@@ -3,6 +3,7 @@
 
 import { relations } from 'drizzle-orm'
 import {
+  boolean,
   date,
   index,
   integer,
@@ -41,6 +42,8 @@ export const documents = pgTable(
     nextReviewOn: date('next_review_on'),
     requiredForRoleKeys: jsonb('required_for_role_keys').$type<string[]>().default([]).notNull(),
     requiredForTradeIds: jsonb('required_for_trade_ids').$type<string[]>().default([]).notNull(),
+    printHeader: boolean('print_header').default(true).notNull(),
+    printFooter: boolean('print_footer').default(true).notNull(),
     ...timestamps,
     ...softDelete,
   },

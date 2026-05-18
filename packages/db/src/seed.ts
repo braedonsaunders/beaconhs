@@ -2,23 +2,32 @@ import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { createClient } from './client'
 import {
-  account,
-  attachments,
   BUILTIN_ROLES,
   correctiveActions,
   crews,
   departments,
   documents,
+  documentAcknowledgments,
+  documentReviews,
+  documentVersions,
   equipmentItems,
   equipmentTypes,
+  equipmentWorkOrders,
+  equipmentLocationHistory,
   formAssignments,
   formResponses,
   formTemplates,
   formTemplateVersions,
+  incidentInjuries,
+  incidentLostTimeEvents,
+  incidentPeople,
   incidents,
   notifications,
   orgUnits,
   people,
+  ppeInspections,
+  ppeIssueReports,
+  ppeIssues,
   ppeItems,
   ppeTypes,
   roles,
@@ -78,12 +87,17 @@ async function main() {
       .returning()
     if (!tenant) throw new Error('Failed to create tenant')
 
-    await tx.insert(tenantUsers).values({
-      tenantId: tenant.id,
-      userId: admin.id,
-      status: 'active',
-      joinedAt: new Date(),
-    })
+    const [membership] = await tx
+      .insert(tenantUsers)
+      .values({
+        tenantId: tenant.id,
+        userId: admin.id,
+        status: 'active',
+        joinedAt: new Date(),
+        displayName: 'Super Admin',
+      })
+      .returning()
+    if (!membership) throw new Error('Failed to create membership')
 
     for (const [key, def] of Object.entries(BUILTIN_ROLES)) {
       await tx.insert(roles).values({
@@ -120,44 +134,57 @@ async function main() {
       .values({ tenantId: tenant.id, name: 'Office' })
       .returning()
 
-    const [carp] = await tx
-      .insert(trades)
-      .values({ tenantId: tenant.id, name: 'Carpenter' })
-      .returning()
-    const [elec] = await tx
-      .insert(trades)
-      .values({ tenantId: tenant.id, name: 'Electrician' })
-      .returning()
-    const [weld] = await tx
-      .insert(trades)
-      .values({ tenantId: tenant.id, name: 'Welder' })
-      .returning()
-    const [supervisorTrade] = await tx
-      .insert(trades)
-      .values({ tenantId: tenant.id, name: 'Supervisor' })
-      .returning()
+    const [carp] = await tx.insert(trades).values({ tenantId: tenant.id, name: 'Carpenter' }).returning()
+    const [elec] = await tx.insert(trades).values({ tenantId: tenant.id, name: 'Electrician' }).returning()
+    const [weld] = await tx.insert(trades).values({ tenantId: tenant.id, name: 'Welder' }).returning()
+    const [supervisorTrade] = await tx.insert(trades).values({ tenantId: tenant.id, name: 'Supervisor' }).returning()
 
-    const [crewAlpha] = await tx
-      .insert(crews)
-      .values({ tenantId: tenant.id, name: 'Crew Alpha' })
-      .returning()
-    const [crewBravo] = await tx
-      .insert(crews)
-      .values({ tenantId: tenant.id, name: 'Crew Bravo' })
-      .returning()
+    const [crewAlpha] = await tx.insert(crews).values({ tenantId: tenant.id, name: 'Crew Alpha' }).returning()
+    const [crewBravo] = await tx.insert(crews).values({ tenantId: tenant.id, name: 'Crew Bravo' }).returning()
 
     // --- People ---------------------------------------------------------
     const peopleData = [
-      { firstName: 'John', lastName: 'Anderson', employeeNo: 'E001', tradeId: supervisorTrade!.id, crewId: crewAlpha!.id, dept: fieldOps!.id },
-      { firstName: 'Sarah', lastName: 'Bell', employeeNo: 'E002', tradeId: carp!.id, crewId: crewAlpha!.id, dept: fieldOps!.id },
-      { firstName: 'Marcus', lastName: 'Chen', employeeNo: 'E003', tradeId: elec!.id, crewId: crewAlpha!.id, dept: fieldOps!.id },
-      { firstName: 'Priya', lastName: 'Desai', employeeNo: 'E004', tradeId: weld!.id, crewId: crewAlpha!.id, dept: fieldOps!.id },
-      { firstName: 'Tom', lastName: 'Eaton', employeeNo: 'E005', tradeId: supervisorTrade!.id, crewId: crewBravo!.id, dept: fieldOps!.id },
-      { firstName: 'Maya', lastName: 'Foster', employeeNo: 'E006', tradeId: carp!.id, crewId: crewBravo!.id, dept: fieldOps!.id },
-      { firstName: 'Daniel', lastName: 'Gonzales', employeeNo: 'E007', tradeId: elec!.id, crewId: crewBravo!.id, dept: fieldOps!.id },
-      { firstName: 'Aisha', lastName: 'Hamid', employeeNo: 'E008', tradeId: weld!.id, crewId: crewBravo!.id, dept: fieldOps!.id },
-      { firstName: 'Linda', lastName: 'Iverson', employeeNo: 'E009', tradeId: null, crewId: null, dept: office!.id },
-      { firstName: 'Robert', lastName: 'Jensen', employeeNo: 'E010', tradeId: null, crewId: null, dept: office!.id },
+      {
+        firstName: 'John', lastName: 'Anderson', formalName: 'John D. Anderson',
+        jobTitle: 'Site Supervisor', employeeNo: 'E001',
+        tradeId: supervisorTrade!.id, crewId: crewAlpha!.id, dept: fieldOps!.id,
+        email: 'janderson@acme.example', phone: '+1-647-555-0101',
+        emergencyContactName: 'Mary Anderson', emergencyContactPhone: '+1-647-555-9001',
+        notes: 'Lead supervisor for Tank Farm operations. 15 years on site.',
+      },
+      {
+        firstName: 'Sarah', lastName: 'Bell', formalName: 'Sarah J. Bell',
+        jobTitle: 'Lead Carpenter', employeeNo: 'E002',
+        tradeId: carp!.id, crewId: crewAlpha!.id, dept: fieldOps!.id,
+        email: 'sbell@acme.example', phone: '+1-647-555-0102',
+        emergencyContactName: 'Tom Bell', emergencyContactPhone: '+1-647-555-9002',
+      },
+      {
+        firstName: 'Marcus', lastName: 'Chen', formalName: 'Marcus K. Chen',
+        jobTitle: 'Journeyman Electrician', employeeNo: 'E003',
+        tradeId: elec!.id, crewId: crewAlpha!.id, dept: fieldOps!.id,
+        email: 'mchen@acme.example', phone: '+1-647-555-0103',
+        emergencyContactName: 'Lisa Chen', emergencyContactPhone: '+1-647-555-9003',
+      },
+      {
+        firstName: 'Priya', lastName: 'Desai', formalName: 'Priya N. Desai',
+        jobTitle: 'Pipe Welder', employeeNo: 'E004',
+        tradeId: weld!.id, crewId: crewAlpha!.id, dept: fieldOps!.id,
+        email: 'pdesai@acme.example', phone: '+1-647-555-0104',
+        emergencyContactName: 'Arjun Desai', emergencyContactPhone: '+1-647-555-9004',
+      },
+      {
+        firstName: 'Tom', lastName: 'Eaton', formalName: 'Thomas Eaton',
+        jobTitle: 'Site Supervisor', employeeNo: 'E005',
+        tradeId: supervisorTrade!.id, crewId: crewBravo!.id, dept: fieldOps!.id,
+        email: 'teaton@acme.example', phone: '+1-647-555-0105',
+        emergencyContactName: 'Jane Eaton', emergencyContactPhone: '+1-647-555-9005',
+      },
+      { firstName: 'Maya', lastName: 'Foster', jobTitle: 'Apprentice Carpenter', employeeNo: 'E006', tradeId: carp!.id, crewId: crewBravo!.id, dept: fieldOps!.id },
+      { firstName: 'Daniel', lastName: 'Gonzales', jobTitle: 'Apprentice Electrician', employeeNo: 'E007', tradeId: elec!.id, crewId: crewBravo!.id, dept: fieldOps!.id },
+      { firstName: 'Aisha', lastName: 'Hamid', jobTitle: 'Welder', employeeNo: 'E008', tradeId: weld!.id, crewId: crewBravo!.id, dept: fieldOps!.id },
+      { firstName: 'Linda', lastName: 'Iverson', jobTitle: 'HSE Coordinator', employeeNo: 'E009', tradeId: null, crewId: null, dept: office!.id },
+      { firstName: 'Robert', lastName: 'Jensen', jobTitle: 'Project Manager', employeeNo: 'E010', tradeId: null, crewId: null, dept: office!.id },
     ]
 
     const insertedPeople = await Promise.all(
@@ -168,25 +195,33 @@ async function main() {
             tenantId: tenant.id,
             firstName: p.firstName,
             lastName: p.lastName,
+            formalName: (p as any).formalName ?? null,
+            jobTitle: (p as any).jobTitle ?? null,
             employeeNo: p.employeeNo,
             departmentId: p.dept,
             tradeId: p.tradeId,
             crewId: p.crewId,
             hireDate: '2023-01-15',
             status: 'active',
+            email: (p as any).email ?? null,
+            phone: (p as any).phone ?? null,
+            emergencyContactName: (p as any).emergencyContactName ?? null,
+            emergencyContactPhone: (p as any).emergencyContactPhone ?? null,
+            notes: (p as any).notes ?? null,
           })
           .returning()
         return row!
       }),
     )
+    const [john, sarah, marcus, priya, tom] = insertedPeople
 
     // --- Training courses + records -------------------------------------
     const courseDefs = [
-      { code: 'WHMIS', name: 'WHMIS 2015', deliveryType: 'self_paced' as const, valid: 36 },
-      { code: 'H2S', name: 'H2S Alive', deliveryType: 'classroom' as const, valid: 36 },
-      { code: 'FALL', name: 'Fall Protection', deliveryType: 'classroom' as const, valid: 36 },
-      { code: 'CSE', name: 'Confined Space Entry', deliveryType: 'classroom' as const, valid: 12 },
-      { code: 'FA', name: 'Standard First Aid', deliveryType: 'classroom' as const, valid: 36 },
+      { code: 'WHMIS', name: 'WHMIS 2015', deliveryType: 'self_paced' as const, valid: 36, description: 'Workplace Hazardous Materials Information System — federally mandated chemical hazard training.' },
+      { code: 'H2S', name: 'H2S Alive', deliveryType: 'classroom' as const, valid: 36, description: 'Hydrogen sulfide hazard recognition + SCBA familiarisation (ENFORM standard).' },
+      { code: 'FALL', name: 'Fall Protection', deliveryType: 'classroom' as const, valid: 36, description: 'Proper use of harness, lanyard, anchor points, rescue planning.' },
+      { code: 'CSE', name: 'Confined Space Entry', deliveryType: 'classroom' as const, valid: 12, description: 'Permit-required confined space awareness for entrants/attendants.' },
+      { code: 'FA', name: 'Standard First Aid', deliveryType: 'classroom' as const, valid: 36, description: 'Canadian Red Cross 16-hour SFA + CPR-C certification.' },
     ]
     const courses = await Promise.all(
       courseDefs.map(async (c) => {
@@ -196,6 +231,7 @@ async function main() {
             tenantId: tenant.id,
             code: c.code,
             name: c.name,
+            description: c.description,
             deliveryType: c.deliveryType,
             validForMonths: c.valid,
             durationMinutes: 60,
@@ -205,7 +241,6 @@ async function main() {
       }),
     )
 
-    // Give every person WHMIS + Fall Protection. A couple of expiring records too.
     const today = new Date()
     const dayMs = 24 * 3600 * 1000
     for (const p of insertedPeople) {
@@ -214,31 +249,51 @@ async function main() {
       await tx.insert(trainingRecords).values({
         tenantId: tenant.id,
         personId: p.id,
-        courseId: courses[0]!.id, // WHMIS
+        courseId: courses[0]!.id,
         source: 'self_paced',
         completedOn: issue,
         expiresOn: expires,
+        certificateType: 'auto',
+        grade: 92,
+        instructor: 'Online module',
       })
     }
-    // Sarah Bell's Fall Protection expires in 25 days (will trip the 30-day reminder)
-    const sarah = insertedPeople[1]!
+    // Sarah's Fall Protection expires in 24 days
     await tx.insert(trainingRecords).values({
       tenantId: tenant.id,
-      personId: sarah.id,
+      personId: sarah!.id,
       courseId: courses[2]!.id,
       source: 'class',
       completedOn: isoDate(new Date(today.getTime() - 1070 * dayMs)),
-      expiresOn: isoDate(new Date(today.getTime() + 25 * dayMs)),
+      expiresOn: isoDate(new Date(today.getTime() + 24 * dayMs)),
+      certificateType: 'auto',
+      instructor: 'L. Iverson',
+      grade: 88,
+      details: 'In-person session at Site A muster point.',
     })
-    // Marcus Chen's H2S Alive expired 5 days ago
-    const marcus = insertedPeople[2]!
+    // Marcus' H2S expired 6 days ago
     await tx.insert(trainingRecords).values({
       tenantId: tenant.id,
-      personId: marcus.id,
+      personId: marcus!.id,
       courseId: courses[1]!.id,
       source: 'class',
       completedOn: isoDate(new Date(today.getTime() - 1100 * dayMs)),
-      expiresOn: isoDate(new Date(today.getTime() - 5 * dayMs)),
+      expiresOn: isoDate(new Date(today.getTime() - 6 * dayMs)),
+      certificateType: 'auto',
+      instructor: 'ENFORM',
+      grade: 84,
+    })
+    // First aid for HSE Coordinator (current)
+    await tx.insert(trainingRecords).values({
+      tenantId: tenant.id,
+      personId: insertedPeople[8]!.id,
+      courseId: courses[4]!.id,
+      source: 'class',
+      completedOn: isoDate(new Date(today.getTime() - 60 * dayMs)),
+      expiresOn: isoDate(new Date(today.getTime() + (3 * 365 - 60) * dayMs)),
+      certificateType: 'auto',
+      instructor: 'Canadian Red Cross',
+      grade: 96,
     })
 
     // --- Equipment + PPE -----------------------------------------------
@@ -251,17 +306,70 @@ async function main() {
       .values({ tenantId: tenant.id, name: 'Light Vehicle', category: 'vehicle' })
       .returning()
 
+    const equipmentIds: string[] = []
     for (let i = 1; i <= 8; i++) {
-      await tx.insert(equipmentItems).values({
+      const isTool = i <= 5
+      const [eq] = await tx
+        .insert(equipmentItems)
+        .values({
+          tenantId: tenant.id,
+          typeId: isTool ? tools!.id : vehicles!.id,
+          assetTag: `AT-${String(i).padStart(4, '0')}`,
+          name: isTool ? `Cordless Drill #${i}` : `Pickup Truck #${i - 5}`,
+          serialNumber: isTool ? `DRL-${1000 + i}` : `VIN-1HGBH${10000 + i}`,
+          qrToken: `bhs-eq-${randomUUID()}`,
+          status: 'in_service',
+          currentSiteOrgUnitId: i % 2 === 0 ? siteA.id : siteB.id,
+          currentHolderPersonId: isTool ? insertedPeople[i % insertedPeople.length]!.id : null,
+          purchaseDate: '2024-03-15',
+          warrantyExpiresOn: '2027-03-15',
+          requiresPreUseInspection: isTool ? true : true,
+          requiresAnnualInspection: !isTool,
+          lastAnnualInspectionOn: !isTool ? isoDate(new Date(today.getTime() - 120 * dayMs)) : null,
+          nextAnnualInspectionDue: !isTool ? isoDate(new Date(today.getTime() + 240 * dayMs)) : null,
+          lastPreUseInspectionAt: new Date(today.getTime() - 2 * dayMs),
+          billingRateCategory: isTool ? 'tools' : 'vehicles',
+        })
+        .returning()
+      equipmentIds.push(eq!.id)
+
+      // Add a little location history
+      await tx.insert(equipmentLocationHistory).values({
         tenantId: tenant.id,
-        typeId: i <= 5 ? tools!.id : vehicles!.id,
-        assetTag: `AT-${String(i).padStart(4, '0')}`,
-        name: i <= 5 ? `Cordless Drill #${i}` : `Pickup Truck #${i - 5}`,
-        qrToken: `bhs-eq-${randomUUID()}`,
-        status: 'in_service',
-        currentSiteOrgUnitId: i % 2 === 0 ? siteA.id : siteB.id,
+        itemId: eq!.id,
+        siteOrgUnitId: i % 2 === 0 ? siteA.id : siteB.id,
+        holderPersonId: isTool ? insertedPeople[i % insertedPeople.length]!.id : null,
+        recordedAt: new Date(today.getTime() - 7 * dayMs),
+        note: 'Issued from yard',
+      })
+      await tx.insert(equipmentLocationHistory).values({
+        tenantId: tenant.id,
+        itemId: eq!.id,
+        siteOrgUnitId: i % 2 === 0 ? siteB.id : siteA.id,
+        recordedAt: new Date(today.getTime() - 30 * dayMs),
+        note: 'Transferred',
       })
     }
+    // A work order on the first pickup truck
+    await tx.insert(equipmentWorkOrders).values({
+      tenantId: tenant.id,
+      itemId: equipmentIds[5]!,
+      reference: 'WO-2026-0001',
+      status: 'in_progress',
+      summary: 'Replace front-left tire',
+      description: 'Sidewall puncture noticed during pre-trip inspection.',
+      openedAt: new Date(today.getTime() - 1 * dayMs),
+    })
+    await tx.insert(equipmentWorkOrders).values({
+      tenantId: tenant.id,
+      itemId: equipmentIds[5]!,
+      reference: 'WO-2026-0002',
+      status: 'closed',
+      summary: 'Annual safety inspection',
+      description: 'Provincial annual inspection completed; certificate filed.',
+      openedAt: new Date(today.getTime() - 120 * dayMs),
+      closedAt: new Date(today.getTime() - 118 * dayMs),
+    })
 
     const [harness] = await tx
       .insert(ppeTypes)
@@ -273,15 +381,72 @@ async function main() {
         sizingScheme: ['S', 'M', 'L', 'XL'],
       })
       .returning()
+    const harnessIds: string[] = []
     for (let i = 1; i <= 6; i++) {
-      await tx.insert(ppeItems).values({
+      const [item] = await tx
+        .insert(ppeItems)
+        .values({
+          tenantId: tenant.id,
+          typeId: harness!.id,
+          serialNumber: `HARN-${i}`,
+          size: i % 2 === 0 ? 'L' : 'M',
+          status: i <= 3 ? 'issued' : 'in_stock',
+          currentHolderPersonId: i <= 3 ? insertedPeople[i - 1]!.id : null,
+          purchaseDate: '2024-01-10',
+          expiresOn: '2029-01-10',
+          lastInspectionOn: isoDate(new Date(today.getTime() - 14 * dayMs)),
+          nextInspectionDue: isoDate(new Date(today.getTime() + 16 * dayMs)),
+          lastAnnualInspectionOn: isoDate(new Date(today.getTime() - 200 * dayMs)),
+          nextAnnualInspectionDue: isoDate(new Date(today.getTime() + 165 * dayMs)),
+        })
+        .returning()
+      harnessIds.push(item!.id)
+
+      // Inspection history (3 pre-use, 1 annual per item)
+      for (let n = 0; n < 3; n++) {
+        await tx.insert(ppeInspections).values({
+          tenantId: tenant.id,
+          itemId: item!.id,
+          kind: 'pre_use',
+          result: 'pass',
+          inspectedOn: isoDate(new Date(today.getTime() - (14 + n * 14) * dayMs)),
+          nextDueOn: isoDate(new Date(today.getTime() - (14 + n * 14) * dayMs + 30 * dayMs)),
+          inspectedByTenantUserId: membership.id,
+        })
+      }
+      await tx.insert(ppeInspections).values({
         tenantId: tenant.id,
-        typeId: harness!.id,
-        serialNumber: `HARN-${i}`,
-        size: i % 2 === 0 ? 'L' : 'M',
-        status: 'in_stock',
+        itemId: item!.id,
+        kind: 'annual',
+        result: 'pass',
+        inspectedOn: isoDate(new Date(today.getTime() - 200 * dayMs)),
+        nextDueOn: isoDate(new Date(today.getTime() + 165 * dayMs)),
+        inspectedByTenantUserId: membership.id,
+        notes: 'Annual inspection by certified competent person.',
       })
+
+      // For items 1-3 (issued), add the issuance receipt
+      if (i <= 3) {
+        await tx.insert(ppeIssues).values({
+          tenantId: tenant.id,
+          itemId: item!.id,
+          personId: insertedPeople[i - 1]!.id,
+          action: 'issue',
+          quantity: 1,
+          issuedByTenantUserId: membership.id,
+          occurredAt: new Date(today.getTime() - 30 * dayMs),
+          note: 'Initial issue at site induction.',
+        })
+      }
     }
+    // An open issue report against harness #2
+    await tx.insert(ppeIssueReports).values({
+      tenantId: tenant.id,
+      itemId: harnessIds[1]!,
+      reportedByTenantUserId: membership.id,
+      description: 'Frayed webbing noticed on leg strap. Removed from service pending inspection.',
+      status: 'open',
+    })
 
     // --- Form template (daily toolbox talk) -----------------------------
     const [tmpl] = await tx
@@ -322,12 +487,7 @@ async function main() {
           id: 'signoff',
           title: { en: 'Sign-off' },
           fields: [
-            {
-              id: 'incidentsDiscussed',
-              type: 'yes_no_comment',
-              label: { en: 'Were recent incidents reviewed?' },
-              required: true,
-            },
+            { id: 'incidentsDiscussed', type: 'yes_no_comment', label: { en: 'Were recent incidents reviewed?' }, required: true },
             { id: 'signature', type: 'signature', label: { en: 'Foreman signature' }, required: true },
           ],
         },
@@ -338,15 +498,18 @@ async function main() {
         ],
       },
     }
-    await tx.insert(formTemplateVersions).values({
-      tenantId: tenant.id,
-      templateId: tmpl!.id,
-      version: 1,
-      schema: toolboxSchema,
-      publishedAt: new Date(),
-      publishedBy: admin.id,
-      changelog: 'Initial version',
-    })
+    const [tv1] = await tx
+      .insert(formTemplateVersions)
+      .values({
+        tenantId: tenant.id,
+        templateId: tmpl!.id,
+        version: 1,
+        schema: toolboxSchema,
+        publishedAt: new Date(),
+        publishedBy: admin.id,
+        changelog: 'Initial version',
+      })
+      .returning()
     await tx.insert(formAssignments).values({
       tenantId: tenant.id,
       templateId: tmpl!.id,
@@ -357,87 +520,239 @@ async function main() {
       createdBy: admin.id,
     })
 
-    // --- A few example form responses -----------------------------------
+    // Sample form responses
     for (let i = 0; i < 4; i++) {
-      const [ver] = await tx
-        .select()
-        .from(formTemplateVersions)
-        .where(sql`template_id = ${tmpl!.id}`)
-        .limit(1)
-      if (!ver) break
       await tx.insert(formResponses).values({
         tenantId: tenant.id,
         templateId: tmpl!.id,
-        templateVersionId: ver.id,
+        templateVersionId: tv1!.id,
         status: i === 0 ? 'submitted' : i === 1 ? 'submitted' : i === 2 ? 'in_progress' : 'closed',
         siteOrgUnitId: i % 2 === 0 ? siteA.id : siteB.id,
+        submittedBy: membership.id,
         submittedAt: i < 3 ? new Date(today.getTime() - i * dayMs) : new Date(),
-        data: { foreman: insertedPeople[0]!.id, attendees: insertedPeople.slice(1, 4).map((p) => p.id) },
+        data: {
+          foreman: john!.id,
+          attendees: insertedPeople.slice(1, 4).map((p) => p.id),
+          topics: [
+            { topic: 'Pinch points around tank manways', discussion: 'Always use spotters when handling >50lb lids.' },
+            { topic: 'Heat stress', discussion: 'Mandatory 15-min water breaks every hour above 28°C.' },
+          ],
+          incidentsDiscussed: { answer: 'yes', comment: 'Reviewed near-miss INC-2026-0001.' },
+        },
       })
     }
 
-    // --- Incidents ------------------------------------------------------
-    const incidentRows = [
-      {
-        reference: 'INC-2026-0001',
-        type: 'near_miss' as const,
-        severity: 'no_injury' as const,
-        status: 'closed' as const,
-        title: 'Hand tool dropped from scaffold',
-        description: 'Wrench dropped from level 2 scaffold; no injury, area was barricaded.',
-        siteId: siteA.id,
-        daysAgo: 14,
-      },
-      {
-        reference: 'INC-2026-0002',
-        type: 'injury' as const,
-        severity: 'first_aid_only' as const,
-        status: 'closed' as const,
-        title: 'Cut on right hand while opening box',
-        description: 'Small laceration during material unpacking; bandaged on site.',
-        siteId: siteA.id,
-        daysAgo: 9,
-      },
-      {
-        reference: 'INC-2026-0003',
-        type: 'injury' as const,
-        severity: 'medical_aid' as const,
-        status: 'under_investigation' as const,
-        title: 'Slip on wet floor in mechanical room',
-        description: 'Worker slipped after a hose was left dripping; treated at walk-in clinic.',
-        siteId: siteB.id,
-        daysAgo: 3,
-      },
-      {
-        reference: 'INC-2026-0004',
-        type: 'property_damage' as const,
-        severity: 'no_injury' as const,
-        status: 'reported' as const,
-        title: 'Forklift bumped overhead conduit',
-        description: 'Minor damage to conduit, isolated and tagged out.',
-        siteId: siteB.id,
-        daysAgo: 1,
-      },
-    ]
-    for (const i of incidentRows) {
-      await tx.insert(incidents).values({
+    // --- Incidents (rich) ----------------------------------------------
+    const [inc1] = await tx
+      .insert(incidents)
+      .values({
         tenantId: tenant.id,
-        reference: i.reference,
-        type: i.type,
-        severity: i.severity,
-        status: i.status,
-        title: i.title,
-        description: i.description,
-        occurredAt: new Date(today.getTime() - i.daysAgo * dayMs),
+        reference: 'INC-2026-0001',
+        type: 'near_miss',
+        severity: 'no_injury',
+        status: 'closed',
+        title: 'Hand tool dropped from scaffold',
+        description: '8" wrench fell from level-2 scaffold into a barricaded area below pump P-103. No personnel in the drop zone — caught by toe-boards.',
+        occurredAt: new Date(today.getTime() - 14 * dayMs),
+        reportedAt: new Date(today.getTime() - 14 * dayMs + 2 * 3600 * 1000),
+        siteOrgUnitId: siteA.id,
+        location: 'P-103 pump bay, north scaffold level 2',
+        weather: '17°C, light wind',
+        departmentId: fieldOps!.id,
+        supervisorPersonId: john!.id,
+        witnesses: 'M. Foster, D. Gonzales',
+        ppeWorn: 'Hard hat, safety glasses, gloves, fall arrest',
+        eventsLeadingUp: 'Working at height removing valve packing. Tool was set down on scaffold deck instead of being tethered. A gust knocked it through the toe-board gap.',
+        immediateActionTaken: 'Work stopped. Area inspected. Toe-board gap shimmed. Tool tethering tailgate held immediately after.',
+        actualSeverity: 1,
+        potentialSeverity: 4,
+        rootCause: 'Tool not tethered when set down on scaffold deck.',
+        contributingFactors: ['Inadequate toe-board height', 'No tool-tethering policy enforcement'],
+        assignedInvestigatorTenantUserId: membership.id,
+        inProgress: false,
+        locked: true,
+        closedAt: new Date(today.getTime() - 10 * dayMs),
+        closedByTenantUserId: membership.id,
       })
-    }
+      .returning()
+
+    const [inc2] = await tx
+      .insert(incidents)
+      .values({
+        tenantId: tenant.id,
+        reference: 'INC-2026-0002',
+        type: 'injury',
+        severity: 'first_aid_only',
+        status: 'closed',
+        title: 'Cut on right hand while opening crate',
+        description: 'Box cutter slipped while opening valve crate. Small laceration to right thumb, treated on site.',
+        occurredAt: new Date(today.getTime() - 9 * dayMs),
+        siteOrgUnitId: siteA.id,
+        location: 'Materials lay-down yard',
+        supervisorPersonId: john!.id,
+        ppeWorn: 'Cut-resistant gloves (level 3)',
+        firstAidReceived: true,
+        firstAidProvider: 'L. Iverson (HSE Coordinator)',
+        actualSeverity: 2,
+        potentialSeverity: 2,
+        rootCause: 'Box cutter blade fully extended, no proper cut-resistant glove rating for this task.',
+        inProgress: false,
+        locked: true,
+        closedAt: new Date(today.getTime() - 6 * dayMs),
+      })
+      .returning()
+    await tx.insert(incidentInjuries).values({
+      tenantId: tenant.id,
+      incidentId: inc2!.id,
+      personId: sarah!.id,
+      personName: 'Sarah Bell',
+      bodyParts: ['Right hand', 'Thumb'],
+      injuryTypes: ['Laceration'],
+      treatment: 'Wound cleaned, butterfly bandage applied, advised follow-up if redness develops.',
+      treatedAtFacility: 'On-site first aid station',
+      workedHoursPriorTo: 4,
+    })
+    await tx.insert(incidentPeople).values({
+      tenantId: tenant.id,
+      incidentId: inc2!.id,
+      personId: sarah!.id,
+      role: 'involved',
+    })
+
+    const [inc3] = await tx
+      .insert(incidents)
+      .values({
+        tenantId: tenant.id,
+        reference: 'INC-2026-0003',
+        type: 'injury',
+        severity: 'medical_aid',
+        status: 'under_investigation',
+        title: 'Slip on wet floor in mechanical room',
+        description: 'Worker slipped after a hose was left dripping at the access point. Treated at walk-in clinic, x-rays clear.',
+        occurredAt: new Date(today.getTime() - 3 * dayMs),
+        siteOrgUnitId: siteB.id,
+        location: 'Mechanical Room 2A, near east entrance',
+        supervisorPersonId: tom!.id,
+        witnesses: 'Marcus Chen',
+        externalPeopleInvolved: 'None',
+        eventsLeadingUp: 'Cleaning crew finished pressure-washing equipment and coiled the hose without draining it. Wet patch wasn\'t flagged with a cone.',
+        immediateActionTaken: 'Area mopped, cones placed, hose drained, worker driven to MedExpress clinic.',
+        ppeWorn: 'Safety boots (SRC slip-resistant), high-vis vest, hard hat',
+        actualSeverity: 3,
+        potentialSeverity: 3,
+        criticalInjury: false,
+        ministryOfLabourNotified: false,
+        emsNotified: false,
+        firstAidReceived: true,
+        firstAidProvider: 'L. Iverson',
+        medicalAttentionReceived: true,
+        treatedAtHospital: 'MedExpress Walk-In Clinic',
+        treatedInCity: 'Toronto',
+        transportation: 'Private vehicle (supervisor drove)',
+        modifiedDuty: true,
+        modifiedDutyFirstDay: isoDate(new Date(today.getTime() - 2 * dayMs)),
+        modifiedDutyDays: 3,
+        externallyReportable: false,
+        rootCause: 'Procedure for hose handling at clean-up did not require draining/coning. Cleaning subcontractor not briefed on site policy.',
+        contributingFactors: ['Subcontractor onboarding gap', 'No signage placement standard'],
+        inProgress: true,
+        locked: false,
+        assignedInvestigatorTenantUserId: membership.id,
+      })
+      .returning()
+    await tx.insert(incidentInjuries).values({
+      tenantId: tenant.id,
+      incidentId: inc3!.id,
+      personId: priya!.id,
+      personName: 'Priya Desai',
+      bodyParts: ['Lower back', 'Left wrist'],
+      injuryTypes: ['Strain', 'Bruise'],
+      treatment: 'X-ray clear, anti-inflammatories prescribed, modified duty for 3 days.',
+      treatedAtFacility: 'MedExpress Walk-In Clinic',
+      workedHoursPriorTo: 5,
+    })
+    await tx.insert(incidentLostTimeEvents).values({
+      tenantId: tenant.id,
+      incidentId: inc3!.id,
+      status: 'restricted_duty',
+      validFrom: isoDate(new Date(today.getTime() - 2 * dayMs)),
+      validTo: isoDate(new Date(today.getTime() + 1 * dayMs)),
+      notes: 'No overhead reaching, no carrying > 5kg.',
+    })
+    await tx.insert(incidentPeople).values({
+      tenantId: tenant.id,
+      incidentId: inc3!.id,
+      personId: priya!.id,
+      role: 'involved',
+    })
+
+    const [inc4] = await tx
+      .insert(incidents)
+      .values({
+        tenantId: tenant.id,
+        reference: 'INC-2026-0004',
+        type: 'property_damage',
+        severity: 'no_injury',
+        status: 'reported',
+        title: 'Forklift bumped overhead conduit',
+        description: 'Forklift forks struck low-hanging electrical conduit while turning. Conduit dented; circuit isolated as a precaution.',
+        occurredAt: new Date(today.getTime() - 1 * dayMs),
+        siteOrgUnitId: siteB.id,
+        location: 'Warehouse aisle 3',
+        supervisorPersonId: tom!.id,
+        immediateActionTaken: 'Forklift parked. Electrical isolated by qualified person. Conduit photographed and tagged.',
+        ppeWorn: 'Standard site PPE',
+        actualSeverity: 1,
+        potentialSeverity: 4,
+        inProgress: true,
+        locked: false,
+      })
+      .returning()
 
     // --- Corrective actions --------------------------------------------
     const caRows = [
-      { reference: 'CA-2026-0001', title: 'Install drip pan under leaking hose', severity: 'medium' as const, status: 'in_progress' as const, daysToDue: 7 },
-      { reference: 'CA-2026-0002', title: 'Re-run scaffold inspection daily during turnaround', severity: 'high' as const, status: 'open' as const, daysToDue: 3 },
-      { reference: 'CA-2026-0003', title: 'Refresh slip-trip awareness in monthly toolbox', severity: 'low' as const, status: 'open' as const, daysToDue: 14 },
-      { reference: 'CA-2026-0004', title: 'Replace damaged conduit section', severity: 'high' as const, status: 'pending_verification' as const, daysToDue: 1 },
+      {
+        reference: 'CA-2026-0001',
+        title: 'Install drip pan + cone protocol for cleaning crew',
+        severity: 'high' as const,
+        status: 'in_progress' as const,
+        daysToDue: 7,
+        source: 'incident' as const,
+        sourceEntityId: inc3!.id,
+        actionTaken: 'Drip pans ordered (ETA 3 days). Cone-placement SOP drafted; awaiting sign-off.',
+        rootCause: 'Subcontractor onboarding gap.',
+      },
+      {
+        reference: 'CA-2026-0002',
+        title: 'Daily scaffold inspection during turnaround',
+        severity: 'high' as const,
+        status: 'open' as const,
+        daysToDue: 3,
+        source: 'jsha' as const,
+        actionTaken: null,
+        rootCause: null,
+      },
+      {
+        reference: 'CA-2026-0003',
+        title: 'Refresh slip-trip awareness in monthly toolbox',
+        severity: 'low' as const,
+        status: 'open' as const,
+        daysToDue: 14,
+        source: 'inspection' as const,
+        actionTaken: null,
+        rootCause: null,
+      },
+      {
+        reference: 'CA-2026-0004',
+        title: 'Replace damaged conduit section',
+        severity: 'high' as const,
+        status: 'pending_verification' as const,
+        daysToDue: 1,
+        source: 'incident' as const,
+        sourceEntityId: inc4!.id,
+        actionTaken: 'Conduit section replaced by qualified electrician. Awaiting verification by site safety.',
+        rootCause: 'Forklift route clearance not validated against installed services.',
+      },
     ]
     for (const c of caRows) {
       await tx.insert(correctiveActions).values({
@@ -447,52 +762,100 @@ async function main() {
         severity: c.severity,
         status: c.status,
         siteOrgUnitId: siteA.id,
+        assignedOn: isoDate(new Date(today.getTime() - 5 * dayMs)),
         dueOn: isoDate(new Date(today.getTime() + c.daysToDue * dayMs)),
+        source: c.source,
+        sourceEntityType: c.source === 'incident' ? 'incident' : null,
+        sourceEntityId: (c as any).sourceEntityId ?? null,
+        actionTaken: c.actionTaken,
+        rootCause: c.rootCause,
+        ownerTenantUserId: membership.id,
+        assignedByTenantUserId: membership.id,
       })
     }
 
     // --- Documents ------------------------------------------------------
-    await tx.insert(documents).values([
-      {
+    const docDefs = [
+      { key: 'corporate-hs-policy', title: 'Corporate Health & Safety Policy', category: 'policy', reviewFreq: 12, body: '## Purpose\n\nAcme Industrial is committed to providing a safe and healthy workplace for all employees…' },
+      { key: 'sds-acetone', title: 'SDS — Acetone', category: 'sds', reviewFreq: 36, body: '## Acetone — Safety Data Sheet\n\n**Hazard class:** Flammable liquid, category 2…' },
+      { key: 'wah-procedure', title: 'Work at Height Procedure', category: 'procedure', reviewFreq: 24, body: '## Scope\n\nThis procedure applies to all work performed >3m above grade…' },
+    ]
+    for (const d of docDefs) {
+      const [doc] = await tx
+        .insert(documents)
+        .values({
+          tenantId: tenant.id,
+          key: d.key,
+          title: d.title,
+          category: d.category,
+          status: 'published',
+          reviewFrequencyMonths: d.reviewFreq,
+          nextReviewOn: isoDate(new Date(today.getTime() + d.reviewFreq * 30 * dayMs - 30 * dayMs)),
+          ownerTenantUserId: membership.id,
+          printHeader: true,
+          printFooter: true,
+        })
+        .returning()
+      const [v1] = await tx
+        .insert(documentVersions)
+        .values({
+          tenantId: tenant.id,
+          documentId: doc!.id,
+          version: 1,
+          contentMarkdown: d.body,
+          publishedAt: new Date(today.getTime() - 200 * dayMs),
+          publishedBy: admin.id,
+          changelog: 'Initial release',
+        })
+        .returning()
+      const [v2] = await tx
+        .insert(documentVersions)
+        .values({
+          tenantId: tenant.id,
+          documentId: doc!.id,
+          version: 2,
+          contentMarkdown: d.body + '\n\n## Revision\n\nUpdated reporting contact emails.',
+          publishedAt: new Date(today.getTime() - 30 * dayMs),
+          publishedBy: admin.id,
+          changelog: 'Updated emergency contact roster',
+        })
+        .returning()
+      // Some acknowledgments
+      for (let i = 0; i < 5; i++) {
+        await tx.insert(documentAcknowledgments).values({
+          tenantId: tenant.id,
+          documentId: doc!.id,
+          versionId: v2!.id,
+          personId: insertedPeople[i]!.id,
+          acknowledgedAt: new Date(today.getTime() - (28 - i) * dayMs),
+        })
+      }
+      // Review history
+      await tx.insert(documentReviews).values({
         tenantId: tenant.id,
-        key: 'corporate-h&s-policy',
-        title: 'Corporate Health & Safety Policy',
-        category: 'policy',
-        status: 'published',
-        reviewFrequencyMonths: 12,
-      },
-      {
-        tenantId: tenant.id,
-        key: 'sds-acetone',
-        title: 'SDS — Acetone',
-        category: 'sds',
-        status: 'published',
-        reviewFrequencyMonths: 36,
-      },
-      {
-        tenantId: tenant.id,
-        key: 'wah-procedure',
-        title: 'Work at Height Procedure',
-        category: 'procedure',
-        status: 'published',
-        reviewFrequencyMonths: 24,
-      },
-    ])
+        documentId: doc!.id,
+        reviewedByTenantUserId: membership.id,
+        reviewedAt: new Date(today.getTime() - 30 * dayMs),
+        outcome: 'updated',
+        nextReviewOn: isoDate(new Date(today.getTime() + d.reviewFreq * 30 * dayMs)),
+        notes: 'Reviewed emergency contact list and updated. No structural changes needed.',
+      })
+    }
 
-    // --- A welcome notification for the super-admin --------------------
+    // --- Welcome notification --------------------
     await tx.insert(notifications).values({
       tenantId: tenant.id,
       userId: admin.id,
       category: 'system',
       type: 'tenant.welcome',
       title: 'Welcome to Acme Industrial',
-      body: 'Sample data has been seeded. Have a look around.',
+      body: 'Sample data has been seeded. Click around — every list is paginated/sortable and every row clicks through to a real detail page.',
       linkPath: '/dashboard',
     })
 
     console.log(`  · tenant: ${tenant.name} (${tenant.slug})`)
     console.log(`  · super-admin: ${admin.email}`)
-    console.log(`  · seeded: ${insertedPeople.length} people, ${courses.length} courses, ${incidentRows.length} incidents, ${caRows.length} corrective actions`)
+    console.log(`  · seeded: ${insertedPeople.length} people, ${courses.length} courses, 4 incidents (1 rich), ${caRows.length} CAs, ${docDefs.length} documents w/ versions+acks, 8 equipment, 6 harnesses w/ inspections`)
     console.log(`  · sign in via Magic link (Mailpit: http://localhost:8025)`)
   })
 

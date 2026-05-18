@@ -15,11 +15,15 @@ CREATE TYPE "public"."training_delivery_type" AS ENUM('classroom', 'self_paced',
 CREATE TYPE "public"."training_record_source" AS ENUM('class', 'self_paced', 'evaluator', 'external_upload', 'migrated');--> statement-breakpoint
 CREATE TYPE "public"."equipment_status" AS ENUM('in_service', 'out_of_service', 'in_repair', 'lost', 'retired');--> statement-breakpoint
 CREATE TYPE "public"."work_order_status" AS ENUM('open', 'assigned', 'in_progress', 'awaiting_parts', 'repaired', 'verified', 'closed', 'cancelled');--> statement-breakpoint
+CREATE TYPE "public"."ppe_inspection_kind" AS ENUM('pre_use', 'annual');--> statement-breakpoint
+CREATE TYPE "public"."ppe_inspection_result" AS ENUM('pass', 'fail', 'n_a');--> statement-breakpoint
 CREATE TYPE "public"."ppe_issue_action" AS ENUM('issue', 'return', 'replace', 'mark_damaged', 'discard');--> statement-breakpoint
+CREATE TYPE "public"."ppe_issue_status" AS ENUM('open', 'resolved', 'replaced');--> statement-breakpoint
 CREATE TYPE "public"."ppe_item_status" AS ENUM('in_stock', 'issued', 'returned', 'damaged', 'discarded', 'expired');--> statement-breakpoint
 CREATE TYPE "public"."document_review_outcome" AS ENUM('approved_no_change', 'updated', 'retired');--> statement-breakpoint
 CREATE TYPE "public"."document_status" AS ENUM('draft', 'published', 'archived', 'under_review');--> statement-breakpoint
 CREATE TYPE "public"."corrective_action_severity" AS ENUM('low', 'medium', 'high', 'critical');--> statement-breakpoint
+CREATE TYPE "public"."corrective_action_source" AS ENUM('inspection', 'incident', 'near_miss', 'observation', 'audit', 'jsha', 'other');--> statement-breakpoint
 CREATE TYPE "public"."corrective_action_status" AS ENUM('open', 'in_progress', 'pending_verification', 'closed', 'cancelled');--> statement-breakpoint
 CREATE TYPE "public"."cs_permit_status" AS ENUM('open', 'active', 'closed', 'expired', 'cancelled');--> statement-breakpoint
 CREATE TYPE "public"."lw_checkin_kind" AS ENUM('manual', 'auto_prompted', 'missed', 'escalation_acknowledged');--> statement-breakpoint
@@ -168,6 +172,8 @@ CREATE TABLE IF NOT EXISTS "people" (
 	"employee_no" text,
 	"first_name" text NOT NULL,
 	"last_name" text NOT NULL,
+	"formal_name" text,
+	"job_title" text,
 	"date_of_birth" date,
 	"hire_date" date,
 	"termination_date" date,
@@ -177,6 +183,9 @@ CREATE TABLE IF NOT EXISTS "people" (
 	"email" text,
 	"phone" text,
 	"photo_attachment_id" uuid,
+	"emergency_contact_name" text,
+	"emergency_contact_phone" text,
+	"notes" text,
 	"status" "people_status" DEFAULT 'active' NOT NULL,
 	"metadata" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -337,6 +346,16 @@ CREATE TABLE IF NOT EXISTS "form_templates" (
 	"deleted_at" timestamp with time zone
 );
 --> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "incident_attachments" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"tenant_id" uuid NOT NULL,
+	"incident_id" uuid NOT NULL,
+	"attachment_id" uuid NOT NULL,
+	"caption" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "incident_injuries" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
@@ -365,6 +384,17 @@ CREATE TABLE IF NOT EXISTS "incident_lost_time_events" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "incident_people" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"tenant_id" uuid NOT NULL,
+	"incident_id" uuid NOT NULL,
+	"person_id" uuid,
+	"person_name_text" text,
+	"role" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "incidents" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
@@ -372,19 +402,48 @@ CREATE TABLE IF NOT EXISTS "incidents" (
 	"type" "incident_type" NOT NULL,
 	"severity" "incident_severity" NOT NULL,
 	"status" "incident_status" DEFAULT 'reported' NOT NULL,
+	"classification" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"title" text NOT NULL,
 	"description" text,
 	"occurred_at" timestamp with time zone NOT NULL,
 	"reported_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"site_org_unit_id" uuid,
-	"reported_by_tenant_user_id" uuid,
-	"assigned_investigator_tenant_user_id" uuid,
 	"location" text,
 	"weather" text,
+	"department_id" uuid,
+	"reported_by_tenant_user_id" uuid,
+	"supervisor_person_id" uuid,
+	"foreman_text" text,
+	"external_people_involved" text,
+	"witnesses" text,
+	"events_leading_up" text,
 	"immediate_action_taken" text,
+	"ppe_worn" text,
+	"critical_injury" boolean DEFAULT false NOT NULL,
+	"ministry_of_labour_notified" boolean DEFAULT false NOT NULL,
+	"ems_notified" boolean DEFAULT false NOT NULL,
+	"first_aid_received" boolean DEFAULT false NOT NULL,
+	"first_aid_provider" text,
+	"medical_attention_received" boolean DEFAULT false NOT NULL,
+	"treated_at_hospital" text,
+	"treated_in_city" text,
+	"transportation" text,
+	"lost_time" boolean DEFAULT false NOT NULL,
+	"lost_time_first_day" date,
+	"lost_time_last_day" date,
+	"lost_time_days" integer,
+	"modified_duty" boolean DEFAULT false NOT NULL,
+	"modified_duty_first_day" date,
+	"modified_duty_last_day" date,
+	"modified_duty_days" integer,
+	"externally_reportable" boolean DEFAULT false NOT NULL,
+	"actual_severity" integer,
+	"potential_severity" integer,
 	"root_cause" text,
 	"contributing_factors" jsonb DEFAULT '[]'::jsonb NOT NULL,
-	"classification" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"assigned_investigator_tenant_user_id" uuid,
+	"in_progress" boolean DEFAULT true NOT NULL,
+	"locked" boolean DEFAULT false NOT NULL,
 	"closed_at" timestamp with time zone,
 	"closed_by_tenant_user_id" uuid,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -471,9 +530,15 @@ CREATE TABLE IF NOT EXISTS "training_records" (
 	"source" "training_record_source" NOT NULL,
 	"class_id" uuid,
 	"score" integer,
+	"grade" integer,
 	"completed_on" date NOT NULL,
 	"expires_on" date,
+	"instructor" text,
+	"evaluator_person_id" uuid,
+	"certificate_type" text,
+	"certificate_attachment_id" uuid,
 	"issued_by_tenant_user_id" uuid,
+	"details" text,
 	"notes" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -518,6 +583,19 @@ CREATE TABLE IF NOT EXISTS "equipment_items" (
 	"warranty_expires_on" date,
 	"current_site_org_unit_id" uuid,
 	"current_holder_person_id" uuid,
+	"photo_attachment_id" uuid,
+	"manual_attachment_id" uuid,
+	"requires_pre_use_inspection" boolean DEFAULT false NOT NULL,
+	"pre_use_inspection_template_key" text,
+	"last_pre_use_inspection_at" timestamp with time zone,
+	"requires_annual_inspection" boolean DEFAULT false NOT NULL,
+	"last_annual_inspection_on" date,
+	"next_annual_inspection_due" date,
+	"is_missing" boolean DEFAULT false NOT NULL,
+	"last_seen_at" timestamp with time zone,
+	"last_seen_site_org_unit_id" uuid,
+	"last_seen_holder_person_id" uuid,
+	"billing_rate_category" text,
 	"metadata" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -564,6 +642,34 @@ CREATE TABLE IF NOT EXISTS "equipment_work_orders" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "ppe_inspections" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"tenant_id" uuid NOT NULL,
+	"item_id" uuid NOT NULL,
+	"kind" "ppe_inspection_kind" NOT NULL,
+	"result" "ppe_inspection_result" NOT NULL,
+	"inspected_by_tenant_user_id" uuid,
+	"inspected_on" date NOT NULL,
+	"next_due_on" date,
+	"notes" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "ppe_issue_reports" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"tenant_id" uuid NOT NULL,
+	"item_id" uuid NOT NULL,
+	"reported_by_tenant_user_id" uuid,
+	"reported_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"description" text NOT NULL,
+	"status" "ppe_issue_status" DEFAULT 'open' NOT NULL,
+	"resolution" text,
+	"resolved_at" timestamp with time zone,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "ppe_issues" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
@@ -589,6 +695,11 @@ CREATE TABLE IF NOT EXISTS "ppe_items" (
 	"current_holder_person_id" uuid,
 	"purchase_date" date,
 	"expires_on" date,
+	"notes" text,
+	"last_inspection_on" date,
+	"next_inspection_due" date,
+	"last_annual_inspection_on" date,
+	"next_annual_inspection_due" date,
 	"metadata" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -669,6 +780,8 @@ CREATE TABLE IF NOT EXISTS "documents" (
 	"next_review_on" date,
 	"required_for_role_keys" jsonb DEFAULT '[]'::jsonb NOT NULL,
 	"required_for_trade_ids" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"print_header" boolean DEFAULT true NOT NULL,
+	"print_footer" boolean DEFAULT true NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"deleted_at" timestamp with time zone
@@ -682,16 +795,21 @@ CREATE TABLE IF NOT EXISTS "corrective_actions" (
 	"description" text,
 	"severity" "corrective_action_severity" DEFAULT 'medium' NOT NULL,
 	"status" "corrective_action_status" DEFAULT 'open' NOT NULL,
+	"assigned_by_tenant_user_id" uuid,
 	"owner_tenant_user_id" uuid,
 	"site_org_unit_id" uuid,
+	"assigned_on" date,
 	"due_on" date,
 	"root_cause" text,
+	"action_taken" text,
+	"source" "corrective_action_source",
 	"source_entity_type" text,
 	"source_entity_id" uuid,
 	"verification_notes" text,
 	"verified_by_tenant_user_id" uuid,
 	"verified_at" timestamp with time zone,
 	"closed_at" timestamp with time zone,
+	"locked" boolean DEFAULT false NOT NULL,
 	"metadata" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -1144,6 +1262,18 @@ EXCEPTION
 END $$;
 --> statement-breakpoint
 DO $$ BEGIN
+ ALTER TABLE "incident_attachments" ADD CONSTRAINT "incident_attachments_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ ALTER TABLE "incident_attachments" ADD CONSTRAINT "incident_attachments_incident_id_incidents_id_fk" FOREIGN KEY ("incident_id") REFERENCES "public"."incidents"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
  ALTER TABLE "incident_injuries" ADD CONSTRAINT "incident_injuries_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
 EXCEPTION
  WHEN duplicate_object THEN null;
@@ -1180,6 +1310,24 @@ EXCEPTION
 END $$;
 --> statement-breakpoint
 DO $$ BEGIN
+ ALTER TABLE "incident_people" ADD CONSTRAINT "incident_people_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ ALTER TABLE "incident_people" ADD CONSTRAINT "incident_people_incident_id_incidents_id_fk" FOREIGN KEY ("incident_id") REFERENCES "public"."incidents"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ ALTER TABLE "incident_people" ADD CONSTRAINT "incident_people_person_id_people_id_fk" FOREIGN KEY ("person_id") REFERENCES "public"."people"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
  ALTER TABLE "incidents" ADD CONSTRAINT "incidents_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
 EXCEPTION
  WHEN duplicate_object THEN null;
@@ -1192,7 +1340,19 @@ EXCEPTION
 END $$;
 --> statement-breakpoint
 DO $$ BEGIN
+ ALTER TABLE "incidents" ADD CONSTRAINT "incidents_department_id_departments_id_fk" FOREIGN KEY ("department_id") REFERENCES "public"."departments"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
  ALTER TABLE "incidents" ADD CONSTRAINT "incidents_reported_by_tenant_user_id_tenant_users_id_fk" FOREIGN KEY ("reported_by_tenant_user_id") REFERENCES "public"."tenant_users"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ ALTER TABLE "incidents" ADD CONSTRAINT "incidents_supervisor_person_id_people_id_fk" FOREIGN KEY ("supervisor_person_id") REFERENCES "public"."people"("id") ON DELETE no action ON UPDATE no action;
 EXCEPTION
  WHEN duplicate_object THEN null;
 END $$;
@@ -1318,6 +1478,12 @@ EXCEPTION
 END $$;
 --> statement-breakpoint
 DO $$ BEGIN
+ ALTER TABLE "training_records" ADD CONSTRAINT "training_records_evaluator_person_id_people_id_fk" FOREIGN KEY ("evaluator_person_id") REFERENCES "public"."people"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
  ALTER TABLE "training_records" ADD CONSTRAINT "training_records_issued_by_tenant_user_id_tenant_users_id_fk" FOREIGN KEY ("issued_by_tenant_user_id") REFERENCES "public"."tenant_users"("id") ON DELETE no action ON UPDATE no action;
 EXCEPTION
  WHEN duplicate_object THEN null;
@@ -1384,6 +1550,18 @@ EXCEPTION
 END $$;
 --> statement-breakpoint
 DO $$ BEGIN
+ ALTER TABLE "equipment_items" ADD CONSTRAINT "equipment_items_last_seen_site_org_unit_id_org_units_id_fk" FOREIGN KEY ("last_seen_site_org_unit_id") REFERENCES "public"."org_units"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ ALTER TABLE "equipment_items" ADD CONSTRAINT "equipment_items_last_seen_holder_person_id_people_id_fk" FOREIGN KEY ("last_seen_holder_person_id") REFERENCES "public"."people"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
  ALTER TABLE "equipment_location_history" ADD CONSTRAINT "equipment_location_history_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
 EXCEPTION
  WHEN duplicate_object THEN null;
@@ -1439,6 +1617,42 @@ END $$;
 --> statement-breakpoint
 DO $$ BEGIN
  ALTER TABLE "equipment_work_orders" ADD CONSTRAINT "equipment_work_orders_assigned_to_tenant_user_id_tenant_users_id_fk" FOREIGN KEY ("assigned_to_tenant_user_id") REFERENCES "public"."tenant_users"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ ALTER TABLE "ppe_inspections" ADD CONSTRAINT "ppe_inspections_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ ALTER TABLE "ppe_inspections" ADD CONSTRAINT "ppe_inspections_item_id_ppe_items_id_fk" FOREIGN KEY ("item_id") REFERENCES "public"."ppe_items"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ ALTER TABLE "ppe_inspections" ADD CONSTRAINT "ppe_inspections_inspected_by_tenant_user_id_tenant_users_id_fk" FOREIGN KEY ("inspected_by_tenant_user_id") REFERENCES "public"."tenant_users"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ ALTER TABLE "ppe_issue_reports" ADD CONSTRAINT "ppe_issue_reports_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ ALTER TABLE "ppe_issue_reports" ADD CONSTRAINT "ppe_issue_reports_item_id_ppe_items_id_fk" FOREIGN KEY ("item_id") REFERENCES "public"."ppe_items"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ ALTER TABLE "ppe_issue_reports" ADD CONSTRAINT "ppe_issue_reports_reported_by_tenant_user_id_tenant_users_id_fk" FOREIGN KEY ("reported_by_tenant_user_id") REFERENCES "public"."tenant_users"("id") ON DELETE no action ON UPDATE no action;
 EXCEPTION
  WHEN duplicate_object THEN null;
 END $$;
@@ -1571,6 +1785,12 @@ END $$;
 --> statement-breakpoint
 DO $$ BEGIN
  ALTER TABLE "corrective_actions" ADD CONSTRAINT "corrective_actions_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ ALTER TABLE "corrective_actions" ADD CONSTRAINT "corrective_actions_assigned_by_tenant_user_id_tenant_users_id_fk" FOREIGN KEY ("assigned_by_tenant_user_id") REFERENCES "public"."tenant_users"("id") ON DELETE no action ON UPDATE no action;
 EXCEPTION
  WHEN duplicate_object THEN null;
 END $$;
@@ -1808,10 +2028,13 @@ CREATE INDEX IF NOT EXISTS "form_template_versions_tenant_idx" ON "form_template
 CREATE UNIQUE INDEX IF NOT EXISTS "form_templates_tenant_key_ux" ON "form_templates" USING btree ("tenant_id","key");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "form_templates_tenant_idx" ON "form_templates" USING btree ("tenant_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "form_templates_category_idx" ON "form_templates" USING btree ("tenant_id","category");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "incident_attachments_incident_idx" ON "incident_attachments" USING btree ("incident_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "incident_injuries_tenant_idx" ON "incident_injuries" USING btree ("tenant_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "incident_injuries_incident_idx" ON "incident_injuries" USING btree ("incident_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "incident_lost_time_incident_idx" ON "incident_lost_time_events" USING btree ("incident_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "incident_lost_time_tenant_idx" ON "incident_lost_time_events" USING btree ("tenant_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "incident_people_incident_idx" ON "incident_people" USING btree ("incident_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "incident_people_tenant_idx" ON "incident_people" USING btree ("tenant_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "incidents_tenant_idx" ON "incidents" USING btree ("tenant_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "incidents_reference_idx" ON "incidents" USING btree ("tenant_id","reference");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "incidents_status_idx" ON "incidents" USING btree ("tenant_id","status");--> statement-breakpoint
@@ -1844,6 +2067,10 @@ CREATE INDEX IF NOT EXISTS "equipment_types_tenant_idx" ON "equipment_types" USI
 CREATE INDEX IF NOT EXISTS "equipment_work_orders_item_idx" ON "equipment_work_orders" USING btree ("item_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "equipment_work_orders_status_idx" ON "equipment_work_orders" USING btree ("tenant_id","status");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "equipment_work_orders_tenant_idx" ON "equipment_work_orders" USING btree ("tenant_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "ppe_inspections_item_idx" ON "ppe_inspections" USING btree ("item_id","inspected_on");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "ppe_inspections_tenant_idx" ON "ppe_inspections" USING btree ("tenant_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "ppe_issue_reports_item_idx" ON "ppe_issue_reports" USING btree ("item_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "ppe_issue_reports_tenant_idx" ON "ppe_issue_reports" USING btree ("tenant_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "ppe_issues_item_idx" ON "ppe_issues" USING btree ("item_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "ppe_issues_person_idx" ON "ppe_issues" USING btree ("tenant_id","person_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "ppe_issues_tenant_idx" ON "ppe_issues" USING btree ("tenant_id");--> statement-breakpoint

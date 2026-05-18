@@ -176,9 +176,15 @@ export const trainingRecords = pgTable(
     source: trainingRecordSource('source').notNull(),
     classId: uuid('class_id').references(() => trainingClasses.id),
     score: integer('score'),
+    grade: integer('grade'), // percentage 0..100
     completedOn: date('completed_on').notNull(),
     expiresOn: date('expires_on'),
+    instructor: text('instructor'),
+    evaluatorPersonId: uuid('evaluator_person_id').references(() => people.id),
+    certificateType: text('certificate_type'), // 'auto' | 'photo' | null
+    certificateAttachmentId: uuid('certificate_attachment_id'),
     issuedByTenantUserId: uuid('issued_by_tenant_user_id').references(() => tenantUsers.id),
+    details: text('details'),
     notes: text('notes'),
     ...timestamps,
     ...softDelete,

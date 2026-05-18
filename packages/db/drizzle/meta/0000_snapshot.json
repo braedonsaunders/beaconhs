@@ -1,5 +1,5 @@
 {
-  "id": "143bae90-ca62-4183-9729-3efa921a6960",
+  "id": "78cb174d-ee7e-4fb0-84dc-eece06327e05",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -1422,6 +1422,18 @@
           "primaryKey": false,
           "notNull": true
         },
+        "formal_name": {
+          "name": "formal_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "job_title": {
+          "name": "job_title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "date_of_birth": {
           "name": "date_of_birth",
           "type": "date",
@@ -1473,6 +1485,24 @@
         "photo_attachment_id": {
           "name": "photo_attachment_id",
           "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "emergency_contact_name": {
+          "name": "emergency_contact_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "emergency_contact_phone": {
+          "name": "emergency_contact_phone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
@@ -3446,6 +3476,107 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.incident_attachments": {
+      "name": "incident_attachments",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "incident_id": {
+          "name": "incident_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "attachment_id": {
+          "name": "attachment_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "caption": {
+          "name": "caption",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "incident_attachments_incident_idx": {
+          "name": "incident_attachments_incident_idx",
+          "columns": [
+            {
+              "expression": "incident_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "incident_attachments_tenant_id_tenants_id_fk": {
+          "name": "incident_attachments_tenant_id_tenants_id_fk",
+          "tableFrom": "incident_attachments",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "incident_attachments_incident_id_incidents_id_fk": {
+          "name": "incident_attachments_incident_id_incidents_id_fk",
+          "tableFrom": "incident_attachments",
+          "tableTo": "incidents",
+          "columnsFrom": [
+            "incident_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.incident_injuries": {
       "name": "incident_injuries",
       "schema": "",
@@ -3755,6 +3886,141 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.incident_people": {
+      "name": "incident_people",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "incident_id": {
+          "name": "incident_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "person_id": {
+          "name": "person_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "person_name_text": {
+          "name": "person_name_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "incident_people_incident_idx": {
+          "name": "incident_people_incident_idx",
+          "columns": [
+            {
+              "expression": "incident_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "incident_people_tenant_idx": {
+          "name": "incident_people_tenant_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "incident_people_tenant_id_tenants_id_fk": {
+          "name": "incident_people_tenant_id_tenants_id_fk",
+          "tableFrom": "incident_people",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "incident_people_incident_id_incidents_id_fk": {
+          "name": "incident_people_incident_id_incidents_id_fk",
+          "tableFrom": "incident_people",
+          "tableTo": "incidents",
+          "columnsFrom": [
+            "incident_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "incident_people_person_id_people_id_fk": {
+          "name": "incident_people_person_id_people_id_fk",
+          "tableFrom": "incident_people",
+          "tableTo": "people",
+          "columnsFrom": [
+            "person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.incidents": {
       "name": "incidents",
       "schema": "",
@@ -3800,6 +4066,13 @@
           "notNull": true,
           "default": "'reported'"
         },
+        "classification": {
+          "name": "classification",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
         "title": {
           "name": "title",
           "type": "text",
@@ -3831,18 +4104,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "reported_by_tenant_user_id": {
-          "name": "reported_by_tenant_user_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "assigned_investigator_tenant_user_id": {
-          "name": "assigned_investigator_tenant_user_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "location": {
           "name": "location",
           "type": "text",
@@ -3855,9 +4116,185 @@
           "primaryKey": false,
           "notNull": false
         },
+        "department_id": {
+          "name": "department_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reported_by_tenant_user_id": {
+          "name": "reported_by_tenant_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "supervisor_person_id": {
+          "name": "supervisor_person_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "foreman_text": {
+          "name": "foreman_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "external_people_involved": {
+          "name": "external_people_involved",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "witnesses": {
+          "name": "witnesses",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "events_leading_up": {
+          "name": "events_leading_up",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "immediate_action_taken": {
           "name": "immediate_action_taken",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ppe_worn": {
+          "name": "ppe_worn",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "critical_injury": {
+          "name": "critical_injury",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "ministry_of_labour_notified": {
+          "name": "ministry_of_labour_notified",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "ems_notified": {
+          "name": "ems_notified",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "first_aid_received": {
+          "name": "first_aid_received",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "first_aid_provider": {
+          "name": "first_aid_provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "medical_attention_received": {
+          "name": "medical_attention_received",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "treated_at_hospital": {
+          "name": "treated_at_hospital",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "treated_in_city": {
+          "name": "treated_in_city",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "transportation": {
+          "name": "transportation",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lost_time": {
+          "name": "lost_time",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "lost_time_first_day": {
+          "name": "lost_time_first_day",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lost_time_last_day": {
+          "name": "lost_time_last_day",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lost_time_days": {
+          "name": "lost_time_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "modified_duty": {
+          "name": "modified_duty",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "modified_duty_first_day": {
+          "name": "modified_duty_first_day",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "modified_duty_last_day": {
+          "name": "modified_duty_last_day",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "modified_duty_days": {
+          "name": "modified_duty_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "externally_reportable": {
+          "name": "externally_reportable",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "actual_severity": {
+          "name": "actual_severity",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "potential_severity": {
+          "name": "potential_severity",
+          "type": "integer",
           "primaryKey": false,
           "notNull": false
         },
@@ -3874,12 +4311,25 @@
           "notNull": true,
           "default": "'[]'::jsonb"
         },
-        "classification": {
-          "name": "classification",
-          "type": "jsonb",
+        "assigned_investigator_tenant_user_id": {
+          "name": "assigned_investigator_tenant_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "in_progress": {
+          "name": "in_progress",
+          "type": "boolean",
           "primaryKey": false,
           "notNull": true,
-          "default": "'{}'::jsonb"
+          "default": true
+        },
+        "locked": {
+          "name": "locked",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "closed_at": {
           "name": "closed_at",
@@ -4042,12 +4492,38 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
+        "incidents_department_id_departments_id_fk": {
+          "name": "incidents_department_id_departments_id_fk",
+          "tableFrom": "incidents",
+          "tableTo": "departments",
+          "columnsFrom": [
+            "department_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
         "incidents_reported_by_tenant_user_id_tenant_users_id_fk": {
           "name": "incidents_reported_by_tenant_user_id_tenant_users_id_fk",
           "tableFrom": "incidents",
           "tableTo": "tenant_users",
           "columnsFrom": [
             "reported_by_tenant_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "incidents_supervisor_person_id_people_id_fk": {
+          "name": "incidents_supervisor_person_id_people_id_fk",
+          "tableFrom": "incidents",
+          "tableTo": "people",
+          "columnsFrom": [
+            "supervisor_person_id"
           ],
           "columnsTo": [
             "id"
@@ -4933,6 +5409,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "grade": {
+          "name": "grade",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
         "completed_on": {
           "name": "completed_on",
           "type": "date",
@@ -4945,9 +5427,39 @@
           "primaryKey": false,
           "notNull": false
         },
+        "instructor": {
+          "name": "instructor",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "evaluator_person_id": {
+          "name": "evaluator_person_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "certificate_type": {
+          "name": "certificate_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "certificate_attachment_id": {
+          "name": "certificate_attachment_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "issued_by_tenant_user_id": {
           "name": "issued_by_tenant_user_id",
           "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "details": {
+          "name": "details",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
@@ -5089,6 +5601,19 @@
           "tableTo": "training_classes",
           "columnsFrom": [
             "class_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "training_records_evaluator_person_id_people_id_fk": {
+          "name": "training_records_evaluator_person_id_people_id_fk",
+          "tableFrom": "training_records",
+          "tableTo": "people",
+          "columnsFrom": [
+            "evaluator_person_id"
           ],
           "columnsTo": [
             "id"
@@ -5474,6 +5999,87 @@
           "primaryKey": false,
           "notNull": false
         },
+        "photo_attachment_id": {
+          "name": "photo_attachment_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "manual_attachment_id": {
+          "name": "manual_attachment_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "requires_pre_use_inspection": {
+          "name": "requires_pre_use_inspection",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "pre_use_inspection_template_key": {
+          "name": "pre_use_inspection_template_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_pre_use_inspection_at": {
+          "name": "last_pre_use_inspection_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "requires_annual_inspection": {
+          "name": "requires_annual_inspection",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "last_annual_inspection_on": {
+          "name": "last_annual_inspection_on",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "next_annual_inspection_due": {
+          "name": "next_annual_inspection_due",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_missing": {
+          "name": "is_missing",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "last_seen_at": {
+          "name": "last_seen_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_seen_site_org_unit_id": {
+          "name": "last_seen_site_org_unit_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_seen_holder_person_id": {
+          "name": "last_seen_holder_person_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "billing_rate_category": {
+          "name": "billing_rate_category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "metadata": {
           "name": "metadata",
           "type": "jsonb",
@@ -5622,6 +6228,32 @@
           "tableTo": "people",
           "columnsFrom": [
             "current_holder_person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "equipment_items_last_seen_site_org_unit_id_org_units_id_fk": {
+          "name": "equipment_items_last_seen_site_org_unit_id_org_units_id_fk",
+          "tableFrom": "equipment_items",
+          "tableTo": "org_units",
+          "columnsFrom": [
+            "last_seen_site_org_unit_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "equipment_items_last_seen_holder_person_id_people_id_fk": {
+          "name": "equipment_items_last_seen_holder_person_id_people_id_fk",
+          "tableFrom": "equipment_items",
+          "tableTo": "people",
+          "columnsFrom": [
+            "last_seen_holder_person_id"
           ],
           "columnsTo": [
             "id"
@@ -6110,6 +6742,323 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.ppe_inspections": {
+      "name": "ppe_inspections",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "item_id": {
+          "name": "item_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "ppe_inspection_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "result": {
+          "name": "result",
+          "type": "ppe_inspection_result",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "inspected_by_tenant_user_id": {
+          "name": "inspected_by_tenant_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "inspected_on": {
+          "name": "inspected_on",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "next_due_on": {
+          "name": "next_due_on",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "ppe_inspections_item_idx": {
+          "name": "ppe_inspections_item_idx",
+          "columns": [
+            {
+              "expression": "item_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "inspected_on",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "ppe_inspections_tenant_idx": {
+          "name": "ppe_inspections_tenant_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "ppe_inspections_tenant_id_tenants_id_fk": {
+          "name": "ppe_inspections_tenant_id_tenants_id_fk",
+          "tableFrom": "ppe_inspections",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "ppe_inspections_item_id_ppe_items_id_fk": {
+          "name": "ppe_inspections_item_id_ppe_items_id_fk",
+          "tableFrom": "ppe_inspections",
+          "tableTo": "ppe_items",
+          "columnsFrom": [
+            "item_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "ppe_inspections_inspected_by_tenant_user_id_tenant_users_id_fk": {
+          "name": "ppe_inspections_inspected_by_tenant_user_id_tenant_users_id_fk",
+          "tableFrom": "ppe_inspections",
+          "tableTo": "tenant_users",
+          "columnsFrom": [
+            "inspected_by_tenant_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.ppe_issue_reports": {
+      "name": "ppe_issue_reports",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "item_id": {
+          "name": "item_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reported_by_tenant_user_id": {
+          "name": "reported_by_tenant_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reported_at": {
+          "name": "reported_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "ppe_issue_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'open'"
+        },
+        "resolution": {
+          "name": "resolution",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "resolved_at": {
+          "name": "resolved_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "ppe_issue_reports_item_idx": {
+          "name": "ppe_issue_reports_item_idx",
+          "columns": [
+            {
+              "expression": "item_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "ppe_issue_reports_tenant_idx": {
+          "name": "ppe_issue_reports_tenant_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "ppe_issue_reports_tenant_id_tenants_id_fk": {
+          "name": "ppe_issue_reports_tenant_id_tenants_id_fk",
+          "tableFrom": "ppe_issue_reports",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "ppe_issue_reports_item_id_ppe_items_id_fk": {
+          "name": "ppe_issue_reports_item_id_ppe_items_id_fk",
+          "tableFrom": "ppe_issue_reports",
+          "tableTo": "ppe_items",
+          "columnsFrom": [
+            "item_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "ppe_issue_reports_reported_by_tenant_user_id_tenant_users_id_fk": {
+          "name": "ppe_issue_reports_reported_by_tenant_user_id_tenant_users_id_fk",
+          "tableFrom": "ppe_issue_reports",
+          "tableTo": "tenant_users",
+          "columnsFrom": [
+            "reported_by_tenant_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.ppe_issues": {
       "name": "ppe_issues",
       "schema": "",
@@ -6363,6 +7312,36 @@
         },
         "expires_on": {
           "name": "expires_on",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_inspection_on": {
+          "name": "last_inspection_on",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "next_inspection_due": {
+          "name": "next_inspection_due",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_annual_inspection_on": {
+          "name": "last_annual_inspection_on",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "next_annual_inspection_due": {
+          "name": "next_annual_inspection_due",
           "type": "date",
           "primaryKey": false,
           "notNull": false
@@ -7262,6 +8241,20 @@
           "notNull": true,
           "default": "'[]'::jsonb"
         },
+        "print_header": {
+          "name": "print_header",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "print_footer": {
+          "name": "print_footer",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -7448,6 +8441,12 @@
           "notNull": true,
           "default": "'open'"
         },
+        "assigned_by_tenant_user_id": {
+          "name": "assigned_by_tenant_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "owner_tenant_user_id": {
           "name": "owner_tenant_user_id",
           "type": "uuid",
@@ -7460,6 +8459,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "assigned_on": {
+          "name": "assigned_on",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
         "due_on": {
           "name": "due_on",
           "type": "date",
@@ -7469,6 +8474,19 @@
         "root_cause": {
           "name": "root_cause",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "action_taken": {
+          "name": "action_taken",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source": {
+          "name": "source",
+          "type": "corrective_action_source",
+          "typeSchema": "public",
           "primaryKey": false,
           "notNull": false
         },
@@ -7507,6 +8525,13 @@
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
+        },
+        "locked": {
+          "name": "locked",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "metadata": {
           "name": "metadata",
@@ -7634,6 +8659,19 @@
             "id"
           ],
           "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "corrective_actions_assigned_by_tenant_user_id_tenant_users_id_fk": {
+          "name": "corrective_actions_assigned_by_tenant_user_id_tenant_users_id_fk",
+          "tableFrom": "corrective_actions",
+          "tableTo": "tenant_users",
+          "columnsFrom": [
+            "assigned_by_tenant_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
           "onUpdate": "no action"
         },
         "corrective_actions_owner_tenant_user_id_tenant_users_id_fk": {
@@ -9760,6 +10798,23 @@
         "cancelled"
       ]
     },
+    "public.ppe_inspection_kind": {
+      "name": "ppe_inspection_kind",
+      "schema": "public",
+      "values": [
+        "pre_use",
+        "annual"
+      ]
+    },
+    "public.ppe_inspection_result": {
+      "name": "ppe_inspection_result",
+      "schema": "public",
+      "values": [
+        "pass",
+        "fail",
+        "n_a"
+      ]
+    },
     "public.ppe_issue_action": {
       "name": "ppe_issue_action",
       "schema": "public",
@@ -9769,6 +10824,15 @@
         "replace",
         "mark_damaged",
         "discard"
+      ]
+    },
+    "public.ppe_issue_status": {
+      "name": "ppe_issue_status",
+      "schema": "public",
+      "values": [
+        "open",
+        "resolved",
+        "replaced"
       ]
     },
     "public.ppe_item_status": {
@@ -9810,6 +10874,19 @@
         "medium",
         "high",
         "critical"
+      ]
+    },
+    "public.corrective_action_source": {
+      "name": "corrective_action_source",
+      "schema": "public",
+      "values": [
+        "inspection",
+        "incident",
+        "near_miss",
+        "observation",
+        "audit",
+        "jsha",
+        "other"
       ]
     },
     "public.corrective_action_status": {

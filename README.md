@@ -4,7 +4,84 @@
 
 **Get started:** [`docs/QUICKSTART.md`](docs/QUICKSTART.md)
 
-**Plan:** This README is the consolidated implementation plan, written from a ~60-question discovery pass over the legacy codebase. Skim §1–2 for the elevator pitch; jump to §12 for phasing and §13 for risks.
+**Plan:** This README is the consolidated implementation plan, written from a ~60-question discovery pass over the legacy codebase. Skim §1–2 for the elevator pitch; jump to §12 for phasing, §13 for risks, and **[§0 for live build status](#0-build-status)**.
+
+---
+
+## 0. Build status
+
+Updated as work lands. `✅` = done, `🟡` = in progress / stub, `⬜` = not yet started.
+
+### Phase 0 — Foundations
+- ✅ Monorepo (Turbo + pnpm), Next.js 15 + React 19 + Tailwind, Docker compose (Postgres/Redis/MinIO/Mailpit), CI workflow
+- ✅ Drizzle schema for every module + RLS policies installed on all tenant-scoped tables
+- ✅ Tenants + Better-Auth (email/password + magic-link via Mailpit) + tenant memberships + 4 built-in roles
+- ✅ Tenant resolution + view-as for super-admin + tenant-switcher UI + impersonation banner
+- ✅ Sample data seed (10 people, 5 courses, 4 incidents with one fully populated, 4 CAs, 3 documents with versions/acks/reviews, 8 equipment items, 6 harnesses with inspection history)
+- ✅ List infrastructure: URL-driven search / sort / pagination / filter chips + reusable `Table`, `Pagination`, `SearchInput`, `SortableTh`, `FilterChips` primitives
+- ✅ Detail-page infrastructure: `Section` (accordion), `TabNav` (URL-driven tabs), `DetailGrid`, `DetailHeader`, `CheckIndicator`, `SeverityRating`
+- ⬜ Audit log writers wired into every mutation (helper exists, callers TBD)
+- ⬜ R2 file storage actually wired (signed PUT + image-optimization job)
+- ⬜ Notifications worker wired into module events
+
+### Phase 1 — Form builder
+- ✅ Schema + Zod validation (`FormSchemaV1`, every field type, conditional logic, multi-step workflow)
+- ✅ Field-type registry (40+ types), conditional-logic evaluator, scoring extractor, formula evaluator (with tests)
+- ✅ Form template list + detail page (schema browser, version history, assignments, recent responses, raw-JSON debug)
+- ✅ Form response detail page (renders any response against any version's schema, including repeating sections)
+- ✅ Form responses list with filters / search / pagination
+- 🟡 Auto-PDF renderer (Puppeteer pipeline scaffolded; needs R2 upload + signed URL)
+- ⬜ Form designer UI (drag-drop palette + canvas + logic builder + i18n editor)
+- ⬜ Form renderer UI for end-users (mobile-first, autosave drafts, voice-to-text, geotag)
+- ⬜ Workflow step transitions + signature capture
+- ⬜ Assignment dispatcher (scheduled / event-triggered tick consumer)
+
+### Phase 2 — Form-driven modules
+Each module's list page has search + sort + pagination + filter chips and every row clicks through to a detail page.
+
+| Module | List | Detail | Edit / actions |
+|---|---|---|---|
+| Incidents | ✅ | ✅ Full legacy parity: 7 accordion sections (general / medical with conditional fields / key-metrics severity 1–5 / injuries / lost-time / investigation / linked CAs), lock-on-close, status workflow, alerts for critical+MOL | ✅ Report incident form (auto-generates `INC-YYYY-NNNN` reference); ⬜ Edit form |
+| Corrective Actions | ✅ | ✅ General + work form + status workflow + source-link to incidents | ✅ New CA form (preserves source link from query string) |
+| Forms — Templates | ✅ | ✅ Overview + schema browser (sections + field types) + assignments + recent responses + raw JSON | ⬜ Designer UI |
+| Forms — Responses | ✅ | ✅ Renders any response with full schema-aware sections (incl. repeating) + workflow steps | ⬜ Renderer/edit UI |
+| Toolbox talks | (uses Forms) | (uses Forms) | — |
+
+### Phase 3 — Specialty modules
+| Module | List | Detail | Notes |
+|---|---|---|---|
+| People | ✅ | ✅ 4-tab profile (Transcript / Compliance / Incidents / PPE / Edit) + sidebar profile card + emergency contact + notes | ✅ Add person form; ⬜ Inline edit form |
+| Training — Courses | ✅ (within /training) | ✅ Course details + records list + scheduled classes | — |
+| Training — Records | ✅ (within /training) | ✅ Record detail + cert verification info + wallet/cert PDF buttons | ⬜ PDF generators wired |
+| Equipment | ✅ | ✅ 4-tab detail (Maintenance / Work orders / Location / Edit) + sidebar asset card + report-missing/found actions | ⬜ Inline edit form; ⬜ QR label generator |
+| PPE | ✅ | ✅ Inspection log + new-inspection form + issue-report form + issuance log + status changer + alerts on open issues | — |
+| Documents | ✅ | ✅ 4-tab detail (Overview / Versions / Acknowledgments / Reviews) + publish/unpublish buttons | ⬜ Acknowledge action wired; ⬜ Versioning editor |
+| Confined Space | ⬜ | ⬜ | Schema exists; UI deferred |
+| Lone Worker | ⬜ | ⬜ | Schema exists; UI deferred |
+
+### Phase 4 — Dashboards + reports + plugin framework
+- 🟡 Dashboard with stat tiles (4 KPI tiles wired to live queries)
+- ⬜ Drag-drop widget builder
+- ⬜ Pre-built reports + custom report builder
+- ⬜ Scheduled reports
+- ⬜ Plugin SDK runtime + first-party plugins
+
+### Phase 5 — Migration + cutover
+- ⬜ ETL from beaconhs SQL Server
+- ⬜ Validation harness
+- ⬜ Dry runs + cutover
+
+### Admin
+- ✅ Admin landing page (cards for each admin area)
+- ✅ /admin/tenants list with member/people/incident counts + "View as" button (super-admin only)
+- ⬜ /admin/users (invitations, role assignments)
+- ⬜ /admin/org (configurable hierarchy editor)
+- ⬜ /admin/settings (branding, risk matrix, hierarchy depth, languages)
+- ⬜ /admin/audit log viewer
+
+### Public-facing
+- ✅ `/verify/<token>` certificate verification page (handles valid / expired / revoked / not-found)
+- ✅ `/manifest.webmanifest` + service worker for PWA install
 
 ---
 

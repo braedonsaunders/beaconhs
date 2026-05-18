@@ -1,39 +1,141 @@
+import Link from 'next/link'
 import { Users } from 'lucide-react'
-import { asc } from 'drizzle-orm'
-import { EmptyState } from '@beaconhs/ui'
-import { people } from '@beaconhs/db/schema'
+import { and, asc, count, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
+import {
+  Button,
+  EmptyState,
+  PageHeader,
+  Table,
+  TableBody,
+  TableCell,
+  TableHeader,
+  TableRow,
+} from '@beaconhs/ui'
+import { departments, people, trades } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { parseListParams } from '@/lib/list-params'
+import { SearchInput } from '@/components/search-input'
+import { SortableTh } from '@/components/sortable-th'
+import { Pagination } from '@/components/pagination'
 
 export const metadata = { title: 'People' }
 
-export default async function PeoplePage() {
+const SORTS = ['name', 'employee_no', 'hire_date', 'department', 'trade'] as const
+
+export default async function PeoplePage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  const sp = await searchParams
+  const params = parseListParams(sp, { sort: 'name', dir: 'asc', perPage: 25, allowedSorts: SORTS })
   const ctx = await requireRequestContext()
-  const rows = await ctx.db((tx) =>
-    tx.select().from(people).orderBy(asc(people.lastName), asc(people.firstName)).limit(200),
-  )
+
+  const { rows, total } = await ctx.db(async (tx) => {
+    const filters: SQL<unknown>[] = []
+    if (params.q) {
+      const term = `%${params.q}%`
+      const cond = or(
+        ilike(people.firstName, term),
+        ilike(people.lastName, term),
+        ilike(people.employeeNo, term),
+      )
+      if (cond) filters.push(cond)
+    }
+    const whereClause = filters.length > 0 ? and(...filters) : undefined
+
+    const orderBy =
+      params.sort === 'name'
+        ? params.dir === 'asc'
+          ? [asc(people.lastName), asc(people.firstName)]
+          : [desc(people.lastName), desc(people.firstName)]
+        : params.sort === 'employee_no'
+          ? [params.dir === 'asc' ? asc(people.employeeNo) : desc(people.employeeNo)]
+          : params.sort === 'hire_date'
+            ? [params.dir === 'asc' ? asc(people.hireDate) : desc(people.hireDate)]
+            : params.sort === 'department'
+              ? [params.dir === 'asc' ? asc(departments.name) : desc(departments.name)]
+              : [params.dir === 'asc' ? asc(trades.name) : desc(trades.name)]
+
+    const [tot] = await tx.select({ c: count() }).from(people).where(whereClause)
+    const data = await tx
+      .select({
+        person: people,
+        department: departments,
+        trade: trades,
+      })
+      .from(people)
+      .leftJoin(departments, eq(departments.id, people.departmentId))
+      .leftJoin(trades, eq(trades.id, people.tradeId))
+      .where(whereClause)
+      .orderBy(...orderBy)
+      .limit(params.perPage)
+      .offset((params.page - 1) * params.perPage)
+
+    return { rows: data, total: Number(tot?.c ?? 0) }
+  })
+
+  const sortProps = { basePath: '/people', currentParams: sp, dir: params.dir }
+
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">People</h1>
-      <p className="text-sm text-slate-500">
-        Workers, contractors, supervisors. Sync from NetSuite via the first-party plugin.
-      </p>
+    <div className="space-y-4">
+      <PageHeader
+        title="People"
+        description="Workers, contractors, supervisors. Sync from your HRIS via the plugin framework."
+        actions={
+          <Link href="/people/new">
+            <Button>Add person</Button>
+          </Link>
+        }
+      />
+      <div className="flex items-center gap-3">
+        <SearchInput placeholder="Search by name or employee #" />
+      </div>
       {rows.length === 0 ? (
         <EmptyState
           icon={<Users size={32} />}
-          title="No people in this tenant"
+          title={params.q ? `No people match "${params.q}"` : 'No people yet'}
           description="Import via CSV from Admin → Import, or enable the NetSuite plugin."
         />
       ) : (
-        <ul className="divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white">
-          {rows.map((p) => (
-            <li key={p.id} className="flex items-center justify-between p-4 text-sm">
-              <span className="font-medium">
-                {p.lastName}, {p.firstName}
-              </span>
-              <span className="text-slate-500">{p.employeeNo ?? '—'}</span>
-            </li>
-          ))}
-        </ul>
+        <>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <SortableTh {...sortProps} column="name" active={params.sort === 'name'}>Name</SortableTh>
+                <SortableTh {...sortProps} column="employee_no" active={params.sort === 'employee_no'}>Employee #</SortableTh>
+                <SortableTh {...sortProps} column="department" active={params.sort === 'department'}>Department</SortableTh>
+                <SortableTh {...sortProps} column="trade" active={params.sort === 'trade'}>Trade</SortableTh>
+                <SortableTh {...sortProps} column="hire_date" active={params.sort === 'hire_date'}>Hire date</SortableTh>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map(({ person, department, trade }) => (
+                <TableRow key={person.id}>
+                  <TableCell>
+                    <Link
+                      href={`/people/${person.id}`}
+                      className="font-medium text-slate-900 hover:underline"
+                    >
+                      {person.lastName}, {person.firstName}
+                    </Link>
+                  </TableCell>
+                  <TableCell className="text-slate-600">{person.employeeNo ?? '—'}</TableCell>
+                  <TableCell className="text-slate-600">{department?.name ?? '—'}</TableCell>
+                  <TableCell className="text-slate-600">{trade?.name ?? '—'}</TableCell>
+                  <TableCell className="text-slate-600">{person.hireDate ?? '—'}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          <Pagination
+            basePath="/people"
+            currentParams={sp}
+            total={total}
+            page={params.page}
+            perPage={params.perPage}
+          />
+        </>
       )}
     </div>
   )

@@ -1,0 +1,55 @@
+import { cn } from './utils'
+
+export function PageHeader({
+  title,
+  description,
+  actions,
+  className,
+}: {
+  title: string
+  description?: string
+  actions?: React.ReactNode
+  className?: string
+}) {
+  return (
+    <header className={cn('flex items-end justify-between gap-4', className)}>
+      <div className="min-w-0 space-y-1">
+        <h1 className="truncate text-2xl font-semibold text-slate-900">{title}</h1>
+        {description ? <p className="text-sm text-slate-500">{description}</p> : null}
+      </div>
+      {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
+    </header>
+  )
+}
+
+export function DetailHeader({
+  back,
+  title,
+  subtitle,
+  badge,
+  actions,
+}: {
+  back?: { href: string; label: string }
+  title: string
+  subtitle?: string
+  badge?: React.ReactNode
+  actions?: React.ReactNode
+}) {
+  return (
+    <header className="space-y-2">
+      {back ? (
+        <a href={back.href} className="text-sm text-teal-700 hover:underline">
+          ← {back.label}
+        </a>
+      ) : null}
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <h1 className="truncate text-2xl font-semibold text-slate-900">{title}</h1>
+          {badge}
+        </div>
+        {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
+      </div>
+      {subtitle ? <p className="text-sm text-slate-500">{subtitle}</p> : null}
+    </header>
+  )
+}

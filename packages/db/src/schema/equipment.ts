@@ -3,6 +3,7 @@
 
 import { relations } from 'drizzle-orm'
 import {
+  boolean,
   date,
   doublePrecision,
   index,
@@ -67,6 +68,19 @@ export const equipmentItems = pgTable(
     warrantyExpiresOn: date('warranty_expires_on'),
     currentSiteOrgUnitId: uuid('current_site_org_unit_id').references(() => orgUnits.id),
     currentHolderPersonId: uuid('current_holder_person_id').references(() => people.id),
+    photoAttachmentId: uuid('photo_attachment_id'),
+    manualAttachmentId: uuid('manual_attachment_id'),
+    requiresPreUseInspection: boolean('requires_pre_use_inspection').default(false).notNull(),
+    preUseInspectionTemplateKey: text('pre_use_inspection_template_key'),
+    lastPreUseInspectionAt: timestamp('last_pre_use_inspection_at', { withTimezone: true }),
+    requiresAnnualInspection: boolean('requires_annual_inspection').default(false).notNull(),
+    lastAnnualInspectionOn: date('last_annual_inspection_on'),
+    nextAnnualInspectionDue: date('next_annual_inspection_due'),
+    isMissing: boolean('is_missing').default(false).notNull(),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
+    lastSeenSiteOrgUnitId: uuid('last_seen_site_org_unit_id').references(() => orgUnits.id),
+    lastSeenHolderPersonId: uuid('last_seen_holder_person_id').references(() => people.id),
+    billingRateCategory: text('billing_rate_category'),
     metadata: jsonb('metadata').$type<Record<string, unknown>>().default({}).notNull(),
     ...timestamps,
     ...softDelete,
