@@ -30,6 +30,10 @@ Then open:
 - Mailpit (catches outbound email): <http://localhost:8025>
 - MinIO console: <http://localhost:9001> (login `beaconhs` / `beaconhs-dev-secret`)
 
+> Postgres is on **5433** and Redis on **6380** so they don't collide with
+> other local instances. `.env.example` already uses those ports. If you start
+> the web app outside `pnpm dev`, symlink the env: `ln -sfn ../../.env apps/web/.env.local`.
+
 ## Default super-admin
 
 After `pnpm db:seed`, sign in as `admin@beaconhs.local`. Use the **Magic link**
