@@ -1,0 +1,2 @@
+# First-party plugins live here.
+# Each plugin is its own workspace package, e.g. plugins/netsuite-sync/.

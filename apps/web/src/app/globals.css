@@ -1,0 +1,10 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import '@beaconhs/ui/styles.css';
+
+html,
+body {
+  height: 100%;
+}

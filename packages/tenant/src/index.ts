@@ -1,0 +1,96 @@
+import { type Database, withSuperAdmin, withTenant } from '@beaconhs/db'
+import type { RoleScope } from '@beaconhs/db/schema'
+
+/**
+ * Resolved auth + tenant context for a request. Built by the web app's
+ * `getRequestContext()` helper and threaded through Server Actions / API routes.
+ */
+export type RequestContext = {
+  userId: string
+  tenantId: string | null // null on /admin or pre-tenant-selection pages
+  isSuperAdmin: boolean
+  // The active tenant_user membership (id, display name)
+  membership: { id: string; displayName: string } | null
+  permissions: Set<string>
+  scopes: RoleScope[]
+  // Convenience: bound DB executor with tenant context applied
+  db: <T>(fn: (tx: Database) => Promise<T>) => Promise<T>
+}
+
+export type SuperAdminContext = {
+  userId: string
+  isSuperAdmin: true
+  db: <T>(fn: (tx: Database) => Promise<T>) => Promise<T>
+}
+
+export function makeTenantContext(
+  baseDb: Database,
+  args: Omit<RequestContext, 'db'> & { tenantId: string },
+): RequestContext {
+  return {
+    ...args,
+    db: <T>(fn: (tx: Database) => Promise<T>) => withTenant(baseDb, args.tenantId, fn),
+  }
+}
+
+export function makeSuperAdminContext(baseDb: Database, userId: string): SuperAdminContext {
+  return {
+    userId,
+    isSuperAdmin: true,
+    db: <T>(fn: (tx: Database) => Promise<T>) => withSuperAdmin(baseDb, fn),
+  }
+}
+
+export function can(ctx: RequestContext, perm: string): boolean {
+  if (ctx.isSuperAdmin) return true
+  if (ctx.permissions.has(perm)) return true
+  // wildcard convention: 'incidents.*' grants any 'incidents.x'
+  for (const p of ctx.permissions) {
+    if (p.endsWith('.*') && perm.startsWith(p.slice(0, -1))) return true
+  }
+  return false
+}
+
+export function assertCan(ctx: RequestContext, perm: string): void {
+  if (!can(ctx, perm)) {
+    throw new ForbiddenError(perm)
+  }
+}
+
+export class ForbiddenError extends Error {
+  override readonly name = 'ForbiddenError'
+  constructor(public readonly permission: string) {
+    super(`Missing permission: ${permission}`)
+  }
+}
+
+export class UnauthorizedError extends Error {
+  override readonly name = 'UnauthorizedError'
+  constructor(message = 'Not signed in') {
+    super(message)
+  }
+}
+
+// Site-level scoping decision: does this ctx grant access to this site?
+export function canSeeSite(ctx: RequestContext, siteId: string | null): boolean {
+  if (!siteId) return true
+  for (const scope of ctx.scopes) {
+    if (scope.type === 'tenant') return true
+    if (scope.type === 'sites' && scope.siteIds.includes(siteId)) return true
+  }
+  return false
+}
+
+// 'self' scope: a worker should only see records where they are the subject/submitter.
+export function selfOnlyFilter(
+  ctx: RequestContext,
+): { type: 'tenant' } | { type: 'self' } | { type: 'sites'; siteIds: string[] } | { type: 'crews'; crewIds: string[] } {
+  if (ctx.isSuperAdmin) return { type: 'tenant' }
+  // Take the widest scope the user has.
+  let widest: RoleScope | null = null
+  const order = { tenant: 4, sites: 3, crews: 2, self: 1 } as const
+  for (const s of ctx.scopes) {
+    if (!widest || order[s.type] > order[widest.type]) widest = s
+  }
+  return widest ?? { type: 'self' }
+}

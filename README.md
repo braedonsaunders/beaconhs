@@ -1,6 +1,10 @@
-# BeaconHS — Greenfield Rewrite Plan
+# BeaconHS
 
-A consolidated plan for replacing the existing Laravel 5.8 BeaconHS app with a modern multi-tenant SaaS platform, based on a thorough read of the current codebase and ~60 discovery questions.
+> Greenfield rewrite of the legacy Laravel 5.8 BeaconHS Health & Safety platform onto a modern multi-tenant TypeScript stack.
+
+**Get started:** [`docs/QUICKSTART.md`](docs/QUICKSTART.md)
+
+**Plan:** This README is the consolidated implementation plan, written from a ~60-question discovery pass over the legacy codebase. Skim §1–2 for the elevator pitch; jump to §12 for phasing and §13 for risks.
 
 ---
 

@@ -1,0 +1,24 @@
+{
+  "name": "@beaconhs/jobs",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./email": "./src/queues/email.ts",
+    "./pdf": "./src/queues/pdf.ts",
+    "./notify": "./src/queues/notify.ts",
+    "./scheduled": "./src/queues/scheduled.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist .turbo"
+  },
+  "dependencies": {
+    "bullmq": "^5.21.2",
+    "ioredis": "^5.4.1"
+  },
+  "devDependencies": { "typescript": "^5.6.3" }
+}

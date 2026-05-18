@@ -1,0 +1,20 @@
+// Schema barrel.
+// Each domain has its own file; relations are declared alongside the tables that own them.
+
+export * from './core'
+export * from './iam'
+export * from './org'
+export * from './audit'
+export * from './attachments'
+export * from './forms'
+export * from './incidents'
+export * from './training'
+export * from './equipment'
+export * from './ppe'
+export * from './documents'
+export * from './corrective-actions'
+export * from './confined-space'
+export * from './lone-worker'
+export * from './notifications'
+export * from './plugins'
+export * from './api-keys'
