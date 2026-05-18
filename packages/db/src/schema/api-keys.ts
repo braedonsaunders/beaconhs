@@ -16,7 +16,7 @@ export const apiKeys = pgTable(
     keyHash: text('key_hash').notNull(),
     prefix: text('prefix').notNull(), // e.g. 'bhs_live_…' first 8 chars, shown in UI
     scopes: jsonb('scopes').$type<string[]>().default([]).notNull(),
-    createdBy: uuid('created_by').references(() => users.id),
+    createdBy: text('created_by').references(() => users.id),
     lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
     expiresAt: timestamp('expires_at', { withTimezone: true }),
     revokedAt: timestamp('revoked_at', { withTimezone: true }),

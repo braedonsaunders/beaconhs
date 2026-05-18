@@ -16,9 +16,12 @@
   },
   "dependencies": {
     "@beaconhs/db": "workspace:*",
-    "better-auth": "^1.1.5"
+    "@beaconhs/jobs": "workspace:*",
+    "better-auth": "^1.6.11",
+    "pg": "^8.13.1"
   },
   "devDependencies": {
+    "@types/pg": "^8.11.10",
     "typescript": "^5.6.3"
   }
 }

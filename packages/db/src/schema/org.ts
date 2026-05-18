@@ -106,7 +106,7 @@ export const people = pgTable(
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
     // Optional link to a system user (workers without app access have no userId)
-    userId: uuid('user_id').references(() => users.id),
+    userId: text('user_id').references(() => users.id),
     employeeNo: text('employee_no'),
     firstName: text('first_name').notNull(),
     lastName: text('last_name').notNull(),

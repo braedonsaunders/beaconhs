@@ -1,7 +1,7 @@
-import 'dotenv/config'
-import { createClient } from './client'
-import { BUILTIN_ROLES, roles, tenants, tenantUsers, users } from './schema'
+import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
+import { createClient } from './client'
+import { account, BUILTIN_ROLES, roles, tenants, tenantUsers, user } from './schema'
 
 async function main() {
   const { db, sql: pg } = createClient()
@@ -10,23 +10,25 @@ async function main() {
   await db.transaction(async (tx) => {
     await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
 
-    // Super-admin user
-    const [admin] = await tx
-      .insert(users)
+    const adminId = randomUUID()
+    const inserted = await tx
+      .insert(user)
       .values({
+        id: adminId,
         email: 'admin@beaconhs.local',
         name: 'Super Admin',
+        emailVerified: true,
         isSuperAdmin: true,
       })
       .onConflictDoNothing()
       .returning()
 
-    if (!admin) {
+    if (inserted.length === 0) {
       console.log('  · super-admin already exists, skipping')
       return
     }
+    const admin = inserted[0]!
 
-    // Demo tenant
     const [tenant] = await tx
       .insert(tenants)
       .values({
@@ -36,10 +38,8 @@ async function main() {
         enabledLanguages: ['en'],
       })
       .returning()
-
     if (!tenant) throw new Error('Failed to create demo tenant')
 
-    // Membership
     await tx.insert(tenantUsers).values({
       tenantId: tenant.id,
       userId: admin.id,
@@ -47,7 +47,6 @@ async function main() {
       joinedAt: new Date(),
     })
 
-    // Built-in roles
     for (const [key, def] of Object.entries(BUILTIN_ROLES)) {
       await tx.insert(roles).values({
         tenantId: tenant.id,
@@ -59,8 +58,9 @@ async function main() {
       })
     }
 
-    console.log(`  · created tenant ${tenant.slug} (${tenant.id})`)
+    console.log(`  · created tenant ${tenant.slug}`)
     console.log(`  · created super-admin ${admin.email}`)
+    console.log(`  · sign in via Magic link (Mailpit: http://localhost:8025)`)
   })
 
   await pg.end()

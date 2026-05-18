@@ -66,7 +66,7 @@ export const documentVersions = pgTable(
     contentAttachmentId: uuid('content_attachment_id'),
     contentMarkdown: text('content_markdown'), // for in-app authored docs
     publishedAt: timestamp('published_at', { withTimezone: true }),
-    publishedBy: uuid('published_by').references(() => users.id),
+    publishedBy: text('published_by').references(() => users.id),
     changelog: text('changelog'),
     ...timestamps,
   },

@@ -28,7 +28,7 @@ export const attachments = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    uploadedBy: uuid('uploaded_by').references(() => users.id),
+    uploadedBy: text('uploaded_by').references(() => users.id),
     kind: attachmentKind('kind').notNull(),
     r2Key: text('r2_key').notNull(),
     contentType: text('content_type').notNull(),

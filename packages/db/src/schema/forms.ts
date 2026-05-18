@@ -47,7 +47,7 @@ export const formTemplates = pgTable(
     // Which built-in module this template powers, if any. Lets us hide certain
     // templates from the generic forms list when they're owned by a specialty UI.
     moduleBinding: text('module_binding'), // 'inspections' | 'jsha' | 'toolbox_talk' | 'incident_investigation' | …
-    createdBy: uuid('created_by').references(() => users.id),
+    createdBy: text('created_by').references(() => users.id),
     ...timestamps,
     ...softDelete,
   },
@@ -73,7 +73,7 @@ export const formTemplateVersions = pgTable(
     schema: jsonb('schema').$type<FormSchemaV1>().notNull(),
     changelog: text('changelog'),
     publishedAt: timestamp('published_at', { withTimezone: true }),
-    publishedBy: uuid('published_by').references(() => users.id),
+    publishedBy: text('published_by').references(() => users.id),
     ...timestamps,
   },
   (t) => ({
@@ -230,7 +230,7 @@ export const formAssignments = pgTable(
     // Manual one-shot due date
     dueAt: timestamp('due_at', { withTimezone: true }),
     enabled: boolean('enabled').default(true).notNull(),
-    createdBy: uuid('created_by').references(() => users.id),
+    createdBy: text('created_by').references(() => users.id),
     ...timestamps,
   },
   (t) => ({

@@ -9,7 +9,7 @@ export const auditLog = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    actorUserId: uuid('actor_user_id').references(() => users.id, { onDelete: 'set null' }),
+    actorUserId: text('actor_user_id').references(() => users.id, { onDelete: 'set null' }),
     actorIp: text('actor_ip'),
     actorUserAgent: text('actor_user_agent'),
     entityType: text('entity_type').notNull(), // e.g. 'incident', 'form_response'
