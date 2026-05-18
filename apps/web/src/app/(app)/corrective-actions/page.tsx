@@ -8,7 +8,6 @@ export const metadata = { title: 'Corrective Actions' }
 
 export default async function CorrectiveActionsPage() {
   const ctx = await requireRequestContext()
-  if (ctx.isSuperAdmin) return <EmptyState icon={<ListChecks />} title="Pick a tenant" />
   const rows = await ctx.db((tx) =>
     tx.select().from(correctiveActions).orderBy(desc(correctiveActions.createdAt)).limit(50),
   )

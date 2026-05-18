@@ -8,7 +8,6 @@ export const metadata = { title: 'People' }
 
 export default async function PeoplePage() {
   const ctx = await requireRequestContext()
-  if (ctx.isSuperAdmin) return <EmptyState icon={<Users />} title="Pick a tenant" />
   const rows = await ctx.db((tx) =>
     tx.select().from(people).orderBy(asc(people.lastName), asc(people.firstName)).limit(200),
   )

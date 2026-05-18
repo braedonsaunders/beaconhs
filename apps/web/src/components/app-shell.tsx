@@ -8,6 +8,7 @@ import {
   GraduationCap,
   HardHat,
   ListChecks,
+  ShieldAlert,
   Settings,
   ShieldCheck,
   UserCircle2,
@@ -15,26 +16,40 @@ import {
   Wrench,
 } from 'lucide-react'
 import { SignOutButton } from './sign-out-button'
+import { TenantSwitcher } from './tenant-switcher'
 
-type Ctx = { isSuperAdmin: boolean; membership?: { displayName: string } | null }
+type Ctx = {
+  isSuperAdmin: boolean
+  membership?: { displayName: string } | null
+  tenantId: string
+  tenantName: string
+}
 
 const NAV = [
-  { href: '/dashboard', label: 'Dashboard', icon: Gauge, perm: null },
-  { href: '/forms', label: 'Forms', icon: ClipboardCheck, perm: null },
-  { href: '/incidents', label: 'Incidents', icon: AlertTriangle, perm: null },
-  { href: '/training', label: 'Training', icon: GraduationCap, perm: null },
-  { href: '/equipment', label: 'Equipment', icon: Wrench, perm: null },
-  { href: '/ppe', label: 'PPE', icon: HardHat, perm: null },
-  { href: '/documents', label: 'Documents', icon: BookOpen, perm: null },
-  { href: '/corrective-actions', label: 'Corrective Actions', icon: ListChecks, perm: null },
-  { href: '/people', label: 'People', icon: Users, perm: null },
-  { href: '/confined-space', label: 'Confined Space', icon: ShieldCheck, perm: null },
-  { href: '/reports', label: 'Reports', icon: FileText, perm: null },
-  { href: '/admin', label: 'Admin', icon: Settings, perm: null },
+  { href: '/dashboard', label: 'Dashboard', icon: Gauge },
+  { href: '/forms', label: 'Forms', icon: ClipboardCheck },
+  { href: '/incidents', label: 'Incidents', icon: AlertTriangle },
+  { href: '/training', label: 'Training', icon: GraduationCap },
+  { href: '/equipment', label: 'Equipment', icon: Wrench },
+  { href: '/ppe', label: 'PPE', icon: HardHat },
+  { href: '/documents', label: 'Documents', icon: BookOpen },
+  { href: '/corrective-actions', label: 'Corrective Actions', icon: ListChecks },
+  { href: '/people', label: 'People', icon: Users },
+  { href: '/confined-space', label: 'Confined Space', icon: ShieldCheck },
+  { href: '/reports', label: 'Reports', icon: FileText },
+  { href: '/admin', label: 'Admin', icon: Settings },
 ] as const
 
-export function AppShell({ ctx, children }: { ctx: Ctx; children: React.ReactNode }) {
-  const display = ctx.membership?.displayName ?? (ctx.isSuperAdmin ? 'Super Admin' : 'Account')
+export function AppShell({
+  ctx,
+  availableTenants,
+  children,
+}: {
+  ctx: Ctx
+  availableTenants: { id: string; name: string; slug: string }[]
+  children: React.ReactNode
+}) {
+  const display = ctx.membership?.displayName ?? 'Account'
   return (
     <div className="flex min-h-screen">
       <aside className="w-60 shrink-0 border-r border-slate-200 bg-white">
@@ -58,8 +73,20 @@ export function AppShell({ ctx, children }: { ctx: Ctx; children: React.ReactNod
         </nav>
       </aside>
       <div className="flex flex-1 flex-col">
+        {ctx.isSuperAdmin ? (
+          <div className="flex items-center gap-2 border-b border-amber-300 bg-amber-50 px-6 py-1.5 text-xs text-amber-900">
+            <ShieldAlert size={14} />
+            <span>
+              Super-admin view · currently scoped to <strong>{ctx.tenantName}</strong>
+            </span>
+          </div>
+        ) : null}
         <header className="flex h-14 items-center justify-between border-b border-slate-200 bg-white px-6">
-          <div className="text-sm text-slate-500">{ctx.isSuperAdmin ? 'Super admin' : 'Tenant'}</div>
+          <TenantSwitcher
+            current={{ id: ctx.tenantId, name: ctx.tenantName }}
+            available={availableTenants}
+            isSuperAdmin={ctx.isSuperAdmin}
+          />
           <div className="flex items-center gap-3 text-sm">
             <UserCircle2 size={18} className="text-slate-500" />
             <span>{display}</span>

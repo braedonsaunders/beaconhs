@@ -9,16 +9,6 @@ export const metadata = { title: 'Forms' }
 
 export default async function FormsPage() {
   const ctx = await requireRequestContext()
-  if (ctx.isSuperAdmin) {
-    return (
-      <EmptyState
-        icon={<ClipboardCheck />}
-        title="Pick a tenant"
-        description="Super-admins must impersonate a tenant to view its forms."
-      />
-    )
-  }
-
   const templates = await ctx.db((tx) =>
     tx.select().from(formTemplates).orderBy(desc(formTemplates.updatedAt)).limit(100),
   )

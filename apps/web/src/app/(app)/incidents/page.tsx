@@ -9,7 +9,6 @@ export const metadata = { title: 'Incidents' }
 
 export default async function IncidentsPage() {
   const ctx = await requireRequestContext()
-  if (ctx.isSuperAdmin) return <EmptyState icon={<AlertTriangle />} title="Pick a tenant" />
   const rows = await ctx.db((tx) =>
     tx.select().from(incidents).orderBy(desc(incidents.occurredAt)).limit(50),
   )

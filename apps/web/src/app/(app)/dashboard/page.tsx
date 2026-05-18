@@ -13,43 +13,40 @@ export const metadata = { title: 'Dashboard' }
 
 export default async function DashboardPage() {
   const ctx = await requireRequestContext()
-  const stats =
-    ctx.isSuperAdmin
-      ? { incidents: 0, openCAs: 0, submissionsToday: 0, expiringCerts: 0 }
-      : await ctx.db(async (tx) => {
-          const thirty = new Date(Date.now() - 30 * 24 * 3600 * 1000)
-          const ninety = new Date(Date.now() + 90 * 24 * 3600 * 1000)
-          const todayStart = new Date()
-          todayStart.setHours(0, 0, 0, 0)
+  const stats = await ctx.db(async (tx) => {
+    const thirty = new Date(Date.now() - 30 * 24 * 3600 * 1000)
+    const ninety = new Date(Date.now() + 90 * 24 * 3600 * 1000)
+    const todayStart = new Date()
+    todayStart.setHours(0, 0, 0, 0)
 
-          const [incRow] = await tx
-            .select({ c: count() })
-            .from(incidents)
-            .where(gte(incidents.occurredAt, thirty))
-          const [caRow] = await tx
-            .select({ c: count() })
-            .from(correctiveActions)
-            .where(and(isNull(correctiveActions.closedAt)))
-          const [subRow] = await tx
-            .select({ c: count() })
-            .from(formResponses)
-            .where(gte(formResponses.submittedAt, todayStart))
-          const [certRow] = await tx
-            .select({ c: count() })
-            .from(trainingRecords)
-            .where(
-              and(
-                sql`expires_on IS NOT NULL`,
-                sql`expires_on <= ${ninety.toISOString().slice(0, 10)}`,
-              ),
-            )
-          return {
-            incidents: Number(incRow?.c ?? 0),
-            openCAs: Number(caRow?.c ?? 0),
-            submissionsToday: Number(subRow?.c ?? 0),
-            expiringCerts: Number(certRow?.c ?? 0),
-          }
-        })
+    const [incRow] = await tx
+      .select({ c: count() })
+      .from(incidents)
+      .where(gte(incidents.occurredAt, thirty))
+    const [caRow] = await tx
+      .select({ c: count() })
+      .from(correctiveActions)
+      .where(and(isNull(correctiveActions.closedAt)))
+    const [subRow] = await tx
+      .select({ c: count() })
+      .from(formResponses)
+      .where(gte(formResponses.submittedAt, todayStart))
+    const [certRow] = await tx
+      .select({ c: count() })
+      .from(trainingRecords)
+      .where(
+        and(
+          sql`expires_on IS NOT NULL`,
+          sql`expires_on <= ${ninety.toISOString().slice(0, 10)}`,
+        ),
+      )
+    return {
+      incidents: Number(incRow?.c ?? 0),
+      openCAs: Number(caRow?.c ?? 0),
+      submissionsToday: Number(subRow?.c ?? 0),
+      expiringCerts: Number(certRow?.c ?? 0),
+    }
+  })
 
   return (
     <div className="space-y-6">
