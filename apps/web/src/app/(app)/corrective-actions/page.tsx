@@ -2,25 +2,20 @@ import Link from 'next/link'
 import { ListChecks } from 'lucide-react'
 import { and, asc, count, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
 import {
-  Badge,
   Button,
   EmptyState,
   PageHeader,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
 } from '@beaconhs/ui'
-import { correctiveActions, orgUnits } from '@beaconhs/db/schema'
+import { correctiveActions, orgUnits, tenantUsers, user } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
-import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
+import { CorrectiveActionsSubNav } from '@/components/corrective-actions-sub-nav'
+import { listTenantOwners } from './_actions'
+import { RecordsTable, type RecordsTableRow } from './_records-table'
 
 export const metadata = { title: 'Corrective Actions' }
 
@@ -47,7 +42,12 @@ export default async function CorrectiveActionsPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const sp = await searchParams
-  const params = parseListParams(sp, { sort: 'due_on', dir: 'asc', perPage: 25, allowedSorts: SORTS })
+  const params = parseListParams(sp, {
+    sort: 'due_on',
+    dir: 'asc',
+    perPage: 25,
+    allowedSorts: SORTS,
+  })
   const statusFilter = pickString(sp.status)
   const sevFilter = pickString(sp.severity)
   const ctx = await requireRequestContext()
@@ -82,9 +82,16 @@ export default async function CorrectiveActionsPage({
 
     const [tot] = await tx.select({ c: count() }).from(correctiveActions).where(whereClause)
     const data = await tx
-      .select({ ca: correctiveActions, site: orgUnits })
+      .select({
+        ca: correctiveActions,
+        site: orgUnits,
+        owner: tenantUsers,
+        ownerAccount: user,
+      })
       .from(correctiveActions)
       .leftJoin(orgUnits, eq(orgUnits.id, correctiveActions.siteOrgUnitId))
+      .leftJoin(tenantUsers, eq(tenantUsers.id, correctiveActions.ownerTenantUserId))
+      .leftJoin(user, eq(user.id, tenantUsers.userId))
       .where(whereClause)
       .orderBy(...orderBy)
       .limit(params.perPage)
@@ -106,13 +113,26 @@ export default async function CorrectiveActionsPage({
     }
   })
 
-  const sortProps = { basePath: '/corrective-actions', currentParams: sp, dir: params.dir }
+  const owners = await listTenantOwners()
   const today = new Date().toISOString().slice(0, 10)
+
+  const tableRows: RecordsTableRow[] = rows.map(({ ca, site, owner, ownerAccount }) => ({
+    id: ca.id,
+    reference: ca.reference,
+    title: ca.title,
+    severity: ca.severity,
+    status: ca.status,
+    dueOn: ca.dueOn,
+    siteName: site?.name ?? null,
+    ownerName: ownerAccount?.name ?? owner?.displayName ?? null,
+    locked: ca.locked,
+  }))
 
   return (
     <ListPageLayout
       header={
         <>
+          <CorrectiveActionsSubNav active="records" />
           <PageHeader
             title="Corrective Actions"
             description="Standalone records, linkable to incidents, inspections, audits, JSHAs."
@@ -149,7 +169,7 @@ export default async function CorrectiveActionsPage({
         </>
       }
     >
-      {rows.length === 0 ? (
+      {tableRows.length === 0 ? (
         <EmptyState
           icon={<ListChecks size={32} />}
           title={
@@ -166,73 +186,7 @@ export default async function CorrectiveActionsPage({
         />
       ) : (
         <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortableTh {...sortProps} column="reference" active={params.sort === 'reference'}>Ref</SortableTh>
-                <SortableTh {...sortProps} column="title" active={params.sort === 'title'}>Title</SortableTh>
-                <SortableTh {...sortProps} column="severity" active={params.sort === 'severity'}>Severity</SortableTh>
-                <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>Status</SortableTh>
-                <SortableTh {...sortProps} column="due_on" active={params.sort === 'due_on'}>Due</SortableTh>
-                <TableHead>Site</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map(({ ca, site }) => {
-                const overdue = ca.dueOn && ca.dueOn < today && !['closed', 'cancelled'].includes(ca.status)
-                return (
-                  <TableRow key={ca.id}>
-                    <TableCell className="font-mono text-xs">
-                      <Link href={`/corrective-actions/${ca.id}`} className="hover:underline">
-                        {ca.reference}
-                      </Link>
-                    </TableCell>
-                    <TableCell>
-                      <Link
-                        href={`/corrective-actions/${ca.id}`}
-                        className="font-medium text-slate-900 hover:underline"
-                      >
-                        {ca.title}
-                      </Link>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={
-                          ca.severity === 'critical' || ca.severity === 'high'
-                            ? 'destructive'
-                            : ca.severity === 'medium'
-                              ? 'warning'
-                              : 'secondary'
-                        }
-                      >
-                        {ca.severity}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={
-                          ca.status === 'closed'
-                            ? 'success'
-                            : ca.status === 'cancelled'
-                              ? 'secondary'
-                              : 'warning'
-                        }
-                      >
-                        {ca.status.replace('_', ' ')}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <span className={overdue ? 'font-medium text-red-700' : ''}>
-                        {ca.dueOn ?? '—'}
-                        {overdue ? ' (overdue)' : ''}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-slate-600">{site?.name ?? '—'}</TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
+          <RecordsTable rows={tableRows} owners={owners} today={today} />
           <Pagination
             basePath="/corrective-actions"
             currentParams={sp}

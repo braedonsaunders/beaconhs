@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { FileText, Calendar } from 'lucide-react'
+import { FileText, Calendar, Sparkles, LayoutDashboard } from 'lucide-react'
 import { asc, desc, eq } from 'drizzle-orm'
 import {
   Badge,
@@ -19,18 +19,16 @@ import {
 } from '@beaconhs/ui'
 import { reportDefinitions, reportSchedules, reportRuns } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
-import { db, withSuperAdmin } from '@beaconhs/db'
 import { PageContainer } from '@/components/page-layout'
+import { loadVisibleDefinitions } from './_definitions'
 
 export const metadata = { title: 'Reports' }
+export const dynamic = 'force-dynamic'
 
 export default async function ReportsPage() {
   const ctx = await requireRequestContext()
 
-  // Definitions live outside RLS (no tenant_id) — read with super-admin bypass.
-  const definitions = await withSuperAdmin(db, (tx) =>
-    tx.select().from(reportDefinitions).orderBy(asc(reportDefinitions.category), asc(reportDefinitions.name)),
-  )
+  const definitions = await loadVisibleDefinitions(ctx.tenantId!)
 
   const [schedules, lastRuns] = await ctx.db(async (tx) => {
     const s = await tx
@@ -49,18 +47,59 @@ export default async function ReportsPage() {
     return [s, r] as const
   })
 
+  const customCount = definitions.filter((d) => d.kind === 'custom').length
+  const builtInCount = definitions.length - customCount
+
   return (
     <PageContainer>
       <div className="space-y-6">
         <PageHeader
           title="Reports"
-          description="Subscribe to recurring report emails. Each run renders a PDF and emails it to the recipients."
+          description="Subscribe to recurring email reports, browse the built-in catalogue, and build your own custom report from any module."
           actions={
-            <Link href="/reports/schedules/new">
-              <Button>Create schedule</Button>
-            </Link>
+            <div className="flex gap-2">
+              <Link href={'/reports/definitions' as any}>
+                <Button variant="outline">Browse definitions</Button>
+              </Link>
+              <Link href={'/reports/definitions/new' as any}>
+                <Button variant="outline">
+                  <Sparkles size={14} className="mr-1.5" />
+                  New custom report
+                </Button>
+              </Link>
+              <Link href="/reports/schedules/new">
+                <Button>Create schedule</Button>
+              </Link>
+            </div>
           }
         />
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+          <StatCard
+            label="Schedules"
+            value={schedules.length}
+            href="/reports"
+            icon={<Calendar size={16} />}
+          />
+          <StatCard
+            label="Built-in reports"
+            value={builtInCount}
+            href="/reports/definitions"
+            icon={<FileText size={16} />}
+          />
+          <StatCard
+            label="Custom reports"
+            value={customCount}
+            href="/reports/definitions?kind=custom"
+            icon={<Sparkles size={16} />}
+          />
+          <StatCard
+            label="Recent runs"
+            value={lastRuns.length}
+            href="/reports"
+            icon={<LayoutDashboard size={16} />}
+          />
+        </div>
 
         <Card>
           <CardHeader>
@@ -96,9 +135,23 @@ export default async function ReportsPage() {
                           {schedule.name}
                         </Link>
                       </TableCell>
-                      <TableCell className="text-slate-600">{definition.name}</TableCell>
                       <TableCell className="text-slate-600">
-                        {formatCadence(schedule.cadence, schedule.dayOfWeek, schedule.dayOfMonth, schedule.hour, schedule.minute, schedule.timezone)}
+                        <span>{definition.name}</span>
+                        {definition.kind === 'custom' ? (
+                          <Badge variant="outline" className="ml-2">
+                            custom
+                          </Badge>
+                        ) : null}
+                      </TableCell>
+                      <TableCell className="text-slate-600">
+                        {formatCadence(
+                          schedule.cadence,
+                          schedule.dayOfWeek,
+                          schedule.dayOfMonth,
+                          schedule.hour,
+                          schedule.minute,
+                          schedule.timezone,
+                        )}
                       </TableCell>
                       <TableCell className="text-slate-600">
                         {schedule.nextRunAt ? formatDateTime(schedule.nextRunAt) : '—'}
@@ -141,23 +194,35 @@ export default async function ReportsPage() {
                   >
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="font-medium text-slate-900">{d.name}</span>
+                        <Link
+                          href={`/reports/definitions/${d.id}` as any}
+                          className="font-medium text-slate-900 hover:underline"
+                        >
+                          {d.name}
+                        </Link>
                         {d.category ? (
-                          <Badge variant="outline">{d.category}</Badge>
+                          <Badge variant="outline">{d.category.replace(/_/g, ' ')}</Badge>
+                        ) : null}
+                        {d.kind === 'custom' ? (
+                          <Badge variant="secondary">custom</Badge>
                         ) : null}
                       </div>
                       {d.description ? (
                         <p className="mt-0.5 text-xs text-slate-500">{d.description}</p>
                       ) : null}
                     </div>
-                    <Link
-                      href={`/reports/schedules/new?definitionId=${d.id}`}
-                      className="shrink-0"
-                    >
-                      <Button variant="outline" size="sm">
-                        Subscribe
-                      </Button>
-                    </Link>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <Link href={`/reports/definitions/${d.id}` as any}>
+                        <Button variant="ghost" size="sm">
+                          Preview
+                        </Button>
+                      </Link>
+                      <Link href={`/reports/schedules/new?definitionId=${d.id}`}>
+                        <Button variant="outline" size="sm">
+                          Subscribe
+                        </Button>
+                      </Link>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -217,7 +282,33 @@ export default async function ReportsPage() {
   )
 }
 
-function formatCadence(
+function StatCard({
+  label,
+  value,
+  href,
+  icon,
+}: {
+  label: string
+  value: number
+  href: string
+  icon: React.ReactNode
+}) {
+  return (
+    <Link href={href as any}>
+      <Card className="transition-shadow hover:shadow-md">
+        <CardContent className="space-y-2 p-4">
+          <div className="flex items-center justify-between text-xs text-slate-500">
+            <span className="uppercase tracking-wide">{label}</span>
+            <span className="text-slate-400">{icon}</span>
+          </div>
+          <div className="text-2xl font-semibold tabular-nums">{value}</div>
+        </CardContent>
+      </Card>
+    </Link>
+  )
+}
+
+export function formatCadence(
   cadence: 'daily' | 'weekly' | 'monthly',
   dow: number | null,
   dom: number | null,
@@ -232,7 +323,7 @@ function formatCadence(
   return `Monthly · day ${dom ?? 1} @ ${time} ${tz}`
 }
 
-function formatDateTime(d: Date): string {
+export function formatDateTime(d: Date): string {
   return new Date(d).toLocaleString(undefined, {
     year: 'numeric',
     month: 'short',

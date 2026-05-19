@@ -21,6 +21,7 @@ import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
+import { PpeSubNav } from '@/components/ppe-sub-nav'
 
 export const metadata = { title: 'PPE' }
 
@@ -97,6 +98,7 @@ export default async function PpePage({
     <ListPageLayout
       header={
         <>
+          <PpeSubNav active="records" />
           <PageHeader
             title="PPE"
             description="Issue, return, replace, discard — plus scheduled inspections for inspectable PPE."

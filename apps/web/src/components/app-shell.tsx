@@ -3,8 +3,10 @@ import {
   AlertTriangle,
   BellRing,
   BookOpen,
+  CheckCircle2,
   ClipboardCheck,
   ClipboardList,
+  Construction,
   FileText,
   Gauge,
   GraduationCap,
@@ -12,6 +14,8 @@ import {
   Layers,
   ListChecks,
   MapPin,
+  MessageSquare,
+  Radiation,
   Settings,
   ShieldAlert,
   ShieldCheck,
@@ -19,6 +23,7 @@ import {
   UserCircle2,
   Users,
   Wrench,
+  Wrench as ToolIcon,
 } from 'lucide-react'
 import { Badge } from '@beaconhs/ui'
 import { SignOutButton } from './sign-out-button'
@@ -47,6 +52,9 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     items: [
       { href: '/forms', label: 'Forms', icon: ClipboardCheck },
       { href: '/inspections', label: 'Inspections', icon: ClipboardList },
+      { href: '/hazid', label: 'JSHA / HazID', icon: Radiation },
+      { href: '/toolbox', label: 'Toolbox talks', icon: MessageSquare },
+      { href: '/lift-plans', label: 'Lift plans', icon: Construction },
       { href: '/incidents', label: 'Incidents', icon: AlertTriangle },
       { href: '/corrective-actions', label: 'Corrective Actions', icon: ListChecks },
     ],
@@ -71,13 +79,18 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   },
   {
     label: 'Insight',
-    items: [{ href: '/reports', label: 'Reports', icon: FileText }],
+    items: [
+      { href: '/reports', label: 'Reports', icon: FileText },
+      { href: '/compliance', label: 'Compliance', icon: CheckCircle2 },
+    ],
   },
   {
     label: 'Settings',
     items: [
       { href: '/admin', label: 'Admin', icon: Settings },
       { href: '/admin/library', label: 'Library & catalogues', icon: Layers },
+      { href: '/tools', label: 'Tools', icon: ToolIcon },
+      { href: '/utilities', label: 'Utilities', icon: Gauge },
     ],
   },
 ]

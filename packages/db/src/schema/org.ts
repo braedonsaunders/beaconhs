@@ -125,6 +125,14 @@ export const people = pgTable(
     emergencyContactPhone: text('emergency_contact_phone'),
     notes: text('notes'),
     status: peopleStatus('status').default('active').notNull(),
+    // Denormalised caches synced by the people-groups / people-divisions /
+    // people-titles server actions. These let list pages filter by
+    // group / division / title without a 3-way join. The source of truth is
+    // still the membership / assignment tables — these arrays are rewritten
+    // whenever a membership / assignment is added or removed.
+    groupIds: jsonb('group_ids').$type<string[]>().default([]).notNull(),
+    divisionIds: jsonb('division_ids').$type<string[]>().default([]).notNull(),
+    titleIds: jsonb('title_ids').$type<string[]>().default([]).notNull(),
     metadata: jsonb('metadata').$type<Record<string, unknown>>().default({}).notNull(),
     ...timestamps,
     ...softDelete,

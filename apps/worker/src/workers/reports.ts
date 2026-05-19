@@ -73,6 +73,7 @@ export async function processReportRun(job: Job<ReportRunJobData>): Promise<void
       ctx.definition.queryKind,
       ctx.schedule.filters,
       range,
+      (ctx.definition as unknown as { customQuery?: unknown }).customQuery ?? null,
     )
 
     // 4. Render PDF.
@@ -228,6 +229,7 @@ async function runReportQuery(
   queryKind: string,
   filters: Record<string, unknown>,
   range: Range,
+  customQuery?: unknown,
 ): Promise<{ groups: ReportGroup[]; summary: { label: string; value: string | number }[]; rowCount: number }> {
   switch (queryKind) {
     case 'incidents_summary':
@@ -240,8 +242,12 @@ async function runReportQuery(
       return queryInspectionsCompleted(tenantId, filters, range)
     case 'documents_overdue_review':
       return queryDocumentsOverdueReview(tenantId, filters)
-    default:
-      throw new Error(`Unknown queryKind: ${queryKind}`)
+    default: {
+      // Fall through to the shared-infra dispatcher (cross-module reports +
+      // custom-query reports). Lazy-import to avoid circulars.
+      const { runSharedReportQuery } = await import('./reports-shared')
+      return runSharedReportQuery({ tenantId, queryKind, filters, range, customQuery })
+    }
   }
 }
 

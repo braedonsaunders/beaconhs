@@ -21,6 +21,29 @@ import { id, softDelete, timestamps } from './_helpers'
 import { tenants, tenantUsers } from './core'
 import { orgUnits, people } from './org'
 
+// Free-form category lookup so admins can group equipment types into buckets
+// ("Tools", "Vehicles", "Lifts", "Trailers", …) without committing to an
+// enum. Equipment types still keep a `category` string for backwards-
+// compatibility with the legacy column; this table is the canonical source.
+export const equipmentCategories = pgTable(
+  'equipment_categories',
+  {
+    id: id(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    slug: text('slug').notNull(),
+    description: text('description'),
+    sortOrder: integer('sort_order').default(0).notNull(),
+    ...timestamps,
+  },
+  (t) => ({
+    tenantIdx: index('equipment_categories_tenant_idx').on(t.tenantId),
+    tenantSlugUx: uniqueIndex('equipment_categories_tenant_slug_ux').on(t.tenantId, t.slug),
+  }),
+)
+
 export const equipmentTypes = pgTable(
   'equipment_types',
   {
@@ -30,6 +53,12 @@ export const equipmentTypes = pgTable(
       .references(() => tenants.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
     category: text('category'), // 'tool' | 'vehicle' | 'machinery' | …
+    // FK to the lookup table when the category exists there. The free-form
+    // `category` text above stays as a fallback for legacy rows.
+    categoryId: uuid('category_id').references(() => equipmentCategories.id, {
+      onDelete: 'set null',
+    }),
+    description: text('description'),
     requiresPreUseInspection: jsonb('requires_pre_use_inspection')
       .$type<{ templateKey?: string } | null>(),
     inspectionSchedule: jsonb('inspection_schedule').$type<{
@@ -37,10 +66,13 @@ export const equipmentTypes = pgTable(
       everyDays?: number
       templateKey?: string
     } | null>(),
+    // Default oil-change interval (in months) for items of this type.
+    defaultOilChangeIntervalMonths: integer('default_oil_change_interval_months'),
     ...timestamps,
   },
   (t) => ({
     tenantIdx: index('equipment_types_tenant_idx').on(t.tenantId),
+    catIdx: index('equipment_types_cat_idx').on(t.tenantId, t.categoryId),
   }),
 )
 
@@ -83,6 +115,24 @@ export const equipmentItems = pgTable(
     lastSeenSiteOrgUnitId: uuid('last_seen_site_org_unit_id').references(() => orgUnits.id),
     lastSeenHolderPersonId: uuid('last_seen_holder_person_id').references(() => people.id),
     billingRateCategory: text('billing_rate_category'),
+    // ----- Oil-change schedule (drives upcoming-oil-change report) -----
+    requiresOilChange: boolean('requires_oil_change').default(false).notNull(),
+    oilChangeIntervalMonths: integer('oil_change_interval_months'),
+    lastOilChangeOn: date('last_oil_change_on'),
+    nextOilChangeDue: date('next_oil_change_due'),
+    // ----- Purchase economics (drives ROI report) -----
+    purchasePrice: numeric('purchase_price', { precision: 12, scale: 2 }),
+    // ----- Bulk-QR support -----
+    // Token stamped on bulk-QR sheets so the same printed page can be
+    // re-issued without regenerating each label. Distinct from `qrToken`
+    // which is per-item and scanned during pre-use inspection.
+    bulkQrToken: text('bulk_qr_token'),
+    bulkQrGeneratedAt: timestamp('bulk_qr_generated_at', { withTimezone: true }),
+    // ----- Availability shortcut for the "available for check-in" filter -----
+    // When `currentHolderPersonId` is null AND status='in_service' AND
+    // `isMissing` is false the item is considered available; we cache the
+    // computed flag here so the list page can filter without a sub-query.
+    isAvailableForCheckout: boolean('is_available_for_checkout').default(true).notNull(),
     metadata: jsonb('metadata').$type<Record<string, unknown>>().default({}).notNull(),
     ...timestamps,
     ...softDelete,
@@ -92,6 +142,7 @@ export const equipmentItems = pgTable(
     qrUx: uniqueIndex('equipment_items_qr_ux').on(t.qrToken),
     tenantIdx: index('equipment_items_tenant_idx').on(t.tenantId),
     siteIdx: index('equipment_items_site_idx').on(t.tenantId, t.currentSiteOrgUnitId),
+    availableIdx: index('equipment_items_available_idx').on(t.tenantId, t.isAvailableForCheckout),
   }),
 )
 
@@ -174,6 +225,23 @@ export const equipmentItemsRelations = relations(equipmentItems, ({ one, many })
     fields: [equipmentItems.currentSiteOrgUnitId],
     references: [orgUnits.id],
   }),
+  currentHolder: one(people, {
+    fields: [equipmentItems.currentHolderPersonId],
+    references: [people.id],
+  }),
   history: many(equipmentLocationHistory),
   workOrders: many(equipmentWorkOrders),
+}))
+
+export const equipmentCategoriesRelations = relations(equipmentCategories, ({ many }) => ({
+  types: many(equipmentTypes),
+}))
+
+export const equipmentTypesRelations = relations(equipmentTypes, ({ one, many }) => ({
+  tenant: one(tenants, { fields: [equipmentTypes.tenantId], references: [tenants.id] }),
+  category: one(equipmentCategories, {
+    fields: [equipmentTypes.categoryId],
+    references: [equipmentCategories.id],
+  }),
+  items: many(equipmentItems),
 }))

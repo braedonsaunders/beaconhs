@@ -35,6 +35,11 @@ const STATUS_OPTIONS = [
   { value: 'retired', label: 'Retired' },
 ]
 
+const AVAILABILITY_OPTIONS = [
+  { value: 'available', label: 'Available for check-out' },
+  { value: 'checked_out', label: 'Currently checked out' },
+]
+
 export default async function EquipmentPage({
   searchParams,
 }: {
@@ -43,9 +48,10 @@ export default async function EquipmentPage({
   const sp = await searchParams
   const params = parseListParams(sp, { sort: 'asset_tag', dir: 'asc', perPage: 25, allowedSorts: SORTS })
   const statusFilter = pickString(sp.status)
+  const availabilityFilter = pickString(sp.availability)
   const ctx = await requireRequestContext()
 
-  const { rows, total, statusCounts } = await ctx.db(async (tx) => {
+  const { rows, total, statusCounts, availabilityCounts } = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = []
     if (params.q) {
       const term = `%${params.q}%`
@@ -57,6 +63,11 @@ export default async function EquipmentPage({
       if (cond) filters.push(cond)
     }
     if (statusFilter) filters.push(eq(equipmentItems.status, statusFilter as any))
+    if (availabilityFilter === 'available') {
+      filters.push(eq(equipmentItems.isAvailableForCheckout, true))
+    } else if (availabilityFilter === 'checked_out') {
+      filters.push(eq(equipmentItems.isAvailableForCheckout, false))
+    }
     const whereClause = filters.length > 0 ? and(...filters) : undefined
 
     const orderBy =
@@ -87,10 +98,18 @@ export default async function EquipmentPage({
       .select({ s: equipmentItems.status, c: count() })
       .from(equipmentItems)
       .groupBy(equipmentItems.status)
+    const av = await tx
+      .select({ a: equipmentItems.isAvailableForCheckout, c: count() })
+      .from(equipmentItems)
+      .groupBy(equipmentItems.isAvailableForCheckout)
     return {
       rows: data,
       total: Number(tot?.c ?? 0),
       statusCounts: Object.fromEntries(ss.map((x) => [x.s, Number(x.c)])),
+      availabilityCounts: {
+        available: Number(av.find((x) => x.a === true)?.c ?? 0),
+        checked_out: Number(av.find((x) => x.a === false)?.c ?? 0),
+      } as Record<string, number>,
     }
   })
 
@@ -109,6 +128,9 @@ export default async function EquipmentPage({
                 <Link href={buildExportHref('/equipment/export.csv', sp)}>
                   <Button variant="outline">Export CSV</Button>
                 </Link>
+                <Link href="/equipment/qr/bulk">
+                  <Button variant="outline">Bulk QR</Button>
+                </Link>
                 <Link href="/equipment/new">
                   <Button>Add equipment</Button>
                 </Link>
@@ -124,6 +146,16 @@ export default async function EquipmentPage({
             paramKey="status"
             label="Status"
             options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
+          />
+          <FilterChips
+            basePath="/equipment"
+            currentParams={sp}
+            paramKey="availability"
+            label="Availability"
+            options={AVAILABILITY_OPTIONS.map((o) => ({
+              ...o,
+              count: availabilityCounts[o.value],
+            }))}
           />
         </>
       }

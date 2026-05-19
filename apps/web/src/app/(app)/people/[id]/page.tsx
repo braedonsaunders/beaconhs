@@ -1,7 +1,22 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { desc, eq } from 'drizzle-orm'
-import { Award, FileText, HardHat, Mail, Pencil, Phone, ShieldCheck } from 'lucide-react'
+import { asc, desc, eq, inArray } from 'drizzle-orm'
+import {
+  Award,
+  BadgeCheck,
+  CheckSquare,
+  FileText,
+  HardHat,
+  IdCard,
+  Layers,
+  Mail,
+  Pencil,
+  Phone,
+  ShieldCheck,
+  Square,
+  Trash2,
+  Users,
+} from 'lucide-react'
 import {
   Badge,
   Button,
@@ -11,6 +26,9 @@ import {
   CardTitle,
   DetailHeader,
   EmptyState,
+  Input,
+  Label,
+  Select,
   Table,
   TableBody,
   TableCell,
@@ -28,7 +46,15 @@ import {
   incidentInjuries,
   incidentPeople,
   incidents,
+  jobTitleTaskAcknowledgments,
+  jobTitleTasks,
   people,
+  personDivisionMemberships,
+  personDivisions,
+  personGroupMemberships,
+  personGroups,
+  personTitleAssignments,
+  personTitles,
   ppeIssues,
   ppeItems,
   ppeTypes,
@@ -46,12 +72,25 @@ import { Section } from '@/components/section'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { PersonEditTab } from './person-edit-tab'
 import { PageContainer } from '@/components/page-layout'
+import { togglePersonInGroup } from '../_actions/groups'
+import { togglePersonInDivision } from '../_actions/divisions'
+import {
+  acknowledgeTitleTask,
+  assignTitleToPerson,
+  revokeTitleTaskAck,
+  setPrimaryTitle,
+  unassignTitleFromPerson,
+} from '../_actions/titles'
 
 export const dynamic = 'force-dynamic'
 
 const TABS = [
   'profile',
   'employment',
+  'groups',
+  'divisions',
+  'title',
+  'compliance',
   'training',
   'skills',
   'ppe',
@@ -100,6 +139,12 @@ export default async function PersonDetailPage({
       ppeIssueLog,
       ackedDocs,
       submittedForms,
+      personGroupRows,
+      allGroups,
+      personDivisionRows,
+      allDivisions,
+      personTitleRows,
+      allTitles,
     ] = await Promise.all([
       tx
         .select({ record: trainingRecords, course: trainingCourses })
@@ -160,7 +205,56 @@ export default async function PersonDetailPage({
         .innerJoin(formTemplates, eq(formTemplates.id, formResponses.templateId))
         .where(eq(formResponses.subjectPersonId, id))
         .orderBy(desc(formResponses.submittedAt)),
+      // Groups this person belongs to
+      tx
+        .select({ membership: personGroupMemberships, group: personGroups })
+        .from(personGroupMemberships)
+        .innerJoin(personGroups, eq(personGroups.id, personGroupMemberships.groupId))
+        .where(eq(personGroupMemberships.personId, id))
+        .orderBy(asc(personGroups.name)),
+      tx.select().from(personGroups).orderBy(asc(personGroups.name)),
+      // Divisions this person belongs to
+      tx
+        .select({ membership: personDivisionMemberships, division: personDivisions })
+        .from(personDivisionMemberships)
+        .innerJoin(
+          personDivisions,
+          eq(personDivisions.id, personDivisionMemberships.divisionId),
+        )
+        .where(eq(personDivisionMemberships.personId, id))
+        .orderBy(asc(personDivisions.name)),
+      tx.select().from(personDivisions).orderBy(asc(personDivisions.name)),
+      // Titles this person holds
+      tx
+        .select({ assignment: personTitleAssignments, title: personTitles })
+        .from(personTitleAssignments)
+        .innerJoin(personTitles, eq(personTitles.id, personTitleAssignments.titleId))
+        .where(eq(personTitleAssignments.personId, id))
+        .orderBy(desc(personTitleAssignments.isPrimary), asc(personTitles.name)),
+      tx.select().from(personTitles).orderBy(asc(personTitles.name)),
     ])
+
+    // Second pass for title tasks now that we know the titles
+    const heldTitleIds = personTitleRows.map((r) => r.title.id)
+    const tasksForHeldTitles =
+      heldTitleIds.length > 0
+        ? await tx
+            .select()
+            .from(jobTitleTasks)
+            .where(inArray(jobTitleTasks.titleId, heldTitleIds))
+            .orderBy(asc(jobTitleTasks.entityOrder))
+        : []
+    const taskIds = tasksForHeldTitles.map((t) => t.id)
+    const acksForPerson =
+      taskIds.length > 0
+        ? await tx
+            .select()
+            .from(jobTitleTaskAcknowledgments)
+            .where(
+              inArray(jobTitleTaskAcknowledgments.taskId, taskIds),
+            )
+        : []
+    const acksForThisPerson = acksForPerson.filter((a) => a.personId === id)
 
     return {
       ...row,
@@ -172,6 +266,14 @@ export default async function PersonDetailPage({
       ppeIssueLog,
       ackedDocs,
       submittedForms,
+      personGroupRows,
+      allGroups,
+      personDivisionRows,
+      allDivisions,
+      personTitleRows,
+      allTitles,
+      titleTasks: tasksForHeldTitles,
+      titleTaskAcks: acksForThisPerson,
     }
   })
 
@@ -189,7 +291,16 @@ export default async function PersonDetailPage({
     ppeIssueLog,
     ackedDocs,
     submittedForms,
+    personGroupRows,
+    allGroups,
+    personDivisionRows,
+    allDivisions,
+    personTitleRows,
+    allTitles,
+    titleTasks,
+    titleTaskAcks,
   } = data
+  const ackByTaskId = new Map(titleTaskAcks.map((a) => [a.taskId, a]))
 
   const today = new Date()
   const trainingWithStatus = training
@@ -337,6 +448,22 @@ export default async function PersonDetailPage({
                 { key: 'profile', label: 'Profile' },
                 { key: 'employment', label: 'Employment' },
                 {
+                  key: 'groups',
+                  label: 'Groups',
+                  count: personGroupRows.length,
+                },
+                {
+                  key: 'divisions',
+                  label: 'Divisions',
+                  count: personDivisionRows.length,
+                },
+                {
+                  key: 'title',
+                  label: 'Title',
+                  count: personTitleRows.length,
+                },
+                { key: 'compliance', label: 'Compliance' },
+                {
                   key: 'training',
                   label: 'Training matrix',
                   count: training.length,
@@ -399,6 +526,46 @@ export default async function PersonDetailPage({
                   </ProfileRow>
                 </dl>
               </Section>
+            ) : null}
+
+            {active === 'groups' ? (
+              <GroupsTab
+                personId={person.id}
+                memberships={personGroupRows}
+                allGroups={allGroups}
+              />
+            ) : null}
+
+            {active === 'divisions' ? (
+              <DivisionsTab
+                personId={person.id}
+                memberships={personDivisionRows}
+                allDivisions={allDivisions}
+              />
+            ) : null}
+
+            {active === 'title' ? (
+              <TitleTab
+                personId={person.id}
+                titlesHeld={personTitleRows}
+                allTitles={allTitles}
+                titleTasks={titleTasks}
+                ackByTaskId={ackByTaskId}
+              />
+            ) : null}
+
+            {active === 'compliance' ? (
+              <ComplianceTab
+                trainingTotal={trainingWithStatus.length}
+                trainingValid={trainingWithStatus.filter((t) => t.status === 'ok').length}
+                trainingExpiring={expiringCount}
+                trainingExpired={expiredCount}
+                documentsAcked={ackedDocs.length}
+                ppeCount={ppeAssigned.length}
+                titleTaskTotal={titleTasks.length}
+                titleTaskAckedCount={titleTaskAcks.length}
+                incidentsCount={allIncidents.length}
+              />
             ) : null}
 
             {active === 'training' ? (
@@ -886,5 +1053,550 @@ function Stat({
       <div className="text-xs uppercase tracking-wide text-slate-500">{label}</div>
       <div className={`mt-1 text-2xl font-semibold tabular-nums ${colour}`}>{value}</div>
     </div>
+  )
+}
+
+// ---------- Groups tab ---------------------------------------------------
+
+function GroupsTab({
+  personId,
+  memberships,
+  allGroups,
+}: {
+  personId: string
+  memberships: { membership: typeof personGroupMemberships.$inferSelect; group: typeof personGroups.$inferSelect }[]
+  allGroups: (typeof personGroups.$inferSelect)[]
+}) {
+  const memberIds = new Set(memberships.map((m) => m.group.id))
+  const candidates = allGroups.filter((g) => !memberIds.has(g.id))
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Users size={16} />
+            Current groups
+            <Badge variant="secondary">{memberships.length}</Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {memberships.length === 0 ? (
+            <p className="text-sm text-slate-500">Not in any groups yet.</p>
+          ) : (
+            <ul className="flex flex-wrap gap-2">
+              {memberships.map(({ group }) => (
+                <li
+                  key={group.id}
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-sm"
+                  style={
+                    group.color
+                      ? { borderColor: group.color, color: group.color }
+                      : undefined
+                  }
+                >
+                  {group.color ? (
+                    <span
+                      className="inline-block h-2 w-2 rounded-full"
+                      style={{ background: group.color }}
+                    />
+                  ) : null}
+                  <Link href={`/people/groups/${group.id}`} className="hover:underline">
+                    {group.name}
+                  </Link>
+                  <form action={togglePersonInGroup} className="inline">
+                    <input type="hidden" name="groupId" value={group.id} />
+                    <input type="hidden" name="personId" value={personId} />
+                    <button
+                      type="submit"
+                      title="Remove from group"
+                      className="text-slate-400 hover:text-red-600"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </form>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+      {candidates.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Available groups</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+              {candidates.map((g) => (
+                <li
+                  key={g.id}
+                  className="flex items-center justify-between rounded border border-slate-200 px-3 py-2"
+                >
+                  <div className="flex items-center gap-2">
+                    {g.color ? (
+                      <span
+                        className="inline-block h-3 w-3 rounded-full"
+                        style={{ background: g.color }}
+                      />
+                    ) : null}
+                    <span className="font-medium">{g.name}</span>
+                  </div>
+                  <form action={togglePersonInGroup} className="inline">
+                    <input type="hidden" name="groupId" value={g.id} />
+                    <input type="hidden" name="personId" value={personId} />
+                    <Button type="submit" size="sm" variant="outline">
+                      Add
+                    </Button>
+                  </form>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      ) : null}
+    </div>
+  )
+}
+
+// ---------- Divisions tab ------------------------------------------------
+
+function DivisionsTab({
+  personId,
+  memberships,
+  allDivisions,
+}: {
+  personId: string
+  memberships: {
+    membership: typeof personDivisionMemberships.$inferSelect
+    division: typeof personDivisions.$inferSelect
+  }[]
+  allDivisions: (typeof personDivisions.$inferSelect)[]
+}) {
+  const memberIds = new Set(memberships.map((m) => m.division.id))
+  const candidates = allDivisions.filter((d) => !memberIds.has(d.id))
+  const divisionById = new Map(allDivisions.map((d) => [d.id, d]))
+  function fullPath(d: typeof personDivisions.$inferSelect): string {
+    const parts: string[] = [d.name]
+    let cur: typeof personDivisions.$inferSelect | undefined = d
+    const seen = new Set<string>()
+    while (cur?.parentDivisionId && !seen.has(cur.id)) {
+      seen.add(cur.id)
+      const p = divisionById.get(cur.parentDivisionId)
+      if (!p) break
+      parts.unshift(p.name)
+      cur = p
+    }
+    return parts.join(' › ')
+  }
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Layers size={16} />
+            Current divisions
+            <Badge variant="secondary">{memberships.length}</Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {memberships.length === 0 ? (
+            <p className="text-sm text-slate-500">Not in any divisions yet.</p>
+          ) : (
+            <ul className="space-y-1 text-sm">
+              {memberships.map(({ division }) => (
+                <li
+                  key={division.id}
+                  className="flex items-center justify-between rounded border border-slate-200 px-3 py-2"
+                >
+                  <Link
+                    href={`/people/divisions/${division.id}`}
+                    className="font-medium hover:underline"
+                  >
+                    {fullPath(division)}
+                  </Link>
+                  <form action={togglePersonInDivision} className="inline">
+                    <input type="hidden" name="divisionId" value={division.id} />
+                    <input type="hidden" name="personId" value={personId} />
+                    <Button
+                      type="submit"
+                      size="sm"
+                      variant="ghost"
+                      className="text-red-500 hover:text-red-700"
+                    >
+                      <Trash2 size={12} />
+                    </Button>
+                  </form>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+      {candidates.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Add a division</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form action={togglePersonInDivision} className="flex items-end gap-2">
+              <input type="hidden" name="personId" value={personId} />
+              <div className="min-w-0 flex-1 space-y-1">
+                <Label htmlFor="divisionId">Division</Label>
+                <Select id="divisionId" name="divisionId" defaultValue="">
+                  <option value="">— select —</option>
+                  {candidates.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {fullPath(d)}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <Button type="submit">Add</Button>
+            </form>
+          </CardContent>
+        </Card>
+      ) : null}
+    </div>
+  )
+}
+
+// ---------- Title tab ----------------------------------------------------
+
+function TitleTab({
+  personId,
+  titlesHeld,
+  allTitles,
+  titleTasks,
+  ackByTaskId,
+}: {
+  personId: string
+  titlesHeld: {
+    assignment: typeof personTitleAssignments.$inferSelect
+    title: typeof personTitles.$inferSelect
+  }[]
+  allTitles: (typeof personTitles.$inferSelect)[]
+  titleTasks: (typeof jobTitleTasks.$inferSelect)[]
+  ackByTaskId: Map<string, typeof jobTitleTaskAcknowledgments.$inferSelect>
+}) {
+  const heldIds = new Set(titlesHeld.map((t) => t.title.id))
+  const candidates = allTitles.filter((t) => !heldIds.has(t.id))
+  // Group tasks by title to render the job-description sign-off list
+  const tasksByTitle = new Map<string, (typeof jobTitleTasks.$inferSelect)[]>()
+  for (const t of titleTasks) {
+    if (!tasksByTitle.has(t.titleId)) tasksByTitle.set(t.titleId, [])
+    tasksByTitle.get(t.titleId)!.push(t)
+  }
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <IdCard size={16} />
+            Current titles
+            <Badge variant="secondary">{titlesHeld.length}</Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {titlesHeld.length === 0 ? (
+            <p className="text-sm text-slate-500">No titles assigned.</p>
+          ) : (
+            <ul className="space-y-2 text-sm">
+              {titlesHeld.map(({ assignment, title }) => (
+                <li
+                  key={assignment.id}
+                  className="flex items-center justify-between gap-3 rounded border border-slate-200 px-3 py-2"
+                >
+                  <Link
+                    href={`/people/titles/${title.id}`}
+                    className="flex-1 font-medium hover:underline"
+                  >
+                    {title.name}
+                  </Link>
+                  {assignment.isPrimary ? (
+                    <Badge variant="success">Primary</Badge>
+                  ) : (
+                    <form action={setPrimaryTitle} className="inline">
+                      <input type="hidden" name="titleId" value={title.id} />
+                      <input type="hidden" name="personId" value={personId} />
+                      <Button type="submit" size="sm" variant="ghost">
+                        Make primary
+                      </Button>
+                    </form>
+                  )}
+                  <form action={unassignTitleFromPerson} className="inline">
+                    <input type="hidden" name="titleId" value={title.id} />
+                    <input type="hidden" name="personId" value={personId} />
+                    <Button
+                      type="submit"
+                      size="sm"
+                      variant="ghost"
+                      className="text-red-500 hover:text-red-700"
+                    >
+                      <Trash2 size={12} />
+                    </Button>
+                  </form>
+                </li>
+              ))}
+            </ul>
+          )}
+          {candidates.length > 0 ? (
+            <form
+              action={assignTitleToPerson}
+              className="mt-3 flex items-end gap-2 border-t border-slate-100 pt-3"
+            >
+              <input type="hidden" name="personId" value={personId} />
+              <div className="min-w-0 flex-1 space-y-1">
+                <Label htmlFor="titleId">Assign new title</Label>
+                <Select id="titleId" name="titleId" defaultValue="">
+                  <option value="">— select —</option>
+                  {candidates.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <label className="flex items-center gap-1 text-xs text-slate-500">
+                <input type="checkbox" name="isPrimary" />
+                Primary
+              </label>
+              <Button type="submit">Assign</Button>
+            </form>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      {titlesHeld.map(({ title }) => {
+        const tasks = tasksByTitle.get(title.id) ?? []
+        if (tasks.length === 0) return null
+        const ackedCount = tasks.filter((t) => ackByTaskId.has(t.id)).length
+        return (
+          <Card key={title.id}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <FileText size={16} />
+                Job description — {title.name}
+                <Badge variant={ackedCount === tasks.length ? 'success' : 'secondary'}>
+                  {ackedCount}/{tasks.length} acknowledged
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ol className="space-y-1 text-sm">
+                {tasks.map((t, i) => {
+                  const ack = ackByTaskId.get(t.id)
+                  return (
+                    <li
+                      key={t.id}
+                      className="flex items-start gap-3 rounded border border-slate-200 px-3 py-2"
+                    >
+                      <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-medium text-slate-600">
+                        {i + 1}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium text-slate-900">{t.task}</div>
+                        {t.description ? (
+                          <div className="text-xs text-slate-500">{t.description}</div>
+                        ) : null}
+                        {ack ? (
+                          <div className="mt-0.5 text-xs text-emerald-700">
+                            Acknowledged {new Date(ack.acknowledgedAt).toLocaleDateString()}
+                          </div>
+                        ) : null}
+                      </div>
+                      {ack ? (
+                        <form action={revokeTitleTaskAck} className="inline">
+                          <input type="hidden" name="taskId" value={t.id} />
+                          <input type="hidden" name="personId" value={personId} />
+                          <Button type="submit" size="sm" variant="ghost" className="text-emerald-700">
+                            <CheckSquare size={14} />
+                          </Button>
+                        </form>
+                      ) : (
+                        <form action={acknowledgeTitleTask} className="inline">
+                          <input type="hidden" name="taskId" value={t.id} />
+                          <input type="hidden" name="personId" value={personId} />
+                          <Button type="submit" size="sm" variant="outline">
+                            <Square size={14} />
+                            Acknowledge
+                          </Button>
+                        </form>
+                      )}
+                    </li>
+                  )
+                })}
+              </ol>
+            </CardContent>
+          </Card>
+        )
+      })}
+    </div>
+  )
+}
+
+// ---------- Compliance tab -----------------------------------------------
+
+function ComplianceTab({
+  trainingTotal,
+  trainingValid,
+  trainingExpiring,
+  trainingExpired,
+  documentsAcked,
+  ppeCount,
+  titleTaskTotal,
+  titleTaskAckedCount,
+  incidentsCount,
+}: {
+  trainingTotal: number
+  trainingValid: number
+  trainingExpiring: number
+  trainingExpired: number
+  documentsAcked: number
+  ppeCount: number
+  titleTaskTotal: number
+  titleTaskAckedCount: number
+  incidentsCount: number
+}) {
+  const trainingPct =
+    trainingTotal === 0 ? null : Math.round((trainingValid / trainingTotal) * 100)
+  const titleTaskPct =
+    titleTaskTotal === 0
+      ? null
+      : Math.round((titleTaskAckedCount / titleTaskTotal) * 100)
+  const overdueCount = trainingExpired
+  return (
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <BigStatCard
+        icon={<BadgeCheck size={20} />}
+        title="Training compliance"
+        primary={trainingPct === null ? '—' : `${trainingPct}%`}
+        accent={
+          trainingPct === null
+            ? 'neutral'
+            : trainingPct >= 95
+              ? 'success'
+              : trainingPct >= 80
+                ? 'warning'
+                : 'destructive'
+        }
+        detail={[
+          `${trainingValid} valid`,
+          `${trainingExpiring} expiring soon`,
+          `${trainingExpired} expired`,
+        ]}
+      />
+      <BigStatCard
+        icon={<ShieldCheck size={20} />}
+        title="Document acknowledgements"
+        primary={`${documentsAcked}`}
+        accent="neutral"
+        detail={[
+          documentsAcked === 0
+            ? 'No documents acknowledged'
+            : `${documentsAcked} document${documentsAcked === 1 ? '' : 's'} signed`,
+        ]}
+      />
+      <BigStatCard
+        icon={<HardHat size={20} />}
+        title="PPE assignments"
+        primary={`${ppeCount}`}
+        accent="neutral"
+        detail={[
+          ppeCount === 0
+            ? 'No PPE currently issued'
+            : `${ppeCount} piece${ppeCount === 1 ? '' : 's'} of PPE assigned`,
+        ]}
+      />
+      <BigStatCard
+        icon={<FileText size={20} />}
+        title="Job description acknowledgements"
+        primary={titleTaskPct === null ? '—' : `${titleTaskPct}%`}
+        accent={
+          titleTaskPct === null
+            ? 'neutral'
+            : titleTaskPct === 100
+              ? 'success'
+              : titleTaskPct >= 50
+                ? 'warning'
+                : 'destructive'
+        }
+        detail={[
+          titleTaskTotal === 0
+            ? 'No tasks for assigned titles'
+            : `${titleTaskAckedCount} of ${titleTaskTotal} tasks acknowledged`,
+        ]}
+      />
+      <BigStatCard
+        icon={<HardHat size={20} />}
+        title="Overdue items"
+        primary={`${overdueCount}`}
+        accent={overdueCount > 0 ? 'destructive' : 'success'}
+        detail={[
+          overdueCount === 0
+            ? 'Nothing overdue — keep it up.'
+            : `${overdueCount} expired training record${overdueCount === 1 ? '' : 's'}`,
+        ]}
+      />
+      <BigStatCard
+        icon={<HardHat size={20} />}
+        title="Recent incidents"
+        primary={`${incidentsCount}`}
+        accent={incidentsCount === 0 ? 'success' : 'neutral'}
+        detail={[
+          incidentsCount === 0
+            ? 'Not involved in any incidents.'
+            : `${incidentsCount} incident${incidentsCount === 1 ? '' : 's'} on record`,
+        ]}
+      />
+    </div>
+  )
+}
+
+function BigStatCard({
+  icon,
+  title,
+  primary,
+  accent,
+  detail,
+}: {
+  icon: React.ReactNode
+  title: string
+  primary: string
+  accent: 'success' | 'warning' | 'destructive' | 'neutral'
+  detail: string[]
+}) {
+  const colour =
+    accent === 'success'
+      ? 'text-emerald-700'
+      : accent === 'warning'
+        ? 'text-amber-700'
+        : accent === 'destructive'
+          ? 'text-red-700'
+          : 'text-slate-700'
+  const borderColour =
+    accent === 'success'
+      ? 'border-emerald-200'
+      : accent === 'warning'
+        ? 'border-amber-200'
+        : accent === 'destructive'
+          ? 'border-red-200'
+          : 'border-slate-200'
+  return (
+    <Card className={borderColour}>
+      <CardHeader className="pb-1">
+        <CardTitle className="flex items-center gap-2 text-sm text-slate-700">
+          <span className={colour}>{icon}</span>
+          {title}
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className={`text-4xl font-semibold tabular-nums ${colour}`}>{primary}</div>
+        <ul className="mt-2 space-y-0.5 text-xs text-slate-500">
+          {detail.map((d, i) => (
+            <li key={i}>{d}</li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
   )
 }

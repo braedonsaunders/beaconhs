@@ -1,10 +1,10 @@
-import Link from 'next/link'
 import { GraduationCap } from 'lucide-react'
 import { and, asc, eq, isNotNull, sql } from 'drizzle-orm'
 import { Badge, Card, CardContent, CardHeader, CardTitle, EmptyState } from '@beaconhs/ui'
 import { people, trainingCourses, trainingRecords } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
+import { TrainingSubNav } from './_components/training-sub-nav'
 
 export const metadata = { title: 'Training' }
 
@@ -55,38 +55,7 @@ export default async function TrainingPage() {
           </p>
         </header>
 
-        <nav className="flex flex-wrap items-center gap-2">
-          <Link
-            href="/training"
-            className="rounded-full border border-teal-500 bg-teal-50 px-3 py-1 text-xs font-medium text-teal-700"
-          >
-            Records
-          </Link>
-          <Link
-            href="/training/courses"
-            className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:border-teal-500 hover:bg-teal-50 hover:text-teal-700"
-          >
-            Courses
-          </Link>
-          <Link
-            href="/training/classes"
-            className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:border-teal-500 hover:bg-teal-50 hover:text-teal-700"
-          >
-            Classes
-          </Link>
-          <Link
-            href="/training/authorities"
-            className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:border-teal-500 hover:bg-teal-50 hover:text-teal-700"
-          >
-            Skill authorities
-          </Link>
-          <Link
-            href="/training/skills"
-            className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:border-teal-500 hover:bg-teal-50 hover:text-teal-700"
-          >
-            Skill types
-          </Link>
-        </nav>
+        <TrainingSubNav active="records" />
 
         <div className="grid gap-4 lg:grid-cols-2">
           <Card>

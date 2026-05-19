@@ -1,11 +1,21 @@
-// Scheduled reports.
+// Scheduled reports + dashboards.
 //
-//   report_definitions  — system-defined report templates (NOT per-tenant).
-//                         Identifies a queryKind, name, description, category.
+//   report_definitions  — report templates.
+//                         `kind='built_in'`  → system-defined, tenantId is null,
+//                                              dispatched via queryKind.
+//                         `kind='custom'`    → tenant-defined, tenantId is set,
+//                                              custom_query jsonb describes the
+//                                              entity / columns / filters /
+//                                              group-by chosen in the builder.
 //   report_schedules    — per-tenant subscription. Owns cadence, recipients,
 //                         filters, and the rolling nextRunAt.
 //   report_runs         — execution log. One row per attempted run, points
 //                         at the generated PDF attachment.
+//   report_dashboards   — saved dashboard layouts. `layout` is a typed jsonb
+//                         array of widget descriptors (kpi tiles + lists).
+//                         Per-tenant; one default dashboard ships unset and
+//                         the built-in dashboard page renders the canonical
+//                         layout when no rows exist.
 
 import { relations } from 'drizzle-orm'
 import {
@@ -24,23 +34,81 @@ import { id, timestamps } from './_helpers'
 import { attachments } from './attachments'
 import { tenants } from './core'
 
-// --- Definitions (cross-tenant) -------------------------------------------
+// --- Definitions (built-in cross-tenant + tenant-scoped custom) -----------
+
+export const reportDefinitionKind = pgEnum('report_definition_kind', [
+  'built_in',
+  'custom',
+])
+
+/** The set of entities a custom report can target. Kept narrow on purpose —
+ *  each value maps to a query plan in `apps/worker/src/workers/reports.ts`. */
+export const REPORT_CUSTOM_ENTITIES = [
+  'incidents',
+  'corrective_actions',
+  'training_records',
+  'inspections',
+  'documents',
+  'equipment',
+  'ppe',
+  'lone_worker',
+  'toolbox_journals',
+] as const
+export type ReportCustomEntity = (typeof REPORT_CUSTOM_ENTITIES)[number]
+
+/** Operators a custom-report filter clause can use. */
+export const REPORT_FILTER_OPERATORS = [
+  'eq',
+  'neq',
+  'in',
+  'not_in',
+  'gte',
+  'lte',
+  'is_null',
+  'is_not_null',
+  'contains',
+  'between_days_ago',
+] as const
+export type ReportFilterOperator = (typeof REPORT_FILTER_OPERATORS)[number]
+
+export type ReportCustomFilter = {
+  column: string
+  op: ReportFilterOperator
+  value?: string | number | string[] | number[] | null
+}
+
+export type ReportCustomQuery = {
+  entity: ReportCustomEntity
+  columns: string[]
+  filters?: ReportCustomFilter[]
+  groupBy?: string | null
+  /** Defaults to descending by primary date column. */
+  sort?: { column: string; direction: 'asc' | 'desc' } | null
+  /** Hard cap on rows; renderer adds "showing N of M" footer. */
+  limit?: number | null
+}
 
 export const reportDefinitions = pgTable(
   'report_definitions',
   {
     id: id(),
+    /** Null for built-ins, set for tenant-scoped custom definitions. */
+    tenantId: uuid('tenant_id').references(() => tenants.id, { onDelete: 'cascade' }),
+    kind: reportDefinitionKind('kind').default('built_in').notNull(),
     slug: text('slug').notNull(),
     name: text('name').notNull(),
     description: text('description'),
-    category: text('category'), // 'incidents' | 'training' | 'corrective_actions' | 'inspections' | 'documents'
-    // queryKind dispatches to a query helper in the worker. Keep as text so
-    // plugins can register their own kinds without a schema change.
+    category: text('category'), // 'incidents' | 'training' | 'corrective_actions' | 'inspections' | 'documents' | 'equipment' | 'ppe' | 'lone_worker' | 'toolbox' | 'cross_module'
+    // queryKind dispatches to a query helper in the worker. For 'custom' the
+    // value is always 'custom_query' and the actual plan lives in customQuery.
     queryKind: text('query_kind').notNull(),
+    /** Populated when kind='custom'. JSON-encoded ReportCustomQuery. */
+    customQuery: jsonb('custom_query').$type<ReportCustomQuery | null>(),
     ...timestamps,
   },
   (t) => ({
     slugUx: uniqueIndex('report_definitions_slug_ux').on(t.slug),
+    tenantKindIdx: index('report_definitions_tenant_kind_idx').on(t.tenantId, t.kind),
   }),
 )
 
@@ -120,9 +188,73 @@ export const reportRuns = pgTable(
   }),
 )
 
+// --- Dashboards (per-tenant saved layouts) --------------------------------
+
+/** Layout-payload widget kinds. Renderer maps each to a query helper. */
+export const REPORT_DASHBOARD_WIDGET_KINDS = [
+  'kpi_incidents_30d',
+  'kpi_open_cas',
+  'kpi_overdue_cas',
+  'kpi_trir',
+  'kpi_dart',
+  'kpi_training_compliance',
+  'kpi_document_compliance',
+  'kpi_open_ca_aging',
+  'kpi_inspections_this_month',
+  'kpi_lw_active',
+  'kpi_ppe_overdue',
+  'kpi_certs_expiring_90d',
+  'kpi_submissions_today',
+  'kpi_cs_active',
+  'kpi_people',
+  'list_recent_incidents',
+  'list_due_cas',
+  'list_expiring_certs',
+  'list_top_sites_incidents',
+  'list_top_overdue_cas',
+  'list_expiring_training_30d',
+  'list_inbox',
+] as const
+export type ReportDashboardWidgetKind = (typeof REPORT_DASHBOARD_WIDGET_KINDS)[number]
+
+export type ReportDashboardWidget = {
+  id: string
+  kind: ReportDashboardWidgetKind
+  title?: string
+  /** Reserved for future placement (grid coords). */
+  position?: { col: number; row: number; w: number; h: number }
+  options?: Record<string, unknown>
+}
+
+export type ReportDashboardLayout = {
+  widgets: ReportDashboardWidget[]
+}
+
+export const reportDashboards = pgTable(
+  'report_dashboards',
+  {
+    id: id(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    description: text('description'),
+    /** True for the dashboard rendered on /dashboard when no id provided. */
+    isDefault: boolean('is_default').default(false).notNull(),
+    layout: jsonb('layout').$type<ReportDashboardLayout>().notNull(),
+    createdByTenantUserId: uuid('created_by_tenant_user_id'),
+    ...timestamps,
+  },
+  (t) => ({
+    tenantIdx: index('report_dashboards_tenant_idx').on(t.tenantId),
+    tenantNameUx: uniqueIndex('report_dashboards_tenant_name_ux').on(t.tenantId, t.name),
+  }),
+)
+
 // --- Relations ------------------------------------------------------------
 
-export const reportDefinitionsRelations = relations(reportDefinitions, ({ many }) => ({
+export const reportDefinitionsRelations = relations(reportDefinitions, ({ one, many }) => ({
+  tenant: one(tenants, { fields: [reportDefinitions.tenantId], references: [tenants.id] }),
   schedules: many(reportSchedules),
 }))
 
@@ -145,4 +277,8 @@ export const reportRunsRelations = relations(reportRuns, ({ one }) => ({
     fields: [reportRuns.pdfAttachmentId],
     references: [attachments.id],
   }),
+}))
+
+export const reportDashboardsRelations = relations(reportDashboards, ({ one }) => ({
+  tenant: one(tenants, { fields: [reportDashboards.tenantId], references: [tenants.id] }),
 }))

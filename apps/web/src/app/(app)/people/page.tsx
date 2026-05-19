@@ -18,6 +18,7 @@ import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { ListPageLayout } from '@/components/page-layout'
+import { PeopleSubNav } from './_components/people-sub-nav'
 
 export const metadata = { title: 'People' }
 
@@ -82,6 +83,7 @@ export default async function PeoplePage({
     <ListPageLayout
       header={
         <>
+          <PeopleSubNav active="directory" />
           <PageHeader
             title="People"
             description="Workers, contractors, supervisors. Sync from your HRIS via the plugin framework."

@@ -185,3 +185,8 @@ export const ppeItemsRelations = relations(ppeItems, ({ one, many }) => ({
   inspections: many(ppeInspections),
   issueReports: many(ppeIssueReports),
 }))
+
+export const ppeTypesRelations = relations(ppeTypes, ({ one, many }) => ({
+  tenant: one(tenants, { fields: [ppeTypes.tenantId], references: [tenants.id] }),
+  items: many(ppeItems),
+}))

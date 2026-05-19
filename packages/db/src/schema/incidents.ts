@@ -14,6 +14,7 @@ import {
   index,
   integer,
   jsonb,
+  numeric,
   pgEnum,
   pgTable,
   text,
@@ -23,6 +24,7 @@ import {
 import { id, softDelete, timestamps } from './_helpers'
 import { tenants, tenantUsers } from './core'
 import { departments, orgUnits, people } from './org'
+import { incidentClassifications, incidentInjuryTypes } from './incident-classifications'
 
 export const incidentType = pgEnum('incident_type', [
   'injury',
@@ -98,11 +100,28 @@ export const incidents = pgTable(
 
     firstAidReceived: boolean('first_aid_received').default(false).notNull(),
     firstAidProvider: text('first_aid_provider'),
+    // Wave-4: structured first-aid notes (separate from generic narrative
+    // fields).  Used by the OSHA-300 supplementary log.
+    firstAidGiven: boolean('first_aid_given').default(false).notNull(),
+    firstAidNotes: text('first_aid_notes'),
 
     medicalAttentionReceived: boolean('medical_attention_received').default(false).notNull(),
     treatedAtHospital: text('treated_at_hospital'),
     treatedInCity: text('treated_in_city'),
     transportation: text('transportation'),
+    // Wave-4: EMS dispatch trail.  Legacy parity = EMS bool + freeform note;
+    // here we split out the call-out flag and the arrival/discharge stamps
+    // because the severity-report needs the response-time delta.
+    emsCalled: boolean('ems_called').default(false).notNull(),
+    emsArrivedAt: timestamp('ems_arrived_at', { withTimezone: true }),
+    hospitalName: text('hospital_name'),
+    hospitalArrivedAt: timestamp('hospital_arrived_at', { withTimezone: true }),
+    dischargedAt: timestamp('discharged_at', { withTimezone: true }),
+    attendingPhysician: text('attending_physician'),
+    // Ministry-of-Labour notification trail — sub-fields appear once the
+    // top-level `ministryOfLabourNotified` flag is set.
+    molNotifiedAt: timestamp('mol_notified_at', { withTimezone: true }),
+    molReportNumber: text('mol_report_number'),
 
     lostTime: boolean('lost_time').default(false).notNull(),
     lostTimeFirstDay: date('lost_time_first_day'),
@@ -119,6 +138,29 @@ export const incidents = pgTable(
     // Key metrics — actual vs potential severity (1-5 scales, matches legacy radio buttons)
     actualSeverity: integer('actual_severity'),
     potentialSeverity: integer('potential_severity'),
+    // Wave-4: blended 1-5 "incident severity rating" used by the
+    // severity-trend report.  Distinct from the per-event actual/potential
+    // pair so we can roll up across an entire incident family.
+    severityRating: integer('severity_rating'),
+    // Wave-4: dollar cost of property/asset damage (USD).  Drives the
+    // financial line on the incident-cost report.  Stored as numeric to
+    // avoid floating-point drift.
+    damageEstimate: numeric('damage_estimate', { precision: 14, scale: 2 }),
+
+    // Wave-4: police + insurance trail for vehicle / theft / liability
+    // incidents.
+    policeNotified: boolean('police_notified').default(false).notNull(),
+    policeReportNumber: text('police_report_number'),
+    insuranceClaimNumber: text('insurance_claim_number'),
+
+    // Wave-4: explicit FK to the tenant-defined classification taxonomy.
+    // Coexists with the legacy `classification` JSON column (which carries
+    // the materialised path so old reports keep rendering after an
+    // archive).
+    classificationId: uuid('classification_id').references(
+      () => incidentClassifications.id,
+      { onDelete: 'set null' },
+    ),
 
     // Investigation
     rootCause: text('root_cause'),
@@ -181,7 +223,14 @@ export const incidentInjuries = pgTable(
     personId: uuid('person_id').references(() => people.id),
     personName: text('person_name'),
     bodyParts: jsonb('body_parts').$type<string[]>().default([]).notNull(),
+    // Legacy: free-form list of injury labels.  New rows should also set
+    // `injuryTypeId` so the report rollups can join against the tenant
+    // taxonomy.  We keep the array in place for back-compat and to support
+    // multi-type injuries (laceration + chemical burn).
     injuryTypes: jsonb('injury_types').$type<string[]>().default([]).notNull(),
+    injuryTypeId: uuid('injury_type_id').references(() => incidentInjuryTypes.id, {
+      onDelete: 'set null',
+    }),
     treatment: text('treatment'),
     treatedAtFacility: text('treated_at_facility'),
     workedHoursPriorTo: integer('worked_hours_prior_to'),
@@ -190,6 +239,7 @@ export const incidentInjuries = pgTable(
   (t) => ({
     tenantIdx: index('incident_injuries_tenant_idx').on(t.tenantId),
     incidentIdx: index('incident_injuries_incident_idx').on(t.incidentId),
+    injuryTypeIdx: index('incident_injuries_injury_type_idx').on(t.injuryTypeId),
   }),
 )
 
@@ -243,8 +293,27 @@ export const incidentAttachments = pgTable(
 export const incidentsRelations = relations(incidents, ({ one, many }) => ({
   tenant: one(tenants, { fields: [incidents.tenantId], references: [tenants.id] }),
   site: one(orgUnits, { fields: [incidents.siteOrgUnitId], references: [orgUnits.id] }),
+  classificationRef: one(incidentClassifications, {
+    fields: [incidents.classificationId],
+    references: [incidentClassifications.id],
+  }),
   injuries: many(incidentInjuries),
   lostTimeEvents: many(incidentLostTimeEvents),
   involved: many(incidentPeople),
   attachments: many(incidentAttachments),
+}))
+
+export const incidentInjuriesRelations = relations(incidentInjuries, ({ one }) => ({
+  incident: one(incidents, {
+    fields: [incidentInjuries.incidentId],
+    references: [incidents.id],
+  }),
+  injuryTypeRef: one(incidentInjuryTypes, {
+    fields: [incidentInjuries.injuryTypeId],
+    references: [incidentInjuryTypes.id],
+  }),
+  person: one(people, {
+    fields: [incidentInjuries.personId],
+    references: [people.id],
+  }),
 }))

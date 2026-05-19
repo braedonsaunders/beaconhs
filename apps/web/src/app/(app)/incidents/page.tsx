@@ -14,6 +14,7 @@ import {
 } from '@beaconhs/ui'
 import { incidents, orgUnits } from '@beaconhs/db/schema'
 import { SeverityBadge, StatusBadge } from './_badges'
+import { IncidentsSubNav } from './_sub-nav'
 import { requireRequestContext } from '@/lib/auth'
 import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
@@ -127,6 +128,7 @@ export default async function IncidentsPage({
               </div>
             }
           />
+          <IncidentsSubNav active="records" />
 
           <div className="flex flex-wrap items-center gap-3">
             <SearchInput placeholder="Search reference, title, description…" />

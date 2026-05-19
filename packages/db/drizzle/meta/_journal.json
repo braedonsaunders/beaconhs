@@ -57,6 +57,13 @@
       "when": 1779158207832,
       "tag": "0007_sticky_changeling",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1779165471074,
+      "tag": "0008_gigantic_gateway",
+      "breakpoints": true
     }
   ]
 }

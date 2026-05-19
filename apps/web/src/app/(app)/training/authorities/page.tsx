@@ -17,6 +17,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { parseListParams } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
 import { SearchInput } from '@/components/search-input'
+import { TrainingSubNav } from '../_components/training-sub-nav'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 
@@ -112,32 +113,7 @@ export default async function TrainingAuthoritiesPage({
               </Link>
             }
           />
-          <nav className="flex flex-wrap items-center gap-2">
-            <Link
-              href="/training"
-              className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:border-teal-500 hover:bg-teal-50 hover:text-teal-700"
-            >
-              Records
-            </Link>
-            <Link
-              href="/training/courses"
-              className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:border-teal-500 hover:bg-teal-50 hover:text-teal-700"
-            >
-              Courses
-            </Link>
-            <Link
-              href="/training/authorities"
-              className="rounded-full border border-teal-500 bg-teal-50 px-3 py-1 text-xs font-medium text-teal-700"
-            >
-              Skill authorities
-            </Link>
-            <Link
-              href="/training/skills"
-              className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:border-teal-500 hover:bg-teal-50 hover:text-teal-700"
-            >
-              Skill types
-            </Link>
-          </nav>
+          <TrainingSubNav active="authorities" />
           <div className="flex items-center gap-3">
             <SearchInput placeholder="Search by name, code, or jurisdiction" />
           </div>

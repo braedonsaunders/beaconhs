@@ -37,8 +37,12 @@ import {
 } from '@beaconhs/ui'
 import {
   attachments,
+  equipmentCheckouts,
+  equipmentExpenses,
   equipmentItems,
   equipmentLocationHistory,
+  equipmentLogEntries,
+  equipmentRates,
   equipmentTypes,
   equipmentWorkOrders,
   formResponses,
@@ -64,9 +68,24 @@ const TABS = [
   'location',
   'certificates',
   'inspections',
+  'rates',
+  'expenses',
+  'log',
+  'checkouts',
   'activity',
 ] as const
 type Tab = (typeof TABS)[number]
+
+function fmtMoney(value: string | number | null | undefined, currency = 'CAD'): string {
+  if (value === null || value === undefined || value === '') return '—'
+  const n = Number(value)
+  if (Number.isNaN(n)) return '—'
+  return new Intl.NumberFormat('en-CA', {
+    style: 'currency',
+    currency,
+    maximumFractionDigits: 2,
+  }).format(n)
+}
 
 // ---------------- Server actions ----------------
 
@@ -190,6 +209,169 @@ async function createWorkOrder(formData: FormData) {
   revalidatePath(`/equipment/${itemId}`)
 }
 
+async function addExpense(formData: FormData) {
+  'use server'
+  const ctx = await requireRequestContext()
+  const itemId = String(formData.get('itemId') ?? '').trim()
+  const incurredOn = String(formData.get('incurredOn') ?? '').trim()
+  const category = String(formData.get('category') ?? 'other').trim() || 'other'
+  const vendor = String(formData.get('vendor') ?? '').trim() || null
+  const description = String(formData.get('description') ?? '').trim() || null
+  const amount = String(formData.get('amount') ?? '').trim()
+  if (!itemId || !incurredOn || !amount) return
+  const amountNum = Number(amount)
+  if (!Number.isFinite(amountNum)) return
+
+  const inserted = await ctx.db(async (tx) => {
+    const [row] = await tx
+      .insert(equipmentExpenses)
+      .values({
+        tenantId: ctx.tenantId,
+        equipmentItemId: itemId,
+        incurredOn,
+        category,
+        vendor,
+        description,
+        amount: amountNum.toFixed(2),
+        createdByTenantUserId: ctx.membership?.id,
+      })
+      .returning({ id: equipmentExpenses.id })
+    return row
+  })
+  if (inserted?.id) {
+    await recordAudit(ctx, {
+      entityType: 'equipment_expense',
+      entityId: inserted.id,
+      action: 'create',
+      summary: `Logged ${amountNum.toFixed(2)} expense (${category})`,
+      after: { itemId, incurredOn, category, amount: amountNum, vendor },
+    })
+  }
+  revalidatePath(`/equipment/${itemId}`)
+}
+
+async function addLogEntry(formData: FormData) {
+  'use server'
+  const ctx = await requireRequestContext()
+  const itemId = String(formData.get('itemId') ?? '').trim()
+  const entryDate = String(formData.get('entryDate') ?? '').trim()
+  const kind = String(formData.get('kind') ?? 'note').trim() || 'note'
+  const title = String(formData.get('title') ?? '').trim() || null
+  const details = String(formData.get('details') ?? '').trim()
+  if (!itemId || !entryDate || !details) return
+
+  const inserted = await ctx.db(async (tx) => {
+    const [row] = await tx
+      .insert(equipmentLogEntries)
+      .values({
+        tenantId: ctx.tenantId,
+        equipmentItemId: itemId,
+        entryDate,
+        kind,
+        title,
+        details,
+        createdByTenantUserId: ctx.membership?.id,
+      })
+      .returning({ id: equipmentLogEntries.id })
+    return row
+  })
+  if (inserted?.id) {
+    await recordAudit(ctx, {
+      entityType: 'equipment_log_entry',
+      entityId: inserted.id,
+      action: 'create',
+      summary: `Logged ${kind} entry`,
+      after: { itemId, entryDate, kind, title, details: details.slice(0, 200) },
+    })
+  }
+  revalidatePath(`/equipment/${itemId}`)
+}
+
+async function checkOutFromItem(formData: FormData) {
+  'use server'
+  const ctx = await requireRequestContext()
+  const itemId = String(formData.get('itemId') ?? '').trim()
+  const holderPersonId = String(formData.get('holderPersonId') ?? '').trim() || null
+  const destinationOrgUnitId =
+    String(formData.get('destinationOrgUnitId') ?? '').trim() || null
+  const expectedReturnOn = String(formData.get('expectedReturnOn') ?? '').trim() || null
+  const notes = String(formData.get('notes') ?? '').trim() || null
+  if (!itemId) return
+
+  const coId = await ctx.db(async (tx) => {
+    const [row] = await tx
+      .insert(equipmentCheckouts)
+      .values({
+        tenantId: ctx.tenantId,
+        equipmentItemId: itemId,
+        holderPersonId,
+        destinationOrgUnitId,
+        expectedReturnOn,
+        notes,
+        checkedOutByTenantUserId: ctx.membership?.id,
+      })
+      .returning({ id: equipmentCheckouts.id })
+    await tx
+      .update(equipmentItems)
+      .set({
+        currentHolderPersonId: holderPersonId,
+        currentSiteOrgUnitId: destinationOrgUnitId,
+        lastSeenHolderPersonId: holderPersonId,
+        lastSeenSiteOrgUnitId: destinationOrgUnitId,
+        lastSeenAt: new Date(),
+        isAvailableForCheckout: false,
+        isMissing: false,
+      })
+      .where(eq(equipmentItems.id, itemId))
+    return row?.id
+  })
+  await recordAudit(ctx, {
+    entityType: 'equipment_checkout',
+    entityId: coId ?? undefined,
+    action: 'create',
+    summary: 'Checked equipment out',
+    after: { itemId, holderPersonId, destinationOrgUnitId, expectedReturnOn },
+  })
+  revalidatePath(`/equipment/${itemId}`)
+}
+
+async function checkInFromItem(formData: FormData) {
+  'use server'
+  const ctx = await requireRequestContext()
+  const checkoutId = String(formData.get('checkoutId') ?? '').trim()
+  const itemId = String(formData.get('itemId') ?? '').trim()
+  const condition = String(formData.get('returnedCondition') ?? 'good').trim() || 'good'
+  const returnedNotes = String(formData.get('returnedNotes') ?? '').trim() || null
+  if (!checkoutId || !itemId) return
+  await ctx.db(async (tx) => {
+    await tx
+      .update(equipmentCheckouts)
+      .set({
+        returnedAt: new Date(),
+        returnedCondition: condition as any,
+        returnedNotes,
+        checkedInByTenantUserId: ctx.membership?.id,
+      })
+      .where(eq(equipmentCheckouts.id, checkoutId))
+    await tx
+      .update(equipmentItems)
+      .set({
+        currentHolderPersonId: null,
+        isAvailableForCheckout: true,
+        lastSeenAt: new Date(),
+      })
+      .where(eq(equipmentItems.id, itemId))
+  })
+  await recordAudit(ctx, {
+    entityType: 'equipment_checkout',
+    entityId: checkoutId,
+    action: 'update',
+    summary: 'Checked equipment in',
+    after: { condition, returnedNotes },
+  })
+  revalidatePath(`/equipment/${itemId}`)
+}
+
 // ---------------- Page ----------------
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
@@ -225,8 +407,18 @@ export default async function EquipmentDetailPage({
       .limit(1)
     if (!row) return null
 
-    const [history, workOrders, sites, holders, certAttachments, inspectionResponses] =
-      await Promise.all([
+    const [
+      history,
+      workOrders,
+      sites,
+      holders,
+      certAttachments,
+      inspectionResponses,
+      rateRow,
+      expenseRows,
+      logRows,
+      checkoutRows,
+    ] = await Promise.all([
         tx
           .select({ history: equipmentLocationHistory, site: orgUnits, holder: people })
           .from(equipmentLocationHistory)
@@ -267,9 +459,53 @@ export default async function EquipmentDetailPage({
           )
           .orderBy(desc(formResponses.submittedAt))
           .limit(50),
+        // Rate for this item's type (one-row-per-type).
+        row.type
+          ? tx
+              .select()
+              .from(equipmentRates)
+              .where(eq(equipmentRates.typeId, row.type.id))
+              .limit(1)
+          : Promise.resolve([]),
+        // Per-item expense ledger.
+        tx
+          .select()
+          .from(equipmentExpenses)
+          .where(eq(equipmentExpenses.equipmentItemId, id))
+          .orderBy(desc(equipmentExpenses.incurredOn))
+          .limit(100),
+        // Per-item freeform log.
+        tx
+          .select({ log: equipmentLogEntries, person: people })
+          .from(equipmentLogEntries)
+          .leftJoin(people, eq(people.id, equipmentLogEntries.personPersonId))
+          .where(eq(equipmentLogEntries.equipmentItemId, id))
+          .orderBy(desc(equipmentLogEntries.entryDate))
+          .limit(100),
+        // Per-item check-out history.
+        tx
+          .select({ co: equipmentCheckouts, holder: people, dest: orgUnits })
+          .from(equipmentCheckouts)
+          .leftJoin(people, eq(people.id, equipmentCheckouts.holderPersonId))
+          .leftJoin(orgUnits, eq(orgUnits.id, equipmentCheckouts.destinationOrgUnitId))
+          .where(eq(equipmentCheckouts.equipmentItemId, id))
+          .orderBy(desc(equipmentCheckouts.checkedOutAt))
+          .limit(100),
       ])
 
-    return { ...row, history, workOrders, sites, holders, certAttachments, inspectionResponses }
+    return {
+      ...row,
+      history,
+      workOrders,
+      sites,
+      holders,
+      certAttachments,
+      inspectionResponses,
+      rate: rateRow[0] ?? null,
+      expenses: expenseRows,
+      logEntries: logRows,
+      checkouts: checkoutRows,
+    }
   })
 
   if (!data) notFound()
@@ -284,7 +520,20 @@ export default async function EquipmentDetailPage({
     holders,
     certAttachments,
     inspectionResponses,
+    rate,
+    expenses,
+    logEntries,
+    checkouts,
   } = data
+  const openCheckout = checkouts.find((c) => c.co.returnedAt === null) ?? null
+  const expensesYtd = expenses
+    .filter((e) => {
+      const yearStart = new Date()
+      yearStart.setMonth(0, 1)
+      yearStart.setHours(0, 0, 0, 0)
+      return new Date(e.incurredOn) >= yearStart
+    })
+    .reduce((s, e) => s + (Number(e.amount) || 0), 0)
 
   const openWOs = workOrders.filter((w) => !['closed', 'cancelled'].includes(w.status))
   const basePath = `/equipment/${id}`
@@ -387,6 +636,10 @@ export default async function EquipmentDetailPage({
                   label: 'Inspections',
                   count: inspectionResponses.length,
                 },
+                { key: 'rates', label: 'Rates' },
+                { key: 'expenses', label: 'Expenses', count: expenses.length },
+                { key: 'log', label: 'Log', count: logEntries.length },
+                { key: 'checkouts', label: 'Check-outs', count: checkouts.length },
                 { key: 'activity', label: 'Activity' },
               ]}
             />
@@ -791,6 +1044,368 @@ export default async function EquipmentDetailPage({
                   )}
                 </CardContent>
               </Card>
+            ) : null}
+
+            {active === 'rates' ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>
+                    Rates {type ? `(${type.name})` : ''}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {rate ? (
+                    <div className="space-y-3">
+                      <DetailGrid
+                        rows={[
+                          { label: 'Hourly', value: fmtMoney(rate.hourly, rate.currency) },
+                          { label: 'Daily', value: fmtMoney(rate.daily, rate.currency) },
+                          { label: 'Weekly', value: fmtMoney(rate.weekly, rate.currency) },
+                          { label: 'Monthly', value: fmtMoney(rate.monthly, rate.currency) },
+                          { label: 'Currency', value: rate.currency },
+                          { label: 'Category', value: rate.category ?? '—' },
+                        ]}
+                      />
+                      <div>
+                        <Link
+                          href="/equipment/rates"
+                          className="text-xs text-teal-700 hover:underline"
+                        >
+                          Edit rate matrix →
+                        </Link>
+                      </div>
+                    </div>
+                  ) : (
+                    <EmptyState
+                      title="No rate set for this type"
+                      description={
+                        type
+                          ? `Set hourly / daily / weekly / monthly rates for ${type.name}.`
+                          : 'Assign this item to an equipment type first.'
+                      }
+                      action={
+                        <Link href="/equipment/rates">
+                          <Button size="sm">Open rate matrix</Button>
+                        </Link>
+                      }
+                    />
+                  )}
+                </CardContent>
+              </Card>
+            ) : null}
+
+            {active === 'expenses' ? (
+              <div className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>
+                      Expenses ({expenses.length}) ·{' '}
+                      <span className="text-sm font-normal text-slate-500">
+                        {fmtMoney(expensesYtd.toFixed(2))} YTD
+                      </span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {expenses.length === 0 ? (
+                      <EmptyState
+                        title="No expenses logged"
+                        description="Log fuel, repairs, parts, registration, etc against this item below."
+                      />
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Date</TableHead>
+                            <TableHead>Category</TableHead>
+                            <TableHead>Vendor</TableHead>
+                            <TableHead>Description</TableHead>
+                            <TableHead className="text-right">Amount</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {expenses.map((e) => (
+                            <TableRow key={e.id}>
+                              <TableCell className="font-mono text-xs">{e.incurredOn}</TableCell>
+                              <TableCell>
+                                <Badge variant="secondary">{e.category}</Badge>
+                              </TableCell>
+                              <TableCell className="text-slate-600">
+                                {e.vendor ?? '—'}
+                              </TableCell>
+                              <TableCell className="text-slate-600">
+                                {e.description ?? '—'}
+                              </TableCell>
+                              <TableCell className="text-right font-medium">
+                                {fmtMoney(e.amount, e.currency)}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )}
+                  </CardContent>
+                </Card>
+                <Section title="Log a new expense">
+                  <form action={addExpense} className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <input type="hidden" name="itemId" value={id} />
+                    <Field label="Date" required>
+                      <Input
+                        name="incurredOn"
+                        type="date"
+                        required
+                        defaultValue={new Date().toISOString().slice(0, 10)}
+                      />
+                    </Field>
+                    <Field label="Category" required>
+                      <Select name="category" defaultValue="other">
+                        <option value="fuel">Fuel</option>
+                        <option value="repair">Repair</option>
+                        <option value="maintenance">Maintenance</option>
+                        <option value="insurance">Insurance</option>
+                        <option value="registration">Registration</option>
+                        <option value="parts">Parts</option>
+                        <option value="tires">Tires</option>
+                        <option value="oil_change">Oil change</option>
+                        <option value="inspection">Inspection</option>
+                        <option value="other">Other</option>
+                      </Select>
+                    </Field>
+                    <Field label="Amount" required>
+                      <Input name="amount" type="number" step="0.01" min="0" required />
+                    </Field>
+                    <Field label="Vendor">
+                      <Input name="vendor" />
+                    </Field>
+                    <Field label="Description" className="sm:col-span-2">
+                      <Input name="description" />
+                    </Field>
+                    <div className="sm:col-span-3 flex justify-end">
+                      <Button type="submit">Log expense</Button>
+                    </div>
+                  </form>
+                </Section>
+              </div>
+            ) : null}
+
+            {active === 'log' ? (
+              <div className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Log entries ({logEntries.length})</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {logEntries.length === 0 ? (
+                      <EmptyState
+                        title="No log entries"
+                        description="Capture observations, fuel-ups, modifications, and anything else worth noting against this asset."
+                      />
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Date</TableHead>
+                            <TableHead>Kind</TableHead>
+                            <TableHead>Title / details</TableHead>
+                            <TableHead>Person</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {logEntries.map(({ log, person }) => (
+                            <TableRow key={log.id}>
+                              <TableCell className="font-mono text-xs">
+                                {log.entryDate}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="secondary">{log.kind}</Badge>
+                              </TableCell>
+                              <TableCell>
+                                {log.title ? (
+                                  <div className="font-medium">{log.title}</div>
+                                ) : null}
+                                <div className="text-xs text-slate-600 whitespace-pre-wrap">
+                                  {log.details}
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-slate-600">
+                                {person ? `${person.firstName} ${person.lastName}` : '—'}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )}
+                  </CardContent>
+                </Card>
+                <Section title="Add a log entry">
+                  <form action={addLogEntry} className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <input type="hidden" name="itemId" value={id} />
+                    <Field label="Date" required>
+                      <Input
+                        name="entryDate"
+                        type="date"
+                        required
+                        defaultValue={new Date().toISOString().slice(0, 10)}
+                      />
+                    </Field>
+                    <Field label="Kind" required>
+                      <Select name="kind" defaultValue="note">
+                        <option value="note">Note</option>
+                        <option value="maintenance">Maintenance</option>
+                        <option value="fuel">Fuel</option>
+                        <option value="incident">Incident</option>
+                        <option value="modification">Modification</option>
+                      </Select>
+                    </Field>
+                    <Field label="Title">
+                      <Input name="title" placeholder="Short summary" />
+                    </Field>
+                    <Field label="Details" required className="sm:col-span-3">
+                      <Textarea name="details" rows={3} required />
+                    </Field>
+                    <div className="sm:col-span-3 flex justify-end">
+                      <Button type="submit">Add entry</Button>
+                    </div>
+                  </form>
+                </Section>
+              </div>
+            ) : null}
+
+            {active === 'checkouts' ? (
+              <div className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Check-out history ({checkouts.length})</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {checkouts.length === 0 ? (
+                      <EmptyState
+                        title="No checkout history"
+                        description="This item has never been checked out via the kiosk. Use the form below to record a checkout."
+                      />
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Held by</TableHead>
+                            <TableHead>Destination</TableHead>
+                            <TableHead>Out</TableHead>
+                            <TableHead>Expected</TableHead>
+                            <TableHead>Returned</TableHead>
+                            <TableHead>Condition</TableHead>
+                            <TableHead>Notes</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {checkouts.map(({ co, holder, dest }) => (
+                            <TableRow key={co.id}>
+                              <TableCell>
+                                {holder ? `${holder.firstName} ${holder.lastName}` : '—'}
+                              </TableCell>
+                              <TableCell className="text-slate-600">
+                                {dest?.name ?? '—'}
+                              </TableCell>
+                              <TableCell className="text-slate-600">
+                                {new Date(co.checkedOutAt).toLocaleDateString()}
+                              </TableCell>
+                              <TableCell className="text-slate-600">
+                                {co.expectedReturnOn ?? '—'}
+                              </TableCell>
+                              <TableCell className="text-slate-600">
+                                {co.returnedAt
+                                  ? new Date(co.returnedAt).toLocaleDateString()
+                                  : '—'}
+                              </TableCell>
+                              <TableCell>
+                                {co.returnedCondition ? (
+                                  <Badge
+                                    variant={
+                                      co.returnedCondition === 'damaged' ||
+                                      co.returnedCondition === 'unusable'
+                                        ? 'destructive'
+                                        : co.returnedCondition === 'fair'
+                                          ? 'warning'
+                                          : 'success'
+                                    }
+                                  >
+                                    {co.returnedCondition}
+                                  </Badge>
+                                ) : co.returnedAt ? (
+                                  '—'
+                                ) : (
+                                  <Badge variant="warning">out</Badge>
+                                )}
+                              </TableCell>
+                              <TableCell className="max-w-xs truncate text-xs text-slate-600">
+                                {co.returnedNotes ?? co.notes ?? '—'}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )}
+                  </CardContent>
+                </Card>
+                {openCheckout ? (
+                  <Section title="Check this item in">
+                    <form action={checkInFromItem} className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      <input type="hidden" name="itemId" value={id} />
+                      <input type="hidden" name="checkoutId" value={openCheckout.co.id} />
+                      <Field label="Condition">
+                        <Select name="returnedCondition" defaultValue="good">
+                          <option value="good">Good</option>
+                          <option value="fair">Fair</option>
+                          <option value="damaged">Damaged</option>
+                          <option value="unusable">Unusable</option>
+                        </Select>
+                      </Field>
+                      <Field label="Notes" className="sm:col-span-2">
+                        <Input name="returnedNotes" placeholder="Optional" />
+                      </Field>
+                      <div className="sm:col-span-3 flex justify-end">
+                        <Button type="submit">Check in</Button>
+                      </div>
+                    </form>
+                  </Section>
+                ) : (
+                  <Section title="Check this item out">
+                    <form
+                      action={checkOutFromItem}
+                      className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+                    >
+                      <input type="hidden" name="itemId" value={id} />
+                      <Field label="Hand to person">
+                        <Select name="holderPersonId" defaultValue="">
+                          <option value="">— No specific holder —</option>
+                          {holders.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.lastName}, {p.firstName}
+                            </option>
+                          ))}
+                        </Select>
+                      </Field>
+                      <Field label="Destination site">
+                        <Select name="destinationOrgUnitId" defaultValue="">
+                          <option value="">— Unassigned —</option>
+                          {sites.map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.name}
+                            </option>
+                          ))}
+                        </Select>
+                      </Field>
+                      <Field label="Expected return on">
+                        <Input name="expectedReturnOn" type="date" />
+                      </Field>
+                      <Field label="Notes" className="sm:col-span-2">
+                        <Input name="notes" />
+                      </Field>
+                      <div className="sm:col-span-2 flex justify-end">
+                        <Button type="submit">Check out</Button>
+                      </div>
+                    </form>
+                  </Section>
+                )}
+              </div>
             ) : null}
 
             {active === 'activity' ? (
