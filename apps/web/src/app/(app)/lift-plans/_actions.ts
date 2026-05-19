@@ -780,22 +780,29 @@ export async function deletePhoto(formData: FormData): Promise<void> {
 export async function sendLiftPlanEmail(formData: FormData): Promise<void> {
   const c = await ctx()
   const id = String(formData.get('id') ?? '')
-  const recipientsRaw = String(formData.get('recipients') ?? '')
   if (!id) throw new Error('Missing id')
-  const recipients = recipientsRaw
-    .split(/[,\s]+/)
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0 && s.includes('@'))
-  if (recipients.length === 0) throw new Error('Provide at least one email address')
-  // The transactional-email driver lives in another agent's scope (worker/
-  // events). For now we just record the intent in the audit log so the
-  // sender + recipient list are persisted; the worker picks it up.
-  await recordAudit(c, {
-    entityType: 'lift_plan',
-    entityId: id,
-    action: 'export',
-    summary: `Emailed lift plan to ${recipients.length} recipient${recipients.length === 1 ? '' : 's'}`,
-    metadata: { recipients, channel: 'email' },
+  const splitEmails = (raw: string) =>
+    raw
+      .split(/[,\s]+/)
+      .map((s) => s.trim())
+      .filter((s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s))
+  const recipients = splitEmails(String(formData.get('recipients') ?? ''))
+  const cc = splitEmails(String(formData.get('cc') ?? ''))
+  const subjectPrefix = String(formData.get('subjectPrefix') ?? '').trim() || undefined
+  const messageOverride = String(formData.get('message') ?? '').trim() || undefined
+  // Delegate to the helper that composes html/text and writes the audit
+  // row. The dialog version of this form lives at [id]/page.tsx; the
+  // older inline form on the same page also routes through here, so we
+  // accept either "recipients" being explicit (then we use them) or
+  // empty (then helper falls back to tenant-admin distribution).
+  const { sendLiftPlanEmail: sendLiftPlanEmailHelper } = await import(
+    './[id]/_send-email'
+  )
+  await sendLiftPlanEmailHelper(c, id, {
+    recipients: recipients.length > 0 ? recipients : undefined,
+    cc: cc.length > 0 ? cc : undefined,
+    subjectPrefix,
+    messageOverride,
   })
   revalidatePlan(id)
 }

@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { asc, eq } from 'drizzle-orm'
+import { FileText, Mail } from 'lucide-react'
 import {
   Badge,
   Button,
@@ -20,11 +21,14 @@ import {
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
+import { pickString } from '@/lib/list-params'
 import { DetailGrid } from '@/components/detail-grid'
 import { Section } from '@/components/section'
 import { ActivityFeed } from '@/components/activity-feed'
 import { DetailPageLayout } from '@/components/page-layout'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
+import { GenericSendEmailDialog } from '@/components/send-email-dialog'
+import { sendWorkOrderEmail } from './_send-email'
 
 export const dynamic = 'force-dynamic'
 
@@ -189,6 +193,32 @@ async function markComplete(formData: FormData) {
   revalidatePath('/equipment/work-orders')
 }
 
+// Inline server action for the Send-email dialog. Reads recipients / Cc /
+// subject prefix / message override from the form data and delegates to
+// `sendWorkOrderEmail` for composition + audit-logging.
+async function sendEmailAction(formData: FormData) {
+  'use server'
+  const ctx = await requireRequestContext()
+  const id = String(formData.get('id') ?? '')
+  if (!id) return
+  const subjectPrefix = String(formData.get('subjectPrefix') ?? '').trim() || undefined
+  const messageOverride = String(formData.get('message') ?? '').trim() || undefined
+  const splitEmails = (raw: string) =>
+    raw
+      .split(/[,\s]+/)
+      .map((s) => s.trim())
+      .filter((s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s))
+  const recipients = splitEmails(String(formData.get('recipients') ?? ''))
+  const cc = splitEmails(String(formData.get('cc') ?? ''))
+  await sendWorkOrderEmail(ctx, id, {
+    recipients: recipients.length > 0 ? recipients : undefined,
+    cc: cc.length > 0 ? cc : undefined,
+    subjectPrefix,
+    messageOverride,
+  })
+  revalidatePath(`/equipment/work-orders/${id}`)
+}
+
 // ---------------- Page ----------------
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
@@ -267,12 +297,27 @@ export default async function WorkOrderDetailPage({
             </div>
           }
           actions={
-            !closed ? (
-              <form action={markComplete}>
-                <input type="hidden" name="id" value={id} />
-                <Button type="submit">Mark complete</Button>
-              </form>
-            ) : null
+            <>
+              <Link href={`/equipment/work-orders/${id}/pdf` as any} target="_blank">
+                <Button variant="outline">
+                  <FileText size={14} /> PDF
+                </Button>
+              </Link>
+              <Link
+                href={`/equipment/work-orders/${id}?send=1${active !== 'overview' ? `&tab=${active}` : ''}` as any}
+                scroll={false}
+              >
+                <Button variant="outline">
+                  <Mail size={14} /> Send email
+                </Button>
+              </Link>
+              {!closed ? (
+                <form action={markComplete}>
+                  <input type="hidden" name="id" value={id} />
+                  <Button type="submit">Mark complete</Button>
+                </form>
+              ) : null}
+            </>
           }
         />
       }
@@ -456,6 +501,19 @@ export default async function WorkOrderDetailPage({
           </Section>
         ) : null}
       </div>
+
+      <GenericSendEmailDialog
+        open={pickString(sp.send) === '1'}
+        title="Send work order"
+        description="Sends a recap of this work order to the tenant admin distribution list (and the assignee, if blank). Add explicit recipients below to override."
+        reference={wo.reference}
+        defaultSubjectPrefix="Update"
+        sendAction={async (fd) => {
+          'use server'
+          fd.set('id', id)
+          await sendEmailAction(fd)
+        }}
+      />
     </DetailPageLayout>
   )
 }

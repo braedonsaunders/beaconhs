@@ -4,10 +4,15 @@ import type { RoleScope } from '@beaconhs/db/schema'
 /**
  * Resolved auth + tenant context for a request. Built by the web app's
  * `getRequestContext()` helper and threaded through Server Actions / API routes.
+ *
+ * `tenantId` is non-null: `requireRequestContext()` redirects to login or the
+ * tenant picker when no tenant is resolvable, so every consumer of this type
+ * already operates inside a chosen tenant. Routes that legitimately need
+ * cross-tenant access use `SuperAdminContext` instead.
  */
 export type RequestContext = {
   userId: string
-  tenantId: string | null // null on /admin or pre-tenant-selection pages
+  tenantId: string
   isSuperAdmin: boolean
   // The active tenant_user membership (id, display name)
   membership: { id: string; displayName: string } | null
@@ -25,7 +30,7 @@ export type SuperAdminContext = {
 
 export function makeTenantContext(
   baseDb: Database,
-  args: Omit<RequestContext, 'db'> & { tenantId: string },
+  args: Omit<RequestContext, 'db'>,
 ): RequestContext {
   return {
     ...args,

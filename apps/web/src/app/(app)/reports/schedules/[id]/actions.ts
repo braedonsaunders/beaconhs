@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { eq } from 'drizzle-orm'
 import { reportSchedules, reportRuns } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { recordAudit } from '@/lib/audit'
 import { computeNextRunAt } from '@/lib/report-cadence'
 import { enqueueReportRun } from '@beaconhs/jobs'
 
@@ -15,6 +16,12 @@ export async function setActive(scheduleId: string, active: boolean): Promise<vo
       .update(reportSchedules)
       .set({ active })
       .where(eq(reportSchedules.id, scheduleId))
+  })
+  await recordAudit(ctx, {
+    entityType: 'report_schedule',
+    entityId: scheduleId,
+    action: active ? 'publish' : 'archive',
+    summary: active ? 'Activated report schedule' : 'Paused report schedule',
   })
   revalidatePath(`/reports/schedules/${scheduleId}`)
   revalidatePath('/reports')
@@ -32,7 +39,13 @@ export async function triggerNow(scheduleId: string): Promise<void> {
     return row ?? null
   })
   if (!schedule) throw new Error('Schedule not found')
-  await enqueueReportRun({ tenantId: ctx.tenantId!, scheduleId })
+  await enqueueReportRun({ tenantId: ctx.tenantId, scheduleId })
+  await recordAudit(ctx, {
+    entityType: 'report_schedule',
+    entityId: scheduleId,
+    action: 'export',
+    summary: 'Triggered ad-hoc report run',
+  })
   revalidatePath(`/reports/schedules/${scheduleId}`)
 }
 
@@ -103,6 +116,14 @@ export async function updateSchedule(scheduleId: string, formData: FormData): Pr
       .where(eq(reportSchedules.id, scheduleId))
   })
 
+  await recordAudit(ctx, {
+    entityType: 'report_schedule',
+    entityId: scheduleId,
+    action: 'update',
+    summary: `Updated report schedule "${name}"`,
+    after: { name, cadence, dayOfWeek, dayOfMonth, hour, minute, timezone, recipientEmails, recipientUserIds },
+  })
+
   revalidatePath(`/reports/schedules/${scheduleId}`)
   revalidatePath('/reports')
 }
@@ -112,6 +133,12 @@ export async function deleteSchedule(scheduleId: string): Promise<void> {
   await ctx.db(async (tx) => {
     // Runs cascade-delete via FK.
     await tx.delete(reportSchedules).where(eq(reportSchedules.id, scheduleId))
+  })
+  await recordAudit(ctx, {
+    entityType: 'report_schedule',
+    entityId: scheduleId,
+    action: 'delete',
+    summary: 'Deleted report schedule',
   })
   revalidatePath('/reports')
   redirect('/reports')

@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ClipboardCheck } from 'lucide-react'
-import { and, asc, count, desc, eq, isNull, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, isNull, sql, type SQL } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -56,6 +56,8 @@ export default async function AssessmentsPage({
   const personFilter = pickString(sp.person)
   const typeFilter = pickString(sp.type)
   const courseFilter = pickString(sp.course)
+  const dateFromRaw = pickString(sp.dateFrom)
+  const dateToRaw = pickString(sp.dateTo)
   const ctx = await requireRequestContext()
 
   const { rows, total, types, statusCounts, peopleList, coursesList } = await ctx.db(async (tx) => {
@@ -75,6 +77,16 @@ export default async function AssessmentsPage({
     if (personFilter) filters.push(eq(trainingAssessments.personId, personFilter))
     if (typeFilter) filters.push(eq(trainingAssessments.typeId, typeFilter))
     if (courseFilter) filters.push(eq(trainingAssessments.courseId, courseFilter))
+    if (dateFromRaw) {
+      filters.push(
+        sql`coalesce(${trainingAssessments.completedAt}, ${trainingAssessments.startedAt})::date >= ${dateFromRaw}`,
+      )
+    }
+    if (dateToRaw) {
+      filters.push(
+        sql`coalesce(${trainingAssessments.completedAt}, ${trainingAssessments.startedAt})::date <= ${dateToRaw}`,
+      )
+    }
     const whereClause = filters.length > 0 ? and(...filters) : undefined
 
     const orderBy =
@@ -206,6 +218,32 @@ export default async function AssessmentsPage({
           />
           <TrainingSubNav active="assessments" />
           <div className="flex flex-wrap items-center gap-3">
+            <form className="flex items-center gap-1 text-xs">
+              <label className="flex items-center gap-1 text-slate-500">
+                Completed from
+                <input
+                  type="date"
+                  name="dateFrom"
+                  defaultValue={dateFromRaw ?? ''}
+                  className="rounded-md border border-slate-300 px-2 py-1 text-xs"
+                />
+              </label>
+              <label className="flex items-center gap-1 text-slate-500">
+                to
+                <input
+                  type="date"
+                  name="dateTo"
+                  defaultValue={dateToRaw ?? ''}
+                  className="rounded-md border border-slate-300 px-2 py-1 text-xs"
+                />
+              </label>
+              <button
+                type="submit"
+                className="rounded-md border border-slate-200 px-2 py-1 text-xs hover:bg-slate-50"
+              >
+                Apply
+              </button>
+            </form>
             <FilterChips
               basePath="/training/assessments"
               currentParams={sp}
@@ -267,24 +305,35 @@ export default async function AssessmentsPage({
             <TableHeader>
               <TableRow>
                 <SortableTh {...sortProps} column="completed" active={params.sort === 'completed'}>
-                  When
+                  Completed
                 </SortableTh>
                 <SortableTh {...sortProps} column="person" active={params.sort === 'person'}>
-                  Person
+                  Employee
                 </SortableTh>
                 <SortableTh {...sortProps} column="type" active={params.sort === 'type'}>
-                  Type
+                  Assessment
                 </SortableTh>
                 <TableHead>Course</TableHead>
+                <TableHead>Started</TableHead>
+                <TableHead>Duration</TableHead>
                 <SortableTh {...sortProps} column="score" active={params.sort === 'score'}>
                   Score
                 </SortableTh>
-                <TableHead>Status</TableHead>
+                <TableHead>Passing</TableHead>
+                <TableHead>Result</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {rows.map(({ attempt, type, person, course }) => {
                 const when = attempt.completedAt ?? attempt.startedAt
+                const duration =
+                  attempt.completedAt && attempt.startedAt
+                    ? Math.round(
+                        (new Date(attempt.completedAt).getTime() -
+                          new Date(attempt.startedAt).getTime()) /
+                          60_000,
+                      )
+                    : null
                 return (
                   <TableRow key={attempt.id}>
                     <TableCell className="text-slate-600 text-xs tabular-nums">
@@ -297,6 +346,9 @@ export default async function AssessmentsPage({
                       >
                         {person.lastName}, {person.firstName}
                       </Link>
+                      {person.employeeNo ? (
+                        <div className="text-xs text-slate-500">#{person.employeeNo}</div>
+                      ) : null}
                     </TableCell>
                     <TableCell>
                       <Link
@@ -312,14 +364,39 @@ export default async function AssessmentsPage({
                           href={`/training/courses/${course.id}`}
                           className="hover:underline"
                         >
-                          {course.code}
+                          <span className="font-mono text-xs">{course.code}</span>
                         </Link>
                       ) : (
                         '—'
                       )}
                     </TableCell>
+                    <TableCell className="text-slate-600 text-xs tabular-nums">
+                      {attempt.startedAt
+                        ? new Date(attempt.startedAt).toLocaleDateString()
+                        : '—'}
+                    </TableCell>
+                    <TableCell className="text-xs tabular-nums">
+                      {duration != null ? `${duration} min` : '—'}
+                    </TableCell>
                     <TableCell className="tabular-nums">
-                      {attempt.score != null ? `${attempt.score}%` : '—'}
+                      {attempt.score != null ? (
+                        <span
+                          className={
+                            attempt.status === 'submitted'
+                              ? attempt.passed
+                                ? 'text-emerald-700 font-medium'
+                                : 'text-red-700 font-medium'
+                              : 'text-slate-700'
+                          }
+                        >
+                          {attempt.score}%
+                        </span>
+                      ) : (
+                        '—'
+                      )}
+                    </TableCell>
+                    <TableCell className="text-xs text-slate-500 tabular-nums">
+                      ≥ {attempt.passingScore}%
                     </TableCell>
                     <TableCell>
                       {attempt.status === 'in_progress' ? (

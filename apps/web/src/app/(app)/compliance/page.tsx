@@ -20,6 +20,7 @@ import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import {
   ASSIGNMENT_KIND_LABELS,
   type AssignmentKind,
+  type AssignmentOption,
   breakdownDocumentAssignment,
   breakdownInspectionAssignment,
   breakdownToolboxAssignment,
@@ -117,7 +118,22 @@ async function EntityTab({
     : 'toolbox') as AssignmentKind
   const assignmentId = pickString(sp.assignment)
 
-  const options = await listAssignmentsForKind(ctx, kind)
+  // Pull *all* options across every kind so we can render a rollup matrix
+  // when no specific assignment is picked. This is the headline value
+  // proposition of the entity tab — see who/where the gaps are at a glance.
+  const [toolboxOptions, inspectionOptions, documentOptions, trainingOptions] = await Promise.all([
+    listAssignmentsForKind(ctx, 'toolbox'),
+    listAssignmentsForKind(ctx, 'inspection'),
+    listAssignmentsForKind(ctx, 'document'),
+    listAssignmentsForKind(ctx, 'training_assessment'),
+  ])
+  const optionsByKind: Record<AssignmentKind, AssignmentOption[]> = {
+    toolbox: toolboxOptions,
+    inspection: inspectionOptions,
+    document: documentOptions,
+    training_assessment: trainingOptions,
+  }
+  const options = optionsByKind[kind]
   const selected = assignmentId
     ? options.find((o) => o.id === assignmentId) ?? null
     : null
@@ -132,6 +148,12 @@ async function EntityTab({
           : await breakdownToolboxAssignment(ctx, selected.id)
     : null
 
+  // When no entity is selected, compute a global rollup across every active
+  // assignment in the active kind. That gives the rollup table a stable
+  // 4-column shape (assignment / completed / total / %) that mirrors the
+  // legacy "all entities" dashboard.
+  const rollup = selected ? null : await computeKindRollup(ctx, kind, options)
+
   return (
     <div className="space-y-6">
       <form method="get" className="flex flex-wrap items-end gap-3">
@@ -143,17 +165,17 @@ async function EntityTab({
           <Select name="kind" defaultValue={kind}>
             {KIND_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
-                {o.label}
+                {o.label} ({optionsByKind[o.value].length})
               </option>
             ))}
           </Select>
         </div>
         <div className="min-w-[320px] flex-1">
           <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">
-            Assignment
+            Assignment (optional — leave blank for rollup)
           </label>
           <Select name="assignment" defaultValue={assignmentId ?? ''}>
-            <option value="">— Select —</option>
+            <option value="">— All {ASSIGNMENT_KIND_LABELS[kind].toLowerCase()} assignments —</option>
             {options.map((o) => (
               <option key={o.id} value={o.id}>
                 {o.label}
@@ -165,11 +187,7 @@ async function EntityTab({
         <Button type="submit">Run</Button>
       </form>
 
-      {!selected ? (
-        <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 p-8 text-center text-sm text-slate-500">
-          Pick an assignment above to see its per-person compliance breakdown.
-        </div>
-      ) : !breakdown ? null : (
+      {selected && breakdown ? (
         <div className="space-y-4">
           <SummaryStrip
             percent={breakdown.percent}
@@ -211,7 +229,158 @@ async function EntityTab({
             </TableBody>
           </Table>
         </div>
+      ) : rollup && rollup.length > 0 ? (
+        <div className="space-y-4">
+          <RollupSummaryStrip
+            rows={rollup}
+            kindLabel={ASSIGNMENT_KIND_LABELS[kind]}
+          />
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Assignment</TableHead>
+                <TableHead className="w-28">Completed</TableHead>
+                <TableHead className="w-28">Audience</TableHead>
+                <TableHead className="w-28">Overdue</TableHead>
+                <TableHead>Compliance</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rollup.map((r) => (
+                <TableRow key={`${r.kind}::${r.id}`}>
+                  <TableCell>
+                    <Link
+                      href={`/compliance?tab=entity&kind=${r.kind}&assignment=${r.id}` as any}
+                      className="font-medium text-slate-900 hover:underline"
+                    >
+                      {r.label}
+                    </Link>
+                    {r.notes ? (
+                      <div className="text-xs text-slate-500 line-clamp-1">{r.notes}</div>
+                    ) : null}
+                  </TableCell>
+                  <TableCell className="tabular-nums text-slate-700">
+                    {r.completed.toLocaleString()}
+                  </TableCell>
+                  <TableCell className="tabular-nums text-slate-700">
+                    {r.total.toLocaleString()}
+                  </TableCell>
+                  <TableCell className="tabular-nums">
+                    {r.overdue > 0 ? (
+                      <Badge variant="destructive">{r.overdue}</Badge>
+                    ) : (
+                      <span className="text-slate-400">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 max-w-xs">
+                        <PercentBar percent={r.percent} />
+                      </div>
+                      <span className="text-xs tabular-nums text-slate-600 min-w-[3rem] text-right">
+                        {r.percent}%
+                      </span>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      ) : (
+        <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 p-8 text-center text-sm text-slate-500">
+          No active {ASSIGNMENT_KIND_LABELS[kind].toLowerCase()} assignments to roll up.
+        </div>
       )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Cross-assignment rollup — used when no specific assignment is selected on
+// the entity tab. Computes a per-assignment summary by re-using the per-kind
+// breakdown helpers in `_lib.ts` and reducing each into its scalar metrics.
+// ---------------------------------------------------------------------------
+
+type RollupRow = {
+  kind: AssignmentKind
+  id: string
+  label: string
+  notes: string | null
+  total: number
+  completed: number
+  overdue: number
+  percent: number
+}
+
+async function computeKindRollup(
+  ctx: Awaited<ReturnType<typeof requireRequestContext>>,
+  kind: AssignmentKind,
+  options: AssignmentOption[],
+): Promise<RollupRow[]> {
+  // Limit to a reasonable number — the breakdown calls hit the DB each time.
+  const sliced = options.slice(0, 50)
+  const results = await Promise.all(
+    sliced.map(async (o) => {
+      const b =
+        kind === 'document'
+          ? await breakdownDocumentAssignment(ctx, o.id)
+          : kind === 'inspection'
+            ? await breakdownInspectionAssignment(ctx, o.id)
+            : kind === 'training_assessment'
+              ? await breakdownTrainingAssignment(ctx, o.id)
+              : await breakdownToolboxAssignment(ctx, o.id)
+      return {
+        kind,
+        id: o.id,
+        label: o.label,
+        notes: o.notes,
+        total: b.totals.total,
+        completed: b.totals.completed,
+        overdue: b.totals.overdue,
+        percent: b.percent,
+      } satisfies RollupRow
+    }),
+  )
+  // Sort by overdue (desc) then by percent (asc) so the worst offenders rise
+  // to the top.
+  results.sort((a, b) => b.overdue - a.overdue || a.percent - b.percent)
+  return results
+}
+
+function RollupSummaryStrip({
+  rows,
+  kindLabel,
+}: {
+  rows: RollupRow[]
+  kindLabel: string
+}) {
+  const totalAudience = rows.reduce((s, r) => s + r.total, 0)
+  const totalCompleted = rows.reduce((s, r) => s + r.completed, 0)
+  const totalOverdue = rows.reduce((s, r) => s + r.overdue, 0)
+  const totalPercent = totalAudience === 0 ? 0 : Math.round((totalCompleted / totalAudience) * 100)
+  return (
+    <div className="grid gap-3 sm:grid-cols-4">
+      <div className="rounded-lg border border-slate-200 bg-white p-4">
+        <div className="text-xs uppercase tracking-wide text-slate-500">{kindLabel} assignments</div>
+        <div className="mt-1 text-2xl font-semibold text-slate-900">{rows.length}</div>
+      </div>
+      <div className="rounded-lg border border-slate-200 bg-white p-4">
+        <div className="text-xs uppercase tracking-wide text-slate-500">Total audience</div>
+        <div className="mt-1 text-2xl font-semibold text-slate-900">
+          {totalAudience.toLocaleString()}
+        </div>
+      </div>
+      <div className="rounded-lg border border-slate-200 bg-white p-4">
+        <div className="text-xs uppercase tracking-wide text-slate-500">Overdue</div>
+        <div className="mt-1 text-2xl font-semibold text-red-700">
+          {totalOverdue.toLocaleString()}
+        </div>
+      </div>
+      <div className="rounded-lg border border-slate-200 bg-white p-4">
+        <div className="text-xs uppercase tracking-wide text-slate-500">Overall compliance</div>
+        <div className="mt-1 text-2xl font-semibold text-slate-900">{totalPercent}%</div>
+      </div>
     </div>
   )
 }

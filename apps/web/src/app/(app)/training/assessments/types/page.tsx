@@ -20,17 +20,23 @@ import {
   trainingCourses,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
-import { parseListParams } from '@/lib/list-params'
+import { parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
+import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
 import { TrainingSubNav } from '../../_components/training-sub-nav'
 
 export const metadata = { title: 'Assessment types' }
 export const dynamic = 'force-dynamic'
 
-const SORTS = ['name', 'passing', 'questions', 'attempts'] as const
+const SORTS = ['name', 'passing', 'questions', 'attempts', 'created', 'updated'] as const
+
+const STATUS_OPTIONS = [
+  { value: 'active', label: 'Active' },
+  { value: 'inactive', label: 'Inactive' },
+]
 
 export default async function AssessmentTypesPage({
   searchParams,
@@ -44,11 +50,17 @@ export default async function AssessmentTypesPage({
     perPage: 25,
     allowedSorts: SORTS,
   })
+  const statusFilter = pickString(sp.status)
+  const courseLinkedFilter = pickString(sp.linked) // 'yes' | 'no'
   const ctx = await requireRequestContext()
 
-  const { rows, total } = await ctx.db(async (tx) => {
+  const { rows, total, statusCounts } = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = []
     filters.push(sql`${trainingAssessmentTypes.deletedAt} IS NULL`)
+    if (statusFilter === 'active') filters.push(eq(trainingAssessmentTypes.active, true))
+    if (statusFilter === 'inactive') filters.push(eq(trainingAssessmentTypes.active, false))
+    if (courseLinkedFilter === 'yes') filters.push(sql`${trainingAssessmentTypes.courseId} IS NOT NULL`)
+    if (courseLinkedFilter === 'no') filters.push(sql`${trainingAssessmentTypes.courseId} IS NULL`)
     if (params.q) {
       const term = `%${params.q}%`
       const cond = or(
@@ -78,11 +90,23 @@ export default async function AssessmentTypesPage({
                   ? asc(sql`count(distinct ${trainingAssessments.id})`)
                   : desc(sql`count(distinct ${trainingAssessments.id})`),
               ]
-            : [
-                params.dir === 'asc'
-                  ? asc(trainingAssessmentTypes.name)
-                  : desc(trainingAssessmentTypes.name),
-              ]
+            : params.sort === 'created'
+              ? [
+                  params.dir === 'asc'
+                    ? asc(trainingAssessmentTypes.createdAt)
+                    : desc(trainingAssessmentTypes.createdAt),
+                ]
+              : params.sort === 'updated'
+                ? [
+                    params.dir === 'asc'
+                      ? asc(trainingAssessmentTypes.updatedAt)
+                      : desc(trainingAssessmentTypes.updatedAt),
+                  ]
+                : [
+                    params.dir === 'asc'
+                      ? asc(trainingAssessmentTypes.name)
+                      : desc(trainingAssessmentTypes.name),
+                  ]
 
     const [tot] = await tx
       .select({ c: count() })
@@ -97,6 +121,9 @@ export default async function AssessmentTypesPage({
           Number,
         ),
         attemptCount: sql<number>`count(distinct ${trainingAssessments.id})`.mapWith(Number),
+        passCount: sql<number>`count(distinct case when ${trainingAssessments.passed} = true then ${trainingAssessments.id} end)`.mapWith(
+          Number,
+        ),
       })
       .from(trainingAssessmentTypes)
       .leftJoin(trainingCourses, eq(trainingCourses.id, trainingAssessmentTypes.courseId))
@@ -111,7 +138,18 @@ export default async function AssessmentTypesPage({
       .limit(params.perPage)
       .offset((params.page - 1) * params.perPage)
 
-    return { rows: data, total: Number(tot?.c ?? 0) }
+    const statusRows = await tx
+      .select({ active: trainingAssessmentTypes.active, c: count() })
+      .from(trainingAssessmentTypes)
+      .where(sql`${trainingAssessmentTypes.deletedAt} IS NULL`)
+      .groupBy(trainingAssessmentTypes.active)
+    const sc: Record<string, number> = { active: 0, inactive: 0 }
+    for (const r of statusRows) {
+      if (r.active) sc.active = Number(r.c)
+      else sc.inactive = Number(r.c)
+    }
+
+    return { rows: data, total: Number(tot?.c ?? 0), statusCounts: sc }
   })
 
   const sortProps = {
@@ -144,6 +182,28 @@ export default async function AssessmentTypesPage({
           <TrainingSubNav active="assessment-types" />
           <div className="flex items-center gap-3">
             <SearchInput placeholder="Search assessment types" />
+          </div>
+          <div className="space-y-2">
+            <FilterChips
+              basePath="/training/assessments/types"
+              currentParams={sp}
+              paramKey="status"
+              label="Status"
+              options={STATUS_OPTIONS.map((o) => ({
+                ...o,
+                count: statusCounts[o.value],
+              }))}
+            />
+            <FilterChips
+              basePath="/training/assessments/types"
+              currentParams={sp}
+              paramKey="linked"
+              label="Course linkage"
+              options={[
+                { value: 'yes', label: 'Linked to course' },
+                { value: 'no', label: 'Standalone' },
+              ]}
+            />
           </div>
         </>
       }
@@ -185,47 +245,84 @@ export default async function AssessmentTypesPage({
                 >
                   Attempts
                 </SortableTh>
+                <TableHead>Pass rate</TableHead>
+                <TableHead>Graded</TableHead>
                 <TableHead>Status</TableHead>
+                <SortableTh {...sortProps} column="updated" active={params.sort === 'updated'}>
+                  Updated
+                </SortableTh>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map(({ type, course, questionCount, attemptCount }) => (
-                <TableRow key={type.id}>
-                  <TableCell>
-                    <Link
-                      href={`/training/assessments/types/${type.id}`}
-                      className="font-medium text-slate-900 hover:underline"
-                    >
-                      {type.name}
-                    </Link>
-                    {type.description ? (
-                      <div className="text-xs text-slate-500 line-clamp-1">{type.description}</div>
-                    ) : null}
-                  </TableCell>
-                  <TableCell className="text-slate-600">
-                    {course ? (
+              {rows.map(({ type, course, questionCount, attemptCount, passCount }) => {
+                const attempts = Number(attemptCount ?? 0)
+                const passes = Number(passCount ?? 0)
+                const passPct = attempts > 0 ? Math.round((passes / attempts) * 100) : null
+                return (
+                  <TableRow key={type.id}>
+                    <TableCell>
                       <Link
-                        href={`/training/courses/${course.id}`}
-                        className="hover:underline"
+                        href={`/training/assessments/types/${type.id}`}
+                        className="font-medium text-slate-900 hover:underline"
                       >
-                        {course.name}
+                        {type.name}
                       </Link>
-                    ) : (
-                      <span className="text-slate-400">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="tabular-nums">{type.passingScore}%</TableCell>
-                  <TableCell className="tabular-nums">{questionCount}</TableCell>
-                  <TableCell className="tabular-nums">{attemptCount}</TableCell>
-                  <TableCell>
-                    {type.active ? (
-                      <Badge variant="success">Active</Badge>
-                    ) : (
-                      <Badge variant="secondary">Inactive</Badge>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
+                      {type.description ? (
+                        <div className="text-xs text-slate-500 line-clamp-1">{type.description}</div>
+                      ) : null}
+                    </TableCell>
+                    <TableCell className="text-slate-600">
+                      {course ? (
+                        <Link
+                          href={`/training/courses/${course.id}`}
+                          className="hover:underline"
+                        >
+                          <span className="font-mono text-xs">{course.code}</span>
+                          {course.code ? ' · ' : ''}
+                          {course.name}
+                        </Link>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="tabular-nums">{type.passingScore}%</TableCell>
+                    <TableCell className="tabular-nums">{questionCount}</TableCell>
+                    <TableCell className="tabular-nums">{attempts}</TableCell>
+                    <TableCell className="tabular-nums">
+                      {passPct != null ? (
+                        <Badge
+                          variant={
+                            passPct >= 80 ? 'success' : passPct >= 50 ? 'warning' : 'destructive'
+                          }
+                        >
+                          {passPct}%
+                        </Badge>
+                      ) : (
+                        <span className="text-slate-400 text-xs">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {type.graded ? (
+                        <Badge variant="outline" className="text-xs">Graded</Badge>
+                      ) : (
+                        <Badge variant="secondary" className="text-xs">Pass-only</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {type.active ? (
+                        <Badge variant="success">Active</Badge>
+                      ) : (
+                        <Badge variant="secondary">Inactive</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-xs text-slate-500 tabular-nums">
+                      {type.updatedAt
+                        ? new Date(type.updatedAt).toLocaleDateString()
+                        : '—'}
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
             </TableBody>
           </Table>
           <Pagination

@@ -17,7 +17,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { and, asc, desc, eq } from 'drizzle-orm'
-import { Camera, ClipboardCheck, HardHat, Plus, ShieldCheck } from 'lucide-react'
+import { Camera, ClipboardCheck, HardHat, Mail, Plus, ShieldCheck } from 'lucide-react'
 import {
   Alert,
   AlertDescription,
@@ -55,10 +55,13 @@ import {
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { pickString } from '@/lib/list-params'
 import { DetailGrid } from '@/components/detail-grid'
 import { Section } from '@/components/section'
 import { DetailPageLayout } from '@/components/page-layout'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
+import { GenericSendEmailDialog } from '@/components/send-email-dialog'
+import { sendPpeIssueEmail } from './_send-email'
 import {
   daysUntil,
   deriveAnnualYear,
@@ -314,6 +317,32 @@ async function addAnnualRecord(formData: FormData) {
   revalidatePath(`/ppe/${itemId}`)
 }
 
+// Inline server action for the Send-email dialog. Allows shipping an
+// open issue report (or the item summary when no issue is open) to a
+// maintenance distribution list or any explicit recipients.
+async function sendEmailAction(formData: FormData) {
+  'use server'
+  const ctx = await requireRequestContext()
+  const id = String(formData.get('id') ?? '')
+  if (!id) return
+  const subjectPrefix = String(formData.get('subjectPrefix') ?? '').trim() || undefined
+  const messageOverride = String(formData.get('message') ?? '').trim() || undefined
+  const splitEmails = (raw: string) =>
+    raw
+      .split(/[,\s]+/)
+      .map((s) => s.trim())
+      .filter((s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s))
+  const recipients = splitEmails(String(formData.get('recipients') ?? ''))
+  const cc = splitEmails(String(formData.get('cc') ?? ''))
+  await sendPpeIssueEmail(ctx, id, {
+    recipients: recipients.length > 0 ? recipients : undefined,
+    cc: cc.length > 0 ? cc : undefined,
+    subjectPrefix,
+    messageOverride,
+  })
+  revalidatePath(`/ppe/${id}`)
+}
+
 function nextDueDate(kind: 'pre_use' | 'annual', iso: string): string {
   const d = new Date(iso)
   if (kind === 'annual') d.setFullYear(d.getFullYear() + 1)
@@ -481,6 +510,16 @@ export default async function PpeDetailPage({
                 </Badge>
               ) : null}
             </div>
+          }
+          actions={
+            <Link
+              href={`/ppe/${id}?send=1${active !== 'overview' ? `&tab=${active}` : ''}` as any}
+              scroll={false}
+            >
+              <Button variant="outline">
+                <Mail size={14} /> Send email
+              </Button>
+            </Link>
           }
         />
       }
@@ -836,20 +875,29 @@ export default async function PpeDetailPage({
                       </TableCell>
                       <TableCell className="text-slate-600">{r.resolution ?? '—'}</TableCell>
                       <TableCell>
-                        {r.status === 'open' ? (
-                          <form action={resolveIssue} className="flex items-center gap-1.5">
-                            <input type="hidden" name="id" value={r.id} />
-                            <input type="hidden" name="itemId" value={id} />
-                            <Input
-                              name="resolution"
-                              placeholder="Resolution…"
-                              className="h-8 w-40"
-                            />
-                            <Button type="submit" size="sm">
-                              Resolve
-                            </Button>
-                          </form>
-                        ) : null}
+                        <div className="flex items-center gap-1.5">
+                          {r.status === 'open' ? (
+                            <form action={resolveIssue} className="flex items-center gap-1.5">
+                              <input type="hidden" name="id" value={r.id} />
+                              <input type="hidden" name="itemId" value={id} />
+                              <Input
+                                name="resolution"
+                                placeholder="Resolution…"
+                                className="h-8 w-40"
+                              />
+                              <Button type="submit" size="sm">
+                                Resolve
+                              </Button>
+                            </form>
+                          ) : null}
+                          <Link
+                            href={`/ppe/${id}/issues/${r.id}/pdf` as any}
+                            target="_blank"
+                            className="text-xs text-teal-700 hover:underline"
+                          >
+                            PDF
+                          </Link>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -977,6 +1025,23 @@ export default async function PpeDetailPage({
           </Card>
         ) : null}
       </div>
+
+      <GenericSendEmailDialog
+        open={pickString(sp.send) === '1'}
+        title={openIssues.length > 0 ? 'Send PPE issue report' : 'Send PPE item summary'}
+        description={
+          openIssues.length > 0
+            ? 'Sends the most-recent open issue report to maintenance. Recipients default to the tenant admin distribution list when blank.'
+            : 'Sends a PPE item summary. Recipients default to the tenant admin distribution list when blank.'
+        }
+        reference={item.serialNumber ?? id.slice(0, 8)}
+        defaultSubjectPrefix={openIssues.length > 0 ? 'Action required' : 'FYI'}
+        sendAction={async (fd) => {
+          'use server'
+          fd.set('id', id)
+          await sendEmailAction(fd)
+        }}
+      />
     </DetailPageLayout>
   )
 }

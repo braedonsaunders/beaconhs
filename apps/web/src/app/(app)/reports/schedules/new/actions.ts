@@ -6,6 +6,7 @@ import { reportDefinitions, reportSchedules } from '@beaconhs/db/schema'
 import { db, withSuperAdmin } from '@beaconhs/db'
 import { eq } from 'drizzle-orm'
 import { requireRequestContext } from '@/lib/auth'
+import { recordAudit } from '@/lib/audit'
 import { computeNextRunAt } from '@/lib/report-cadence'
 
 const CADENCES = ['daily', 'weekly', 'monthly'] as const
@@ -83,7 +84,7 @@ export async function createSchedule(formData: FormData): Promise<void> {
     return tx
       .insert(reportSchedules)
       .values({
-        tenantId: ctx.tenantId!,
+        tenantId: ctx.tenantId,
         definitionId,
         name,
         cadence,
@@ -100,6 +101,16 @@ export async function createSchedule(formData: FormData): Promise<void> {
       })
       .returning({ id: reportSchedules.id })
   })
+
+  if (row) {
+    await recordAudit(ctx, {
+      entityType: 'report_schedule',
+      entityId: row.id,
+      action: 'create',
+      summary: `Created report schedule "${name}" (${cadence})`,
+      after: { name, definitionId, cadence, dayOfWeek, dayOfMonth, hour, minute, timezone, recipientEmails, recipientUserIds },
+    })
+  }
 
   revalidatePath('/reports')
   if (row) redirect(`/reports/schedules/${row.id}`)

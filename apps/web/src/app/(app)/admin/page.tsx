@@ -13,6 +13,11 @@ const SECTIONS = [
   { href: '/admin/api-keys', title: 'API keys', desc: 'Manage public REST API credentials.' },
   { href: '/admin/audit', title: 'Audit log', desc: 'Every write captured with actor + diffs.' },
   {
+    href: '/admin/email-log',
+    title: 'Email log',
+    desc: 'Every transactional + on-demand email the worker dispatched.',
+  },
+  {
     href: '/admin/library',
     title: 'Library & catalogues',
     desc: 'Inspection banks, skill authorities, skill types, atmospheric sensors.',

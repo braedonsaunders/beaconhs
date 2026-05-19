@@ -34,12 +34,14 @@ import {
 import { publicUrl } from '@beaconhs/storage'
 import { requireRequestContext } from '@/lib/auth'
 import { recentActivityForEntity } from '@/lib/audit'
+import { pickString } from '@/lib/list-params'
 import { ActivityFeed } from '@/components/activity-feed'
 import { DetailGrid } from '@/components/detail-grid'
 import { DetailPageLayout } from '@/components/page-layout'
 import { PhotoGallery } from '@/components/photo-gallery'
 import { Section } from '@/components/section'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
+import { GenericSendEmailDialog } from '@/components/send-email-dialog'
 import { CapacityBadge, StatusBadge } from '../_badges'
 import {
   LIFT_PLAN_STATUSES,
@@ -282,6 +284,14 @@ export default async function LiftPlanDetailPage({
               <Link href={`/lift-plans/${id}/pdf`}>
                 <Button variant="outline">
                   <FileText size={14} /> PDF
+                </Button>
+              </Link>
+              <Link
+                href={`/lift-plans/${id}?send=1${active !== 'overview' ? `&tab=${active}` : ''}` as any}
+                scroll={false}
+              >
+                <Button variant="outline">
+                  <Mail size={14} /> Send email
                 </Button>
               </Link>
             </>
@@ -778,6 +788,19 @@ export default async function LiftPlanDetailPage({
           </Section>
         ) : null}
       </div>
+
+      <GenericSendEmailDialog
+        open={pickString(sp.send) === '1'}
+        title="Send lift plan"
+        description="Sends a structured lift plan recap to the tenant admin distribution list by default, or to the explicit recipients below."
+        reference={plan.reference}
+        defaultSubjectPrefix="Update"
+        sendAction={async (fd) => {
+          'use server'
+          fd.set('id', id)
+          await sendLiftPlanEmail(fd)
+        }}
+      />
     </DetailPageLayout>
   )
 }

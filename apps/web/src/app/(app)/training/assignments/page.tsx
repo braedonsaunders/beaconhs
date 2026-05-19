@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { CalendarRange } from 'lucide-react'
-import { and, asc, count, desc, eq, isNull, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, isNull, sql, type SQL } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -15,6 +15,7 @@ import {
 } from '@beaconhs/ui'
 import {
   trainingAssessmentTypes,
+  trainingAudienceAssignmentTargets,
   trainingAudienceAssignments,
   trainingCourses,
 } from '@beaconhs/db/schema'
@@ -99,6 +100,15 @@ export default async function TrainingAssignmentsPage({
         a: trainingAudienceAssignments,
         course: trainingCourses,
         type: trainingAssessmentTypes,
+        targetCount: sql<number>`count(distinct ${trainingAudienceAssignmentTargets.id})`.mapWith(
+          Number,
+        ),
+        personTargets: sql<number>`count(distinct case when ${trainingAudienceAssignmentTargets.kind} = 'person' then ${trainingAudienceAssignmentTargets.id} end)`.mapWith(
+          Number,
+        ),
+        tradeTargets: sql<number>`count(distinct case when ${trainingAudienceAssignmentTargets.kind} = 'trade' then ${trainingAudienceAssignmentTargets.id} end)`.mapWith(
+          Number,
+        ),
       })
       .from(trainingAudienceAssignments)
       .leftJoin(trainingCourses, eq(trainingCourses.id, trainingAudienceAssignments.courseId))
@@ -106,7 +116,12 @@ export default async function TrainingAssignmentsPage({
         trainingAssessmentTypes,
         eq(trainingAssessmentTypes.id, trainingAudienceAssignments.assessmentTypeId),
       )
+      .leftJoin(
+        trainingAudienceAssignmentTargets,
+        eq(trainingAudienceAssignmentTargets.assignmentId, trainingAudienceAssignments.id),
+      )
       .where(whereClause)
+      .groupBy(trainingAudienceAssignments.id, trainingCourses.id, trainingAssessmentTypes.id)
       .orderBy(...orderBy)
       .limit(params.perPage)
       .offset((params.page - 1) * params.perPage)
@@ -189,20 +204,28 @@ export default async function TrainingAssignmentsPage({
                 <SortableTh {...sortProps} column="name" active={params.sort === 'name'}>
                   Name
                 </SortableTh>
+                <TableHead>Kind</TableHead>
                 <TableHead>Item</TableHead>
+                <TableHead>Audience</TableHead>
                 <SortableTh {...sortProps} column="due" active={params.sort === 'due'}>
                   Due
                 </SortableTh>
                 <TableHead>Compliance</TableHead>
+                <TableHead>Overdue</TableHead>
+                <TableHead>Remind before</TableHead>
                 <TableHead>Recurrence</TableHead>
+                <SortableTh {...sortProps} column="created" active={params.sort === 'created'}>
+                  Created
+                </SortableTh>
                 <TableHead>Status</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map(({ a, course, type }) => {
+              {rows.map(({ a, course, type, targetCount, personTargets, tradeTargets }) => {
                 const stats = compliance.get(a.id) ?? { total: 0, completed: 0, overdue: 0 }
                 const pct = stats.total === 0 ? 0 : Math.round((stats.completed / stats.total) * 100)
                 const overdueExists = a.dueOn && a.dueOn < today
+                const audienceCount = Number(targetCount ?? 0)
                 return (
                   <TableRow key={a.id}>
                     <TableCell>
@@ -216,13 +239,18 @@ export default async function TrainingAssignmentsPage({
                         <div className="text-xs text-slate-500 line-clamp-1">{a.notes}</div>
                       ) : null}
                     </TableCell>
-                    <TableCell className="text-slate-600">
+                    <TableCell>
+                      <Badge variant="outline" className="text-xs">
+                        {a.itemKind === 'course' ? 'Course' : 'Assessment'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-slate-600 text-xs">
                       {a.itemKind === 'course' && course ? (
                         <Link
                           href={`/training/courses/${course.id}`}
                           className="hover:underline"
                         >
-                          {course.code} · {course.name}
+                          <span className="font-mono">{course.code}</span> · {course.name}
                         </Link>
                       ) : a.itemKind === 'assessment_type' && type ? (
                         <Link
@@ -235,7 +263,13 @@ export default async function TrainingAssignmentsPage({
                         '—'
                       )}
                     </TableCell>
-                    <TableCell className="text-slate-600 tabular-nums">
+                    <TableCell className="text-xs">
+                      <Badge variant="secondary">{audienceCount}</Badge>
+                      <div className="mt-0.5 text-slate-500">
+                        {Number(personTargets ?? 0)} ppl · {Number(tradeTargets ?? 0)} trades
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-slate-600 tabular-nums text-xs">
                       {a.dueOn ?? '—'}
                     </TableCell>
                     <TableCell>
@@ -257,12 +291,25 @@ export default async function TrainingAssignmentsPage({
                         </span>
                       </div>
                     </TableCell>
+                    <TableCell className="tabular-nums">
+                      {stats.overdue > 0 ? (
+                        <Badge variant="destructive">{stats.overdue}</Badge>
+                      ) : (
+                        <span className="text-slate-400 text-xs">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-xs text-slate-600">
+                      {a.remindBeforeDays}d
+                    </TableCell>
                     <TableCell className="text-xs text-slate-500">
                       {a.recurrenceCron ? (
                         <span className="font-mono">{a.recurrenceCron}</span>
                       ) : (
                         '—'
                       )}
+                    </TableCell>
+                    <TableCell className="text-xs text-slate-500 tabular-nums">
+                      {new Date(a.createdAt).toLocaleDateString()}
                     </TableCell>
                     <TableCell>
                       {a.status === 'archived' ? (

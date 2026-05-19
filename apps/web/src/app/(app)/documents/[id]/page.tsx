@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { asc, desc, eq } from 'drizzle-orm'
-import { Check, FileText, Plus } from 'lucide-react'
+import { Check, FileText, Mail, Plus } from 'lucide-react'
 import {
   Alert,
   AlertDescription,
@@ -31,11 +31,14 @@ import {
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
+import { pickString } from '@/lib/list-params'
 import { ActivityFeed } from '@/components/activity-feed'
 import { DetailGrid } from '@/components/detail-grid'
 import { Section } from '@/components/section'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { DetailPageLayout } from '@/components/page-layout'
+import { GenericSendEmailDialog } from '@/components/send-email-dialog'
+import { sendDocumentEmail } from './_send-email'
 
 export const dynamic = 'force-dynamic'
 
@@ -241,6 +244,32 @@ async function newVersion(formData: FormData) {
   revalidatePath(`/documents/${documentId}`)
 }
 
+// Inline server action for the Send-email dialog. Reads the dialog form
+// fields, delegates to `sendDocumentEmail` which composes the email +
+// writes the audit row, then revalidates the detail page.
+async function sendEmailAction(formData: FormData) {
+  'use server'
+  const ctx = await requireRequestContext()
+  const id = String(formData.get('id') ?? '')
+  if (!id) return
+  const subjectPrefix = String(formData.get('subjectPrefix') ?? '').trim() || undefined
+  const messageOverride = String(formData.get('message') ?? '').trim() || undefined
+  const splitEmails = (raw: string) =>
+    raw
+      .split(/[,\s]+/)
+      .map((s) => s.trim())
+      .filter((s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s))
+  const recipients = splitEmails(String(formData.get('recipients') ?? ''))
+  const cc = splitEmails(String(formData.get('cc') ?? ''))
+  await sendDocumentEmail(ctx, id, {
+    recipients: recipients.length > 0 ? recipients : undefined,
+    cc: cc.length > 0 ? cc : undefined,
+    subjectPrefix,
+    messageOverride,
+  })
+  revalidatePath(`/documents/${id}`)
+}
+
 // ---------- Page ----------
 
 export default async function DocumentDetailPage({
@@ -320,6 +349,19 @@ export default async function DocumentDetailPage({
           }
           actions={
             <>
+              <Link href={`/documents/${id}/pdf` as any} target="_blank">
+                <Button variant="outline">
+                  <FileText size={14} /> PDF
+                </Button>
+              </Link>
+              <Link
+                href={`/documents/${id}?send=1${active !== 'overview' ? `&tab=${active}` : ''}` as any}
+                scroll={false}
+              >
+                <Button variant="outline">
+                  <Mail size={14} /> Send email
+                </Button>
+              </Link>
               {doc.status === 'published' ? (
                 <form action={unpublish} className="inline">
                   <input type="hidden" name="id" value={id} />
@@ -618,6 +660,19 @@ export default async function DocumentDetailPage({
           </Card>
         ) : null}
       </div>
+
+      <GenericSendEmailDialog
+        open={pickString(sp.send) === '1'}
+        title="Send document"
+        description="Sends the document content + a link to the in-app view. Defaults to the tenant admin distribution list when no recipients are specified."
+        reference={doc.key}
+        defaultSubjectPrefix="FYI"
+        sendAction={async (fd) => {
+          'use server'
+          fd.set('id', id)
+          await sendEmailAction(fd)
+        }}
+      />
     </DetailPageLayout>
   )
 }

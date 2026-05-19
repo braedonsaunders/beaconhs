@@ -1,7 +1,8 @@
 import Link from 'next/link'
 import { ArrowUpRight } from 'lucide-react'
-import { and, asc, count, desc, eq, gte, ilike, isNull, lte, or, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gte, ilike, isNull, lte, or, sql, type SQL } from 'drizzle-orm'
 import {
+  Badge,
   Button,
   EmptyState,
   PageHeader,
@@ -12,7 +13,13 @@ import {
   TableHeader,
   TableRow,
 } from '@beaconhs/ui'
-import { liftPlans, orgUnits, tenantUsers } from '@beaconhs/db/schema'
+import {
+  liftPlanSignatures,
+  liftPlans,
+  orgUnits,
+  tenantUsers,
+} from '@beaconhs/db/schema'
+import { alias } from 'drizzle-orm/pg-core'
 import { StatusBadge } from './_badges'
 import { LIFT_PLAN_STATUSES } from './_types'
 import { requireRequestContext } from '@/lib/auth'
@@ -26,7 +33,7 @@ import { ListPageLayout } from '@/components/page-layout'
 export const metadata = { title: 'Lift Plans' }
 export const dynamic = 'force-dynamic'
 
-const SORTS = ['reference', 'lift_date', 'status', 'site', 'created_at'] as const
+const SORTS = ['reference', 'lift_date', 'status', 'site', 'project', 'completed', 'created_at'] as const
 
 const STATUS_OPTIONS = LIFT_PLAN_STATUSES.map((s) => ({
   value: s,
@@ -48,12 +55,18 @@ export default async function LiftPlansPage({
   const statusFilter = pickString(sp.status)
   const supervisorFilter = pickString(sp.supervisor)
   const projectFilter = pickString(sp.project)
+  const siteFilter = pickString(sp.site)
   const dateFromRaw = pickString(sp.dateFrom)
   const dateToRaw = pickString(sp.dateTo)
 
   const ctx = await requireRequestContext()
 
-  const { rows, total, statusCounts, supervisors, projects } = await ctx.db(async (tx) => {
+  // Aliased orgUnits join — one for the site, one for the project (so a plan
+  // attached to both is rendered with each column independently).
+  const siteUnits = alias(orgUnits, 'site_units')
+  const projectUnits = alias(orgUnits, 'project_units')
+
+  const { rows, total, statusCounts, supervisors, projects, sites } = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = [isNull(liftPlans.deletedAt)]
     if (params.q) {
       const term = `%${params.q}%`
@@ -65,6 +78,7 @@ export default async function LiftPlansPage({
     }
     if (supervisorFilter) filters.push(eq(liftPlans.supervisorTenantUserId, supervisorFilter))
     if (projectFilter) filters.push(eq(liftPlans.projectOrgUnitId, projectFilter))
+    if (siteFilter) filters.push(eq(liftPlans.siteOrgUnitId, siteFilter))
     if (dateFromRaw) filters.push(gte(liftPlans.liftDate, dateFromRaw))
     if (dateToRaw) filters.push(lte(liftPlans.liftDate, dateToRaw))
     const whereClause = and(...filters)
@@ -75,19 +89,32 @@ export default async function LiftPlansPage({
         : params.sort === 'status'
           ? [params.dir === 'asc' ? asc(liftPlans.status) : desc(liftPlans.status)]
           : params.sort === 'site'
-            ? [params.dir === 'asc' ? asc(orgUnits.name) : desc(orgUnits.name)]
-            : params.sort === 'created_at'
-              ? [params.dir === 'asc' ? asc(liftPlans.createdAt) : desc(liftPlans.createdAt)]
-              : [params.dir === 'asc' ? asc(liftPlans.liftDate) : desc(liftPlans.liftDate)]
+            ? [params.dir === 'asc' ? asc(siteUnits.name) : desc(siteUnits.name)]
+            : params.sort === 'project'
+              ? [params.dir === 'asc' ? asc(projectUnits.name) : desc(projectUnits.name)]
+              : params.sort === 'completed'
+                ? [params.dir === 'asc' ? asc(liftPlans.completedAt) : desc(liftPlans.completedAt)]
+                : params.sort === 'created_at'
+                  ? [params.dir === 'asc' ? asc(liftPlans.createdAt) : desc(liftPlans.createdAt)]
+                  : [params.dir === 'asc' ? asc(liftPlans.liftDate) : desc(liftPlans.liftDate)]
 
     const [tot] = await tx.select({ c: count() }).from(liftPlans).where(whereClause)
 
     const data = await tx
-      .select({ plan: liftPlans, site: orgUnits, supervisor: tenantUsers })
+      .select({
+        plan: liftPlans,
+        site: siteUnits,
+        project: projectUnits,
+        supervisor: tenantUsers,
+        signatureCount: sql<number>`count(distinct ${liftPlanSignatures.id})`.mapWith(Number),
+      })
       .from(liftPlans)
-      .leftJoin(orgUnits, eq(orgUnits.id, liftPlans.siteOrgUnitId))
+      .leftJoin(siteUnits, eq(siteUnits.id, liftPlans.siteOrgUnitId))
+      .leftJoin(projectUnits, eq(projectUnits.id, liftPlans.projectOrgUnitId))
       .leftJoin(tenantUsers, eq(tenantUsers.id, liftPlans.supervisorTenantUserId))
+      .leftJoin(liftPlanSignatures, eq(liftPlanSignatures.liftPlanId, liftPlans.id))
       .where(whereClause)
+      .groupBy(liftPlans.id, siteUnits.id, projectUnits.id, tenantUsers.id)
       .orderBy(...orderBy)
       .limit(params.perPage)
       .offset((params.page - 1) * params.perPage)
@@ -114,12 +141,20 @@ export default async function LiftPlansPage({
       .orderBy(asc(orgUnits.name))
       .limit(50)
 
+    const sites = await tx
+      .select({ id: orgUnits.id, name: orgUnits.name })
+      .from(orgUnits)
+      .where(eq(orgUnits.level, 'site'))
+      .orderBy(asc(orgUnits.name))
+      .limit(50)
+
     return {
       rows: data,
       total: Number(tot?.c ?? 0),
       statusCounts: Object.fromEntries(statuses.map((s) => [s.status, Number(s.c)])),
       supervisors,
       projects,
+      sites,
     }
   })
 
@@ -172,6 +207,15 @@ export default async function LiftPlansPage({
                 options={projects.map((p) => ({ value: p.id, label: p.name }))}
               />
             ) : null}
+            {sites.length > 0 ? (
+              <FilterChips
+                basePath="/lift-plans"
+                currentParams={sp}
+                paramKey="site"
+                label="Site"
+                options={sites.map((s) => ({ value: s.id, label: s.name }))}
+              />
+            ) : null}
           </div>
         </>
       }
@@ -199,36 +243,58 @@ export default async function LiftPlansPage({
                 <SortableTh {...sortProps} column="reference" active={params.sort === 'reference'}>
                   Ref
                 </SortableTh>
-                <SortableTh {...sortProps} column="lift_date" active={params.sort === 'lift_date'}>
-                  Lift date
-                </SortableTh>
-                <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>
-                  Status
+                <SortableTh {...sortProps} column="project" active={params.sort === 'project'}>
+                  Project
                 </SortableTh>
                 <SortableTh {...sortProps} column="site" active={params.sort === 'site'}>
                   Site
                 </SortableTh>
                 <TableHead>Supervisor</TableHead>
+                <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>
+                  Status
+                </SortableTh>
+                <SortableTh {...sortProps} column="lift_date" active={params.sort === 'lift_date'}>
+                  Lift date
+                </SortableTh>
+                <SortableTh {...sortProps} column="completed" active={params.sort === 'completed'}>
+                  Completed
+                </SortableTh>
+                <TableHead className="w-20">Signed</TableHead>
                 <TableHead>Summary</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map(({ plan, site, supervisor }) => (
+              {rows.map(({ plan, site, project, supervisor, signatureCount }) => (
                 <TableRow key={plan.id}>
                   <TableCell className="font-mono text-xs text-slate-600">
-                    <Link href={`/lift-plans/${plan.id}`} className="hover:underline">
+                    <Link href={`/lift-plans/${plan.id}`} className="font-medium text-slate-900 hover:underline">
                       {plan.reference}
                     </Link>
                   </TableCell>
+                  <TableCell className="text-slate-600">{project?.name ?? '—'}</TableCell>
+                  <TableCell className="text-slate-600">{site?.name ?? '—'}</TableCell>
                   <TableCell className="text-slate-600">
-                    {new Date(plan.liftDate).toLocaleDateString()}
+                    {supervisor?.displayName ?? '—'}
                   </TableCell>
                   <TableCell>
                     <StatusBadge status={plan.status} />
                   </TableCell>
-                  <TableCell className="text-slate-600">{site?.name ?? '—'}</TableCell>
-                  <TableCell className="text-slate-600">
-                    {supervisor?.displayName ?? '—'}
+                  <TableCell className="text-slate-600 tabular-nums">
+                    {new Date(plan.liftDate).toLocaleDateString()}
+                  </TableCell>
+                  <TableCell className="text-slate-600 tabular-nums">
+                    {plan.completedAt ? (
+                      <span className="text-emerald-700">
+                        {new Date(plan.completedAt).toLocaleDateString()}
+                      </span>
+                    ) : (
+                      <span className="text-slate-400">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="tabular-nums">
+                    <Badge variant={Number(signatureCount ?? 0) > 0 ? 'success' : 'secondary'}>
+                      {Number(signatureCount ?? 0)}
+                    </Badge>
                   </TableCell>
                   <TableCell className="max-w-md truncate text-slate-600">
                     {plan.description ?? '—'}

@@ -12,6 +12,7 @@ import {
   type ReportCustomQuery,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { recordAudit } from '@/lib/audit'
 
 /** Build a stable, URL-safe slug for a custom definition. */
 function buildSlug(name: string): string {
@@ -116,7 +117,7 @@ export async function createCustomDefinition(formData: FormData): Promise<void> 
     const [row] = await tx
       .insert(reportDefinitions)
       .values({
-        tenantId: ctx.tenantId!,
+        tenantId: ctx.tenantId,
         kind: 'custom',
         slug,
         name,
@@ -127,6 +128,14 @@ export async function createCustomDefinition(formData: FormData): Promise<void> 
       })
       .returning({ id: reportDefinitions.id })
     return row!.id
+  })
+
+  await recordAudit(ctx, {
+    entityType: 'report_definition',
+    entityId: newId,
+    action: 'create',
+    summary: `Created custom report definition "${name}"`,
+    after: { name, slug, category, queryKind: 'custom_query', clonedFrom: cloneFromIdRaw || null },
   })
 
   revalidatePath('/reports')

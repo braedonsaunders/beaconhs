@@ -1,39 +1,86 @@
 // PDF worker.
 //
-// Consumes the `pdfs` BullMQ queue and renders three kinds of PDFs:
-//   - form_response  → form response → PDF, stored on form_responses.pdfAttachmentId
-//   - incident       → incident detail → PDF, linked via incident_attachments
-//   - certificate    → training_certificates → both wallet card + full cert PDFs,
-//                       cert URL stored on training_certificates.pdfAttachmentId
+// Consumes the `pdfs` BullMQ queue and renders all worker-rendered PDF kinds.
+// Older kinds (form_response / incident / certificate) attach the resulting
+// PDF to the source row directly; the new wave-6 kinds (hazid / lift_plan /
+// toolbox / ca / document / document_book / equipment_workorder / ppe_issue)
+// write the rendered PDF into the `attachments` table and rely on the GET
+// /pdf route to look up the latest matching attachment by tenant+entity+kind.
 //
 // All renders are uploaded straight to MinIO/R2 via the storage package and
 // recorded in the attachments table + audit_log (action='export').
 
 import type { Job } from 'bullmq'
-import { asc, eq } from 'drizzle-orm'
+import { and, asc, desc, eq } from 'drizzle-orm'
 import { db, withTenant } from '@beaconhs/db'
 import {
+  atmosphericSensors,
   attachments,
+  caCompleteSteps,
+  caPhotos,
+  correctiveActions,
   departments,
+  documentBookItems,
+  documentBooks,
+  documentVersions,
+  documents,
+  equipmentItems,
+  equipmentTypes,
+  equipmentWorkOrders,
   formResponses,
   formTemplateVersions,
   formTemplates,
+  hazidAssessmentCSAtmospheric,
+  hazidAssessmentCSEntries,
+  hazidAssessmentHazards,
+  hazidAssessmentPPE,
+  hazidAssessmentPhotos,
+  hazidAssessmentQuestions,
+  hazidAssessmentSignatures,
+  hazidAssessmentTasks,
+  hazidAssessmentTypes,
+  hazidAssessments,
+  hazidHazards,
+  hazidTasks,
   incidentAttachments,
   incidentInjuries,
   incidentLostTimeEvents,
   incidentPeople,
   incidents,
+  liftPlanEquipment,
+  liftPlanHazards,
+  liftPlanLoads,
+  liftPlanPhotos,
+  liftPlanPpe,
+  liftPlanSignatures,
+  liftPlans,
   orgUnits,
   people,
+  ppeIssueReports,
+  ppeItems,
+  ppeTypes,
   tenants,
+  tenantUsers,
+  toolboxJournalAttendees,
+  toolboxJournalPhotos,
+  toolboxJournals,
   trainingCertificates,
   trainingCourses,
   trainingRecords,
+  user,
 } from '@beaconhs/db/schema'
 import {
+  renderCaPdf,
   renderCertificatePdf,
+  renderDocumentBookPdf,
+  renderDocumentPdf,
+  renderEquipmentWorkOrderPdf,
   renderFormPdf,
+  renderHazidPdf,
   renderIncidentPdf,
+  renderLiftPlanPdf,
+  renderPpeIssuePdf,
+  renderToolboxPdf,
 } from '@beaconhs/forms-pdf'
 import type { PdfJobData } from '@beaconhs/jobs'
 import { newAttachmentKey, publicUrl, putObject } from '@beaconhs/storage'
@@ -49,6 +96,22 @@ export async function processPdf(job: Job<PdfJobData>): Promise<void> {
         return await renderIncident(data.tenantId, data.incidentId)
       case 'certificate':
         return await renderCertificate(data.tenantId, data.certificateId)
+      case 'hazid':
+        return await renderHazid(data.tenantId, data.assessmentId)
+      case 'lift_plan':
+        return await renderLiftPlan(data.tenantId, data.liftPlanId)
+      case 'toolbox':
+        return await renderToolbox(data.tenantId, data.journalId)
+      case 'ca':
+        return await renderCa(data.tenantId, data.caId)
+      case 'document':
+        return await renderDocument(data.tenantId, data.documentId)
+      case 'document_book':
+        return await renderDocumentBook(data.tenantId, data.bookId)
+      case 'equipment_workorder':
+        return await renderEquipmentWorkOrder(data.tenantId, data.workOrderId)
+      case 'ppe_issue':
+        return await renderPpeIssue(data.tenantId, data.issueReportId)
     }
   } catch (err) {
     console.error(`[pdf] job ${job.id} failed:`, err)
@@ -452,4 +515,1029 @@ async function renderCertificate(tenantId: string, certificateId: string): Promi
   console.log(
     `[pdf] certificate ${certificateId} rendered (cert ${certificate.length}B, wallet ${wallet.length}B)`,
   )
+}
+
+// --- Shared helpers for wave-6 PDF kinds ----------------------------------
+//
+// Each wave-6 kind:
+//   1. Loads its primary entity + sub-tables (RLS-scoped via withTenant)
+//   2. Builds the render input
+//   3. Calls render*Pdf to produce a Buffer
+//   4. Uploads to MinIO/R2
+//   5. Inserts an `attachments` row with a predictable filename prefix so the
+//      GET /pdf route can later look up "the latest PDF for this entity"
+//   6. Records an `export` audit row with the attachment id + url
+
+type StoredPdfResult = { attachmentId: string; r2Key: string; sizeBytes: number }
+
+async function storePdfArtifact(args: {
+  tenantId: string
+  pdf: Buffer
+  filename: string
+  r2Key: string
+  entityType: string
+  entityId: string
+  summary: string
+}): Promise<StoredPdfResult> {
+  await putObject({ key: args.r2Key, body: args.pdf, contentType: 'application/pdf' })
+
+  return await withTenant(db, args.tenantId, async (tx) => {
+    const [att] = await tx
+      .insert(attachments)
+      .values({
+        tenantId: args.tenantId,
+        kind: 'document',
+        r2Key: args.r2Key,
+        contentType: 'application/pdf',
+        sizeBytes: args.pdf.length,
+        filename: args.filename,
+      })
+      .returning()
+    if (!att) throw new Error('Failed to insert attachment row')
+    await audit(tx, {
+      tenantId: args.tenantId,
+      entityType: args.entityType,
+      entityId: args.entityId,
+      action: 'export',
+      summary: args.summary,
+      metadata: {
+        attachmentId: att.id,
+        r2Key: args.r2Key,
+        sizeBytes: args.pdf.length,
+        url: publicUrl(args.r2Key),
+      },
+    })
+    return { attachmentId: att.id, r2Key: args.r2Key, sizeBytes: args.pdf.length }
+  })
+}
+
+function personName(p: { firstName: string; lastName: string } | null | undefined): string | null {
+  if (!p) return null
+  return `${p.firstName} ${p.lastName}`
+}
+
+function memberDisplayName(args: {
+  member?: { displayName: string | null } | null
+  user?: { name: string | null } | null
+}): string | null {
+  return args.user?.name ?? args.member?.displayName ?? null
+}
+
+// --- hazid -----------------------------------------------------------------
+
+async function renderHazid(tenantId: string, assessmentId: string): Promise<void> {
+  const data = await withTenant(db, tenantId, async (tx) => {
+    const [row] = await tx
+      .select({
+        a: hazidAssessments,
+        type: hazidAssessmentTypes,
+        site: orgUnits,
+        supervisor: people,
+        tenant: tenants,
+      })
+      .from(hazidAssessments)
+      .leftJoin(hazidAssessmentTypes, eq(hazidAssessmentTypes.id, hazidAssessments.assessmentTypeId))
+      .leftJoin(orgUnits, eq(orgUnits.id, hazidAssessments.siteOrgUnitId))
+      .leftJoin(people, eq(people.id, hazidAssessments.supervisorPersonId))
+      .innerJoin(tenants, eq(tenants.id, hazidAssessments.tenantId))
+      .where(eq(hazidAssessments.id, assessmentId))
+      .limit(1)
+    if (!row) return null
+
+    let projectName: string | null = null
+    if (row.a.projectOrgUnitId) {
+      const [proj] = await tx
+        .select({ name: orgUnits.name })
+        .from(orgUnits)
+        .where(eq(orgUnits.id, row.a.projectOrgUnitId))
+        .limit(1)
+      projectName = proj?.name ?? null
+    }
+
+    const tasks = await tx
+      .select({ row: hazidAssessmentTasks, task: hazidTasks })
+      .from(hazidAssessmentTasks)
+      .leftJoin(hazidTasks, eq(hazidTasks.id, hazidAssessmentTasks.taskId))
+      .where(eq(hazidAssessmentTasks.assessmentId, assessmentId))
+      .orderBy(asc(hazidAssessmentTasks.entityOrder))
+
+    const hazards = await tx
+      .select({ row: hazidAssessmentHazards, library: hazidHazards })
+      .from(hazidAssessmentHazards)
+      .leftJoin(hazidHazards, eq(hazidHazards.id, hazidAssessmentHazards.hazardId))
+      .where(eq(hazidAssessmentHazards.assessmentId, assessmentId))
+      .orderBy(asc(hazidAssessmentHazards.entityOrder))
+
+    const ppe = await tx
+      .select()
+      .from(hazidAssessmentPPE)
+      .where(eq(hazidAssessmentPPE.assessmentId, assessmentId))
+      .orderBy(asc(hazidAssessmentPPE.entityOrder))
+
+    const questions = await tx
+      .select()
+      .from(hazidAssessmentQuestions)
+      .where(eq(hazidAssessmentQuestions.assessmentId, assessmentId))
+      .orderBy(asc(hazidAssessmentQuestions.entityOrder))
+
+    const signatures = await tx
+      .select({ row: hazidAssessmentSignatures, person: people })
+      .from(hazidAssessmentSignatures)
+      .leftJoin(people, eq(people.id, hazidAssessmentSignatures.personId))
+      .where(eq(hazidAssessmentSignatures.assessmentId, assessmentId))
+
+    const photos = await tx
+      .select({ link: hazidAssessmentPhotos, att: attachments })
+      .from(hazidAssessmentPhotos)
+      .innerJoin(attachments, eq(attachments.id, hazidAssessmentPhotos.attachmentId))
+      .where(eq(hazidAssessmentPhotos.assessmentId, assessmentId))
+
+    const atmospheric = await tx
+      .select({ row: hazidAssessmentCSAtmospheric, sensor: atmosphericSensors })
+      .from(hazidAssessmentCSAtmospheric)
+      .leftJoin(
+        atmosphericSensors,
+        eq(atmosphericSensors.id, hazidAssessmentCSAtmospheric.atmosphericSensorId),
+      )
+      .where(eq(hazidAssessmentCSAtmospheric.assessmentId, assessmentId))
+      .orderBy(asc(hazidAssessmentCSAtmospheric.time))
+
+    const entries = await tx
+      .select({ row: hazidAssessmentCSEntries, person: people })
+      .from(hazidAssessmentCSEntries)
+      .leftJoin(people, eq(people.id, hazidAssessmentCSEntries.personId))
+      .where(eq(hazidAssessmentCSEntries.assessmentId, assessmentId))
+
+    return { ...row, projectName, tasks, hazards, ppe, questions, signatures, photos, atmospheric, entries }
+  })
+
+  if (!data) {
+    console.warn(`[pdf] hazid assessment ${assessmentId} not found`)
+    return
+  }
+
+  const a = data.a
+  const t = data.tenant
+
+  const pdf = await renderHazidPdf({
+    tenantName: t.name,
+    tenantLogoUrl: t.branding.logoUrl,
+    primaryColor: t.branding.primaryColor,
+    assessment: {
+      reference: a.reference,
+      occurredAt: a.occurredAt,
+      locked: a.locked,
+      lockedAt: a.lockedAt,
+      siteName: data.site?.name ?? null,
+      locationOnSite: a.locationOnSite,
+      projectName: data.projectName,
+      typeName: data.type?.name ?? null,
+      supervisorName: personName(data.supervisor),
+      jobScope: a.jobScope,
+      wah: a.wah,
+      wahType: a.wahType,
+      wahCommunication: a.wahCommunication ?? [],
+      wahAccess: a.wahAccess ?? [],
+      wahEquipment: a.wahEquipment ?? [],
+      wahRescue: a.wahRescue,
+      wahPermitNumber: a.wahPermitNumber,
+      confinedSpace: a.confinedSpace,
+      csType: a.csType,
+      csDescription: a.csDescription,
+      csCommunication: a.csCommunication ?? [],
+      csCommunicationRescue: a.csCommunicationRescue ?? [],
+      csRescue: a.csRescue ?? [],
+      csWorkPerformed: a.csWorkPerformed,
+      csDiagramBase64: a.csDiagramBase64,
+      csRescueStyle: a.csRescueStyle,
+      csRescueProcedure: a.csRescueProcedure,
+      csPermitNumber: a.csPermitNumber,
+      arcFlash: a.arcFlash,
+      arcFlashLevel: a.arcFlashLevel,
+      arcFlashBoundary: a.arcFlashBoundary,
+      arcFlashIncidentEnergy: a.arcFlashIncidentEnergy,
+      arcFlashEquipment: a.arcFlashEquipment ?? [],
+      arcFlashProcedures: a.arcFlashProcedures,
+      arcFlashQualifiedPerson: a.arcFlashQualifiedPerson,
+    },
+    ppe: data.ppe.map((p) => ({
+      name: p.name,
+      description: p.description,
+      required: p.required,
+      answer: p.answer,
+    })),
+    questions: data.questions.map((q) => ({
+      question: q.question,
+      answer: q.answer,
+      requiresYes: q.requiresYes,
+    })),
+    tasks: data.tasks.map((t) => ({
+      name: t.task?.name ?? t.row.description ?? 'Task',
+      controls: t.row.controls,
+    })),
+    hazards: data.hazards.map((h) => ({
+      name: h.library?.name ?? h.row.name ?? 'Hazard',
+      standardControls: h.row.standardControls,
+      specificControls: h.row.specificControls,
+      applicable: h.row.applicable,
+    })),
+    signatures: data.signatures.map((s) => ({
+      name: s.person ? personName(s.person)! : s.row.externalName ?? 'Unknown',
+      signatureType: s.row.signatureType,
+      csEntrant: s.row.csEntrant,
+      csAttendant: s.row.csAttendant,
+      csRescue: s.row.csRescue,
+      signatureDataUrl: s.row.signatureDataUrl,
+      signedAt: s.row.signedAt,
+    })),
+    photos: data.photos.map((p) => ({
+      url: publicUrl(p.att.r2Key),
+      caption: p.link.caption,
+    })),
+    atmospheric: data.atmospheric.map((r) => ({
+      time: r.row.time,
+      sensorIdentifier: r.sensor?.identifier ?? null,
+      sensor1Reading: r.row.sensor1Reading,
+      sensor2Reading: r.row.sensor2Reading,
+      sensor3Reading: r.row.sensor3Reading,
+      sensor4Reading: r.row.sensor4Reading,
+      distance: r.row.distance,
+      notes: r.row.notes,
+    })),
+    entries: data.entries.map((e) => ({
+      name: e.person ? personName(e.person)! : e.row.externalName ?? 'Unknown',
+      timeIn: e.row.timeIn,
+      timeOut: e.row.timeOut,
+    })),
+    generatedAt: new Date(),
+  })
+
+  const stamp = Date.now()
+  await storePdfArtifact({
+    tenantId,
+    pdf,
+    filename: `hazid-${a.reference || assessmentId.slice(0, 8)}-${stamp}.pdf`,
+    r2Key: `pdfs/hazid/${assessmentId}-${stamp}.pdf`,
+    entityType: 'hazid_assessment',
+    entityId: assessmentId,
+    summary: 'Rendered HazID assessment PDF',
+  })
+
+  console.log(`[pdf] hazid ${assessmentId} rendered (${pdf.length} bytes)`)
+}
+
+// --- lift_plan -------------------------------------------------------------
+
+async function renderLiftPlan(tenantId: string, liftPlanId: string): Promise<void> {
+  const data = await withTenant(db, tenantId, async (tx) => {
+    const [row] = await tx
+      .select({
+        p: liftPlans,
+        site: orgUnits,
+        supervisorMember: tenantUsers,
+        supervisorUser: user,
+        operator: people,
+        tenant: tenants,
+      })
+      .from(liftPlans)
+      .leftJoin(orgUnits, eq(orgUnits.id, liftPlans.siteOrgUnitId))
+      .leftJoin(tenantUsers, eq(tenantUsers.id, liftPlans.supervisorTenantUserId))
+      .leftJoin(user, eq(user.id, tenantUsers.userId))
+      .leftJoin(people, eq(people.id, liftPlans.operatorPersonId))
+      .innerJoin(tenants, eq(tenants.id, liftPlans.tenantId))
+      .where(eq(liftPlans.id, liftPlanId))
+      .limit(1)
+    if (!row) return null
+
+    let projectName: string | null = null
+    if (row.p.projectOrgUnitId) {
+      const [proj] = await tx
+        .select({ name: orgUnits.name })
+        .from(orgUnits)
+        .where(eq(orgUnits.id, row.p.projectOrgUnitId))
+        .limit(1)
+      projectName = proj?.name ?? null
+    }
+    let rigger: { firstName: string; lastName: string } | null = null
+    if (row.p.riggerPersonId) {
+      const [r] = await tx
+        .select({ firstName: people.firstName, lastName: people.lastName })
+        .from(people)
+        .where(eq(people.id, row.p.riggerPersonId))
+        .limit(1)
+      rigger = r ?? null
+    }
+
+    const loads = await tx
+      .select()
+      .from(liftPlanLoads)
+      .where(eq(liftPlanLoads.liftPlanId, liftPlanId))
+      .orderBy(asc(liftPlanLoads.entityOrder))
+
+    const equipment = await tx
+      .select({ row: liftPlanEquipment, item: equipmentItems })
+      .from(liftPlanEquipment)
+      .leftJoin(equipmentItems, eq(equipmentItems.id, liftPlanEquipment.equipmentItemId))
+      .where(eq(liftPlanEquipment.liftPlanId, liftPlanId))
+      .orderBy(asc(liftPlanEquipment.entityOrder))
+
+    const hazards = await tx
+      .select()
+      .from(liftPlanHazards)
+      .where(eq(liftPlanHazards.liftPlanId, liftPlanId))
+      .orderBy(asc(liftPlanHazards.entityOrder))
+
+    const ppe = await tx
+      .select()
+      .from(liftPlanPpe)
+      .where(eq(liftPlanPpe.liftPlanId, liftPlanId))
+      .orderBy(asc(liftPlanPpe.entityOrder))
+
+    const signatures = await tx
+      .select({ row: liftPlanSignatures, person: people })
+      .from(liftPlanSignatures)
+      .leftJoin(people, eq(people.id, liftPlanSignatures.personId))
+      .where(eq(liftPlanSignatures.liftPlanId, liftPlanId))
+      .orderBy(asc(liftPlanSignatures.createdAt))
+
+    const photos = await tx
+      .select({ link: liftPlanPhotos, att: attachments })
+      .from(liftPlanPhotos)
+      .innerJoin(attachments, eq(attachments.id, liftPlanPhotos.attachmentId))
+      .where(eq(liftPlanPhotos.liftPlanId, liftPlanId))
+
+    return { ...row, projectName, rigger, loads, equipment, hazards, ppe, signatures, photos }
+  })
+
+  if (!data) {
+    console.warn(`[pdf] lift_plan ${liftPlanId} not found`)
+    return
+  }
+
+  const p = data.p
+  const t = data.tenant
+
+  const pdf = await renderLiftPlanPdf({
+    tenantName: t.name,
+    tenantLogoUrl: t.branding.logoUrl,
+    primaryColor: t.branding.primaryColor,
+    liftPlan: {
+      reference: p.reference,
+      liftDate: p.liftDate,
+      description: p.description,
+      status: p.status,
+      locked: p.locked,
+      siteName: data.site?.name ?? null,
+      projectName: data.projectName,
+      supervisorName: memberDisplayName({
+        member: data.supervisorMember,
+        user: data.supervisorUser,
+      }),
+      operatorName: personName(data.operator),
+      riggerName: personName(data.rigger),
+      cancellationReason: p.cancellationReason,
+      completedAt: p.completedAt,
+    },
+    loads: data.loads.map((l) => ({
+      description: l.description,
+      weightKg: l.weightKg,
+      dimensionsMaxMm: l.dimensionsMaxMm,
+      attachmentMethod: l.attachmentMethod,
+    })),
+    equipment: data.equipment.map((e) => ({
+      name: e.item?.name ?? e.row.equipmentDescription ?? '—',
+      capacityKg: e.row.capacityKg,
+      boomLengthM: e.row.boomLengthM,
+      radiusM: e.row.radiusM,
+      capacityUsedPct: e.row.capacityUsedPct,
+    })),
+    hazards: data.hazards.map((h) => ({
+      hazardDescription: h.hazardDescription,
+      controls: h.controls,
+    })),
+    ppe: data.ppe.map((p) => ({ ppeName: p.ppeName, required: p.required })),
+    signatures: data.signatures.map((s) => ({
+      role: s.row.role,
+      name: s.person ? personName(s.person)! : s.row.externalName ?? 'Unknown',
+      signatureDataUrl: s.row.signatureDataUrl,
+      signedAt: s.row.signedAt,
+    })),
+    photos: data.photos.map((ph) => ({
+      url: publicUrl(ph.att.r2Key),
+      caption: ph.link.caption,
+    })),
+    generatedAt: new Date(),
+  })
+
+  const stamp = Date.now()
+  await storePdfArtifact({
+    tenantId,
+    pdf,
+    filename: `lift-plan-${p.reference || liftPlanId.slice(0, 8)}-${stamp}.pdf`,
+    r2Key: `pdfs/lift-plans/${liftPlanId}-${stamp}.pdf`,
+    entityType: 'lift_plan',
+    entityId: liftPlanId,
+    summary: 'Rendered lift plan PDF',
+  })
+
+  console.log(`[pdf] lift_plan ${liftPlanId} rendered (${pdf.length} bytes)`)
+}
+
+// --- toolbox ---------------------------------------------------------------
+
+async function renderToolbox(tenantId: string, journalId: string): Promise<void> {
+  const data = await withTenant(db, tenantId, async (tx) => {
+    const [row] = await tx
+      .select({
+        j: toolboxJournals,
+        site: orgUnits,
+        foremanMember: tenantUsers,
+        foremanUser: user,
+        tenant: tenants,
+      })
+      .from(toolboxJournals)
+      .leftJoin(orgUnits, eq(orgUnits.id, toolboxJournals.siteOrgUnitId))
+      .leftJoin(tenantUsers, eq(tenantUsers.id, toolboxJournals.foremanTenantUserId))
+      .leftJoin(user, eq(user.id, tenantUsers.userId))
+      .innerJoin(tenants, eq(tenants.id, toolboxJournals.tenantId))
+      .where(eq(toolboxJournals.id, journalId))
+      .limit(1)
+    if (!row) return null
+
+    const attendees = await tx
+      .select({ row: toolboxJournalAttendees, person: people })
+      .from(toolboxJournalAttendees)
+      .innerJoin(people, eq(people.id, toolboxJournalAttendees.personId))
+      .where(eq(toolboxJournalAttendees.journalId, journalId))
+      .orderBy(asc(people.lastName), asc(people.firstName))
+
+    const photos = await tx
+      .select({ link: toolboxJournalPhotos, att: attachments })
+      .from(toolboxJournalPhotos)
+      .innerJoin(attachments, eq(attachments.id, toolboxJournalPhotos.attachmentId))
+      .where(eq(toolboxJournalPhotos.journalId, journalId))
+
+    return { ...row, attendees, photos }
+  })
+
+  if (!data) {
+    console.warn(`[pdf] toolbox ${journalId} not found`)
+    return
+  }
+
+  const j = data.j
+  const t = data.tenant
+
+  const pdf = await renderToolboxPdf({
+    tenantName: t.name,
+    tenantLogoUrl: t.branding.logoUrl,
+    primaryColor: t.branding.primaryColor,
+    journal: {
+      reference: j.reference,
+      title: j.title,
+      topic: j.topic,
+      occurredOn: j.occurredOn,
+      status: j.status,
+      locked: j.locked,
+      siteName: data.site?.name ?? null,
+      foremanName: memberDisplayName({
+        member: data.foremanMember,
+        user: data.foremanUser,
+      }),
+      discussionNotes: j.discussionNotes,
+      questionsRaised: j.questionsRaised,
+      actionItems: j.actionItems,
+    },
+    attendees: data.attendees.map((a) => ({
+      name: `${a.person.lastName}, ${a.person.firstName}`,
+      jobTitle: a.person.jobTitle ?? null,
+      signatureDataUrl: a.row.signatureDataUrl,
+      signedAt: a.row.signedAt,
+    })),
+    photos: data.photos.map((p) => ({
+      url: publicUrl(p.att.r2Key),
+      caption: p.link.caption,
+    })),
+    generatedAt: new Date(),
+  })
+
+  const stamp = Date.now()
+  await storePdfArtifact({
+    tenantId,
+    pdf,
+    filename: `toolbox-${j.reference || journalId.slice(0, 8)}-${stamp}.pdf`,
+    r2Key: `pdfs/toolbox/${journalId}-${stamp}.pdf`,
+    entityType: 'toolbox_journal',
+    entityId: journalId,
+    summary: 'Rendered toolbox journal PDF',
+  })
+
+  console.log(`[pdf] toolbox ${journalId} rendered (${pdf.length} bytes)`)
+}
+
+// --- ca --------------------------------------------------------------------
+
+async function renderCa(tenantId: string, caId: string): Promise<void> {
+  const data = await withTenant(db, tenantId, async (tx) => {
+    const [row] = await tx
+      .select({
+        c: correctiveActions,
+        site: orgUnits,
+        ownerMember: tenantUsers,
+        ownerUser: user,
+        tenant: tenants,
+      })
+      .from(correctiveActions)
+      .leftJoin(orgUnits, eq(orgUnits.id, correctiveActions.siteOrgUnitId))
+      .leftJoin(tenantUsers, eq(tenantUsers.id, correctiveActions.ownerTenantUserId))
+      .leftJoin(user, eq(user.id, tenantUsers.userId))
+      .innerJoin(tenants, eq(tenants.id, correctiveActions.tenantId))
+      .where(eq(correctiveActions.id, caId))
+      .limit(1)
+    if (!row) return null
+
+    let assignedByName: string | null = null
+    if (row.c.assignedByTenantUserId) {
+      const [a] = await tx
+        .select({ member: tenantUsers, u: user })
+        .from(tenantUsers)
+        .leftJoin(user, eq(user.id, tenantUsers.userId))
+        .where(eq(tenantUsers.id, row.c.assignedByTenantUserId))
+        .limit(1)
+      assignedByName = a ? memberDisplayName({ member: a.member, user: a.u }) : null
+    }
+    let verifierName: string | null = null
+    if (row.c.verifiedByTenantUserId) {
+      const [v] = await tx
+        .select({ member: tenantUsers, u: user })
+        .from(tenantUsers)
+        .leftJoin(user, eq(user.id, tenantUsers.userId))
+        .where(eq(tenantUsers.id, row.c.verifiedByTenantUserId))
+        .limit(1)
+      verifierName = v ? memberDisplayName({ member: v.member, user: v.u }) : null
+    }
+
+    const photos = await tx
+      .select({ link: caPhotos, att: attachments })
+      .from(caPhotos)
+      .innerJoin(attachments, eq(attachments.id, caPhotos.attachmentId))
+      .where(eq(caPhotos.caId, caId))
+
+    const steps = await tx
+      .select({
+        step: caCompleteSteps,
+        byMember: tenantUsers,
+        byUser: user,
+      })
+      .from(caCompleteSteps)
+      .leftJoin(tenantUsers, eq(tenantUsers.id, caCompleteSteps.completedByTenantUserId))
+      .leftJoin(user, eq(user.id, tenantUsers.userId))
+      .where(eq(caCompleteSteps.caId, caId))
+      .orderBy(asc(caCompleteSteps.entityOrder))
+
+    return { ...row, assignedByName, verifierName, photos, steps }
+  })
+
+  if (!data) {
+    console.warn(`[pdf] ca ${caId} not found`)
+    return
+  }
+
+  const c = data.c
+  const t = data.tenant
+
+  const pdf = await renderCaPdf({
+    tenantName: t.name,
+    tenantLogoUrl: t.branding.logoUrl,
+    primaryColor: t.branding.primaryColor,
+    ca: {
+      reference: c.reference,
+      title: c.title,
+      description: c.description,
+      rootCause: c.rootCause,
+      actionTaken: c.actionTaken,
+      severity: c.severity,
+      status: c.status,
+      source: c.source,
+      sourceEntityType: c.sourceEntityType,
+      siteName: data.site?.name ?? null,
+      ownerName: memberDisplayName({
+        member: data.ownerMember,
+        user: data.ownerUser,
+      }),
+      assignedByName: data.assignedByName,
+      assignedOn: c.assignedOn,
+      dueOn: c.dueOn,
+      closedAt: c.closedAt,
+      costImpact: c.costImpact,
+      verificationRequired: c.verificationRequired,
+      verificationNotes: c.verificationNotes,
+      verifierName: data.verifierName,
+      verifiedAt: c.verifiedAt,
+    },
+    photos: data.photos.map((p) => ({
+      url: publicUrl(p.att.r2Key),
+      caption: p.link.caption,
+    })),
+    completeSteps: data.steps.map((s) => ({
+      kind: s.step.kind,
+      description: s.step.description,
+      completedByName: memberDisplayName({
+        member: s.byMember,
+        user: s.byUser,
+      }),
+      completedAt: s.step.completedAt,
+      signatureDataUrl: s.step.signatureDataUrl,
+    })),
+    generatedAt: new Date(),
+  })
+
+  const stamp = Date.now()
+  await storePdfArtifact({
+    tenantId,
+    pdf,
+    filename: `ca-${c.reference || caId.slice(0, 8)}-${stamp}.pdf`,
+    r2Key: `pdfs/corrective-actions/${caId}-${stamp}.pdf`,
+    entityType: 'corrective_action',
+    entityId: caId,
+    summary: 'Rendered corrective action PDF',
+  })
+
+  console.log(`[pdf] ca ${caId} rendered (${pdf.length} bytes)`)
+}
+
+// --- document --------------------------------------------------------------
+
+async function renderDocument(tenantId: string, documentId: string): Promise<void> {
+  const data = await withTenant(db, tenantId, async (tx) => {
+    const [row] = await tx
+      .select({
+        d: documents,
+        tenant: tenants,
+        ownerMember: tenantUsers,
+        ownerUser: user,
+      })
+      .from(documents)
+      .innerJoin(tenants, eq(tenants.id, documents.tenantId))
+      .leftJoin(tenantUsers, eq(tenantUsers.id, documents.ownerTenantUserId))
+      .leftJoin(user, eq(user.id, tenantUsers.userId))
+      .where(eq(documents.id, documentId))
+      .limit(1)
+    if (!row) return null
+
+    const [version] = await tx
+      .select()
+      .from(documentVersions)
+      .where(eq(documentVersions.documentId, documentId))
+      .orderBy(desc(documentVersions.version))
+      .limit(1)
+
+    let publishedByName: string | null = null
+    if (version?.publishedBy) {
+      const [u] = await tx
+        .select({ name: user.name })
+        .from(user)
+        .where(eq(user.id, version.publishedBy))
+        .limit(1)
+      publishedByName = u?.name ?? null
+    }
+
+    return { ...row, version: version ?? null, publishedByName }
+  })
+
+  if (!data) {
+    console.warn(`[pdf] document ${documentId} not found`)
+    return
+  }
+
+  const d = data.d
+  const t = data.tenant
+
+  const pdf = await renderDocumentPdf({
+    tenantName: t.name,
+    tenantLogoUrl: t.branding.logoUrl,
+    primaryColor: t.branding.primaryColor,
+    document: {
+      key: d.key,
+      title: d.title,
+      description: d.description,
+      category: d.category,
+      status: d.status,
+      printHeader: d.printHeader,
+      printFooter: d.printFooter,
+      nextReviewOn: d.nextReviewOn,
+      ownerName: memberDisplayName({
+        member: data.ownerMember,
+        user: data.ownerUser,
+      }),
+    },
+    version: data.version
+      ? {
+          version: data.version.version,
+          publishedAt: data.version.publishedAt,
+          publishedBy: data.publishedByName,
+          contentMarkdown: data.version.contentMarkdown,
+          changelog: data.version.changelog,
+        }
+      : null,
+    generatedAt: new Date(),
+  })
+
+  const stamp = Date.now()
+  await storePdfArtifact({
+    tenantId,
+    pdf,
+    filename: `document-${d.key || documentId.slice(0, 8)}-${stamp}.pdf`,
+    r2Key: `pdfs/documents/${documentId}-${stamp}.pdf`,
+    entityType: 'document',
+    entityId: documentId,
+    summary: 'Rendered document PDF',
+  })
+
+  console.log(`[pdf] document ${documentId} rendered (${pdf.length} bytes)`)
+}
+
+// --- document_book ---------------------------------------------------------
+
+async function renderDocumentBook(tenantId: string, bookId: string): Promise<void> {
+  const data = await withTenant(db, tenantId, async (tx) => {
+    const [row] = await tx
+      .select({ b: documentBooks, tenant: tenants })
+      .from(documentBooks)
+      .innerJoin(tenants, eq(tenants.id, documentBooks.tenantId))
+      .where(eq(documentBooks.id, bookId))
+      .limit(1)
+    if (!row) return null
+
+    const items = await tx
+      .select({ item: documentBookItems, doc: documents })
+      .from(documentBookItems)
+      .innerJoin(documents, eq(documents.id, documentBookItems.documentId))
+      .where(eq(documentBookItems.bookId, bookId))
+      .orderBy(asc(documentBookItems.position))
+
+    const versions = await Promise.all(
+      items.map(async (i) => {
+        const [v] = await tx
+          .select()
+          .from(documentVersions)
+          .where(eq(documentVersions.documentId, i.doc.id))
+          .orderBy(desc(documentVersions.version))
+          .limit(1)
+        return { docId: i.doc.id, version: v ?? null }
+      }),
+    )
+
+    return { ...row, items, versions }
+  })
+
+  if (!data) {
+    console.warn(`[pdf] document_book ${bookId} not found`)
+    return
+  }
+
+  const b = data.b
+  const t = data.tenant
+  const versionMap = new Map(data.versions.map((v) => [v.docId, v.version] as const))
+
+  const pdf = await renderDocumentBookPdf({
+    tenantName: t.name,
+    tenantLogoUrl: t.branding.logoUrl,
+    primaryColor: t.branding.primaryColor,
+    book: {
+      title: b.title || b.name || 'Document Book',
+      description: b.description,
+      category: b.category,
+      status: b.status,
+      publishedAt: b.publishedAt,
+    },
+    items: data.items.map((i) => {
+      const v = versionMap.get(i.doc.id) ?? null
+      return {
+        document: {
+          key: i.doc.key,
+          title: i.doc.title,
+          category: i.doc.category,
+        },
+        version: v
+          ? {
+              version: v.version,
+              contentMarkdown: v.contentMarkdown,
+              publishedAt: v.publishedAt,
+            }
+          : null,
+      }
+    }),
+    generatedAt: new Date(),
+  })
+
+  const stamp = Date.now()
+  await storePdfArtifact({
+    tenantId,
+    pdf,
+    filename: `document-book-${bookId.slice(0, 8)}-${stamp}.pdf`,
+    r2Key: `pdfs/document-books/${bookId}-${stamp}.pdf`,
+    entityType: 'document_book',
+    entityId: bookId,
+    summary: 'Rendered document book PDF',
+  })
+
+  console.log(`[pdf] document_book ${bookId} rendered (${pdf.length} bytes)`)
+}
+
+// --- equipment_workorder ---------------------------------------------------
+
+async function renderEquipmentWorkOrder(
+  tenantId: string,
+  workOrderId: string,
+): Promise<void> {
+  const data = await withTenant(db, tenantId, async (tx) => {
+    const [row] = await tx
+      .select({
+        wo: equipmentWorkOrders,
+        item: equipmentItems,
+        type: equipmentTypes,
+        site: orgUnits,
+        holder: people,
+        reportedBy: people,
+        tenant: tenants,
+      })
+      .from(equipmentWorkOrders)
+      .innerJoin(equipmentItems, eq(equipmentItems.id, equipmentWorkOrders.itemId))
+      .leftJoin(equipmentTypes, eq(equipmentTypes.id, equipmentItems.typeId))
+      .leftJoin(orgUnits, eq(orgUnits.id, equipmentItems.currentSiteOrgUnitId))
+      .leftJoin(people, eq(people.id, equipmentItems.currentHolderPersonId))
+      .innerJoin(tenants, eq(tenants.id, equipmentWorkOrders.tenantId))
+      .where(eq(equipmentWorkOrders.id, workOrderId))
+      .limit(1)
+    if (!row) return null
+
+    let reportedByName: string | null = null
+    if (row.wo.reportedByPersonId) {
+      const [p] = await tx
+        .select({ firstName: people.firstName, lastName: people.lastName })
+        .from(people)
+        .where(eq(people.id, row.wo.reportedByPersonId))
+        .limit(1)
+      reportedByName = personName(p ?? null)
+    }
+    let openedByName: string | null = null
+    if (row.wo.openedByTenantUserId) {
+      const [m] = await tx
+        .select({ member: tenantUsers, u: user })
+        .from(tenantUsers)
+        .leftJoin(user, eq(user.id, tenantUsers.userId))
+        .where(eq(tenantUsers.id, row.wo.openedByTenantUserId))
+        .limit(1)
+      openedByName = m ? memberDisplayName({ member: m.member, user: m.u }) : null
+    }
+    let assignedToName: string | null = null
+    if (row.wo.assignedToTenantUserId) {
+      const [m] = await tx
+        .select({ member: tenantUsers, u: user })
+        .from(tenantUsers)
+        .leftJoin(user, eq(user.id, tenantUsers.userId))
+        .where(eq(tenantUsers.id, row.wo.assignedToTenantUserId))
+        .limit(1)
+      assignedToName = m ? memberDisplayName({ member: m.member, user: m.u }) : null
+    }
+
+    return { ...row, reportedByName, openedByName, assignedToName }
+  })
+
+  if (!data) {
+    console.warn(`[pdf] equipment_workorder ${workOrderId} not found`)
+    return
+  }
+
+  const wo = data.wo
+  const item = data.item
+  const t = data.tenant
+
+  const pdf = await renderEquipmentWorkOrderPdf({
+    tenantName: t.name,
+    tenantLogoUrl: t.branding.logoUrl,
+    primaryColor: t.branding.primaryColor,
+    workOrder: {
+      reference: wo.reference,
+      status: wo.status,
+      priority: wo.priority,
+      summary: wo.summary,
+      description: wo.description,
+      actionTaken: wo.actionTaken,
+      cost: wo.cost,
+      openedAt: wo.openedAt,
+      closedAt: wo.closedAt,
+      reportedByName: data.reportedByName,
+      openedByName: data.openedByName,
+      assignedToName: data.assignedToName,
+    },
+    item: {
+      assetTag: item.assetTag,
+      name: item.name,
+      serialNumber: item.serialNumber,
+      description: item.description,
+      typeName: data.type?.name ?? null,
+      status: item.status,
+      currentSiteName: data.site?.name ?? null,
+      currentHolderName: personName(data.holder),
+    },
+    generatedAt: new Date(),
+  })
+
+  const stamp = Date.now()
+  await storePdfArtifact({
+    tenantId,
+    pdf,
+    filename: `wo-${wo.reference || workOrderId.slice(0, 8)}-${stamp}.pdf`,
+    r2Key: `pdfs/equipment-work-orders/${workOrderId}-${stamp}.pdf`,
+    entityType: 'equipment_work_order',
+    entityId: workOrderId,
+    summary: 'Rendered equipment work order PDF',
+  })
+
+  console.log(`[pdf] equipment_workorder ${workOrderId} rendered (${pdf.length} bytes)`)
+}
+
+// --- ppe_issue -------------------------------------------------------------
+
+async function renderPpeIssue(tenantId: string, issueReportId: string): Promise<void> {
+  const data = await withTenant(db, tenantId, async (tx) => {
+    const [row] = await tx
+      .select({
+        r: ppeIssueReports,
+        item: ppeItems,
+        type: ppeTypes,
+        holder: people,
+        tenant: tenants,
+      })
+      .from(ppeIssueReports)
+      .innerJoin(ppeItems, eq(ppeItems.id, ppeIssueReports.itemId))
+      .innerJoin(ppeTypes, eq(ppeTypes.id, ppeItems.typeId))
+      .leftJoin(people, eq(people.id, ppeItems.currentHolderPersonId))
+      .innerJoin(tenants, eq(tenants.id, ppeIssueReports.tenantId))
+      .where(eq(ppeIssueReports.id, issueReportId))
+      .limit(1)
+    if (!row) return null
+
+    let reportedByName: string | null = null
+    if (row.r.reportedByTenantUserId) {
+      const [m] = await tx
+        .select({ member: tenantUsers, u: user })
+        .from(tenantUsers)
+        .leftJoin(user, eq(user.id, tenantUsers.userId))
+        .where(eq(tenantUsers.id, row.r.reportedByTenantUserId))
+        .limit(1)
+      reportedByName = m ? memberDisplayName({ member: m.member, user: m.u }) : null
+    }
+
+    return { ...row, reportedByName }
+  })
+
+  if (!data) {
+    console.warn(`[pdf] ppe_issue ${issueReportId} not found`)
+    return
+  }
+
+  const r = data.r
+  const item = data.item
+  const t = data.tenant
+
+  const pdf = await renderPpeIssuePdf({
+    tenantName: t.name,
+    tenantLogoUrl: t.branding.logoUrl,
+    primaryColor: t.branding.primaryColor,
+    issueReport: {
+      description: r.description,
+      status: r.status,
+      resolution: r.resolution,
+      reportedAt: r.reportedAt,
+      resolvedAt: r.resolvedAt,
+      reportedByName: data.reportedByName,
+    },
+    item: {
+      serialNumber: item.serialNumber,
+      size: item.size,
+      status: item.status,
+      typeName: data.type.name,
+      category: data.type.category,
+      currentHolderName: personName(data.holder),
+      purchaseDate: item.purchaseDate,
+      expiresOn: item.expiresOn,
+    },
+    generatedAt: new Date(),
+  })
+
+  const stamp = Date.now()
+  await storePdfArtifact({
+    tenantId,
+    pdf,
+    filename: `ppe-issue-${issueReportId.slice(0, 8)}-${stamp}.pdf`,
+    r2Key: `pdfs/ppe-issues/${issueReportId}-${stamp}.pdf`,
+    entityType: 'ppe_issue_report',
+    entityId: issueReportId,
+    summary: 'Rendered PPE issue report PDF',
+  })
+
+  console.log(`[pdf] ppe_issue ${issueReportId} rendered (${pdf.length} bytes)`)
 }

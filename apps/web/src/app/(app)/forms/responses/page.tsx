@@ -13,7 +13,15 @@ import {
   TableHeader,
   TableRow,
 } from '@beaconhs/ui'
-import { formResponses, formTemplates, orgUnits } from '@beaconhs/db/schema'
+import {
+  formResponses,
+  formTemplateVersions,
+  formTemplates,
+  orgUnits,
+  people,
+  tenantUsers,
+  user,
+} from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
@@ -94,10 +102,22 @@ export default async function FormResponsesPage({
       .innerJoin(formTemplates, eq(formTemplates.id, formResponses.templateId))
       .where(whereClause)
     const data = await tx
-      .select({ response: formResponses, template: formTemplates, site: orgUnits })
+      .select({
+        response: formResponses,
+        template: formTemplates,
+        site: orgUnits,
+        version: formTemplateVersions,
+        submittedByName: user.name,
+        subjectFirst: people.firstName,
+        subjectLast: people.lastName,
+      })
       .from(formResponses)
       .innerJoin(formTemplates, eq(formTemplates.id, formResponses.templateId))
       .leftJoin(orgUnits, eq(orgUnits.id, formResponses.siteOrgUnitId))
+      .leftJoin(formTemplateVersions, eq(formTemplateVersions.id, formResponses.templateVersionId))
+      .leftJoin(tenantUsers, eq(tenantUsers.id, formResponses.submittedBy))
+      .leftJoin(user, eq(user.id, tenantUsers.userId))
+      .leftJoin(people, eq(people.id, formResponses.subjectPersonId))
       .where(whereClause)
       .orderBy(...orderBy)
       .limit(params.perPage)
@@ -189,38 +209,93 @@ export default async function FormResponsesPage({
               <TableRow>
                 <TableHead>ID</TableHead>
                 <TableHead>Template</TableHead>
-                <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>Status</SortableTh>
-                <SortableTh {...sortProps} column="submitted_at" active={params.sort === 'submitted_at'}>Submitted</SortableTh>
+                <TableHead>Version</TableHead>
+                <TableHead>Subject</TableHead>
                 <TableHead>Site</TableHead>
+                <TableHead>Step</TableHead>
+                <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>Status</SortableTh>
+                <SortableTh {...sortProps} column="created_at" active={params.sort === 'created_at'}>Started</SortableTh>
+                <SortableTh {...sortProps} column="submitted_at" active={params.sort === 'submitted_at'}>Submitted</SortableTh>
+                <TableHead>By</TableHead>
+                <TableHead>Closed</TableHead>
+                <TableHead className="w-16">PDF</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map(({ response, template, site }) => (
-                <TableRow key={response.id}>
-                  <TableCell className="font-mono text-xs">
-                    <Link href={`/forms/responses/${response.id}`} className="hover:underline">
-                      {response.id.slice(0, 8)}
-                    </Link>
-                  </TableCell>
-                  <TableCell>
-                    <Link
-                      href={`/forms/responses/${response.id}`}
-                      className="font-medium text-slate-900 hover:underline"
-                    >
-                      {template.name}
-                    </Link>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={response.status === 'closed' || response.status === 'submitted' ? 'success' : 'warning'}>
-                      {response.status.replace('_', ' ')}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-slate-600">
-                    {response.submittedAt ? new Date(response.submittedAt).toLocaleDateString() : '—'}
-                  </TableCell>
-                  <TableCell className="text-slate-600">{site?.name ?? '—'}</TableCell>
-                </TableRow>
-              ))}
+              {rows.map(({ response, template, site, version, submittedByName, subjectFirst, subjectLast }) => {
+                const subject =
+                  subjectFirst || subjectLast
+                    ? `${subjectLast ?? ''}${subjectLast ? ', ' : ''}${subjectFirst ?? ''}`.trim()
+                    : null
+                return (
+                  <TableRow key={response.id}>
+                    <TableCell className="font-mono text-xs">
+                      <Link href={`/forms/responses/${response.id}`} className="hover:underline">
+                        {response.id.slice(0, 8)}
+                      </Link>
+                    </TableCell>
+                    <TableCell>
+                      <Link
+                        href={`/forms/responses/${response.id}`}
+                        className="font-medium text-slate-900 hover:underline"
+                      >
+                        {template.name}
+                      </Link>
+                      {template.category ? (
+                        <div className="text-xs text-slate-500">
+                          {template.category.replace(/_/g, ' ')}
+                        </div>
+                      ) : null}
+                    </TableCell>
+                    <TableCell className="text-xs text-slate-500 tabular-nums">
+                      {version ? `v${version.version}` : '—'}
+                    </TableCell>
+                    <TableCell className="text-slate-600 text-xs">
+                      {subject || <span className="text-slate-400">—</span>}
+                    </TableCell>
+                    <TableCell className="text-slate-600 text-xs">{site?.name ?? '—'}</TableCell>
+                    <TableCell className="text-xs text-slate-600">
+                      {response.currentStep ? (
+                        <Badge variant="outline" className="text-[10px]">
+                          {response.currentStep}
+                        </Badge>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={response.status === 'closed' || response.status === 'submitted' ? 'success' : 'warning'}>
+                        {response.status.replace('_', ' ')}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-slate-600 text-xs tabular-nums">
+                      {response.createdAt
+                        ? new Date(response.createdAt).toLocaleDateString()
+                        : '—'}
+                    </TableCell>
+                    <TableCell className="text-slate-600 text-xs tabular-nums">
+                      {response.submittedAt
+                        ? new Date(response.submittedAt).toLocaleDateString()
+                        : '—'}
+                    </TableCell>
+                    <TableCell className="text-slate-600 text-xs">
+                      {submittedByName ?? <span className="text-slate-400">—</span>}
+                    </TableCell>
+                    <TableCell className="text-slate-600 text-xs tabular-nums">
+                      {response.closedAt
+                        ? new Date(response.closedAt).toLocaleDateString()
+                        : '—'}
+                    </TableCell>
+                    <TableCell>
+                      {response.pdfAttachmentId ? (
+                        <Badge variant="success" className="text-[10px]">PDF</Badge>
+                      ) : (
+                        <span className="text-slate-400 text-xs">—</span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
             </TableBody>
           </Table>
           <Pagination

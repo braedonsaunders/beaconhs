@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ClipboardList } from 'lucide-react'
-import { and, asc, count, desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gte, ilike, isNotNull, isNull, lte, or, sql, type SQL } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -57,9 +57,13 @@ export default async function InspectionRecordsPage({
   const statusFilter = pickString(sp.status)
   const typeFilter = pickString(sp.type)
   const siteFilter = pickString(sp.site)
+  const inspectorFilter = pickString(sp.inspector)
+  const signedFilter = pickString(sp.signed) // 'yes' | 'no'
+  const dateFromRaw = pickString(sp.dateFrom)
+  const dateToRaw = pickString(sp.dateTo)
   const ctx = await requireRequestContext()
 
-  const { rows, total, statusCounts, types } = await ctx.db(async (tx) => {
+  const { rows, total, statusCounts, types, sites, inspectors } = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = []
     if (params.q) {
       const term = `%${params.q}%`
@@ -73,6 +77,11 @@ export default async function InspectionRecordsPage({
     if (statusFilter) filters.push(eq(inspectionRecords.status, statusFilter as any))
     if (typeFilter) filters.push(eq(inspectionRecords.typeId, typeFilter))
     if (siteFilter) filters.push(eq(inspectionRecords.siteOrgUnitId, siteFilter))
+    if (inspectorFilter) filters.push(eq(inspectionRecords.inspectorTenantUserId, inspectorFilter))
+    if (signedFilter === 'yes') filters.push(isNotNull(inspectionRecords.customerSignedAt))
+    if (signedFilter === 'no') filters.push(isNull(inspectionRecords.customerSignedAt))
+    if (dateFromRaw) filters.push(gte(inspectionRecords.occurredAt, new Date(dateFromRaw)))
+    if (dateToRaw) filters.push(lte(inspectionRecords.occurredAt, new Date(dateToRaw)))
     const whereClause = filters.length > 0 ? and(...filters) : undefined
 
     const orderBy =
@@ -133,7 +142,34 @@ export default async function InspectionRecordsPage({
       .where(eq(inspectionTypes.isPublished, true))
       .orderBy(asc(inspectionTypes.name))
 
-    return { rows: data, total: Number(tot?.c ?? 0), statusCounts: sc, types: tt }
+    const siteOptions = await tx
+      .select({ id: orgUnits.id, name: orgUnits.name })
+      .from(orgUnits)
+      .innerJoin(inspectionRecords, eq(inspectionRecords.siteOrgUnitId, orgUnits.id))
+      .groupBy(orgUnits.id, orgUnits.name)
+      .orderBy(asc(orgUnits.name))
+      .limit(30)
+
+    const inspectorOptions = await tx
+      .select({
+        id: tenantUsers.id,
+        displayName: tenantUsers.displayName,
+        c: count(),
+      })
+      .from(tenantUsers)
+      .innerJoin(inspectionRecords, eq(inspectionRecords.inspectorTenantUserId, tenantUsers.id))
+      .groupBy(tenantUsers.id, tenantUsers.displayName)
+      .orderBy(desc(count()))
+      .limit(20)
+
+    return {
+      rows: data,
+      total: Number(tot?.c ?? 0),
+      statusCounts: sc,
+      types: tt,
+      sites: siteOptions,
+      inspectors: inspectorOptions,
+    }
   })
 
   const sortProps = { basePath: '/inspections/records', currentParams: sp, dir: params.dir }
@@ -156,36 +192,83 @@ export default async function InspectionRecordsPage({
           <InspectionsSubNav active="records" />
           <div className="flex flex-wrap items-center gap-3">
             <SearchInput placeholder="Search by reference / type / foreman" />
-            {types.length > 0 ? (
-              <form className="flex items-center gap-1 text-xs">
-                <select
-                  name="type"
-                  defaultValue={typeFilter ?? ''}
-                  className="rounded-md border border-slate-200 px-2 py-1 text-xs"
-                >
-                  <option value="">All types</option>
-                  {types.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="submit"
-                  className="rounded-md border border-slate-200 px-2 py-1 text-xs hover:bg-slate-50"
-                >
-                  Filter
-                </button>
-              </form>
-            ) : null}
+            <form className="flex items-center gap-1 text-xs">
+              <label className="flex items-center gap-1 text-slate-500">
+                Occurred from
+                <input
+                  type="date"
+                  name="dateFrom"
+                  defaultValue={dateFromRaw ?? ''}
+                  className="rounded-md border border-slate-300 px-2 py-1 text-xs"
+                />
+              </label>
+              <label className="flex items-center gap-1 text-slate-500">
+                to
+                <input
+                  type="date"
+                  name="dateTo"
+                  defaultValue={dateToRaw ?? ''}
+                  className="rounded-md border border-slate-300 px-2 py-1 text-xs"
+                />
+              </label>
+              <button
+                type="submit"
+                className="rounded-md border border-slate-200 px-2 py-1 text-xs hover:bg-slate-50"
+              >
+                Apply
+              </button>
+            </form>
           </div>
-          <FilterChips
-            basePath="/inspections/records"
-            currentParams={sp}
-            paramKey="status"
-            label="Status"
-            options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
-          />
+          <div className="space-y-2">
+            <FilterChips
+              basePath="/inspections/records"
+              currentParams={sp}
+              paramKey="status"
+              label="Status"
+              options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
+            />
+            {types.length > 0 ? (
+              <FilterChips
+                basePath="/inspections/records"
+                currentParams={sp}
+                paramKey="type"
+                label="Type"
+                options={types.slice(0, 12).map((t) => ({ value: t.id, label: t.name }))}
+              />
+            ) : null}
+            {sites.length > 0 ? (
+              <FilterChips
+                basePath="/inspections/records"
+                currentParams={sp}
+                paramKey="site"
+                label="Site"
+                options={sites.slice(0, 12).map((s) => ({ value: s.id, label: s.name }))}
+              />
+            ) : null}
+            {inspectors.length > 0 ? (
+              <FilterChips
+                basePath="/inspections/records"
+                currentParams={sp}
+                paramKey="inspector"
+                label="Inspector"
+                options={inspectors.slice(0, 12).map((i) => ({
+                  value: i.id,
+                  label: i.displayName ?? '—',
+                  count: Number(i.c),
+                }))}
+              />
+            ) : null}
+            <FilterChips
+              basePath="/inspections/records"
+              currentParams={sp}
+              paramKey="signed"
+              label="Customer signed"
+              options={[
+                { value: 'yes', label: 'Signed' },
+                { value: 'no', label: 'Unsigned' },
+              ]}
+            />
+          </div>
         </>
       }
     >
@@ -220,7 +303,9 @@ export default async function InspectionRecordsPage({
                 </SortableTh>
                 <TableHead>Site</TableHead>
                 <TableHead>Inspector</TableHead>
+                <TableHead>Foreman</TableHead>
                 <TableHead>Pass / Fail / N-A</TableHead>
+                <TableHead className="w-20">Signed</TableHead>
                 <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>
                   Status
                 </SortableTh>
@@ -232,6 +317,7 @@ export default async function InspectionRecordsPage({
                 const pass = Number(r.passCount ?? 0)
                 const fail = Number(r.failCount ?? 0)
                 const na = Number(r.naCount ?? 0)
+                const passPct = total > 0 ? Math.round((pass / total) * 100) : null
                 return (
                   <TableRow key={r.record.id}>
                     <TableCell className="font-mono text-xs">
@@ -250,21 +336,55 @@ export default async function InspectionRecordsPage({
                         {r.type.name}
                       </Link>
                     </TableCell>
-                    <TableCell className="text-slate-600">
+                    <TableCell className="text-slate-600 text-xs tabular-nums">
                       {new Date(r.record.occurredAt).toLocaleDateString()}
                     </TableCell>
                     <TableCell className="text-slate-600">{r.site?.name ?? '—'}</TableCell>
                     <TableCell className="text-slate-600">{r.inspectorName ?? '—'}</TableCell>
+                    <TableCell className="text-slate-600 text-xs">
+                      {r.record.foremanText ? (
+                        <span>{r.record.foremanText}</span>
+                      ) : r.record.foremanPersonIds.length > 0 ? (
+                        <Badge variant="secondary">
+                          {r.record.foremanPersonIds.length} assigned
+                        </Badge>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
+                    </TableCell>
                     <TableCell className="text-xs tabular-nums">
                       {total === 0 ? (
                         <span className="text-slate-400">—</span>
                       ) : (
-                        <span>
-                          <span className="text-emerald-700">{pass}</span> /{' '}
-                          <span className="text-red-700">{fail}</span> /{' '}
-                          <span className="text-slate-500">{na}</span>
-                          <span className="ml-1 text-slate-400">({total})</span>
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span>
+                            <span className="text-emerald-700">{pass}</span> /{' '}
+                            <span className="text-red-700">{fail}</span> /{' '}
+                            <span className="text-slate-500">{na}</span>
+                            <span className="ml-1 text-slate-400">({total})</span>
+                          </span>
+                          {passPct != null ? (
+                            <Badge
+                              variant={
+                                passPct >= 90
+                                  ? 'success'
+                                  : passPct >= 60
+                                    ? 'warning'
+                                    : 'destructive'
+                              }
+                              className="text-[10px]"
+                            >
+                              {passPct}%
+                            </Badge>
+                          ) : null}
+                        </div>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {r.record.customerSignedAt ? (
+                        <Badge variant="success" className="text-[10px]">Signed</Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-[10px]">Unsigned</Badge>
                       )}
                     </TableCell>
                     <TableCell>

@@ -201,6 +201,32 @@ export type FormWorkflowStep = {
   visibleFields?: string[]
 }
 
+// Per-step state inside a form_responses.workflow_state jsonb. Mirrors enough
+// of form_response_steps for fast reads on the response detail page without
+// joining. The form_response_steps table remains source-of-truth for indexing
+// and per-step audit; this jsonb is a denormalised view written in lockstep.
+export type FormResponseWorkflowStepState = {
+  stepKey: string
+  sequence: number
+  status: 'pending' | 'signed' | 'rejected' | 'skipped'
+  signedAt?: string // ISO 8601
+  personId?: string | null
+  tenantUserId?: string | null
+  signatureDataUrl?: string | null
+  rejectionReason?: string | null
+  rejectedAt?: string // ISO 8601
+  rejectedByTenantUserId?: string | null
+  comment?: string | null
+}
+
+export type FormResponseWorkflowState = {
+  steps: FormResponseWorkflowStepState[]
+  lastActionAt?: string // ISO 8601
+  lastActionByTenantUserId?: string | null
+  lastAction?: 'sign' | 'advance' | 'reject' | 'reopen'
+  lastReason?: string | null
+}
+
 // --- Assignments -----------------------------------------------------------
 
 export const formAssignmentMode = pgEnum('form_assignment_mode', [
@@ -284,6 +310,19 @@ export const formResponses = pgTable(
     sourceEntityId: uuid('source_entity_id'),
     // Generated PDF
     pdfAttachmentId: uuid('pdf_attachment_id'),
+    // Workflow state machine — captures the *response-level* view of where the
+    // multi-step workflow currently sits. Per-step detail lives in
+    // form_response_steps rows; this column carries response-level metadata
+    // (last action, last actor, last reason) plus a denormalised steps[] array
+    // that the UI can read in a single fetch without joining.
+    //
+    // Shape (FormResponseWorkflowState):
+    //   { steps: [{ stepKey, status, signedAt?, personId?, signatureDataUrl?,
+    //               rejectionReason?, rejectedAt?, rejectedBy? }],
+    //     lastActionAt?, lastActionByTenantUserId?, lastReason? }
+    workflowState: jsonb('workflow_state')
+      .$type<FormResponseWorkflowState | null>()
+      .default(null),
     ...timestamps,
     ...softDelete,
   },
@@ -297,6 +336,17 @@ export const formResponses = pgTable(
   }),
 )
 
+// Each row is one workflow step instance for one response. Created lazily the
+// first time we need state for that step (sign / advance / reject). Older code
+// reads only `signedAt` / `comment`; the additional columns are additive.
+//
+// Status state machine (column `status`):
+//   pending  → not yet acted on
+//   signed   → assignee captured a signature (terminal-for-this-step success)
+//   rejected → assignee bounced the step back; response moves to in_review
+//              and `currentStep` is left pointing at this step so a re-sign
+//              can re-attempt it
+//   skipped  → reserved for future "skip non-required step" flow
 export const formResponseSteps = pgTable(
   'form_response_steps',
   {
@@ -313,11 +363,25 @@ export const formResponseSteps = pgTable(
     signedAt: timestamp('signed_at', { withTimezone: true }),
     signatureAttachmentId: uuid('signature_attachment_id'),
     comment: text('comment'),
+    // Lifecycle status. Defaults to 'pending'; populated by the workflow
+    // server actions in apps/web/src/app/(app)/forms/responses/[id]/_actions.ts.
+    status: text('status').default('pending').notNull(),
+    // Inline signature data URL (PNG). Mirrors the lift_plan_signatures
+    // pattern — fast to render in PDFs without a separate fetch.
+    signatureDataUrl: text('signature_data_url'),
+    // Whose person record the signer represents (if internal).
+    signedByPersonId: uuid('signed_by_person_id').references(() => people.id),
+    // Which tenant_users row did the click — used by audit + assignee resolution.
+    signedByTenantUserId: uuid('signed_by_tenant_user_id').references(() => tenantUsers.id),
+    rejectionReason: text('rejection_reason'),
+    rejectedAt: timestamp('rejected_at', { withTimezone: true }),
+    rejectedByTenantUserId: uuid('rejected_by_tenant_user_id').references(() => tenantUsers.id),
     ...timestamps,
   },
   (t) => ({
     responseIdx: index('form_response_steps_response_idx').on(t.responseId, t.sequence),
     tenantIdx: index('form_response_steps_tenant_idx').on(t.tenantId),
+    statusIdx: index('form_response_steps_status_idx').on(t.tenantId, t.status),
   }),
 )
 

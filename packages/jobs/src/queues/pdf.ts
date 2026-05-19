@@ -5,6 +5,14 @@ export type PdfJobData =
   | { kind: 'form_response'; tenantId: string; responseId: string }
   | { kind: 'incident'; tenantId: string; incidentId: string }
   | { kind: 'certificate'; tenantId: string; certificateId: string }
+  | { kind: 'hazid'; tenantId: string; assessmentId: string }
+  | { kind: 'lift_plan'; tenantId: string; liftPlanId: string }
+  | { kind: 'toolbox'; tenantId: string; journalId: string }
+  | { kind: 'ca'; tenantId: string; caId: string }
+  | { kind: 'document'; tenantId: string; documentId: string }
+  | { kind: 'document_book'; tenantId: string; bookId: string }
+  | { kind: 'equipment_workorder'; tenantId: string; workOrderId: string }
+  | { kind: 'ppe_issue'; tenantId: string; issueReportId: string }
 
 export const pdfQueue = new Queue<PdfJobData>('pdfs', {
   connection,

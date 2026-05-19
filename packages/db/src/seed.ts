@@ -3481,6 +3481,136 @@ export async function seedLiftPlans(tx: any, tenantId: string): Promise<void> {
   console.log(`  · lift plans: ${createdCount} seeded`)
 }
 
+// HazID library seed — the build agent declared the call but forgot to ship
+// the function body. This adds 5 hazard types, 12 hazards, 3 hazard sets, 8
+// tasks, and 2 assessment types (one with all sections, one minimal). All
+// idempotent via a slug-based existence check.
+export async function seedHazidLibraries(tx: any, tenantId: string): Promise<void> {
+  const existing = await tx
+    .select({ id: hazidHazardTypes.id })
+    .from(hazidHazardTypes)
+    .where(sql`${hazidHazardTypes.tenantId} = ${tenantId}`)
+  if (existing.length > 0) {
+    console.log(`  · hazid libraries: ${existing.length} hazard types already present, skipping`)
+    return
+  }
+
+  const typeRows = await tx
+    .insert(hazidHazardTypes)
+    .values([
+      { tenantId, name: 'Physical', color: '#ef4444' },
+      { tenantId, name: 'Chemical', color: '#a855f7' },
+      { tenantId, name: 'Biological', color: '#22c55e' },
+      { tenantId, name: 'Ergonomic', color: '#0ea5e9' },
+      { tenantId, name: 'Environmental', color: '#f59e0b' },
+    ])
+    .returning({ id: hazidHazardTypes.id, name: hazidHazardTypes.name })
+
+  const byName: Record<string, string> = {}
+  for (const r of typeRows) byName[r.name] = r.id
+
+  const hazardRows = await tx
+    .insert(hazidHazards)
+    .values([
+      { tenantId, name: 'Slip / trip', hazardTypeId: byName['Physical'], standardControls: 'Housekeeping; remove debris; mark wet floors.' },
+      { tenantId, name: 'Falling object', hazardTypeId: byName['Physical'], standardControls: 'Toe-boards; hard hats; secure tools at height.' },
+      { tenantId, name: 'Pinch point', hazardTypeId: byName['Physical'], standardControls: 'LOTO; guard installed; awareness training.' },
+      { tenantId, name: 'Sharp edges', hazardTypeId: byName['Physical'], standardControls: 'Cut-resistant gloves; deburr; storage cages.' },
+      { tenantId, name: 'Solvent exposure', hazardTypeId: byName['Chemical'], standardControls: 'Local exhaust; respirator per SDS; eye-wash station.' },
+      { tenantId, name: 'Welding fumes', hazardTypeId: byName['Chemical'], standardControls: 'Fume extractor; PAPR for stainless/galv; SDS posted.' },
+      { tenantId, name: 'Biohazard (bodily fluid)', hazardTypeId: byName['Biological'], standardControls: 'Universal precautions; disposable nitrile; biohazard kit.' },
+      { tenantId, name: 'Heavy lifting', hazardTypeId: byName['Ergonomic'], standardControls: 'Mechanical aid; team lift > 25kg; rotation.' },
+      { tenantId, name: 'Repetitive motion', hazardTypeId: byName['Ergonomic'], standardControls: 'Job rotation; ergonomic tooling; stretching protocol.' },
+      { tenantId, name: 'Heat stress', hazardTypeId: byName['Environmental'], standardControls: 'Hydration station; mandated breaks; shaded rest area.' },
+      { tenantId, name: 'Cold exposure', hazardTypeId: byName['Environmental'], standardControls: 'Insulated PPE; warming hut; buddy system.' },
+      { tenantId, name: 'Noise > 85 dBA', hazardTypeId: byName['Physical'], standardControls: 'Hearing protection mandatory; audiometric testing.' },
+    ])
+    .returning({ id: hazidHazards.id, name: hazidHazards.name })
+
+  // Hazard sets — pre-curated groupings
+  await tx.insert(hazidHazardSets).values([
+    {
+      tenantId,
+      name: 'Confined space entry',
+      hazardIds: hazardRows.filter((h: any) => /slip|pinch|solvent|biohaz/i.test(h.name)).map((h: any) => h.id),
+    },
+    {
+      tenantId,
+      name: 'Outdoor work — summer',
+      hazardIds: hazardRows.filter((h: any) => /heat|slip|repetitive|fall/i.test(h.name)).map((h: any) => h.id),
+    },
+    {
+      tenantId,
+      name: 'Welding / hot work',
+      hazardIds: hazardRows.filter((h: any) => /weld|sharp|noise|fall/i.test(h.name)).map((h: any) => h.id),
+    },
+  ])
+
+  // Task library
+  await tx.insert(hazidTasks).values([
+    { tenantId, name: 'Set up barricades', description: 'Establish barrier perimeter before work begins.' },
+    { tenantId, name: 'Lock out / tag out', description: 'Isolate energy sources, verify zero state.' },
+    { tenantId, name: 'Pre-use inspection', description: 'Visual + functional inspection of every tool/PPE.' },
+    { tenantId, name: 'Atmospheric test', description: 'Verify O₂ / LEL / H₂S / CO before entry.' },
+    { tenantId, name: 'Rigging setup', description: 'Inspect slings, check WLL, verify anchor points.' },
+    { tenantId, name: 'Hot work permit', description: 'Verify fire watch + extinguisher + clear combustibles.' },
+    { tenantId, name: 'Don PPE', description: 'Confirm all crew has required PPE before entering zone.' },
+    { tenantId, name: 'Tailboard meeting', description: 'Review JSA with crew; confirm understanding.' },
+  ])
+
+  // Assessment types (one full, one minimal)
+  const [fullType, minimalType] = await tx
+    .insert(hazidAssessmentTypes)
+    .values([
+      {
+        tenantId,
+        name: 'Standard JSHA',
+        description: 'Job Safety Hazard Analysis with all sections enabled.',
+        hasTasks: true,
+        hasHazards: true,
+        hasPPE: true,
+        hasQuestions: true,
+        hasWAH: true,
+        hasCS: true,
+        hasArcFlash: false,
+      },
+      {
+        tenantId,
+        name: 'Quick FLRA',
+        description: 'Field-Level Risk Assessment — minimal sections, fast to fill.',
+        hasTasks: false,
+        hasHazards: true,
+        hasPPE: true,
+        hasQuestions: false,
+        hasWAH: false,
+        hasCS: false,
+        hasArcFlash: false,
+      },
+    ])
+    .returning({ id: hazidAssessmentTypes.id, name: hazidAssessmentTypes.name })
+
+  // Default PPE for the full type
+  await tx.insert(hazidAssessmentTypePPE).values([
+    { tenantId, typeId: fullType.id, name: 'Hard hat', required: true, entityOrder: 1 },
+    { tenantId, typeId: fullType.id, name: 'Safety glasses', required: true, entityOrder: 2 },
+    { tenantId, typeId: fullType.id, name: 'Steel-toe boots', required: true, entityOrder: 3 },
+    { tenantId, typeId: fullType.id, name: 'Hi-vis vest', required: true, entityOrder: 4 },
+    { tenantId, typeId: fullType.id, name: 'Gloves (task-specific)', required: false, entityOrder: 5 },
+    { tenantId, typeId: fullType.id, name: 'Hearing protection', required: false, entityOrder: 6 },
+    { tenantId, typeId: fullType.id, name: 'Fall harness (if WAH)', required: false, entityOrder: 7 },
+  ])
+
+  // Default Q&A for the full type
+  await tx.insert(hazidAssessmentTypeQuestions).values([
+    { tenantId, typeId: fullType.id, question: 'Have all crew members reviewed this JSHA?', questionType: 'yes_no', requiresYes: true, entityOrder: 1 },
+    { tenantId, typeId: fullType.id, question: 'Have all hazards been assessed and controlled?', questionType: 'yes_no', requiresYes: true, entityOrder: 2 },
+    { tenantId, typeId: fullType.id, question: 'Is the work area clear and properly barricaded?', questionType: 'yes_no', requiresYes: true, entityOrder: 3 },
+    { tenantId, typeId: fullType.id, question: 'Are emergency procedures known to all crew?', questionType: 'yes_no', requiresYes: true, entityOrder: 4 },
+  ])
+
+  console.log(`  · hazid libraries: ${typeRows.length} hazard types, ${hazardRows.length} hazards, 3 sets, 8 tasks, 2 assessment types`)
+}
+
 main().catch((err) => {
   console.error(err)
   process.exit(1)

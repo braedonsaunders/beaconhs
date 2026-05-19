@@ -7,8 +7,10 @@
 // source row (form_responses.pdfAttachmentId, training_certificates.pdfAttachmentId,
 // or inserts an incident_attachments link for incidents).
 //
-// Callers (route handlers, button onClick) should poll the source row /
-// route handler GET endpoint to discover when the PDF is ready.
+// Wave-6 kinds (hazid / lift_plan / toolbox / ca / document / document_book /
+// equipment_workorder / ppe_issue) write a row into `attachments` and rely on
+// the GET /pdf route to look up the latest matching attachment by tenant +
+// entity + kind, then 307 redirect to a presigned URL.
 
 import { enqueuePdf } from '@beaconhs/jobs'
 import { requireRequestContext } from './auth'
@@ -51,6 +53,110 @@ export async function requestCertificatePdf(certificateId: string): Promise<Requ
     entityId: certificateId,
     action: 'export',
     summary: 'Requested certificate PDF render',
+  })
+  return { ok: true }
+}
+
+export async function requestHazidPdf(assessmentId: string): Promise<RequestPdfResult> {
+  const ctx = await requireRequestContext()
+  if (!ctx.tenantId) return { ok: false, error: 'No active tenant' }
+  await enqueuePdf({ kind: 'hazid', tenantId: ctx.tenantId, assessmentId })
+  await recordAudit(ctx, {
+    entityType: 'hazid_assessment',
+    entityId: assessmentId,
+    action: 'export',
+    summary: 'Requested HazID assessment PDF render',
+  })
+  return { ok: true }
+}
+
+export async function requestLiftPlanPdf(liftPlanId: string): Promise<RequestPdfResult> {
+  const ctx = await requireRequestContext()
+  if (!ctx.tenantId) return { ok: false, error: 'No active tenant' }
+  await enqueuePdf({ kind: 'lift_plan', tenantId: ctx.tenantId, liftPlanId })
+  await recordAudit(ctx, {
+    entityType: 'lift_plan',
+    entityId: liftPlanId,
+    action: 'export',
+    summary: 'Requested lift plan PDF render',
+  })
+  return { ok: true }
+}
+
+export async function requestToolboxPdf(journalId: string): Promise<RequestPdfResult> {
+  const ctx = await requireRequestContext()
+  if (!ctx.tenantId) return { ok: false, error: 'No active tenant' }
+  await enqueuePdf({ kind: 'toolbox', tenantId: ctx.tenantId, journalId })
+  await recordAudit(ctx, {
+    entityType: 'toolbox_journal',
+    entityId: journalId,
+    action: 'export',
+    summary: 'Requested toolbox journal PDF render',
+  })
+  return { ok: true }
+}
+
+export async function requestCaPdf(caId: string): Promise<RequestPdfResult> {
+  const ctx = await requireRequestContext()
+  if (!ctx.tenantId) return { ok: false, error: 'No active tenant' }
+  await enqueuePdf({ kind: 'ca', tenantId: ctx.tenantId, caId })
+  await recordAudit(ctx, {
+    entityType: 'corrective_action',
+    entityId: caId,
+    action: 'export',
+    summary: 'Requested corrective action PDF render',
+  })
+  return { ok: true }
+}
+
+export async function requestDocumentPdf(documentId: string): Promise<RequestPdfResult> {
+  const ctx = await requireRequestContext()
+  if (!ctx.tenantId) return { ok: false, error: 'No active tenant' }
+  await enqueuePdf({ kind: 'document', tenantId: ctx.tenantId, documentId })
+  await recordAudit(ctx, {
+    entityType: 'document',
+    entityId: documentId,
+    action: 'export',
+    summary: 'Requested document PDF render',
+  })
+  return { ok: true }
+}
+
+export async function requestDocumentBookPdf(bookId: string): Promise<RequestPdfResult> {
+  const ctx = await requireRequestContext()
+  if (!ctx.tenantId) return { ok: false, error: 'No active tenant' }
+  await enqueuePdf({ kind: 'document_book', tenantId: ctx.tenantId, bookId })
+  await recordAudit(ctx, {
+    entityType: 'document_book',
+    entityId: bookId,
+    action: 'export',
+    summary: 'Requested document book PDF render',
+  })
+  return { ok: true }
+}
+
+export async function requestEquipmentWorkOrderPdf(workOrderId: string): Promise<RequestPdfResult> {
+  const ctx = await requireRequestContext()
+  if (!ctx.tenantId) return { ok: false, error: 'No active tenant' }
+  await enqueuePdf({ kind: 'equipment_workorder', tenantId: ctx.tenantId, workOrderId })
+  await recordAudit(ctx, {
+    entityType: 'equipment_work_order',
+    entityId: workOrderId,
+    action: 'export',
+    summary: 'Requested equipment work order PDF render',
+  })
+  return { ok: true }
+}
+
+export async function requestPpeIssuePdf(issueReportId: string): Promise<RequestPdfResult> {
+  const ctx = await requireRequestContext()
+  if (!ctx.tenantId) return { ok: false, error: 'No active tenant' }
+  await enqueuePdf({ kind: 'ppe_issue', tenantId: ctx.tenantId, issueReportId })
+  await recordAudit(ctx, {
+    entityType: 'ppe_issue_report',
+    entityId: issueReportId,
+    action: 'export',
+    summary: 'Requested PPE issue report PDF render',
   })
   return { ok: true }
 }

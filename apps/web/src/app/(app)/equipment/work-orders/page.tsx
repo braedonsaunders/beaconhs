@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { Wrench } from 'lucide-react'
-import { and, asc, count, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gte, ilike, isNull, lte, or, sql, type SQL } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -15,6 +15,7 @@ import {
 } from '@beaconhs/ui'
 import {
   equipmentItems,
+  equipmentTypes,
   equipmentWorkOrders,
   tenantUsers,
   user,
@@ -30,7 +31,7 @@ import { EquipmentSubNav } from '@/components/equipment-sub-nav'
 
 export const metadata = { title: 'Work orders' }
 
-const SORTS = ['reference', 'summary', 'status', 'priority', 'opened_at', 'closed_at'] as const
+const SORTS = ['reference', 'summary', 'status', 'priority', 'opened_at', 'closed_at', 'cost', 'aging'] as const
 
 const STATUS_OPTIONS = [
   { value: 'open', label: 'Open' },
@@ -73,9 +74,14 @@ export default async function WorkOrdersPage({
   })
   const statusFilter = pickString(sp.status)
   const priorityFilter = pickString(sp.priority)
+  const assigneeFilter = pickString(sp.assignee)
+  const typeFilter = pickString(sp.type)
+  const ageBucketFilter = pickString(sp.age) // 'open7' | 'open30' | 'overdue30'
+  const openedFromRaw = pickString(sp.openedFrom)
+  const openedToRaw = pickString(sp.openedTo)
   const ctx = await requireRequestContext()
 
-  const { rows, total, statusCounts, priorityCounts } = await ctx.db(async (tx) => {
+  const { rows, total, statusCounts, priorityCounts, assigneeOptions, typeOptions } = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = []
     if (params.q) {
       const term = `%${params.q}%`
@@ -90,6 +96,27 @@ export default async function WorkOrdersPage({
     }
     if (statusFilter) filters.push(eq(equipmentWorkOrders.status, statusFilter as any))
     if (priorityFilter) filters.push(eq(equipmentWorkOrders.priority, priorityFilter as any))
+    if (assigneeFilter) filters.push(eq(equipmentWorkOrders.assignedToTenantUserId, assigneeFilter))
+    if (typeFilter) filters.push(eq(equipmentItems.typeId, typeFilter))
+    if (openedFromRaw) filters.push(gte(equipmentWorkOrders.openedAt, new Date(openedFromRaw)))
+    if (openedToRaw) filters.push(lte(equipmentWorkOrders.openedAt, new Date(openedToRaw)))
+    if (ageBucketFilter === 'open7') {
+      filters.push(isNull(equipmentWorkOrders.closedAt))
+      filters.push(
+        sql`${equipmentWorkOrders.openedAt} < (now() - interval '7 days')`,
+      )
+    } else if (ageBucketFilter === 'open30') {
+      filters.push(isNull(equipmentWorkOrders.closedAt))
+      filters.push(
+        sql`${equipmentWorkOrders.openedAt} < (now() - interval '30 days')`,
+      )
+    } else if (ageBucketFilter === 'overdue30') {
+      filters.push(isNull(equipmentWorkOrders.closedAt))
+      filters.push(eq(equipmentWorkOrders.priority, 'high'))
+      filters.push(
+        sql`${equipmentWorkOrders.openedAt} < (now() - interval '7 days')`,
+      )
+    }
     const whereClause = filters.length > 0 ? and(...filters) : undefined
 
     const orderBy =
@@ -103,7 +130,15 @@ export default async function WorkOrdersPage({
               ? [params.dir === 'asc' ? asc(equipmentWorkOrders.priority) : desc(equipmentWorkOrders.priority)]
               : params.sort === 'closed_at'
                 ? [params.dir === 'asc' ? asc(equipmentWorkOrders.closedAt) : desc(equipmentWorkOrders.closedAt)]
-                : [params.dir === 'asc' ? asc(equipmentWorkOrders.openedAt) : desc(equipmentWorkOrders.openedAt)]
+                : params.sort === 'cost'
+                  ? [params.dir === 'asc' ? asc(equipmentWorkOrders.cost) : desc(equipmentWorkOrders.cost)]
+                  : params.sort === 'aging'
+                    ? [
+                        params.dir === 'asc'
+                          ? asc(equipmentWorkOrders.openedAt)
+                          : desc(equipmentWorkOrders.openedAt),
+                      ]
+                    : [params.dir === 'asc' ? asc(equipmentWorkOrders.openedAt) : desc(equipmentWorkOrders.openedAt)]
 
     const [tot] = await tx
       .select({ c: count() })
@@ -115,11 +150,13 @@ export default async function WorkOrdersPage({
       .select({
         wo: equipmentWorkOrders,
         item: equipmentItems,
+        type: equipmentTypes,
         assignee: tenantUsers,
         assigneeUser: user,
       })
       .from(equipmentWorkOrders)
       .leftJoin(equipmentItems, eq(equipmentItems.id, equipmentWorkOrders.itemId))
+      .leftJoin(equipmentTypes, eq(equipmentTypes.id, equipmentItems.typeId))
       .leftJoin(tenantUsers, eq(tenantUsers.id, equipmentWorkOrders.assignedToTenantUserId))
       .leftJoin(user, eq(user.id, tenantUsers.userId))
       .where(whereClause)
@@ -136,11 +173,34 @@ export default async function WorkOrdersPage({
       .from(equipmentWorkOrders)
       .groupBy(equipmentWorkOrders.priority)
 
+    const aOpts = await tx
+      .select({
+        id: tenantUsers.id,
+        displayName: tenantUsers.displayName,
+        c: count(),
+      })
+      .from(tenantUsers)
+      .innerJoin(
+        equipmentWorkOrders,
+        eq(equipmentWorkOrders.assignedToTenantUserId, tenantUsers.id),
+      )
+      .groupBy(tenantUsers.id, tenantUsers.displayName)
+      .orderBy(desc(count()))
+      .limit(20)
+
+    const tOpts = await tx
+      .select({ id: equipmentTypes.id, name: equipmentTypes.name })
+      .from(equipmentTypes)
+      .orderBy(asc(equipmentTypes.name))
+      .limit(50)
+
     return {
       rows: data,
       total: Number(tot?.c ?? 0),
       statusCounts: Object.fromEntries(ss.map((x) => [x.s, Number(x.c)])),
       priorityCounts: Object.fromEntries(ps.map((x) => [x.p, Number(x.c)])),
+      assigneeOptions: aOpts,
+      typeOptions: tOpts,
     }
   })
 
@@ -162,8 +222,32 @@ export default async function WorkOrdersPage({
               </div>
             }
           />
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <SearchInput placeholder="Search reference, summary, asset tag…" />
+            <form className="flex items-center gap-1 text-xs">
+              <label className="flex items-center gap-1 text-slate-500">
+                Opened
+                <input
+                  type="date"
+                  name="openedFrom"
+                  defaultValue={openedFromRaw ?? ''}
+                  className="rounded-md border border-slate-300 px-2 py-1 text-xs"
+                />
+              </label>
+              <span className="text-slate-400">to</span>
+              <input
+                type="date"
+                name="openedTo"
+                defaultValue={openedToRaw ?? ''}
+                className="rounded-md border border-slate-300 px-2 py-1 text-xs"
+              />
+              <button
+                type="submit"
+                className="rounded-md border border-slate-200 px-2 py-1 text-xs hover:bg-slate-50"
+              >
+                Apply
+              </button>
+            </form>
           </div>
           <div className="space-y-2">
             <FilterChips
@@ -180,6 +264,42 @@ export default async function WorkOrdersPage({
               label="Priority"
               options={PRIORITY_OPTIONS.map((o) => ({ ...o, count: priorityCounts[o.value] }))}
             />
+            <FilterChips
+              basePath="/equipment/work-orders"
+              currentParams={sp}
+              paramKey="age"
+              label="Aging"
+              options={[
+                { value: 'open7', label: 'Open 7d+' },
+                { value: 'open30', label: 'Open 30d+' },
+                { value: 'overdue30', label: 'High prio · 7d+' },
+              ]}
+            />
+            {assigneeOptions.length > 0 ? (
+              <FilterChips
+                basePath="/equipment/work-orders"
+                currentParams={sp}
+                paramKey="assignee"
+                label="Assignee"
+                options={assigneeOptions.slice(0, 12).map((a) => ({
+                  value: a.id,
+                  label: a.displayName ?? '—',
+                  count: Number(a.c ?? 0),
+                }))}
+              />
+            ) : null}
+            {typeOptions.length > 0 ? (
+              <FilterChips
+                basePath="/equipment/work-orders"
+                currentParams={sp}
+                paramKey="type"
+                label="Equipment type"
+                options={typeOptions.slice(0, 12).map((t) => ({
+                  value: t.id,
+                  label: t.name,
+                }))}
+              />
+            ) : null}
           </div>
         </>
       }
@@ -211,6 +331,7 @@ export default async function WorkOrdersPage({
                   Summary
                 </SortableTh>
                 <TableHead>Equipment</TableHead>
+                <TableHead>Type</TableHead>
                 <SortableTh {...sortProps} column="priority" active={params.sort === 'priority'}>
                   Priority
                 </SortableTh>
@@ -221,53 +342,91 @@ export default async function WorkOrdersPage({
                 <SortableTh {...sortProps} column="opened_at" active={params.sort === 'opened_at'}>
                   Reported
                 </SortableTh>
+                <SortableTh {...sortProps} column="closed_at" active={params.sort === 'closed_at'}>
+                  Closed
+                </SortableTh>
+                <SortableTh {...sortProps} column="aging" active={params.sort === 'aging'}>
+                  Aging
+                </SortableTh>
+                <SortableTh {...sortProps} column="cost" active={params.sort === 'cost'}>
+                  Cost
+                </SortableTh>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map(({ wo, item, assignee, assigneeUser }) => (
-                <TableRow key={wo.id}>
-                  <TableCell className="font-mono text-xs">
-                    <Link
-                      href={`/equipment/work-orders/${wo.id}` as any}
-                      className="hover:underline"
-                    >
-                      {wo.reference}
-                    </Link>
-                  </TableCell>
-                  <TableCell>
-                    <Link
-                      href={`/equipment/work-orders/${wo.id}` as any}
-                      className="font-medium text-slate-900 hover:underline"
-                    >
-                      {wo.summary}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="text-slate-600">
-                    {item ? (
-                      <Link href={`/equipment/${item.id}`} className="hover:underline">
-                        <span className="font-mono text-xs">{item.assetTag}</span>{' '}
-                        <span>{item.name}</span>
+              {rows.map(({ wo, item, type, assignee, assigneeUser }) => {
+                const openedMs = new Date(wo.openedAt).getTime()
+                const closedMs = wo.closedAt ? new Date(wo.closedAt).getTime() : Date.now()
+                const ageDays = Math.max(0, Math.round((closedMs - openedMs) / 86_400_000))
+                const ageVariant: 'success' | 'warning' | 'destructive' | 'secondary' =
+                  wo.closedAt
+                    ? 'secondary'
+                    : ageDays > 30
+                      ? 'destructive'
+                      : ageDays > 7
+                        ? 'warning'
+                        : 'success'
+                return (
+                  <TableRow key={wo.id}>
+                    <TableCell className="font-mono text-xs">
+                      <Link
+                        href={`/equipment/work-orders/${wo.id}` as any}
+                        className="hover:underline"
+                      >
+                        {wo.reference}
                       </Link>
-                    ) : (
-                      '—'
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={priorityBadgeVariant(wo.priority)}>{wo.priority}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={statusBadgeVariant(wo.status)}>
-                      {wo.status === 'closed' ? 'completed' : wo.status.replace('_', ' ')}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-slate-600">
-                    {assigneeUser?.name ?? assignee?.displayName ?? '—'}
-                  </TableCell>
-                  <TableCell className="text-slate-600">
-                    {new Date(wo.openedAt).toLocaleDateString()}
-                  </TableCell>
-                </TableRow>
-              ))}
+                    </TableCell>
+                    <TableCell>
+                      <Link
+                        href={`/equipment/work-orders/${wo.id}` as any}
+                        className="font-medium text-slate-900 hover:underline"
+                      >
+                        {wo.summary}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="text-slate-600">
+                      {item ? (
+                        <Link href={`/equipment/${item.id}`} className="hover:underline">
+                          <span className="font-mono text-xs">{item.assetTag}</span>{' '}
+                          <span>{item.name}</span>
+                        </Link>
+                      ) : (
+                        '—'
+                      )}
+                    </TableCell>
+                    <TableCell className="text-slate-600 text-xs">
+                      {type?.name ?? '—'}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={priorityBadgeVariant(wo.priority)}>{wo.priority}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={statusBadgeVariant(wo.status)}>
+                        {wo.status === 'closed' ? 'completed' : wo.status.replace('_', ' ')}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-slate-600">
+                      {assigneeUser?.name ?? assignee?.displayName ?? '—'}
+                    </TableCell>
+                    <TableCell className="text-slate-600 text-xs tabular-nums">
+                      {new Date(wo.openedAt).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell className="text-slate-600 text-xs tabular-nums">
+                      {wo.closedAt ? (
+                        new Date(wo.closedAt).toLocaleDateString()
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="tabular-nums">
+                      <Badge variant={ageVariant}>{ageDays}d</Badge>
+                    </TableCell>
+                    <TableCell className="text-slate-600 text-xs tabular-nums">
+                      {wo.cost ? `$${Number(wo.cost).toLocaleString()}` : '—'}
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
             </TableBody>
           </Table>
           <Pagination

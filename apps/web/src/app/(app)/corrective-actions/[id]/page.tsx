@@ -276,7 +276,7 @@ export default async function CorrectiveActionPage({
           }
           actions={
             <>
-              <Link href={`/corrective-actions/${id}/print` as any} target="_blank">
+              <Link href={`/corrective-actions/${id}/pdf` as any} target="_blank">
                 <Button variant="outline" type="button">
                   <FileText size={14} />
                   PDF

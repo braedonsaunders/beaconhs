@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { asc, desc, eq } from 'drizzle-orm'
+import { aliasedTable, asc, desc, eq } from 'drizzle-orm'
 import { FileText, MessageSquare, Plus, Send, Undo2 } from 'lucide-react'
 import {
   Alert,
@@ -28,6 +28,7 @@ import {
   people,
   tenantUsers,
   user,
+  type FormWorkflowStep,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
@@ -36,6 +37,7 @@ import { DetailGrid } from '@/components/detail-grid'
 import { Section } from '@/components/section'
 import { DetailPageLayout } from '@/components/page-layout'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
+import { WorkflowPanel, type WorkflowStepProp } from './_workflow-panel'
 
 export const dynamic = 'force-dynamic'
 
@@ -137,10 +139,30 @@ export default async function FormResponsePage({
       .where(eq(formResponses.id, id))
       .limit(1)
     if (!row) return null
+    // Aliased joins so we can attach signer + rejector display names to each
+    // step row in a single query.
+    const signerTu = aliasedTable(tenantUsers, 'signer_tu')
+    const signerUser = aliasedTable(user, 'signer_user')
+    const signerPerson = aliasedTable(people, 'signer_person')
+    const rejectorTu = aliasedTable(tenantUsers, 'rejector_tu')
+    const rejectorUser = aliasedTable(user, 'rejector_user')
+
     const [steps, comments, scoreRows] = await Promise.all([
       tx
-        .select()
+        .select({
+          step: formResponseSteps,
+          signerTu,
+          signerUser,
+          signerPerson,
+          rejectorTu,
+          rejectorUser,
+        })
         .from(formResponseSteps)
+        .leftJoin(signerTu, eq(signerTu.id, formResponseSteps.signedByTenantUserId))
+        .leftJoin(signerUser, eq(signerUser.id, signerTu.userId))
+        .leftJoin(signerPerson, eq(signerPerson.id, formResponseSteps.signedByPersonId))
+        .leftJoin(rejectorTu, eq(rejectorTu.id, formResponseSteps.rejectedByTenantUserId))
+        .leftJoin(rejectorUser, eq(rejectorUser.id, rejectorTu.userId))
         .where(eq(formResponseSteps.responseId, id))
         .orderBy(asc(formResponseSteps.sequence)),
       tx
@@ -173,6 +195,46 @@ export default async function FormResponsePage({
 
   const failCount = scoreRows.filter((r) => r.score === 0).length
   const passCount = scoreRows.filter((r) => r.score === 1).length
+
+  // Build the workflow-panel input by joining the template's declared steps
+  // with whatever state rows already exist. Steps the user hasn't touched yet
+  // contribute a `pending` placeholder so the panel can show "Step 3 of 5".
+  const templateWorkflowSteps: FormWorkflowStep[] = version.schema.workflow?.steps ?? []
+  const stepsByKey = new Map(steps.map((row) => [row.step.stepKey, row]))
+  const workflowStepProps: WorkflowStepProp[] = templateWorkflowSteps.map((wf, i) => {
+    const joined = stepsByKey.get(wf.key)
+    const row = joined?.step ?? null
+    const signedByName =
+      joined?.signerUser?.name ??
+      joined?.signerTu?.displayName ??
+      (joined?.signerPerson
+        ? `${joined.signerPerson.firstName} ${joined.signerPerson.lastName}`
+        : null)
+    const rejectedByName =
+      joined?.rejectorUser?.name ?? joined?.rejectorTu?.displayName ?? null
+    const assigneeLabel =
+      wf.assignee.type === 'literal'
+        ? wf.assignee.userId
+        : wf.assignee.type === 'role'
+          ? wf.assignee.role
+          : wf.assignee.expr
+    return {
+      key: wf.key,
+      sequence: i,
+      title: wf.title?.en ?? wf.key,
+      signatureRequired: !!wf.signatureRequired,
+      assigneeKind: wf.assignee.type,
+      assigneeLabel,
+      status: (row?.status ?? 'pending') as WorkflowStepProp['status'],
+      signedAt: row?.signedAt ? row.signedAt.toISOString() : null,
+      signedBy: signedByName,
+      signatureDataUrl: row?.signatureDataUrl ?? null,
+      comment: row?.comment ?? null,
+      rejectionReason: row?.rejectionReason ?? null,
+      rejectedAt: row?.rejectedAt ? row.rejectedAt.toISOString() : null,
+      rejectedBy: rejectedByName,
+    }
+  })
 
   // The form's schema may declare needs-follow-up logic in metadata.
   const schemaMeta = (version.schema as any)?.metadata ?? {}
@@ -329,27 +391,27 @@ export default async function FormResponsePage({
               </Section>
             ))}
 
-            <Section title={`Workflow steps (${steps.length})`} defaultOpen={steps.length > 0}>
-              {steps.length === 0 ? (
-                <p className="text-sm text-slate-500">No steps recorded for this response.</p>
+            <Section
+              title={`Workflow steps (${workflowStepProps.length})`}
+              defaultOpen={workflowStepProps.length > 0}
+            >
+              {workflowStepProps.length === 0 ? (
+                <p className="text-sm text-slate-500">
+                  No workflow steps configured on this template.
+                </p>
               ) : (
-                <ul className="divide-y divide-slate-100 text-sm">
-                  {steps.map((s) => (
-                    <li key={s.id} className="flex items-center justify-between py-2">
-                      <div>
-                        <div className="font-medium">{s.stepKey}</div>
-                        <div className="text-xs text-slate-500">
-                          {s.signedAt
-                            ? `signed ${new Date(s.signedAt).toLocaleString()}`
-                            : 'awaiting signature'}
-                        </div>
-                      </div>
-                      <Badge variant={s.signedAt ? 'success' : 'warning'}>
-                        {s.signedAt ? 'signed' : 'open'}
-                      </Badge>
-                    </li>
-                  ))}
-                </ul>
+                <WorkflowPanel
+                  responseId={id}
+                  steps={workflowStepProps}
+                  currentStepKey={response.currentStep ?? null}
+                  responseStatus={response.status}
+                  // canAct = a user is signed in to this tenant. The panel itself
+                  // disables interaction when the response is in a terminal
+                  // (closed/rejected) state. Super-admin viewing-as has
+                  // membership=null but ctx-level permissions; we still allow
+                  // them to interact for cross-tenant debugging.
+                  canAct={true}
+                />
               )}
             </Section>
           </>

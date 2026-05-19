@@ -11,7 +11,7 @@ import {
   Textarea,
 } from '@beaconhs/ui'
 import { db } from '@beaconhs/db'
-import { tenants } from '@beaconhs/db/schema'
+import { auditLog, tenants } from '@beaconhs/db/schema'
 import { getCurrentUserId } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
 
@@ -48,14 +48,31 @@ async function createTenant(formData: FormData): Promise<void> {
 
   await db.transaction(async (tx) => {
     await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
-    await tx.insert(tenants).values({
-      name,
-      slug,
-      status: 'active',
-      region,
-      defaultLanguage,
-      enabledLanguages: enabledLanguages.length > 0 ? enabledLanguages : [defaultLanguage],
-    })
+    const [created] = await tx
+      .insert(tenants)
+      .values({
+        name,
+        slug,
+        status: 'active',
+        region,
+        defaultLanguage,
+        enabledLanguages: enabledLanguages.length > 0 ? enabledLanguages : [defaultLanguage],
+      })
+      .returning({ id: tenants.id })
+    if (created) {
+      // Audit row lives in the *new* tenant's audit_log so the activity timeline
+      // shows "tenant created" on day-one. Super-admin actions otherwise have
+      // no natural home in any tenant's log.
+      await tx.insert(auditLog).values({
+        tenantId: created.id,
+        actorUserId: userId,
+        entityType: 'tenant',
+        entityId: created.id,
+        action: 'create',
+        summary: `Created tenant "${name}" (${slug})`,
+        after: { name, slug, region, defaultLanguage, enabledLanguages },
+      })
+    }
   })
 
   revalidatePath('/admin/tenants')

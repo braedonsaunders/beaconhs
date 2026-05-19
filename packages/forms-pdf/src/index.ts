@@ -10,10 +10,53 @@ import { renderIncidentHtml, type IncidentRenderInput } from './templates/incide
 import { renderCertificateHtml, type CertificateRenderInput } from './templates/certificate'
 import { renderWalletHtml, type WalletRenderInput } from './templates/wallet'
 import { renderReportHtml, type ReportRenderInput, type ReportGroup } from './templates/report'
+import { renderHazidHtml, type HazidRenderInput } from './templates/hazid'
+import { renderLiftPlanHtml, type LiftPlanRenderInput } from './templates/lift-plan'
+import { renderToolboxHtml, type ToolboxRenderInput } from './templates/toolbox'
+import { renderCaHtml, type CaRenderInput } from './templates/ca'
+import {
+  renderDocumentHtml,
+  renderDocumentBookHtml,
+  type DocumentRenderInput,
+  type DocumentBookRenderInput,
+} from './templates/document'
+import {
+  renderEquipmentWorkOrderHtml,
+  type EquipmentWorkOrderRenderInput,
+} from './templates/equipment-workorder'
+import { renderPpeIssueHtml, type PpeIssueRenderInput } from './templates/ppe-issue'
 import { getBrowser as browser, closeBrowser, escapeHtml } from './util'
 
-export type { IncidentRenderInput, CertificateRenderInput, WalletRenderInput, ReportRenderInput, ReportGroup }
-export { renderIncidentHtml, renderCertificateHtml, renderWalletHtml, renderReportHtml, closeBrowser }
+export type {
+  IncidentRenderInput,
+  CertificateRenderInput,
+  WalletRenderInput,
+  ReportRenderInput,
+  ReportGroup,
+  HazidRenderInput,
+  LiftPlanRenderInput,
+  ToolboxRenderInput,
+  CaRenderInput,
+  DocumentRenderInput,
+  DocumentBookRenderInput,
+  EquipmentWorkOrderRenderInput,
+  PpeIssueRenderInput,
+}
+export {
+  renderIncidentHtml,
+  renderCertificateHtml,
+  renderWalletHtml,
+  renderReportHtml,
+  renderHazidHtml,
+  renderLiftPlanHtml,
+  renderToolboxHtml,
+  renderCaHtml,
+  renderDocumentHtml,
+  renderDocumentBookHtml,
+  renderEquipmentWorkOrderHtml,
+  renderPpeIssueHtml,
+  closeBrowser,
+}
 
 export type RenderInput = {
   schema: FormSchemaV1
@@ -306,4 +349,129 @@ export async function renderReportPdf(input: ReportRenderInput): Promise<Buffer>
   } finally {
     await page.close()
   }
+}
+
+// --- Generic letterhead body renderer -------------------------------------
+//
+// Used by hazid / lift_plan / toolbox / ca / document / equipment_workorder /
+// ppe_issue. Each template produces a self-contained body fragment (style + DOM)
+// which we wrap in <html><head><title>...</head><body>...</body></html> and
+// print on Letter-sized pages with a small footer (page n / total).
+
+async function printLetterheadPdf(args: {
+  body: string
+  title: string
+  footerLeft: string
+  footerRight?: string
+}): Promise<Buffer> {
+  const html = wrapDocument(args.body, args.title)
+  const b = await browser()
+  const page = await b.newPage()
+  try {
+    await page.setContent(html, { waitUntil: 'networkidle0', timeout: 30_000 })
+    const pdf = await page.pdf({
+      format: 'Letter',
+      printBackground: true,
+      margin: { top: '15mm', bottom: '15mm', left: '12mm', right: '12mm' },
+      displayHeaderFooter: true,
+      headerTemplate: `<div></div>`,
+      footerTemplate: `<div style="font-size:8px;width:100%;padding:0 12mm;display:flex;justify-content:space-between;color:#666;">
+        <span>${escapeHtml(args.footerLeft)}</span>
+        <span>${args.footerRight ? escapeHtml(args.footerRight) + ' · ' : ''}<span class="pageNumber"></span> / <span class="totalPages"></span></span>
+      </div>`,
+    })
+    return Buffer.from(pdf)
+  } finally {
+    await page.close()
+  }
+}
+
+// --- HazID assessment PDF -------------------------------------------------
+
+export async function renderHazidPdf(input: HazidRenderInput): Promise<Buffer> {
+  return printLetterheadPdf({
+    body: renderHazidHtml(input),
+    title: 'Hazard Assessment',
+    footerLeft: input.tenantName,
+    footerRight: `HazID ${input.assessment.reference}`,
+  })
+}
+
+// --- Lift Plan PDF --------------------------------------------------------
+
+export async function renderLiftPlanPdf(input: LiftPlanRenderInput): Promise<Buffer> {
+  return printLetterheadPdf({
+    body: renderLiftPlanHtml(input),
+    title: 'Critical Lift Plan',
+    footerLeft: input.tenantName,
+    footerRight: `Lift Plan ${input.liftPlan.reference}`,
+  })
+}
+
+// --- Toolbox Journal PDF --------------------------------------------------
+
+export async function renderToolboxPdf(input: ToolboxRenderInput): Promise<Buffer> {
+  return printLetterheadPdf({
+    body: renderToolboxHtml(input),
+    title: 'Toolbox Talk',
+    footerLeft: input.tenantName,
+    footerRight: `Toolbox ${input.journal.reference}`,
+  })
+}
+
+// --- Corrective Action PDF ------------------------------------------------
+
+export async function renderCaPdf(input: CaRenderInput): Promise<Buffer> {
+  return printLetterheadPdf({
+    body: renderCaHtml(input),
+    title: 'Corrective Action',
+    footerLeft: input.tenantName,
+    footerRight: `CA ${input.ca.reference}`,
+  })
+}
+
+// --- Document PDF ---------------------------------------------------------
+
+export async function renderDocumentPdf(input: DocumentRenderInput): Promise<Buffer> {
+  return printLetterheadPdf({
+    body: renderDocumentHtml(input),
+    title: input.document.title,
+    footerLeft: input.tenantName,
+    footerRight: input.document.key,
+  })
+}
+
+// --- Document Book PDF ----------------------------------------------------
+
+export async function renderDocumentBookPdf(input: DocumentBookRenderInput): Promise<Buffer> {
+  return printLetterheadPdf({
+    body: renderDocumentBookHtml(input),
+    title: input.book.title,
+    footerLeft: input.tenantName,
+    footerRight: input.book.title,
+  })
+}
+
+// --- Equipment Work Order PDF ---------------------------------------------
+
+export async function renderEquipmentWorkOrderPdf(
+  input: EquipmentWorkOrderRenderInput,
+): Promise<Buffer> {
+  return printLetterheadPdf({
+    body: renderEquipmentWorkOrderHtml(input),
+    title: 'Equipment Work Order',
+    footerLeft: input.tenantName,
+    footerRight: `WO ${input.workOrder.reference}`,
+  })
+}
+
+// --- PPE Issue Report PDF -------------------------------------------------
+
+export async function renderPpeIssuePdf(input: PpeIssueRenderInput): Promise<Buffer> {
+  return printLetterheadPdf({
+    body: renderPpeIssueHtml(input),
+    title: 'PPE Issue Report',
+    footerLeft: input.tenantName,
+    footerRight: `PPE Issue`,
+  })
 }

@@ -7,6 +7,7 @@ import { db, withSuperAdmin } from '@beaconhs/db'
 import { reportDefinitions, reportSchedules } from '@beaconhs/db/schema'
 import { enqueueReportRun } from '@beaconhs/jobs'
 import { requireRequestContext } from '@/lib/auth'
+import { recordAudit } from '@/lib/audit'
 import { computeNextRunAt } from '@/lib/report-cadence'
 
 /**
@@ -28,7 +29,7 @@ export async function runOnceFromDefinition(definitionId: string): Promise<void>
           eq(reportDefinitions.id, definitionId),
           or(
             isNull(reportDefinitions.tenantId),
-            eq(reportDefinitions.tenantId, ctx.tenantId!),
+            eq(reportDefinitions.tenantId, ctx.tenantId),
           ),
         ),
       )
@@ -45,7 +46,7 @@ export async function runOnceFromDefinition(definitionId: string): Promise<void>
       .from(reportSchedules)
       .where(
         and(
-          eq(reportSchedules.tenantId, ctx.tenantId!),
+          eq(reportSchedules.tenantId, ctx.tenantId),
           eq(reportSchedules.definitionId, definitionId),
           eq(reportSchedules.name, oneShotName),
         ),
@@ -66,14 +67,14 @@ export async function runOnceFromDefinition(definitionId: string): Promise<void>
     const [row] = await tx
       .insert(reportSchedules)
       .values({
-        tenantId: ctx.tenantId!,
+        tenantId: ctx.tenantId,
         definitionId,
         name: oneShotName,
         cadence: 'daily',
         hour: 8,
         minute: 0,
         timezone: 'America/Toronto',
-        recipientUserIds: [ctx.userId!],
+        recipientUserIds: [ctx.userId],
         recipientEmails: [],
         filters: {},
         nextRunAt,
@@ -83,7 +84,14 @@ export async function runOnceFromDefinition(definitionId: string): Promise<void>
     return row!.id
   })
 
-  await enqueueReportRun({ tenantId: ctx.tenantId!, scheduleId })
+  await enqueueReportRun({ tenantId: ctx.tenantId, scheduleId })
+  await recordAudit(ctx, {
+    entityType: 'report_definition',
+    entityId: definitionId,
+    action: 'export',
+    summary: `Ran one-shot of "${def.name}"`,
+    metadata: { scheduleId },
+  })
 
   revalidatePath(`/reports/definitions/${definitionId}`)
   revalidatePath(`/reports/schedules/${scheduleId}`)
@@ -93,7 +101,7 @@ export async function runOnceFromDefinition(definitionId: string): Promise<void>
 /** Delete a custom definition. Built-ins cannot be deleted. */
 export async function deleteDefinition(definitionId: string): Promise<void> {
   const ctx = await requireRequestContext()
-  await withSuperAdmin(db, async (tx) => {
+  const deletedName = await withSuperAdmin(db, async (tx) => {
     const [d] = await tx
       .select()
       .from(reportDefinitions)
@@ -117,6 +125,14 @@ export async function deleteDefinition(definitionId: string): Promise<void> {
       )
     }
     await tx.delete(reportDefinitions).where(eq(reportDefinitions.id, definitionId))
+    return d.name
+  })
+
+  await recordAudit(ctx, {
+    entityType: 'report_definition',
+    entityId: definitionId,
+    action: 'delete',
+    summary: `Deleted custom report definition "${deletedName}"`,
   })
 
   // Set a tenant-id setting for the post-delete redirect path. Actually we

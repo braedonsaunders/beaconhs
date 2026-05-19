@@ -15,19 +15,37 @@ async function main() {
   await migrate(db, { migrationsFolder: './drizzle' })
 
   console.log('▶ Applying RLS policies…')
+  let newCount = 0
+  let existingCount = 0
+  const realFailures: { table: string; msg: string }[] = []
   for (const table of TENANT_SCOPED_TABLES) {
     try {
       await db.execute(sql.raw(RLS_POLICY_SQL(table)))
-      process.stdout.write('.')
+      newCount++
+      process.stdout.write('+')
     } catch (err) {
-      // policy may already exist; safe to ignore on idempotent re-runs
-      const msg = err instanceof Error ? err.message : String(err)
-      if (!/already exists/.test(msg)) {
-        console.error(`\n✗ ${table}: ${msg}`)
+      // drizzle wraps the underlying postgres error in err.cause.
+      // policy may already exist; safe to ignore on idempotent re-runs.
+      const causeMsg =
+        err instanceof Error && err.cause instanceof Error ? err.cause.message : ''
+      const topMsg = err instanceof Error ? err.message : String(err)
+      const combined = `${topMsg} | ${causeMsg}`
+      if (/already exists/.test(combined)) {
+        existingCount++
+        process.stdout.write('.')
+      } else {
+        realFailures.push({ table, msg: causeMsg || topMsg })
       }
     }
   }
-  console.log('\n✔ RLS applied')
+  console.log(`\n  ${newCount} newly installed, ${existingCount} already existed`)
+  if (realFailures.length > 0) {
+    console.error(`\n  ${realFailures.length} real failures:`)
+    for (const f of realFailures) {
+      console.error(`    ✗ ${f.table}: ${f.msg}`)
+    }
+  }
+  console.log('✔ RLS applied')
 
   await migrationClient.end()
 }

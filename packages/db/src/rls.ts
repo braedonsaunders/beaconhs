@@ -179,4 +179,38 @@ export const TENANT_SCOPED_TABLES = [
   // Safe Distance tool — engineering calc + record-keeping for safe-distance
   // assessments (electrical / drone / overhead-crane proximity).
   'safe_distance_records',
+  // Incidents — supporting sub-tables
+  'incident_attachments',
+  'incident_classifications',
+  'incident_injury_types',
+  'incident_hours_periods',
+  'incident_people',
+  // Job-title task tracking
+  'job_title_tasks',
+  'job_title_task_acknowledgments',
+  // Lift Plans — main + sub-tables
+  'lift_plans',
+  'lift_plan_loads',
+  'lift_plan_equipment',
+  'lift_plan_hazards',
+  'lift_plan_ppe',
+  'lift_plan_signatures',
+  'lift_plan_photos',
+  // People — divisions / groups / titles assignments
+  'person_divisions',
+  'person_division_memberships',
+  'person_groups',
+  'person_group_memberships',
+  'person_titles',
+  'person_title_assignments',
+  // Corrective Actions — photos + multi-step complete wizard
+  'ca_photos',
+  'ca_complete_steps',
+  // Plugin event bus — tenant-scoped fan-out queue
+  'plugin_events',
+  // Email delivery log. tenantId is NULLABLE for platform sends (magic-link,
+  // billing etc.); the default tenant_isolation policy correctly hides NULL
+  // rows from regular tenant context. The /admin/email-log viewer uses
+  // withSuperAdmin to see those.
+  'email_log',
 ] as const
