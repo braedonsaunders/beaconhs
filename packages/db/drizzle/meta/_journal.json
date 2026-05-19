@@ -78,6 +78,13 @@
       "when": 1779200103951,
       "tag": "0010_clumsy_whizzer",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1779300000000,
+      "tag": "0011_hazid_signed_report_worker",
+      "breakpoints": true
     }
   ]
 }

@@ -12,7 +12,7 @@
 
 import type { Job } from 'bullmq'
 import { and, asc, desc, eq } from 'drizzle-orm'
-import { db, withTenant } from '@beaconhs/db'
+import { db, withTenant, type Database } from '@beaconhs/db'
 import {
   atmosphericSensors,
   attachments,
@@ -41,6 +41,7 @@ import {
   hazidAssessmentTypes,
   hazidAssessments,
   hazidHazards,
+  hazidSignedReports,
   hazidTasks,
   incidentAttachments,
   incidentInjuries,
@@ -77,13 +78,15 @@ import {
   renderEquipmentWorkOrderPdf,
   renderFormPdf,
   renderHazidPdf,
+  renderHazidSignedReportPdf,
   renderIncidentPdf,
   renderLiftPlanPdf,
   renderPpeIssuePdf,
   renderToolboxPdf,
+  type HazidRenderInput,
 } from '@beaconhs/forms-pdf'
-import type { PdfJobData } from '@beaconhs/jobs'
-import { newAttachmentKey, publicUrl, putObject } from '@beaconhs/storage'
+import { enqueueEmail, type PdfJobData } from '@beaconhs/jobs'
+import { newAttachmentKey, presignGet, publicUrl, putObject } from '@beaconhs/storage'
 import { audit } from '@beaconhs/audit'
 
 export async function processPdf(job: Job<PdfJobData>): Promise<void> {
@@ -112,6 +115,8 @@ export async function processPdf(job: Job<PdfJobData>): Promise<void> {
         return await renderEquipmentWorkOrder(data.tenantId, data.workOrderId)
       case 'ppe_issue':
         return await renderPpeIssue(data.tenantId, data.issueReportId)
+      case 'hazid_signed_report':
+        return await renderHazidSignedReport(data.tenantId, data.reportId)
     }
   } catch (err) {
     console.error(`[pdf] job ${job.id} failed:`, err)
@@ -585,101 +590,153 @@ function memberDisplayName(args: {
 
 // --- hazid -----------------------------------------------------------------
 
-async function renderHazid(tenantId: string, assessmentId: string): Promise<void> {
-  const data = await withTenant(db, tenantId, async (tx) => {
-    const [row] = await tx
-      .select({
-        a: hazidAssessments,
-        type: hazidAssessmentTypes,
-        site: orgUnits,
-        supervisor: people,
-        tenant: tenants,
-      })
-      .from(hazidAssessments)
-      .leftJoin(hazidAssessmentTypes, eq(hazidAssessmentTypes.id, hazidAssessments.assessmentTypeId))
-      .leftJoin(orgUnits, eq(orgUnits.id, hazidAssessments.siteOrgUnitId))
-      .leftJoin(people, eq(people.id, hazidAssessments.supervisorPersonId))
-      .innerJoin(tenants, eq(tenants.id, hazidAssessments.tenantId))
-      .where(eq(hazidAssessments.id, assessmentId))
+// Shape returned from the per-assessment loader. Holds the tenant + the joined
+// project/site/supervisor metadata as well as every child sub-table needed to
+// render the HazID template. The signed-report bundler re-uses this loader so
+// the per-assessment output inside a bundle matches the standalone PDF exactly.
+type HazidLoadedAssessment = {
+  a: typeof hazidAssessments.$inferSelect
+  type: typeof hazidAssessmentTypes.$inferSelect | null
+  site: typeof orgUnits.$inferSelect | null
+  supervisor: typeof people.$inferSelect | null
+  tenant: typeof tenants.$inferSelect
+  projectName: string | null
+  tasks: {
+    row: typeof hazidAssessmentTasks.$inferSelect
+    task: typeof hazidTasks.$inferSelect | null
+  }[]
+  hazards: {
+    row: typeof hazidAssessmentHazards.$inferSelect
+    library: typeof hazidHazards.$inferSelect | null
+  }[]
+  ppe: (typeof hazidAssessmentPPE.$inferSelect)[]
+  questions: (typeof hazidAssessmentQuestions.$inferSelect)[]
+  signatures: {
+    row: typeof hazidAssessmentSignatures.$inferSelect
+    person: typeof people.$inferSelect | null
+  }[]
+  photos: {
+    link: typeof hazidAssessmentPhotos.$inferSelect
+    att: typeof attachments.$inferSelect
+  }[]
+  atmospheric: {
+    row: typeof hazidAssessmentCSAtmospheric.$inferSelect
+    sensor: typeof atmosphericSensors.$inferSelect | null
+  }[]
+  entries: {
+    row: typeof hazidAssessmentCSEntries.$inferSelect
+    person: typeof people.$inferSelect | null
+  }[]
+}
+
+// Loads everything needed to render a single HazID assessment as a PDF, using
+// the supplied transaction (already RLS-scoped via withTenant). Returns null
+// when the assessment row is missing.
+async function loadHazidAssessment(
+  tx: Database,
+  assessmentId: string,
+): Promise<HazidLoadedAssessment | null> {
+  const [row] = await tx
+    .select({
+      a: hazidAssessments,
+      type: hazidAssessmentTypes,
+      site: orgUnits,
+      supervisor: people,
+      tenant: tenants,
+    })
+    .from(hazidAssessments)
+    .leftJoin(hazidAssessmentTypes, eq(hazidAssessmentTypes.id, hazidAssessments.assessmentTypeId))
+    .leftJoin(orgUnits, eq(orgUnits.id, hazidAssessments.siteOrgUnitId))
+    .leftJoin(people, eq(people.id, hazidAssessments.supervisorPersonId))
+    .innerJoin(tenants, eq(tenants.id, hazidAssessments.tenantId))
+    .where(eq(hazidAssessments.id, assessmentId))
+    .limit(1)
+  if (!row) return null
+
+  let projectName: string | null = null
+  if (row.a.projectOrgUnitId) {
+    const [proj] = await tx
+      .select({ name: orgUnits.name })
+      .from(orgUnits)
+      .where(eq(orgUnits.id, row.a.projectOrgUnitId))
       .limit(1)
-    if (!row) return null
-
-    let projectName: string | null = null
-    if (row.a.projectOrgUnitId) {
-      const [proj] = await tx
-        .select({ name: orgUnits.name })
-        .from(orgUnits)
-        .where(eq(orgUnits.id, row.a.projectOrgUnitId))
-        .limit(1)
-      projectName = proj?.name ?? null
-    }
-
-    const tasks = await tx
-      .select({ row: hazidAssessmentTasks, task: hazidTasks })
-      .from(hazidAssessmentTasks)
-      .leftJoin(hazidTasks, eq(hazidTasks.id, hazidAssessmentTasks.taskId))
-      .where(eq(hazidAssessmentTasks.assessmentId, assessmentId))
-      .orderBy(asc(hazidAssessmentTasks.entityOrder))
-
-    const hazards = await tx
-      .select({ row: hazidAssessmentHazards, library: hazidHazards })
-      .from(hazidAssessmentHazards)
-      .leftJoin(hazidHazards, eq(hazidHazards.id, hazidAssessmentHazards.hazardId))
-      .where(eq(hazidAssessmentHazards.assessmentId, assessmentId))
-      .orderBy(asc(hazidAssessmentHazards.entityOrder))
-
-    const ppe = await tx
-      .select()
-      .from(hazidAssessmentPPE)
-      .where(eq(hazidAssessmentPPE.assessmentId, assessmentId))
-      .orderBy(asc(hazidAssessmentPPE.entityOrder))
-
-    const questions = await tx
-      .select()
-      .from(hazidAssessmentQuestions)
-      .where(eq(hazidAssessmentQuestions.assessmentId, assessmentId))
-      .orderBy(asc(hazidAssessmentQuestions.entityOrder))
-
-    const signatures = await tx
-      .select({ row: hazidAssessmentSignatures, person: people })
-      .from(hazidAssessmentSignatures)
-      .leftJoin(people, eq(people.id, hazidAssessmentSignatures.personId))
-      .where(eq(hazidAssessmentSignatures.assessmentId, assessmentId))
-
-    const photos = await tx
-      .select({ link: hazidAssessmentPhotos, att: attachments })
-      .from(hazidAssessmentPhotos)
-      .innerJoin(attachments, eq(attachments.id, hazidAssessmentPhotos.attachmentId))
-      .where(eq(hazidAssessmentPhotos.assessmentId, assessmentId))
-
-    const atmospheric = await tx
-      .select({ row: hazidAssessmentCSAtmospheric, sensor: atmosphericSensors })
-      .from(hazidAssessmentCSAtmospheric)
-      .leftJoin(
-        atmosphericSensors,
-        eq(atmosphericSensors.id, hazidAssessmentCSAtmospheric.atmosphericSensorId),
-      )
-      .where(eq(hazidAssessmentCSAtmospheric.assessmentId, assessmentId))
-      .orderBy(asc(hazidAssessmentCSAtmospheric.time))
-
-    const entries = await tx
-      .select({ row: hazidAssessmentCSEntries, person: people })
-      .from(hazidAssessmentCSEntries)
-      .leftJoin(people, eq(people.id, hazidAssessmentCSEntries.personId))
-      .where(eq(hazidAssessmentCSEntries.assessmentId, assessmentId))
-
-    return { ...row, projectName, tasks, hazards, ppe, questions, signatures, photos, atmospheric, entries }
-  })
-
-  if (!data) {
-    console.warn(`[pdf] hazid assessment ${assessmentId} not found`)
-    return
+    projectName = proj?.name ?? null
   }
 
+  const tasks = await tx
+    .select({ row: hazidAssessmentTasks, task: hazidTasks })
+    .from(hazidAssessmentTasks)
+    .leftJoin(hazidTasks, eq(hazidTasks.id, hazidAssessmentTasks.taskId))
+    .where(eq(hazidAssessmentTasks.assessmentId, assessmentId))
+    .orderBy(asc(hazidAssessmentTasks.entityOrder))
+
+  const hazards = await tx
+    .select({ row: hazidAssessmentHazards, library: hazidHazards })
+    .from(hazidAssessmentHazards)
+    .leftJoin(hazidHazards, eq(hazidHazards.id, hazidAssessmentHazards.hazardId))
+    .where(eq(hazidAssessmentHazards.assessmentId, assessmentId))
+    .orderBy(asc(hazidAssessmentHazards.entityOrder))
+
+  const ppe = await tx
+    .select()
+    .from(hazidAssessmentPPE)
+    .where(eq(hazidAssessmentPPE.assessmentId, assessmentId))
+    .orderBy(asc(hazidAssessmentPPE.entityOrder))
+
+  const questions = await tx
+    .select()
+    .from(hazidAssessmentQuestions)
+    .where(eq(hazidAssessmentQuestions.assessmentId, assessmentId))
+    .orderBy(asc(hazidAssessmentQuestions.entityOrder))
+
+  const signatures = await tx
+    .select({ row: hazidAssessmentSignatures, person: people })
+    .from(hazidAssessmentSignatures)
+    .leftJoin(people, eq(people.id, hazidAssessmentSignatures.personId))
+    .where(eq(hazidAssessmentSignatures.assessmentId, assessmentId))
+
+  const photos = await tx
+    .select({ link: hazidAssessmentPhotos, att: attachments })
+    .from(hazidAssessmentPhotos)
+    .innerJoin(attachments, eq(attachments.id, hazidAssessmentPhotos.attachmentId))
+    .where(eq(hazidAssessmentPhotos.assessmentId, assessmentId))
+
+  const atmospheric = await tx
+    .select({ row: hazidAssessmentCSAtmospheric, sensor: atmosphericSensors })
+    .from(hazidAssessmentCSAtmospheric)
+    .leftJoin(
+      atmosphericSensors,
+      eq(atmosphericSensors.id, hazidAssessmentCSAtmospheric.atmosphericSensorId),
+    )
+    .where(eq(hazidAssessmentCSAtmospheric.assessmentId, assessmentId))
+    .orderBy(asc(hazidAssessmentCSAtmospheric.time))
+
+  const entries = await tx
+    .select({ row: hazidAssessmentCSEntries, person: people })
+    .from(hazidAssessmentCSEntries)
+    .leftJoin(people, eq(people.id, hazidAssessmentCSEntries.personId))
+    .where(eq(hazidAssessmentCSEntries.assessmentId, assessmentId))
+
+  return {
+    ...row,
+    projectName,
+    tasks,
+    hazards,
+    ppe,
+    questions,
+    signatures,
+    photos,
+    atmospheric,
+    entries,
+  }
+}
+
+// Convert the joined db rows into the HazidRenderInput shape consumed by
+// renderHazidPdf / renderHazidSignedReportPdf. Pure / no IO.
+function toHazidRenderInput(data: HazidLoadedAssessment): HazidRenderInput {
   const a = data.a
   const t = data.tenant
-
-  const pdf = await renderHazidPdf({
+  return {
     tenantName: t.name,
     tenantLogoUrl: t.branding.logoUrl,
     primaryColor: t.branding.primaryColor,
@@ -770,7 +827,19 @@ async function renderHazid(tenantId: string, assessmentId: string): Promise<void
       timeOut: e.row.timeOut,
     })),
     generatedAt: new Date(),
-  })
+  }
+}
+
+async function renderHazid(tenantId: string, assessmentId: string): Promise<void> {
+  const data = await withTenant(db, tenantId, async (tx) => loadHazidAssessment(tx, assessmentId))
+
+  if (!data) {
+    console.warn(`[pdf] hazid assessment ${assessmentId} not found`)
+    return
+  }
+
+  const a = data.a
+  const pdf = await renderHazidPdf(toHazidRenderInput(data))
 
   const stamp = Date.now()
   await storePdfArtifact({
@@ -784,6 +853,318 @@ async function renderHazid(tenantId: string, assessmentId: string): Promise<void
   })
 
   console.log(`[pdf] hazid ${assessmentId} rendered (${pdf.length} bytes)`)
+}
+
+// --- hazid signed-report bundle -------------------------------------------
+//
+// Bundle N hazid assessments into a single PDF with a cover page. The flow:
+//
+//   1. Load the hazid_signed_reports row + its assessmentIds[]
+//   2. Flip status pending → rendering so the detail page shows progress
+//   3. Load each per-assessment payload via the shared loader
+//   4. Render the cover + each assessment as a single big HTML doc
+//   5. Upload, insert attachments row, link via pdfAttachmentId
+//   6. Flip status rendering → completed (or failed on error)
+//   7. If recipientEmails is non-empty, enqueue an email with a signed link
+//   8. Audit-log with entityType='hazid_signed_report', action='export'
+//
+// Errors are caught and recorded as status='failed' + errorMessage. We then
+// re-throw so BullMQ can apply its retry/backoff policy: the retry will see
+// status='failed' and is free to flip back to 'rendering' on the next attempt.
+
+async function renderHazidSignedReport(tenantId: string, reportId: string): Promise<void> {
+  // 1+2. Load the report row and flip to 'rendering' in one round trip. We
+  // do this BEFORE the heavy loaders so the UI shows progress immediately.
+  const reportRow = await withTenant(db, tenantId, async (tx) => {
+    const [row] = await tx
+      .select()
+      .from(hazidSignedReports)
+      .where(eq(hazidSignedReports.id, reportId))
+      .limit(1)
+    if (!row) return null
+    if (row.status !== 'completed') {
+      await tx
+        .update(hazidSignedReports)
+        .set({ status: 'rendering', errorMessage: null })
+        .where(eq(hazidSignedReports.id, reportId))
+    }
+    return row
+  })
+
+  if (!reportRow) {
+    console.warn(`[pdf] hazid_signed_report ${reportId} not found`)
+    return
+  }
+
+  if (reportRow.status === 'completed' && reportRow.pdfAttachmentId) {
+    // Idempotent: a successful render already exists. Nothing to do.
+    console.log(`[pdf] hazid_signed_report ${reportId} already completed, skipping`)
+    return
+  }
+
+  const assessmentIds = reportRow.assessmentIds
+  if (assessmentIds.length === 0) {
+    await markReportFailed(tenantId, reportId, 'No assessments selected')
+    throw new Error(`Signed-report ${reportId} has no assessments`)
+  }
+
+  try {
+    // 3. Load tenant + each assessment payload. We also resolve the builder's
+    // display name from tenantUsers + user for the cover page.
+    const loaded = await withTenant(db, tenantId, async (tx) => {
+      const [tenantRow] = await tx
+        .select()
+        .from(tenants)
+        .where(eq(tenants.id, tenantId))
+        .limit(1)
+      if (!tenantRow) return null
+
+      let builtByName: string | null = null
+      if (reportRow.builtByTenantUserId) {
+        const [u] = await tx
+          .select({ member: tenantUsers, u: user })
+          .from(tenantUsers)
+          .leftJoin(user, eq(user.id, tenantUsers.userId))
+          .where(eq(tenantUsers.id, reportRow.builtByTenantUserId))
+          .limit(1)
+        builtByName = u ? memberDisplayName({ member: u.member, user: u.u }) : null
+      }
+
+      // Load every requested assessment. Skip silently-missing ones (they
+      // may have been soft-deleted between build and render). We still error
+      // out hard if EVERY assessment is missing, since the bundle would be
+      // empty.
+      const assessments: HazidLoadedAssessment[] = []
+      for (const aid of assessmentIds) {
+        const a = await loadHazidAssessment(tx, aid)
+        if (a) assessments.push(a)
+      }
+      return { tenant: tenantRow, builtByName, assessments }
+    })
+
+    if (!loaded) {
+      await markReportFailed(tenantId, reportId, 'Tenant row missing')
+      throw new Error(`Tenant ${tenantId} not found while rendering signed-report`)
+    }
+
+    if (loaded.assessments.length === 0) {
+      await markReportFailed(tenantId, reportId, 'All selected assessments are missing or deleted')
+      throw new Error(`Signed-report ${reportId} resolved to zero assessments`)
+    }
+
+    const t = loaded.tenant
+
+    // 4. Render the big HTML document → one PDF.
+    const pdf = await renderHazidSignedReportPdf({
+      tenantName: t.name,
+      tenantLogoUrl: t.branding.logoUrl,
+      primaryColor: t.branding.primaryColor,
+      report: {
+        title: reportRow.title,
+        description: reportRow.description,
+        builtAt: reportRow.builtAt ?? reportRow.createdAt,
+        builtByName: loaded.builtByName,
+        assessmentCount: loaded.assessments.length,
+      },
+      assessments: loaded.assessments.map(toHazidRenderInput),
+      generatedAt: new Date(),
+    })
+
+    // 5. Upload + record attachment + link onto the report row.
+    const stamp = Date.now()
+    const safeTitle = reportRow.title.replace(/[^a-zA-Z0-9]+/g, '-').slice(0, 60) || 'bundle'
+    const filename = `hazid-signed-${safeTitle}-${stamp}.pdf`
+    const r2Key = `pdfs/hazid-signed/${reportId}-${stamp}.pdf`
+    await putObject({ key: r2Key, body: pdf, contentType: 'application/pdf' })
+
+    const completedAt = new Date()
+    await withTenant(db, tenantId, async (tx) => {
+      const [att] = await tx
+        .insert(attachments)
+        .values({
+          tenantId,
+          kind: 'document',
+          r2Key,
+          contentType: 'application/pdf',
+          sizeBytes: pdf.length,
+          filename,
+        })
+        .returning()
+      if (!att) throw new Error('Failed to insert attachment row for signed-report bundle')
+
+      // 6. Flip rendering → completed and link the PDF.
+      await tx
+        .update(hazidSignedReports)
+        .set({
+          status: 'completed',
+          pdfAttachmentId: att.id,
+          completedAt,
+          builtAt: reportRow.builtAt ?? completedAt,
+          errorMessage: null,
+        })
+        .where(eq(hazidSignedReports.id, reportId))
+
+      // 8. Audit-log the export.
+      await audit(tx, {
+        tenantId,
+        entityType: 'hazid_signed_report',
+        entityId: reportId,
+        action: 'export',
+        summary: `Rendered signed-report bundle "${reportRow.title}" (${loaded.assessments.length} assessments)`,
+        metadata: {
+          attachmentId: att.id,
+          r2Key,
+          sizeBytes: pdf.length,
+          url: publicUrl(r2Key),
+          assessmentIds: loaded.assessments.map((a) => a.a.id),
+        },
+      })
+    })
+
+    console.log(
+      `[pdf] hazid_signed_report ${reportId} rendered (${pdf.length} bytes) → ${r2Key}`,
+    )
+
+    // 7. If the builder captured recipients, send them an email with a signed
+    // link to the freshly-rendered PDF. We enqueue rather than send inline so
+    // the email_log fan-out + retry logic kicks in.
+    if (reportRow.recipientEmails.length > 0) {
+      await sendSignedReportEmail({
+        tenantId,
+        reportId,
+        title: reportRow.title,
+        description: reportRow.description,
+        recipients: reportRow.recipientEmails,
+        attachmentR2Key: r2Key,
+        tenantName: t.name,
+        assessmentCount: loaded.assessments.length,
+      })
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error(`[pdf] hazid_signed_report ${reportId} render failed:`, err)
+    await markReportFailed(tenantId, reportId, msg)
+    throw err
+  }
+}
+
+// Stamp status='failed' + the error message so the detail page can surface
+// what went wrong. Audit-log the failure too.
+async function markReportFailed(
+  tenantId: string,
+  reportId: string,
+  message: string,
+): Promise<void> {
+  try {
+    await withTenant(db, tenantId, async (tx) => {
+      await tx
+        .update(hazidSignedReports)
+        .set({
+          status: 'failed',
+          errorMessage: message.slice(0, 1000),
+          completedAt: new Date(),
+        })
+        .where(eq(hazidSignedReports.id, reportId))
+      await audit(tx, {
+        tenantId,
+        entityType: 'hazid_signed_report',
+        entityId: reportId,
+        action: 'update',
+        summary: `Signed-report render failed: ${message.slice(0, 200)}`,
+        metadata: { error: message.slice(0, 1000) },
+      })
+    })
+  } catch (writeErr) {
+    // Don't let bookkeeping errors hide the original failure.
+    console.error(
+      `[pdf] failed to mark signed-report ${reportId} as failed:`,
+      writeErr,
+    )
+  }
+}
+
+// Compose + enqueue the recipient email for a freshly-rendered signed-report
+// bundle. The body contains a signed (presigned) link valid for 7 days; we
+// keep the rest of the message intentionally minimal — the PDF is the artifact
+// of record.
+async function sendSignedReportEmail(args: {
+  tenantId: string
+  reportId: string
+  title: string
+  description: string | null
+  recipients: string[]
+  attachmentR2Key: string
+  tenantName: string
+  assessmentCount: number
+}): Promise<void> {
+  const signedUrl = await presignGet({
+    key: args.attachmentR2Key,
+    expiresInSeconds: 7 * 24 * 3600,
+  })
+  const recipients = args.recipients.filter((s) => /@/.test(s))
+  if (recipients.length === 0) return
+
+  const subject = `Signed-report bundle: ${args.title}`
+  const text = [
+    `${args.tenantName}`,
+    ``,
+    `A signed-report bundle has been prepared for your review.`,
+    ``,
+    `Title: ${args.title}`,
+    `Assessments included: ${args.assessmentCount}`,
+    args.description ? `\nDescription:\n${args.description}` : '',
+    ``,
+    `Download the PDF (link valid for 7 days):`,
+    signedUrl,
+  ]
+    .filter((s) => s !== '')
+    .join('\n')
+
+  const html = `
+    <div style="font-family:system-ui,Segoe UI,Arial,sans-serif;color:#0f172a;max-width:720px;">
+      <h2 style="margin:0 0 4px;font-size:18px;">${escapeHtml(args.title)}</h2>
+      <div style="color:#64748b;font-size:13px;margin-bottom:12px;">
+        ${escapeHtml(args.tenantName)} · Signed-report bundle ·
+        ${args.assessmentCount} assessment${args.assessmentCount === 1 ? '' : 's'}
+      </div>
+      ${
+        args.description
+          ? `<div style="border-left:3px solid #0f766e;padding:8px 12px;background:#ecfdf5;margin-bottom:12px;font-size:13px;white-space:pre-wrap;">${escapeHtml(args.description)}</div>`
+          : ''
+      }
+      <p style="font-size:13px;">A signed-report bundle has been prepared for your review.</p>
+      <p style="font-size:13px;margin-top:18px;">
+        <a href="${escapeHtml(signedUrl)}"
+           style="display:inline-block;padding:10px 16px;background:#0f766e;color:#fff;text-decoration:none;border-radius:6px;font-weight:600;">
+          Download PDF
+        </a>
+      </p>
+      <p style="font-size:11px;color:#94a3b8;margin-top:18px;">
+        This link is valid for 7 days. After it expires, ask the bundle owner to re-send.
+      </p>
+    </div>
+  `
+
+  await enqueueEmail({
+    to: recipients,
+    subject,
+    html,
+    text,
+    meta: {
+      tenantId: args.tenantId,
+      category: 'hazid_signed_report',
+    },
+  })
+}
+
+function escapeHtml(s: string | null | undefined): string {
+  if (s == null) return ''
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
 }
 
 // --- lift_plan -------------------------------------------------------------

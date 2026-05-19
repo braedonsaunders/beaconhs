@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { FileSignature } from 'lucide-react'
 import { and, asc, desc, eq, gte, isNull, lte, type SQL } from 'drizzle-orm'
 import {
@@ -203,29 +204,26 @@ export default async function SignedReportsPage({
               <TableBody>
                 {bundles.map((b) => (
                   <TableRow key={b.id}>
-                    <TableCell className="font-medium text-slate-900">{b.title}</TableCell>
+                    <TableCell className="font-medium text-slate-900">
+                      <Link href={`/hazid/reports/signed/${b.id}` as any} className="hover:underline">
+                        {b.title}
+                      </Link>
+                    </TableCell>
                     <TableCell>
                       <Badge variant="secondary">{b.assessmentIds.length}</Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge
-                        variant={
-                          b.status === 'ready'
-                            ? 'success'
-                            : b.status === 'pending'
-                              ? 'secondary'
-                              : b.status === 'generating'
-                                ? 'warning'
-                                : 'destructive'
-                        }
-                      >
-                        {b.status}
-                      </Badge>
+                      <Badge variant={statusBadgeVariant(b.status)}>{b.status}</Badge>
                     </TableCell>
                     <TableCell className="text-xs text-slate-500">
                       {new Date(b.createdAt).toLocaleString()}
                     </TableCell>
                     <TableCell className="flex items-center justify-end gap-2">
+                      <Link href={`/hazid/reports/signed/${b.id}` as any}>
+                        <Button type="button" size="sm" variant="outline">
+                          View
+                        </Button>
+                      </Link>
                       {b.status === 'pending' ? (
                         <form action={markSignedReportReady}>
                           <input type="hidden" name="id" value={b.id} />
@@ -259,4 +257,25 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       {children}
     </div>
   )
+}
+
+// Shared badge variant map for the wave-7 + legacy status strings so the
+// listing row and the detail header agree on color.
+function statusBadgeVariant(
+  status: string,
+): 'success' | 'secondary' | 'warning' | 'destructive' {
+  switch (status) {
+    case 'completed':
+    case 'ready':
+      return 'success'
+    case 'rendering':
+    case 'generating':
+      return 'warning'
+    case 'pending':
+      return 'secondary'
+    case 'failed':
+      return 'destructive'
+    default:
+      return 'secondary'
+  }
 }

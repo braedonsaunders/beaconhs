@@ -4,6 +4,7 @@ import {
   BellRing,
   BookOpen,
   CheckCircle2,
+  CircleUser,
   ClipboardCheck,
   ClipboardList,
   Construction,
@@ -29,6 +30,7 @@ import { Badge } from '@beaconhs/ui'
 import { SignOutButton } from './sign-out-button'
 import { TenantSwitcher } from './tenant-switcher'
 import { NotificationsBell } from './notifications-bell'
+import { GlobalSearch } from './global-search'
 
 type Ctx = {
   isSuperAdmin: boolean
@@ -44,6 +46,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     label: 'Overview',
     items: [
       { href: '/dashboard', label: 'Dashboard', icon: Gauge },
+      { href: '/my', label: 'My', icon: CircleUser },
       { href: '/notifications', label: 'Inbox', icon: BellRing },
     ],
   },
@@ -153,12 +156,15 @@ export function AppShell({
           </div>
         ) : null}
 
-        <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-6">
+        <header className="flex h-14 shrink-0 items-center gap-4 border-b border-slate-200 bg-white px-6">
           <TenantSwitcher
             current={{ id: ctx.tenantId, name: ctx.tenantName }}
             available={availableTenants}
             isSuperAdmin={ctx.isSuperAdmin}
           />
+          <div className="hidden flex-1 justify-center md:flex">
+            <GlobalSearch />
+          </div>
           <div className="flex items-center gap-3 text-sm">
             <NotificationsBell unread={unreadCount} />
             <div className="hidden items-center gap-2 sm:flex">

@@ -1,0 +1,383 @@
+'use client'
+
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import {
+  AlertTriangle,
+  BookOpen,
+  ClipboardList,
+  Construction,
+  ListChecks,
+  Loader2,
+  MessageSquare,
+  Radiation,
+  Search,
+  Users,
+  Wrench,
+  X,
+} from 'lucide-react'
+import { Input } from '@beaconhs/ui'
+import { cn } from '@beaconhs/ui'
+import type { SearchGroup, SearchResponse, SearchResultItem } from '@/app/api/search/route'
+
+type EntityType = SearchGroup['type']
+
+const ENTITY_META: Record<
+  EntityType,
+  { label: string; icon: typeof Search; viewAllHref: (q: string) => string }
+> = {
+  incidents: {
+    label: 'Incidents',
+    icon: AlertTriangle,
+    viewAllHref: (q) => `/incidents?q=${encodeURIComponent(q)}`,
+  },
+  corrective_actions: {
+    label: 'Corrective Actions',
+    icon: ListChecks,
+    viewAllHref: (q) => `/corrective-actions?q=${encodeURIComponent(q)}`,
+  },
+  people: {
+    label: 'People',
+    icon: Users,
+    viewAllHref: (q) => `/people?q=${encodeURIComponent(q)}`,
+  },
+  equipment: {
+    label: 'Equipment',
+    icon: Wrench,
+    viewAllHref: (q) => `/equipment?q=${encodeURIComponent(q)}`,
+  },
+  documents: {
+    label: 'Documents',
+    icon: BookOpen,
+    viewAllHref: (q) => `/documents?q=${encodeURIComponent(q)}`,
+  },
+  hazid_assessments: {
+    label: 'JSHA / HazID',
+    icon: Radiation,
+    viewAllHref: (q) => `/hazid?q=${encodeURIComponent(q)}`,
+  },
+  toolbox_journals: {
+    label: 'Toolbox talks',
+    icon: MessageSquare,
+    viewAllHref: (q) => `/toolbox?q=${encodeURIComponent(q)}`,
+  },
+  lift_plans: {
+    label: 'Lift plans',
+    icon: Construction,
+    viewAllHref: (q) => `/lift-plans?q=${encodeURIComponent(q)}`,
+  },
+}
+
+const PER_GROUP_LIMIT = 5
+
+// A `FlatRow` is one keyboard-navigable position inside the dropdown — either
+// an item link, or a "view all" link. The list is flattened so up/down arrows
+// can cross group boundaries naturally.
+type FlatRow =
+  | { kind: 'item'; group: EntityType; item: SearchResultItem }
+  | { kind: 'viewAll'; group: EntityType; total: number }
+
+function flatten(groups: SearchGroup[]): FlatRow[] {
+  const out: FlatRow[] = []
+  for (const g of groups) {
+    for (const it of g.items) out.push({ kind: 'item', group: g.type, item: it })
+    if (g.total > g.items.length && g.items.length >= PER_GROUP_LIMIT) {
+      out.push({ kind: 'viewAll', group: g.type, total: g.total })
+    }
+  }
+  return out
+}
+
+export function GlobalSearch() {
+  const router = useRouter()
+  const [value, setValue] = useState('')
+  const [groups, setGroups] = useState<SearchGroup[]>([])
+  const [loading, setLoading] = useState(false)
+  const [open, setOpen] = useState(false)
+  const [activeIndex, setActiveIndex] = useState(0)
+
+  const inputRef = useRef<HTMLInputElement | null>(null)
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const abortRef = useRef<AbortController | null>(null)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const flat = useMemo(() => flatten(groups), [groups])
+
+  // Reset highlight whenever the result set changes so an old index doesn't
+  // point at a row that no longer exists.
+  useEffect(() => {
+    setActiveIndex(0)
+  }, [flat.length])
+
+  // Global "/" hotkey to focus the search. Skipped when the user is already
+  // typing in an input/textarea so we don't hijack regular typing.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return
+      const target = e.target as HTMLElement | null
+      const tag = target?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable) return
+      e.preventDefault()
+      inputRef.current?.focus()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  // Close the dropdown when the user clicks outside the search container.
+  useEffect(() => {
+    function onClick(e: MouseEvent) {
+      if (!containerRef.current) return
+      if (!containerRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    window.addEventListener('mousedown', onClick)
+    return () => window.removeEventListener('mousedown', onClick)
+  }, [])
+
+  // Debounced fetch. We abort any in-flight request when the user keeps
+  // typing so the UI never flashes stale results.
+  const runSearch = useCallback(async (q: string) => {
+    if (q.trim().length < 2) {
+      setGroups([])
+      setLoading(false)
+      return
+    }
+    abortRef.current?.abort()
+    const ctrl = new AbortController()
+    abortRef.current = ctrl
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`, {
+        signal: ctrl.signal,
+        cache: 'no-store',
+      })
+      if (!res.ok) {
+        setGroups([])
+        return
+      }
+      const body = (await res.json()) as SearchResponse
+      setGroups(body.groups ?? [])
+    } catch (err: unknown) {
+      if ((err as { name?: string })?.name !== 'AbortError') {
+        setGroups([])
+      }
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      void runSearch(value)
+    }, 200)
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [value, runSearch])
+
+  function navigateToRow(row: FlatRow) {
+    setOpen(false)
+    setValue('')
+    if (row.kind === 'item') router.push(row.item.href as any)
+    else router.push(ENTITY_META[row.group].viewAllHref(value) as any)
+  }
+
+  function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (!open) {
+      // Re-open on first arrow keypress after clicking outside.
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') setOpen(true)
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      if (flat.length === 0) return
+      setActiveIndex((i) => (i + 1) % flat.length)
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      if (flat.length === 0) return
+      setActiveIndex((i) => (i - 1 + flat.length) % flat.length)
+    } else if (e.key === 'Enter') {
+      if (flat.length === 0) {
+        // Nothing to navigate to — submit a "global incidents search" as a
+        // sensible default so the user isn't trapped if results are still
+        // loading.
+        if (value.trim().length >= 2) {
+          setOpen(false)
+          router.push(`/incidents?q=${encodeURIComponent(value)}` as any)
+        }
+        return
+      }
+      e.preventDefault()
+      const row = flat[activeIndex]
+      if (row) navigateToRow(row)
+    } else if (e.key === 'Escape') {
+      if (value) setValue('')
+      else setOpen(false)
+      inputRef.current?.blur()
+    }
+  }
+
+  const showDropdown = open && value.trim().length >= 2
+
+  let flatIndex = 0
+
+  return (
+    <div ref={containerRef} className="relative w-full max-w-md">
+      <div className="relative">
+        <Search
+          className="pointer-events-none absolute left-2.5 top-2.5 text-slate-400"
+          size={16}
+        />
+        <Input
+          ref={inputRef}
+          type="search"
+          role="combobox"
+          aria-expanded={showDropdown}
+          aria-controls="global-search-results"
+          aria-autocomplete="list"
+          aria-label="Search incidents, people, equipment, and more"
+          placeholder="Search…  (press /)"
+          value={value}
+          onChange={(e) => {
+            setValue(e.target.value)
+            if (!open) setOpen(true)
+          }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={onKeyDown}
+          className="pl-9 pr-9"
+        />
+        {loading ? (
+          <Loader2
+            className="absolute right-2.5 top-2.5 animate-spin text-slate-400"
+            size={16}
+          />
+        ) : value ? (
+          <button
+            type="button"
+            aria-label="Clear search"
+            onClick={() => {
+              setValue('')
+              inputRef.current?.focus()
+            }}
+            className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600"
+          >
+            <X size={16} />
+          </button>
+        ) : null}
+      </div>
+
+      {showDropdown ? (
+        <div
+          id="global-search-results"
+          role="listbox"
+          className="absolute z-50 mt-1 max-h-[70vh] w-[28rem] overflow-y-auto rounded-md border border-slate-200 bg-white shadow-lg"
+        >
+          {flat.length === 0 ? (
+            <div className="px-4 py-6 text-center text-sm text-slate-500">
+              {loading ? 'Searching…' : `No results for "${value}"`}
+            </div>
+          ) : (
+            <div className="py-1">
+              {groups.map((group) => {
+                const meta = ENTITY_META[group.type]
+                const Icon = meta.icon
+                return (
+                  <div key={group.type} className="py-1">
+                    <div className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                      <Icon size={11} className="text-slate-400" />
+                      <span>{meta.label}</span>
+                      <span className="ml-auto text-slate-400">{group.total}</span>
+                    </div>
+                    {group.items.map((it) => {
+                      const idx = flatIndex++
+                      const active = idx === activeIndex
+                      return (
+                        <Link
+                          key={`${group.type}-${it.id}`}
+                          href={it.href as any}
+                          onMouseEnter={() => setActiveIndex(idx)}
+                          onClick={() => {
+                            setOpen(false)
+                            setValue('')
+                          }}
+                          role="option"
+                          aria-selected={active}
+                          className={cn(
+                            'flex items-start gap-2 px-3 py-1.5 text-sm',
+                            active
+                              ? 'bg-teal-50 text-teal-900'
+                              : 'text-slate-800 hover:bg-slate-50',
+                          )}
+                        >
+                          <Icon
+                            size={14}
+                            className={cn(
+                              'mt-0.5 shrink-0',
+                              active ? 'text-teal-600' : 'text-slate-400',
+                            )}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate">{it.label}</div>
+                            {it.sublabel ? (
+                              <div
+                                className={cn(
+                                  'truncate text-xs',
+                                  active ? 'text-teal-700' : 'text-slate-500',
+                                )}
+                              >
+                                {it.sublabel}
+                              </div>
+                            ) : null}
+                          </div>
+                        </Link>
+                      )
+                    })}
+                    {group.total > group.items.length &&
+                    group.items.length >= PER_GROUP_LIMIT ? (
+                      (() => {
+                        const idx = flatIndex++
+                        const active = idx === activeIndex
+                        return (
+                          <Link
+                            href={meta.viewAllHref(value) as any}
+                            onMouseEnter={() => setActiveIndex(idx)}
+                            onClick={() => {
+                              setOpen(false)
+                              setValue('')
+                            }}
+                            role="option"
+                            aria-selected={active}
+                            className={cn(
+                              'flex items-center gap-2 px-3 py-1.5 text-xs',
+                              active
+                                ? 'bg-teal-50 text-teal-800'
+                                : 'text-teal-700 hover:bg-slate-50',
+                            )}
+                          >
+                            <span className="ml-5">
+                              View all {meta.label.toLowerCase()} matching “{value}”
+                              <span className="ml-1 text-slate-400">({group.total})</span>
+                            </span>
+                          </Link>
+                        )
+                      })()
+                    ) : null}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+          <div className="border-t border-slate-100 px-3 py-1.5 text-[10px] text-slate-400">
+            <kbd className="rounded border border-slate-200 bg-slate-50 px-1 font-mono">↑↓</kbd>
+            <span className="mx-1">navigate</span>
+            <kbd className="rounded border border-slate-200 bg-slate-50 px-1 font-mono">↵</kbd>
+            <span className="mx-1">open</span>
+            <kbd className="rounded border border-slate-200 bg-slate-50 px-1 font-mono">esc</kbd>
+            <span className="mx-1">close</span>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
+}

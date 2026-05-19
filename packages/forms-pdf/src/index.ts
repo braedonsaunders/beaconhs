@@ -42,6 +42,8 @@ export type {
   EquipmentWorkOrderRenderInput,
   PpeIssueRenderInput,
 }
+// Note: HazidSignedReportRenderInput is exported via the function declaration
+// below so that consumers can import it alongside renderHazidSignedReportPdf.
 export {
   renderIncidentHtml,
   renderCertificateHtml,
@@ -395,6 +397,182 @@ export async function renderHazidPdf(input: HazidRenderInput): Promise<Buffer> {
     footerLeft: input.tenantName,
     footerRight: `HazID ${input.assessment.reference}`,
   })
+}
+
+// --- HazID signed-report bundle PDF ---------------------------------------
+//
+// Bundles N assessments into a single PDF: a cover page followed by each
+// assessment rendered via renderHazidHtml(), separated by hard page breaks.
+// The whole document is sent to puppeteer once so signatures + photos all
+// land in a single artifact suitable for distribution.
+
+export type HazidSignedReportRenderInput = {
+  tenantName: string
+  tenantLogoUrl?: string | null
+  primaryColor?: string | null
+  report: {
+    title: string
+    description?: string | null
+    builtAt: string | Date
+    builtByName?: string | null
+    assessmentCount: number
+  }
+  // The same shape as a per-assessment HazidRenderInput, sans the redundant
+  // tenant/letterhead block. We re-use renderHazidHtml() so output matches
+  // the standalone /hazid/[id]/pdf rendering exactly.
+  assessments: HazidRenderInput[]
+  generatedAt?: string | Date
+}
+
+export async function renderHazidSignedReportPdf(
+  input: HazidSignedReportRenderInput,
+): Promise<Buffer> {
+  const cover = renderHazidSignedReportCover(input)
+  const body = input.assessments
+    .map((a, i) => {
+      // Every assessment past the first starts on a fresh page. We rely on
+      // the explicit page-break-after wrapper to keep puppeteer from running
+      // pages together when an assessment is short.
+      const sep =
+        i === 0
+          ? ''
+          : '<div style="page-break-after: always; height: 0; overflow: hidden;"></div>'
+      return `${sep}<div class="bundled-assessment">${renderHazidHtml(a)}</div>`
+    })
+    .join('\n')
+
+  // The bundled PDF is one big self-contained HTML document. We don't reuse
+  // printLetterheadPdf() because the cover page owns its own letterhead and
+  // the per-assessment renderer already emits a letterhead inside its body.
+  const html = wrapDocument(
+    `${cover}<div style="page-break-after: always; height: 0; overflow: hidden;"></div>${body}`,
+    input.report.title || 'Signed Report Bundle',
+  )
+
+  const b = await browser()
+  const page = await b.newPage()
+  try {
+    await page.setContent(html, { waitUntil: 'networkidle0', timeout: 60_000 })
+    const pdf = await page.pdf({
+      format: 'Letter',
+      printBackground: true,
+      margin: { top: '15mm', bottom: '15mm', left: '12mm', right: '12mm' },
+      displayHeaderFooter: true,
+      headerTemplate: `<div></div>`,
+      footerTemplate: `<div style="font-size:8px;width:100%;padding:0 12mm;display:flex;justify-content:space-between;color:#666;">
+        <span>${escapeHtml(input.tenantName)} · ${escapeHtml(input.report.title)}</span>
+        <span><span class="pageNumber"></span> / <span class="totalPages"></span></span>
+      </div>`,
+    })
+    return Buffer.from(pdf)
+  } finally {
+    await page.close()
+  }
+}
+
+function renderHazidSignedReportCover(input: HazidSignedReportRenderInput): string {
+  const primary = input.primaryColor ?? '#1f3a5f'
+  const builtAt = formatBundleDateTime(input.report.builtAt)
+  const generated = formatBundleDateTime(input.generatedAt ?? new Date())
+
+  const items =
+    input.assessments.length === 0
+      ? '<li class="muted">No assessments selected.</li>'
+      : input.assessments
+          .map((a, i) => {
+            const refDate = formatBundleDateTime(a.assessment.occurredAt)
+            return `<li>
+              <div class="row-num">${i + 1}.</div>
+              <div class="row-body">
+                <div class="row-ref">${escapeHtml(a.assessment.reference)}</div>
+                <div class="row-meta">
+                  ${a.assessment.typeName ? escapeHtml(a.assessment.typeName) + ' · ' : ''}
+                  ${a.assessment.siteName ? escapeHtml(a.assessment.siteName) + ' · ' : ''}
+                  ${escapeHtml(refDate)}
+                </div>
+                ${
+                  a.assessment.supervisorName
+                    ? `<div class="row-sub">Supervisor: ${escapeHtml(a.assessment.supervisorName)}</div>`
+                    : ''
+                }
+              </div>
+            </li>`
+          })
+          .join('')
+
+  return `<section class="bundle-cover">
+    <style>
+      .bundle-cover { font-family: Georgia, "Times New Roman", serif; color: #1a1a1a; font-size: 11pt; line-height: 1.5; padding: 0 0 16px; }
+      .bundle-cover .header { border-top: 8px solid ${primary}; padding: 16px 0 12px; display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #ccc; margin-bottom: 18px; }
+      .bundle-cover .header .left { display: flex; align-items: center; gap: 16px; }
+      .bundle-cover .header img.logo { max-height: 56px; max-width: 220px; }
+      .bundle-cover .header .tenant-name { font-size: 16pt; font-weight: 700; letter-spacing: 0.5px; color: ${primary}; }
+      .bundle-cover .header .right { text-align: right; font-size: 9pt; color: #444; }
+      .bundle-cover h1 { font-size: 20pt; margin: 18px 0 4px; color: #222; text-transform: uppercase; letter-spacing: 1.5px; text-align: center; }
+      .bundle-cover .subtitle { text-align: center; color: #555; font-style: italic; margin-bottom: 18px; }
+      .bundle-cover .meta-block { width: 100%; border-collapse: collapse; margin: 12px auto 18px; max-width: 540px; }
+      .bundle-cover .meta-block td { padding: 5px 8px; font-size: 10pt; vertical-align: top; }
+      .bundle-cover .meta-block td.lbl { color: #555; font-weight: 600; width: 40%; }
+      .bundle-cover .description { background: #f8f8f8; border-left: 4px solid ${primary}; padding: 10px 14px; margin: 18px 0; font-size: 10.5pt; }
+      .bundle-cover h2.included { font-size: 12pt; color: ${primary}; border-bottom: 1px solid ${primary}; padding-bottom: 4px; margin: 22px 0 12px; text-transform: uppercase; letter-spacing: 1px; }
+      .bundle-cover ol.assessment-list { list-style: none; padding: 0; margin: 0; }
+      .bundle-cover ol.assessment-list > li { display: flex; gap: 10px; padding: 8px 4px; border-bottom: 1px dotted #ddd; page-break-inside: avoid; }
+      .bundle-cover .row-num { width: 28px; font-weight: 700; color: ${primary}; }
+      .bundle-cover .row-body { flex: 1; }
+      .bundle-cover .row-ref { font-weight: 700; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10pt; }
+      .bundle-cover .row-meta { font-size: 9.5pt; color: #555; margin-top: 2px; }
+      .bundle-cover .row-sub { font-size: 9pt; color: #666; margin-top: 1px; font-style: italic; }
+      .bundle-cover .muted { color: #888; font-style: italic; }
+      .bundle-cover .footer-note { margin-top: 28px; padding-top: 12px; border-top: 1px solid #ddd; font-size: 9pt; color: #777; text-align: center; font-style: italic; }
+    </style>
+    <div class="header">
+      <div class="left">
+        ${input.tenantLogoUrl ? `<img class="logo" src="${escapeHtml(input.tenantLogoUrl)}" alt=""/>` : ''}
+        <div class="tenant-name">${escapeHtml(input.tenantName)}</div>
+      </div>
+      <div class="right">
+        Generated ${escapeHtml(generated)}
+      </div>
+    </div>
+    <h1>${escapeHtml(input.report.title)}</h1>
+    <div class="subtitle">Signed-Report Bundle · ${input.report.assessmentCount} assessment${input.report.assessmentCount === 1 ? '' : 's'}</div>
+    <table class="meta-block">
+      <tr>
+        <td class="lbl">Bundle title</td>
+        <td>${escapeHtml(input.report.title)}</td>
+      </tr>
+      <tr>
+        <td class="lbl">Built by</td>
+        <td>${escapeHtml(input.report.builtByName ?? '—')}</td>
+      </tr>
+      <tr>
+        <td class="lbl">Built at</td>
+        <td>${escapeHtml(builtAt)}</td>
+      </tr>
+      <tr>
+        <td class="lbl">Assessments included</td>
+        <td>${input.report.assessmentCount}</td>
+      </tr>
+    </table>
+    ${
+      input.report.description
+        ? `<div class="description">${escapeHtml(input.report.description)}</div>`
+        : ''
+    }
+    <h2 class="included">Included Assessments</h2>
+    <ol class="assessment-list">
+      ${items}
+    </ol>
+    <div class="footer-note">
+      Each assessment that follows is reproduced in full, including all sub-forms (WAH / Confined Space / Arc Flash), signatures, and photos.
+    </div>
+  </section>`
+}
+
+function formatBundleDateTime(d: string | Date): string {
+  const date = typeof d === 'string' ? new Date(d) : d
+  if (Number.isNaN(date.getTime())) return String(d)
+  return date.toISOString().slice(0, 19).replace('T', ' ')
 }
 
 // --- Lift Plan PDF --------------------------------------------------------

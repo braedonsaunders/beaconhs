@@ -5,9 +5,13 @@
 // audit-log call is consistent.
 
 import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 import { asc, count, eq, max, sql } from 'drizzle-orm'
+import { enqueueEmail, enqueuePdf } from '@beaconhs/jobs'
+import { presignGet } from '@beaconhs/storage'
 import type { RequestContext } from '@beaconhs/tenant'
 import {
+  attachments,
   hazidAssessmentCSAtmospheric,
   hazidAssessmentCSEntries,
   hazidAssessmentHazards,
@@ -1160,6 +1164,21 @@ export async function deletePhoto(formData: FormData) {
 // ------------------------------------------------------------------
 // Signed report bundle builder
 // ------------------------------------------------------------------
+//
+// The builder UI submits this action with:
+//   * title (required)
+//   * description
+//   * assessmentIds[] (comma separated, required, >= 1)
+//   * recipientEmails (any whitespace/comma separated list)
+//   * builtAt timestamp (now)
+//
+// We insert a pending hazid_signed_reports row, audit-log the build, then
+// enqueue the wave-7 'hazid_signed_report' PDF job. The worker concatenates
+// per-assessment HTML + a cover page into a single bundled PDF, links it to
+// the row, and (if recipientEmails is non-empty) emails a signed link.
+//
+// On success we redirect to the bundle's detail page so the user can watch
+// the render flip pending → rendering → completed.
 export async function buildSignedReport(formData: FormData) {
   const ctx = await ctxWithTenant()
   const title = String(formData.get('title') ?? '').trim()
@@ -1186,19 +1205,40 @@ export async function buildSignedReport(formData: FormData) {
         recipientEmails,
         status: 'pending',
         builtByTenantUserId: ctx.membership?.id ?? null,
+        builtAt: new Date(),
       })
       .returning(),
   )
+  if (!row) throw new Error('Failed to insert signed-report row')
+
   await recordAudit(ctx, {
     entityType: 'hazid_signed_report',
-    entityId: row?.id,
+    entityId: row.id,
     action: 'create',
     summary: `Built signed-report bundle "${title}" (${assessmentIds.length} assessments)`,
-    after: { title, count: assessmentIds.length },
+    after: {
+      title,
+      count: assessmentIds.length,
+      recipientCount: recipientEmails.length,
+    },
   })
+
+  // Enqueue the bundler. The worker handles status transitions + email send.
+  await enqueuePdf({
+    kind: 'hazid_signed_report',
+    tenantId: ctx.tenantId,
+    reportId: row.id,
+  })
+
   revalidatePath('/hazid/reports/signed')
+  revalidatePath(`/hazid/reports/signed/${row.id}`)
+  // Send the user to the detail page so they can watch progress.
+  redirect(`/hazid/reports/signed/${row.id}` as any)
 }
 
+// Legacy fallback — kept for parity with the old listing page that surfaces
+// "Mark ready" for pre-worker rows. New writes flow through the worker, but
+// admins occasionally need to flip a stale 'pending' row by hand.
 export async function markSignedReportReady(formData: FormData) {
   const ctx = await ctxWithTenant()
   const id = String(formData.get('id') ?? '')
@@ -1212,9 +1252,141 @@ export async function markSignedReportReady(formData: FormData) {
     entityType: 'hazid_signed_report',
     entityId: id,
     action: 'update',
-    summary: 'Marked bundle as ready',
+    summary: 'Marked bundle as ready (manual override)',
   })
   revalidatePath('/hazid/reports/signed')
+}
+
+// Re-enqueue the bundler for an existing report. Used by the detail page when
+// a build failed and the user wants to retry, OR when admins want to refresh
+// a completed bundle (e.g. an assessment was updated after the bundle was
+// built). Flips the row back to 'pending' so the worker picks it up.
+export async function retrySignedReport(formData: FormData) {
+  const ctx = await ctxWithTenant()
+  const id = String(formData.get('id') ?? '')
+  if (!id) throw new Error('Missing id')
+
+  await ctx.db((tx) =>
+    tx
+      .update(hazidSignedReports)
+      .set({ status: 'pending', errorMessage: null })
+      .where(eq(hazidSignedReports.id, id)),
+  )
+  await enqueuePdf({
+    kind: 'hazid_signed_report',
+    tenantId: ctx.tenantId,
+    reportId: id,
+  })
+  await recordAudit(ctx, {
+    entityType: 'hazid_signed_report',
+    entityId: id,
+    action: 'update',
+    summary: 'Re-enqueued signed-report render',
+  })
+  revalidatePath(`/hazid/reports/signed/${id}`)
+  revalidatePath('/hazid/reports/signed')
+}
+
+// Re-send the bundle email to the same recipients (or an override list). Used
+// by the detail page's "Re-send email" button after a bundle has completed.
+// Composes the same html/text body the worker uses and enqueues via the email
+// queue so the email_log fan-out still applies.
+export async function resendSignedReportEmail(formData: FormData) {
+  const ctx = await ctxWithTenant()
+  const id = String(formData.get('id') ?? '')
+  if (!id) throw new Error('Missing id')
+
+  const overrideRaw = String(formData.get('recipients') ?? '').trim()
+  const overrideRecipients = overrideRaw
+    ? overrideRaw
+        .split(/[,\s]+/)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0 && s.includes('@'))
+    : []
+
+  const result = await ctx.db(async (tx) => {
+    const [row] = await tx
+      .select({ report: hazidSignedReports, attachment: attachments })
+      .from(hazidSignedReports)
+      .leftJoin(attachments, eq(attachments.id, hazidSignedReports.pdfAttachmentId))
+      .where(eq(hazidSignedReports.id, id))
+      .limit(1)
+    return row ?? null
+  })
+  if (!result || !result.report) throw new Error('Signed-report not found')
+  if (result.report.status !== 'completed' || !result.attachment) {
+    throw new Error('Bundle is not completed — cannot re-send email')
+  }
+
+  const recipients =
+    overrideRecipients.length > 0 ? overrideRecipients : result.report.recipientEmails
+  if (recipients.length === 0) throw new Error('No recipients on file')
+
+  const signedUrl = await presignGet({
+    key: result.attachment.r2Key,
+    expiresInSeconds: 7 * 24 * 3600,
+  })
+  const assessmentCount = result.report.assessmentIds.length
+
+  const subject = `Signed-report bundle: ${result.report.title}`
+  const text = [
+    `A signed-report bundle has been re-sent for your review.`,
+    ``,
+    `Title: ${result.report.title}`,
+    `Assessments included: ${assessmentCount}`,
+    result.report.description ? `\nDescription:\n${result.report.description}` : '',
+    ``,
+    `Download the PDF (link valid for 7 days):`,
+    signedUrl,
+  ]
+    .filter((s) => s !== '')
+    .join('\n')
+
+  const html = `
+    <div style="font-family:system-ui,Segoe UI,Arial,sans-serif;color:#0f172a;max-width:720px;">
+      <h2 style="margin:0 0 4px;font-size:18px;">${escapeHtml(result.report.title)}</h2>
+      <div style="color:#64748b;font-size:13px;margin-bottom:12px;">
+        Signed-report bundle ·
+        ${assessmentCount} assessment${assessmentCount === 1 ? '' : 's'}
+      </div>
+      ${
+        result.report.description
+          ? `<div style="border-left:3px solid #0f766e;padding:8px 12px;background:#ecfdf5;margin-bottom:12px;font-size:13px;white-space:pre-wrap;">${escapeHtml(result.report.description)}</div>`
+          : ''
+      }
+      <p style="font-size:13px;">A signed-report bundle has been re-sent for your review.</p>
+      <p style="font-size:13px;margin-top:18px;">
+        <a href="${escapeHtml(signedUrl)}"
+           style="display:inline-block;padding:10px 16px;background:#0f766e;color:#fff;text-decoration:none;border-radius:6px;font-weight:600;">
+          Download PDF
+        </a>
+      </p>
+      <p style="font-size:11px;color:#94a3b8;margin-top:18px;">
+        This link is valid for 7 days. After it expires, ask the bundle owner to re-send.
+      </p>
+    </div>
+  `
+
+  await enqueueEmail({
+    to: recipients,
+    subject,
+    html,
+    text,
+    meta: {
+      tenantId: ctx.tenantId,
+      category: 'hazid_signed_report',
+      userId: ctx.userId,
+    },
+  })
+
+  await recordAudit(ctx, {
+    entityType: 'hazid_signed_report',
+    entityId: id,
+    action: 'export',
+    summary: `Re-sent signed-report bundle email to ${recipients.length} recipient${recipients.length === 1 ? '' : 's'}`,
+    after: { recipients, recipientCount: recipients.length },
+  })
+  revalidatePath(`/hazid/reports/signed/${id}`)
 }
 
 export async function deleteSignedReport(formData: FormData) {
@@ -1228,6 +1400,18 @@ export async function deleteSignedReport(formData: FormData) {
     summary: 'Deleted bundle',
   })
   revalidatePath('/hazid/reports/signed')
+}
+
+// Tiny html-escape helper used by the re-send email action. Mirrors the
+// escapeHtml used by the worker.
+function escapeHtml(s: string | null | undefined): string {
+  if (s == null) return ''
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
 }
 
 // ------------------------------------------------------------------

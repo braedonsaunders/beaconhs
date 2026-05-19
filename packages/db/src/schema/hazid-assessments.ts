@@ -374,11 +374,24 @@ export const hazidAssessmentCSEntries = pgTable(
 
 // ----------------------------------------------------------------------------
 // Signed report bundles — list of completed assessments combined into one PDF.
+//
+// Status lifecycle:
+//   pending    — row inserted by the builder, queue job not yet picked up
+//   rendering  — worker picked it up, puppeteer running
+//   completed  — PDF rendered + attached
+//   failed     — render threw (see audit log)
+//
+// `generating` + `ready` are legacy aliases kept in the enum for backward
+// compatibility with rows written by the original builder before the worker
+// existed; new writes always use the pending/rendering/completed/failed
+// vocabulary.
 // ----------------------------------------------------------------------------
 export const hazidSignedReportStatus = pgEnum('hazid_signed_report_status', [
   'pending',
   'generating',
   'ready',
+  'rendering',
+  'completed',
   'failed',
 ])
 
@@ -401,6 +414,10 @@ export const hazidSignedReports = pgTable(
     }),
     builtByTenantUserId: uuid('built_by_tenant_user_id').references(() => tenantUsers.id),
     builtAt: timestamp('built_at', { withTimezone: true }),
+    // When the worker finished rendering (completed) or aborted (failed).
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    // Reason for failure when status='failed'. Empty otherwise.
+    errorMessage: text('error_message'),
     ...timestamps,
   },
   (t) => ({

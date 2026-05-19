@@ -13,6 +13,11 @@ export type PdfJobData =
   | { kind: 'document_book'; tenantId: string; bookId: string }
   | { kind: 'equipment_workorder'; tenantId: string; workOrderId: string }
   | { kind: 'ppe_issue'; tenantId: string; issueReportId: string }
+  // Wave-7: bundle N hazid assessments into a single signed-report PDF.
+  // The builder inserts a `hazid_signed_reports` row with status='pending';
+  // the worker flips it to 'rendering', concatenates per-assessment HTML +
+  // a cover page, prints once, then stamps pdfAttachmentId/status='completed'.
+  | { kind: 'hazid_signed_report'; tenantId: string; reportId: string }
 
 export const pdfQueue = new Queue<PdfJobData>('pdfs', {
   connection,
