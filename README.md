@@ -1,5 +1,9 @@
 # BeaconHS
 
+<p align="center">
+  <img src=".github/codeflow-card.svg" alt="CodeFlow card — codebase health, scale, fragility, hidden costs (auto-updated on every merge)" width="100%" />
+</p>
+
 > Greenfield rewrite of the legacy Laravel 5.8 BeaconHS Health & Safety platform onto a modern multi-tenant TypeScript stack.
 
 **Get started:** [`docs/QUICKSTART.md`](docs/QUICKSTART.md)
