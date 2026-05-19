@@ -17,8 +17,10 @@ import {
   Select,
 } from '@beaconhs/ui'
 import {
+  attachments,
   correctiveActions,
   departments,
+  incidentAttachments,
   incidentInjuries,
   incidentLostTimeEvents,
   incidentPeople,
@@ -26,6 +28,7 @@ import {
   orgUnits,
   people,
 } from '@beaconhs/db/schema'
+import { publicUrl } from '@beaconhs/storage'
 import { requireRequestContext } from '@/lib/auth'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { DetailGrid } from '@/components/detail-grid'
@@ -33,6 +36,8 @@ import { Section } from '@/components/section'
 import { CheckIndicator } from '@/components/checkbox-field'
 import { SeverityRating } from '@/components/severity-rating'
 import { ActivityFeed } from '@/components/activity-feed'
+import { PhotoGallery } from '@/components/photo-gallery'
+import { PhotoUploaderSection } from '@/components/photo-uploader-section'
 import { SeverityBadge, StatusBadge } from '../page'
 
 export const dynamic = 'force-dynamic'
@@ -84,6 +89,28 @@ async function toggleLock(formData: FormData) {
   revalidatePath(`/incidents/${id}`)
 }
 
+async function attachPhotos(incidentId: string, attachmentIds: string[]) {
+  'use server'
+  const ctx = await requireRequestContext()
+  if (attachmentIds.length === 0) return
+  await ctx.db((tx) =>
+    tx.insert(incidentAttachments).values(
+      attachmentIds.map((attachmentId) => ({
+        tenantId: ctx.tenantId,
+        incidentId,
+        attachmentId,
+      })),
+    ),
+  )
+  await recordAudit(ctx, {
+    entityType: 'incident',
+    entityId: incidentId,
+    action: 'update',
+    summary: `Attached ${attachmentIds.length} photo${attachmentIds.length === 1 ? '' : 's'}`,
+  })
+  revalidatePath(`/incidents/${incidentId}`)
+}
+
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   return { title: `Incident · ${id.slice(0, 8)}` }
@@ -129,12 +156,27 @@ export default async function IncidentDetailPage({ params }: { params: Promise<{
       .where(
         and(eq(correctiveActions.sourceEntityType, 'incident'), eq(correctiveActions.sourceEntityId, id)),
       )
-    return { ...row, injuries, lostTime, involved, linkedCAs }
+    const photos = await tx
+      .select({
+        link: incidentAttachments,
+        attachment: attachments,
+      })
+      .from(incidentAttachments)
+      .innerJoin(attachments, eq(attachments.id, incidentAttachments.attachmentId))
+      .where(eq(incidentAttachments.incidentId, id))
+    return { ...row, injuries, lostTime, involved, linkedCAs, photos }
   })
 
   if (!data) notFound()
-  const { incident, site, department, supervisor, injuries, lostTime, involved, linkedCAs } = data
+  const { incident, site, department, supervisor, injuries, lostTime, involved, linkedCAs, photos } =
+    data
   const activity = await recentActivityForEntity(ctx, 'incident', id, 25)
+  const galleryPhotos = photos.map((p) => ({
+    id: p.link.id,
+    url: publicUrl(p.attachment.r2Key),
+    filename: p.attachment.filename,
+    caption: p.link.caption,
+  }))
 
   return (
     <div className="space-y-5">
@@ -424,6 +466,20 @@ export default async function IncidentDetailPage({ params }: { params: Promise<{
             ))}
           </ul>
         )}
+      </Section>
+
+      <Section title={`Photos & files (${photos.length})`} defaultOpen={photos.length > 0}>
+        <div className="space-y-3">
+          <PhotoGallery photos={galleryPhotos} />
+          {!incident.locked ? (
+            <PhotoUploaderSection
+              attachAction={async (ids) => {
+                'use server'
+                await attachPhotos(id, ids)
+              }}
+            />
+          ) : null}
+        </div>
       </Section>
 
       <Section title={`Activity (${activity.length})`} defaultOpen={false}>

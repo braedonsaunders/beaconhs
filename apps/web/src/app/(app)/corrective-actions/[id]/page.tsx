@@ -27,8 +27,10 @@ import {
   user,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { DetailGrid } from '@/components/detail-grid'
 import { Section } from '@/components/section'
+import { ActivityFeed } from '@/components/activity-feed'
 
 export const dynamic = 'force-dynamic'
 
@@ -47,6 +49,13 @@ async function updateStatus(formData: FormData) {
       .set({ status, closedAt: closing ? new Date() : null, locked: status === 'closed' })
       .where(eq(correctiveActions.id, id)),
   )
+  await recordAudit(ctx, {
+    entityType: 'corrective_action',
+    entityId: id,
+    action: 'update',
+    summary: `Status moved to "${status.replace(/_/g, ' ')}"`,
+    after: { status },
+  })
   revalidatePath(`/corrective-actions/${id}`)
   revalidatePath('/corrective-actions')
 }
@@ -64,6 +73,13 @@ async function updateAction(formData: FormData) {
       .set({ actionTaken, rootCause, verificationNotes })
       .where(eq(correctiveActions.id, id)),
   )
+  await recordAudit(ctx, {
+    entityType: 'corrective_action',
+    entityId: id,
+    action: 'update',
+    summary: 'Work notes updated',
+    after: { actionTaken, rootCause, verificationNotes },
+  })
   revalidatePath(`/corrective-actions/${id}`)
 }
 
@@ -100,6 +116,7 @@ export default async function CorrectiveActionPage({ params }: { params: Promise
   })
   if (!data) notFound()
   const { ca, site, owner, ownerAccount, source } = data
+  const activity = await recentActivityForEntity(ctx, 'corrective_action', id, 25)
 
   return (
     <div className="space-y-5">
@@ -215,6 +232,10 @@ export default async function CorrectiveActionPage({ params }: { params: Promise
           </form>
         </CardContent>
       </Card>
+
+      <Section title={`Activity (${activity.length})`} defaultOpen={false}>
+        <ActivityFeed entries={activity} />
+      </Section>
     </div>
   )
 }

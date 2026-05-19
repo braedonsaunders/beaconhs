@@ -18,8 +18,16 @@ const nextConfig: NextConfig = {
     '@beaconhs/emails',
     '@beaconhs/jobs',
     '@beaconhs/plugin-sdk',
+    '@beaconhs/storage',
   ],
-  serverExternalPackages: ['postgres', 'bullmq', 'ioredis', 'puppeteer-core'],
+  serverExternalPackages: [
+    'postgres',
+    'bullmq',
+    'ioredis',
+    'puppeteer-core',
+    '@aws-sdk/client-s3',
+    '@aws-sdk/s3-request-presigner',
+  ],
 }
 
 export default nextConfig

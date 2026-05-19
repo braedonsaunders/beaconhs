@@ -36,6 +36,7 @@ import {
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
+import { PersonEditTab } from './person-edit-tab'
 
 export const dynamic = 'force-dynamic'
 
@@ -453,22 +454,7 @@ export default async function PersonDetailPage({
             </div>
           ) : null}
 
-          {active === 'edit' ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>Edit details</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-slate-500">
-                  Inline edit form lands in the next pass. Use the dedicated{' '}
-                  <Link href={`/people/${id}/edit`} className="text-teal-700 hover:underline">
-                    edit page
-                  </Link>
-                  .
-                </p>
-              </CardContent>
-            </Card>
-          ) : null}
+          {active === 'edit' ? <PersonEditTab personId={id} /> : null}
         </div>
       </div>
     </div>

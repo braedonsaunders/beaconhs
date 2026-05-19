@@ -20,6 +20,7 @@
     "@beaconhs/forms-core": "workspace:*",
     "@beaconhs/jobs": "workspace:*",
     "@beaconhs/plugin-sdk": "workspace:*",
+    "@beaconhs/storage": "workspace:*",
     "@beaconhs/tenant": "workspace:*",
     "@beaconhs/ui": "workspace:*",
     "class-variance-authority": "^0.7.0",

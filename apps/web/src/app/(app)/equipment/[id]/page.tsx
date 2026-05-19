@@ -31,6 +31,7 @@ import {
   people,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { recordAudit } from '@/lib/audit'
 import { DetailGrid } from '@/components/detail-grid'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 
@@ -52,6 +53,12 @@ async function reportMissing(formData: FormData) {
       })
       .where(eq(equipmentItems.id, id)),
   )
+  await recordAudit(ctx, {
+    entityType: 'equipment',
+    entityId: id,
+    action: 'update',
+    summary: 'Reported missing',
+  })
   revalidatePath(`/equipment/${id}`)
 }
 
@@ -65,6 +72,12 @@ async function reportFound(formData: FormData) {
       .set({ isMissing: false })
       .where(eq(equipmentItems.id, id)),
   )
+  await recordAudit(ctx, {
+    entityType: 'equipment',
+    entityId: id,
+    action: 'update',
+    summary: 'Reported found',
+  })
   revalidatePath(`/equipment/${id}`)
 }
 

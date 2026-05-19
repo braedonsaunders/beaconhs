@@ -30,6 +30,7 @@ import {
 } from '@beaconhs/ui'
 import { FIELD_TYPES, type FieldType, type FormField, type FormSchemaV1, type FormSection } from '@beaconhs/forms-core'
 import { publishNewVersion } from './actions'
+import { LogicBuilder, describeRule } from './logic-builder'
 
 type PaletteGroup = { label: string; types: FieldType[] }
 
@@ -361,12 +362,14 @@ export function FormDesigner({
               key={selectedField.field.id}
               sectionId={selectedField.section.id}
               field={selectedField.field}
+              schema={schema}
               onChange={(patch) => updateField(selectedField.section.id, selectedField.field.id, patch)}
             />
           ) : selectedSection ? (
             <SectionProperties
               key={selectedSection.id}
               section={selectedSection}
+              schema={schema}
               onChange={(patch) => updateSection(selectedSection.id, patch)}
             />
           ) : (
@@ -463,12 +466,19 @@ function IconButton({
 
 function FieldProperties({
   field,
+  schema,
   onChange,
 }: {
   sectionId: string
   field: FormField
+  schema: FormSchemaV1
   onChange: (patch: Partial<FormField>) => void
 }) {
+  const otherFields = schema.sections
+    .flatMap((s) => s.fields)
+    .filter((f) => f.id !== field.id)
+    .map((f) => ({ id: f.id, label: f.label?.en ?? f.id }))
+
   return (
     <div className="space-y-3 text-sm">
       <h3 className="text-sm font-semibold text-slate-700">Field — {FIELD_TYPES[field.type].label}</h3>
@@ -542,6 +552,15 @@ function FieldProperties({
           </div>
         </div>
       ) : null}
+
+      <div className="space-y-1 pt-2">
+        <Label className="text-xs">Visibility (showIf)</Label>
+        <LogicBuilder
+          rule={field.showIf}
+          availableFields={otherFields}
+          onChange={(rule) => onChange({ showIf: rule })}
+        />
+      </div>
     </div>
   )
 }
@@ -609,11 +628,16 @@ function ChoiceOptionsEditor({
 
 function SectionProperties({
   section,
+  schema,
   onChange,
 }: {
   section: FormSection
+  schema: FormSchemaV1
   onChange: (patch: Partial<FormSection>) => void
 }) {
+  const allFields = schema.sections
+    .flatMap((s) => s.fields)
+    .map((f) => ({ id: f.id, label: f.label?.en ?? f.id }))
   return (
     <div className="space-y-3 text-sm">
       <h3 className="text-sm font-semibold text-slate-700">Section</h3>
@@ -648,6 +672,14 @@ function SectionProperties({
         />
         Repeating section (user adds N rows)
       </label>
+      <div className="space-y-1 pt-2">
+        <Label className="text-xs">Visibility (showIf)</Label>
+        <LogicBuilder
+          rule={section.showIf}
+          availableFields={allFields}
+          onChange={(rule) => onChange({ showIf: rule })}
+        />
+      </div>
     </div>
   )
 }

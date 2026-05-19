@@ -21,6 +21,9 @@ import {
 } from '@beaconhs/ui'
 import { evalLogicRule, validateResponse, type FormField, type FormSchemaV1 } from '@beaconhs/forms-core'
 import { submitFormResponse } from './actions'
+import { SignaturePad } from '@/components/signature-pad'
+import { FileUpload, dataUrlToFile, type AttachedFile } from '@/components/file-upload'
+import { finalizeUpload, requestUpload } from '@/lib/uploads'
 
 export function FormRenderer({
   templateId,
@@ -384,23 +387,38 @@ function FieldInput({
         </Select>
       )
     case 'signature':
-      return (
-        <button
-          type="button"
-          onClick={() => onChange(`sig_${Date.now()}`)}
-          className="flex h-20 w-full items-center justify-center rounded-md border border-dashed border-slate-300 bg-slate-50 text-xs text-slate-500 hover:border-teal-500 hover:bg-teal-50"
-        >
-          {value ? `[Signature captured at ${String(value).slice(4, 17)}]` : 'Tap to sign'}
-        </button>
-      )
+      return <SignatureField value={(value as string | null) ?? null} onChange={onChange} />
     case 'photo':
+      return (
+        <FileUpload
+          variant="photo"
+          value={Array.isArray(value) ? (value as AttachedFile[]) : []}
+          onChange={(files) => onChange(files)}
+        />
+      )
     case 'file':
+      return (
+        <FileUpload
+          variant="file"
+          value={Array.isArray(value) ? (value as AttachedFile[]) : []}
+          onChange={(files) => onChange(files)}
+        />
+      )
     case 'video':
+      return (
+        <FileUpload
+          variant="video"
+          value={Array.isArray(value) ? (value as AttachedFile[]) : []}
+          onChange={(files) => onChange(files)}
+        />
+      )
     case 'audio':
       return (
-        <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 p-3 text-center text-xs text-slate-500">
-          Upload integration pending — placeholder
-        </div>
+        <FileUpload
+          variant="audio"
+          value={Array.isArray(value) ? (value as AttachedFile[]) : []}
+          onChange={(files) => onChange(files)}
+        />
       )
     case 'heading':
       return <h3 className="text-base font-semibold text-slate-800">{field.label?.en}</h3>
@@ -468,6 +486,61 @@ function RepeatingSection({
         <Plus size={14} />
         Add row
       </Button>
+    </div>
+  )
+}
+
+/**
+ * Signature field — captures drawn ink as PNG, uploads to MinIO/R2 the moment
+ * the user lifts the stylus, then stores the attachment id on the response.
+ */
+function SignatureField({
+  value,
+  onChange,
+}: {
+  value: string | null
+  onChange: (v: { attachmentId: string; url: string } | null) => void
+}) {
+  // We treat `value` as previously-stored attachment id+url payload, but the
+  // canvas works in data-URL space. Use a local state for the active draw.
+  const stored = (value as unknown as { attachmentId: string; url: string } | null) ?? null
+
+  async function persist(dataUrl: string | null) {
+    if (!dataUrl) {
+      onChange(null)
+      return
+    }
+    const file = dataUrlToFile(dataUrl, `signature-${Date.now()}.png`)
+    const req = await requestUpload({
+      kind: 'signature',
+      filename: file.name,
+      contentType: file.type,
+      sizeBytes: file.size,
+    })
+    if (!req.ok) {
+      console.warn('[signature] presign failed', req.error)
+      return
+    }
+    const put = await fetch(req.putUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': file.type },
+      body: file,
+    })
+    if (!put.ok) return
+    const fin = await finalizeUpload({
+      kind: 'signature',
+      key: req.key,
+      filename: file.name,
+      contentType: file.type,
+      sizeBytes: file.size,
+    })
+    if (!fin.ok) return
+    onChange({ attachmentId: fin.attachmentId, url: req.publicUrl })
+  }
+
+  return (
+    <div>
+      <SignaturePad value={stored?.url ?? null} onChange={persist} />
     </div>
   )
 }
