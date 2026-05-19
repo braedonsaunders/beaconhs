@@ -1,15 +1,22 @@
 import type { Job } from 'bullmq'
-import { and, eq, isNotNull, lte, sql } from 'drizzle-orm'
+import { and, eq, inArray, isNotNull, lte, sql } from 'drizzle-orm'
 import { db, withSuperAdmin } from '@beaconhs/db'
 import {
+  correctiveActions,
   csPermits,
   documents,
   lwSessions,
-  notifications,
   trainingRecords,
-  users,
 } from '@beaconhs/db/schema'
-import { enqueueNotification, type ScheduledTick } from '@beaconhs/jobs'
+import {
+  emitCorrectiveActionOverdue,
+  emitCsPermitExpiring,
+  emitDocumentReviewDue,
+  emitLoneWorkerOverdue,
+  emitTrainingExpired,
+  emitTrainingExpiring,
+} from '@beaconhs/events'
+import { type ScheduledTick } from '@beaconhs/jobs'
 
 export async function processScheduledTick(job: Job<ScheduledTick>): Promise<void> {
   switch (job.data.kind) {
@@ -21,8 +28,11 @@ export async function processScheduledTick(job: Job<ScheduledTick>): Promise<voi
       return scanLoneWorkerOverdue()
     case 'document_review_scan':
       return scanDocumentReview()
+    case 'ca_overdue_scan':
+      return scanCorrectiveActionOverdue()
     case 'form_assignment_scan':
     case 'report_schedule_scan':
+    case 'report_run':
     case 'plugin_cron':
       console.log(`[scheduled] ${job.data.kind} not yet implemented`)
       return
@@ -30,32 +40,61 @@ export async function processScheduledTick(job: Job<ScheduledTick>): Promise<voi
 }
 
 async function scanCertExpiry(): Promise<void> {
+  // Walk all the typical "reminder" buckets, plus the "already expired" bucket.
+  // Each match emits an event scoped to the record's tenant.
   await withSuperAdmin(db, async (tx) => {
     const today = new Date()
+    const todayYmd = today.toISOString().slice(0, 10)
     const buckets = [90, 30, 7, 1]
     for (const days of buckets) {
       const target = new Date(today.getTime() + days * 24 * 3600 * 1000).toISOString().slice(0, 10)
       const rows = await tx
-        .select()
+        .select({ id: trainingRecords.id, tenantId: trainingRecords.tenantId })
         .from(trainingRecords)
         .where(and(isNotNull(trainingRecords.expiresOn), eq(trainingRecords.expiresOn, target)))
       for (const r of rows) {
-        console.log(`[cert_expiry] training_record ${r.id} expires in ${days}d`)
-        // TODO: notify worker + supervisor
+        await emitTrainingExpiring(r.tenantId, r.id, days)
       }
+    }
+
+    // Newly expired today
+    const expiredRows = await tx
+      .select({ id: trainingRecords.id, tenantId: trainingRecords.tenantId })
+      .from(trainingRecords)
+      .where(and(isNotNull(trainingRecords.expiresOn), eq(trainingRecords.expiresOn, todayYmd)))
+    for (const r of expiredRows) {
+      await emitTrainingExpired(r.tenantId, r.id)
     }
   })
 }
 
 async function scanCsPermitExpiry(): Promise<void> {
+  // 1. Notify on permits expiring soon (within 24 hours) before marking expired
+  // 2. Mark active permits past expiry as 'expired'
   await withSuperAdmin(db, async (tx) => {
     const now = new Date()
-    const rows = await tx
+    const in24h = new Date(now.getTime() + 24 * 3600 * 1000)
+    const expiringSoon = await tx
+      .select({ id: csPermits.id, tenantId: csPermits.tenantId, expiresAt: csPermits.expiresAt })
+      .from(csPermits)
+      .where(
+        and(
+          eq(csPermits.status, 'active'),
+          lte(csPermits.expiresAt, in24h),
+        ),
+      )
+    for (const p of expiringSoon) {
+      if (p.expiresAt > now) {
+        await emitCsPermitExpiring(p.tenantId, p.id)
+      }
+    }
+
+    const expired = await tx
       .update(csPermits)
       .set({ status: 'expired' })
       .where(and(eq(csPermits.status, 'active'), lte(csPermits.expiresAt, now)))
-      .returning()
-    if (rows.length) console.log(`[cs_permit_expiry] expired ${rows.length} permit(s)`)
+      .returning({ id: csPermits.id })
+    if (expired.length) console.log(`[cs_permit_expiry] expired ${expired.length} permit(s)`)
   })
 }
 
@@ -63,17 +102,16 @@ async function scanLoneWorkerOverdue(): Promise<void> {
   await withSuperAdmin(db, async (tx) => {
     const now = new Date()
     const overdue = await tx
-      .select()
+      .select({
+        id: lwSessions.id,
+        tenantId: lwSessions.tenantId,
+      })
       .from(lwSessions)
       .where(and(eq(lwSessions.status, 'active'), lte(lwSessions.nextCheckinDueAt, now)))
     for (const s of overdue) {
-      console.log(`[lone_worker] session ${s.id} overdue — escalating`)
-      // Mark missed + emit a notification (notify queue is tenant-scoped)
+      // Mark missed first so we don't re-fire next minute
       await tx.update(lwSessions).set({ status: 'missed' }).where(eq(lwSessions.id, s.id))
-      if (s.supervisorTenantUserId) {
-        // The job dispatcher resolves tenant from arg; just enqueue for the supervisor's user.
-        // (Real wire: look up supervisor user, then enqueueNotification with userIds.)
-      }
+      await emitLoneWorkerOverdue(s.tenantId, s.id)
     }
   })
 }
@@ -82,9 +120,38 @@ async function scanDocumentReview(): Promise<void> {
   await withSuperAdmin(db, async (tx) => {
     const today = new Date().toISOString().slice(0, 10)
     const rows = await tx
-      .select()
+      .select({ id: documents.id, tenantId: documents.tenantId })
       .from(documents)
-      .where(and(isNotNull(documents.nextReviewOn), lte(documents.nextReviewOn, today)))
-    if (rows.length) console.log(`[doc_review] ${rows.length} documents due for review`)
+      .where(
+        and(
+          isNotNull(documents.nextReviewOn),
+          lte(documents.nextReviewOn, today),
+          inArray(documents.status, ['draft', 'published', 'under_review']),
+        ),
+      )
+    for (const d of rows) {
+      await emitDocumentReviewDue(d.tenantId, d.id)
+    }
+  })
+}
+
+async function scanCorrectiveActionOverdue(): Promise<void> {
+  // CAs whose due date has passed and that are still open/in_progress.
+  // We use the dueOn date column (text 'YYYY-MM-DD') compared to today.
+  await withSuperAdmin(db, async (tx) => {
+    const today = new Date().toISOString().slice(0, 10)
+    const rows = await tx
+      .select({ id: correctiveActions.id, tenantId: correctiveActions.tenantId })
+      .from(correctiveActions)
+      .where(
+        and(
+          isNotNull(correctiveActions.dueOn),
+          sql`${correctiveActions.dueOn} < ${today}`,
+          inArray(correctiveActions.status, ['open', 'in_progress']),
+        ),
+      )
+    for (const c of rows) {
+      await emitCorrectiveActionOverdue(c.tenantId, c.id)
+    }
   })
 }

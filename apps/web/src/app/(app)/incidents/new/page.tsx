@@ -15,6 +15,7 @@ import {
   Textarea,
 } from '@beaconhs/ui'
 import { incidents, orgUnits } from '@beaconhs/db/schema'
+import { emitIncidentReported } from '@beaconhs/events'
 import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
 
@@ -65,12 +66,17 @@ async function reportIncident(formData: FormData) {
         location,
         weather,
         immediateActionTaken,
+        reportedByTenantUserId: ctx.membership?.id ?? null,
       })
       .returning()
   })
 
   revalidatePath('/incidents')
-  if (row) redirect(`/incidents/${row.id}`)
+  if (row) {
+    // Fire-and-forget notification; the emit function never throws.
+    await emitIncidentReported(ctx, { incidentId: row.id })
+    redirect(`/incidents/${row.id}`)
+  }
   redirect('/incidents')
 }
 

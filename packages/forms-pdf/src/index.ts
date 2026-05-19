@@ -5,30 +5,15 @@
 // then print-to-PDF. CSS overrides per template are applied last so admins
 // can fully customise output.
 
-import puppeteer, { type Browser } from 'puppeteer-core'
 import type { FormSchemaV1 } from '@beaconhs/forms-core'
 import { renderIncidentHtml, type IncidentRenderInput } from './templates/incident'
 import { renderCertificateHtml, type CertificateRenderInput } from './templates/certificate'
 import { renderWalletHtml, type WalletRenderInput } from './templates/wallet'
+import { renderReportHtml, type ReportRenderInput, type ReportGroup } from './templates/report'
+import { getBrowser as browser, closeBrowser, escapeHtml } from './util'
 
-export type { IncidentRenderInput, CertificateRenderInput, WalletRenderInput }
-export { renderIncidentHtml, renderCertificateHtml, renderWalletHtml }
-
-let browserPromise: Promise<Browser> | null = null
-function browser(): Promise<Browser> {
-  if (!browserPromise) {
-    browserPromise = puppeteer.launch({
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH ?? '/usr/bin/chromium',
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--font-render-hinting=none',
-      ],
-    })
-  }
-  return browserPromise
-}
+export type { IncidentRenderInput, CertificateRenderInput, WalletRenderInput, ReportRenderInput, ReportGroup }
+export { renderIncidentHtml, renderCertificateHtml, renderWalletHtml, renderReportHtml, closeBrowser }
 
 export type RenderInput = {
   schema: FormSchemaV1
@@ -195,15 +180,6 @@ function renderValue(type: string, raw: unknown): string | null {
   }
 }
 
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-}
-
 // --- Incident PDF ---------------------------------------------------------
 
 export async function renderIncidentPdf(input: IncidentRenderInput): Promise<Buffer> {
@@ -303,4 +279,31 @@ function wrapDocument(body: string, title: string): string {
   return `<!doctype html>
 <html><head><meta charset="utf-8"/><title>${title.replace(/[<>]/g, '')}</title></head>
 <body>${body}</body></html>`
+}
+
+// --- Scheduled-report PDF -------------------------------------------------
+
+export async function renderReportPdf(input: ReportRenderInput): Promise<Buffer> {
+  // The report template owns its own <html>+<head> (with @page size) so we
+  // pass it through to the page directly.
+  const html = renderReportHtml(input)
+  const b = await browser()
+  const page = await b.newPage()
+  try {
+    await page.setContent(html, { waitUntil: 'networkidle0', timeout: 30_000 })
+    const pdf = await page.pdf({
+      printBackground: true,
+      preferCSSPageSize: true,
+      displayHeaderFooter: true,
+      headerTemplate: `<div></div>`,
+      footerTemplate: `<div style="font-size:8px;width:100%;padding:0 12mm;display:flex;justify-content:space-between;color:#666;">
+        <span>${escapeHtml(input.tenantName)} — ${escapeHtml(input.reportName)}</span>
+        <span><span class="pageNumber"></span> / <span class="totalPages"></span></span>
+      </div>`,
+      margin: { top: '15mm', bottom: '15mm', left: '15mm', right: '15mm' },
+    })
+    return Buffer.from(pdf)
+  } finally {
+    await page.close()
+  }
 }

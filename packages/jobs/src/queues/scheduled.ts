@@ -11,6 +11,8 @@ export type ScheduledTick =
   | { kind: 'cs_permit_expiry_scan' }
   | { kind: 'lone_worker_overdue_scan' }
   | { kind: 'report_schedule_scan' }
+  | { kind: 'report_run'; tenantId: string; scheduleId: string }
+  | { kind: 'ca_overdue_scan' }
   | { kind: 'plugin_cron'; cadence: 'hourly' | 'daily' | 'weekly' }
 
 export const scheduledQueue = new Queue<ScheduledTick>('scheduled', {
@@ -40,11 +42,16 @@ export async function registerSchedules() {
     { kind: 'report_schedule_scan' } as ScheduledTick,
     { repeat: { pattern: '*/5 * * * *' }, jobId: 'tick:reports' },
   )
-  // Hourly: confined-space permit expiry
+  // Hourly: confined-space permit expiry + corrective-action overdue
   await scheduledQueue.add(
     'tick:cs_permits',
     { kind: 'cs_permit_expiry_scan' } as ScheduledTick,
     { repeat: { pattern: '0 * * * *' }, jobId: 'tick:cs_permits' },
+  )
+  await scheduledQueue.add(
+    'tick:ca_overdue',
+    { kind: 'ca_overdue_scan' } as ScheduledTick,
+    { repeat: { pattern: '0 * * * *' }, jobId: 'tick:ca_overdue' },
   )
   // Daily 07:00 local: cert expiry reminders + document review reminders + daily plugins
   await scheduledQueue.add(

@@ -40,7 +40,8 @@ import { PhotoGallery } from '@/components/photo-gallery'
 import { PhotoUploaderSection } from '@/components/photo-uploader-section'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { DetailPageLayout } from '@/components/page-layout'
-import { SeverityBadge, StatusBadge } from '../page'
+import { emitIncidentStatusChanged } from '@beaconhs/events'
+import { SeverityBadge, StatusBadge } from '../_badges'
 
 export const dynamic = 'force-dynamic'
 
@@ -53,6 +54,14 @@ async function updateStatus(formData: FormData) {
   const status = String(formData.get('status') ?? '')
   if (!STATUSES.includes(status as (typeof STATUSES)[number])) return
   const closing = status === 'closed'
+  const fromStatus = await ctx.db(async (tx) => {
+    const [row] = await tx
+      .select({ status: incidents.status })
+      .from(incidents)
+      .where(eq(incidents.id, id))
+      .limit(1)
+    return row?.status ?? null
+  })
   await ctx.db((tx) =>
     tx
       .update(incidents)
@@ -67,10 +76,13 @@ async function updateStatus(formData: FormData) {
   await recordAudit(ctx, {
     entityType: 'incident',
     entityId: id,
-    action: closing ? 'update' : 'update',
+    action: 'update',
     summary: `Status changed to "${status.replace(/_/g, ' ')}"`,
     after: { status },
   })
+  if (fromStatus && fromStatus !== status) {
+    await emitIncidentStatusChanged(ctx, { incidentId: id, fromStatus, toStatus: status })
+  }
   revalidatePath(`/incidents/${id}`)
   revalidatePath('/incidents')
 }

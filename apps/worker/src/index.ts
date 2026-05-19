@@ -4,6 +4,7 @@ import { processEmail } from './workers/email'
 import { processPdf } from './workers/pdf'
 import { processNotification } from './workers/notify'
 import { processScheduledTick } from './workers/scheduled'
+import { processReportRun } from './workers/reports'
 
 console.log('[worker] starting beaconhs worker…')
 
@@ -12,6 +13,7 @@ const workers = [
   new Worker('pdfs', processPdf, { connection, concurrency: 3 }),
   new Worker('notifications', processNotification, { connection, concurrency: 10 }),
   new Worker('scheduled', processScheduledTick, { connection, concurrency: 5 }),
+  new Worker('reports', processReportRun, { connection, concurrency: 2 }),
 ]
 
 for (const w of workers) {

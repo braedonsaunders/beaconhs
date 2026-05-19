@@ -38,6 +38,9 @@ importers:
       '@beaconhs/emails':
         specifier: workspace:*
         version: link:../../packages/emails
+      '@beaconhs/events':
+        specifier: workspace:*
+        version: link:../../packages/events
       '@beaconhs/forms-core':
         specifier: workspace:*
         version: link:../../packages/forms-core
@@ -126,6 +129,9 @@ importers:
       '@beaconhs/emails':
         specifier: workspace:*
         version: link:../../packages/emails
+      '@beaconhs/events':
+        specifier: workspace:*
+        version: link:../../packages/events
       '@beaconhs/forms-core':
         specifier: workspace:*
         version: link:../../packages/forms-core
@@ -232,6 +238,25 @@ importers:
       resend:
         specifier: ^4.0.0
         version: 4.8.0(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
+    devDependencies:
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+
+  packages/events:
+    dependencies:
+      '@beaconhs/db':
+        specifier: workspace:*
+        version: link:../db
+      '@beaconhs/emails':
+        specifier: workspace:*
+        version: link:../emails
+      '@beaconhs/jobs':
+        specifier: workspace:*
+        version: link:../jobs
+      drizzle-orm:
+        specifier: ^0.36.4
+        version: 0.36.4(@types/pg@8.20.0)(@types/react@19.2.14)(kysely@0.28.17)(pg@8.21.0)(postgres@3.4.9)(react@19.0.0)
     devDependencies:
       typescript:
         specifier: ^5.6.3

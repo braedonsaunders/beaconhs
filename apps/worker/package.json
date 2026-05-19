@@ -16,6 +16,7 @@
     "@beaconhs/audit": "workspace:*",
     "@beaconhs/db": "workspace:*",
     "@beaconhs/emails": "workspace:*",
+    "@beaconhs/events": "workspace:*",
     "@beaconhs/forms-core": "workspace:*",
     "@beaconhs/forms-pdf": "workspace:*",
     "@beaconhs/jobs": "workspace:*",

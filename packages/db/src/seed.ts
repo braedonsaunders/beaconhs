@@ -36,6 +36,7 @@ import {
   ppeIssues,
   ppeItems,
   ppeTypes,
+  reportDefinitions,
   roles,
   tenants,
   tenantUsers,
@@ -52,6 +53,57 @@ import type { FormSchemaV1 } from './schema'
 async function main() {
   const { db, sql: pg } = createClient()
   console.log('▶ Seeding…')
+
+  // --- Report definitions (cross-tenant catalogue) ---------------------
+  // Run every seed invocation so new definitions land even on re-seed.
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
+    await tx
+      .insert(reportDefinitions)
+      .values([
+        {
+          slug: 'incidents_weekly',
+          name: 'Weekly Incidents Summary',
+          description:
+            'All incidents in the configured date range (default last 7 days), grouped by severity, with status summary cards.',
+          category: 'incidents',
+          queryKind: 'incidents_summary',
+        },
+        {
+          slug: 'training_expiring_30d',
+          name: 'Training Expiring (30 days)',
+          description:
+            'Training records expiring in the next N days (default 30), grouped by course.',
+          category: 'training',
+          queryKind: 'training_expiring',
+        },
+        {
+          slug: 'corrective_actions_open',
+          name: 'Open Corrective Actions',
+          description:
+            'All open, in-progress, and pending-verification corrective actions grouped by status, sorted by due date.',
+          category: 'corrective_actions',
+          queryKind: 'corrective_actions_open',
+        },
+        {
+          slug: 'inspections_completed_weekly',
+          name: 'Inspections Completed (weekly)',
+          description:
+            'Completed inspections in the configured date range, grouped by template.',
+          category: 'inspections',
+          queryKind: 'inspections_completed',
+        },
+        {
+          slug: 'documents_overdue_review',
+          name: 'Documents Overdue Review',
+          description:
+            'Published documents whose next-review date has passed, grouped by category.',
+          category: 'documents',
+          queryKind: 'documents_overdue_review',
+        },
+      ])
+      .onConflictDoNothing({ target: reportDefinitions.slug })
+  })
 
   await db.transaction(async (tx) => {
     await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)

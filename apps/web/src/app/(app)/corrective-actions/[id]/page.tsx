@@ -33,6 +33,7 @@ import { Section } from '@/components/section'
 import { ActivityFeed } from '@/components/activity-feed'
 import { DetailPageLayout } from '@/components/page-layout'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
+import { emitCorrectiveActionCompleted } from '@beaconhs/events'
 
 export const dynamic = 'force-dynamic'
 
@@ -60,6 +61,9 @@ async function updateStatus(formData: FormData) {
     summary: `Status moved to "${status.replace(/_/g, ' ')}"`,
     after: { status },
   })
+  if (status === 'closed' || status === 'pending_verification') {
+    await emitCorrectiveActionCompleted(ctx, { caId: id, completerUserId: ctx.userId })
+  }
   revalidatePath(`/corrective-actions/${id}`)
   revalidatePath('/corrective-actions')
 }

@@ -106,4 +106,7 @@ export const TENANT_SCOPED_TABLES = [
   'training_skill_assignments',
   'atmospheric_sensors',
   'atmospheric_calibrations',
+  'report_schedules',
+  'report_runs',
+  'tenant_notification_recipients',
 ] as const
