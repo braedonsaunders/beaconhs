@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
@@ -101,6 +102,31 @@ export function GlobalSearch() {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [portalRect, setPortalRect] = useState<{ top: number; left: number; width: number } | null>(
+    null,
+  )
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+
+  // Track the input position so the portal'd dropdown sits directly under
+  // it. Re-measure on resize + scroll (the latter for any container that
+  // might scroll the input out of view).
+  useEffect(() => {
+    if (!open) return
+    function measure() {
+      const el = inputRef.current
+      if (!el) return
+      const r = el.getBoundingClientRect()
+      setPortalRect({ top: r.bottom + 4, left: r.left, width: r.width })
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    window.addEventListener('scroll', measure, true)
+    return () => {
+      window.removeEventListener('resize', measure)
+      window.removeEventListener('scroll', measure, true)
+    }
+  }, [open, value])
 
   const flat = useMemo(() => flatten(groups), [groups])
 
@@ -267,13 +293,19 @@ export function GlobalSearch() {
         ) : null}
       </div>
 
-      {showDropdown ? (
-        <div
-          id="global-search-results"
-          role="listbox"
-          className="absolute z-50 mt-1 max-h-[70vh] w-[28rem] overflow-y-auto rounded-md border border-slate-200 bg-white shadow-lg"
-        >
-          {flat.length === 0 ? (
+      {showDropdown && mounted && portalRect && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              id="global-search-results"
+              role="listbox"
+              className="fixed z-40 max-h-[70vh] overflow-y-auto rounded-md border border-slate-200 bg-white shadow-lg"
+              style={{
+                top: portalRect.top,
+                left: portalRect.left,
+                width: Math.max(portalRect.width, 448),
+              }}
+            >
+              {flat.length === 0 ? (
             <div className="px-4 py-6 text-center text-sm text-slate-500">
               {loading ? 'Searching…' : `No results for "${value}"`}
             </div>
@@ -368,16 +400,18 @@ export function GlobalSearch() {
               })}
             </div>
           )}
-          <div className="border-t border-slate-100 px-3 py-1.5 text-[10px] text-slate-400">
-            <kbd className="rounded border border-slate-200 bg-slate-50 px-1 font-mono">↑↓</kbd>
-            <span className="mx-1">navigate</span>
-            <kbd className="rounded border border-slate-200 bg-slate-50 px-1 font-mono">↵</kbd>
-            <span className="mx-1">open</span>
-            <kbd className="rounded border border-slate-200 bg-slate-50 px-1 font-mono">esc</kbd>
-            <span className="mx-1">close</span>
-          </div>
-        </div>
-      ) : null}
+              <div className="border-t border-slate-100 px-3 py-1.5 text-[10px] text-slate-400">
+                <kbd className="rounded border border-slate-200 bg-slate-50 px-1 font-mono">↑↓</kbd>
+                <span className="mx-1">navigate</span>
+                <kbd className="rounded border border-slate-200 bg-slate-50 px-1 font-mono">↵</kbd>
+                <span className="mx-1">open</span>
+                <kbd className="rounded border border-slate-200 bg-slate-50 px-1 font-mono">esc</kbd>
+                <span className="mx-1">close</span>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   )
 }
