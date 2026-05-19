@@ -38,6 +38,8 @@ import {
   incidents,
   inspectionBankCriteria,
   inspectionBanks,
+  inspectionRecordCriteria,
+  inspectionRecords,
   inspectionTypeBanks,
   inspectionTypes,
   liftPlanEquipment,
@@ -71,6 +73,8 @@ import {
   trainingSkillAssignments,
   trainingSkillAuthorities,
   trainingSkillTypes,
+  trainingAssessments,
+  trainingAssessmentResults,
   trainingAssessmentTypes,
   trainingAssessmentTypeQuestions,
   user,
@@ -1269,6 +1273,9 @@ async function main() {
     // --- Inspection types (3 sample types reusing the seeded banks) -----
     await seedInspectionTypes(tx, tenant.id)
 
+    // --- Inspection records (5 sample records against the seeded types) -
+    await seedInspectionRecords(tx, tenant.id)
+
     // --- Equipment rates + expenses + log + checkouts -------------------
     await seedEquipmentRatesAndExpenses(tx, tenant.id)
 
@@ -1277,6 +1284,9 @@ async function main() {
 
     // --- Training assessment type templates ----------------------------
     await seedTrainingAssessmentTypes(tx, tenant.id)
+
+    // --- Training assessment attempts (5 sample completed quizzes) ------
+    await seedTrainingAssessmentAttempts(tx, tenant.id)
 
     // --- Safe Distance sample records (electrical / drone / vehicle) ---
     await seedSafeDistanceRecords(tx, tenant.id)
@@ -3609,6 +3619,144 @@ export async function seedHazidLibraries(tx: any, tenantId: string): Promise<voi
   ])
 
   console.log(`  · hazid libraries: ${typeRows.length} hazard types, ${hazardRows.length} hazards, 3 sets, 8 tasks, 2 assessment types`)
+}
+
+// Inspection records — 5 sample legacy-style inspections against the seeded
+// inspection types, each with criterion responses (mix of pass/fail/N-A).
+export async function seedInspectionRecords(tx: any, tenantId: string): Promise<void> {
+  const existing = await tx
+    .select({ id: inspectionRecords.id })
+    .from(inspectionRecords)
+    .where(sql`${inspectionRecords.tenantId} = ${tenantId} AND ${inspectionRecords.reference} LIKE 'INS-SEED-%'`)
+  if (existing.length > 0) {
+    console.log(`  · inspection records: ${existing.length} already present, skipping`)
+    return
+  }
+  const types = await tx
+    .select({ id: inspectionTypes.id, name: inspectionTypes.name })
+    .from(inspectionTypes)
+    .where(sql`${inspectionTypes.tenantId} = ${tenantId}`)
+  if (types.length === 0) {
+    console.log('  · inspection records: no types in tenant, skipping')
+    return
+  }
+  const siteRow = await tx
+    .select({ id: orgUnits.id })
+    .from(orgUnits)
+    .where(sql`${orgUnits.tenantId} = ${tenantId} AND ${orgUnits.level} = 'site'`)
+    .limit(1)
+  const siteId = siteRow[0]?.id ?? null
+  const inspectorRow = await tx
+    .select({ id: tenantUsers.id })
+    .from(tenantUsers)
+    .where(sql`${tenantUsers.tenantId} = ${tenantId}`)
+    .limit(1)
+  const inspectorId = inspectorRow[0]?.id ?? null
+  // Pull criteria for each type so we can write responses
+  const today = new Date()
+  const DAY_MS = 24 * 60 * 60 * 1000
+  let created = 0
+  for (let i = 0; i < 5; i++) {
+    const type = types[i % types.length]
+    const occurredAt = new Date(today.getTime() - i * DAY_MS * 3)
+    const ref = `INS-SEED-${String(i + 1).padStart(4, '0')}`
+    const [rec] = await tx
+      .insert(inspectionRecords)
+      .values({
+        tenantId,
+        reference: ref,
+        typeId: type.id,
+        status: i < 2 ? 'submitted' : i === 2 ? 'in_progress' : 'closed',
+        occurredAt,
+        siteOrgUnitId: siteId,
+        inspectorTenantUserId: inspectorId,
+        notes: i === 4 ? 'Routine quarterly inspection — no issues found.' : null,
+        submittedAt: i < 2 ? occurredAt : null,
+        closedAt: i >= 3 ? occurredAt : null,
+      })
+      .returning({ id: inspectionRecords.id })
+    if (!rec) continue
+    created++
+    // Pull the bank criteria attached to this type via inspection_type_banks
+    const bankLinks = await tx
+      .select({ bankId: inspectionTypeBanks.bankId })
+      .from(inspectionTypeBanks)
+      .where(eq(inspectionTypeBanks.typeId, type.id))
+    const bankIds = bankLinks.map((b: any) => b.bankId)
+    if (bankIds.length === 0) continue
+    const criteria = await tx
+      .select({ id: inspectionBankCriteria.id, text: inspectionBankCriteria.text })
+      .from(inspectionBankCriteria)
+      .where(sql`${inspectionBankCriteria.bankId} IN (${sql.join(bankIds.map((x: any) => sql`${x}`), sql`, `)})`)
+    for (let j = 0; j < criteria.length; j++) {
+      const answer = j === 0 && i === 1 ? 'fail' : j % 5 === 4 ? 'n_a' : 'pass'
+      await tx.insert(inspectionRecordCriteria).values({
+        tenantId,
+        recordId: rec.id,
+        criterionId: criteria[j].id,
+        questionTextSnapshot: criteria[j].text,
+        sequence: j + 1,
+        answer,
+        severity: answer === 'fail' ? 'high' : null,
+        nonComplianceDescription: answer === 'fail' ? 'Latch loose on east door; tagged out for follow-up.' : null,
+      })
+    }
+  }
+  console.log(`  · inspection records: ${created} seeded with criterion responses`)
+}
+
+// Training assessment attempts — 5 sample completed quizzes against the
+// seeded assessment types, mixing pass/fail outcomes.
+export async function seedTrainingAssessmentAttempts(tx: any, tenantId: string): Promise<void> {
+  const existing = await tx
+    .select({ id: trainingAssessments.id })
+    .from(trainingAssessments)
+    .where(eq(trainingAssessments.tenantId, tenantId))
+  if (existing.length > 0) {
+    console.log(`  · training assessment attempts: ${existing.length} already present, skipping`)
+    return
+  }
+  const typeRows = await tx
+    .select({ id: trainingAssessmentTypes.id, passingScore: trainingAssessmentTypes.passingScore })
+    .from(trainingAssessmentTypes)
+    .where(eq(trainingAssessmentTypes.tenantId, tenantId))
+    .limit(2)
+  if (typeRows.length === 0) {
+    console.log('  · training assessment attempts: no types in tenant, skipping')
+    return
+  }
+  const peopleRows = await tx
+    .select({ id: people.id, firstName: people.firstName, lastName: people.lastName })
+    .from(people)
+    .where(eq(people.tenantId, tenantId))
+    .limit(5)
+  if (peopleRows.length < 3) {
+    console.log('  · training assessment attempts: not enough people, skipping')
+    return
+  }
+  const today = new Date()
+  const DAY_MS = 24 * 60 * 60 * 1000
+  let created = 0
+  for (let i = 0; i < 5; i++) {
+    const type = typeRows[i % typeRows.length]
+    const person = peopleRows[i % peopleRows.length]
+    const score = i === 1 ? 60 : i === 4 ? 70 : 85 + i * 2
+    const passingScore = type.passingScore ?? 75
+    const passed = score >= passingScore
+    await tx.insert(trainingAssessments).values({
+      tenantId,
+      typeId: type.id,
+      personId: person.id,
+      passingScore,
+      score,
+      passed,
+      status: 'submitted',
+      startedAt: new Date(today.getTime() - i * DAY_MS * 2 - 30 * 60 * 1000),
+      completedAt: new Date(today.getTime() - i * DAY_MS * 2),
+    })
+    created++
+  }
+  console.log(`  · training assessment attempts: ${created} seeded (mixed pass/fail)`)
 }
 
 main().catch((err) => {
