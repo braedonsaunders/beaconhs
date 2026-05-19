@@ -13,7 +13,7 @@
 Updated as work lands. `✅` = done, `🟡` = in progress / stub, `⬜` = not yet started.
 
 ### Phase 0 — Foundations
-- ✅ Monorepo (Turbo + pnpm), Next.js 15 + React 19 + Tailwind, Docker compose (Postgres/Redis/MinIO/Mailpit), CI workflow
+- ✅ Monorepo (Turbo + pnpm), **Next.js 16.2 (Turbopack) + React 19.2 + Drizzle 0.45 + Better-Auth 1.6 + Tailwind 3 + TypeScript 5.6**, Docker compose (Postgres/Redis/MinIO/Mailpit), CI workflow
 - ✅ Drizzle schema for every module + RLS policies installed on all tenant-scoped tables
 - ✅ Tenants + Better-Auth (email/password + magic-link via Mailpit) + tenant memberships + 4 built-in roles
 - ✅ Tenant resolution + view-as for super-admin + tenant-switcher UI + impersonation banner
@@ -99,6 +99,26 @@ Every list has search + sort + pagination + filter chips. Every row clicks throu
 - ✅ **Training Skill Authorities** (`/training/authorities`) and **Skill Types** (`/training/skills`): full competency hierarchy with skill assignments per person + expiry tracking.
 - ✅ **Atmospheric Sensors** (`/confined-space/sensors`): calibration history + next-due tracking + overdue alarms.
 - ✅ **PDF rendering pipeline**: Puppeteer worker handles `form_response`, `incident`, and `certificate` kinds (full cert + wallet card). Uploads via `putObject`, sets pdfAttachmentId, audit-logs. Public routes at `/incidents/[id]/pdf`, `/forms/responses/[id]/pdf`, `/training/records/[id]/certificate?format=cert|wallet` enqueue and 302 to the signed URL.
+
+### Wave 2 modules (canonical form templates, Equipment work-orders/truck-log, Documents books/reference, Kiosk, Training classes)
+- ✅ **Canonical form templates** seeded: JSHA, Toolbox Talk, Critical Lift Plan, Working-at-Heights Rescue Plan. `/forms/templates/new` gives a "Start from template" gallery that clones one of the canonicals into the tenant. Lifts the legacy HazID / JSHA / Toolbox / Lift-Plan modules onto the form-builder runtime rather than porting bespoke surfaces.
+- ✅ **Equipment Work Orders** (`/equipment/work-orders`): list/detail/new with auto `WO-YYYY-NNNN` ref, priority enum, action-taken notes, status workflow, mark-complete action.
+- ✅ **Equipment Truck Log** (`/equipment/truck-log`): month calendar grid + entry form (km in/out, driver, manpower, site) + summary matrix with grand totals + CSV export.
+- ✅ **Equipment Scheduled Inspections** (`/equipment/inspections`): overdue pre-use + annual rollup + start-inspection link wired to the appropriate equipment-inspection template.
+- ✅ **Document Books** (`/documents/books`): orderable groupings of documents with publish + render-book-as-one-PDF actions.
+- ✅ **Document Reference Library** (`/documents/reference`): external file/URL pointers for SDS / manuals / regulatory references.
+- ✅ **Kiosk mode** (`/kiosk?t=<slug>`): full-screen kiosk page outside AppShell — workers sign in/out on a shared tablet with an employee picker, optional site + crew pickers, PIN-gated by tenant; records to `kiosk_scans`.
+- ✅ **Training Classes** (`/training/classes`): schedule classes for courses, roster attendees, mark-complete spawns `training_records` per attendee.
+- ✅ **CSV export route handlers** on 12 list pages (people, equipment, incidents, CAs, documents, PPE, locations, lone-worker, confined-space, inspections, forms/responses, training/courses). Each is a Route Handler streaming a properly-formatted download, audit-logged as `action: 'export'`.
+- ✅ **Admin Library hub** (`/admin/library`): home for reference-data catalogues (inspection banks, skill authorities, skill types, atmospheric sensors) that were demoted from the top-level nav.
+- ✅ **Audit-log everywhere**: every server action across the new pages calls `recordAudit()` (incidents/new, CA/new, CS permit/new, lone-worker/new, people/new, every reports schedule action, every PPE action, every document workflow action).
+
+### Stack
+- ✅ **Next.js 16.2.6 (Turbopack default)** — upgraded from 15.0.3
+- ✅ **React 19.2.6** — upgraded from 19.0.0 (View Transitions, `useEffectEvent`, Activity boundary now available)
+- ✅ **Drizzle 0.45 + drizzle-kit 0.31** — upgraded from 0.36 / 0.28
+- ✅ **better-auth 1.6.11**, **lucide-react 1.16**, **bullmq 5.76**, **zod 4.4**
+- ⬜ TypeScript 6 and Tailwind 4 are major-rewrite upgrades — deferred until a focused upgrade pass; 5.6 + 3.x still ship a working dev/build.
 
 ---
 
