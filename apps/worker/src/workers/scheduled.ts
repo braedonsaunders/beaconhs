@@ -17,6 +17,7 @@ import {
   emitTrainingExpiring,
 } from '@beaconhs/events'
 import { type ScheduledTick } from '@beaconhs/jobs'
+import { scanReportSchedules } from '../lib/report-scheduler'
 
 export async function processScheduledTick(job: Job<ScheduledTick>): Promise<void> {
   switch (job.data.kind) {
@@ -30,8 +31,9 @@ export async function processScheduledTick(job: Job<ScheduledTick>): Promise<voi
       return scanDocumentReview()
     case 'ca_overdue_scan':
       return scanCorrectiveActionOverdue()
-    case 'form_assignment_scan':
     case 'report_schedule_scan':
+      return scanReportSchedules()
+    case 'form_assignment_scan':
     case 'report_run':
     case 'plugin_cron':
       console.log(`[scheduled] ${job.data.kind} not yet implemented`)
