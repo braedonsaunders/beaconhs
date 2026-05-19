@@ -22,8 +22,8 @@
     "@beaconhs/jobs": "workspace:*",
     "@beaconhs/plugin-sdk": "workspace:*",
     "@beaconhs/storage": "workspace:*",
-    "bullmq": "^5.21.2",
-    "drizzle-orm": "^0.36.4",
+    "bullmq": "^5.76.10",
+    "drizzle-orm": "^0.45.2",
     "ioredis": "^5.4.1",
     "twilio": "^5.3.5",
     "web-push": "^3.6.7"

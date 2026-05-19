@@ -136,7 +136,11 @@ export const documentReviews = pgTable(
   }),
 )
 
-// Curated bundle of documents for management review. One signoff covers the bundle.
+// Curated bundle of documents that publishes as a single PDF.
+// Ordered membership lives in document_book_items (see document-books.ts).
+// Legacy `contents` jsonb is preserved for back-compat but new code should write items.
+export const documentBookStatus = pgEnum('document_book_status', ['draft', 'published'])
+
 export const documentBooks = pgTable(
   'document_books',
   {
@@ -144,14 +148,22 @@ export const documentBooks = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    name: text('name').notNull(),
+    // Display fields. `title` is the canonical column going forward; `name` is the
+    // legacy column kept around to avoid breaking older inserts.
+    title: text('title').notNull().default(''),
+    name: text('name').notNull().default(''),
     description: text('description'),
-    // Ordered list of { documentId, versionId? } entries
+    category: text('category'),
+    status: documentBookStatus('status').default('draft').notNull(),
+    publishedAt: timestamp('published_at', { withTimezone: true }),
+    publishedByUserId: text('published_by_user_id').references(() => users.id),
+    // Legacy jsonb representation — kept for back-compat; new readers use document_book_items.
     contents: jsonb('contents').$type<{ documentId: string; versionId?: string }[]>().default([]).notNull(),
     ...timestamps,
   },
   (t) => ({
     tenantIdx: index('document_books_tenant_idx').on(t.tenantId),
+    statusIdx: index('document_books_status_idx').on(t.tenantId, t.status),
   }),
 )
 

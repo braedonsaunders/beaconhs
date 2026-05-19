@@ -18,13 +18,12 @@ import {
 } from '@beaconhs/ui'
 import { formResponses, formTemplates, orgUnits } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
-import { parseListParams, pickString } from '@/lib/list-params'
+import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
-import { TabNav } from '@/components/tab-nav'
 
 export const metadata = { title: 'Inspections' }
 
@@ -111,15 +110,20 @@ export default async function InspectionsPage({
             title="Inspections"
             description="Pass/fail/N/A criteria, comments, photos, customer signature. Each inspection type is a form template."
             actions={
-              templates.length > 0 ? (
-                <Link href={`/forms/templates/${templates[0]!.id}/fill`}>
-                  <Button>New inspection</Button>
+              <div className="flex items-center gap-2">
+                <Link href={buildExportHref('/inspections/export.csv', sp)}>
+                  <Button variant="outline">Export CSV</Button>
                 </Link>
-              ) : (
-                <Link href="/forms/templates/new?category=inspection">
-                  <Button>Create inspection template</Button>
-                </Link>
-              )
+                {templates.length > 0 ? (
+                  <Link href={`/forms/templates/${templates[0]!.id}/fill`}>
+                    <Button>New inspection</Button>
+                  </Link>
+                ) : (
+                  <Link href="/forms/templates/new?category=inspection">
+                    <Button>Create inspection template</Button>
+                  </Link>
+                )}
+              </div>
             }
           />
           <nav className="flex flex-wrap items-center gap-2">

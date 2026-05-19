@@ -14,7 +14,7 @@ import {
 } from '@beaconhs/ui'
 import { trainingCourses } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
-import { parseListParams, pickString } from '@/lib/list-params'
+import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
@@ -106,9 +106,14 @@ export default async function TrainingCoursesPage({
             title="Training courses"
             description="Course catalogue. Each course can be delivered as classroom, self-paced, on-the-job, or as an external certificate."
             actions={
-              <Link href="/training/courses/new">
-                <Button>New course</Button>
-              </Link>
+              <div className="flex items-center gap-2">
+                <Link href={buildExportHref('/training/courses/export.csv', sp)}>
+                  <Button variant="outline">Export CSV</Button>
+                </Link>
+                <Link href="/training/courses/new">
+                  <Button>New course</Button>
+                </Link>
+              </div>
             }
           />
           <nav className="flex flex-wrap items-center gap-2">

@@ -250,7 +250,7 @@ export default async function PersonDetailPage({
             </Badge>
           }
           actions={
-            <Link href={`${basePath}?tab=edit`}>
+            <Link href={`${basePath}?tab=edit` as any}>
               <Button variant="outline">
                 <Pencil size={14} />
                 Edit
@@ -414,7 +414,7 @@ export default async function PersonDetailPage({
                         title="No training records"
                         description="Records appear here as the person completes courses or uploads external certificates."
                         action={
-                          <Link href={`/training/records?personId=${id}`}>
+                          <Link href={`/training/records?personId=${id}` as any}>
                             <Button variant="outline" size="sm">
                               View training module →
                             </Button>

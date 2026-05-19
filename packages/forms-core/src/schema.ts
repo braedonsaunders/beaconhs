@@ -34,6 +34,7 @@ export const fieldTypeSchema = z.enum([
   // standard
   'text',
   'textarea',
+  'long_text', // alias of textarea — preferred name for multi-line in canonical templates
   'number',
   'date',
   'datetime',
@@ -53,6 +54,7 @@ export const fieldTypeSchema = z.enum([
   'traffic_light',
   // pickers
   'person_picker',
+  'multi_person_picker', // person_picker with multiple selection
   'site_picker',
   'equipment_picker',
   'ppe_picker',
@@ -60,6 +62,7 @@ export const fieldTypeSchema = z.enum([
   'course_picker',
   // media
   'photo',
+  'photo_upload', // alias of photo — preferred name for camera-first capture
   'file',
   'video',
   'audio',
@@ -68,6 +71,7 @@ export const fieldTypeSchema = z.enum([
   'typed_attestation',
   // computed
   'formula',
+  'calc', // alias of formula — preferred name for computed cells
   'risk_matrix',
   // display
   'heading',

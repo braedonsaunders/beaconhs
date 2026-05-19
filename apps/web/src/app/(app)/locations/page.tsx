@@ -14,7 +14,7 @@ import {
 } from '@beaconhs/ui'
 import { customerContacts, orgUnits } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
-import { parseListParams } from '@/lib/list-params'
+import { buildExportHref, parseListParams } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
@@ -131,9 +131,14 @@ export default async function LocationsPage({
             title="Locations"
             description="Customers, projects and sites. Add customer contacts (non-employee site managers, client reps) here."
             actions={
-              <Link href="/locations/new">
-                <Button>Add customer</Button>
-              </Link>
+              <div className="flex items-center gap-2">
+                <Link href={buildExportHref('/locations/export.csv', sp)}>
+                  <Button variant="outline">Export CSV</Button>
+                </Link>
+                <Link href="/locations/new">
+                  <Button>Add customer</Button>
+                </Link>
+              </div>
             }
           />
           <div className="flex items-center gap-3">

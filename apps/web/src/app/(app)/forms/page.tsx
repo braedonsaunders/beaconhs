@@ -61,7 +61,7 @@ export default async function FormsPage({
               return (
                 <Link
                   key={c.value || 'all'}
-                  href={href}
+                  href={href as any}
                   className={
                     active
                       ? 'rounded-full border border-teal-500 bg-teal-50 px-3 py-1 text-xs font-medium text-teal-700'

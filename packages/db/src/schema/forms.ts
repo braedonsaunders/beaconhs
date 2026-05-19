@@ -123,6 +123,7 @@ export type FieldType =
   // Standard inputs
   | 'text'
   | 'textarea'
+  | 'long_text' // alias of textarea
   | 'number'
   | 'date'
   | 'datetime'
@@ -142,6 +143,7 @@ export type FieldType =
   | 'traffic_light'
   // Domain pickers
   | 'person_picker'
+  | 'multi_person_picker' // person_picker with multiple selection
   | 'site_picker'
   | 'equipment_picker'
   | 'ppe_picker'
@@ -149,6 +151,7 @@ export type FieldType =
   | 'course_picker'
   // Media
   | 'photo'
+  | 'photo_upload' // alias of photo
   | 'file'
   | 'video'
   | 'audio'
@@ -157,6 +160,7 @@ export type FieldType =
   | 'typed_attestation'
   // Computed
   | 'formula'
+  | 'calc' // alias of formula
   | 'risk_matrix'
   // Display
   | 'heading'

@@ -13,8 +13,10 @@ import {
   ListChecks,
   MapPin,
   Settings,
+  ShieldAlert,
   ShieldCheck,
   Timer,
+  UserCircle2,
   Users,
   Wrench,
 } from 'lucide-react'

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { sql } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import { createClient } from './client'
 import {
   atmosphericCalibrations,
@@ -49,6 +49,7 @@ import {
   user,
 } from './schema'
 import type { FormSchemaV1 } from './schema'
+import { CANONICAL_TEMPLATES } from './canonical-templates'
 
 async function main() {
   const { db, sql: pg } = createClient()
@@ -1133,8 +1134,91 @@ async function main() {
     console.log(`  · sign in via Magic link (Mailpit: http://localhost:8025)`)
   })
 
+  // Canonical templates (JSHA / Toolbox Talk / Lift Plan / WAH Rescue) ----
+  // These are seeded for the first tenant only — every other tenant clones
+  // them on demand from the /forms/templates/new gallery.
+  await seedCanonicalTemplates(db)
+
   await pg.end()
   console.log('✔ Seed complete')
+}
+
+/**
+ * Idempotently insert the four canonical form templates (JSHA, Toolbox Talk,
+ * Lift Plan, WAH Rescue Plan) for the FIRST tenant in the database.
+ *
+ * Safe to re-run: uses ON CONFLICT (tenant_id, key) DO NOTHING for templates,
+ * and version 1 is inserted only when the template was actually new.
+ *
+ * Re-export of CANONICAL_TEMPLATES means the same shape is consumed by the
+ * "Start from template" gallery at /forms/templates/new (the gallery clones
+ * each template into the user's own tenant on click).
+ */
+async function seedCanonicalTemplates(db: ReturnType<typeof createClient>['db']): Promise<void> {
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
+
+    // Pick the first tenant (by createdAt). If there is none, skip — this is
+    // a fresh DB with no tenants.
+    const [first] = await tx
+      .select({ id: tenants.id, name: tenants.name, slug: tenants.slug })
+      .from(tenants)
+      .orderBy(tenants.createdAt)
+      .limit(1)
+    if (!first) {
+      console.log('  · seedCanonicalTemplates: no tenants found, skipping')
+      return
+    }
+
+    // Find a super-admin user to attribute the `created_by` field, if available.
+    const [superAdmin] = await tx
+      .select({ id: user.id })
+      .from(user)
+      .where(eq(user.isSuperAdmin, true))
+      .limit(1)
+    const createdBy = superAdmin?.id ?? null
+
+    let inserted = 0
+    let skipped = 0
+    for (const canonical of CANONICAL_TEMPLATES) {
+      // Insert the template shell. ON CONFLICT (tenant_id, key) DO NOTHING — if
+      // an admin already cloned + renamed one, we don't fight them.
+      const inserts = await tx
+        .insert(formTemplates)
+        .values({
+          tenantId: first.id,
+          key: canonical.key,
+          name: canonical.name,
+          category: canonical.category,
+          description: canonical.description,
+          status: 'published',
+          moduleBinding: canonical.moduleBinding,
+          createdBy,
+        })
+        .onConflictDoNothing({ target: [formTemplates.tenantId, formTemplates.key] })
+        .returning({ id: formTemplates.id })
+
+      const tmpl = inserts[0]
+      if (!tmpl) {
+        skipped += 1
+        continue
+      }
+
+      await tx.insert(formTemplateVersions).values({
+        tenantId: first.id,
+        templateId: tmpl.id,
+        version: 1,
+        schema: canonical.schema as FormSchemaV1,
+        publishedAt: new Date(),
+        publishedBy: createdBy,
+        changelog: 'Canonical template v1',
+      })
+      inserted += 1
+    }
+    console.log(
+      `  · canonical templates: ${inserted} inserted, ${skipped} already present (tenant: ${first.slug ?? first.id})`,
+    )
+  })
 }
 
 async function insertOrgUnit(

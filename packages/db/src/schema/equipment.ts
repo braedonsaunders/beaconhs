@@ -7,7 +7,9 @@ import {
   date,
   doublePrecision,
   index,
+  integer,
   jsonb,
+  numeric,
   pgEnum,
   pgTable,
   text,
@@ -128,6 +130,8 @@ export const workOrderStatus = pgEnum('work_order_status', [
   'cancelled',
 ])
 
+export const workOrderPriority = pgEnum('work_order_priority', ['low', 'med', 'high'])
+
 export const equipmentWorkOrders = pgTable(
   'equipment_work_orders',
   {
@@ -140,8 +144,12 @@ export const equipmentWorkOrders = pgTable(
       .references(() => equipmentItems.id, { onDelete: 'cascade' }),
     reference: text('reference').notNull(),
     status: workOrderStatus('status').default('open').notNull(),
+    priority: workOrderPriority('priority').default('med').notNull(),
     summary: text('summary').notNull(),
     description: text('description'),
+    actionTaken: text('action_taken'),
+    cost: numeric('cost', { precision: 12, scale: 2 }),
+    reportedByPersonId: uuid('reported_by_person_id').references(() => people.id),
     openedByTenantUserId: uuid('opened_by_tenant_user_id').references(() => tenantUsers.id),
     assignedToTenantUserId: uuid('assigned_to_tenant_user_id').references(() => tenantUsers.id),
     openedAt: timestamp('opened_at', { withTimezone: true }).defaultNow().notNull(),
@@ -152,6 +160,7 @@ export const equipmentWorkOrders = pgTable(
     itemIdx: index('equipment_work_orders_item_idx').on(t.itemId),
     statusIdx: index('equipment_work_orders_status_idx').on(t.tenantId, t.status),
     tenantIdx: index('equipment_work_orders_tenant_idx').on(t.tenantId),
+    priorityIdx: index('equipment_work_orders_priority_idx').on(t.tenantId, t.priority),
   }),
 )
 

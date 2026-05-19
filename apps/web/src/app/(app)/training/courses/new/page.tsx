@@ -27,6 +27,8 @@ const DELIVERY_OPTIONS = [
 async function createCourse(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  if (!ctx.tenantId) throw new Error('No active tenant')
+  const tenantId: string = ctx.tenantId
   const name = String(formData.get('name') ?? '').trim()
   const code = String(formData.get('code') ?? '').trim()
   if (!name || !code) throw new Error('Name and code are required')
@@ -46,7 +48,7 @@ async function createCourse(formData: FormData) {
     const [r] = await tx
       .insert(trainingCourses)
       .values({
-        tenantId: ctx.tenantId,
+        tenantId,
         name,
         code,
         description,
@@ -54,7 +56,7 @@ async function createCourse(formData: FormData) {
         durationMinutes: Number.isFinite(durationMinutes!) ? (durationMinutes as number) : null,
         validForMonths: Number.isFinite(validForMonths!) ? (validForMonths as number) : null,
         requiresEvaluator,
-      })
+      } as any)
       .returning()
     return r
   })

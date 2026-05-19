@@ -101,9 +101,14 @@ export default async function PpePage({
             title="PPE"
             description="Issue, return, replace, discard — plus scheduled inspections for inspectable PPE."
             actions={
-              <Link href="/ppe/new">
-                <Button>New PPE item</Button>
-              </Link>
+              <div className="flex items-center gap-2">
+                <Link href={buildExportHref('/ppe/export.csv', sp)}>
+                  <Button variant="outline">Export CSV</Button>
+                </Link>
+                <Link href="/ppe/new">
+                  <Button>New PPE item</Button>
+                </Link>
+              </div>
             }
           />
           <div className="flex items-center gap-3">

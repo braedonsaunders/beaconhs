@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { desc, eq } from 'drizzle-orm'
-import { Timer } from 'lucide-react'
+import { MapPin, Timer } from 'lucide-react'
 import {
   Alert,
   AlertDescription,
@@ -13,10 +13,12 @@ import {
   CardHeader,
   CardTitle,
   DetailHeader,
+  EmptyState,
 } from '@beaconhs/ui'
 import { lwCheckins, lwSessions, orgUnits, tenantUsers, user } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
-import { recordAudit } from '@/lib/audit'
+import { recentActivityForEntity, recordAudit } from '@/lib/audit'
+import { ActivityFeed } from '@/components/activity-feed'
 import { DetailGrid } from '@/components/detail-grid'
 import { Section } from '@/components/section'
 import { DetailPageLayout } from '@/components/page-layout'
@@ -24,8 +26,10 @@ import { TabNav, pickActiveTab } from '@/components/tab-nav'
 
 export const dynamic = 'force-dynamic'
 
-const LW_TABS = ['overview', 'checkins'] as const
+const LW_TABS = ['overview', 'checkins', 'map', 'activity'] as const
 type LwTab = (typeof LW_TABS)[number]
+
+// ---------- Server actions ----------
 
 async function manualCheckin(formData: FormData) {
   'use server'
@@ -59,7 +63,10 @@ async function endSession(formData: FormData) {
   const ctx = await requireRequestContext()
   const sessionId = String(formData.get('sessionId') ?? '')
   await ctx.db((tx) =>
-    tx.update(lwSessions).set({ status: 'completed', endedAt: new Date() }).where(eq(lwSessions.id, sessionId)),
+    tx
+      .update(lwSessions)
+      .set({ status: 'completed', endedAt: new Date() })
+      .where(eq(lwSessions.id, sessionId)),
   )
   await recordAudit(ctx, {
     entityType: 'lw_session',
@@ -70,6 +77,8 @@ async function endSession(formData: FormData) {
   revalidatePath(`/lone-worker/${sessionId}`)
   revalidatePath('/lone-worker')
 }
+
+// ---------- Page ----------
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -113,7 +122,16 @@ export default async function LoneWorkerSessionPage({
   const { session, site, workerAccount, checkins } = data
   const isActive = session.status === 'active'
   const overdue = isActive && new Date(session.nextCheckinDueAt).getTime() < Date.now()
-  const minsUntilCheckin = Math.round((new Date(session.nextCheckinDueAt).getTime() - Date.now()) / 60_000)
+  const minsUntilCheckin = Math.round(
+    (new Date(session.nextCheckinDueAt).getTime() - Date.now()) / 60_000,
+  )
+
+  // Pick latest check-in with a GPS fix.
+  const lastWithGps = checkins.find((c) => c.geoLat != null && c.geoLng != null)
+  const gpsCheckins = checkins.filter((c) => c.geoLat != null && c.geoLng != null)
+
+  const activity =
+    active === 'activity' ? await recentActivityForEntity(ctx, 'lw_session', id, 50) : []
 
   const basePath = `/lone-worker/${id}`
   return (
@@ -124,7 +142,15 @@ export default async function LoneWorkerSessionPage({
           title={workerAccount?.name ?? 'Lone-worker session'}
           subtitle={session.task ?? 'No task description'}
           badge={
-            <Badge variant={isActive ? 'success' : session.status === 'missed' ? 'destructive' : 'secondary'}>
+            <Badge
+              variant={
+                isActive
+                  ? 'success'
+                  : session.status === 'missed'
+                    ? 'destructive'
+                    : 'secondary'
+              }
+            >
               {session.status}
             </Badge>
           }
@@ -137,7 +163,9 @@ export default async function LoneWorkerSessionPage({
                 </form>
                 <form action={endSession} className="inline">
                   <input type="hidden" name="sessionId" value={id} />
-                  <Button type="submit" variant="outline">End session</Button>
+                  <Button type="submit" variant="outline">
+                    End session
+                  </Button>
                 </form>
               </>
             ) : null
@@ -163,54 +191,163 @@ export default async function LoneWorkerSessionPage({
           tabs={[
             { key: 'overview', label: 'Overview' },
             { key: 'checkins', label: 'Check-ins', count: checkins.length },
+            { key: 'map', label: 'Map', count: gpsCheckins.length },
+            { key: 'activity', label: 'Activity' },
           ]}
         />
       }
     >
       <div className="space-y-5">
         {active === 'overview' ? (
-        <DetailGrid
-          rows={[
-            { label: 'Worker', value: workerAccount?.name ?? '—' },
-            { label: 'Site', value: site?.name ?? '—' },
-            { label: 'Started', value: new Date(session.startedAt).toLocaleString() },
-            { label: 'Expected end', value: new Date(session.expectedEndAt).toLocaleString() },
-            { label: 'Interval', value: `${session.intervalMinutes} min` },
-            { label: 'Grace period', value: `${session.gracePeriodMinutes} min` },
-            {
-              label: 'Next check-in',
-              value: (
-                <span className={overdue ? 'font-medium text-red-700' : ''}>
-                  {new Date(session.nextCheckinDueAt).toLocaleString()}{' '}
-                  {isActive ? `(${minsUntilCheckin > 0 ? `in ${minsUntilCheckin}m` : `${Math.abs(minsUntilCheckin)}m overdue`})` : ''}
-                </span>
-              ),
-            },
-            { label: 'Ended', value: session.endedAt ? new Date(session.endedAt).toLocaleString() : '—' },
-          ]}
-        />
+          <DetailGrid
+            rows={[
+              { label: 'Worker', value: workerAccount?.name ?? '—' },
+              { label: 'Site', value: site?.name ?? '—' },
+              { label: 'Started', value: new Date(session.startedAt).toLocaleString() },
+              {
+                label: 'Expected end',
+                value: new Date(session.expectedEndAt).toLocaleString(),
+              },
+              { label: 'Interval', value: `${session.intervalMinutes} min` },
+              { label: 'Grace period', value: `${session.gracePeriodMinutes} min` },
+              {
+                label: 'Next check-in',
+                value: (
+                  <span className={overdue ? 'font-medium text-red-700' : ''}>
+                    {new Date(session.nextCheckinDueAt).toLocaleString()}{' '}
+                    {isActive
+                      ? `(${minsUntilCheckin > 0 ? `in ${minsUntilCheckin}m` : `${Math.abs(minsUntilCheckin)}m overdue`})`
+                      : ''}
+                  </span>
+                ),
+              },
+              {
+                label: 'Ended',
+                value: session.endedAt ? new Date(session.endedAt).toLocaleString() : '—',
+              },
+            ]}
+          />
         ) : null}
 
         {active === 'checkins' ? (
-        <Section title={`Check-in log (${checkins.length})`}>
-          {checkins.length === 0 ? (
-            <p className="text-sm text-slate-500">No check-ins yet.</p>
-          ) : (
-            <ul className="divide-y divide-slate-100 text-sm">
-              {checkins.map((c) => (
-                <li key={c.id} className="flex items-center justify-between py-2">
-                  <div className="flex items-center gap-2">
-                    <Timer size={14} className="text-slate-400" />
-                    <span className="font-medium">{c.kind.replace('_', ' ')}</span>
-                  </div>
-                  <span className="text-xs text-slate-500">{new Date(c.recordedAt).toLocaleString()}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Section>
+          <Section title={`Check-in log (${checkins.length})`}>
+            {checkins.length === 0 ? (
+              <p className="text-sm text-slate-500">No check-ins yet.</p>
+            ) : (
+              <ul className="divide-y divide-slate-100 text-sm">
+                {checkins.map((c) => (
+                  <li key={c.id} className="flex items-center justify-between py-2">
+                    <div className="flex items-center gap-2">
+                      <Timer size={14} className="text-slate-400" />
+                      <span className="font-medium">{c.kind.replace(/_/g, ' ')}</span>
+                      {c.geoLat != null && c.geoLng != null ? (
+                        <Badge variant="secondary" className="gap-1">
+                          <MapPin size={10} /> GPS
+                        </Badge>
+                      ) : null}
+                    </div>
+                    <span className="text-xs text-slate-500">
+                      {new Date(c.recordedAt).toLocaleString()}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Section>
+        ) : null}
+
+        {active === 'map' ? <MapTab lastWithGps={lastWithGps} all={gpsCheckins} /> : null}
+
+        {active === 'activity' ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Activity</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ActivityFeed entries={activity} />
+            </CardContent>
+          </Card>
         ) : null}
       </div>
     </DetailPageLayout>
+  )
+}
+
+function MapTab({
+  lastWithGps,
+  all,
+}: {
+  lastWithGps: typeof lwCheckins.$inferSelect | undefined
+  all: (typeof lwCheckins.$inferSelect)[]
+}) {
+  if (!lastWithGps || lastWithGps.geoLat == null || lastWithGps.geoLng == null) {
+    return (
+      <EmptyState
+        icon={<MapPin size={32} />}
+        title="No GPS check-ins yet"
+        description="Check-ins from the mobile app include the worker's last known coordinates and will appear here on a map."
+      />
+    )
+  }
+  const lat = lastWithGps.geoLat
+  const lng = lastWithGps.geoLng
+  const bboxLat = 0.005
+  const bboxLng = 0.008
+  const src = `https://www.openstreetmap.org/export/embed.html?bbox=${(lng - bboxLng).toFixed(5)}%2C${(lat - bboxLat).toFixed(5)}%2C${(lng + bboxLng).toFixed(5)}%2C${(lat + bboxLat).toFixed(5)}&layer=mapnik&marker=${lat}%2C${lng}`
+  const gmaps = `https://www.google.com/maps?q=${lat},${lng}`
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Last known location</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <iframe
+            title="OpenStreetMap"
+            width="100%"
+            height="380"
+            loading="lazy"
+            className="rounded-md border border-slate-200"
+            src={src}
+          />
+          <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+            <div className="text-slate-600">
+              <MapPin size={12} className="-mt-0.5 mr-1 inline" />
+              {lat.toFixed(5)}, {lng.toFixed(5)} · captured{' '}
+              {new Date(lastWithGps.recordedAt).toLocaleString()}
+            </div>
+            <a
+              href={gmaps}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-teal-700 hover:underline"
+            >
+              Open in Google Maps →
+            </a>
+          </div>
+        </CardContent>
+      </Card>
+      {all.length > 1 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>All GPS check-ins ({all.length})</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="divide-y divide-slate-100 text-sm">
+              {all.map((c) => (
+                <li key={c.id} className="flex items-center justify-between py-2">
+                  <span className="font-mono text-xs text-slate-600">
+                    {c.geoLat!.toFixed(5)}, {c.geoLng!.toFixed(5)}
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    {new Date(c.recordedAt).toLocaleString()}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      ) : null}
+    </div>
   )
 }

@@ -302,7 +302,7 @@ async function renderCustomer({
           subtitle={unit.code ? `Customer · ${unit.code}` : 'Customer'}
           badge={<Badge variant="secondary">customer</Badge>}
           actions={
-            <Link href={`${basePath}/edit`}>
+            <Link href={`${basePath}/edit` as any}>
               <Button variant="outline">
                 <Pencil size={14} /> Edit
               </Button>
@@ -387,7 +387,7 @@ async function renderProject({
           subtitle={parent ? `Project under ${parent.name}` : 'Project'}
           badge={<Badge variant="secondary">project</Badge>}
           actions={
-            <Link href={`${basePath}/edit`}>
+            <Link href={`${basePath}/edit` as any}>
               <Button variant="outline">
                 <Pencil size={14} /> Edit
               </Button>
@@ -466,7 +466,7 @@ async function renderSite({
           subtitle={parent ? `${unit.level} under ${parent.name}` : unit.level}
           badge={<Badge variant="secondary">{unit.level}</Badge>}
           actions={
-            <Link href={`${basePath}/edit`}>
+            <Link href={`${basePath}/edit` as any}>
               <Button variant="outline">
                 <Pencil size={14} /> Edit
               </Button>

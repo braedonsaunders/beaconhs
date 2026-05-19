@@ -80,6 +80,7 @@ export const TENANT_SCOPED_TABLES = [
   'equipment_items',
   'equipment_location_history',
   'equipment_work_orders',
+  'truck_log_entries',
   'ppe_types',
   'ppe_items',
   'ppe_issues',
@@ -113,4 +114,7 @@ export const TENANT_SCOPED_TABLES = [
   'tenant_notification_recipients',
   'form_assignment_dispatches',
   'plugin_runs',
+  'document_book_items',
+  'document_references',
+  'kiosk_scans',
 ] as const

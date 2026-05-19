@@ -15,7 +15,7 @@ import {
 } from '@beaconhs/ui'
 import { csPermits, orgUnits } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
-import { parseListParams, pickString } from '@/lib/list-params'
+import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
@@ -94,9 +94,14 @@ export default async function ConfinedSpacePage({
             title="Confined Space"
             description="Entry permits, atmospheric monitoring, rescue plans. Permits expire automatically when their window passes."
             actions={
-              <Link href="/confined-space/new">
-                <Button>New permit</Button>
-              </Link>
+              <div className="flex items-center gap-2">
+                <Link href={buildExportHref('/confined-space/export.csv', sp)}>
+                  <Button variant="outline">Export CSV</Button>
+                </Link>
+                <Link href="/confined-space/new">
+                  <Button>New permit</Button>
+                </Link>
+              </div>
             }
           />
           <nav className="flex flex-wrap items-center gap-2">

@@ -66,11 +66,15 @@ export default function NewTenantPage() {
   return (
     <PageContainer>
       <div className="mx-auto max-w-2xl">
-        <PageHeader
-          title="New tenant"
-          description="Super-admin only. Creates an empty tenant — you'll add an admin user from the users page after."
-          back={{ href: '/admin/tenants', label: 'Back to tenants' }}
-        />
+        <div>
+          <Link href="/admin/tenants" className="text-xs text-slate-500 hover:text-teal-700">
+            ← Back to tenants
+          </Link>
+          <PageHeader
+            title="New tenant"
+            description="Super-admin only. Creates an empty tenant — you'll add an admin user from the users page after."
+          />
+        </div>
         <form action={createTenant} className="mt-6 space-y-5 rounded-lg border border-slate-200 bg-white p-6">
           <div className="space-y-1.5">
             <Label htmlFor="name">Tenant name *</Label>

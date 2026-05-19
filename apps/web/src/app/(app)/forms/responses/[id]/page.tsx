@@ -1,8 +1,12 @@
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
-import { asc, eq } from 'drizzle-orm'
-import { FileText } from 'lucide-react'
+import { notFound, redirect } from 'next/navigation'
+import { revalidatePath } from 'next/cache'
+import { asc, desc, eq } from 'drizzle-orm'
+import { FileText, MessageSquare, Plus, Send, Undo2 } from 'lucide-react'
 import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
   Badge,
   Button,
   Card,
@@ -10,8 +14,12 @@ import {
   CardHeader,
   CardTitle,
   DetailHeader,
+  EmptyState,
+  Textarea,
 } from '@beaconhs/ui'
 import {
+  formResponseComments,
+  formResponseScores,
   formResponseSteps,
   formResponses,
   formTemplateVersions,
@@ -22,19 +30,91 @@ import {
   user,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { recentActivityForEntity, recordAudit } from '@/lib/audit'
+import { ActivityFeed } from '@/components/activity-feed'
 import { DetailGrid } from '@/components/detail-grid'
 import { Section } from '@/components/section'
-import { PageContainer } from '@/components/page-layout'
+import { DetailPageLayout } from '@/components/page-layout'
+import { TabNav, pickActiveTab } from '@/components/tab-nav'
 
 export const dynamic = 'force-dynamic'
+
+const TABS = ['response', 'comments', 'audit'] as const
+type Tab = (typeof TABS)[number]
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   return { title: `Form response · ${id.slice(0, 8)}` }
 }
 
-export default async function FormResponsePage({ params }: { params: Promise<{ id: string }> }) {
+// ---------- Server actions ----------
+
+async function addComment(formData: FormData) {
+  'use server'
+  const ctx = await requireRequestContext()
+  const responseId = String(formData.get('responseId') ?? '')
+  const body = String(formData.get('body') ?? '').trim()
+  if (!responseId || !body) return
+  if (!ctx.membership?.id) return
+  await ctx.db((tx) =>
+    tx.insert(formResponseComments).values({
+      tenantId: ctx.tenantId,
+      responseId,
+      authorTenantUserId: ctx.membership!.id,
+      body,
+    }),
+  )
+  await recordAudit(ctx, {
+    entityType: 'form_response',
+    entityId: responseId,
+    action: 'update',
+    summary: 'Comment added',
+  })
+  revalidatePath(`/forms/responses/${responseId}`)
+}
+
+async function reopenResponse(formData: FormData) {
+  'use server'
+  const ctx = await requireRequestContext()
+  const responseId = String(formData.get('responseId') ?? '')
+  if (!responseId) return
+  await ctx.db((tx) =>
+    tx
+      .update(formResponses)
+      .set({ status: 'in_progress', closedAt: null })
+      .where(eq(formResponses.id, responseId)),
+  )
+  await recordAudit(ctx, {
+    entityType: 'form_response',
+    entityId: responseId,
+    action: 'update',
+    summary: 'Response reopened',
+  })
+  revalidatePath(`/forms/responses/${responseId}`)
+}
+
+async function openCorrectiveAction(formData: FormData) {
+  'use server'
+  const responseId = String(formData.get('responseId') ?? '')
+  if (!responseId) return
+  redirect(
+    `/corrective-actions/new?sourceEntityType=form_response&sourceEntityId=${responseId}`,
+  )
+}
+
+// ---------- Page ----------
+
+export default async function FormResponsePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
   const { id } = await params
+  const sp = await searchParams
+  const active: Tab = pickActiveTab(sp, TABS, 'response')
+
   const ctx = await requireRequestContext()
   const data = await ctx.db(async (tx) => {
     const [row] = await tx
@@ -57,88 +137,285 @@ export default async function FormResponsePage({ params }: { params: Promise<{ i
       .where(eq(formResponses.id, id))
       .limit(1)
     if (!row) return null
-    const steps = await tx
-      .select()
-      .from(formResponseSteps)
-      .where(eq(formResponseSteps.responseId, id))
-      .orderBy(asc(formResponseSteps.sequence))
-    return { ...row, steps }
+    const [steps, comments, scoreRows] = await Promise.all([
+      tx
+        .select()
+        .from(formResponseSteps)
+        .where(eq(formResponseSteps.responseId, id))
+        .orderBy(asc(formResponseSteps.sequence)),
+      tx
+        .select({ comment: formResponseComments, author: tenantUsers, account: user })
+        .from(formResponseComments)
+        .leftJoin(tenantUsers, eq(tenantUsers.id, formResponseComments.authorTenantUserId))
+        .leftJoin(user, eq(user.id, tenantUsers.userId))
+        .where(eq(formResponseComments.responseId, id))
+        .orderBy(desc(formResponseComments.createdAt)),
+      tx
+        .select()
+        .from(formResponseScores)
+        .where(eq(formResponseScores.responseId, id)),
+    ])
+    return { ...row, steps, comments, scoreRows }
   })
 
   if (!data) notFound()
-  const { response, template, version, site, subjectPerson, submitterAccount, steps } = data
+  const {
+    response,
+    template,
+    version,
+    site,
+    subjectPerson,
+    submitterAccount,
+    steps,
+    comments,
+    scoreRows,
+  } = data
 
+  const failCount = scoreRows.filter((r) => r.score === 0).length
+  const passCount = scoreRows.filter((r) => r.score === 1).length
+
+  // The form's schema may declare needs-follow-up logic in metadata.
+  const schemaMeta = (version.schema as any)?.metadata ?? {}
+  const flagsFollowup =
+    !!schemaMeta.needsFollowUpOnFail && failCount > 0
+
+  const supportsReopen = response.status === 'closed' || response.status === 'rejected'
+
+  const activity =
+    active === 'audit' ? await recentActivityForEntity(ctx, 'form_response', id, 100) : []
+
+  const basePath = `/forms/responses/${id}`
   return (
-    <PageContainer>
-      <div className="space-y-5">
+    <DetailPageLayout
+      header={
         <DetailHeader
           back={{ href: '/forms', label: 'Back to forms' }}
           title={template.name}
           subtitle={`${id.slice(0, 8)} · v${version.version}`}
           badge={
-            <Badge variant={response.status === 'closed' || response.status === 'submitted' ? 'success' : 'warning'}>
+            <Badge
+              variant={
+                response.status === 'closed' || response.status === 'submitted'
+                  ? 'success'
+                  : response.status === 'rejected'
+                    ? 'destructive'
+                    : 'warning'
+              }
+            >
               {response.status.replace('_', ' ')}
             </Badge>
           }
           actions={
-            <Link href={`/forms/responses/${id}/pdf`}>
-              <Button variant="outline">
-                <FileText size={14} /> PDF
-              </Button>
-            </Link>
+            <>
+              {flagsFollowup ? (
+                <form action={openCorrectiveAction} className="inline">
+                  <input type="hidden" name="responseId" value={id} />
+                  <Button type="submit">
+                    <Plus size={14} /> Open corrective action
+                  </Button>
+                </form>
+              ) : (
+                <Link
+                  href={`/corrective-actions/new?sourceEntityType=form_response&sourceEntityId=${id}`}
+                >
+                  <Button variant="outline">
+                    <Plus size={14} /> Open corrective action
+                  </Button>
+                </Link>
+              )}
+              {supportsReopen ? (
+                <form action={reopenResponse} className="inline">
+                  <input type="hidden" name="responseId" value={id} />
+                  <Button type="submit" variant="outline">
+                    <Undo2 size={14} /> Reopen
+                  </Button>
+                </form>
+              ) : null}
+              <Link href={`/forms/responses/${id}/pdf`}>
+                <Button variant="outline">
+                  <FileText size={14} /> PDF
+                </Button>
+              </Link>
+            </>
           }
         />
+      }
+      alerts={
+        flagsFollowup ? (
+          <Alert variant="warning">
+            <AlertTitle>Follow-up required</AlertTitle>
+            <AlertDescription>
+              This response has {failCount} failing item{failCount === 1 ? '' : 's'} and the template
+              is configured to require a corrective action.
+            </AlertDescription>
+          </Alert>
+        ) : null
+      }
+      subtabs={
+        <TabNav
+          basePath={basePath}
+          currentParams={sp}
+          active={active}
+          tabs={[
+            { key: 'response', label: 'Response' },
+            { key: 'comments', label: 'Comments', count: comments.length },
+            { key: 'audit', label: 'Audit trail' },
+          ]}
+        />
+      }
+    >
+      <div className="space-y-5">
+        {active === 'response' ? (
+          <>
+            <Section title="Overview">
+              <DetailGrid
+                rows={[
+                  {
+                    label: 'Template',
+                    value: (
+                      <Link
+                        href={`/forms/templates/${template.id}`}
+                        className="text-teal-700 hover:underline"
+                      >
+                        {template.name}
+                      </Link>
+                    ),
+                  },
+                  { label: 'Template version', value: `v${version.version}` },
+                  { label: 'Status', value: response.status.replace('_', ' ') },
+                  { label: 'Current step', value: response.currentStep ?? '—' },
+                  { label: 'Site', value: site?.name ?? '—' },
+                  {
+                    label: 'Subject',
+                    value: subjectPerson
+                      ? `${subjectPerson.firstName} ${subjectPerson.lastName}`
+                      : '—',
+                  },
+                  { label: 'Submitted by', value: submitterAccount?.name ?? '—' },
+                  {
+                    label: 'Submitted at',
+                    value: response.submittedAt
+                      ? new Date(response.submittedAt).toLocaleString()
+                      : '—',
+                  },
+                  {
+                    label: 'Closed at',
+                    value: response.closedAt ? new Date(response.closedAt).toLocaleString() : '—',
+                  },
+                ]}
+              />
+            </Section>
 
-        <Section title="Overview">
-          <DetailGrid
-            rows={[
-              {
-                label: 'Template',
-                value: (
-                  <Link href={`/forms/templates/${template.id}`} className="text-teal-700 hover:underline">
-                    {template.name}
-                  </Link>
-                ),
-              },
-              { label: 'Template version', value: `v${version.version}` },
-              { label: 'Status', value: response.status.replace('_', ' ') },
-              { label: 'Current step', value: response.currentStep ?? '—' },
-              { label: 'Site', value: site?.name ?? '—' },
-              { label: 'Subject', value: subjectPerson ? `${subjectPerson.firstName} ${subjectPerson.lastName}` : '—' },
-              { label: 'Submitted by', value: submitterAccount?.name ?? '—' },
-              { label: 'Submitted at', value: response.submittedAt ? new Date(response.submittedAt).toLocaleString() : '—' },
-              { label: 'Closed at', value: response.closedAt ? new Date(response.closedAt).toLocaleString() : '—' },
-            ]}
-          />
-        </Section>
+            {scoreRows.length > 0 ? (
+              <Section title="Compliance scoring">
+                <div className="flex flex-wrap items-center gap-3 text-sm">
+                  <Badge variant="success">{passCount} pass</Badge>
+                  <Badge variant="destructive">{failCount} fail</Badge>
+                  <Badge variant="secondary">
+                    {scoreRows.length - passCount - failCount} n/a or rating
+                  </Badge>
+                  <span className="text-slate-500">{scoreRows.length} scored items total</span>
+                </div>
+              </Section>
+            ) : null}
 
-        {version.schema.sections.map((sec) => (
-          <Section key={sec.id} title={sec.title?.en ?? sec.id} subtitle={sec.repeating ? 'repeating section' : undefined}>
-            {sec.repeating ? renderRepeating(sec, response.data) : renderFlat(sec, response.data)}
-          </Section>
-        ))}
+            {version.schema.sections.map((sec) => (
+              <Section
+                key={sec.id}
+                title={sec.title?.en ?? sec.id}
+                subtitle={sec.repeating ? 'repeating section' : undefined}
+              >
+                {sec.repeating ? renderRepeating(sec, response.data) : renderFlat(sec, response.data)}
+              </Section>
+            ))}
 
-        <Section title={`Workflow steps (${steps.length})`} defaultOpen={steps.length > 0}>
-          {steps.length === 0 ? (
-            <p className="text-sm text-slate-500">No steps recorded for this response.</p>
-          ) : (
-            <ul className="divide-y divide-slate-100 text-sm">
-              {steps.map((s) => (
-                <li key={s.id} className="flex items-center justify-between py-2">
-                  <div>
-                    <div className="font-medium">{s.stepKey}</div>
-                    <div className="text-xs text-slate-500">
-                      {s.signedAt ? `signed ${new Date(s.signedAt).toLocaleString()}` : 'awaiting signature'}
-                    </div>
-                  </div>
-                  <Badge variant={s.signedAt ? 'success' : 'warning'}>{s.signedAt ? 'signed' : 'open'}</Badge>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Section>
+            <Section title={`Workflow steps (${steps.length})`} defaultOpen={steps.length > 0}>
+              {steps.length === 0 ? (
+                <p className="text-sm text-slate-500">No steps recorded for this response.</p>
+              ) : (
+                <ul className="divide-y divide-slate-100 text-sm">
+                  {steps.map((s) => (
+                    <li key={s.id} className="flex items-center justify-between py-2">
+                      <div>
+                        <div className="font-medium">{s.stepKey}</div>
+                        <div className="text-xs text-slate-500">
+                          {s.signedAt
+                            ? `signed ${new Date(s.signedAt).toLocaleString()}`
+                            : 'awaiting signature'}
+                        </div>
+                      </div>
+                      <Badge variant={s.signedAt ? 'success' : 'warning'}>
+                        {s.signedAt ? 'signed' : 'open'}
+                      </Badge>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Section>
+          </>
+        ) : null}
+
+        {active === 'comments' ? (
+          <div className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Comments ({comments.length})</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {comments.length === 0 ? (
+                  <EmptyState
+                    icon={<MessageSquare size={24} />}
+                    title="No comments yet"
+                    description="Use comments for back-and-forth between reviewers and submitters, follow-up notes, or correction history."
+                  />
+                ) : (
+                  <ul className="space-y-3 text-sm">
+                    {comments.map((c) => (
+                      <li
+                        key={c.comment.id}
+                        className="rounded-md border border-slate-200 bg-white p-3"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium">
+                            {c.account?.name ?? c.author?.displayName ?? 'Someone'}
+                          </span>
+                          <span className="text-xs text-slate-500">
+                            {new Date(c.comment.createdAt).toLocaleString()}
+                          </span>
+                        </div>
+                        <p className="mt-1 whitespace-pre-wrap text-slate-800">{c.comment.body}</p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </CardContent>
+            </Card>
+            <Section title="Add a comment">
+              <form action={addComment} className="space-y-3">
+                <input type="hidden" name="responseId" value={id} />
+                <Textarea name="body" rows={3} required placeholder="Type a comment…" />
+                <div className="flex justify-end">
+                  <Button type="submit">
+                    <Send size={14} /> Post comment
+                  </Button>
+                </div>
+              </form>
+            </Section>
+          </div>
+        ) : null}
+
+        {active === 'audit' ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Audit trail</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ActivityFeed entries={activity} />
+            </CardContent>
+          </Card>
+        ) : null}
       </div>
-    </PageContainer>
+    </DetailPageLayout>
   )
 }
 
@@ -148,7 +425,9 @@ function renderFlat(sec: any, values: Record<string, unknown>) {
     <dl className="grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
       {sec.fields.map((f: any) => (
         <div key={f.id} className="flex flex-col">
-          <dt className="text-xs uppercase tracking-wide text-slate-500">{f.label?.en ?? f.id}</dt>
+          <dt className="text-xs uppercase tracking-wide text-slate-500">
+            {f.label?.en ?? f.id}
+          </dt>
           <dd className="text-slate-900">{renderValue(f.type, values[f.id])}</dd>
         </div>
       ))}
@@ -188,16 +467,22 @@ function renderValue(type: string, raw: unknown) {
     case 'checkbox_group':
     case 'multi_select':
     case 'person_picker':
+    case 'multi_person_picker':
       return Array.isArray(raw)
         ? raw.map((v) => String(v).slice(0, 8)).join(', ')
         : String(raw).slice(0, 8)
     case 'signature':
       return <span className="text-slate-500">[signature captured]</span>
     case 'photo':
+    case 'photo_upload':
     case 'file':
     case 'video':
     case 'audio':
-      return <span className="text-slate-500">[{Array.isArray(raw) ? raw.length : 1} attachment]</span>
+      return (
+        <span className="text-slate-500">
+          [{Array.isArray(raw) ? raw.length : 1} attachment]
+        </span>
+      )
     default:
       return String(raw)
   }

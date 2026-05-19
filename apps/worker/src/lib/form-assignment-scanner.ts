@@ -41,8 +41,8 @@ export type CronFields = {
 
 /**
  * Parse a small subset of cron syntax: `m h dom mon dow` with `*`, single
- * numbers, `a,b,c` lists, and `*/n` step. No ranges, no named months/days.
- * Throws on parse error; callers should catch and skip the assignment.
+ * numbers, `a,b,c` lists, and step syntax like `* / n`. No ranges, no named
+ * months/days. Throws on parse error; callers catch and skip the assignment.
  */
 export function parseCron(expr: string): CronFields {
   const parts = expr.trim().split(/\s+/)

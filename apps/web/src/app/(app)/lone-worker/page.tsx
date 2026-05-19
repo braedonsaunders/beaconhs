@@ -18,7 +18,7 @@ import {
 } from '@beaconhs/ui'
 import { lwSessions, orgUnits, tenantUsers, user } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
-import { parseListParams, pickString } from '@/lib/list-params'
+import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
@@ -101,9 +101,14 @@ export default async function LoneWorkerPage({
             title="Lone worker"
             description="Timer-based check-ins with auto-escalation. Workers on solo tasks open a session; the scheduler watches and pages the supervisor on missed check-ins."
             actions={
-              <Link href="/lone-worker/new">
-                <Button>Start session</Button>
-              </Link>
+              <div className="flex items-center gap-2">
+                <Link href={buildExportHref('/lone-worker/export.csv', sp)}>
+                  <Button variant="outline">Export CSV</Button>
+                </Link>
+                <Link href="/lone-worker/new">
+                  <Button>Start session</Button>
+                </Link>
+              </div>
             }
           />
 

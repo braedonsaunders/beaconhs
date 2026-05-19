@@ -258,9 +258,12 @@ function FieldInput({
     case 'url':
       return <Input value={(value as string) ?? ''} onChange={(e) => onChange(e.target.value)} type={field.type === 'email' ? 'email' : field.type === 'phone' ? 'tel' : field.type === 'url' ? 'url' : 'text'} />
     case 'textarea':
+    case 'long_text':
       return <Textarea rows={3} value={(value as string) ?? ''} onChange={(e) => onChange(e.target.value)} />
     case 'number':
     case 'rating':
+    case 'formula':
+    case 'calc':
       return <Input type="number" value={(value as number) ?? ''} onChange={(e) => onChange(e.target.value === '' ? '' : Number(e.target.value))} />
     case 'date':
       return <Input type="date" value={(value as string) ?? ''} onChange={(e) => onChange(e.target.value)} />
@@ -390,9 +393,45 @@ function FieldInput({
           ))}
         </Select>
       )
+    case 'multi_person_picker': {
+      const arr = Array.isArray(value) ? (value as string[]) : []
+      return (
+        <div className="space-y-1 rounded-md border border-slate-200 bg-white p-2 max-h-48 overflow-y-auto">
+          {people.length === 0 ? (
+            <p className="text-xs text-slate-500">No people available.</p>
+          ) : (
+            people.map((p) => (
+              <label key={p.id} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={arr.includes(p.id)}
+                  onChange={(e) =>
+                    onChange(
+                      e.target.checked
+                        ? [...arr, p.id]
+                        : arr.filter((v) => v !== p.id),
+                    )
+                  }
+                />
+                {p.lastName}, {p.firstName}
+              </label>
+            ))
+          )}
+        </div>
+      )
+    }
+    case 'site_picker':
+      return (
+        <Input
+          value={(value as string) ?? ''}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="(site id — see top-of-form site picker)"
+        />
+      )
     case 'signature':
       return <SignatureField value={(value as string | null) ?? null} onChange={onChange} />
     case 'photo':
+    case 'photo_upload':
       return (
         <FileUpload
           variant="photo"

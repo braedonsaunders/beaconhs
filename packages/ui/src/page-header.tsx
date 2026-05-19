@@ -4,21 +4,30 @@ export function PageHeader({
   title,
   description,
   actions,
+  back,
   className,
 }: {
   title: string
   description?: string
   actions?: React.ReactNode
+  back?: { href: string; label: string }
   className?: string
 }) {
   return (
-    <header className={cn('flex items-end justify-between gap-4', className)}>
-      <div className="min-w-0 space-y-1">
-        <h1 className="truncate text-2xl font-semibold text-slate-900">{title}</h1>
-        {description ? <p className="text-sm text-slate-500">{description}</p> : null}
-      </div>
-      {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
-    </header>
+    <div className={cn('space-y-2', className)}>
+      {back ? (
+        <a href={back.href} className="text-xs text-slate-500 hover:text-teal-700">
+          ← {back.label}
+        </a>
+      ) : null}
+      <header className="flex items-end justify-between gap-4">
+        <div className="min-w-0 space-y-1">
+          <h1 className="truncate text-2xl font-semibold text-slate-900">{title}</h1>
+          {description ? <p className="text-sm text-slate-500">{description}</p> : null}
+        </div>
+        {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
+      </header>
+    </div>
   )
 }
 

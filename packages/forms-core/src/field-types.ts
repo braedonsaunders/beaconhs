@@ -25,6 +25,7 @@ export const FIELD_TYPES: Record<FieldType, FieldTypeMeta> = {
   // standard
   text: { type: 'text', category: 'standard', label: 'Short text', description: 'Single-line text input', scoring: false, valueKind: 'string' },
   textarea: { type: 'textarea', category: 'standard', label: 'Long text', description: 'Multi-line text area', scoring: false, valueKind: 'string' },
+  long_text: { type: 'long_text', category: 'standard', label: 'Long text', description: 'Multi-line text area (alias of textarea)', scoring: false, valueKind: 'string' },
   number: { type: 'number', category: 'standard', label: 'Number', description: 'Numeric input with optional units', scoring: false, valueKind: 'number' },
   date: { type: 'date', category: 'standard', label: 'Date', description: 'Date picker', scoring: false, valueKind: 'string' },
   datetime: { type: 'datetime', category: 'standard', label: 'Date & time', description: 'Date + time picker', scoring: false, valueKind: 'string' },
@@ -47,6 +48,7 @@ export const FIELD_TYPES: Record<FieldType, FieldTypeMeta> = {
 
   // pickers
   person_picker: { type: 'person_picker', category: 'picker', label: 'Person', description: 'Pick a person from the directory', scoring: false, valueKind: 'entity_ref' },
+  multi_person_picker: { type: 'multi_person_picker', category: 'picker', label: 'People (multiple)', description: 'Pick one or more people from the directory', scoring: false, valueKind: 'entity_ref_array' },
   site_picker: { type: 'site_picker', category: 'picker', label: 'Site', description: 'Pick a site/location', scoring: false, valueKind: 'entity_ref' },
   equipment_picker: { type: 'equipment_picker', category: 'picker', label: 'Equipment', description: 'Pick equipment / asset', scoring: false, valueKind: 'entity_ref' },
   ppe_picker: { type: 'ppe_picker', category: 'picker', label: 'PPE', description: 'Pick a PPE item', scoring: false, valueKind: 'entity_ref' },
@@ -55,6 +57,7 @@ export const FIELD_TYPES: Record<FieldType, FieldTypeMeta> = {
 
   // media
   photo: { type: 'photo', category: 'media', label: 'Photo', description: 'Camera / gallery upload with annotation', scoring: false, valueKind: 'attachment_id_array' },
+  photo_upload: { type: 'photo_upload', category: 'media', label: 'Photo upload', description: 'Camera / gallery upload (alias of photo)', scoring: false, valueKind: 'attachment_id_array' },
   file: { type: 'file', category: 'media', label: 'File', description: 'PDF / Word / Excel upload', scoring: false, valueKind: 'attachment_id_array' },
   video: { type: 'video', category: 'media', label: 'Video', description: 'Short video upload', scoring: false, valueKind: 'attachment_id_array' },
   audio: { type: 'audio', category: 'media', label: 'Audio note', description: 'Voice recording', scoring: false, valueKind: 'attachment_id_array' },
@@ -65,6 +68,7 @@ export const FIELD_TYPES: Record<FieldType, FieldTypeMeta> = {
 
   // computed
   formula: { type: 'formula', category: 'computed', label: 'Formula', description: 'Computed from other fields', scoring: false, valueKind: 'number' },
+  calc: { type: 'calc', category: 'computed', label: 'Calculated value', description: 'Computed from other fields (alias of formula)', scoring: false, valueKind: 'number' },
   risk_matrix: { type: 'risk_matrix', category: 'computed', label: 'Risk matrix', description: 'Severity × likelihood', scoring: true, valueKind: 'compound' },
 
   // display
