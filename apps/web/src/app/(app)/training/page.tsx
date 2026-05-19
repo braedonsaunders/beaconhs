@@ -69,6 +69,12 @@ export default async function TrainingPage() {
             Courses
           </Link>
           <Link
+            href="/training/classes"
+            className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:border-teal-500 hover:bg-teal-50 hover:text-teal-700"
+          >
+            Classes
+          </Link>
+          <Link
             href="/training/authorities"
             className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:border-teal-500 hover:bg-teal-50 hover:text-teal-700"
           >

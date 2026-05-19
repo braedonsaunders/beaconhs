@@ -29,8 +29,10 @@ export const metadata = { title: 'Inspections' }
 
 const SORTS = ['submitted_at', 'template', 'status'] as const
 
-// Inspections in BeaconHS = form_responses against templates with category='inspection'
-// (legacy: a dedicated Inspections module; new: same surface but built on the form builder)
+// Inspections in BeaconHS = form_responses against templates with category='inspection'.
+// We re-use the same surface for the four canonical module-bound categories
+// (jsha / toolbox_talk / lift_plan / wah) — driven by ?bound=… — so users get a
+// dedicated landing for the legacy big modules without duplicating the UI.
 
 const STATUS_OPTIONS = [
   { value: 'draft', label: 'Draft' },
@@ -40,6 +42,21 @@ const STATUS_OPTIONS = [
   { value: 'closed', label: 'Closed' },
 ]
 
+// Sub-nav pills mapping a "bound" value to the moduleBinding/category pair to
+// filter on. The default ('') is the classic Inspections view.
+const MODULE_PILLS = [
+  { value: '', label: 'Inspections', moduleBinding: null as string | null, category: 'inspection' },
+  { value: 'jsha', label: 'JSHAs', moduleBinding: 'jsha', category: 'jsha' },
+  { value: 'toolbox_talk', label: 'Toolbox talks', moduleBinding: 'toolbox_talk', category: 'toolbox_talk' },
+  { value: 'lift_plan', label: 'Lift plans', moduleBinding: 'lift_plan', category: 'lift_plan' },
+  { value: 'wah', label: 'WAH rescue', moduleBinding: 'wah', category: 'wah' },
+] as const
+
+function resolveBound(raw: string | undefined): (typeof MODULE_PILLS)[number] {
+  const found = MODULE_PILLS.find((p) => p.value === raw)
+  return found ?? MODULE_PILLS[0]!
+}
+
 export default async function InspectionsPage({
   searchParams,
 }: {
@@ -48,10 +65,21 @@ export default async function InspectionsPage({
   const sp = await searchParams
   const params = parseListParams(sp, { sort: 'submitted_at', dir: 'desc', perPage: 25, allowedSorts: SORTS })
   const statusFilter = pickString(sp.status)
+  const bound = resolveBound(pickString(sp.bound))
   const ctx = await requireRequestContext()
 
   const { rows, total, statusCounts, templates } = await ctx.db(async (tx) => {
-    const filters: SQL<unknown>[] = [eq(formTemplates.category, 'inspection')]
+    // When bound is set, prefer moduleBinding for the template filter — that's
+    // the canonical signal — but fall back to category so legacy templates
+    // (set up before moduleBinding was added) still flow through.
+    const templateScope: SQL<unknown> = bound.value
+      ? (or(
+          eq(formTemplates.moduleBinding, bound.moduleBinding!),
+          eq(formTemplates.category, bound.category),
+        ) as SQL<unknown>)
+      : eq(formTemplates.category, 'inspection')
+
+    const filters: SQL<unknown>[] = [templateScope]
     if (params.q) {
       const term = `%${params.q}%`
       const cond = ilike(formTemplates.name, term)
@@ -85,12 +113,12 @@ export default async function InspectionsPage({
       .select({ s: formResponses.status, c: count() })
       .from(formResponses)
       .innerJoin(formTemplates, eq(formTemplates.id, formResponses.templateId))
-      .where(eq(formTemplates.category, 'inspection'))
+      .where(templateScope)
       .groupBy(formResponses.status)
     const tmpls = await tx
       .select({ id: formTemplates.id, name: formTemplates.name, status: formTemplates.status })
       .from(formTemplates)
-      .where(eq(formTemplates.category, 'inspection'))
+      .where(templateScope)
       .orderBy(asc(formTemplates.name))
     return {
       rows: data,
@@ -102,13 +130,27 @@ export default async function InspectionsPage({
 
   const sortProps = { basePath: '/inspections', currentParams: sp, dir: params.dir }
 
+  // Title / copy adapt to the bound pill so the page feels like a dedicated
+  // landing for each of the four legacy big modules.
+  const pageTitle = bound.value ? bound.label : 'Inspections'
+  const pageDescription = bound.value
+    ? `${bound.label} live on the form-template surface — every template tagged with the "${bound.moduleBinding}" module binding shows up here.`
+    : 'Pass/fail/N/A criteria, comments, photos, customer signature. Each inspection type is a form template.'
+
+  // "New" CTA links to the right kind of template — bound pages fall back to
+  // the canonical gallery filtered by the matching category.
+  const newCtaLabel = bound.value ? `New ${bound.label.toLowerCase()}` : 'New inspection'
+  const noTemplatesCtaHref = bound.value
+    ? `/forms/templates/new?category=${bound.category}`
+    : '/forms/templates/new?category=inspection'
+
   return (
     <ListPageLayout
       header={
         <>
           <PageHeader
-            title="Inspections"
-            description="Pass/fail/N/A criteria, comments, photos, customer signature. Each inspection type is a form template."
+            title={pageTitle}
+            description={pageDescription}
             actions={
               <div className="flex items-center gap-2">
                 <Link href={buildExportHref('/inspections/export.csv', sp)}>
@@ -116,25 +158,37 @@ export default async function InspectionsPage({
                 </Link>
                 {templates.length > 0 ? (
                   <Link href={`/forms/templates/${templates[0]!.id}/fill`}>
-                    <Button>New inspection</Button>
+                    <Button>{newCtaLabel}</Button>
                   </Link>
                 ) : (
-                  <Link href="/forms/templates/new?category=inspection">
-                    <Button>Create inspection template</Button>
+                  <Link href={noTemplatesCtaHref as any}>
+                    <Button>Create template</Button>
                   </Link>
                 )}
               </div>
             }
           />
           <nav className="flex flex-wrap items-center gap-2">
+            {MODULE_PILLS.map((pill) => {
+              const isActive = pill.value === bound.value
+              const href = pill.value ? `/inspections?bound=${pill.value}` : '/inspections'
+              return (
+                <Link
+                  key={pill.value || 'all'}
+                  href={href as any}
+                  className={
+                    isActive
+                      ? 'rounded-full border border-teal-500 bg-teal-50 px-3 py-1 text-xs font-medium text-teal-700'
+                      : 'rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:border-teal-500 hover:bg-teal-50 hover:text-teal-700'
+                  }
+                >
+                  {pill.label}
+                </Link>
+              )
+            })}
+            <span className="mx-1 h-4 w-px bg-slate-200" />
             <Link
-              href="/inspections"
-              className="rounded-full border border-teal-500 bg-teal-50 px-3 py-1 text-xs font-medium text-teal-700"
-            >
-              Recent inspections
-            </Link>
-            <Link
-              href="/forms?category=inspection"
+              href={`/forms?category=${bound.value || 'inspection'}` as any}
               className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:border-teal-500 hover:bg-teal-50 hover:text-teal-700"
             >
               Templates
@@ -151,16 +205,38 @@ export default async function InspectionsPage({
     >
       {templates.length === 0 ? (
         <Alert variant="info">
-          <AlertTitle>No inspection templates yet</AlertTitle>
+          <AlertTitle>
+            {bound.value ? `No ${bound.label} templates yet` : 'No inspection templates yet'}
+          </AlertTitle>
           <AlertDescription>
-            Inspections are configurable form templates with the category{' '}
-            <code className="font-mono">inspection</code>. Create your first template to get
-            started.
+            {bound.value ? (
+              <>
+                Tag a template with module binding{' '}
+                <code className="font-mono">{bound.moduleBinding}</code> (or category{' '}
+                <code className="font-mono">{bound.category}</code>) and it'll show up here.
+                The fastest way is to clone the canonical from the{' '}
+                <Link
+                  href="/forms/templates/new"
+                  className="font-medium text-teal-700 hover:underline"
+                >
+                  template gallery
+                </Link>
+                .
+              </>
+            ) : (
+              <>
+                Inspections are configurable form templates with the category{' '}
+                <code className="font-mono">inspection</code>. Create your first template to get
+                started.
+              </>
+            )}
           </AlertDescription>
         </Alert>
       ) : (
         <div className="rounded-lg border border-slate-200 bg-white p-4">
-          <h3 className="mb-2 text-sm font-semibold">Available inspection types ({templates.length})</h3>
+          <h3 className="mb-2 text-sm font-semibold">
+            Available {bound.value ? `${bound.label.toLowerCase()} ` : 'inspection '}types ({templates.length})
+          </h3>
           <div className="flex flex-wrap gap-2">
             {templates.map((t) => (
               <Link
@@ -189,8 +265,23 @@ export default async function InspectionsPage({
       {rows.length === 0 ? (
         <EmptyState
           icon={<ClipboardList size={32} />}
-          title="No inspections yet"
-          description="Pick an inspection type above to record one."
+          title={bound.value ? `No ${bound.label.toLowerCase()} submitted yet` : 'No inspections yet'}
+          description={
+            bound.value
+              ? `Pick a ${bound.label.toLowerCase()} template above to record one.`
+              : 'Pick an inspection type above to record one.'
+          }
+          action={
+            templates.length > 0 ? (
+              <Link href={`/forms/templates/${templates[0]!.id}/fill`}>
+                <Button>{newCtaLabel}</Button>
+              </Link>
+            ) : (
+              <Link href={noTemplatesCtaHref as any}>
+                <Button>Create template</Button>
+              </Link>
+            )
+          }
         />
       ) : (
         <>

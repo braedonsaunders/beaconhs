@@ -157,17 +157,17 @@ export default async function TruckLogSummaryPage({
             description={`Annual roll-up of km driven, hours on site, and manpower for ${year}.`}
             actions={
               <div className="flex items-center gap-2">
-                <Link href={`/equipment/truck-log/summary?year=${year - 1}`}>
+                <Link href={`/equipment/truck-log/summary?year=${year - 1}` as any}>
                   <Button variant="outline" size="sm">
                     ← {year - 1}
                   </Button>
                 </Link>
-                <Link href={`/equipment/truck-log/summary?year=${year + 1}`}>
+                <Link href={`/equipment/truck-log/summary?year=${year + 1}` as any}>
                   <Button variant="outline" size="sm">
                     {year + 1} →
                   </Button>
                 </Link>
-                <Link href={buildHref('/equipment/truck-log/export.csv', { year })}>
+                <Link href={buildHref('/equipment/truck-log/export.csv', { year }) as any}>
                   <Button>Export CSV</Button>
                 </Link>
               </div>
@@ -230,7 +230,7 @@ export default async function TruckLogSummaryPage({
                       return (
                         <TableCell key={i} className="text-center align-top">
                           <Link
-                            href={`/equipment/truck-log?month=${year}-${pad2(i + 1)}`}
+                            href={`/equipment/truck-log?month=${year}-${pad2(i + 1)}` as any}
                             className="block rounded bg-slate-50 px-1.5 py-1 text-[11px] hover:bg-teal-50"
                           >
                             <div className="font-medium text-slate-900">{m.km} km</div>

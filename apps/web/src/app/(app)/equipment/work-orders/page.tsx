@@ -156,7 +156,7 @@ export default async function WorkOrdersPage({
             description="Track repairs and scheduled service against equipment."
             actions={
               <div className="flex items-center gap-2">
-                <Link href="/equipment/work-orders/new">
+                <Link href={'/equipment/work-orders/new' as any}>
                   <Button>New work order</Button>
                 </Link>
               </div>
@@ -194,7 +194,7 @@ export default async function WorkOrdersPage({
           }
           description="Open the first work order to start tracking repairs against your equipment."
           action={
-            <Link href="/equipment/work-orders/new">
+            <Link href={'/equipment/work-orders/new' as any}>
               <Button>Create first work order</Button>
             </Link>
           }
@@ -227,13 +227,16 @@ export default async function WorkOrdersPage({
               {rows.map(({ wo, item, assignee, assigneeUser }) => (
                 <TableRow key={wo.id}>
                   <TableCell className="font-mono text-xs">
-                    <Link href={`/equipment/work-orders/${wo.id}`} className="hover:underline">
+                    <Link
+                      href={`/equipment/work-orders/${wo.id}` as any}
+                      className="hover:underline"
+                    >
                       {wo.reference}
                     </Link>
                   </TableCell>
                   <TableCell>
                     <Link
-                      href={`/equipment/work-orders/${wo.id}`}
+                      href={`/equipment/work-orders/${wo.id}` as any}
                       className="font-medium text-slate-900 hover:underline"
                     >
                       {wo.summary}

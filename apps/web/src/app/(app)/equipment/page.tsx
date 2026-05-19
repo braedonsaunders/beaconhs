@@ -21,6 +21,7 @@ import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
+import { EquipmentSubNav } from '@/components/equipment-sub-nav'
 
 export const metadata = { title: 'Equipment' }
 
@@ -99,6 +100,7 @@ export default async function EquipmentPage({
     <ListPageLayout
       header={
         <>
+          <EquipmentSubNav active="equipment" />
           <PageHeader
             title="Equipment"
             description="Asset registry. QR scan + inspections + work orders."

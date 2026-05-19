@@ -129,10 +129,10 @@ export default async function TruckLogPage({
             description="Per-day per-truck odometer, manpower, and hours. Powers the monthly billing summary."
             actions={
               <div className="flex items-center gap-2">
-                <Link href="/equipment/truck-log/summary">
+                <Link href={'/equipment/truck-log/summary' as any}>
                   <Button variant="outline">Monthly summary</Button>
                 </Link>
-                <Link href={`/equipment/truck-log/new?month=${year}-${pad2(month)}`}>
+                <Link href={`/equipment/truck-log/new?month=${year}-${pad2(month)}` as any}>
                   <Button>New entry</Button>
                 </Link>
               </div>
@@ -140,13 +140,13 @@ export default async function TruckLogPage({
           />
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <Link href={`/equipment/truck-log?month=${monthParamPrev}`}>
+              <Link href={`/equipment/truck-log?month=${monthParamPrev}` as any}>
                 <Button variant="outline" size="sm">
                   ← Previous
                 </Button>
               </Link>
               <div className="text-sm font-medium text-slate-700">{fmtMonthLabel(year, month)}</div>
-              <Link href={`/equipment/truck-log?month=${monthParamNext}`}>
+              <Link href={`/equipment/truck-log?month=${monthParamNext}` as any}>
                 <Button variant="outline" size="sm">
                   Next →
                 </Button>
@@ -203,7 +203,9 @@ export default async function TruckLogPage({
                         return (
                           <TableCell key={d} className="px-1 text-center align-middle">
                             <Link
-                              href={`/equipment/truck-log/new?truckId=${t.id}&date=${date}`}
+                              href={
+                                `/equipment/truck-log/new?truckId=${t.id}&date=${date}` as any
+                              }
                               className="block py-1 text-[11px] text-slate-300 hover:text-teal-700"
                             >
                               ·
@@ -214,7 +216,7 @@ export default async function TruckLogPage({
                       return (
                         <TableCell key={d} className="px-1 text-center align-middle">
                           <Link
-                            href={`/equipment/truck-log/${cell.id}`}
+                            href={`/equipment/truck-log/${cell.id}` as any}
                             className="block rounded bg-teal-50 px-1.5 py-1 text-[11px] font-medium text-teal-800 hover:bg-teal-100"
                           >
                             {cell.km ?? '·'}

@@ -71,11 +71,11 @@ async function createEntry(formData: FormData) {
         endOdometer,
         kmDriven,
         siteOrgUnitId,
-        hoursOnSite: hoursRaw as any,
+        hoursOnSite: hoursRaw,
         manpowerCount,
         notes,
         createdByTenantUserId: ctx.membership?.id,
-      })
+      } as any)
       .returning()
     return inserted
   })

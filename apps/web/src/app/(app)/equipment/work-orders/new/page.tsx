@@ -44,11 +44,12 @@ async function createWorkOrder(formData: FormData) {
 
   const row = await ctx.db(async (tx) => {
     const year = new Date().getFullYear()
-    const [{ c }] = await tx
+    const counts = await tx
       .select({ c: sql<number>`count(*)::int` })
       .from(equipmentWorkOrders)
       .where(sql`extract(year from ${equipmentWorkOrders.openedAt}) = ${year}`)
-    const reference = `WO-${year}-${String(Number(c ?? 0) + 1).padStart(4, '0')}`
+    const c = counts[0]?.c ?? 0
+    const reference = `WO-${year}-${String(Number(c) + 1).padStart(4, '0')}`
     const [inserted] = await tx
       .insert(equipmentWorkOrders)
       .values({
@@ -62,7 +63,7 @@ async function createWorkOrder(formData: FormData) {
         reportedByPersonId,
         assignedToTenantUserId,
         openedByTenantUserId: ctx.membership?.id,
-      })
+      } as any)
       .returning()
     return inserted
   })
