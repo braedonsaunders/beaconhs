@@ -1,11 +1,10 @@
 'use client'
 
-// Inline add-row form for the Lost Time tab.  Lives next to the existing
-// event table — no modal so the admin can scan history while typing.
+// Add-row form for the Lost Time tab.  Now rendered inside a drawer; the
+// parent drawer's footer Submit button targets us via `form={formId}`.
 
 import { useTransition } from 'react'
-import { Button, Input, Label, Textarea } from '@beaconhs/ui'
-import { Plus } from 'lucide-react'
+import { Input, Label, Textarea } from '@beaconhs/ui'
 
 const STATUSES = [
   { value: 'off_work', label: 'Off work' },
@@ -16,69 +15,83 @@ const STATUSES = [
 export function LostTimeAddForm({
   addAction,
   injuryOptions,
+  formId,
 }: {
   addAction: (formData: FormData) => Promise<void>
   injuryOptions: { id: string; label: string }[]
+  formId?: string
 }) {
   const [isPending, startTransition] = useTransition()
   return (
     <form
+      id={formId}
       action={(fd) => startTransition(() => addAction(fd))}
-      className="grid grid-cols-1 gap-3 rounded-md border border-slate-200 bg-slate-50/40 p-3 sm:grid-cols-[140px_140px_140px_180px_1fr_120px]"
+      className="space-y-3"
     >
-      <div className="space-y-1.5">
-        <Label htmlFor="status">Status</Label>
-        <select
-          id="status"
-          name="status"
-          defaultValue="off_work"
-          className="h-9 w-full rounded-md border border-slate-300 bg-white px-2 text-sm"
-        >
-          {STATUSES.map((s) => (
-            <option key={s.value} value={s.value}>
-              {s.label}
-            </option>
-          ))}
-        </select>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label htmlFor="ltf-status">Status</Label>
+          <select
+            id="ltf-status"
+            name="status"
+            defaultValue="off_work"
+            className="h-9 w-full rounded-md border border-slate-300 bg-white px-2 text-sm"
+            disabled={isPending}
+          >
+            {STATUSES.map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="ltf-injury">Injury</Label>
+          <select
+            id="ltf-injury"
+            name="injuryId"
+            defaultValue=""
+            className="h-9 w-full rounded-md border border-slate-300 bg-white px-2 text-sm"
+            disabled={isPending}
+          >
+            <option value="">— Any —</option>
+            {injuryOptions.map((opt) => (
+              <option key={opt.id} value={opt.id}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label htmlFor="ltf-from">From *</Label>
+          <Input
+            id="ltf-from"
+            name="validFrom"
+            type="date"
+            required
+            disabled={isPending}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="ltf-to">To</Label>
+          <Input id="ltf-to" name="validTo" type="date" disabled={isPending} />
+        </div>
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="validFrom">From *</Label>
-        <Input id="validFrom" name="validFrom" type="date" required />
-      </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="validTo">To</Label>
-        <Input id="validTo" name="validTo" type="date" />
-      </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="injuryId">Injury</Label>
-        <select
-          id="injuryId"
-          name="injuryId"
-          defaultValue=""
-          className="h-9 w-full rounded-md border border-slate-300 bg-white px-2 text-sm"
-        >
-          <option value="">— Any —</option>
-          {injuryOptions.map((opt) => (
-            <option key={opt.id} value={opt.id}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="space-y-1.5 sm:col-span-1">
-        <Label htmlFor="notes">Notes</Label>
+        <Label htmlFor="ltf-notes">Notes</Label>
         <Textarea
-          id="notes"
+          id="ltf-notes"
           name="notes"
-          rows={1}
+          rows={3}
           placeholder="Restriction summary (e.g. ‘no overhead reaching’)"
+          disabled={isPending}
         />
       </div>
-      <div className="flex items-end">
-        <Button type="submit" disabled={isPending} className="w-full">
-          <Plus size={14} /> {isPending ? 'Saving…' : 'Add row'}
-        </Button>
-      </div>
+      <p className="text-xs text-slate-500">
+        {isPending ? 'Saving…' : 'Submit from the drawer footer when ready.'}
+      </p>
     </form>
   )
 }

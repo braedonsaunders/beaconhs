@@ -8,8 +8,9 @@ import {
   Badge,
   Button,
   DetailHeader,
+  UrlDrawer,
 } from '@beaconhs/ui'
-import { FileText, Lock, Mail, Unlock } from 'lucide-react'
+import { FileText, Lock, Mail, Plus, Unlock } from 'lucide-react'
 import {
   atmosphericSensors,
   attachments,
@@ -73,16 +74,24 @@ import {
   unlockAssessment,
   updateHazard,
   updatePPE,
+  updateQuestion,
   updateTask,
   updateTextField,
 } from '../_actions'
 import {
-  AddAtmosphericForm,
-  AddEntryForm,
-  AddHazardForm,
-  AddPPEForm,
-  AddQuestionForm,
-  AddTaskForm,
+  AddAtmosphericDrawerBody,
+  AddEntryDrawerBody,
+  AddHazardDrawerBody,
+  AddHazardLibraryDrawerBody,
+  AddHazardSetDrawerBody,
+  AddPPEDrawerBody,
+  AddQuestionDrawerBody,
+  AddTaskDrawerBody,
+  EditHazardDrawerBody,
+  EditPPEDrawerBody,
+  EditQuestionDrawerBody,
+  EditTaskDrawerBody,
+  ExitEntryDrawerBody,
   HazardRow,
   PPERow,
   QuestionRow,
@@ -91,7 +100,7 @@ import {
 } from './_sections'
 import { InlineField } from '../_field'
 import { CSDiagram } from '../_cs-diagram'
-import { AddSignatureForm } from '../_signature-form'
+import { AddSignatureDrawerBody } from '../_signature-form'
 import { HazidPhotoUploader } from '../_photo-uploader'
 
 export const dynamic = 'force-dynamic'
@@ -153,6 +162,12 @@ export default async function HazidAssessmentDetailPage({
   const sp = await searchParams
   const active = pickActiveTab(sp, TABS, 'overview')
   const ctx = await requireRequestContext()
+  const drawerKey = pickString(sp.drawer) ?? ''
+  const editTaskId = pickString(sp.taskId) ?? ''
+  const editHazardId = pickString(sp.hazardId) ?? ''
+  const editPPEId = pickString(sp.ppeId) ?? ''
+  const editQuestionId = pickString(sp.questionId) ?? ''
+  const editEntryId = pickString(sp.entryId) ?? ''
 
   const data = await ctx.db(async (tx) => {
     const [row] = await tx
@@ -321,6 +336,30 @@ export default async function HazidAssessmentDetailPage({
   const showHazards = type?.hasHazards ?? true
 
   const basePath = `/hazid/${id}`
+
+  // Close-href for a drawer in tab X is "?tab=X" (or just basePath for the
+  // default Overview tab). This lets the drawer close without changing tabs.
+  const tabHref = active === 'overview' ? basePath : `${basePath}?tab=${active}`
+  const drawerHref = (key: string, extra?: Record<string, string>) => {
+    const params = new URLSearchParams()
+    if (active !== 'overview') params.set('tab', active)
+    params.set('drawer', key)
+    if (extra) for (const [k, v] of Object.entries(extra)) params.set(k, v)
+    return `${basePath}?${params.toString()}`
+  }
+
+  // Look up rows targeted by edit drawers — done up front so the drawer body
+  // can render with the correct initial values. If the id doesn't resolve we
+  // simply don't open the drawer (the `open=` predicate stays false).
+  const editTaskRow = editTaskId ? tasks.find((t) => t.row.id === editTaskId) : undefined
+  const editHazardRow = editHazardId ? hazards.find((h) => h.row.id === editHazardId) : undefined
+  const editPPERow = editPPEId ? ppe.find((p) => p.id === editPPEId) : undefined
+  const editQuestionRow = editQuestionId
+    ? questions.find((q) => q.id === editQuestionId)
+    : undefined
+  const exitEntryRow = editEntryId
+    ? entries.find((e) => e.row.id === editEntryId)
+    : undefined
 
   return (
     <DetailPageLayout
@@ -497,7 +536,15 @@ export default async function HazidAssessmentDetailPage({
         {active === 'ppe' && showPPE ? (
           <Section title={`Personal Protective Equipment (${ppe.length})`} defaultOpen>
             <div className="space-y-3">
-              <AddPPEForm assessmentId={id} disabled={locked} addAction={addPPE} />
+              {locked ? null : (
+                <div className="flex items-center justify-end">
+                  <Link href={drawerHref('add-ppe') as any}>
+                    <Button type="button" size="sm">
+                      <Plus size={12} /> Add PPE
+                    </Button>
+                  </Link>
+                </div>
+              )}
               {ppe.length === 0 ? (
                 <p className="text-sm text-slate-500">No PPE rows yet.</p>
               ) : (
@@ -509,6 +556,8 @@ export default async function HazidAssessmentDetailPage({
                       assessmentId={id}
                       index={idx}
                       totalCount={ppe.length}
+                      basePath={basePath}
+                      activeTab={active}
                       disabled={locked}
                       answerAction={answerPPE}
                       moveAction={movePPE}
@@ -524,7 +573,15 @@ export default async function HazidAssessmentDetailPage({
         {active === 'questions' && showQ ? (
           <Section title={`Questions & Answers (${questions.length})`} defaultOpen>
             <div className="space-y-3">
-              <AddQuestionForm assessmentId={id} disabled={locked} addAction={addQuestion} />
+              {locked ? null : (
+                <div className="flex items-center justify-end">
+                  <Link href={drawerHref('add-question') as any}>
+                    <Button type="button" size="sm">
+                      <Plus size={12} /> Add question
+                    </Button>
+                  </Link>
+                </div>
+              )}
               {questions.length === 0 ? (
                 <p className="text-sm text-slate-500">No questions yet.</p>
               ) : (
@@ -539,6 +596,8 @@ export default async function HazidAssessmentDetailPage({
                       assessmentId={id}
                       index={idx}
                       totalCount={questions.length}
+                      basePath={basePath}
+                      activeTab={active}
                       disabled={locked}
                       answerAction={answerQuestion}
                       moveAction={moveQuestion}
@@ -554,12 +613,15 @@ export default async function HazidAssessmentDetailPage({
         {active === 'tasks' && showTasks ? (
           <Section title={`Tasks (${tasks.length})`} defaultOpen>
             <div className="space-y-3">
-              <AddTaskForm
-                assessmentId={id}
-                taskLibrary={taskLibrary}
-                disabled={locked}
-                addAction={addTask}
-              />
+              {locked ? null : (
+                <div className="flex items-center justify-end">
+                  <Link href={drawerHref('add-task') as any}>
+                    <Button type="button" size="sm">
+                      <Plus size={12} /> Add task
+                    </Button>
+                  </Link>
+                </div>
+              )}
               {tasks.length === 0 ? (
                 <p className="text-sm text-slate-500">No tasks yet.</p>
               ) : (
@@ -573,8 +635,9 @@ export default async function HazidAssessmentDetailPage({
                       index={idx}
                       taskName={row.task?.name ?? null}
                       hazardLookup={hazardNameLookup}
+                      basePath={basePath}
+                      activeTab={active}
                       disabled={locked}
-                      updateAction={updateTask}
                       moveAction={moveTask}
                       deleteAction={deleteTask}
                     />
@@ -588,14 +651,25 @@ export default async function HazidAssessmentDetailPage({
         {active === 'hazards' && showHazards ? (
           <Section title={`Hazards (${hazards.length})`} defaultOpen>
             <div className="space-y-3">
-              <AddHazardForm
-                assessmentId={id}
-                hazardLibrary={hazardLibrary}
-                hazardSets={hazardSetWithCount}
-                disabled={locked}
-                addAction={addHazard}
-                addSetAction={addHazardSet}
-              />
+              {locked ? null : (
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <Link href={drawerHref('add-hazard-library') as any}>
+                    <Button type="button" size="sm" variant="outline">
+                      <Plus size={12} /> From library
+                    </Button>
+                  </Link>
+                  <Link href={drawerHref('add-hazard-set') as any}>
+                    <Button type="button" size="sm" variant="outline">
+                      <Plus size={12} /> Add set
+                    </Button>
+                  </Link>
+                  <Link href={drawerHref('add-hazard') as any}>
+                    <Button type="button" size="sm">
+                      <Plus size={12} /> Ad-hoc hazard
+                    </Button>
+                  </Link>
+                </div>
+              )}
               {hazards.length === 0 ? (
                 <p className="text-sm text-slate-500">No hazards added yet.</p>
               ) : (
@@ -608,8 +682,9 @@ export default async function HazidAssessmentDetailPage({
                       index={idx}
                       totalCount={hazards.length}
                       libraryName={row.library?.name ?? null}
+                      basePath={basePath}
+                      activeTab={active}
                       disabled={locked}
-                      updateAction={updateHazard}
                       moveAction={moveHazard}
                       deleteAction={deleteHazard}
                     />
@@ -801,12 +876,15 @@ export default async function HazidAssessmentDetailPage({
 
             <Section title={`Atmospheric readings (${atmospheric.length})`} defaultOpen>
               <div className="space-y-3">
-                <AddAtmosphericForm
-                  assessmentId={id}
-                  sensors={sensorList}
-                  disabled={locked || !a.confinedSpace}
-                  addAction={addCSAtmospheric}
-                />
+                {locked || !a.confinedSpace ? null : (
+                  <div className="flex items-center justify-end">
+                    <Link href={drawerHref('add-cs-reading') as any}>
+                      <Button type="button" size="sm">
+                        <Plus size={12} /> Add reading
+                      </Button>
+                    </Link>
+                  </div>
+                )}
                 {atmospheric.length === 0 ? (
                   <p className="text-sm text-slate-500">No readings logged.</p>
                 ) : (
@@ -848,54 +926,60 @@ export default async function HazidAssessmentDetailPage({
 
             <Section title={`Entry log (${entries.length})`} defaultOpen>
               <div className="space-y-3">
-                <AddEntryForm
-                  assessmentId={id}
-                  people={peopleList}
-                  disabled={locked || !a.confinedSpace}
-                  addAction={addCSEntry}
-                />
+                {locked || !a.confinedSpace ? null : (
+                  <div className="flex items-center justify-end">
+                    <Link href={drawerHref('add-cs-entry') as any}>
+                      <Button type="button" size="sm">
+                        <Plus size={12} /> Log entry
+                      </Button>
+                    </Link>
+                  </div>
+                )}
                 {entries.length === 0 ? (
                   <p className="text-sm text-slate-500">No entries logged.</p>
                 ) : (
                   <ul className="space-y-2">
-                    {entries.map((r) => (
-                      <li
-                        key={r.row.id}
-                        className="grid grid-cols-1 items-center gap-2 rounded-md border border-slate-200 bg-white p-3 sm:grid-cols-[1fr_auto_auto]"
-                      >
-                        <div>
-                          <div className="font-medium text-slate-900">
-                            {r.person
-                              ? `${r.person.firstName} ${r.person.lastName}`
-                              : r.row.externalName ?? 'Unknown'}
+                    {entries.map((r) => {
+                      const personLabel = r.person
+                        ? `${r.person.firstName} ${r.person.lastName}`
+                        : r.row.externalName ?? 'Unknown'
+                      return (
+                        <li
+                          key={r.row.id}
+                          className="grid grid-cols-1 items-center gap-2 rounded-md border border-slate-200 bg-white p-3 sm:grid-cols-[1fr_auto_auto]"
+                        >
+                          <div>
+                            <div className="font-medium text-slate-900">{personLabel}</div>
+                            <div className="text-xs text-slate-500">
+                              In: {r.row.timeIn ? new Date(r.row.timeIn).toLocaleString() : '—'}
+                              {r.row.timeOut
+                                ? ` · Out: ${new Date(r.row.timeOut).toLocaleString()}`
+                                : ' · Still inside'}
+                            </div>
                           </div>
-                          <div className="text-xs text-slate-500">
-                            In: {r.row.timeIn ? new Date(r.row.timeIn).toLocaleString() : '—'}
-                            {r.row.timeOut ? ` · Out: ${new Date(r.row.timeOut).toLocaleString()}` : ' · Still inside'}
-                          </div>
-                        </div>
-                        {!r.row.timeOut && !locked ? (
-                          <form action={exitCSEntry}>
-                            <input type="hidden" name="id" value={r.row.id} />
-                            <input type="hidden" name="assessmentId" value={id} />
-                            <Button type="submit" size="sm">
-                              Sign out
-                            </Button>
-                          </form>
-                        ) : (
-                          <span />
-                        )}
-                        {locked ? null : (
-                          <form action={deleteCSEntry}>
-                            <input type="hidden" name="id" value={r.row.id} />
-                            <input type="hidden" name="assessmentId" value={id} />
-                            <Button type="submit" size="sm" variant="ghost">
-                              Delete
-                            </Button>
-                          </form>
-                        )}
-                      </li>
-                    ))}
+                          {!r.row.timeOut && !locked ? (
+                            <Link
+                              href={drawerHref('exit-cs-entry', { entryId: r.row.id }) as any}
+                            >
+                              <Button type="button" size="sm">
+                                Sign out
+                              </Button>
+                            </Link>
+                          ) : (
+                            <span />
+                          )}
+                          {locked ? null : (
+                            <form action={deleteCSEntry}>
+                              <input type="hidden" name="id" value={r.row.id} />
+                              <input type="hidden" name="assessmentId" value={id} />
+                              <Button type="submit" size="sm" variant="ghost">
+                                Delete
+                              </Button>
+                            </form>
+                          )}
+                        </li>
+                      )
+                    })}
                   </ul>
                 )}
               </div>
@@ -979,14 +1063,15 @@ export default async function HazidAssessmentDetailPage({
         {active === 'signatures' ? (
           <Section title={`Signatures (${signatures.length})`} defaultOpen>
             <div className="space-y-3">
-              {!locked ? (
-                <AddSignatureForm
-                  assessmentId={id}
-                  people={peopleList}
-                  showCSRoles={Boolean(showCS)}
-                  addAction={addSignature}
-                />
-              ) : null}
+              {locked ? null : (
+                <div className="flex items-center justify-end">
+                  <Link href={drawerHref('add-signature') as any}>
+                    <Button type="button" size="sm">
+                      <Plus size={12} /> Add signature
+                    </Button>
+                  </Link>
+                </div>
+              )}
               {signatures.length === 0 ? (
                 <p className="text-sm text-slate-500">No signatures captured.</p>
               ) : (
@@ -1073,6 +1158,231 @@ export default async function HazidAssessmentDetailPage({
           </Section>
         ) : null}
       </div>
+
+      {/* ============================================================== */}
+      {/* Drawers — one per drawer key. Each is `open` only when the URL */}
+      {/* `?drawer=` matches AND the row lookup (if any) succeeded.      */}
+      {/* ============================================================== */}
+
+      {/* Tasks */}
+      <UrlDrawer
+        open={drawerKey === 'add-task'}
+        closeHref={tabHref}
+        title="Add task"
+        description="Pick from the task library or describe an ad-hoc task."
+        size="md"
+      >
+        <AddTaskDrawerBody
+          assessmentId={id}
+          taskLibrary={taskLibrary}
+          closeHref={tabHref}
+          addAction={addTask}
+        />
+      </UrlDrawer>
+      <UrlDrawer
+        open={drawerKey === 'edit-task' && !!editTaskRow}
+        closeHref={tabHref}
+        title="Edit task"
+        size="md"
+      >
+        {editTaskRow ? (
+          <EditTaskDrawerBody
+            assessmentId={id}
+            closeHref={tabHref}
+            row={editTaskRow.row}
+            taskName={editTaskRow.task?.name ?? null}
+            hazardLookup={hazardNameLookup}
+            updateAction={updateTask}
+          />
+        ) : null}
+      </UrlDrawer>
+
+      {/* Hazards */}
+      <UrlDrawer
+        open={drawerKey === 'add-hazard-library'}
+        closeHref={tabHref}
+        title="Add hazard from library"
+        size="md"
+      >
+        <AddHazardLibraryDrawerBody
+          assessmentId={id}
+          hazardLibrary={hazardLibrary}
+          closeHref={tabHref}
+          addAction={addHazard}
+        />
+      </UrlDrawer>
+      <UrlDrawer
+        open={drawerKey === 'add-hazard-set'}
+        closeHref={tabHref}
+        title="Add hazard set"
+        description="Bulk-add a curated list of hazards."
+        size="md"
+      >
+        <AddHazardSetDrawerBody
+          assessmentId={id}
+          hazardSets={hazardSetWithCount}
+          closeHref={tabHref}
+          addSetAction={addHazardSet}
+        />
+      </UrlDrawer>
+      <UrlDrawer
+        open={drawerKey === 'add-hazard'}
+        closeHref={tabHref}
+        title="Add ad-hoc hazard"
+        size="md"
+      >
+        <AddHazardDrawerBody
+          assessmentId={id}
+          closeHref={tabHref}
+          addAction={addHazard}
+        />
+      </UrlDrawer>
+      <UrlDrawer
+        open={drawerKey === 'edit-hazard' && !!editHazardRow}
+        closeHref={tabHref}
+        title="Edit hazard"
+        size="md"
+      >
+        {editHazardRow ? (
+          <EditHazardDrawerBody
+            assessmentId={id}
+            closeHref={tabHref}
+            row={editHazardRow.row}
+            libraryName={editHazardRow.library?.name ?? null}
+            updateAction={updateHazard}
+          />
+        ) : null}
+      </UrlDrawer>
+
+      {/* PPE */}
+      <UrlDrawer
+        open={drawerKey === 'add-ppe'}
+        closeHref={tabHref}
+        title="Add PPE"
+        size="md"
+      >
+        <AddPPEDrawerBody
+          assessmentId={id}
+          closeHref={tabHref}
+          addAction={addPPE}
+        />
+      </UrlDrawer>
+      <UrlDrawer
+        open={drawerKey === 'edit-ppe' && !!editPPERow}
+        closeHref={tabHref}
+        title="Edit PPE"
+        size="md"
+      >
+        {editPPERow ? (
+          <EditPPEDrawerBody
+            assessmentId={id}
+            closeHref={tabHref}
+            row={editPPERow}
+            updateAction={updatePPE}
+          />
+        ) : null}
+      </UrlDrawer>
+
+      {/* Questions */}
+      <UrlDrawer
+        open={drawerKey === 'add-question'}
+        closeHref={tabHref}
+        title="Add question"
+        size="md"
+      >
+        <AddQuestionDrawerBody
+          assessmentId={id}
+          closeHref={tabHref}
+          addAction={addQuestion}
+        />
+      </UrlDrawer>
+      <UrlDrawer
+        open={drawerKey === 'edit-question' && !!editQuestionRow}
+        closeHref={tabHref}
+        title="Edit question"
+        size="md"
+      >
+        {editQuestionRow ? (
+          <EditQuestionDrawerBody
+            assessmentId={id}
+            closeHref={tabHref}
+            row={{
+              ...editQuestionRow,
+              questionType: editQuestionRow.questionType as
+                | 'yes_no'
+                | 'text'
+                | 'multi_select',
+            }}
+            updateAction={updateQuestion}
+          />
+        ) : null}
+      </UrlDrawer>
+
+      {/* CS Atmospheric */}
+      <UrlDrawer
+        open={drawerKey === 'add-cs-reading'}
+        closeHref={tabHref}
+        title="Add atmospheric reading"
+        size="md"
+      >
+        <AddAtmosphericDrawerBody
+          assessmentId={id}
+          sensors={sensorList}
+          closeHref={tabHref}
+          addAction={addCSAtmospheric}
+        />
+      </UrlDrawer>
+
+      {/* CS Entry log */}
+      <UrlDrawer
+        open={drawerKey === 'add-cs-entry'}
+        closeHref={tabHref}
+        title="Log confined-space entry"
+        size="md"
+      >
+        <AddEntryDrawerBody
+          assessmentId={id}
+          people={peopleList}
+          closeHref={tabHref}
+          addAction={addCSEntry}
+        />
+      </UrlDrawer>
+      <UrlDrawer
+        open={drawerKey === 'exit-cs-entry' && !!exitEntryRow}
+        closeHref={tabHref}
+        title="Mark entry exited"
+        size="sm"
+      >
+        {exitEntryRow ? (
+          <ExitEntryDrawerBody
+            assessmentId={id}
+            closeHref={tabHref}
+            row={{ id: exitEntryRow.row.id, timeIn: exitEntryRow.row.timeIn }}
+            personLabel={
+              exitEntryRow.person
+                ? `${exitEntryRow.person.firstName} ${exitEntryRow.person.lastName}`
+                : exitEntryRow.row.externalName ?? 'Unknown'
+            }
+            exitAction={exitCSEntry}
+          />
+        ) : null}
+      </UrlDrawer>
+
+      {/* Signatures */}
+      <UrlDrawer
+        open={drawerKey === 'add-signature'}
+        closeHref={tabHref}
+        title="Add signature"
+        size="md"
+      >
+        <AddSignatureDrawerBody
+          assessmentId={id}
+          people={peopleList}
+          showCSRoles={Boolean(showCS)}
+          closeHref={tabHref}
+          addAction={addSignature}
+        />
+      </UrlDrawer>
 
       <GenericSendEmailDialog
         open={pickString(sp.send) === '1'}

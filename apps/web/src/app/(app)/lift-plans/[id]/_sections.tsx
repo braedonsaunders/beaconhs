@@ -1,12 +1,15 @@
 'use client'
 
-// Client-side row editors for the Loads / Equipment / Hazards / PPE tabs.
-// Each pair (AddXForm + XRow) keeps inline edit state local, then submits a
-// FormData to the server action prop. Inline-only state because there's no
-// global shape — every row is independent.
+// Row renderers + drawer-body widgets for the Loads / Equipment / Hazards /
+// PPE tabs.  Inline edit was removed in favour of `?drawer=edit-*&*Id=…` so
+// the parent page is now in charge of rendering the drawer + Submit footer.
+// Each Body widget here is the form that goes *inside* the drawer; the
+// parent's footer Submit button targets it via `form={formId}`.
 
 import { useState, useTransition } from 'react'
-import { ChevronDown, ChevronUp, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { ChevronDown, ChevronUp, Pencil, Trash2 } from 'lucide-react'
 import { Button, Input, Label, Select } from '@beaconhs/ui'
 import type { EquipmentItemForPicker } from '../_types'
 
@@ -23,71 +26,15 @@ export function LoadRow({
   load,
   liftPlanId,
   locked,
-  updateAction,
   deleteAction,
   moveAction,
 }: {
   load: LoadView
   liftPlanId: string
   locked: boolean
-  updateAction: (formData: FormData) => Promise<void>
   deleteAction: (formData: FormData) => Promise<void>
   moveAction: (formData: FormData) => Promise<void>
 }) {
-  const [editing, setEditing] = useState(false)
-  const [pending, start] = useTransition()
-
-  function save(formData: FormData) {
-    formData.set('id', load.id)
-    formData.set('liftPlanId', liftPlanId)
-    start(async () => {
-      await updateAction(formData)
-      setEditing(false)
-    })
-  }
-
-  if (editing) {
-    return (
-      <form
-        action={save}
-        className="grid grid-cols-1 gap-2 rounded-md border border-teal-200 bg-teal-50/40 p-3 sm:grid-cols-6"
-      >
-        <Input
-          name="description"
-          defaultValue={load.description}
-          placeholder="Description"
-          required
-          className="sm:col-span-2"
-        />
-        <Input
-          name="weightKg"
-          type="number"
-          step="0.01"
-          defaultValue={load.weightKg ?? ''}
-          placeholder="Weight (kg)"
-        />
-        <Input
-          name="dimensionsMaxMm"
-          type="number"
-          defaultValue={load.dimensionsMaxMm ?? ''}
-          placeholder="Max dim (mm)"
-        />
-        <Input
-          name="attachmentMethod"
-          defaultValue={load.attachmentMethod ?? ''}
-          placeholder="Attachment method"
-        />
-        <div className="flex items-center justify-end gap-1">
-          <Button type="submit" size="sm" disabled={pending}>
-            {pending ? '…' : 'Save'}
-          </Button>
-          <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(false)}>
-            <X size={12} />
-          </Button>
-        </div>
-      </form>
-    )
-  }
   return (
     <div className="grid grid-cols-1 gap-2 border-b border-slate-100 py-2 text-sm sm:grid-cols-6">
       <div className="font-medium sm:col-span-2">{load.description}</div>
@@ -100,9 +47,13 @@ export function LoadRow({
         {!locked ? (
           <>
             <MoveBtns id={load.id} liftPlanId={liftPlanId} moveAction={moveAction} />
-            <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
-              <Pencil size={12} />
-            </Button>
+            <Link
+              href={`/lift-plans/${liftPlanId}?tab=loads&drawer=edit-load&loadId=${load.id}`}
+            >
+              <Button variant="ghost" size="sm">
+                <Pencil size={12} />
+              </Button>
+            </Link>
             <DeleteBtn id={load.id} liftPlanId={liftPlanId} deleteAction={deleteAction} />
           </>
         ) : null}
@@ -111,49 +62,71 @@ export function LoadRow({
   )
 }
 
-export function AddLoadForm({
+export function LoadBody({
+  formId,
   liftPlanId,
-  addAction,
+  load,
+  action,
+  closeHref,
 }: {
+  formId: string
   liftPlanId: string
-  addAction: (formData: FormData) => Promise<void>
+  load?: LoadView
+  action: (formData: FormData) => Promise<void>
+  closeHref: string
 }) {
-  const [open, setOpen] = useState(false)
+  const router = useRouter()
   const [pending, start] = useTransition()
-  function submit(formData: FormData) {
+  function handle(formData: FormData) {
     formData.set('liftPlanId', liftPlanId)
+    if (load) formData.set('id', load.id)
     start(async () => {
-      await addAction(formData)
-      setOpen(false)
+      await action(formData)
+      router.push(closeHref as any)
+      router.refresh()
     })
   }
-  if (!open)
-    return (
-      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-        <Plus size={12} /> Add load
-      </Button>
-    )
   return (
-    <form
-      action={submit}
-      className="grid grid-cols-1 gap-2 rounded-md border border-teal-200 bg-teal-50/40 p-3 sm:grid-cols-6"
-    >
-      <Input
-        name="description"
-        placeholder="Description"
-        required
-        className="sm:col-span-2"
-      />
-      <Input name="weightKg" type="number" step="0.01" placeholder="Weight (kg)" />
-      <Input name="dimensionsMaxMm" type="number" placeholder="Max dim (mm)" />
-      <Input name="attachmentMethod" placeholder="Attachment method" />
-      <div className="flex items-center justify-end gap-1">
-        <Button type="submit" size="sm" disabled={pending}>
-          {pending ? '…' : 'Add'}
-        </Button>
-        <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>
-          <X size={12} />
-        </Button>
+    <form id={formId} action={handle} className="space-y-3">
+      <div className="space-y-1.5">
+        <Label>Description *</Label>
+        <Input
+          name="description"
+          defaultValue={load?.description ?? ''}
+          required
+          placeholder="Description"
+          disabled={pending}
+        />
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label>Weight (kg)</Label>
+          <Input
+            name="weightKg"
+            type="number"
+            step="0.01"
+            defaultValue={load?.weightKg ?? ''}
+            disabled={pending}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Max dimension (mm)</Label>
+          <Input
+            name="dimensionsMaxMm"
+            type="number"
+            defaultValue={load?.dimensionsMaxMm ?? ''}
+            disabled={pending}
+          />
+        </div>
+      </div>
+      <div className="space-y-1.5">
+        <Label>Attachment method</Label>
+        <Input
+          name="attachmentMethod"
+          defaultValue={load?.attachmentMethod ?? ''}
+          placeholder="e.g. shackles, slings, basket hitch"
+          disabled={pending}
+        />
       </div>
     </form>
   )
@@ -175,87 +148,15 @@ export function EquipmentRow({
   row,
   liftPlanId,
   locked,
-  equipmentItems,
-  updateAction,
   deleteAction,
   moveAction,
 }: {
   row: EquipmentView
   liftPlanId: string
   locked: boolean
-  equipmentItems: EquipmentItemForPicker[]
-  updateAction: (formData: FormData) => Promise<void>
   deleteAction: (formData: FormData) => Promise<void>
   moveAction: (formData: FormData) => Promise<void>
 }) {
-  const [editing, setEditing] = useState(false)
-  const [pending, start] = useTransition()
-
-  function save(formData: FormData) {
-    formData.set('id', row.id)
-    formData.set('liftPlanId', liftPlanId)
-    start(async () => {
-      await updateAction(formData)
-      setEditing(false)
-    })
-  }
-
-  if (editing) {
-    return (
-      <form
-        action={save}
-        className="grid grid-cols-1 gap-2 rounded-md border border-teal-200 bg-teal-50/40 p-3 sm:grid-cols-7"
-      >
-        <div className="sm:col-span-2">
-          <Select name="equipmentItemId" defaultValue={row.equipmentItemId ?? ''}>
-            <option value="">— Free-text description —</option>
-            {equipmentItems.map((it) => (
-              <option key={it.id} value={it.id}>
-                {it.name} ({it.assetTag})
-              </option>
-            ))}
-          </Select>
-          <Input
-            name="equipmentDescription"
-            defaultValue={row.equipmentDescription ?? ''}
-            placeholder="Description (rental, subcontractor crane, etc.)"
-            className="mt-1.5"
-          />
-        </div>
-        <Input
-          name="capacityKg"
-          type="number"
-          step="0.01"
-          defaultValue={row.capacityKg ?? ''}
-          placeholder="Capacity (kg)"
-        />
-        <Input
-          name="boomLengthM"
-          type="number"
-          step="0.01"
-          defaultValue={row.boomLengthM ?? ''}
-          placeholder="Boom (m)"
-        />
-        <Input
-          name="radiusM"
-          type="number"
-          step="0.01"
-          defaultValue={row.radiusM ?? ''}
-          placeholder="Radius (m)"
-        />
-        <div className="text-xs text-slate-500">Auto: capacity used %</div>
-        <div className="flex items-center justify-end gap-1">
-          <Button type="submit" size="sm" disabled={pending}>
-            {pending ? '…' : 'Save'}
-          </Button>
-          <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(false)}>
-            <X size={12} />
-          </Button>
-        </div>
-      </form>
-    )
-  }
-
   return (
     <div className="grid grid-cols-1 gap-2 border-b border-slate-100 py-2 text-sm sm:grid-cols-7">
       <div className="font-medium sm:col-span-2">
@@ -269,9 +170,13 @@ export function EquipmentRow({
         {!locked ? (
           <>
             <MoveBtns id={row.id} liftPlanId={liftPlanId} moveAction={moveAction} />
-            <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
-              <Pencil size={12} />
-            </Button>
+            <Link
+              href={`/lift-plans/${liftPlanId}?tab=equipment&drawer=edit-equipment&equipmentId=${row.id}`}
+            >
+              <Button variant="ghost" size="sm">
+                <Pencil size={12} />
+              </Button>
+            </Link>
             <DeleteBtn id={row.id} liftPlanId={liftPlanId} deleteAction={deleteAction} />
           </>
         ) : null}
@@ -280,37 +185,41 @@ export function EquipmentRow({
   )
 }
 
-export function AddEquipmentForm({
+export function EquipmentBody({
+  formId,
   liftPlanId,
+  row,
   equipmentItems,
-  addAction,
+  action,
+  closeHref,
 }: {
+  formId: string
   liftPlanId: string
+  row?: EquipmentView
   equipmentItems: EquipmentItemForPicker[]
-  addAction: (formData: FormData) => Promise<void>
+  action: (formData: FormData) => Promise<void>
+  closeHref: string
 }) {
-  const [open, setOpen] = useState(false)
+  const router = useRouter()
   const [pending, start] = useTransition()
-  function submit(formData: FormData) {
+  function handle(formData: FormData) {
     formData.set('liftPlanId', liftPlanId)
+    if (row) formData.set('id', row.id)
     start(async () => {
-      await addAction(formData)
-      setOpen(false)
+      await action(formData)
+      router.push(closeHref as any)
+      router.refresh()
     })
   }
-  if (!open)
-    return (
-      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-        <Plus size={12} /> Add equipment
-      </Button>
-    )
   return (
-    <form
-      action={submit}
-      className="grid grid-cols-1 gap-2 rounded-md border border-teal-200 bg-teal-50/40 p-3 sm:grid-cols-7"
-    >
-      <div className="sm:col-span-2">
-        <Select name="equipmentItemId" defaultValue="">
+    <form id={formId} action={handle} className="space-y-3">
+      <div className="space-y-1.5">
+        <Label>Tracked item</Label>
+        <Select
+          name="equipmentItemId"
+          defaultValue={row?.equipmentItemId ?? ''}
+          disabled={pending}
+        >
           <option value="">— Free-text description —</option>
           {equipmentItems.map((it) => (
             <option key={it.id} value={it.id}>
@@ -318,24 +227,55 @@ export function AddEquipmentForm({
             </option>
           ))}
         </Select>
+        <p className="text-xs text-slate-500">
+          Pick a tracked asset or leave blank and use the description below for rentals
+          / subcontractor equipment.
+        </p>
+      </div>
+      <div className="space-y-1.5">
+        <Label>Description</Label>
         <Input
           name="equipmentDescription"
+          defaultValue={row?.equipmentDescription ?? ''}
           placeholder="Description (rental, subcontractor crane, etc.)"
-          className="mt-1.5"
+          disabled={pending}
         />
       </div>
-      <Input name="capacityKg" type="number" step="0.01" placeholder="Capacity (kg)" />
-      <Input name="boomLengthM" type="number" step="0.01" placeholder="Boom (m)" />
-      <Input name="radiusM" type="number" step="0.01" placeholder="Radius (m)" />
-      <div className="text-xs text-slate-500">Auto: capacity used %</div>
-      <div className="flex items-center justify-end gap-1">
-        <Button type="submit" size="sm" disabled={pending}>
-          {pending ? '…' : 'Add'}
-        </Button>
-        <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>
-          <X size={12} />
-        </Button>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="space-y-1.5">
+          <Label>Capacity (kg)</Label>
+          <Input
+            name="capacityKg"
+            type="number"
+            step="0.01"
+            defaultValue={row?.capacityKg ?? ''}
+            disabled={pending}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Boom (m)</Label>
+          <Input
+            name="boomLengthM"
+            type="number"
+            step="0.01"
+            defaultValue={row?.boomLengthM ?? ''}
+            disabled={pending}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Radius (m)</Label>
+          <Input
+            name="radiusM"
+            type="number"
+            step="0.01"
+            defaultValue={row?.radiusM ?? ''}
+            disabled={pending}
+          />
+        </div>
       </div>
+      <p className="text-xs text-slate-500">
+        Capacity-used % is auto-computed from total load weight.
+      </p>
     </form>
   )
 }
@@ -351,57 +291,15 @@ export function HazardRow({
   row,
   liftPlanId,
   locked,
-  updateAction,
   deleteAction,
   moveAction,
 }: {
   row: HazardView
   liftPlanId: string
   locked: boolean
-  updateAction: (formData: FormData) => Promise<void>
   deleteAction: (formData: FormData) => Promise<void>
   moveAction: (formData: FormData) => Promise<void>
 }) {
-  const [editing, setEditing] = useState(false)
-  const [pending, start] = useTransition()
-  function save(formData: FormData) {
-    formData.set('id', row.id)
-    formData.set('liftPlanId', liftPlanId)
-    start(async () => {
-      await updateAction(formData)
-      setEditing(false)
-    })
-  }
-  if (editing) {
-    return (
-      <form
-        action={save}
-        className="grid grid-cols-1 gap-2 rounded-md border border-teal-200 bg-teal-50/40 p-3 sm:grid-cols-5"
-      >
-        <Input
-          name="hazardDescription"
-          defaultValue={row.hazardDescription}
-          required
-          placeholder="Hazard"
-          className="sm:col-span-2"
-        />
-        <Input
-          name="controls"
-          defaultValue={row.controls ?? ''}
-          placeholder="Controls in place"
-          className="sm:col-span-2"
-        />
-        <div className="flex items-center justify-end gap-1">
-          <Button type="submit" size="sm" disabled={pending}>
-            {pending ? '…' : 'Save'}
-          </Button>
-          <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(false)}>
-            <X size={12} />
-          </Button>
-        </div>
-      </form>
-    )
-  }
   return (
     <div className="grid grid-cols-1 gap-2 border-b border-slate-100 py-2 text-sm sm:grid-cols-5">
       <div className="font-medium sm:col-span-2">{row.hazardDescription}</div>
@@ -410,9 +308,13 @@ export function HazardRow({
         {!locked ? (
           <>
             <MoveBtns id={row.id} liftPlanId={liftPlanId} moveAction={moveAction} />
-            <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
-              <Pencil size={12} />
-            </Button>
+            <Link
+              href={`/lift-plans/${liftPlanId}?tab=hazards&drawer=edit-hazard&hazardId=${row.id}`}
+            >
+              <Button variant="ghost" size="sm">
+                <Pencil size={12} />
+              </Button>
+            </Link>
             <DeleteBtn id={row.id} liftPlanId={liftPlanId} deleteAction={deleteAction} />
           </>
         ) : null}
@@ -421,47 +323,50 @@ export function HazardRow({
   )
 }
 
-export function AddHazardForm({
+export function HazardBody({
+  formId,
   liftPlanId,
-  addAction,
+  row,
+  action,
+  closeHref,
 }: {
+  formId: string
   liftPlanId: string
-  addAction: (formData: FormData) => Promise<void>
+  row?: HazardView
+  action: (formData: FormData) => Promise<void>
+  closeHref: string
 }) {
-  const [open, setOpen] = useState(false)
+  const router = useRouter()
   const [pending, start] = useTransition()
-  function submit(formData: FormData) {
+  function handle(formData: FormData) {
     formData.set('liftPlanId', liftPlanId)
+    if (row) formData.set('id', row.id)
     start(async () => {
-      await addAction(formData)
-      setOpen(false)
+      await action(formData)
+      router.push(closeHref as any)
+      router.refresh()
     })
   }
-  if (!open)
-    return (
-      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-        <Plus size={12} /> Add hazard
-      </Button>
-    )
   return (
-    <form
-      action={submit}
-      className="grid grid-cols-1 gap-2 rounded-md border border-teal-200 bg-teal-50/40 p-3 sm:grid-cols-5"
-    >
-      <Input
-        name="hazardDescription"
-        placeholder="Hazard (e.g. overhead power lines)"
-        required
-        className="sm:col-span-2"
-      />
-      <Input name="controls" placeholder="Controls in place" className="sm:col-span-2" />
-      <div className="flex items-center justify-end gap-1">
-        <Button type="submit" size="sm" disabled={pending}>
-          {pending ? '…' : 'Add'}
-        </Button>
-        <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>
-          <X size={12} />
-        </Button>
+    <form id={formId} action={handle} className="space-y-3">
+      <div className="space-y-1.5">
+        <Label>Hazard *</Label>
+        <Input
+          name="hazardDescription"
+          defaultValue={row?.hazardDescription ?? ''}
+          required
+          placeholder="e.g. overhead power lines"
+          disabled={pending}
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label>Controls</Label>
+        <Input
+          name="controls"
+          defaultValue={row?.controls ?? ''}
+          placeholder="Controls in place"
+          disabled={pending}
+        />
       </div>
     </form>
   )
@@ -474,54 +379,15 @@ export function PpeRow({
   row,
   liftPlanId,
   locked,
-  updateAction,
   deleteAction,
   moveAction,
 }: {
   row: PpeView
   liftPlanId: string
   locked: boolean
-  updateAction: (formData: FormData) => Promise<void>
   deleteAction: (formData: FormData) => Promise<void>
   moveAction: (formData: FormData) => Promise<void>
 }) {
-  const [editing, setEditing] = useState(false)
-  const [pending, start] = useTransition()
-  function save(formData: FormData) {
-    formData.set('id', row.id)
-    formData.set('liftPlanId', liftPlanId)
-    start(async () => {
-      await updateAction(formData)
-      setEditing(false)
-    })
-  }
-  if (editing) {
-    return (
-      <form
-        action={save}
-        className="grid grid-cols-1 gap-2 rounded-md border border-teal-200 bg-teal-50/40 p-3 sm:grid-cols-4"
-      >
-        <Input
-          name="ppeName"
-          defaultValue={row.ppeName}
-          required
-          placeholder="PPE name"
-          className="sm:col-span-2"
-        />
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" name="required" defaultChecked={row.required} /> Required
-        </label>
-        <div className="flex items-center justify-end gap-1">
-          <Button type="submit" size="sm" disabled={pending}>
-            {pending ? '…' : 'Save'}
-          </Button>
-          <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(false)}>
-            <X size={12} />
-          </Button>
-        </div>
-      </form>
-    )
-  }
   return (
     <div className="grid grid-cols-1 gap-2 border-b border-slate-100 py-2 text-sm sm:grid-cols-4">
       <div className="font-medium sm:col-span-2">{row.ppeName}</div>
@@ -530,9 +396,6 @@ export function PpeRow({
         {!locked ? (
           <>
             <MoveBtns id={row.id} liftPlanId={liftPlanId} moveAction={moveAction} />
-            <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
-              <Pencil size={12} />
-            </Button>
             <DeleteBtn id={row.id} liftPlanId={liftPlanId} deleteAction={deleteAction} />
           </>
         ) : null}
@@ -541,50 +404,41 @@ export function PpeRow({
   )
 }
 
-export function AddPpeForm({
+export function PpeBody({
+  formId,
   liftPlanId,
-  addAction,
+  action,
+  closeHref,
 }: {
+  formId: string
   liftPlanId: string
-  addAction: (formData: FormData) => Promise<void>
+  action: (formData: FormData) => Promise<void>
+  closeHref: string
 }) {
-  const [open, setOpen] = useState(false)
+  const router = useRouter()
   const [pending, start] = useTransition()
-  function submit(formData: FormData) {
+  function handle(formData: FormData) {
     formData.set('liftPlanId', liftPlanId)
     start(async () => {
-      await addAction(formData)
-      setOpen(false)
+      await action(formData)
+      router.push(closeHref as any)
+      router.refresh()
     })
   }
-  if (!open)
-    return (
-      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-        <Plus size={12} /> Add PPE
-      </Button>
-    )
   return (
-    <form
-      action={submit}
-      className="grid grid-cols-1 gap-2 rounded-md border border-teal-200 bg-teal-50/40 p-3 sm:grid-cols-4"
-    >
-      <Input
-        name="ppeName"
-        placeholder="PPE name (e.g. Hard hat)"
-        required
-        className="sm:col-span-2"
-      />
+    <form id={formId} action={handle} className="space-y-3">
+      <div className="space-y-1.5">
+        <Label>PPE name *</Label>
+        <Input
+          name="ppeName"
+          required
+          placeholder="e.g. Hard hat"
+          disabled={pending}
+        />
+      </div>
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" name="required" defaultChecked /> Required
       </label>
-      <div className="flex items-center justify-end gap-1">
-        <Button type="submit" size="sm" disabled={pending}>
-          {pending ? '…' : 'Add'}
-        </Button>
-        <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>
-          <X size={12} />
-        </Button>
-      </div>
     </form>
   )
 }
@@ -626,7 +480,7 @@ export function PhotoCaptionForm({
           {pending ? '…' : 'Save'}
         </Button>
         <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(false)}>
-          <X size={12} />
+          <Trash2 size={12} />
         </Button>
       </form>
     )

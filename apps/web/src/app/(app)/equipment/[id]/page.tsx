@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { and, asc, desc, eq, sql } from 'drizzle-orm'
 import {
@@ -7,7 +7,10 @@ import {
   ArrowLeftRight,
   ClipboardCheck,
   FileText,
+  LogIn,
+  LogOut,
   MapPin,
+  Plus,
   QrCode,
   Truck,
   Wrench,
@@ -34,7 +37,9 @@ import {
   TableHeader,
   TableRow,
   Textarea,
+  UrlDrawer,
 } from '@beaconhs/ui'
+import { pickString } from '@/lib/list-params'
 import {
   attachments,
   equipmentCheckouts,
@@ -248,6 +253,8 @@ async function addExpense(formData: FormData) {
     })
   }
   revalidatePath(`/equipment/${itemId}`)
+  // Strip the ?drawer param by redirecting to a clean URL (keep active tab).
+  redirect(`/equipment/${itemId}?tab=expenses`)
 }
 
 async function addLogEntry(formData: FormData) {
@@ -285,6 +292,7 @@ async function addLogEntry(formData: FormData) {
     })
   }
   revalidatePath(`/equipment/${itemId}`)
+  redirect(`/equipment/${itemId}?tab=log`)
 }
 
 async function checkOutFromItem(formData: FormData) {
@@ -333,6 +341,7 @@ async function checkOutFromItem(formData: FormData) {
     after: { itemId, holderPersonId, destinationOrgUnitId, expectedReturnOn },
   })
   revalidatePath(`/equipment/${itemId}`)
+  redirect(`/equipment/${itemId}?tab=checkouts`)
 }
 
 async function checkInFromItem(formData: FormData) {
@@ -370,6 +379,7 @@ async function checkInFromItem(formData: FormData) {
     after: { condition, returnedNotes },
   })
   revalidatePath(`/equipment/${itemId}`)
+  redirect(`/equipment/${itemId}?tab=checkouts`)
 }
 
 // ---------------- Page ----------------
@@ -537,6 +547,10 @@ export default async function EquipmentDetailPage({
 
   const openWOs = workOrders.filter((w) => !['closed', 'cancelled'].includes(w.status))
   const basePath = `/equipment/${id}`
+  // Drawer state is URL-driven; the active tab is preserved in the close URL
+  // so that closing the drawer doesn't kick you back to the Overview tab.
+  const drawerKey = pickString(sp.drawer)
+  const closeHref = `${basePath}?tab=${active}`
 
   const activity =
     active === 'activity' ? await recentActivityForEntity(ctx, 'equipment', id, 50) : []
@@ -1097,19 +1111,31 @@ export default async function EquipmentDetailPage({
             {active === 'expenses' ? (
               <div className="space-y-4">
                 <Card>
-                  <CardHeader>
+                  <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
                     <CardTitle>
                       Expenses ({expenses.length}) ·{' '}
                       <span className="text-sm font-normal text-slate-500">
                         {fmtMoney(expensesYtd.toFixed(2))} YTD
                       </span>
                     </CardTitle>
+                    <Link href={`${basePath}?tab=expenses&drawer=add-expense` as any}>
+                      <Button size="sm">
+                        <Plus size={14} /> Add expense
+                      </Button>
+                    </Link>
                   </CardHeader>
                   <CardContent>
                     {expenses.length === 0 ? (
                       <EmptyState
                         title="No expenses logged"
-                        description="Log fuel, repairs, parts, registration, etc against this item below."
+                        description="Log fuel, repairs, parts, registration, etc against this item."
+                        action={
+                          <Link href={`${basePath}?tab=expenses&drawer=add-expense` as any}>
+                            <Button size="sm" variant="outline">
+                              <Plus size={14} /> Add the first expense
+                            </Button>
+                          </Link>
+                        }
                       />
                     ) : (
                       <Table>
@@ -1145,59 +1171,32 @@ export default async function EquipmentDetailPage({
                     )}
                   </CardContent>
                 </Card>
-                <Section title="Log a new expense">
-                  <form action={addExpense} className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                    <input type="hidden" name="itemId" value={id} />
-                    <Field label="Date" required>
-                      <Input
-                        name="incurredOn"
-                        type="date"
-                        required
-                        defaultValue={new Date().toISOString().slice(0, 10)}
-                      />
-                    </Field>
-                    <Field label="Category" required>
-                      <Select name="category" defaultValue="other">
-                        <option value="fuel">Fuel</option>
-                        <option value="repair">Repair</option>
-                        <option value="maintenance">Maintenance</option>
-                        <option value="insurance">Insurance</option>
-                        <option value="registration">Registration</option>
-                        <option value="parts">Parts</option>
-                        <option value="tires">Tires</option>
-                        <option value="oil_change">Oil change</option>
-                        <option value="inspection">Inspection</option>
-                        <option value="other">Other</option>
-                      </Select>
-                    </Field>
-                    <Field label="Amount" required>
-                      <Input name="amount" type="number" step="0.01" min="0" required />
-                    </Field>
-                    <Field label="Vendor">
-                      <Input name="vendor" />
-                    </Field>
-                    <Field label="Description" className="sm:col-span-2">
-                      <Input name="description" />
-                    </Field>
-                    <div className="sm:col-span-3 flex justify-end">
-                      <Button type="submit">Log expense</Button>
-                    </div>
-                  </form>
-                </Section>
               </div>
             ) : null}
 
             {active === 'log' ? (
               <div className="space-y-4">
                 <Card>
-                  <CardHeader>
+                  <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
                     <CardTitle>Log entries ({logEntries.length})</CardTitle>
+                    <Link href={`${basePath}?tab=log&drawer=add-log` as any}>
+                      <Button size="sm">
+                        <Plus size={14} /> Add log entry
+                      </Button>
+                    </Link>
                   </CardHeader>
                   <CardContent>
                     {logEntries.length === 0 ? (
                       <EmptyState
                         title="No log entries"
                         description="Capture observations, fuel-ups, modifications, and anything else worth noting against this asset."
+                        action={
+                          <Link href={`${basePath}?tab=log&drawer=add-log` as any}>
+                            <Button size="sm" variant="outline">
+                              <Plus size={14} /> Add the first entry
+                            </Button>
+                          </Link>
+                        }
                       />
                     ) : (
                       <Table>
@@ -1236,51 +1235,48 @@ export default async function EquipmentDetailPage({
                     )}
                   </CardContent>
                 </Card>
-                <Section title="Add a log entry">
-                  <form action={addLogEntry} className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                    <input type="hidden" name="itemId" value={id} />
-                    <Field label="Date" required>
-                      <Input
-                        name="entryDate"
-                        type="date"
-                        required
-                        defaultValue={new Date().toISOString().slice(0, 10)}
-                      />
-                    </Field>
-                    <Field label="Kind" required>
-                      <Select name="kind" defaultValue="note">
-                        <option value="note">Note</option>
-                        <option value="maintenance">Maintenance</option>
-                        <option value="fuel">Fuel</option>
-                        <option value="incident">Incident</option>
-                        <option value="modification">Modification</option>
-                      </Select>
-                    </Field>
-                    <Field label="Title">
-                      <Input name="title" placeholder="Short summary" />
-                    </Field>
-                    <Field label="Details" required className="sm:col-span-3">
-                      <Textarea name="details" rows={3} required />
-                    </Field>
-                    <div className="sm:col-span-3 flex justify-end">
-                      <Button type="submit">Add entry</Button>
-                    </div>
-                  </form>
-                </Section>
               </div>
             ) : null}
 
             {active === 'checkouts' ? (
               <div className="space-y-4">
                 <Card>
-                  <CardHeader>
+                  <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
                     <CardTitle>Check-out history ({checkouts.length})</CardTitle>
+                    <div className="flex items-center gap-2">
+                      {openCheckout ? (
+                        <Link
+                          href={`${basePath}?tab=checkouts&drawer=check-in` as any}
+                        >
+                          <Button size="sm">
+                            <LogIn size={14} /> Check in
+                          </Button>
+                        </Link>
+                      ) : (
+                        <Link
+                          href={`${basePath}?tab=checkouts&drawer=check-out` as any}
+                        >
+                          <Button size="sm">
+                            <LogOut size={14} /> Check out
+                          </Button>
+                        </Link>
+                      )}
+                    </div>
                   </CardHeader>
                   <CardContent>
                     {checkouts.length === 0 ? (
                       <EmptyState
                         title="No checkout history"
-                        description="This item has never been checked out via the kiosk. Use the form below to record a checkout."
+                        description="This item has never been checked out. Hand it to someone or pin it to a site using the Check out button."
+                        action={
+                          <Link
+                            href={`${basePath}?tab=checkouts&drawer=check-out` as any}
+                          >
+                            <Button size="sm" variant="outline">
+                              <LogOut size={14} /> Check out
+                            </Button>
+                          </Link>
+                        }
                       />
                     ) : (
                       <Table>
@@ -1346,65 +1342,20 @@ export default async function EquipmentDetailPage({
                   </CardContent>
                 </Card>
                 {openCheckout ? (
-                  <Section title="Check this item in">
-                    <form action={checkInFromItem} className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                      <input type="hidden" name="itemId" value={id} />
-                      <input type="hidden" name="checkoutId" value={openCheckout.co.id} />
-                      <Field label="Condition">
-                        <Select name="returnedCondition" defaultValue="good">
-                          <option value="good">Good</option>
-                          <option value="fair">Fair</option>
-                          <option value="damaged">Damaged</option>
-                          <option value="unusable">Unusable</option>
-                        </Select>
-                      </Field>
-                      <Field label="Notes" className="sm:col-span-2">
-                        <Input name="returnedNotes" placeholder="Optional" />
-                      </Field>
-                      <div className="sm:col-span-3 flex justify-end">
-                        <Button type="submit">Check in</Button>
-                      </div>
-                    </form>
-                  </Section>
-                ) : (
-                  <Section title="Check this item out">
-                    <form
-                      action={checkOutFromItem}
-                      className="grid grid-cols-1 gap-3 sm:grid-cols-2"
-                    >
-                      <input type="hidden" name="itemId" value={id} />
-                      <Field label="Hand to person">
-                        <Select name="holderPersonId" defaultValue="">
-                          <option value="">— No specific holder —</option>
-                          {holders.map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.lastName}, {p.firstName}
-                            </option>
-                          ))}
-                        </Select>
-                      </Field>
-                      <Field label="Destination site">
-                        <Select name="destinationOrgUnitId" defaultValue="">
-                          <option value="">— Unassigned —</option>
-                          {sites.map((s) => (
-                            <option key={s.id} value={s.id}>
-                              {s.name}
-                            </option>
-                          ))}
-                        </Select>
-                      </Field>
-                      <Field label="Expected return on">
-                        <Input name="expectedReturnOn" type="date" />
-                      </Field>
-                      <Field label="Notes" className="sm:col-span-2">
-                        <Input name="notes" />
-                      </Field>
-                      <div className="sm:col-span-2 flex justify-end">
-                        <Button type="submit">Check out</Button>
-                      </div>
-                    </form>
-                  </Section>
-                )}
+                  <Alert>
+                    <AlertTitle>Currently checked out</AlertTitle>
+                    <AlertDescription>
+                      Held by{' '}
+                      {openCheckout.holder
+                        ? `${openCheckout.holder.firstName} ${openCheckout.holder.lastName}`
+                        : '—'}
+                      {openCheckout.co.expectedReturnOn
+                        ? ` · expected back ${openCheckout.co.expectedReturnOn}`
+                        : ''}
+                      . Use the Check in button above to record the return.
+                    </AlertDescription>
+                  </Alert>
+                ) : null}
               </div>
             ) : null}
 
@@ -1423,6 +1374,209 @@ export default async function EquipmentDetailPage({
           </div>
         </div>
       </div>
+
+      {/*
+       * Sub-entity drawers. Mounted once per page; only one renders open at
+       * a time based on `?drawer=…`. Each form has an id so the sticky
+       * footer's submit button can target it via the `form` attribute.
+       * Closing (X / backdrop / Esc) pops back to closeHref preserving the
+       * active tab.
+       */}
+      <UrlDrawer
+        open={drawerKey === 'add-expense'}
+        closeHref={closeHref}
+        title="Log expense"
+        description="Vendor invoice, fuel, repair, parts, etc — recorded against this asset's ledger."
+        size="md"
+        footer={
+          <Button type="submit" form="equipment-add-expense-form">
+            <Plus size={14} /> Log expense
+          </Button>
+        }
+      >
+        <form
+          id="equipment-add-expense-form"
+          action={addExpense}
+          className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+        >
+          <input type="hidden" name="itemId" value={id} />
+          <Field label="Date" required>
+            <Input
+              name="incurredOn"
+              type="date"
+              required
+              defaultValue={new Date().toISOString().slice(0, 10)}
+            />
+          </Field>
+          <Field label="Category" required>
+            <Select name="category" defaultValue="other">
+              <option value="fuel">Fuel</option>
+              <option value="repair">Repair</option>
+              <option value="maintenance">Maintenance</option>
+              <option value="insurance">Insurance</option>
+              <option value="registration">Registration</option>
+              <option value="parts">Parts</option>
+              <option value="tires">Tires</option>
+              <option value="oil_change">Oil change</option>
+              <option value="inspection">Inspection</option>
+              <option value="other">Other</option>
+            </Select>
+          </Field>
+          <Field label="Amount" required>
+            <Input name="amount" type="number" step="0.01" min="0" required />
+          </Field>
+          <Field label="Vendor">
+            <Input name="vendor" placeholder="e.g. Acme Auto" />
+          </Field>
+          <Field label="Description" className="sm:col-span-2">
+            <Input name="description" placeholder="Optional short description" />
+          </Field>
+        </form>
+      </UrlDrawer>
+
+      <UrlDrawer
+        open={drawerKey === 'add-log'}
+        closeHref={closeHref}
+        title="Add log entry"
+        description="Capture an observation, fuel-up, modification, or anything else worth recording against this asset."
+        size="md"
+        footer={
+          <Button type="submit" form="equipment-add-log-form">
+            <Plus size={14} /> Add entry
+          </Button>
+        }
+      >
+        <form
+          id="equipment-add-log-form"
+          action={addLogEntry}
+          className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+        >
+          <input type="hidden" name="itemId" value={id} />
+          <Field label="Date" required>
+            <Input
+              name="entryDate"
+              type="date"
+              required
+              defaultValue={new Date().toISOString().slice(0, 10)}
+            />
+          </Field>
+          <Field label="Kind" required>
+            <Select name="kind" defaultValue="note">
+              <option value="note">Note</option>
+              <option value="maintenance">Maintenance</option>
+              <option value="fuel">Fuel</option>
+              <option value="incident">Incident</option>
+              <option value="modification">Modification</option>
+            </Select>
+          </Field>
+          <Field label="Title" className="sm:col-span-2">
+            <Input name="title" placeholder="Short summary (optional)" />
+          </Field>
+          <Field label="Details" required className="sm:col-span-2">
+            <Textarea name="details" rows={5} required />
+          </Field>
+        </form>
+      </UrlDrawer>
+
+      <UrlDrawer
+        open={drawerKey === 'check-out' && !openCheckout}
+        closeHref={closeHref}
+        title="Check out"
+        description="Hand this item to a person, pin it to a site, and optionally set an expected return date."
+        size="md"
+        footer={
+          <Button type="submit" form="equipment-check-out-form">
+            <LogOut size={14} /> Check out
+          </Button>
+        }
+      >
+        <form
+          id="equipment-check-out-form"
+          action={checkOutFromItem}
+          className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+        >
+          <input type="hidden" name="itemId" value={id} />
+          <Field label="Hand to person">
+            <Select name="holderPersonId" defaultValue="">
+              <option value="">— No specific holder —</option>
+              {holders.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.lastName}, {p.firstName}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Destination site">
+            <Select name="destinationOrgUnitId" defaultValue="">
+              <option value="">— Unassigned —</option>
+              {sites.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Expected return on">
+            <Input name="expectedReturnOn" type="date" />
+          </Field>
+          <Field label="Notes" className="sm:col-span-2">
+            <Textarea name="notes" rows={3} placeholder="Optional context for this checkout" />
+          </Field>
+        </form>
+      </UrlDrawer>
+
+      <UrlDrawer
+        open={drawerKey === 'check-in' && !!openCheckout}
+        closeHref={closeHref}
+        title="Check in (return)"
+        description={
+          openCheckout
+            ? `Record return from ${
+                openCheckout.holder
+                  ? `${openCheckout.holder.firstName} ${openCheckout.holder.lastName}`
+                  : 'the current holder'
+              }.`
+            : 'This item is not currently checked out.'
+        }
+        size="md"
+        footer={
+          openCheckout ? (
+            <Button type="submit" form="equipment-check-in-form">
+              <LogIn size={14} /> Check in
+            </Button>
+          ) : null
+        }
+      >
+        {openCheckout ? (
+          <form
+            id="equipment-check-in-form"
+            action={checkInFromItem}
+            className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+          >
+            <input type="hidden" name="itemId" value={id} />
+            <input type="hidden" name="checkoutId" value={openCheckout.co.id} />
+            <Field label="Returned condition">
+              <Select name="returnedCondition" defaultValue="good">
+                <option value="good">Good</option>
+                <option value="fair">Fair</option>
+                <option value="damaged">Damaged</option>
+                <option value="unusable">Unusable</option>
+              </Select>
+            </Field>
+            <Field label="Notes" className="sm:col-span-2">
+              <Textarea
+                name="returnedNotes"
+                rows={3}
+                placeholder="Anything to note about this return"
+              />
+            </Field>
+          </form>
+        ) : (
+          <p className="text-sm text-slate-500">
+            There's no open check-out for this item right now.
+          </p>
+        )}
+      </UrlDrawer>
     </PageContainer>
   )
 }

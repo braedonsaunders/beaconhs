@@ -1,22 +1,32 @@
 'use client'
 
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useState, useTransition } from 'react'
 import { Button, Input, Label, Select } from '@beaconhs/ui'
 import { SignaturePad } from '@/components/signature-pad'
 
 type Person = { id: string; firstName: string; lastName: string }
 
-export function AddSignatureForm({
+/**
+ * Drawer body for capturing a new signature. Renders into the body slot of
+ * an <UrlDrawer> on the HazID detail page. Closes the drawer (router.replace
+ * to `closeHref`) after the server action completes.
+ */
+export function AddSignatureDrawerBody({
   assessmentId,
   people,
   showCSRoles,
+  closeHref,
   addAction,
 }: {
   assessmentId: string
   people: Person[]
   showCSRoles: boolean
+  closeHref: string
   addAction: (formData: FormData) => Promise<void>
 }) {
+  const router = useRouter()
   const [type, setType] = useState<'internal' | 'external'>('internal')
   const [personId, setPersonId] = useState<string>('')
   const [externalName, setExternalName] = useState<string>('')
@@ -54,21 +64,19 @@ export function AddSignatureForm({
     }
     start(async () => {
       await addAction(fd)
-      setSignature(null)
-      setPersonId('')
-      setExternalName('')
-      setCsEntrant(false)
-      setCsAttendant(false)
-      setCsRescue(false)
+      router.replace(closeHref as any)
     })
   }
 
   return (
-    <div className="space-y-3 rounded-md border border-slate-200 bg-slate-50/40 p-3">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+    <>
+      <div className="space-y-4">
         <div className="space-y-1.5">
           <Label>Signer type</Label>
-          <Select value={type} onChange={(e) => setType(e.target.value as 'internal' | 'external')}>
+          <Select
+            value={type}
+            onChange={(e) => setType(e.target.value as 'internal' | 'external')}
+          >
             <option value="internal">Internal (employee)</option>
             <option value="external">External (visitor / contractor)</option>
           </Select>
@@ -88,34 +96,60 @@ export function AddSignatureForm({
         ) : (
           <div className="space-y-1.5">
             <Label>External name</Label>
-            <Input value={externalName} onChange={(e) => setExternalName(e.target.value)} placeholder="Full name" />
+            <Input
+              value={externalName}
+              onChange={(e) => setExternalName(e.target.value)}
+              placeholder="Full name"
+            />
           </div>
         )}
-      </div>
-      {showCSRoles ? (
-        <div className="flex flex-wrap items-center gap-3 text-sm">
-          <span className="text-xs uppercase tracking-wide text-slate-500">CS role(s):</span>
-          <label className="flex items-center gap-1">
-            <input type="checkbox" checked={csEntrant} onChange={(e) => setCsEntrant(e.target.checked)} />
-            Entrant
-          </label>
-          <label className="flex items-center gap-1">
-            <input type="checkbox" checked={csAttendant} onChange={(e) => setCsAttendant(e.target.checked)} />
-            Attendant
-          </label>
-          <label className="flex items-center gap-1">
-            <input type="checkbox" checked={csRescue} onChange={(e) => setCsRescue(e.target.checked)} />
-            Rescue
-          </label>
+        {showCSRoles ? (
+          <div className="space-y-1.5">
+            <Label>CS role(s)</Label>
+            <div className="flex flex-wrap items-center gap-3 text-sm">
+              <label className="flex items-center gap-1.5">
+                <input
+                  type="checkbox"
+                  checked={csEntrant}
+                  onChange={(e) => setCsEntrant(e.target.checked)}
+                />
+                Entrant
+              </label>
+              <label className="flex items-center gap-1.5">
+                <input
+                  type="checkbox"
+                  checked={csAttendant}
+                  onChange={(e) => setCsAttendant(e.target.checked)}
+                />
+                Attendant
+              </label>
+              <label className="flex items-center gap-1.5">
+                <input
+                  type="checkbox"
+                  checked={csRescue}
+                  onChange={(e) => setCsRescue(e.target.checked)}
+                />
+                Rescue
+              </label>
+            </div>
+          </div>
+        ) : null}
+        <div className="space-y-1.5">
+          <Label>Signature</Label>
+          <SignaturePad value={signature} onChange={setSignature} />
         </div>
-      ) : null}
-      <SignaturePad value={signature} onChange={setSignature} />
-      {err ? <div className="text-xs text-red-600">{err}</div> : null}
-      <div className="flex items-center justify-end">
+        {err ? <div className="text-sm text-red-600">{err}</div> : null}
+      </div>
+      <div className="sticky bottom-0 -mx-6 -mb-5 mt-6 flex items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-6 py-3">
+        <Link href={closeHref as any}>
+          <Button type="button" variant="outline">
+            Cancel
+          </Button>
+        </Link>
         <Button type="button" onClick={submit} disabled={pending}>
           {pending ? 'Saving…' : 'Add signature'}
         </Button>
       </div>
-    </div>
+    </>
   )
 }

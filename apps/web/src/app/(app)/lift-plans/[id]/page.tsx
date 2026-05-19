@@ -15,8 +15,9 @@ import {
   Input,
   Label,
   Select,
+  UrlDrawer,
 } from '@beaconhs/ui'
-import { FileText, Lock, Mail, Trash2, Unlock } from 'lucide-react'
+import { FileText, Lock, Mail, Plus, Trash2, Unlock } from 'lucide-react'
 import {
   attachments,
   equipmentItems,
@@ -41,7 +42,6 @@ import { DetailPageLayout } from '@/components/page-layout'
 import { PhotoGallery } from '@/components/photo-gallery'
 import { Section } from '@/components/section'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
-import { GenericSendEmailDialog } from '@/components/send-email-dialog'
 import { CapacityBadge, StatusBadge } from '../_badges'
 import {
   LIFT_PLAN_STATUSES,
@@ -77,19 +77,20 @@ import {
   updatePpe,
   updateSignature,
 } from '../_actions'
-import { AddSignatureForm, ResignForm } from '../_signature-form'
+import { ResignForm } from '../_signature-form'
 import { LiftPlanPhotoUploader } from '../_photo-uploader'
 import {
-  AddEquipmentForm,
-  AddHazardForm,
-  AddLoadForm,
-  AddPpeForm,
+  EquipmentBody,
   EquipmentRow,
+  HazardBody,
   HazardRow,
+  LoadBody,
   LoadRow,
   PhotoCaptionForm,
+  PpeBody,
   PpeRow,
 } from './_sections'
+import { AddSignatureBody } from './_signature-body'
 
 export const dynamic = 'force-dynamic'
 
@@ -119,6 +120,10 @@ export default async function LiftPlanDetailPage({
   const { id } = await params
   const sp = await searchParams
   const active = pickActiveTab(sp, TABS, 'overview')
+  const drawer = pickString(sp.drawer)
+  const drawerLoadId = pickString(sp.loadId)
+  const drawerEquipmentId = pickString(sp.equipmentId)
+  const drawerHazardId = pickString(sp.hazardId)
   const ctx = await requireRequestContext()
 
   const data = await ctx.db(async (tx) => {
@@ -287,7 +292,7 @@ export default async function LiftPlanDetailPage({
                 </Button>
               </Link>
               <Link
-                href={`/lift-plans/${id}?send=1${active !== 'overview' ? `&tab=${active}` : ''}` as any}
+                href={`/lift-plans/${id}?drawer=send-email${active !== 'overview' ? `&tab=${active}` : ''}`}
                 scroll={false}
               >
                 <Button variant="outline">
@@ -535,7 +540,6 @@ export default async function LiftPlanDetailPage({
                     }}
                     liftPlanId={id}
                     locked={plan.locked}
-                    updateAction={updateLoad}
                     deleteAction={deleteLoad}
                     moveAction={moveLoad}
                   />
@@ -549,7 +553,11 @@ export default async function LiftPlanDetailPage({
               ) : null}
               {!plan.locked ? (
                 <div className="pt-3">
-                  <AddLoadForm liftPlanId={id} addAction={addLoad} />
+                  <Link href={`/lift-plans/${id}?tab=loads&drawer=add-load`}>
+                    <Button variant="outline" size="sm">
+                      <Plus size={12} /> Add load
+                    </Button>
+                  </Link>
                 </div>
               ) : null}
             </div>
@@ -585,8 +593,6 @@ export default async function LiftPlanDetailPage({
                       }}
                       liftPlanId={id}
                       locked={plan.locked}
-                      equipmentItems={equipmentChoices}
-                      updateAction={updateEquipment}
                       deleteAction={deleteEquipment}
                       moveAction={moveEquipment}
                     />
@@ -601,11 +607,11 @@ export default async function LiftPlanDetailPage({
               )}
               {!plan.locked ? (
                 <div className="pt-3">
-                  <AddEquipmentForm
-                    liftPlanId={id}
-                    equipmentItems={equipmentChoices}
-                    addAction={addEquipment}
-                  />
+                  <Link href={`/lift-plans/${id}?tab=equipment&drawer=add-equipment`}>
+                    <Button variant="outline" size="sm">
+                      <Plus size={12} /> Add equipment
+                    </Button>
+                  </Link>
                 </div>
               ) : null}
             </div>
@@ -633,7 +639,6 @@ export default async function LiftPlanDetailPage({
                     }}
                     liftPlanId={id}
                     locked={plan.locked}
-                    updateAction={updateHazard}
                     deleteAction={deleteHazard}
                     moveAction={moveHazard}
                   />
@@ -641,7 +646,11 @@ export default async function LiftPlanDetailPage({
               )}
               {!plan.locked ? (
                 <div className="pt-3">
-                  <AddHazardForm liftPlanId={id} addAction={addHazard} />
+                  <Link href={`/lift-plans/${id}?tab=hazards&drawer=add-hazard`}>
+                    <Button variant="outline" size="sm">
+                      <Plus size={12} /> Add hazard
+                    </Button>
+                  </Link>
                 </div>
               ) : null}
             </div>
@@ -665,7 +674,6 @@ export default async function LiftPlanDetailPage({
                     row={{ id: p.id, ppeName: p.ppeName, required: p.required }}
                     liftPlanId={id}
                     locked={plan.locked}
-                    updateAction={updatePpe}
                     deleteAction={deletePpe}
                     moveAction={movePpe}
                   />
@@ -673,7 +681,11 @@ export default async function LiftPlanDetailPage({
               )}
               {!plan.locked ? (
                 <div className="pt-3">
-                  <AddPpeForm liftPlanId={id} addAction={addPpe} />
+                  <Link href={`/lift-plans/${id}?tab=ppe&drawer=add-ppe`}>
+                    <Button variant="outline" size="sm">
+                      <Plus size={12} /> Add PPE
+                    </Button>
+                  </Link>
                 </div>
               ) : null}
             </div>
@@ -742,12 +754,11 @@ export default async function LiftPlanDetailPage({
                 </div>
               )}
               {!plan.locked ? (
-                <AddSignatureForm
-                  liftPlanId={id}
-                  people={workers}
-                  existingRoles={existingRoles}
-                  addAction={addSignature}
-                />
+                <Link href={`/lift-plans/${id}?tab=signatures&drawer=add-signature`}>
+                  <Button variant="outline" size="sm">
+                    <Plus size={12} /> Add signature
+                  </Button>
+                </Link>
               ) : (
                 <p className="text-xs text-slate-500">Unlock the plan to add signatures.</p>
               )}
@@ -789,18 +800,325 @@ export default async function LiftPlanDetailPage({
         ) : null}
       </div>
 
-      <GenericSendEmailDialog
-        open={pickString(sp.send) === '1'}
-        title="Send lift plan"
+      <UrlDrawer
+        open={drawer === 'add-load'}
+        closeHref={`/lift-plans/${id}?tab=loads`}
+        title="Add load"
+        size="md"
+        footer={
+          <>
+            <Link href={`/lift-plans/${id}?tab=loads`}>
+              <Button type="button" variant="outline">
+                Cancel
+              </Button>
+            </Link>
+            <Button type="submit" form="lp-load-form">
+              <Plus size={14} /> Add
+            </Button>
+          </>
+        }
+      >
+        <LoadBody
+          formId="lp-load-form"
+          liftPlanId={id}
+          action={addLoad}
+          closeHref={`/lift-plans/${id}?tab=loads`}
+        />
+      </UrlDrawer>
+
+      <UrlDrawer
+        open={drawer === 'edit-load' && Boolean(drawerLoadId)}
+        closeHref={`/lift-plans/${id}?tab=loads`}
+        title="Edit load"
+        size="md"
+        footer={
+          <>
+            <Link href={`/lift-plans/${id}?tab=loads`}>
+              <Button type="button" variant="outline">
+                Cancel
+              </Button>
+            </Link>
+            <Button type="submit" form="lp-load-form">
+              Save
+            </Button>
+          </>
+        }
+      >
+        {(() => {
+          const load = loads.find((l) => l.id === drawerLoadId)
+          if (!load) return <p className="text-sm text-slate-500">Load not found.</p>
+          return (
+            <LoadBody
+              formId="lp-load-form"
+              liftPlanId={id}
+              load={{
+                id: load.id,
+                description: load.description,
+                weightKg: load.weightKg,
+                dimensionsMaxMm: load.dimensionsMaxMm,
+                attachmentMethod: load.attachmentMethod,
+              }}
+              action={updateLoad}
+              closeHref={`/lift-plans/${id}?tab=loads`}
+            />
+          )
+        })()}
+      </UrlDrawer>
+
+      <UrlDrawer
+        open={drawer === 'add-equipment'}
+        closeHref={`/lift-plans/${id}?tab=equipment`}
+        title="Add equipment"
+        size="md"
+        footer={
+          <>
+            <Link href={`/lift-plans/${id}?tab=equipment`}>
+              <Button type="button" variant="outline">
+                Cancel
+              </Button>
+            </Link>
+            <Button type="submit" form="lp-equipment-form">
+              <Plus size={14} /> Add
+            </Button>
+          </>
+        }
+      >
+        <EquipmentBody
+          formId="lp-equipment-form"
+          liftPlanId={id}
+          equipmentItems={equipmentChoices}
+          action={addEquipment}
+          closeHref={`/lift-plans/${id}?tab=equipment`}
+        />
+      </UrlDrawer>
+
+      <UrlDrawer
+        open={drawer === 'edit-equipment' && Boolean(drawerEquipmentId)}
+        closeHref={`/lift-plans/${id}?tab=equipment`}
+        title="Edit equipment"
+        size="md"
+        footer={
+          <>
+            <Link href={`/lift-plans/${id}?tab=equipment`}>
+              <Button type="button" variant="outline">
+                Cancel
+              </Button>
+            </Link>
+            <Button type="submit" form="lp-equipment-form">
+              Save
+            </Button>
+          </>
+        }
+      >
+        {(() => {
+          const eq = equipment.find((e) => e.row.id === drawerEquipmentId)
+          if (!eq) return <p className="text-sm text-slate-500">Equipment not found.</p>
+          return (
+            <EquipmentBody
+              formId="lp-equipment-form"
+              liftPlanId={id}
+              row={{
+                id: eq.row.id,
+                equipmentItemId: eq.row.equipmentItemId,
+                equipmentDescription: eq.row.equipmentDescription,
+                capacityKg: eq.row.capacityKg,
+                boomLengthM: eq.row.boomLengthM,
+                radiusM: eq.row.radiusM,
+                capacityUsedPct: eq.row.capacityUsedPct,
+                itemName: eq.item?.name ?? null,
+              }}
+              equipmentItems={equipmentChoices}
+              action={updateEquipment}
+              closeHref={`/lift-plans/${id}?tab=equipment`}
+            />
+          )
+        })()}
+      </UrlDrawer>
+
+      <UrlDrawer
+        open={drawer === 'add-hazard'}
+        closeHref={`/lift-plans/${id}?tab=hazards`}
+        title="Add hazard"
+        size="md"
+        footer={
+          <>
+            <Link href={`/lift-plans/${id}?tab=hazards`}>
+              <Button type="button" variant="outline">
+                Cancel
+              </Button>
+            </Link>
+            <Button type="submit" form="lp-hazard-form">
+              <Plus size={14} /> Add
+            </Button>
+          </>
+        }
+      >
+        <HazardBody
+          formId="lp-hazard-form"
+          liftPlanId={id}
+          action={addHazard}
+          closeHref={`/lift-plans/${id}?tab=hazards`}
+        />
+      </UrlDrawer>
+
+      <UrlDrawer
+        open={drawer === 'edit-hazard' && Boolean(drawerHazardId)}
+        closeHref={`/lift-plans/${id}?tab=hazards`}
+        title="Edit hazard"
+        size="md"
+        footer={
+          <>
+            <Link href={`/lift-plans/${id}?tab=hazards`}>
+              <Button type="button" variant="outline">
+                Cancel
+              </Button>
+            </Link>
+            <Button type="submit" form="lp-hazard-form">
+              Save
+            </Button>
+          </>
+        }
+      >
+        {(() => {
+          const h = hazards.find((x) => x.id === drawerHazardId)
+          if (!h) return <p className="text-sm text-slate-500">Hazard not found.</p>
+          return (
+            <HazardBody
+              formId="lp-hazard-form"
+              liftPlanId={id}
+              row={{
+                id: h.id,
+                hazardDescription: h.hazardDescription,
+                controls: h.controls,
+              }}
+              action={updateHazard}
+              closeHref={`/lift-plans/${id}?tab=hazards`}
+            />
+          )
+        })()}
+      </UrlDrawer>
+
+      <UrlDrawer
+        open={drawer === 'add-ppe'}
+        closeHref={`/lift-plans/${id}?tab=ppe`}
+        title="Add PPE"
+        size="sm"
+        footer={
+          <>
+            <Link href={`/lift-plans/${id}?tab=ppe`}>
+              <Button type="button" variant="outline">
+                Cancel
+              </Button>
+            </Link>
+            <Button type="submit" form="lp-ppe-form">
+              <Plus size={14} /> Add
+            </Button>
+          </>
+        }
+      >
+        <PpeBody
+          formId="lp-ppe-form"
+          liftPlanId={id}
+          action={addPpe}
+          closeHref={`/lift-plans/${id}?tab=ppe`}
+        />
+      </UrlDrawer>
+
+      <UrlDrawer
+        open={drawer === 'add-signature'}
+        closeHref={`/lift-plans/${id}?tab=signatures`}
+        title="Add signature"
+        description="Capture a signed-off role for this lift plan."
+        size="md"
+        footer={
+          <>
+            <Link href={`/lift-plans/${id}?tab=signatures`}>
+              <Button type="button" variant="outline">
+                Cancel
+              </Button>
+            </Link>
+            <Button type="submit" form="lp-signature-form">
+              Add signature
+            </Button>
+          </>
+        }
+      >
+        <AddSignatureBody
+          formId="lp-signature-form"
+          liftPlanId={id}
+          people={workers}
+          existingRoles={existingRoles}
+          action={addSignature}
+          closeHref={`/lift-plans/${id}?tab=signatures`}
+        />
+      </UrlDrawer>
+
+      <UrlDrawer
+        open={drawer === 'send-email'}
+        closeHref={`/lift-plans/${id}${active !== 'overview' ? `?tab=${active}` : ''}`}
+        title={`Send lift plan · ${plan.reference}`}
         description="Sends a structured lift plan recap to the tenant admin distribution list by default, or to the explicit recipients below."
-        reference={plan.reference}
-        defaultSubjectPrefix="Update"
-        sendAction={async (fd) => {
-          'use server'
-          fd.set('id', id)
-          await sendLiftPlanEmail(fd)
-        }}
-      />
+        size="md"
+        footer={
+          <>
+            <Link
+              href={`/lift-plans/${id}${active !== 'overview' ? `?tab=${active}` : ''}`}
+            >
+              <Button type="button" variant="outline">
+                Cancel
+              </Button>
+            </Link>
+            <Button type="submit" form="lp-send-email-form">
+              Send email
+            </Button>
+          </>
+        }
+      >
+        <form
+          id="lp-send-email-form"
+          action={async (fd) => {
+            'use server'
+            fd.set('id', id)
+            await sendLiftPlanEmail(fd)
+          }}
+          className="space-y-3"
+        >
+          <div className="space-y-1.5">
+            <Label htmlFor="lp-se-recipients">Recipients (comma-separated)</Label>
+            <Input
+              id="lp-se-recipients"
+              name="recipients"
+              type="text"
+              placeholder="alice@example.com, bob@example.com"
+            />
+            <p className="text-[11px] text-slate-500">
+              Each address gets its own copy. Leave blank to send to the default tenant
+              admin distribution list.
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="lp-se-cc">Cc</Label>
+            <Input id="lp-se-cc" name="cc" type="text" placeholder="cc@example.com" />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="lp-se-subject">Subject prefix</Label>
+            <Input
+              id="lp-se-subject"
+              name="subjectPrefix"
+              defaultValue="Update"
+              placeholder="Update / Action required / FYI"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="lp-se-message">Personal note (optional)</Label>
+            <Input
+              id="lp-se-message"
+              name="message"
+              placeholder="Add context for the recipients."
+            />
+          </div>
+        </form>
+      </UrlDrawer>
     </DetailPageLayout>
   )
 }

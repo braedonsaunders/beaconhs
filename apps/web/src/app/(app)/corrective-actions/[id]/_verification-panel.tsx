@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { CheckCircle2, ShieldCheck } from 'lucide-react'
@@ -15,10 +16,9 @@ import { SignaturePad } from '@/components/signature-pad'
 import { verifyCorrectiveAction } from '../_actions'
 
 /**
- * Verification tab body. Shown only when `verificationRequired = true`.
- * Captures the verifier's notes + signature and records both on the row
- * (`verifiedAt`, `verifiedByTenantUserId`, `verificationNotes`) plus on the
- * complete-steps timeline.
+ * Verification tab body. Read-only display of an already-verified CA, plus a
+ * "Sign verification" trigger that opens the verify drawer when work is still
+ * outstanding. The body widget used inside the drawer is `VerifyBody` below.
  */
 export function VerificationPanel({
   caId,
@@ -33,32 +33,6 @@ export function VerificationPanel({
   verificationNotes: string | null
   locked: boolean
 }) {
-  const router = useRouter()
-  const [notes, setNotes] = useState(verificationNotes ?? '')
-  const [sig, setSig] = useState<string | null>(null)
-  const [pending, start] = useTransition()
-  const [error, setError] = useState<string | null>(null)
-
-  function sign() {
-    setError(null)
-    if (!notes.trim()) {
-      setError('Add a verification note before signing.')
-      return
-    }
-    start(async () => {
-      const res = await verifyCorrectiveAction({
-        caId,
-        notes,
-        signatureDataUrl: sig,
-      })
-      if (!res.ok) {
-        setError(res.error)
-        return
-      }
-      router.refresh()
-    })
-  }
-
   if (verifiedAt) {
     return (
       <div className="space-y-4">
@@ -105,6 +79,67 @@ export function VerificationPanel({
           timestamp will be stamped on the record once you sign.
         </AlertDescription>
       </Alert>
+      <Link href={`/corrective-actions/${caId}?tab=verification&drawer=verify`}>
+        <Button>
+          <CheckCircle2 size={14} /> Sign verification
+        </Button>
+      </Link>
+    </div>
+  )
+}
+
+/**
+ * Body of the "Verify" drawer. Captures verifier notes + optional signature.
+ * The parent drawer footer's Submit button calls the internal submit via the
+ * `formId` linkage.
+ */
+export function VerifyBody({
+  caId,
+  initialNotes,
+  formId,
+  closeHref,
+}: {
+  caId: string
+  initialNotes: string | null
+  formId: string
+  closeHref: string
+}) {
+  const router = useRouter()
+  const [notes, setNotes] = useState(initialNotes ?? '')
+  const [sig, setSig] = useState<string | null>(null)
+  const [pending, start] = useTransition()
+  const [error, setError] = useState<string | null>(null)
+
+  function submit() {
+    setError(null)
+    if (!notes.trim()) {
+      setError('Add a verification note before signing.')
+      return
+    }
+    start(async () => {
+      const res = await verifyCorrectiveAction({
+        caId,
+        notes,
+        signatureDataUrl: sig,
+      })
+      if (!res.ok) {
+        setError(res.error)
+        return
+      }
+      router.push(closeHref as any)
+      router.refresh()
+    })
+  }
+
+  return (
+    <form
+      id={formId}
+      onSubmit={(e) => {
+        e.preventDefault()
+        submit()
+      }}
+      className="space-y-4"
+    >
       <div className="space-y-1.5">
         <Label>Verification notes</Label>
         <Textarea
@@ -120,12 +155,9 @@ export function VerificationPanel({
         <SignaturePad value={sig} onChange={setSig} />
       </div>
       {error ? <p className="text-xs text-red-600">{error}</p> : null}
-      <div className="flex justify-end">
-        <Button type="button" onClick={sign} disabled={pending}>
-          <CheckCircle2 size={14} />
-          {pending ? 'Signing…' : 'Sign verification'}
-        </Button>
-      </div>
-    </div>
+      <p className="text-xs text-slate-500">
+        {pending ? 'Signing…' : 'Submit from the drawer footer when ready.'}
+      </p>
+    </form>
   )
 }

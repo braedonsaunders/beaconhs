@@ -14,10 +14,20 @@
 // auto-spawn a CA via spawnCorrectiveActionForFailedPpeInspection().
 
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { and, asc, desc, eq } from 'drizzle-orm'
-import { Camera, ClipboardCheck, HardHat, Mail, Plus, ShieldCheck } from 'lucide-react'
+import {
+  AlertTriangle,
+  Camera,
+  ClipboardCheck,
+  HardHat,
+  Mail,
+  Plus,
+  RefreshCw,
+  ShieldCheck,
+  UserPlus,
+} from 'lucide-react'
 import {
   Alert,
   AlertDescription,
@@ -40,6 +50,7 @@ import {
   TableHeader,
   TableRow,
   Textarea,
+  UrlDrawer,
 } from '@beaconhs/ui'
 import {
   attachments,
@@ -166,6 +177,7 @@ async function recordInspection(formData: FormData) {
   }
 
   revalidatePath(`/ppe/${itemId}`)
+  redirect(`/ppe/${itemId}?tab=inspections`)
 }
 
 async function setStatus(formData: FormData) {
@@ -204,6 +216,7 @@ async function setStatus(formData: FormData) {
   }
   revalidatePath(`/ppe/${itemId}`)
   revalidatePath('/ppe')
+  redirect(`/ppe/${itemId}?tab=status`)
 }
 
 async function reportIssue(formData: FormData) {
@@ -233,6 +246,7 @@ async function reportIssue(formData: FormData) {
     after: { itemId, description },
   })
   revalidatePath(`/ppe/${itemId}`)
+  redirect(`/ppe/${itemId}?tab=issues`)
 }
 
 async function resolveIssue(formData: FormData) {
@@ -315,6 +329,7 @@ async function addAnnualRecord(formData: FormData) {
     },
   })
   revalidatePath(`/ppe/${itemId}`)
+  redirect(`/ppe/${itemId}?tab=annual`)
 }
 
 // Inline server action for the Send-email dialog. Allows shipping an
@@ -479,6 +494,10 @@ export default async function PpeDetailPage({
   const annualDueIn = daysUntil(item.nextAnnualInspectionDue)
 
   const basePath = `/ppe/${id}`
+  // Drawer state is URL-driven; preserve the active tab in the close URL so
+  // that closing the drawer doesn't kick you back to Overview.
+  const drawerKey = pickString(sp.drawer)
+  const closeHref = `${basePath}?tab=${active}`
   return (
     <DetailPageLayout
       header={
@@ -649,9 +668,47 @@ export default async function PpeDetailPage({
 
         {active === 'inspections' ? (
           <>
-            <Section title={`Inspections (${inspections.length})`}>
+            <Section
+              title={`Inspections (${inspections.length})`}
+              actions={
+                <div className="flex items-center gap-2">
+                  <Link
+                    href={
+                      `${basePath}?tab=inspections&drawer=record-inspection&kind=pre_use` as any
+                    }
+                  >
+                    <Button size="sm">
+                      <ClipboardCheck size={14} /> Pre-use
+                    </Button>
+                  </Link>
+                  <Link
+                    href={
+                      `${basePath}?tab=inspections&drawer=record-inspection&kind=annual` as any
+                    }
+                  >
+                    <Button size="sm" variant="outline">
+                      <ShieldCheck size={14} /> Annual
+                    </Button>
+                  </Link>
+                </div>
+              }
+            >
               {inspections.length === 0 ? (
-                <EmptyState icon={<ClipboardCheck size={24} />} title="No inspections recorded" />
+                <EmptyState
+                  icon={<ClipboardCheck size={24} />}
+                  title="No inspections recorded"
+                  action={
+                    <Link
+                      href={
+                        `${basePath}?tab=inspections&drawer=record-inspection&kind=pre_use` as any
+                      }
+                    >
+                      <Button size="sm" variant="outline">
+                        <ClipboardCheck size={14} /> Record pre-use inspection
+                      </Button>
+                    </Link>
+                  }
+                />
               ) : (
                 <Table>
                   <TableHeader>
@@ -707,27 +764,33 @@ export default async function PpeDetailPage({
                 </Table>
               )}
             </Section>
-
-            <Section title="Record new inspection" subtitle="Walks through the criteria configured on this PPE type.">
-              <CriteriaInspectionForm
-                itemId={id}
-                typeId={type.id}
-                preUseCriteria={preUseCriteria}
-                annualCriteria={annualCriteria}
-                action={recordInspection}
-              />
-            </Section>
           </>
         ) : null}
 
         {active === 'annual' ? (
           <>
-            <Section title={`Annual records (${annualRecords.length})`}>
+            <Section
+              title={`Annual records (${annualRecords.length})`}
+              actions={
+                <Link href={`${basePath}?tab=annual&drawer=add-annual` as any}>
+                  <Button size="sm">
+                    <Plus size={14} /> Add annual record
+                  </Button>
+                </Link>
+              }
+            >
               {annualRecords.length === 0 ? (
                 <EmptyState
                   icon={<ShieldCheck size={24} />}
                   title="No annual records yet"
                   description="Upload the most recent third-party recertification to start the history."
+                  action={
+                    <Link href={`${basePath}?tab=annual&drawer=add-annual` as any}>
+                      <Button size="sm" variant="outline">
+                        <Plus size={14} /> Add the first record
+                      </Button>
+                    </Link>
+                  }
                 />
               ) : (
                 <Table>
@@ -789,67 +852,20 @@ export default async function PpeDetailPage({
                 </Table>
               )}
             </Section>
-
-            <Section title="Add annual record" subtitle="Capture the third-party inspector's signed certificate.">
-              <form action={addAnnualRecord} className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <input type="hidden" name="itemId" value={id} />
-                <div className="space-y-1.5">
-                  <Label>Inspected on *</Label>
-                  <Input type="date" name="inspectedOn" required />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Result *</Label>
-                  <Select name="result" defaultValue="pass">
-                    <option value="pass">Pass</option>
-                    <option value="fail">Fail</option>
-                    <option value="remediated">Pass after remediation</option>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Inspected by (person)</Label>
-                  <Select name="inspectedByPersonId" defaultValue="">
-                    <option value="">— External inspector —</option>
-                    {peopleList.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.lastName}, {p.firstName}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Inspector name (free-text)</Label>
-                  <Input name="inspectorName" placeholder="e.g. Joe Rigger" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Inspector company</Label>
-                  <Input name="inspectorCompany" placeholder="e.g. Acme Riggers Ltd" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Certificate attachment ID</Label>
-                  <Input
-                    name="certificateAttachmentId"
-                    placeholder="UUID from /api/attachments"
-                  />
-                  <p className="text-xs text-slate-500">
-                    Upload via the file uploader elsewhere then paste the attachment id here.
-                  </p>
-                </div>
-                <div className="space-y-1.5 sm:col-span-3">
-                  <Label>Notes</Label>
-                  <Textarea name="notes" rows={2} />
-                </div>
-                <div className="sm:col-span-3 flex justify-end">
-                  <Button type="submit">
-                    <Plus size={14} /> Save annual record
-                  </Button>
-                </div>
-              </form>
-            </Section>
           </>
         ) : null}
 
         {active === 'issues' ? (
-          <Section title={`Defect reports (${issueReports.length})`}>
+          <Section
+            title={`Defect reports (${issueReports.length})`}
+            actions={
+              <Link href={`${basePath}?tab=issues&drawer=report-issue` as any}>
+                <Button size="sm" variant="destructive">
+                  <AlertTriangle size={14} /> Report defective
+                </Button>
+              </Link>
+            }
+          >
             {issueReports.length === 0 ? (
               <p className="text-sm text-slate-500">No issues reported.</p>
             ) : (
@@ -904,21 +920,6 @@ export default async function PpeDetailPage({
                 </TableBody>
               </Table>
             )}
-            <div className="mt-4 rounded-md border border-slate-200 bg-slate-50/50 p-4">
-              <h4 className="mb-2 text-sm font-semibold">Report a new defect</h4>
-              <form action={reportIssue} className="space-y-2">
-                <input type="hidden" name="itemId" value={id} />
-                <Textarea
-                  name="description"
-                  rows={2}
-                  placeholder="Frayed strap, missing buckle, damage from drop, etc."
-                  required
-                />
-                <Button type="submit" variant="destructive">
-                  Report defect
-                </Button>
-              </form>
-            </div>
           </Section>
         ) : null}
 
@@ -982,45 +983,51 @@ export default async function PpeDetailPage({
             <CardHeader>
               <CardTitle>Status</CardTitle>
             </CardHeader>
-            <CardContent>
-              <p className="mb-4 text-sm text-slate-500">
-                Changing status to <strong>issued</strong> prompts for a holder and inserts a
-                ledger row. Changing to <strong>returned</strong> clears the holder. The other
-                statuses behave like simple state flips.
+            <CardContent className="space-y-4">
+              <p className="text-sm text-slate-500">
+                Current status:{' '}
+                <Badge
+                  variant={
+                    item.status === 'issued'
+                      ? 'success'
+                      : item.status === 'in_stock'
+                        ? 'secondary'
+                        : 'warning'
+                  }
+                >
+                  {item.status.replace('_', ' ')}
+                </Badge>
+                {holder ? (
+                  <>
+                    {' '}
+                    held by{' '}
+                    <Link
+                      href={`/people/${holder.id}`}
+                      className="text-teal-700 hover:underline"
+                    >
+                      {holder.firstName} {holder.lastName}
+                    </Link>
+                  </>
+                ) : null}
+                .
               </p>
-              <form action={setStatus} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <input type="hidden" name="itemId" value={id} />
-                <div className="space-y-1.5">
-                  <Label>Set status</Label>
-                  <Select name="status" defaultValue={item.status}>
-                    {['in_stock', 'issued', 'returned', 'damaged', 'discarded', 'expired'].map(
-                      (s) => (
-                        <option key={s} value={s}>
-                          {s.replace('_', ' ')}
-                        </option>
-                      ),
-                    )}
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Holder (required when issuing)</Label>
-                  <Select name="personId" defaultValue={item.currentHolderPersonId ?? ''}>
-                    <option value="">— None —</option>
-                    {peopleList.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.lastName}, {p.firstName}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-                <div className="space-y-1.5 sm:col-span-2">
-                  <Label>Note</Label>
-                  <Input name="note" placeholder="Optional ledger note for this status change" />
-                </div>
-                <div className="sm:col-span-2 flex justify-end">
-                  <Button type="submit">Update status</Button>
-                </div>
-              </form>
+              <div className="flex flex-wrap items-center gap-2">
+                <Link href={`${basePath}?tab=status&drawer=issue-to-person` as any}>
+                  <Button>
+                    <UserPlus size={14} /> Issue to person
+                  </Button>
+                </Link>
+                <Link href={`${basePath}?tab=status&drawer=change-status` as any}>
+                  <Button variant="outline">
+                    <RefreshCw size={14} /> Mark returned / damaged / discarded
+                  </Button>
+                </Link>
+              </div>
+              <p className="text-xs text-slate-500">
+                Issuing this item prompts for a holder and inserts a ledger row in the
+                issues / returns history. Marking returned clears the holder. The other
+                statuses behave like simple state flips and are audited.
+              </p>
             </CardContent>
           </Card>
         ) : null}
@@ -1042,19 +1049,242 @@ export default async function PpeDetailPage({
           await sendEmailAction(fd)
         }}
       />
+
+      {/*
+       * Sub-entity drawers. Mounted once per page; only one is open at a time
+       * (URL-driven via `?drawer=…`). Each form inside the drawer has an id
+       * so the sticky footer's submit button can target it via the `form`
+       * attribute. Closing pops back to closeHref which preserves the
+       * active tab.
+       */}
+      <UrlDrawer
+        open={drawerKey === 'record-inspection'}
+        closeHref={closeHref}
+        title="Record inspection"
+        description="Walks through the criteria configured on this PPE type. High+ severity failures auto-spawn a corrective action."
+        size="lg"
+        footer={
+          <Button type="submit" form="ppe-record-inspection-form">
+            <HardHat size={14} /> Record inspection
+          </Button>
+        }
+      >
+        <CriteriaInspectionForm
+          formId="ppe-record-inspection-form"
+          itemId={id}
+          typeId={type.id}
+          defaultKind={
+            pickString(sp.kind) === 'annual' ? 'annual' : 'pre_use'
+          }
+          preUseCriteria={preUseCriteria}
+          annualCriteria={annualCriteria}
+          action={recordInspection}
+        />
+      </UrlDrawer>
+
+      <UrlDrawer
+        open={drawerKey === 'report-issue'}
+        closeHref={closeHref}
+        title="Report defective issue"
+        description="Logs a defect report against this PPE item. Open reports surface on the dashboard and the item header."
+        size="md"
+        footer={
+          <Button type="submit" form="ppe-report-issue-form" variant="destructive">
+            <AlertTriangle size={14} /> Report defect
+          </Button>
+        }
+      >
+        <form id="ppe-report-issue-form" action={reportIssue} className="space-y-3">
+          <input type="hidden" name="itemId" value={id} />
+          <div className="space-y-1.5">
+            <Label>What's wrong? *</Label>
+            <Textarea
+              name="description"
+              rows={6}
+              required
+              placeholder="Frayed strap, missing buckle, damage from drop, contamination, etc."
+            />
+          </div>
+        </form>
+      </UrlDrawer>
+
+      <UrlDrawer
+        open={drawerKey === 'issue-to-person'}
+        closeHref={closeHref}
+        title="Issue to person"
+        description="Hand this item to a named holder and append an issuance row to the ledger."
+        size="md"
+        footer={
+          <Button type="submit" form="ppe-issue-to-person-form">
+            <UserPlus size={14} /> Issue
+          </Button>
+        }
+      >
+        <form
+          id="ppe-issue-to-person-form"
+          action={setStatus}
+          className="space-y-3"
+        >
+          <input type="hidden" name="itemId" value={id} />
+          <input type="hidden" name="status" value="issued" />
+          <div className="space-y-1.5">
+            <Label>Holder *</Label>
+            <Select name="personId" defaultValue={item.currentHolderPersonId ?? ''} required>
+              <option value="">— Pick a person —</option>
+              {peopleList.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.lastName}, {p.firstName}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Note</Label>
+            <Textarea
+              name="note"
+              rows={3}
+              placeholder="Optional context for the issuance ledger entry"
+            />
+          </div>
+        </form>
+      </UrlDrawer>
+
+      <UrlDrawer
+        open={drawerKey === 'change-status'}
+        closeHref={closeHref}
+        title="Change status"
+        description="Mark this item as returned, damaged, discarded, in stock, or expired. Issuing to a person uses the dedicated drawer."
+        size="md"
+        footer={
+          <Button type="submit" form="ppe-change-status-form">
+            <RefreshCw size={14} /> Update status
+          </Button>
+        }
+      >
+        <form
+          id="ppe-change-status-form"
+          action={setStatus}
+          className="space-y-3"
+        >
+          <input type="hidden" name="itemId" value={id} />
+          <div className="space-y-1.5">
+            <Label>New status</Label>
+            <Select
+              name="status"
+              defaultValue={item.status === 'issued' ? 'returned' : item.status}
+            >
+              <option value="returned">Returned</option>
+              <option value="in_stock">In stock</option>
+              <option value="damaged">Damaged</option>
+              <option value="discarded">Discarded</option>
+              <option value="expired">Expired</option>
+            </Select>
+            <p className="text-xs text-slate-500">
+              To issue to a person, use the Issue to person action instead.
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Note</Label>
+            <Textarea
+              name="note"
+              rows={3}
+              placeholder="Optional ledger note for this status change"
+            />
+          </div>
+        </form>
+      </UrlDrawer>
+
+      <UrlDrawer
+        open={drawerKey === 'add-annual'}
+        closeHref={closeHref}
+        title="Add annual recertification"
+        description="Capture the third-party inspector's signed certificate. The item's next-annual-due date updates automatically."
+        size="lg"
+        footer={
+          <Button type="submit" form="ppe-add-annual-form">
+            <Plus size={14} /> Save annual record
+          </Button>
+        }
+      >
+        <form
+          id="ppe-add-annual-form"
+          action={addAnnualRecord}
+          className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+        >
+          <input type="hidden" name="itemId" value={id} />
+          <div className="space-y-1.5">
+            <Label>
+              Inspected on <span className="text-red-600">*</span>
+            </Label>
+            <Input
+              type="date"
+              name="inspectedOn"
+              required
+              defaultValue={new Date().toISOString().slice(0, 10)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>
+              Result <span className="text-red-600">*</span>
+            </Label>
+            <Select name="result" defaultValue="pass">
+              <option value="pass">Pass</option>
+              <option value="fail">Fail</option>
+              <option value="remediated">Pass after remediation</option>
+            </Select>
+          </div>
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label>Inspected by (person)</Label>
+            <Select name="inspectedByPersonId" defaultValue="">
+              <option value="">— External inspector —</option>
+              {peopleList.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.lastName}, {p.firstName}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Inspector name (free-text)</Label>
+            <Input name="inspectorName" placeholder="e.g. Joe Rigger" />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Inspector company</Label>
+            <Input name="inspectorCompany" placeholder="e.g. Acme Riggers Ltd" />
+          </div>
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label>Certificate attachment ID</Label>
+            <Input
+              name="certificateAttachmentId"
+              placeholder="UUID from /api/attachments"
+            />
+            <p className="text-xs text-slate-500">
+              Upload via the file uploader elsewhere then paste the attachment id here.
+            </p>
+          </div>
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label>Notes</Label>
+            <Textarea name="notes" rows={3} />
+          </div>
+        </form>
+      </UrlDrawer>
     </DetailPageLayout>
   )
 }
 
 function CriteriaInspectionForm({
+  formId,
   itemId,
   typeId,
+  defaultKind = 'pre_use',
   preUseCriteria,
   annualCriteria,
   action,
 }: {
+  formId?: string
   itemId: string
   typeId: string
+  defaultKind?: 'pre_use' | 'annual'
   preUseCriteria: {
     id: string
     question: string
@@ -1072,16 +1302,18 @@ function CriteriaInspectionForm({
   action: (fd: FormData) => Promise<void>
 }) {
   // The form ships both lists; the user picks kind in the Select. We render
-  // both critera lists in <details> so the form stays tight by default.
+  // both critera lists in <details> so the form stays tight by default. The
+  // submit button lives in the parent drawer's sticky footer (connected via
+  // the `form` attribute on the button matching `formId`).
   return (
-    <form action={action} className="space-y-4">
+    <form id={formId} action={action} className="space-y-4">
       <input type="hidden" name="itemId" value={itemId} />
       <input type="hidden" name="typeId" value={typeId} />
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="space-y-1.5">
           <Label>Kind</Label>
-          <Select name="kind" defaultValue="pre_use">
+          <Select name="kind" defaultValue={defaultKind}>
             <option value="pre_use">Pre-use</option>
             <option value="annual">Annual</option>
           </Select>
@@ -1101,7 +1333,10 @@ function CriteriaInspectionForm({
       </div>
 
       {preUseCriteria.length > 0 ? (
-        <details open className="rounded-md border border-slate-200 bg-slate-50/50 p-4">
+        <details
+          open={defaultKind === 'pre_use'}
+          className="rounded-md border border-slate-200 bg-slate-50/50 p-4"
+        >
           <summary className="cursor-pointer text-sm font-semibold text-slate-800">
             Pre-use criteria ({preUseCriteria.length}) — answer per criterion. High+ failures
             auto-spawn a corrective action.
@@ -1115,7 +1350,10 @@ function CriteriaInspectionForm({
       ) : null}
 
       {annualCriteria.length > 0 ? (
-        <details className="rounded-md border border-slate-200 bg-slate-50/50 p-4">
+        <details
+          open={defaultKind === 'annual'}
+          className="rounded-md border border-slate-200 bg-slate-50/50 p-4"
+        >
           <summary className="cursor-pointer text-sm font-semibold text-slate-800">
             Annual criteria ({annualCriteria.length}) — answer when recording an annual.
           </summary>
@@ -1142,12 +1380,6 @@ function CriteriaInspectionForm({
           </AlertDescription>
         </Alert>
       ) : null}
-
-      <div className="flex justify-end">
-        <Button type="submit">
-          <HardHat size={14} /> Record inspection
-        </Button>
-      </div>
     </form>
   )
 }
@@ -1169,9 +1401,9 @@ function CriterionRow({
     <li className="rounded border border-slate-200 bg-white p-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="flex items-center gap-2 text-sm font-medium text-slate-900">
+          <div className="flex flex-wrap items-center gap-2 text-sm font-medium text-slate-900">
             <span className="text-slate-500">{index + 1}.</span>
-            {criterion.question}
+            <span className="flex-1">{criterion.question}</span>
             {criterion.requiresPhoto ? (
               <Badge variant="warning">
                 <Camera size={10} /> photo
@@ -1191,6 +1423,17 @@ function CriterionRow({
           </div>
           {criterion.description ? (
             <p className="mt-1 text-xs text-slate-500">{criterion.description}</p>
+          ) : null}
+          {criterion.requiresPhoto ? (
+            <div className="mt-2">
+              <Label className="text-xs text-slate-500">Attach photo evidence</Label>
+              <Input
+                type="file"
+                accept="image/*"
+                name={`photo_${criterion.id}`}
+                className="mt-1 text-xs"
+              />
+            </div>
           ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-1.5 text-xs">

@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ClipboardList } from 'lucide-react'
-import { and, asc, count, desc, eq, gte, ilike, lte, or, sql, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gte, ilike, inArray, lte, or, sql, type SQL } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -161,7 +161,7 @@ export default async function ToolboxIndexPage({
             c: count(),
           })
           .from(toolboxJournalAttendees)
-          .where(sql`${toolboxJournalAttendees.journalId} = ANY(${journalIds})`)
+          .where(inArray(toolboxJournalAttendees.journalId, journalIds))
           .groupBy(toolboxJournalAttendees.journalId)
         counts = Object.fromEntries(rows.map((r) => [r.journalId, Number(r.c)]))
       }

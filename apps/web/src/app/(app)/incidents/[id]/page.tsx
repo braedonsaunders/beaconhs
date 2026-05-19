@@ -14,7 +14,11 @@ import {
   CardHeader,
   CardTitle,
   DetailHeader,
+  Input,
+  Label,
   Select,
+  Textarea,
+  UrlDrawer,
 } from '@beaconhs/ui'
 import {
   attachments,
@@ -29,7 +33,6 @@ import {
   people,
 } from '@beaconhs/db/schema'
 import { sendIncidentEmail } from './_send-email'
-import { SendEmailDialog } from './_send-email-dialog'
 import { LostTimeAddForm } from './_lost-time-form'
 import { pickString } from '@/lib/list-params'
 import { publicUrl } from '@beaconhs/storage'
@@ -152,6 +155,7 @@ async function copyIncident(formData: FormData) {
   const ctx = await requireRequestContext()
   const sourceId = String(formData.get('id') ?? '')
   if (!sourceId) return
+  const titleOverride = String(formData.get('title') ?? '').trim()
   const src = await ctx.db(async (tx) => {
     const [row] = await tx.select().from(incidents).where(eq(incidents.id, sourceId)).limit(1)
     return row ?? null
@@ -177,7 +181,7 @@ async function copyIncident(formData: FormData) {
         type: src.type,
         severity: src.severity,
         status: 'reported',
-        title: `Copy of ${src.title}`,
+        title: titleOverride || `Copy of ${src.title}`,
         description: src.description,
         occurredAt: new Date(),
         siteOrgUnitId: src.siteOrgUnitId,
@@ -245,6 +249,7 @@ async function addLostTimeEvent(formData: FormData) {
     })
   }
   revalidatePath(`/incidents/${incidentId}`)
+  redirect(`/incidents/${incidentId}?tab=lost-time`)
 }
 
 async function deleteLostTimeEvent(formData: FormData) {
@@ -300,6 +305,7 @@ export default async function IncidentDetailPage({
   const { id } = await params
   const sp = await searchParams
   const active: IncidentTab = pickActiveTab(sp, INCIDENT_TABS, 'overview')
+  const drawer = pickString(sp.drawer)
   const ctx = await requireRequestContext()
 
   const data = await ctx.db(async (tx) => {
@@ -393,19 +399,18 @@ export default async function IncidentDetailPage({
                 </Button>
               </Link>
               <Link
-                href={`/incidents/${id}?send=1${active !== 'overview' ? `&tab=${active}` : ''}`}
+                href={`/incidents/${id}?drawer=send-email${active !== 'overview' ? `&tab=${active}` : ''}`}
                 scroll={false}
               >
                 <Button variant="outline">
                   <Mail size={14} /> Send email
                 </Button>
               </Link>
-              <form action={copyIncident} className="inline">
-                <input type="hidden" name="id" value={id} />
-                <Button variant="outline" type="submit">
+              <Link href={`/incidents/${id}?drawer=copy`}>
+                <Button variant="outline" type="button">
                   <Copy size={14} /> Copy
                 </Button>
-              </form>
+              </Link>
             </>
           }
         />
@@ -761,22 +766,9 @@ export default async function IncidentDetailPage({
           )}
           {!incident.locked ? (
             <div className="mt-4 border-t border-slate-100 pt-4">
-              <h4 className="mb-2 text-xs uppercase tracking-wide text-slate-500">
-                Add lost-time / modified-duty row
-              </h4>
-              <LostTimeAddForm
-                addAction={async (fd) => {
-                  'use server'
-                  fd.set('incidentId', id)
-                  await addLostTimeEvent(fd)
-                }}
-                injuryOptions={injuries.map((row) => ({
-                  id: row.injury.id,
-                  label: row.person
-                    ? `${row.person.firstName} ${row.person.lastName}`
-                    : row.injury.personName ?? 'Unknown',
-                }))}
-              />
+              <Link href={`/incidents/${id}?tab=lost-time&drawer=add-lost-time`}>
+                <Button size="sm">Add lost-time row</Button>
+              </Link>
             </div>
           ) : null}
         </Section>
@@ -876,16 +868,139 @@ export default async function IncidentDetailPage({
         </Card>
       </div>
 
-      <SendEmailDialog
-        open={pickString(sp.send) === '1'}
-        reference={incident.reference}
-        defaultSubjectPrefix="Update"
-        sendAction={async (fd) => {
-          'use server'
-          fd.set('id', id)
-          await sendEmailAction(fd)
-        }}
-      />
+      <UrlDrawer
+        open={drawer === 'add-lost-time'}
+        closeHref={`/incidents/${id}?tab=lost-time`}
+        title="Add lost-time / modified-duty row"
+        description="Record an off-work, restricted-duty, or full-duty transition with explicit date window."
+        size="md"
+        footer={
+          <>
+            <Link href={`/incidents/${id}?tab=lost-time`}>
+              <Button type="button" variant="outline">
+                Cancel
+              </Button>
+            </Link>
+            <Button type="submit" form="inc-lost-time-form">
+              Add row
+            </Button>
+          </>
+        }
+      >
+        <LostTimeAddForm
+          formId="inc-lost-time-form"
+          addAction={async (fd) => {
+            'use server'
+            fd.set('incidentId', id)
+            await addLostTimeEvent(fd)
+          }}
+          injuryOptions={injuries.map((row) => ({
+            id: row.injury.id,
+            label: row.person
+              ? `${row.person.firstName} ${row.person.lastName}`
+              : row.injury.personName ?? 'Unknown',
+          }))}
+        />
+      </UrlDrawer>
+
+      <UrlDrawer
+        open={drawer === 'send-email'}
+        closeHref={`/incidents/${id}${active !== 'overview' ? `?tab=${active}` : ''}`}
+        title={`Send incident email · ${incident.reference}`}
+        description="Sends a structured incident summary email to every active tenant admin. Add extra comma-separated email addresses below if you want to copy specific recipients in addition."
+        size="md"
+        footer={
+          <>
+            <Link
+              href={`/incidents/${id}${active !== 'overview' ? `?tab=${active}` : ''}`}
+            >
+              <Button type="button" variant="outline">
+                Cancel
+              </Button>
+            </Link>
+            <Button type="submit" form="inc-send-email-form">
+              Send email
+            </Button>
+          </>
+        }
+      >
+        <form
+          id="inc-send-email-form"
+          action={async (fd) => {
+            'use server'
+            fd.set('id', id)
+            await sendEmailAction(fd)
+          }}
+          className="space-y-3"
+        >
+          <div className="space-y-1.5">
+            <Label htmlFor="inc-se-subject">Subject prefix</Label>
+            <Input
+              id="inc-se-subject"
+              name="subjectPrefix"
+              defaultValue="Update"
+              placeholder="Update / Action required / FYI"
+            />
+            <p className="text-xs text-slate-500">
+              Prepended to the auto-generated subject.
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="inc-se-extra">Extra recipients</Label>
+            <Input
+              id="inc-se-extra"
+              name="extraRecipients"
+              type="text"
+              placeholder="ceo@example.com, hse@example.com"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="inc-se-message">Personal note (optional)</Label>
+            <Textarea
+              id="inc-se-message"
+              name="message"
+              rows={4}
+              placeholder="Add context for the recipients — e.g. ‘Please join the 4pm post-incident review.’"
+            />
+          </div>
+        </form>
+      </UrlDrawer>
+
+      <UrlDrawer
+        open={drawer === 'copy'}
+        closeHref={`/incidents/${id}`}
+        title={`Copy incident · ${incident.reference}`}
+        description="Create a new incident pre-populated from this one. The new copy starts in 'reported' status with a fresh reference and reset timestamps."
+        size="md"
+        footer={
+          <>
+            <Link href={`/incidents/${id}`}>
+              <Button type="button" variant="outline">
+                Cancel
+              </Button>
+            </Link>
+            <Button type="submit" form="inc-copy-form">
+              <Copy size={14} /> Create copy
+            </Button>
+          </>
+        }
+      >
+        <form id="inc-copy-form" action={copyIncident} className="space-y-3">
+          <input type="hidden" name="id" value={id} />
+          <div className="space-y-1.5">
+            <Label htmlFor="inc-copy-title">Title for the new incident</Label>
+            <Input
+              id="inc-copy-title"
+              name="title"
+              defaultValue={`Copy of ${incident.title}`}
+              placeholder="Title for the cloned incident"
+            />
+            <p className="text-xs text-slate-500">
+              Leave the default ("Copy of …") or override with a more descriptive title.
+            </p>
+          </div>
+        </form>
+      </UrlDrawer>
     </DetailPageLayout>
   )
 }

@@ -27,7 +27,9 @@ import {
   EmptyState,
   Label,
   Select,
+  UrlDrawer,
 } from '@beaconhs/ui'
+import { pickString } from '@/lib/list-params'
 import {
   attachments,
   orgUnits,
@@ -49,8 +51,8 @@ import { PhotoUploaderSection } from '@/components/photo-uploader-section'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { DetailPageLayout } from '@/components/page-layout'
 import { ToolboxStatusBadge } from '../_status-badge'
-import { SignHere } from '../_sign-here'
 import { sendJournalEmail } from './_send-email'
+import { SignAttendeeBody } from './_sign-attendee-body'
 
 export const dynamic = 'force-dynamic'
 
@@ -156,6 +158,7 @@ async function addAttendee(formData: FormData) {
     after: { personId },
   })
   revalidatePath(`/toolbox/${journalId}`)
+  redirect(`/toolbox/${journalId}?tab=attendees`)
 }
 
 async function removeAttendee(formData: FormData) {
@@ -236,6 +239,7 @@ async function sendEmail(formData: FormData) {
   if (!id) return
   await sendJournalEmail(ctx, id)
   revalidatePath(`/toolbox/${id}`)
+  redirect(`/toolbox/${id}`)
 }
 
 // ---------- Page ----------
@@ -255,6 +259,8 @@ export default async function ToolboxDetailPage({
   const { id } = await params
   const sp = await searchParams
   const active: Tab = pickActiveTab(sp, TABS, 'overview')
+  const drawer = pickString(sp.drawer)
+  const drawerAttendeeId = pickString(sp.attendeeId)
   const ctx = await requireRequestContext()
 
   const data = await ctx.db(async (tx) => {
@@ -360,12 +366,11 @@ export default async function ToolboxDetailPage({
                   <FileText size={14} /> PDF
                 </Button>
               </Link>
-              <form action={sendEmail} className="inline">
-                <input type="hidden" name="id" value={id} />
-                <Button type="submit" variant="outline">
+              <Link href={`/toolbox/${id}?drawer=send-email`}>
+                <Button type="button" variant="outline">
                   <Mail size={14} /> Send email
                 </Button>
-              </form>
+              </Link>
               <form action={toggleLock} className="inline">
                 <input type="hidden" name="id" value={id} />
                 <input type="hidden" name="lock" value={j.locked ? 'false' : 'true'} />
@@ -545,11 +550,14 @@ export default async function ToolboxDetailPage({
                             )}
                             {!j.locked ? (
                               <>
-                                <SignHere
-                                  attendeeId={row.att.id}
-                                  alreadySigned={alreadySigned}
-                                  saveAction={saveSignature}
-                                />
+                                <Link
+                                  href={`/toolbox/${id}?tab=attendees&drawer=sign-attendee&attendeeId=${row.att.id}`}
+                                >
+                                  <Button type="button" variant="ghost" size="sm">
+                                    <Pencil size={12} />
+                                    {alreadySigned ? 'Re-sign' : 'Sign'}
+                                  </Button>
+                                </Link>
                                 <form action={removeAttendee} className="inline">
                                   <input type="hidden" name="journalId" value={id} />
                                   <input type="hidden" name="attendeeId" value={row.att.id} />
@@ -583,32 +591,17 @@ export default async function ToolboxDetailPage({
             </Section>
 
             {!j.locked ? (
-              <Section title="Add attendee">
-                {availablePeople.length === 0 ? (
-                  <p className="text-sm text-slate-500">
-                    Every active person is already on this attendee list.
-                  </p>
-                ) : (
-                  <form action={addAttendee} className="flex items-end gap-2">
-                    <input type="hidden" name="journalId" value={id} />
-                    <div className="min-w-0 flex-1 space-y-1.5">
-                      <Label>Person</Label>
-                      <Select name="personId" required>
-                        <option value="">Select a person…</option>
-                        {availablePeople.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.lastName}, {p.firstName}
-                            {p.jobTitle ? ` — ${p.jobTitle}` : ''}
-                          </option>
-                        ))}
-                      </Select>
-                    </div>
-                    <Button type="submit">
-                      <Plus size={14} /> Add
-                    </Button>
-                  </form>
-                )}
-              </Section>
+              availablePeople.length === 0 ? (
+                <p className="text-sm text-slate-500">
+                  Every active person is already on this attendee list.
+                </p>
+              ) : (
+                <Link href={`/toolbox/${id}?tab=attendees&drawer=add-attendee`}>
+                  <Button>
+                    <Plus size={14} /> Add attendee
+                  </Button>
+                </Link>
+              )
             ) : null}
           </>
         ) : null}
@@ -635,6 +628,104 @@ export default async function ToolboxDetailPage({
           </Section>
         ) : null}
       </div>
+
+      <UrlDrawer
+        open={drawer === 'add-attendee'}
+        closeHref={`/toolbox/${id}?tab=attendees`}
+        title="Add attendee"
+        description="Pick an active person from the directory to add to this toolbox talk."
+        size="md"
+        footer={
+          <>
+            <Link href={`/toolbox/${id}?tab=attendees`}>
+              <Button type="button" variant="outline">
+                Cancel
+              </Button>
+            </Link>
+            <Button type="submit" form="tb-add-attendee-form">
+              <Plus size={14} /> Add attendee
+            </Button>
+          </>
+        }
+      >
+        <form id="tb-add-attendee-form" action={addAttendee} className="space-y-3">
+          <input type="hidden" name="journalId" value={id} />
+          <div className="space-y-1.5">
+            <Label>Person</Label>
+            <Select name="personId" required defaultValue="">
+              <option value="">Select a person…</option>
+              {availablePeople.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.lastName}, {p.firstName}
+                  {p.jobTitle ? ` — ${p.jobTitle}` : ''}
+                </option>
+              ))}
+            </Select>
+          </div>
+        </form>
+      </UrlDrawer>
+
+      <UrlDrawer
+        open={drawer === 'sign-attendee' && Boolean(drawerAttendeeId)}
+        closeHref={`/toolbox/${id}?tab=attendees`}
+        title="Sign here"
+        description="Capture the attendee's signature."
+        size="md"
+        footer={
+          <>
+            <Link href={`/toolbox/${id}?tab=attendees`}>
+              <Button type="button" variant="outline">
+                Cancel
+              </Button>
+            </Link>
+            <Button type="submit" form="tb-sign-attendee-form">
+              Save signature
+            </Button>
+          </>
+        }
+      >
+        {drawerAttendeeId ? (
+          <SignAttendeeBody
+            attendeeId={drawerAttendeeId}
+            formId="tb-sign-attendee-form"
+            closeHref={`/toolbox/${id}?tab=attendees`}
+            saveAction={saveSignature}
+          />
+        ) : null}
+      </UrlDrawer>
+
+      <UrlDrawer
+        open={drawer === 'send-email'}
+        closeHref={`/toolbox/${id}`}
+        title={`Send toolbox talk · ${j.reference}`}
+        description="Sends a structured recap to every active tenant admin."
+        size="md"
+        footer={
+          <>
+            <Link href={`/toolbox/${id}`}>
+              <Button type="button" variant="outline">
+                Cancel
+              </Button>
+            </Link>
+            <Button type="submit" form="tb-send-email-form">
+              <Send size={14} /> Send
+            </Button>
+          </>
+        }
+      >
+        <form id="tb-send-email-form" action={sendEmail} className="space-y-3">
+          <input type="hidden" name="id" value={id} />
+          <p className="text-sm text-slate-600">
+            Sends an HTML email summarising attendees, discussion, questions raised, and
+            action items. Delivery happens via the configured email provider.
+          </p>
+          <ul className="rounded-md border border-slate-200 bg-slate-50/40 p-3 text-xs text-slate-600">
+            <li>Reference: <span className="font-mono">{j.reference}</span></li>
+            <li>Date: {j.occurredOn}</li>
+            <li>Attendees: {attendeeRows.length} ({signedCount} signed)</li>
+          </ul>
+        </form>
+      </UrlDrawer>
     </DetailPageLayout>
   )
 }

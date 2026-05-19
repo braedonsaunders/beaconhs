@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { asc, desc, eq } from 'drizzle-orm'
 import { Activity, AlertTriangle, LogOut, UserPlus, Wind } from 'lucide-react'
@@ -24,7 +24,9 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  UrlDrawer,
 } from '@beaconhs/ui'
+import { pickString } from '@/lib/list-params'
 import {
   csAtmosphericReadings,
   csPermitPersonnel,
@@ -124,6 +126,7 @@ async function addReading(formData: FormData) {
     after: { oxygenPct, lelPct, h2sPpm, coPpm },
   })
   revalidatePath(`/confined-space/${permitId}`)
+  redirect(`/confined-space/${permitId}?tab=readings`)
 }
 
 async function addPersonnel(formData: FormData) {
@@ -155,6 +158,7 @@ async function addPersonnel(formData: FormData) {
     after: { personId, role, entered: markEntered },
   })
   revalidatePath(`/confined-space/${permitId}`)
+  redirect(`/confined-space/${permitId}?tab=personnel`)
 }
 
 async function markEntered(formData: FormData) {
@@ -212,6 +216,7 @@ export default async function CSPermitDetailPage({
   const { id } = await params
   const sp = await searchParams
   const active: CsTab = pickActiveTab(sp, CS_TABS, 'overview')
+  const drawer = pickString(sp.drawer)
   const ctx = await requireRequestContext()
 
   const data = await ctx.db(async (tx) => {
@@ -422,41 +427,13 @@ export default async function CSPermitDetailPage({
               </Table>
             )}
 
-            <Card className="mt-4 border-dashed">
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2 text-sm">
-                  <Wind size={14} /> Record a new reading
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <form action={addReading} className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                  <input type="hidden" name="permitId" value={id} />
-                  <Field label="O₂ %">
-                    <Input name="oxygenPct" type="number" step="0.1" placeholder="20.9" />
-                  </Field>
-                  <Field label="LEL %">
-                    <Input name="lelPct" type="number" step="0.1" placeholder="0" />
-                  </Field>
-                  <Field label="H₂S ppm">
-                    <Input name="h2sPpm" type="number" step="0.1" placeholder="0" />
-                  </Field>
-                  <Field label="CO ppm">
-                    <Input name="coPpm" type="number" step="0.1" placeholder="0" />
-                  </Field>
-                  <Field label="Sensor ID" className="sm:col-span-2">
-                    <Input name="sensorIdentifier" placeholder="e.g. GASMON-04" />
-                  </Field>
-                  <Field label="Note" className="sm:col-span-2">
-                    <Input name="note" placeholder="Optional" />
-                  </Field>
-                  <div className="sm:col-span-4">
-                    <Button type="submit">
-                      <Activity size={14} /> Record reading
-                    </Button>
-                  </div>
-                </form>
-              </CardContent>
-            </Card>
+            <div className="mt-4">
+              <Link href={`/confined-space/${id}?tab=readings&drawer=add-reading`}>
+                <Button>
+                  <Activity size={14} /> Record reading
+                </Button>
+              </Link>
+            </div>
           </Section>
         ) : null}
 
@@ -550,52 +527,13 @@ export default async function CSPermitDetailPage({
                 )}
               </CardContent>
             </Card>
-            <Section title="Add personnel">
-              <form
-                action={addPersonnel}
-                className="grid grid-cols-1 gap-3 sm:grid-cols-2"
-              >
-                <input type="hidden" name="permitId" value={id} />
-                <Field label="Person" required>
-                  <Select name="personId" required defaultValue="">
-                    <option value="">— Select —</option>
-                    {allPeople.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.lastName}, {p.firstName}
-                        {p.employeeNo ? ` (#${p.employeeNo})` : ''}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-                <Field label="Role" required>
-                  <Select name="role" required defaultValue="entrant">
-                    <option value="entrant">Entrant</option>
-                    <option value="attendant">Attendant</option>
-                    <option value="supervisor">Supervisor</option>
-                    <option value="rescue">Rescue</option>
-                  </Select>
-                </Field>
-                <Field label="Note" className="sm:col-span-2">
-                  <Input name="note" placeholder="Optional — e.g. shift label, contact number" />
-                </Field>
-                <div className="sm:col-span-2 flex items-center gap-3">
-                  <input
-                    id="cs-mark-entered"
-                    type="checkbox"
-                    name="markEntered"
-                    className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
-                  />
-                  <Label htmlFor="cs-mark-entered" className="text-sm">
-                    Mark as entered now
-                  </Label>
-                  <div className="ml-auto">
-                    <Button type="submit">
-                      <UserPlus size={14} /> Add to permit
-                    </Button>
-                  </div>
-                </div>
-              </form>
-            </Section>
+            <div>
+              <Link href={`/confined-space/${id}?tab=personnel&drawer=add-personnel`}>
+                <Button>
+                  <UserPlus size={14} /> Add personnel
+                </Button>
+              </Link>
+            </div>
           </div>
         ) : null}
 
@@ -610,6 +548,113 @@ export default async function CSPermitDetailPage({
           </Card>
         ) : null}
       </div>
+
+      <UrlDrawer
+        open={drawer === 'add-reading'}
+        closeHref={`/confined-space/${id}?tab=readings`}
+        title="Record atmospheric reading"
+        description="Industry-standard pass thresholds: 19.5–23% O₂, LEL <10%, H₂S <10 ppm, CO <25 ppm."
+        size="md"
+        footer={
+          <>
+            <Link href={`/confined-space/${id}?tab=readings`}>
+              <Button type="button" variant="outline">
+                Cancel
+              </Button>
+            </Link>
+            <Button type="submit" form="cs-add-reading-form">
+              <Activity size={14} /> Record reading
+            </Button>
+          </>
+        }
+      >
+        <form
+          id="cs-add-reading-form"
+          action={addReading}
+          className="grid grid-cols-2 gap-3 sm:grid-cols-4"
+        >
+          <input type="hidden" name="permitId" value={id} />
+          <Field label="O₂ %">
+            <Input name="oxygenPct" type="number" step="0.1" placeholder="20.9" />
+          </Field>
+          <Field label="LEL %">
+            <Input name="lelPct" type="number" step="0.1" placeholder="0" />
+          </Field>
+          <Field label="H₂S ppm">
+            <Input name="h2sPpm" type="number" step="0.1" placeholder="0" />
+          </Field>
+          <Field label="CO ppm">
+            <Input name="coPpm" type="number" step="0.1" placeholder="0" />
+          </Field>
+          <Field label="Sensor ID" className="sm:col-span-2">
+            <Input name="sensorIdentifier" placeholder="e.g. GASMON-04" />
+          </Field>
+          <Field label="Note" className="sm:col-span-2">
+            <Input name="note" placeholder="Optional" />
+          </Field>
+        </form>
+      </UrlDrawer>
+
+      <UrlDrawer
+        open={drawer === 'add-personnel'}
+        closeHref={`/confined-space/${id}?tab=personnel`}
+        title="Add personnel"
+        description="Assign an entrant, attendant, supervisor, or rescue contact to the permit."
+        size="md"
+        footer={
+          <>
+            <Link href={`/confined-space/${id}?tab=personnel`}>
+              <Button type="button" variant="outline">
+                Cancel
+              </Button>
+            </Link>
+            <Button type="submit" form="cs-add-personnel-form">
+              <UserPlus size={14} /> Add to permit
+            </Button>
+          </>
+        }
+      >
+        <form
+          id="cs-add-personnel-form"
+          action={addPersonnel}
+          className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+        >
+          <input type="hidden" name="permitId" value={id} />
+          <Field label="Person" required>
+            <Select name="personId" required defaultValue="">
+              <option value="">— Select —</option>
+              {allPeople.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.lastName}, {p.firstName}
+                  {p.employeeNo ? ` (#${p.employeeNo})` : ''}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Role" required>
+            <Select name="role" required defaultValue="entrant">
+              <option value="entrant">Entrant</option>
+              <option value="attendant">Attendant</option>
+              <option value="supervisor">Supervisor</option>
+              <option value="rescue">Rescue</option>
+            </Select>
+          </Field>
+          <Field label="Note" className="sm:col-span-2">
+            <Input name="note" placeholder="Optional — e.g. shift label, contact number" />
+          </Field>
+          <div className="sm:col-span-2 flex items-center gap-3">
+            <input
+              id="cs-mark-entered"
+              type="checkbox"
+              name="markEntered"
+              className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+            />
+            <Label htmlFor="cs-mark-entered" className="text-sm">
+              Mark as entered now
+            </Label>
+          </div>
+        </form>
+      </UrlDrawer>
     </DetailPageLayout>
   )
 }

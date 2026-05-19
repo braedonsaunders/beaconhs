@@ -31,18 +31,74 @@ const KIND_META: Record<
 }
 
 /**
- * Right column on the Work tab — the legacy "complete action" flow.
- * Lists every step already recorded (action taken, verification, signature)
- * and lets the user append a new one of any kind without leaving the page.
+ * Read-only timeline of complete-action steps. Used inline on the Work tab.
+ * The mutation (add step) lives in the AddStepBody component, mounted inside
+ * a drawer triggered from a "+ Add step" link.
  */
-export function CompleteStepsPanel({
+export function CompleteStepsTimeline({ steps }: { steps: CompleteStep[] }) {
+  return (
+    <div>
+      <div className="text-xs uppercase tracking-wide text-slate-500">Timeline</div>
+      {steps.length === 0 ? (
+        <p className="mt-2 text-sm text-slate-500">No steps recorded yet.</p>
+      ) : (
+        <ol className="mt-2 space-y-2">
+          {steps.map((s) => {
+            const meta = KIND_META[s.kind]
+            const Icon = meta.icon
+            return (
+              <li
+                key={s.id}
+                className="rounded-md border border-slate-200 bg-white p-3 text-sm"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="flex items-center gap-2">
+                    <span
+                      className={`inline-flex h-5 w-5 items-center justify-center rounded-full ${meta.tone}`}
+                    >
+                      <Icon size={11} />
+                    </span>
+                    <span className="font-medium text-slate-900">{meta.label}</span>
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    {s.completedAt.toLocaleString()}
+                  </span>
+                </div>
+                {s.completedByName ? (
+                  <div className="mt-1 text-xs text-slate-500">by {s.completedByName}</div>
+                ) : null}
+                {s.description ? (
+                  <p className="mt-2 whitespace-pre-wrap text-slate-700">{s.description}</p>
+                ) : null}
+                {s.signatureDataUrl ? (
+                  <img
+                    src={s.signatureDataUrl}
+                    alt="Signature"
+                    className="mt-2 h-20 rounded border border-slate-200 bg-white object-contain"
+                  />
+                ) : null}
+              </li>
+            )
+          })}
+        </ol>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Body of the "Add step" drawer. Renders only the form (no header / footer);
+ * the parent drawer's footer Submit button targets us via `form={formId}`.
+ * After a successful submit we close the drawer by navigating to `closeHref`.
+ */
+export function AddStepBody({
   caId,
-  steps,
-  locked,
+  formId,
+  closeHref,
 }: {
   caId: string
-  steps: CompleteStep[]
-  locked: boolean
+  formId: string
+  closeHref: string
 }) {
   const router = useRouter()
   const [kind, setKind] = useState<CompleteStep['kind']>('action_taken')
@@ -51,7 +107,7 @@ export function CompleteStepsPanel({
   const [pending, start] = useTransition()
   const [error, setError] = useState<string | null>(null)
 
-  function add() {
+  function submit() {
     setError(null)
     if (kind === 'signature' && !sig) {
       setError('Capture a signature first.')
@@ -75,116 +131,66 @@ export function CompleteStepsPanel({
       setDescription('')
       setSig(null)
       setKind('action_taken')
+      router.push(closeHref as any)
       router.refresh()
     })
   }
 
   return (
-    <div className="space-y-4">
-      <div>
-        <div className="text-xs uppercase tracking-wide text-slate-500">Timeline</div>
-        {steps.length === 0 ? (
-          <p className="mt-2 text-sm text-slate-500">No steps recorded yet.</p>
-        ) : (
-          <ol className="mt-2 space-y-2">
-            {steps.map((s) => {
-              const meta = KIND_META[s.kind]
-              const Icon = meta.icon
-              return (
-                <li
-                  key={s.id}
-                  className="rounded-md border border-slate-200 bg-white p-3 text-sm"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="flex items-center gap-2">
-                      <span
-                        className={`inline-flex h-5 w-5 items-center justify-center rounded-full ${meta.tone}`}
-                      >
-                        <Icon size={11} />
-                      </span>
-                      <span className="font-medium text-slate-900">{meta.label}</span>
-                    </span>
-                    <span className="text-xs text-slate-500">
-                      {s.completedAt.toLocaleString()}
-                    </span>
-                  </div>
-                  {s.completedByName ? (
-                    <div className="mt-1 text-xs text-slate-500">by {s.completedByName}</div>
-                  ) : null}
-                  {s.description ? (
-                    <p className="mt-2 whitespace-pre-wrap text-slate-700">{s.description}</p>
-                  ) : null}
-                  {s.signatureDataUrl ? (
-                    <img
-                      src={s.signatureDataUrl}
-                      alt="Signature"
-                      className="mt-2 h-20 rounded border border-slate-200 bg-white object-contain"
-                    />
-                  ) : null}
-                </li>
-              )
-            })}
-          </ol>
-        )}
+    <form
+      id={formId}
+      onSubmit={(e) => {
+        e.preventDefault()
+        submit()
+      }}
+      className="space-y-3"
+    >
+      <div className="flex flex-wrap gap-1.5 text-xs">
+        {(Object.keys(KIND_META) as CompleteStep['kind'][]).map((k) => {
+          const meta = KIND_META[k]
+          const Icon = meta.icon
+          const active = kind === k
+          return (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setKind(k)}
+              disabled={pending}
+              className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 transition-colors ${
+                active
+                  ? 'border-teal-700 bg-teal-700 text-white'
+                  : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              <Icon size={11} />
+              {meta.label}
+            </button>
+          )
+        })}
       </div>
-
-      {!locked ? (
-        <div className="rounded-md border border-dashed border-slate-300 bg-slate-50/60 p-3">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Add a step
-          </div>
-          <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
-            {(Object.keys(KIND_META) as CompleteStep['kind'][]).map((k) => {
-              const meta = KIND_META[k]
-              const Icon = meta.icon
-              const active = kind === k
-              return (
-                <button
-                  key={k}
-                  type="button"
-                  onClick={() => setKind(k)}
-                  disabled={pending}
-                  className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 transition-colors ${
-                    active
-                      ? 'border-teal-700 bg-teal-700 text-white'
-                      : 'border-slate-200 bg-white text-slate-700 hover:bg-white'
-                  }`}
-                >
-                  <Icon size={11} />
-                  {meta.label}
-                </button>
-              )
-            })}
-          </div>
-          {kind !== 'signature' ? (
-            <div className="mt-3 space-y-1.5">
-              <Label>Description</Label>
-              <Textarea
-                rows={3}
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder={
-                  kind === 'verification'
-                    ? 'What did you check?'
-                    : 'What was done to fix it?'
-                }
-                disabled={pending}
-              />
-            </div>
-          ) : (
-            <div className="mt-3 space-y-1.5">
-              <Label>Signature</Label>
-              <SignaturePad value={sig} onChange={setSig} />
-            </div>
-          )}
-          {error ? <p className="mt-2 text-xs text-red-600">{error}</p> : null}
-          <div className="mt-2 flex justify-end">
-            <Button type="button" size="sm" onClick={add} disabled={pending}>
-              {pending ? 'Saving…' : 'Add step'}
-            </Button>
-          </div>
+      {kind !== 'signature' ? (
+        <div className="space-y-1.5">
+          <Label>Description</Label>
+          <Textarea
+            rows={4}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder={
+              kind === 'verification' ? 'What did you check?' : 'What was done to fix it?'
+            }
+            disabled={pending}
+          />
         </div>
-      ) : null}
-    </div>
+      ) : (
+        <div className="space-y-1.5">
+          <Label>Signature</Label>
+          <SignaturePad value={sig} onChange={setSig} />
+        </div>
+      )}
+      {error ? <p className="text-xs text-red-600">{error}</p> : null}
+      <p className="text-xs text-slate-500">
+        {pending ? 'Saving…' : 'Use the Add button below to record this step.'}
+      </p>
+    </form>
   )
 }

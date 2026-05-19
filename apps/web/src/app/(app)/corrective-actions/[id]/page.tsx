@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { asc, eq } from 'drizzle-orm'
-import { FileText, Lock, Unlock } from 'lucide-react'
+import { FileText, Lock, Plus, Unlock } from 'lucide-react'
 import {
   Alert,
   AlertDescription,
@@ -17,7 +17,9 @@ import {
   Label,
   Select,
   Textarea,
+  UrlDrawer,
 } from '@beaconhs/ui'
+import { pickString } from '@/lib/list-params'
 import {
   attachments,
   caCompleteSteps,
@@ -39,11 +41,15 @@ import { DetailPageLayout } from '@/components/page-layout'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { emitCorrectiveActionCompleted } from '@beaconhs/events'
 import { reopenCorrectiveAction, setVerificationRequired } from '../_actions'
-import { CloseButton } from './_close-button'
-import { CompleteStepsPanel, type CompleteStep } from './_complete-steps-panel'
+import { CloseBody, CloseButton } from './_close-button'
+import {
+  AddStepBody,
+  CompleteStepsTimeline,
+  type CompleteStep,
+} from './_complete-steps-panel'
 import { PhotosPanel, type CaPhotoRow } from './_photos-panel'
-import { SendEmailButton } from './_send-email-button'
-import { VerificationPanel } from './_verification-panel'
+import { SendEmailBody, SendEmailButton } from './_send-email-button'
+import { VerificationPanel, VerifyBody } from './_verification-panel'
 
 export const dynamic = 'force-dynamic'
 
@@ -143,6 +149,7 @@ export default async function CorrectiveActionPage({
 }) {
   const { id } = await params
   const sp = await searchParams
+  const drawer = pickString(sp.drawer)
   const ctx = await requireRequestContext()
   const data = await ctx.db(async (tx) => {
     const [row] = await tx
@@ -450,7 +457,16 @@ export default async function CorrectiveActionPage({
               </form>
             </Section>
             <Section title={`Complete-action steps (${steps.length})`}>
-              <CompleteStepsPanel caId={id} steps={steps} locked={ca.locked} />
+              <div className="space-y-4">
+                <CompleteStepsTimeline steps={steps} />
+                {!ca.locked ? (
+                  <Link href={`/corrective-actions/${id}?tab=work&drawer=add-step`}>
+                    <Button type="button" size="sm" variant="outline">
+                      <Plus size={12} /> Add step
+                    </Button>
+                  </Link>
+                ) : null}
+              </div>
             </Section>
           </div>
         ) : null}
@@ -510,6 +526,111 @@ export default async function CorrectiveActionPage({
           </Section>
         ) : null}
       </div>
+
+      <UrlDrawer
+        open={drawer === 'add-step'}
+        closeHref={`/corrective-actions/${id}?tab=work`}
+        title="Add complete-action step"
+        description="Record an action-taken note, a verification check, or capture a signature."
+        size="md"
+        footer={
+          <>
+            <Link href={`/corrective-actions/${id}?tab=work`}>
+              <Button type="button" variant="outline">
+                Cancel
+              </Button>
+            </Link>
+            <Button type="submit" form="ca-add-step-form">
+              Add step
+            </Button>
+          </>
+        }
+      >
+        <AddStepBody
+          caId={id}
+          formId="ca-add-step-form"
+          closeHref={`/corrective-actions/${id}?tab=work`}
+        />
+      </UrlDrawer>
+
+      <UrlDrawer
+        open={drawer === 'verify'}
+        closeHref={`/corrective-actions/${id}?tab=verification`}
+        title="Sign verification"
+        description="Confirm the corrective action is complete and effective."
+        size="md"
+        footer={
+          <>
+            <Link href={`/corrective-actions/${id}?tab=verification`}>
+              <Button type="button" variant="outline">
+                Cancel
+              </Button>
+            </Link>
+            <Button type="submit" form="ca-verify-form">
+              Sign verification
+            </Button>
+          </>
+        }
+      >
+        <VerifyBody
+          caId={id}
+          initialNotes={ca.verificationNotes}
+          formId="ca-verify-form"
+          closeHref={`/corrective-actions/${id}?tab=verification`}
+        />
+      </UrlDrawer>
+
+      <UrlDrawer
+        open={drawer === 'send-email'}
+        closeHref={`/corrective-actions/${id}`}
+        title={`Send corrective action · ${ca.reference}`}
+        description="Email a copy of this corrective action to one or more recipients."
+        size="md"
+        footer={
+          <>
+            <Link href={`/corrective-actions/${id}`}>
+              <Button type="button" variant="outline">
+                Cancel
+              </Button>
+            </Link>
+            <Button type="submit" form="ca-send-email-form">
+              Send
+            </Button>
+          </>
+        }
+      >
+        <SendEmailBody
+          caId={id}
+          formId="ca-send-email-form"
+          closeHref={`/corrective-actions/${id}`}
+        />
+      </UrlDrawer>
+
+      <UrlDrawer
+        open={drawer === 'close'}
+        closeHref={`/corrective-actions/${id}`}
+        title={`Close corrective action · ${ca.reference}`}
+        description="Capture cost impact + a close note and lock the record."
+        size="md"
+        footer={
+          <>
+            <Link href={`/corrective-actions/${id}`}>
+              <Button type="button" variant="outline">
+                Cancel
+              </Button>
+            </Link>
+            <Button type="submit" form="ca-close-form">
+              Close + lock
+            </Button>
+          </>
+        }
+      >
+        <CloseBody
+          caId={id}
+          formId="ca-close-form"
+          closeHref={`/corrective-actions/${id}`}
+        />
+      </UrlDrawer>
     </DetailPageLayout>
   )
 }
