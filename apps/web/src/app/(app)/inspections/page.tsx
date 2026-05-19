@@ -23,6 +23,7 @@ import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
+import { ListPageLayout } from '@/components/page-layout'
 
 export const metadata = { title: 'Inspections' }
 
@@ -102,23 +103,27 @@ export default async function InspectionsPage({
   const sortProps = { basePath: '/inspections', currentParams: sp, dir: params.dir }
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="Inspections"
-        description="Pass/fail/N/A criteria, comments, photos, customer signature. Each inspection type is a form template."
-        actions={
-          templates.length > 0 ? (
-            <Link href={`/forms/templates/${templates[0]!.id}/fill`}>
-              <Button>New inspection</Button>
-            </Link>
-          ) : (
-            <Link href="/forms/templates/new?category=inspection">
-              <Button>Create inspection template</Button>
-            </Link>
-          )
-        }
-      />
-
+    <ListPageLayout
+      header={
+        <>
+          <PageHeader
+            title="Inspections"
+            description="Pass/fail/N/A criteria, comments, photos, customer signature. Each inspection type is a form template."
+            actions={
+              templates.length > 0 ? (
+                <Link href={`/forms/templates/${templates[0]!.id}/fill`}>
+                  <Button>New inspection</Button>
+                </Link>
+              ) : (
+                <Link href="/forms/templates/new?category=inspection">
+                  <Button>Create inspection template</Button>
+                </Link>
+              )
+            }
+          />
+        </>
+      }
+    >
       {templates.length === 0 ? (
         <Alert variant="info">
           <AlertTitle>No inspection templates yet</AlertTitle>
@@ -209,6 +214,6 @@ export default async function InspectionsPage({
           />
         </>
       )}
-    </div>
+    </ListPageLayout>
   )
 }

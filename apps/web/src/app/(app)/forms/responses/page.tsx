@@ -19,6 +19,7 @@ import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
+import { ListPageLayout } from '@/components/page-layout'
 
 export const metadata = { title: 'Form responses' }
 
@@ -93,22 +94,26 @@ export default async function FormResponsesPage({
   const sortProps = { basePath: '/forms/responses', currentParams: sp, dir: params.dir }
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="Form responses"
-        description="Every submission across every template."
-      />
-      <div className="flex items-center gap-3">
-        <SearchInput placeholder="Search template name…" />
-      </div>
-      <FilterChips
-        basePath="/forms/responses"
-        currentParams={sp}
-        paramKey="status"
-        label="Status"
-        options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
-      />
-
+    <ListPageLayout
+      header={
+        <>
+          <PageHeader
+            title="Form responses"
+            description="Every submission across every template."
+          />
+          <div className="flex items-center gap-3">
+            <SearchInput placeholder="Search template name…" />
+          </div>
+          <FilterChips
+            basePath="/forms/responses"
+            currentParams={sp}
+            paramKey="status"
+            label="Status"
+            options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
+          />
+        </>
+      }
+    >
       {rows.length === 0 ? (
         <EmptyState icon={<ClipboardCheck size={32} />} title="No responses yet" />
       ) : (
@@ -161,6 +166,6 @@ export default async function FormResponsesPage({
           />
         </>
       )}
-    </div>
+    </ListPageLayout>
   )
 }

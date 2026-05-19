@@ -14,6 +14,7 @@ import {
 import { crews, departments, people, trades } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { PageContainer } from '@/components/page-layout'
 
 export const metadata = { title: 'Edit person' }
 export const dynamic = 'force-dynamic'
@@ -75,89 +76,91 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
   if (!person) notFound()
 
   return (
-    <div className="max-w-3xl space-y-6">
-      <DetailHeader
-        back={{ href: `/people/${id}`, label: 'Back to profile' }}
-        title="Edit person"
-        subtitle={`${person.firstName} ${person.lastName}${person.employeeNo ? ` · ${person.employeeNo}` : ''}`}
-      />
-      <Card>
-        <CardContent className="pt-6">
-          <form action={updatePerson} className="space-y-4">
-            <input type="hidden" name="id" value={id} />
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label="First name" required>
-                <Input name="firstName" required defaultValue={person.firstName} />
-              </Field>
-              <Field label="Last name" required>
-                <Input name="lastName" required defaultValue={person.lastName} />
-              </Field>
-              <Field label="Formal name">
-                <Input name="formalName" defaultValue={person.formalName ?? ''} />
-              </Field>
-              <Field label="Job title">
-                <Input name="jobTitle" defaultValue={person.jobTitle ?? ''} />
-              </Field>
-              <Field label="Employee #">
-                <Input name="employeeNo" defaultValue={person.employeeNo ?? ''} />
-              </Field>
-              <Field label="Hire date">
-                <Input name="hireDate" type="date" defaultValue={person.hireDate ?? ''} />
-              </Field>
-              <Field label="Email">
-                <Input name="email" type="email" defaultValue={person.email ?? ''} />
-              </Field>
-              <Field label="Phone">
-                <Input name="phone" type="tel" defaultValue={person.phone ?? ''} />
-              </Field>
-              <Field label="Department">
-                <Select name="departmentId" defaultValue={person.departmentId ?? ''}>
-                  <option value="">—</option>
-                  {depts.map((d) => (
-                    <option key={d.id} value={d.id}>{d.name}</option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="Trade">
-                <Select name="tradeId" defaultValue={person.tradeId ?? ''}>
-                  <option value="">—</option>
-                  {allTrades.map((t) => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="Crew">
-                <Select name="crewId" defaultValue={person.crewId ?? ''}>
-                  <option value="">—</option>
-                  {allCrews.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="Status">
-                <Select name="status" defaultValue={person.status}>
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                  <option value="terminated">Terminated</option>
-                </Select>
-              </Field>
-              <Field label="Emergency contact name">
-                <Input name="emergencyContactName" defaultValue={person.emergencyContactName ?? ''} />
-              </Field>
-              <Field label="Emergency contact phone">
-                <Input name="emergencyContactPhone" type="tel" defaultValue={person.emergencyContactPhone ?? ''} />
-              </Field>
-              <Field label="Notes" className="sm:col-span-2">
-                <Textarea name="notes" rows={3} defaultValue={person.notes ?? ''} />
-              </Field>
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button type="submit">Save changes</Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
+    <PageContainer>
+      <div className="max-w-3xl space-y-6">
+        <DetailHeader
+          back={{ href: `/people/${id}`, label: 'Back to profile' }}
+          title="Edit person"
+          subtitle={`${person.firstName} ${person.lastName}${person.employeeNo ? ` · ${person.employeeNo}` : ''}`}
+        />
+        <Card>
+          <CardContent className="pt-6">
+            <form action={updatePerson} className="space-y-4">
+              <input type="hidden" name="id" value={id} />
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Field label="First name" required>
+                  <Input name="firstName" required defaultValue={person.firstName} />
+                </Field>
+                <Field label="Last name" required>
+                  <Input name="lastName" required defaultValue={person.lastName} />
+                </Field>
+                <Field label="Formal name">
+                  <Input name="formalName" defaultValue={person.formalName ?? ''} />
+                </Field>
+                <Field label="Job title">
+                  <Input name="jobTitle" defaultValue={person.jobTitle ?? ''} />
+                </Field>
+                <Field label="Employee #">
+                  <Input name="employeeNo" defaultValue={person.employeeNo ?? ''} />
+                </Field>
+                <Field label="Hire date">
+                  <Input name="hireDate" type="date" defaultValue={person.hireDate ?? ''} />
+                </Field>
+                <Field label="Email">
+                  <Input name="email" type="email" defaultValue={person.email ?? ''} />
+                </Field>
+                <Field label="Phone">
+                  <Input name="phone" type="tel" defaultValue={person.phone ?? ''} />
+                </Field>
+                <Field label="Department">
+                  <Select name="departmentId" defaultValue={person.departmentId ?? ''}>
+                    <option value="">—</option>
+                    {depts.map((d) => (
+                      <option key={d.id} value={d.id}>{d.name}</option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Trade">
+                  <Select name="tradeId" defaultValue={person.tradeId ?? ''}>
+                    <option value="">—</option>
+                    {allTrades.map((t) => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Crew">
+                  <Select name="crewId" defaultValue={person.crewId ?? ''}>
+                    <option value="">—</option>
+                    {allCrews.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Status">
+                  <Select name="status" defaultValue={person.status}>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                    <option value="terminated">Terminated</option>
+                  </Select>
+                </Field>
+                <Field label="Emergency contact name">
+                  <Input name="emergencyContactName" defaultValue={person.emergencyContactName ?? ''} />
+                </Field>
+                <Field label="Emergency contact phone">
+                  <Input name="emergencyContactPhone" type="tel" defaultValue={person.emergencyContactPhone ?? ''} />
+                </Field>
+                <Field label="Notes" className="sm:col-span-2">
+                  <Textarea name="notes" rows={3} defaultValue={person.notes ?? ''} />
+                </Field>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button type="submit">Save changes</Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    </PageContainer>
   )
 }
 

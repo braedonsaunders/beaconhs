@@ -8,6 +8,20 @@
       "when": 1779151649498,
       "tag": "0000_amazing_tarot",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1779152969287,
+      "tag": "0001_sweet_ted_forrester",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1779153140101,
+      "tag": "0002_melodic_jack_murdock",
+      "breakpoints": true
     }
   ]
 }

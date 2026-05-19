@@ -18,6 +18,7 @@ import { db } from '@beaconhs/db'
 import { tenants } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { PageContainer } from '@/components/page-layout'
 
 export const metadata = { title: 'Tenant settings' }
 export const dynamic = 'force-dynamic'
@@ -97,134 +98,136 @@ export default async function AdminSettingsPage() {
   const hierarchy = tenant.hierarchy
 
   return (
-    <div className="space-y-5">
-      <DetailHeader
-        back={{ href: '/admin', label: 'Back to admin' }}
-        title="Tenant settings"
-        subtitle="Branding, languages, hierarchy depth, risk matrix"
-      />
+    <PageContainer>
+      <div className="space-y-5">
+        <DetailHeader
+          back={{ href: '/admin', label: 'Back to admin' }}
+          title="Tenant settings"
+          subtitle="Branding, languages, hierarchy depth, risk matrix"
+        />
 
-      <form action={saveSettings} className="space-y-4">
-        <Card>
-          <CardHeader>
-            <CardTitle>Identity</CardTitle>
-          </CardHeader>
-          <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field label="Name">
-              <Input name="name" defaultValue={tenant.name} />
-            </Field>
-            <Field label="Slug">
-              <Input name="slug" defaultValue={tenant.slug} className="font-mono" />
-            </Field>
-          </CardContent>
-        </Card>
+        <form action={saveSettings} className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Identity</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field label="Name">
+                <Input name="name" defaultValue={tenant.name} />
+              </Field>
+              <Field label="Slug">
+                <Input name="slug" defaultValue={tenant.slug} className="font-mono" />
+              </Field>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Branding</CardTitle>
-            <CardDescription>Shows in the app shell + on PDF outputs.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field label="Logo URL">
-              <Input name="logoUrl" defaultValue={tenant.branding.logoUrl ?? ''} placeholder="https://…" />
-            </Field>
-            <Field label="Primary color (hex)">
-              <Input
-                name="primaryColor"
-                defaultValue={tenant.branding.primaryColor ?? ''}
-                placeholder="#0f766e"
-              />
-            </Field>
-            <Field label="PDF letterhead text" className="sm:col-span-2">
-              <Input
-                name="pdfLetterhead"
-                defaultValue={tenant.branding.pdfLetterhead ?? ''}
-                placeholder="Acme Industrial · Health & Safety"
-              />
-            </Field>
-            {tenant.branding.logoUrl ? (
-              <div className="sm:col-span-2">
-                <Label className="text-xs">Preview</Label>
-                <div className="mt-1 flex items-center gap-3 rounded-md border border-slate-200 bg-white p-3">
-                  <img src={tenant.branding.logoUrl} alt="" className="h-8" />
-                  <span className="font-semibold" style={{ color: tenant.branding.primaryColor ?? '#0f766e' }}>
-                    {tenant.name}
-                  </span>
+          <Card>
+            <CardHeader>
+              <CardTitle>Branding</CardTitle>
+              <CardDescription>Shows in the app shell + on PDF outputs.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field label="Logo URL">
+                <Input name="logoUrl" defaultValue={tenant.branding.logoUrl ?? ''} placeholder="https://…" />
+              </Field>
+              <Field label="Primary color (hex)">
+                <Input
+                  name="primaryColor"
+                  defaultValue={tenant.branding.primaryColor ?? ''}
+                  placeholder="#0f766e"
+                />
+              </Field>
+              <Field label="PDF letterhead text" className="sm:col-span-2">
+                <Input
+                  name="pdfLetterhead"
+                  defaultValue={tenant.branding.pdfLetterhead ?? ''}
+                  placeholder="Acme Industrial · Health & Safety"
+                />
+              </Field>
+              {tenant.branding.logoUrl ? (
+                <div className="sm:col-span-2">
+                  <Label className="text-xs">Preview</Label>
+                  <div className="mt-1 flex items-center gap-3 rounded-md border border-slate-200 bg-white p-3">
+                    <img src={tenant.branding.logoUrl} alt="" className="h-8" />
+                    <span className="font-semibold" style={{ color: tenant.branding.primaryColor ?? '#0f766e' }}>
+                      {tenant.name}
+                    </span>
+                  </div>
                 </div>
-              </div>
-            ) : null}
-          </CardContent>
-        </Card>
+              ) : null}
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Languages</CardTitle>
-            <CardDescription>Which languages users can pick.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="grid grid-cols-3 gap-2">
-              {KNOWN_LANGUAGES.map((l) => (
-                <label key={l.value} className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm">
-                  <input
-                    type="checkbox"
-                    name={`lang_${l.value}`}
-                    defaultChecked={enabled.has(l.value)}
-                  />
-                  {l.label}
+          <Card>
+            <CardHeader>
+              <CardTitle>Languages</CardTitle>
+              <CardDescription>Which languages users can pick.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid grid-cols-3 gap-2">
+                {KNOWN_LANGUAGES.map((l) => (
+                  <label key={l.value} className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm">
+                    <input
+                      type="checkbox"
+                      name={`lang_${l.value}`}
+                      defaultChecked={enabled.has(l.value)}
+                    />
+                    {l.label}
+                  </label>
+                ))}
+              </div>
+              <Field label="Default language">
+                <select
+                  name="defaultLanguage"
+                  defaultValue={tenant.defaultLanguage}
+                  className="h-10 w-32 rounded-md border border-slate-300 bg-white px-3 text-sm"
+                >
+                  {KNOWN_LANGUAGES.map((l) => (
+                    <option key={l.value} value={l.value}>{l.label}</option>
+                  ))}
+                </select>
+              </Field>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Hierarchy depth</CardTitle>
+              <CardDescription>Toggle the levels used in this tenant's org tree.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {LEVELS.map((lvl) => (
+                <label key={lvl} className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm">
+                  <input type="checkbox" name={`lvl_${lvl}`} defaultChecked={hierarchy[lvl]} />
+                  {lvl}
                 </label>
               ))}
-            </div>
-            <Field label="Default language">
-              <select
-                name="defaultLanguage"
-                defaultValue={tenant.defaultLanguage}
-                className="h-10 w-32 rounded-md border border-slate-300 bg-white px-3 text-sm"
-              >
-                {KNOWN_LANGUAGES.map((l) => (
-                  <option key={l.value} value={l.value}>{l.label}</option>
-                ))}
-              </select>
-            </Field>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Hierarchy depth</CardTitle>
-            <CardDescription>Toggle the levels used in this tenant's org tree.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {LEVELS.map((lvl) => (
-              <label key={lvl} className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm">
-                <input type="checkbox" name={`lvl_${lvl}`} defaultChecked={hierarchy[lvl]} />
-                {lvl}
-              </label>
-            ))}
-          </CardContent>
-        </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Risk matrix</CardTitle>
+              <CardDescription>Currently configured matrix. (Editor pending.)</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {tenant.riskMatrix ? (
+                <RiskMatrixPreview matrix={tenant.riskMatrix} />
+              ) : (
+                <Alert variant="info">
+                  <AlertTitle>No matrix configured</AlertTitle>
+                  <AlertDescription>JSHAs that reference a matrix won't render scores.</AlertDescription>
+                </Alert>
+              )}
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Risk matrix</CardTitle>
-            <CardDescription>Currently configured matrix. (Editor pending.)</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {tenant.riskMatrix ? (
-              <RiskMatrixPreview matrix={tenant.riskMatrix} />
-            ) : (
-              <Alert variant="info">
-                <AlertTitle>No matrix configured</AlertTitle>
-                <AlertDescription>JSHAs that reference a matrix won't render scores.</AlertDescription>
-              </Alert>
-            )}
-          </CardContent>
-        </Card>
-
-        <div className="flex justify-end">
-          <Button type="submit">Save settings</Button>
-        </div>
-      </form>
-    </div>
+          <div className="flex justify-end">
+            <Button type="submit">Save settings</Button>
+          </div>
+        </form>
+      </div>
+    </PageContainer>
   )
 }
 

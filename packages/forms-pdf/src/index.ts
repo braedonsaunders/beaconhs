@@ -7,6 +7,12 @@
 
 import puppeteer, { type Browser } from 'puppeteer-core'
 import type { FormSchemaV1 } from '@beaconhs/forms-core'
+import { renderIncidentHtml, type IncidentRenderInput } from './templates/incident'
+import { renderCertificateHtml, type CertificateRenderInput } from './templates/certificate'
+import { renderWalletHtml, type WalletRenderInput } from './templates/wallet'
+
+export type { IncidentRenderInput, CertificateRenderInput, WalletRenderInput }
+export { renderIncidentHtml, renderCertificateHtml, renderWalletHtml }
 
 let browserPromise: Promise<Browser> | null = null
 function browser(): Promise<Browser> {
@@ -196,4 +202,105 @@ function escapeHtml(s: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;')
+}
+
+// --- Incident PDF ---------------------------------------------------------
+
+export async function renderIncidentPdf(input: IncidentRenderInput): Promise<Buffer> {
+  const body = renderIncidentHtml(input)
+  const html = wrapDocument(body, 'Incident Report')
+  const b = await browser()
+  const page = await b.newPage()
+  try {
+    await page.setContent(html, { waitUntil: 'networkidle0', timeout: 30_000 })
+    const pdf = await page.pdf({
+      format: 'Letter',
+      printBackground: true,
+      margin: { top: '15mm', bottom: '15mm', left: '12mm', right: '12mm' },
+      displayHeaderFooter: true,
+      headerTemplate: `<div style="font-size:8px;width:100%;padding:0 12mm;display:flex;justify-content:space-between;color:#666;"><span>${escapeHtml(input.tenantName)}</span><span>Incident ${escapeHtml(input.incident.reference)}</span></div>`,
+      footerTemplate: `<div style="font-size:8px;width:100%;padding:0 12mm;text-align:right;color:#666;"><span class="pageNumber"></span> / <span class="totalPages"></span></div>`,
+    })
+    return Buffer.from(pdf)
+  } finally {
+    await page.close()
+  }
+}
+
+// --- Certificate + wallet card PDF ---------------------------------------
+
+export async function renderCertificatePdf(
+  input: CertificateRenderInput & { wallet?: WalletRenderInput },
+): Promise<{ certificate: Buffer; wallet: Buffer }> {
+  const wallet = input.wallet ?? walletFromCertificate(input)
+  const [certificate, walletPdf] = await Promise.all([
+    renderCertificateOnly(input),
+    renderWalletOnly(wallet),
+  ])
+  return { certificate, wallet: walletPdf }
+}
+
+async function renderCertificateOnly(input: CertificateRenderInput): Promise<Buffer> {
+  const body = renderCertificateHtml(input)
+  // Certificate template carries its own @page rule + outer 8.5×11 wrapper,
+  // so we render with zero default margins and let CSS control layout.
+  const html = wrapDocument(body, 'Certificate of Completion')
+  const b = await browser()
+  const page = await b.newPage()
+  try {
+    await page.setContent(html, { waitUntil: 'networkidle0', timeout: 30_000 })
+    const pdf = await page.pdf({
+      format: 'Letter',
+      printBackground: true,
+      margin: { top: 0, bottom: 0, left: 0, right: 0 },
+      preferCSSPageSize: true,
+    })
+    return Buffer.from(pdf)
+  } finally {
+    await page.close()
+  }
+}
+
+async function renderWalletOnly(input: WalletRenderInput): Promise<Buffer> {
+  const body = renderWalletHtml(input)
+  const html = wrapDocument(body, 'Wallet Card')
+  const b = await browser()
+  const page = await b.newPage()
+  try {
+    await page.setContent(html, { waitUntil: 'networkidle0', timeout: 30_000 })
+    const pdf = await page.pdf({
+      width: '3.5in',
+      height: '2in',
+      printBackground: true,
+      margin: { top: 0, bottom: 0, left: 0, right: 0 },
+      preferCSSPageSize: true,
+    })
+    return Buffer.from(pdf)
+  } finally {
+    await page.close()
+  }
+}
+
+function walletFromCertificate(input: CertificateRenderInput): WalletRenderInput {
+  return {
+    tenantName: input.tenantName,
+    tenantLogoUrl: input.tenantLogoUrl,
+    primaryColor: input.primaryColor,
+    recipient: {
+      fullName: input.recipient.fullName,
+      employeeNo: input.recipient.employeeNo,
+    },
+    course: input.course,
+    completedOn: input.completedOn,
+    expiresOn: input.expiresOn,
+    verifyUrl: input.verifyUrl,
+    verifyToken: input.verifyToken,
+    qrDataUrl: input.qrDataUrl,
+  }
+}
+
+function wrapDocument(body: string, title: string): string {
+  return `<!doctype html>
+<html><head><meta charset="utf-8"/><title>${title.replace(/[<>]/g, '')}</title></head>
+<body>${body}</body></html>`
 }

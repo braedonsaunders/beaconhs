@@ -16,6 +16,7 @@ import { parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
+import { PageContainer } from '@/components/page-layout'
 
 export const metadata = { title: 'Audit log' }
 export const dynamic = 'force-dynamic'
@@ -66,64 +67,66 @@ export default async function AuditLogPage({
   })
 
   return (
-    <div className="space-y-4">
-      <DetailHeader
-        back={{ href: '/admin', label: 'Back to admin' }}
-        title="Audit log"
-        subtitle="Every write to a tenant-scoped record"
-      />
-      <div className="flex items-center gap-3">
-        <SearchInput placeholder="Search entity type or summary" />
-      </div>
-      <FilterChips
-        basePath="/admin/audit"
-        currentParams={sp}
-        paramKey="action"
-        label="Action"
-        options={ACTION_OPTIONS}
-      />
-      {rows.length === 0 ? (
-        <EmptyState title="No audit entries yet" />
-      ) : (
-        <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>When</TableHead>
-                <TableHead>Actor</TableHead>
-                <TableHead>Action</TableHead>
-                <TableHead>Entity</TableHead>
-                <TableHead>Summary</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map(({ log, actor }) => (
-                <TableRow key={log.id}>
-                  <TableCell className="text-slate-600">
-                    {new Date(log.occurredAt).toLocaleString()}
-                  </TableCell>
-                  <TableCell className="text-slate-700">{actor?.name ?? '—'}</TableCell>
-                  <TableCell>
-                    <Badge variant="secondary">{log.action}</Badge>
-                  </TableCell>
-                  <TableCell className="font-mono text-xs text-slate-600">
-                    {log.entityType}
-                    {log.entityId ? ` · ${log.entityId.slice(0, 8)}` : ''}
-                  </TableCell>
-                  <TableCell className="text-slate-900">{log.summary ?? '—'}</TableCell>
+    <PageContainer>
+      <div className="space-y-4">
+        <DetailHeader
+          back={{ href: '/admin', label: 'Back to admin' }}
+          title="Audit log"
+          subtitle="Every write to a tenant-scoped record"
+        />
+        <div className="flex items-center gap-3">
+          <SearchInput placeholder="Search entity type or summary" />
+        </div>
+        <FilterChips
+          basePath="/admin/audit"
+          currentParams={sp}
+          paramKey="action"
+          label="Action"
+          options={ACTION_OPTIONS}
+        />
+        {rows.length === 0 ? (
+          <EmptyState title="No audit entries yet" />
+        ) : (
+          <>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>When</TableHead>
+                  <TableHead>Actor</TableHead>
+                  <TableHead>Action</TableHead>
+                  <TableHead>Entity</TableHead>
+                  <TableHead>Summary</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          <Pagination
-            basePath="/admin/audit"
-            currentParams={sp}
-            total={total}
-            page={params.page}
-            perPage={params.perPage}
-          />
-        </>
-      )}
-    </div>
+              </TableHeader>
+              <TableBody>
+                {rows.map(({ log, actor }) => (
+                  <TableRow key={log.id}>
+                    <TableCell className="text-slate-600">
+                      {new Date(log.occurredAt).toLocaleString()}
+                    </TableCell>
+                    <TableCell className="text-slate-700">{actor?.name ?? '—'}</TableCell>
+                    <TableCell>
+                      <Badge variant="secondary">{log.action}</Badge>
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-slate-600">
+                      {log.entityType}
+                      {log.entityId ? ` · ${log.entityId.slice(0, 8)}` : ''}
+                    </TableCell>
+                    <TableCell className="text-slate-900">{log.summary ?? '—'}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            <Pagination
+              basePath="/admin/audit"
+              currentParams={sp}
+              total={total}
+              page={params.page}
+              perPage={params.perPage}
+            />
+          </>
+        )}
+      </div>
+    </PageContainer>
   )
 }

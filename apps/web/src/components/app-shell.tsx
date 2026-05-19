@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import {
+  Activity,
   AlertTriangle,
+  Award,
   BellRing,
   BookOpen,
   ClipboardCheck,
@@ -9,7 +11,9 @@ import {
   Gauge,
   GraduationCap,
   HardHat,
+  Layers,
   ListChecks,
+  MapPin,
   ShieldAlert,
   Settings,
   ShieldCheck,
@@ -45,6 +49,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     items: [
       { href: '/forms', label: 'Forms', icon: ClipboardCheck },
       { href: '/inspections', label: 'Inspections', icon: ClipboardList },
+      { href: '/inspections/banks', label: 'Inspection Banks', icon: Layers },
       { href: '/incidents', label: 'Incidents', icon: AlertTriangle },
       { href: '/corrective-actions', label: 'Corrective Actions', icon: ListChecks },
     ],
@@ -53,8 +58,11 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     label: 'Programs',
     items: [
       { href: '/training', label: 'Training', icon: GraduationCap },
+      { href: '/training/authorities', label: 'Skill Authorities', icon: Award },
+      { href: '/training/skills', label: 'Skills', icon: Activity },
       { href: '/documents', label: 'Documents', icon: BookOpen },
       { href: '/confined-space', label: 'Confined Space', icon: ShieldCheck },
+      { href: '/confined-space/sensors', label: 'Atmospheric Sensors', icon: Activity },
       { href: '/lone-worker', label: 'Lone Worker', icon: Timer },
     ],
   },
@@ -62,6 +70,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     label: 'Assets & people',
     items: [
       { href: '/people', label: 'People', icon: Users },
+      { href: '/locations', label: 'Locations', icon: MapPin },
       { href: '/equipment', label: 'Equipment', icon: Wrench },
       { href: '/ppe', label: 'PPE', icon: HardHat },
     ],
@@ -150,8 +159,8 @@ export function AppShell({
           </div>
         </header>
 
-        <main className="app-scroll flex-1 overflow-y-auto bg-slate-50">
-          <div className="mx-auto w-full max-w-screen-2xl p-6">{children}</div>
+        <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-50">
+          {children}
         </main>
       </div>
     </div>

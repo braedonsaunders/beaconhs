@@ -20,6 +20,7 @@ import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
+import { ListPageLayout } from '@/components/page-layout'
 
 export const metadata = { title: 'Corrective Actions' }
 
@@ -109,36 +110,40 @@ export default async function CorrectiveActionsPage({
   const today = new Date().toISOString().slice(0, 10)
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="Corrective Actions"
-        description="Standalone records, linkable to incidents, inspections, audits, JSHAs."
-        actions={
-          <Link href="/corrective-actions/new">
-            <Button>New action</Button>
-          </Link>
-        }
-      />
-      <div className="flex items-center gap-3">
-        <SearchInput placeholder="Search reference, title, description…" />
-      </div>
-      <div className="space-y-2">
-        <FilterChips
-          basePath="/corrective-actions"
-          currentParams={sp}
-          paramKey="status"
-          label="Status"
-          options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
-        />
-        <FilterChips
-          basePath="/corrective-actions"
-          currentParams={sp}
-          paramKey="severity"
-          label="Severity"
-          options={SEVERITY_OPTIONS.map((o) => ({ ...o, count: sevCounts[o.value] }))}
-        />
-      </div>
-
+    <ListPageLayout
+      header={
+        <>
+          <PageHeader
+            title="Corrective Actions"
+            description="Standalone records, linkable to incidents, inspections, audits, JSHAs."
+            actions={
+              <Link href="/corrective-actions/new">
+                <Button>New action</Button>
+              </Link>
+            }
+          />
+          <div className="flex items-center gap-3">
+            <SearchInput placeholder="Search reference, title, description…" />
+          </div>
+          <div className="space-y-2">
+            <FilterChips
+              basePath="/corrective-actions"
+              currentParams={sp}
+              paramKey="status"
+              label="Status"
+              options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
+            />
+            <FilterChips
+              basePath="/corrective-actions"
+              currentParams={sp}
+              paramKey="severity"
+              label="Severity"
+              options={SEVERITY_OPTIONS.map((o) => ({ ...o, count: sevCounts[o.value] }))}
+            />
+          </div>
+        </>
+      }
+    >
       {rows.length === 0 ? (
         <EmptyState icon={<ListChecks size={32} />} title="No corrective actions match these filters" />
       ) : (
@@ -219,6 +224,6 @@ export default async function CorrectiveActionsPage({
           />
         </>
       )}
-    </div>
+    </ListPageLayout>
   )
 }

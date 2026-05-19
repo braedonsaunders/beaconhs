@@ -17,6 +17,7 @@ import {
 import { crews, departments, orgUnits, trades } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { PageContainer } from '@/components/page-layout'
 
 export const metadata = { title: 'Org hierarchy' }
 export const dynamic = 'force-dynamic'
@@ -115,71 +116,73 @@ export default async function AdminOrgPage() {
   })
 
   return (
-    <div className="space-y-5">
-      <DetailHeader
-        back={{ href: '/admin', label: 'Back to admin' }}
-        title="Org hierarchy"
-        subtitle="Customers, projects, sites, areas + crews / departments / trades"
-      />
+    <PageContainer>
+      <div className="space-y-5">
+        <DetailHeader
+          back={{ href: '/admin', label: 'Back to admin' }}
+          title="Org hierarchy"
+          subtitle="Customers, projects, sites, areas + crews / departments / trades"
+        />
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Org units ({allUnits.length})</CardTitle>
-            <CardDescription>Hierarchical tree by level.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <OrgTree units={allUnits} onDelete={deleteOrgUnit} />
-            <form action={addOrgUnit} className="grid grid-cols-1 gap-2 rounded-md border border-dashed border-slate-300 bg-slate-50/50 p-3 sm:grid-cols-4">
-              <Field label="Level">
-                <Select name="level" defaultValue="site">
-                  {LEVELS.map((l) => (
-                    <option key={l} value={l}>{l}</option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="Parent (optional)">
-                <Select name="parentId" defaultValue="">
-                  <option value="">— top-level —</option>
-                  {allUnits.map((u) => (
-                    <option key={u.id} value={u.id}>{u.level}: {u.name}</option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="Name" className="sm:col-span-1">
-                <Input name="name" placeholder="e.g. Site C" />
-              </Field>
-              <div className="flex items-end">
-                <Button type="submit" className="w-full">
-                  <Plus size={14} /> Add
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
+        <div className="grid gap-4 lg:grid-cols-3">
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <CardTitle>Org units ({allUnits.length})</CardTitle>
+              <CardDescription>Hierarchical tree by level.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <OrgTree units={allUnits} onDelete={deleteOrgUnit} />
+              <form action={addOrgUnit} className="grid grid-cols-1 gap-2 rounded-md border border-dashed border-slate-300 bg-slate-50/50 p-3 sm:grid-cols-4">
+                <Field label="Level">
+                  <Select name="level" defaultValue="site">
+                    {LEVELS.map((l) => (
+                      <option key={l} value={l}>{l}</option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Parent (optional)">
+                  <Select name="parentId" defaultValue="">
+                    <option value="">— top-level —</option>
+                    {allUnits.map((u) => (
+                      <option key={u.id} value={u.id}>{u.level}: {u.name}</option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Name" className="sm:col-span-1">
+                  <Input name="name" placeholder="e.g. Site C" />
+                </Field>
+                <div className="flex items-end">
+                  <Button type="submit" className="w-full">
+                    <Plus size={14} /> Add
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
 
-        <div className="space-y-4">
-          <NameListCard
-            title="Departments"
-            items={depts}
-            addAction={addDepartment}
-            deleteAction={deleteDepartment}
-          />
-          <NameListCard
-            title="Trades"
-            items={allTrades}
-            addAction={addTrade}
-            deleteAction={deleteTrade}
-          />
-          <NameListCard
-            title="Crews"
-            items={allCrews}
-            addAction={addCrew}
-            deleteAction={deleteCrew}
-          />
+          <div className="space-y-4">
+            <NameListCard
+              title="Departments"
+              items={depts}
+              addAction={addDepartment}
+              deleteAction={deleteDepartment}
+            />
+            <NameListCard
+              title="Trades"
+              items={allTrades}
+              addAction={addTrade}
+              deleteAction={deleteTrade}
+            />
+            <NameListCard
+              title="Crews"
+              items={allCrews}
+              addAction={addCrew}
+              deleteAction={deleteCrew}
+            />
+          </div>
         </div>
       </div>
-    </div>
+    </PageContainer>
   )
 }
 

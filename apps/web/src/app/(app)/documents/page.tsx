@@ -19,6 +19,7 @@ import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
+import { ListPageLayout } from '@/components/page-layout'
 
 export const metadata = { title: 'Documents' }
 
@@ -82,22 +83,26 @@ export default async function DocumentsPage({
   const sortProps = { basePath: '/documents', currentParams: sp, dir: params.dir }
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="Documents"
-        description="Versioned library + read-and-acknowledge + periodic review + management review books."
-      />
-      <div className="flex items-center gap-3">
-        <SearchInput placeholder="Search title or description" />
-      </div>
-      <FilterChips
-        basePath="/documents"
-        currentParams={sp}
-        paramKey="status"
-        label="Status"
-        options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
-      />
-
+    <ListPageLayout
+      header={
+        <>
+          <PageHeader
+            title="Documents"
+            description="Versioned library + read-and-acknowledge + periodic review + management review books."
+          />
+          <div className="flex items-center gap-3">
+            <SearchInput placeholder="Search title or description" />
+          </div>
+          <FilterChips
+            basePath="/documents"
+            currentParams={sp}
+            paramKey="status"
+            label="Status"
+            options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
+          />
+        </>
+      }
+    >
       {rows.length === 0 ? (
         <EmptyState icon={<BookOpen size={32} />} title="No documents match" />
       ) : (
@@ -137,6 +142,6 @@ export default async function DocumentsPage({
           />
         </>
       )}
-    </div>
+    </ListPageLayout>
   )
 }

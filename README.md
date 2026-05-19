@@ -86,10 +86,19 @@ Every list has search + sort + pagination + filter chips. Every row clicks throu
 - ✅ **/admin/plugins** — first-party plugin catalogue (NetSuite, adminapp2-sync, webhook-out) with enable/disable per tenant, capability chips, version display
 
 ### Cross-cutting
+- ✅ **Container-app shell**: AppShell is `h-screen overflow-hidden`. Pages choose `PageContainer` (whole-page scroll), `ListPageLayout` (sticky header + scrolling body), `DetailPageLayout` (sticky header + subtabs + scrolling body), `DetailSplitLayout` (sticky header + sticky sidebar + scrolling body), or `WizardLayout` (sticky header + scrolling body + sticky footer for forms).
+- ✅ **Horizontal subtabs** on Incident detail (Overview / Medical / Injuries / Investigation / Photos / Activity) and existing tabs on People, Equipment, Documents, Locations.
 - ✅ **Notifications inbox** at /notifications + bell-icon unread count in header + mark-read / mark-all-read actions
-- ✅ App-shell sidebar grouped: Overview / Frontline / Programs / Assets & people / Insight / Settings
+- ✅ App-shell sidebar grouped: Overview / Frontline (Forms / Inspections / Inspection Banks / Incidents / CAs) / Programs (Training + Skills + Authorities / Documents / CS + Sensors / Lone Worker) / Assets & people (People / Locations / Equipment / PPE) / Insight / Settings
 - ✅ `/verify/<token>` certificate verification page (handles valid / expired / revoked / not-found)
 - ✅ `/manifest.webmanifest` + service worker for PWA install
+
+### Newly added modules (Locations, Inspection Banks, Skill Authorities, Atmospheric Sensors, PDF rendering)
+- ✅ **Locations** (`/locations`): customer-level org_units list + adaptive detail (different tab strip for customer / project / site) + edit + new + child-project create. New `customer_contacts` table with inline add on the Contacts tab + standalone `/contacts/new` route.
+- ✅ **Inspection Banks** (`/inspections/banks`): reusable inspection-criteria templates with criteria CRUD, sequence reorder, response-type + photo/comment-required flags.
+- ✅ **Training Skill Authorities** (`/training/authorities`) and **Skill Types** (`/training/skills`): full competency hierarchy with skill assignments per person + expiry tracking.
+- ✅ **Atmospheric Sensors** (`/confined-space/sensors`): calibration history + next-due tracking + overdue alarms.
+- ✅ **PDF rendering pipeline**: Puppeteer worker handles `form_response`, `incident`, and `certificate` kinds (full cert + wallet card). Uploads via `putObject`, sets pdfAttachmentId, audit-logs. Public routes at `/incidents/[id]/pdf`, `/forms/responses/[id]/pdf`, `/training/records/[id]/certificate?format=cert|wallet` enqueue and 302 to the signed URL.
 
 ---
 

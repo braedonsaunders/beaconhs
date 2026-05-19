@@ -16,6 +16,7 @@ import {
 } from '@beaconhs/ui'
 import { incidents, orgUnits } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { PageContainer } from '@/components/page-layout'
 
 export const metadata = { title: 'Report incident' }
 
@@ -85,77 +86,79 @@ export default async function NewIncidentPage() {
   const nowLocal = new Date().toISOString().slice(0, 16)
 
   return (
-    <div className="max-w-3xl space-y-6">
-      <DetailHeader back={{ href: '/incidents', label: 'Back to incidents' }} title="Report incident" />
-      <Alert variant="info">
-        <AlertTitle>Quick report</AlertTitle>
-        <AlertDescription>
-          Use this form to capture the essentials. Photos, witness statements, and the full
-          investigation form happen on the incident's detail page after submission.
-        </AlertDescription>
-      </Alert>
-      <Card>
-        <CardContent className="pt-6">
-          <form action={reportIncident} className="space-y-4">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label="Type" required>
-                <Select name="type" defaultValue="injury">
-                  {TYPES.map((t) => (
-                    <option key={t} value={t}>
-                      {t.replace(/_/g, ' ')}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="Severity" required>
-                <Select name="severity" defaultValue="no_injury">
-                  {SEVERITIES.map((s) => (
-                    <option key={s} value={s}>
-                      {s.replace(/_/g, ' ')}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="Occurred at" required className="sm:col-span-1">
-                <Input name="occurredAt" type="datetime-local" required defaultValue={nowLocal} />
-              </Field>
-              <Field label="Site">
-                <Select name="siteOrgUnitId" defaultValue="">
-                  <option value="">—</option>
-                  {sites.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="Title" required className="sm:col-span-2">
-                <Input name="title" required placeholder="Short summary, e.g. ‘Slip on wet floor near pump 3’" />
-              </Field>
-              <Field label="Description" className="sm:col-span-2">
-                <Textarea name="description" rows={4} placeholder="What happened? Witnesses? Equipment involved?" />
-              </Field>
-              <Field label="Specific location">
-                <Input name="location" placeholder="Building / area / coordinates" />
-              </Field>
-              <Field label="Weather">
-                <Input name="weather" placeholder="Optional" />
-              </Field>
-              <Field label="Immediate action taken" className="sm:col-span-2">
-                <Textarea
-                  name="immediateActionTaken"
-                  rows={3}
-                  placeholder="First aid given, area barricaded, equipment locked out, etc."
-                />
-              </Field>
-            </div>
-            <div className="flex items-center justify-end gap-2">
-              <Button type="submit">Submit report</Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
+    <PageContainer>
+      <div className="max-w-3xl space-y-6">
+        <DetailHeader back={{ href: '/incidents', label: 'Back to incidents' }} title="Report incident" />
+        <Alert variant="info">
+          <AlertTitle>Quick report</AlertTitle>
+          <AlertDescription>
+            Use this form to capture the essentials. Photos, witness statements, and the full
+            investigation form happen on the incident's detail page after submission.
+          </AlertDescription>
+        </Alert>
+        <Card>
+          <CardContent className="pt-6">
+            <form action={reportIncident} className="space-y-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Field label="Type" required>
+                  <Select name="type" defaultValue="injury">
+                    {TYPES.map((t) => (
+                      <option key={t} value={t}>
+                        {t.replace(/_/g, ' ')}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Severity" required>
+                  <Select name="severity" defaultValue="no_injury">
+                    {SEVERITIES.map((s) => (
+                      <option key={s} value={s}>
+                        {s.replace(/_/g, ' ')}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Occurred at" required className="sm:col-span-1">
+                  <Input name="occurredAt" type="datetime-local" required defaultValue={nowLocal} />
+                </Field>
+                <Field label="Site">
+                  <Select name="siteOrgUnitId" defaultValue="">
+                    <option value="">—</option>
+                    {sites.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Title" required className="sm:col-span-2">
+                  <Input name="title" required placeholder="Short summary, e.g. ‘Slip on wet floor near pump 3’" />
+                </Field>
+                <Field label="Description" className="sm:col-span-2">
+                  <Textarea name="description" rows={4} placeholder="What happened? Witnesses? Equipment involved?" />
+                </Field>
+                <Field label="Specific location">
+                  <Input name="location" placeholder="Building / area / coordinates" />
+                </Field>
+                <Field label="Weather">
+                  <Input name="weather" placeholder="Optional" />
+                </Field>
+                <Field label="Immediate action taken" className="sm:col-span-2">
+                  <Textarea
+                    name="immediateActionTaken"
+                    rows={3}
+                    placeholder="First aid given, area barricaded, equipment locked out, etc."
+                  />
+                </Field>
+              </div>
+              <div className="flex items-center justify-end gap-2">
+                <Button type="submit">Submit report</Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    </PageContainer>
   )
 }
 

@@ -17,6 +17,7 @@ import { db } from '@beaconhs/db'
 import { incidents, people, tenantUsers, tenants } from '@beaconhs/db/schema'
 import { getCurrentUserId } from '@/lib/auth'
 import { setActiveTenant } from '@/lib/actions'
+import { PageContainer } from '@/components/page-layout'
 
 export const metadata = { title: 'All tenants' }
 export const dynamic = 'force-dynamic'
@@ -46,61 +47,63 @@ export default async function AdminTenantsPage() {
   })
 
   return (
-    <div className="space-y-5">
-      <DetailHeader
-        back={{ href: '/admin', label: 'Back to admin' }}
-        title="All tenants"
-        subtitle="Super-admin view of every tenant on this deployment"
-        actions={
-          <Link href="/admin/tenants/new">
-            <Button>New tenant</Button>
-          </Link>
-        }
-      />
+    <PageContainer>
+      <div className="space-y-5">
+        <DetailHeader
+          back={{ href: '/admin', label: 'Back to admin' }}
+          title="All tenants"
+          subtitle="Super-admin view of every tenant on this deployment"
+          actions={
+            <Link href="/admin/tenants/new">
+              <Button>New tenant</Button>
+            </Link>
+          }
+        />
 
-      {rows.length === 0 ? (
-        <EmptyState title="No tenants yet" />
-      ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Slug</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Region</TableHead>
-              <TableHead>Members</TableHead>
-              <TableHead>People</TableHead>
-              <TableHead>Incidents</TableHead>
-              <TableHead></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.map(({ tenant, memberCount, peopleCount, incidentCount }) => (
-              <TableRow key={tenant.id}>
-                <TableCell className="font-medium">{tenant.name}</TableCell>
-                <TableCell className="font-mono text-xs">{tenant.slug}</TableCell>
-                <TableCell>
-                  <Badge variant={tenant.status === 'active' ? 'success' : 'secondary'}>
-                    {tenant.status}
-                  </Badge>
-                </TableCell>
-                <TableCell>{tenant.region}</TableCell>
-                <TableCell>{Number(memberCount)}</TableCell>
-                <TableCell>{Number(peopleCount)}</TableCell>
-                <TableCell>{Number(incidentCount)}</TableCell>
-                <TableCell>
-                  <form action={viewAs}>
-                    <input type="hidden" name="tenantId" value={tenant.id} />
-                    <Button type="submit" size="sm" variant="outline">
-                      View as
-                    </Button>
-                  </form>
-                </TableCell>
+        {rows.length === 0 ? (
+          <EmptyState title="No tenants yet" />
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Slug</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Region</TableHead>
+                <TableHead>Members</TableHead>
+                <TableHead>People</TableHead>
+                <TableHead>Incidents</TableHead>
+                <TableHead></TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      )}
-    </div>
+            </TableHeader>
+            <TableBody>
+              {rows.map(({ tenant, memberCount, peopleCount, incidentCount }) => (
+                <TableRow key={tenant.id}>
+                  <TableCell className="font-medium">{tenant.name}</TableCell>
+                  <TableCell className="font-mono text-xs">{tenant.slug}</TableCell>
+                  <TableCell>
+                    <Badge variant={tenant.status === 'active' ? 'success' : 'secondary'}>
+                      {tenant.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>{tenant.region}</TableCell>
+                  <TableCell>{Number(memberCount)}</TableCell>
+                  <TableCell>{Number(peopleCount)}</TableCell>
+                  <TableCell>{Number(incidentCount)}</TableCell>
+                  <TableCell>
+                    <form action={viewAs}>
+                      <input type="hidden" name="tenantId" value={tenant.id} />
+                      <Button type="submit" size="sm" variant="outline">
+                        View as
+                      </Button>
+                    </form>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </div>
+    </PageContainer>
   )
 }

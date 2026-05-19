@@ -39,6 +39,25 @@ export async function presignPut(args: {
   return getSignedUrl(client, cmd, { expiresIn: args.expiresInSeconds ?? 300 })
 }
 
+/**
+ * Server-side direct upload. Used by the worker to push rendered PDFs
+ * into MinIO/R2 without having to round-trip through a presigned URL.
+ */
+export async function putObject(args: {
+  key: string
+  body: Buffer | Uint8Array
+  contentType: string
+}): Promise<void> {
+  await client.send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: args.key,
+      Body: args.body,
+      ContentType: args.contentType,
+    }),
+  )
+}
+
 export async function presignGet(args: {
   key: string
   expiresInSeconds?: number

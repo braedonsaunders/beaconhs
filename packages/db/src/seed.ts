@@ -2,9 +2,12 @@ import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { createClient } from './client'
 import {
+  atmosphericCalibrations,
+  atmosphericSensors,
   BUILTIN_ROLES,
   correctiveActions,
   crews,
+  customerContacts,
   departments,
   documents,
   documentAcknowledgments,
@@ -22,6 +25,8 @@ import {
   incidentLostTimeEvents,
   incidentPeople,
   incidents,
+  inspectionBankCriteria,
+  inspectionBanks,
   notifications,
   orgUnits,
   people,
@@ -37,6 +42,9 @@ import {
   trades,
   trainingCourses,
   trainingRecords,
+  trainingSkillAssignments,
+  trainingSkillAuthorities,
+  trainingSkillTypes,
   user,
 } from './schema'
 import type { FormSchemaV1 } from './schema'
@@ -874,6 +882,13 @@ async function main() {
       ])
       .onConflictDoNothing()
 
+    // --- Customer contacts ---
+    await tx.insert(customerContacts).values([
+      { tenantId: tenant.id, orgUnitId: customer.id, name: 'Karen Whitaker', role: 'Site Operations Manager', email: 'kwhitaker@acmerefinery.com', phone: '+1-647-555-7001', isPrimary: true },
+      { tenantId: tenant.id, orgUnitId: customer.id, name: 'David Park', role: 'HSE Lead', email: 'dpark@acmerefinery.com', phone: '+1-647-555-7002' },
+      { tenantId: tenant.id, orgUnitId: siteA.id, name: 'Marco Rossi', role: 'Site Foreman', phone: '+1-647-555-7003' },
+    ])
+
     // --- Welcome notification --------------------
     await tx.insert(notifications).values({
       tenantId: tenant.id,
@@ -884,6 +899,181 @@ async function main() {
       body: 'Sample data has been seeded. Click around — every list is paginated/sortable and every row clicks through to a real detail page.',
       linkPath: '/dashboard',
     })
+
+    // --- Inspection Bank ------------------------------------------------
+    const [bank1] = await tx
+      .insert(inspectionBanks)
+      .values({
+        tenantId: tenant.id,
+        name: 'Site Daily Walk-Through',
+        description: 'Routine site safety walk-through criteria used by site supervisors at start of shift.',
+        category: 'site_inspection',
+        isPublished: true,
+        createdBy: admin.id,
+      })
+      .returning()
+    if (bank1) {
+      await tx.insert(inspectionBankCriteria).values([
+        { tenantId: tenant.id, bankId: bank1.id, sequence: 1, text: 'Are walkways clear and unobstructed?', responseType: 'pass_fail_na', requiresPhoto: false, requiresComment: false },
+        { tenantId: tenant.id, bankId: bank1.id, sequence: 2, text: 'Is fire extinguisher signage visible from all working areas?', responseType: 'pass_fail_na', requiresPhoto: true, requiresComment: false },
+        { tenantId: tenant.id, bankId: bank1.id, sequence: 3, text: 'Are MSDS binders accessible at the chemical storage?', responseType: 'yes_no', requiresPhoto: false, requiresComment: true },
+        { tenantId: tenant.id, bankId: bank1.id, sequence: 4, text: 'Eyewash stations functional and unobstructed?', responseType: 'pass_fail_na', requiresPhoto: true, requiresComment: true },
+      ])
+    }
+    const [bank2] = await tx
+      .insert(inspectionBanks)
+      .values({
+        tenantId: tenant.id,
+        name: 'PPE Pre-Use Inspection (Harness)',
+        description: 'Draft template — to be reviewed before publishing.',
+        category: 'ppe_check',
+        isPublished: false,
+        createdBy: admin.id,
+      })
+      .returning()
+    if (bank2) {
+      await tx.insert(inspectionBankCriteria).values([
+        { tenantId: tenant.id, bankId: bank2.id, sequence: 1, text: 'Webbing free from cuts, frays, burns, or chemical damage?', responseType: 'pass_fail_na', requiresPhoto: true, requiresComment: false },
+        { tenantId: tenant.id, bankId: bank2.id, sequence: 2, text: 'D-rings free from cracks, sharp edges, or deformation?', responseType: 'pass_fail_na', requiresPhoto: false, requiresComment: false },
+        { tenantId: tenant.id, bankId: bank2.id, sequence: 3, text: 'Buckles function and lock correctly?', responseType: 'pass_fail_na', requiresPhoto: false, requiresComment: false },
+      ])
+    }
+
+    // --- Training Skill Authorities + Types + Assignments --------------
+    const [authority1] = await tx
+      .insert(trainingSkillAuthorities)
+      .values({
+        tenantId: tenant.id,
+        name: 'In-house Quality Control',
+        code: 'IHQC',
+        jurisdiction: 'Internal',
+        notes: 'Internal evaluator sign-off for in-house competencies.',
+      })
+      .returning()
+    const [authority2] = await tx
+      .insert(trainingSkillAuthorities)
+      .values({
+        tenantId: tenant.id,
+        name: 'Boilermakers Local 128',
+        code: 'BM128',
+        jurisdiction: 'Ontario',
+      })
+      .returning()
+    if (authority1) {
+      const [skill1] = await tx
+        .insert(trainingSkillTypes)
+        .values({
+          tenantId: tenant.id,
+          authorityId: authority1.id,
+          name: 'Forklift Operator',
+          code: 'FORK',
+          validForMonths: 36,
+          description: 'Class 4/5 sit-down counterbalance forklift competency.',
+        })
+        .returning()
+      const [skill2] = await tx
+        .insert(trainingSkillTypes)
+        .values({
+          tenantId: tenant.id,
+          authorityId: authority1.id,
+          name: 'Confined Space Attendant',
+          code: 'CSA',
+          validForMonths: 12,
+          description: 'Permit-required confined space attendant role.',
+        })
+        .returning()
+      if (skill1) {
+        await tx.insert(trainingSkillAssignments).values([
+          {
+            tenantId: tenant.id,
+            personId: john!.id,
+            skillTypeId: skill1.id,
+            grantedOn: isoDate(new Date(today.getTime() - 200 * dayMs)),
+            expiresOn: isoDate(new Date(today.getTime() + 900 * dayMs)),
+            grantedByTenantUserId: membership.id,
+          },
+          {
+            tenantId: tenant.id,
+            personId: tom!.id,
+            skillTypeId: skill1.id,
+            grantedOn: isoDate(new Date(today.getTime() - 100 * dayMs)),
+            expiresOn: isoDate(new Date(today.getTime() + 1000 * dayMs)),
+            grantedByTenantUserId: membership.id,
+          },
+        ])
+      }
+      if (skill2) {
+        await tx.insert(trainingSkillAssignments).values({
+          tenantId: tenant.id,
+          personId: john!.id,
+          skillTypeId: skill2.id,
+          grantedOn: isoDate(new Date(today.getTime() - 340 * dayMs)),
+          expiresOn: isoDate(new Date(today.getTime() + 25 * dayMs)),
+          grantedByTenantUserId: membership.id,
+          notes: 'Expires soon — schedule recertification.',
+        })
+      }
+    }
+    if (authority2) {
+      await tx.insert(trainingSkillTypes).values({
+        tenantId: tenant.id,
+        authorityId: authority2.id,
+        name: 'Pressure Welding Certification',
+        code: 'PWELD',
+        validForMonths: 24,
+        description: 'Provincially-recognised pressure welding ticket.',
+      })
+    }
+
+    // --- Atmospheric Sensors + Calibrations -----------------------------
+    const [sensor1] = await tx
+      .insert(atmosphericSensors)
+      .values({
+        tenantId: tenant.id,
+        identifier: 'GASMON-04',
+        make: 'BW Technologies',
+        model: 'GasAlertMicro 5',
+        serialNumber: 'GA5-2024-04',
+        type: 'multi_gas',
+        gases: ['O2', 'LEL', 'H2S', 'CO'],
+        lastCalibrationOn: isoDate(new Date(today.getTime() - 30 * dayMs)),
+        nextCalibrationDue: isoDate(new Date(today.getTime() + 60 * dayMs)),
+        status: 'active',
+      })
+      .returning()
+    const [sensor2] = await tx
+      .insert(atmosphericSensors)
+      .values({
+        tenantId: tenant.id,
+        identifier: 'GASMON-07',
+        make: 'BW Technologies',
+        model: 'GasAlertMicro 5',
+        serialNumber: 'GA5-2023-12',
+        type: 'multi_gas',
+        gases: ['O2', 'LEL', 'H2S', 'CO'],
+        lastCalibrationOn: isoDate(new Date(today.getTime() - 200 * dayMs)),
+        nextCalibrationDue: isoDate(new Date(today.getTime() - 10 * dayMs)),
+        status: 'active',
+      })
+      .returning()
+    if (sensor1 && membership) {
+      await tx.insert(atmosphericCalibrations).values({
+        tenantId: tenant.id,
+        sensorId: sensor1.id,
+        calibratedOn: isoDate(new Date(today.getTime() - 30 * dayMs)),
+        calibratedByTenantUserId: membership.id,
+        notes: 'Routine bump test + span calibration with certified gas.',
+      })
+    }
+    if (sensor2 && membership) {
+      await tx.insert(atmosphericCalibrations).values({
+        tenantId: tenant.id,
+        sensorId: sensor2.id,
+        calibratedOn: isoDate(new Date(today.getTime() - 200 * dayMs)),
+        calibratedByTenantUserId: membership.id,
+        notes: 'Previous calibration — now overdue.',
+      })
+    }
 
     console.log(`  · tenant: ${tenant.name} (${tenant.slug})`)
     console.log(`  · super-admin: ${admin.email}`)

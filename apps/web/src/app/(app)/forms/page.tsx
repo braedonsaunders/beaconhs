@@ -4,6 +4,7 @@ import { desc } from 'drizzle-orm'
 import { Badge, Button, EmptyState } from '@beaconhs/ui'
 import { formTemplates } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { ListPageLayout } from '@/components/page-layout'
 
 export const metadata = { title: 'Forms' }
 
@@ -14,19 +15,23 @@ export default async function FormsPage() {
   )
 
   return (
-    <div className="space-y-6">
-      <header className="flex items-end justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Forms</h1>
-          <p className="text-sm text-slate-500">
-            Templates, assignments, and submissions. Designer launches in Phase 1.
-          </p>
-        </div>
-        <Link href="/forms/templates/new">
-          <Button>New template</Button>
-        </Link>
-      </header>
-
+    <ListPageLayout
+      header={
+        <>
+          <header className="flex items-end justify-between">
+            <div>
+              <h1 className="text-2xl font-semibold">Forms</h1>
+              <p className="text-sm text-slate-500">
+                Templates, assignments, and submissions. Designer launches in Phase 1.
+              </p>
+            </div>
+            <Link href="/forms/templates/new">
+              <Button>New template</Button>
+            </Link>
+          </header>
+        </>
+      }
+    >
       {templates.length === 0 ? (
         <EmptyState
           icon={<ClipboardCheck size={32} />}
@@ -62,6 +67,6 @@ export default async function FormsPage() {
           ))}
         </ul>
       )}
-    </div>
+    </ListPageLayout>
   )
 }

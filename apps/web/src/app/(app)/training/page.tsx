@@ -3,6 +3,7 @@ import { and, asc, eq, isNotNull, sql } from 'drizzle-orm'
 import { Badge, Card, CardContent, CardHeader, CardTitle, EmptyState } from '@beaconhs/ui'
 import { people, trainingCourses, trainingRecords } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { PageContainer } from '@/components/page-layout'
 
 export const metadata = { title: 'Training' }
 
@@ -44,101 +45,103 @@ export default async function TrainingPage() {
   })
 
   return (
-    <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-semibold">Training</h1>
-        <p className="text-sm text-slate-500">
-          Courses, records, and expiry tracking. Full matrix view + cert verification in Phase 3.
-        </p>
-      </header>
+    <PageContainer>
+      <div className="space-y-6">
+        <header>
+          <h1 className="text-2xl font-semibold">Training</h1>
+          <p className="text-sm text-slate-500">
+            Courses, records, and expiry tracking. Full matrix view + cert verification in Phase 3.
+          </p>
+        </header>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Course catalogue ({courses.length})</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {courses.length === 0 ? (
+                <EmptyState icon={<GraduationCap size={24} />} title="No courses yet" />
+              ) : (
+                <ul className="divide-y divide-slate-100 text-sm">
+                  {courses.map((c) => (
+                    <li key={c.id} className="flex items-center justify-between py-2">
+                      <div>
+                        <div className="font-medium">{c.name}</div>
+                        <div className="text-xs text-slate-500">
+                          {c.code} · {c.deliveryType.replace('_', ' ')}
+                          {c.validForMonths ? ` · valid ${c.validForMonths}mo` : ''}
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Expiring within 90 days ({expiring.length})</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {expiring.length === 0 ? (
+                <p className="text-sm text-slate-500">Nothing expiring soon. Nice.</p>
+              ) : (
+                <ul className="divide-y divide-slate-100 text-sm">
+                  {expiring.map((row) => {
+                    const exp = row.record.expiresOn ? new Date(row.record.expiresOn) : null
+                    const days = exp
+                      ? Math.round((exp.getTime() - Date.now()) / (24 * 3600 * 1000))
+                      : null
+                    return (
+                      <li key={row.record.id} className="flex items-center justify-between py-2">
+                        <div>
+                          <div className="font-medium">
+                            {row.person.firstName} {row.person.lastName}
+                          </div>
+                          <div className="text-xs text-slate-500">{row.course.name}</div>
+                        </div>
+                        <Badge variant={days !== null && days < 0 ? 'destructive' : 'warning'}>
+                          {days !== null && days < 0
+                            ? `Expired ${Math.abs(days)}d ago`
+                            : `${days}d left`}
+                        </Badge>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
         <Card>
           <CardHeader>
-            <CardTitle>Course catalogue ({courses.length})</CardTitle>
+            <CardTitle>Recent records ({recentRecords.length})</CardTitle>
           </CardHeader>
           <CardContent>
-            {courses.length === 0 ? (
-              <EmptyState icon={<GraduationCap size={24} />} title="No courses yet" />
+            {recentRecords.length === 0 ? (
+              <EmptyState icon={<GraduationCap size={24} />} title="No training records yet" />
             ) : (
               <ul className="divide-y divide-slate-100 text-sm">
-                {courses.map((c) => (
-                  <li key={c.id} className="flex items-center justify-between py-2">
+                {recentRecords.slice(0, 10).map((row) => (
+                  <li key={row.record.id} className="flex items-center justify-between py-2">
                     <div>
-                      <div className="font-medium">{c.name}</div>
-                      <div className="text-xs text-slate-500">
-                        {c.code} · {c.deliveryType.replace('_', ' ')}
-                        {c.validForMonths ? ` · valid ${c.validForMonths}mo` : ''}
-                      </div>
+                      <span className="font-medium">
+                        {row.person.firstName} {row.person.lastName}
+                      </span>
+                      {' · '}
+                      <span>{row.course.name}</span>
                     </div>
+                    <span className="text-xs text-slate-500">{row.record.completedOn}</span>
                   </li>
                 ))}
               </ul>
             )}
           </CardContent>
         </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Expiring within 90 days ({expiring.length})</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {expiring.length === 0 ? (
-              <p className="text-sm text-slate-500">Nothing expiring soon. Nice.</p>
-            ) : (
-              <ul className="divide-y divide-slate-100 text-sm">
-                {expiring.map((row) => {
-                  const exp = row.record.expiresOn ? new Date(row.record.expiresOn) : null
-                  const days = exp
-                    ? Math.round((exp.getTime() - Date.now()) / (24 * 3600 * 1000))
-                    : null
-                  return (
-                    <li key={row.record.id} className="flex items-center justify-between py-2">
-                      <div>
-                        <div className="font-medium">
-                          {row.person.firstName} {row.person.lastName}
-                        </div>
-                        <div className="text-xs text-slate-500">{row.course.name}</div>
-                      </div>
-                      <Badge variant={days !== null && days < 0 ? 'destructive' : 'warning'}>
-                        {days !== null && days < 0
-                          ? `Expired ${Math.abs(days)}d ago`
-                          : `${days}d left`}
-                      </Badge>
-                    </li>
-                  )
-                })}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent records ({recentRecords.length})</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {recentRecords.length === 0 ? (
-            <EmptyState icon={<GraduationCap size={24} />} title="No training records yet" />
-          ) : (
-            <ul className="divide-y divide-slate-100 text-sm">
-              {recentRecords.slice(0, 10).map((row) => (
-                <li key={row.record.id} className="flex items-center justify-between py-2">
-                  <div>
-                    <span className="font-medium">
-                      {row.person.firstName} {row.person.lastName}
-                    </span>
-                    {' · '}
-                    <span>{row.course.name}</span>
-                  </div>
-                  <span className="text-xs text-slate-500">{row.record.completedOn}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+    </PageContainer>
   )
 }

@@ -20,6 +20,7 @@ import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
+import { ListPageLayout } from '@/components/page-layout'
 
 export const metadata = { title: 'Equipment' }
 
@@ -95,27 +96,31 @@ export default async function EquipmentPage({
   const sortProps = { basePath: '/equipment', currentParams: sp, dir: params.dir }
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="Equipment"
-        description="Asset registry. QR scan + inspections + work orders."
-        actions={
-          <Link href="/equipment/new">
-            <Button>Add equipment</Button>
-          </Link>
-        }
-      />
-      <div className="flex items-center gap-3">
-        <SearchInput placeholder="Search asset tag, name, serial #" />
-      </div>
-      <FilterChips
-        basePath="/equipment"
-        currentParams={sp}
-        paramKey="status"
-        label="Status"
-        options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
-      />
-
+    <ListPageLayout
+      header={
+        <>
+          <PageHeader
+            title="Equipment"
+            description="Asset registry. QR scan + inspections + work orders."
+            actions={
+              <Link href="/equipment/new">
+                <Button>Add equipment</Button>
+              </Link>
+            }
+          />
+          <div className="flex items-center gap-3">
+            <SearchInput placeholder="Search asset tag, name, serial #" />
+          </div>
+          <FilterChips
+            basePath="/equipment"
+            currentParams={sp}
+            paramKey="status"
+            label="Status"
+            options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
+          />
+        </>
+      }
+    >
       {rows.length === 0 ? (
         <EmptyState icon={<Wrench size={32} />} title="No equipment matches these filters" />
       ) : (
@@ -166,6 +171,6 @@ export default async function EquipmentPage({
           />
         </>
       )}
-    </div>
+    </ListPageLayout>
   )
 }

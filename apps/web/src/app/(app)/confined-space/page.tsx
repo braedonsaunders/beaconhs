@@ -20,6 +20,7 @@ import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
+import { ListPageLayout } from '@/components/page-layout'
 
 export const metadata = { title: 'Confined Space' }
 
@@ -86,27 +87,31 @@ export default async function ConfinedSpacePage({
   const now = Date.now()
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="Confined Space"
-        description="Entry permits, atmospheric monitoring, rescue plans. Permits expire automatically when their window passes."
-        actions={
-          <Link href="/confined-space/new">
-            <Button>New permit</Button>
-          </Link>
-        }
-      />
-      <div className="flex items-center gap-3">
-        <SearchInput placeholder="Search by permit title" />
-      </div>
-      <FilterChips
-        basePath="/confined-space"
-        currentParams={sp}
-        paramKey="status"
-        label="Status"
-        options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
-      />
-
+    <ListPageLayout
+      header={
+        <>
+          <PageHeader
+            title="Confined Space"
+            description="Entry permits, atmospheric monitoring, rescue plans. Permits expire automatically when their window passes."
+            actions={
+              <Link href="/confined-space/new">
+                <Button>New permit</Button>
+              </Link>
+            }
+          />
+          <div className="flex items-center gap-3">
+            <SearchInput placeholder="Search by permit title" />
+          </div>
+          <FilterChips
+            basePath="/confined-space"
+            currentParams={sp}
+            paramKey="status"
+            label="Status"
+            options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
+          />
+        </>
+      }
+    >
       {rows.length === 0 ? (
         <EmptyState
           icon={<ShieldCheck size={32} />}
@@ -184,6 +189,6 @@ export default async function ConfinedSpacePage({
           />
         </>
       )}
-    </div>
+    </ListPageLayout>
   )
 }

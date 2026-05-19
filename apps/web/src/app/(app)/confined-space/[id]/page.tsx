@@ -35,6 +35,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { DetailGrid } from '@/components/detail-grid'
 import { Section } from '@/components/section'
+import { PageContainer } from '@/components/page-layout'
 
 export const dynamic = 'force-dynamic'
 
@@ -150,158 +151,160 @@ export default async function CSPermitDetailPage({ params }: { params: Promise<{
   const outOfSpec = readings.find((r) => r.outOfSpec === 1)
 
   return (
-    <div className="space-y-5">
-      <DetailHeader
-        back={{ href: '/confined-space', label: 'Back to permits' }}
-        title={permit.title}
-        subtitle={`${permit.reference} · issued ${new Date(permit.issuedAt).toLocaleString()}`}
-        badge={
-          <Badge
-            variant={
-              permit.status === 'active'
-                ? 'success'
-                : permit.status === 'expired'
-                  ? 'destructive'
-                  : 'secondary'
-            }
-          >
-            {permit.status}
-          </Badge>
-        }
-        actions={
-          <>
-            {permit.status === 'open' ? (
-              <form action={activatePermit} className="inline">
-                <input type="hidden" name="id" value={id} />
-                <Button type="submit">Activate</Button>
-              </form>
-            ) : permit.status === 'active' ? (
-              <form action={closePermit} className="inline">
-                <input type="hidden" name="id" value={id} />
-                <Button type="submit" variant="outline">Close permit</Button>
-              </form>
-            ) : null}
-          </>
-        }
-      />
-
-      {outOfSpec ? (
-        <Alert variant="destructive">
-          <AlertTriangle size={16} />
-          <AlertTitle>Out-of-spec atmospheric reading detected</AlertTitle>
-          <AlertDescription>
-            Most recent out-of-spec reading was on{' '}
-            {new Date(outOfSpec.recordedAt).toLocaleString()}. Review before allowing further entry.
-          </AlertDescription>
-        </Alert>
-      ) : null}
-
-      <Section title="Permit details">
-        <DetailGrid
-          rows={[
-            { label: 'Reference', value: <span className="font-mono">{permit.reference}</span> },
-            { label: 'Site', value: site?.name ?? '—' },
-            { label: 'Issued by', value: issuerAccount?.name ?? '—' },
-            { label: 'Issued at', value: new Date(permit.issuedAt).toLocaleString() },
-            { label: 'Expires at', value: new Date(permit.expiresAt).toLocaleString() },
-            {
-              label: 'Closed at',
-              value: permit.closedAt ? new Date(permit.closedAt).toLocaleString() : '—',
-            },
-          ]}
+    <PageContainer>
+      <div className="space-y-5">
+        <DetailHeader
+          back={{ href: '/confined-space', label: 'Back to permits' }}
+          title={permit.title}
+          subtitle={`${permit.reference} · issued ${new Date(permit.issuedAt).toLocaleString()}`}
+          badge={
+            <Badge
+              variant={
+                permit.status === 'active'
+                  ? 'success'
+                  : permit.status === 'expired'
+                    ? 'destructive'
+                    : 'secondary'
+              }
+            >
+              {permit.status}
+            </Badge>
+          }
+          actions={
+            <>
+              {permit.status === 'open' ? (
+                <form action={activatePermit} className="inline">
+                  <input type="hidden" name="id" value={id} />
+                  <Button type="submit">Activate</Button>
+                </form>
+              ) : permit.status === 'active' ? (
+                <form action={closePermit} className="inline">
+                  <input type="hidden" name="id" value={id} />
+                  <Button type="submit" variant="outline">Close permit</Button>
+                </form>
+              ) : null}
+            </>
+          }
         />
-        <div className="mt-4 space-y-2 text-sm">
-          <TextBlock label="Space description">{permit.spaceDescription}</TextBlock>
-          <TextBlock label="Hazards identified">
-            {permit.hazardIdentification.length > 0 ? (
-              <ul className="list-disc pl-5">
-                {permit.hazardIdentification.map((h, i) => (
-                  <li key={i}>{h}</li>
-                ))}
-              </ul>
-            ) : (
-              <span className="text-slate-500">—</span>
-            )}
-          </TextBlock>
-          <TextBlock label="Rescue plan">
-            {permit.rescuePlan ?? <span className="text-slate-500">—</span>}
-          </TextBlock>
-        </div>
-      </Section>
 
-      <Section title={`Atmospheric readings (${readings.length})`}>
-        {readings.length === 0 ? (
-          <p className="text-sm text-slate-500">No readings recorded yet.</p>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Time</TableHead>
-                <TableHead>O₂ %</TableHead>
-                <TableHead>LEL %</TableHead>
-                <TableHead>H₂S ppm</TableHead>
-                <TableHead>CO ppm</TableHead>
-                <TableHead>Sensor</TableHead>
-                <TableHead>Result</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {readings.map((r) => (
-                <TableRow key={r.id}>
-                  <TableCell>{new Date(r.recordedAt).toLocaleString()}</TableCell>
-                  <TableCell>{r.oxygenPct ?? '—'}</TableCell>
-                  <TableCell>{r.lelPct ?? '—'}</TableCell>
-                  <TableCell>{r.h2sPpm ?? '—'}</TableCell>
-                  <TableCell>{r.coPpm ?? '—'}</TableCell>
-                  <TableCell className="text-slate-600">{r.sensorIdentifier ?? '—'}</TableCell>
-                  <TableCell>
-                    <Badge variant={r.outOfSpec ? 'destructive' : 'success'}>
-                      {r.outOfSpec ? 'Out of spec' : 'Pass'}
-                    </Badge>
-                  </TableCell>
+        {outOfSpec ? (
+          <Alert variant="destructive">
+            <AlertTriangle size={16} />
+            <AlertTitle>Out-of-spec atmospheric reading detected</AlertTitle>
+            <AlertDescription>
+              Most recent out-of-spec reading was on{' '}
+              {new Date(outOfSpec.recordedAt).toLocaleString()}. Review before allowing further entry.
+            </AlertDescription>
+          </Alert>
+        ) : null}
+
+        <Section title="Permit details">
+          <DetailGrid
+            rows={[
+              { label: 'Reference', value: <span className="font-mono">{permit.reference}</span> },
+              { label: 'Site', value: site?.name ?? '—' },
+              { label: 'Issued by', value: issuerAccount?.name ?? '—' },
+              { label: 'Issued at', value: new Date(permit.issuedAt).toLocaleString() },
+              { label: 'Expires at', value: new Date(permit.expiresAt).toLocaleString() },
+              {
+                label: 'Closed at',
+                value: permit.closedAt ? new Date(permit.closedAt).toLocaleString() : '—',
+              },
+            ]}
+          />
+          <div className="mt-4 space-y-2 text-sm">
+            <TextBlock label="Space description">{permit.spaceDescription}</TextBlock>
+            <TextBlock label="Hazards identified">
+              {permit.hazardIdentification.length > 0 ? (
+                <ul className="list-disc pl-5">
+                  {permit.hazardIdentification.map((h, i) => (
+                    <li key={i}>{h}</li>
+                  ))}
+                </ul>
+              ) : (
+                <span className="text-slate-500">—</span>
+              )}
+            </TextBlock>
+            <TextBlock label="Rescue plan">
+              {permit.rescuePlan ?? <span className="text-slate-500">—</span>}
+            </TextBlock>
+          </div>
+        </Section>
+
+        <Section title={`Atmospheric readings (${readings.length})`}>
+          {readings.length === 0 ? (
+            <p className="text-sm text-slate-500">No readings recorded yet.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Time</TableHead>
+                  <TableHead>O₂ %</TableHead>
+                  <TableHead>LEL %</TableHead>
+                  <TableHead>H₂S ppm</TableHead>
+                  <TableHead>CO ppm</TableHead>
+                  <TableHead>Sensor</TableHead>
+                  <TableHead>Result</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
+              </TableHeader>
+              <TableBody>
+                {readings.map((r) => (
+                  <TableRow key={r.id}>
+                    <TableCell>{new Date(r.recordedAt).toLocaleString()}</TableCell>
+                    <TableCell>{r.oxygenPct ?? '—'}</TableCell>
+                    <TableCell>{r.lelPct ?? '—'}</TableCell>
+                    <TableCell>{r.h2sPpm ?? '—'}</TableCell>
+                    <TableCell>{r.coPpm ?? '—'}</TableCell>
+                    <TableCell className="text-slate-600">{r.sensorIdentifier ?? '—'}</TableCell>
+                    <TableCell>
+                      <Badge variant={r.outOfSpec ? 'destructive' : 'success'}>
+                        {r.outOfSpec ? 'Out of spec' : 'Pass'}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
 
-        <Card className="mt-4 border-dashed">
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <Wind size={14} /> Record a new reading
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form action={addReading} className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <input type="hidden" name="permitId" value={id} />
-              <Field label="O₂ %">
-                <Input name="oxygenPct" type="number" step="0.1" placeholder="20.9" />
-              </Field>
-              <Field label="LEL %">
-                <Input name="lelPct" type="number" step="0.1" placeholder="0" />
-              </Field>
-              <Field label="H₂S ppm">
-                <Input name="h2sPpm" type="number" step="0.1" placeholder="0" />
-              </Field>
-              <Field label="CO ppm">
-                <Input name="coPpm" type="number" step="0.1" placeholder="0" />
-              </Field>
-              <Field label="Sensor ID" className="sm:col-span-2">
-                <Input name="sensorIdentifier" placeholder="e.g. GASMON-04" />
-              </Field>
-              <Field label="Note" className="sm:col-span-2">
-                <Input name="note" placeholder="Optional" />
-              </Field>
-              <div className="sm:col-span-4">
-                <Button type="submit">
-                  <Activity size={14} /> Record reading
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-      </Section>
-    </div>
+          <Card className="mt-4 border-dashed">
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <Wind size={14} /> Record a new reading
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form action={addReading} className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <input type="hidden" name="permitId" value={id} />
+                <Field label="O₂ %">
+                  <Input name="oxygenPct" type="number" step="0.1" placeholder="20.9" />
+                </Field>
+                <Field label="LEL %">
+                  <Input name="lelPct" type="number" step="0.1" placeholder="0" />
+                </Field>
+                <Field label="H₂S ppm">
+                  <Input name="h2sPpm" type="number" step="0.1" placeholder="0" />
+                </Field>
+                <Field label="CO ppm">
+                  <Input name="coPpm" type="number" step="0.1" placeholder="0" />
+                </Field>
+                <Field label="Sensor ID" className="sm:col-span-2">
+                  <Input name="sensorIdentifier" placeholder="e.g. GASMON-04" />
+                </Field>
+                <Field label="Note" className="sm:col-span-2">
+                  <Input name="note" placeholder="Optional" />
+                </Field>
+                <div className="sm:col-span-4">
+                  <Button type="submit">
+                    <Activity size={14} /> Record reading
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </Section>
+      </div>
+    </PageContainer>
   )
 }
 

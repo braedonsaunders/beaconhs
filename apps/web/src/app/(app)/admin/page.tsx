@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@beaconhs/ui'
+import { PageContainer } from '@/components/page-layout'
 
 export const metadata = { title: 'Admin' }
 
@@ -15,21 +16,23 @@ const SECTIONS = [
 
 export default function AdminPage() {
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Admin</h1>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {SECTIONS.map((s) => (
-          <Link key={s.href} href={s.href as any} className="block">
-            <Card className="transition-shadow hover:shadow-md">
-              <CardHeader>
-                <CardTitle>{s.title}</CardTitle>
-                <CardDescription>{s.desc}</CardDescription>
-              </CardHeader>
-              <CardContent />
-            </Card>
-          </Link>
-        ))}
+    <PageContainer>
+      <div className="space-y-6">
+        <h1 className="text-2xl font-semibold">Admin</h1>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {SECTIONS.map((s) => (
+            <Link key={s.href} href={s.href as any} className="block">
+              <Card className="transition-shadow hover:shadow-md">
+                <CardHeader>
+                  <CardTitle>{s.title}</CardTitle>
+                  <CardDescription>{s.desc}</CardDescription>
+                </CardHeader>
+                <CardContent />
+              </Card>
+            </Link>
+          ))}
+        </div>
       </div>
-    </div>
+    </PageContainer>
   )
 }

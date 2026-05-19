@@ -19,6 +19,7 @@ import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
+import { ListPageLayout } from '@/components/page-layout'
 
 export const metadata = { title: 'PPE' }
 
@@ -92,22 +93,26 @@ export default async function PpePage({
   const sortProps = { basePath: '/ppe', currentParams: sp, dir: params.dir }
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="PPE"
-        description="Issue, return, replace, discard — plus scheduled inspections for inspectable PPE."
-      />
-      <div className="flex items-center gap-3">
-        <SearchInput placeholder="Search type or serial #" />
-      </div>
-      <FilterChips
-        basePath="/ppe"
-        currentParams={sp}
-        paramKey="status"
-        label="Status"
-        options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
-      />
-
+    <ListPageLayout
+      header={
+        <>
+          <PageHeader
+            title="PPE"
+            description="Issue, return, replace, discard — plus scheduled inspections for inspectable PPE."
+          />
+          <div className="flex items-center gap-3">
+            <SearchInput placeholder="Search type or serial #" />
+          </div>
+          <FilterChips
+            basePath="/ppe"
+            currentParams={sp}
+            paramKey="status"
+            label="Status"
+            options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
+          />
+        </>
+      }
+    >
       {rows.length === 0 ? (
         <EmptyState icon={<HardHat size={32} />} title="No PPE matches" />
       ) : (
@@ -155,6 +160,6 @@ export default async function PpePage({
           />
         </>
       )}
-    </div>
+    </ListPageLayout>
   )
 }

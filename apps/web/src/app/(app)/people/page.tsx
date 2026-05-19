@@ -17,6 +17,7 @@ import { parseListParams } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
+import { ListPageLayout } from '@/components/page-layout'
 
 export const metadata = { title: 'People' }
 
@@ -78,19 +79,24 @@ export default async function PeoplePage({
   const sortProps = { basePath: '/people', currentParams: sp, dir: params.dir }
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="People"
-        description="Workers, contractors, supervisors. Sync from your HRIS via the plugin framework."
-        actions={
-          <Link href="/people/new">
-            <Button>Add person</Button>
-          </Link>
-        }
-      />
-      <div className="flex items-center gap-3">
-        <SearchInput placeholder="Search by name or employee #" />
-      </div>
+    <ListPageLayout
+      header={
+        <>
+          <PageHeader
+            title="People"
+            description="Workers, contractors, supervisors. Sync from your HRIS via the plugin framework."
+            actions={
+              <Link href="/people/new">
+                <Button>Add person</Button>
+              </Link>
+            }
+          />
+          <div className="flex items-center gap-3">
+            <SearchInput placeholder="Search by name or employee #" />
+          </div>
+        </>
+      }
+    >
       {rows.length === 0 ? (
         <EmptyState
           icon={<Users size={32} />}
@@ -137,6 +143,6 @@ export default async function PeoplePage({
           />
         </>
       )}
-    </div>
+    </ListPageLayout>
   )
 }

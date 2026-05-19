@@ -24,6 +24,7 @@ import { submitFormResponse } from './actions'
 import { SignaturePad } from '@/components/signature-pad'
 import { FileUpload, dataUrlToFile, type AttachedFile } from '@/components/file-upload'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
+import { WizardLayout } from '@/components/page-layout'
 
 export function FormRenderer({
   templateId,
@@ -115,35 +116,62 @@ export function FormRenderer({
   const completion = Math.round((step / Math.max(1, totalSteps - 1)) * 100)
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
-      <header className="space-y-1">
-        <Link
-          href={`/forms/templates/${templateId}`}
-          className="text-sm text-teal-700 hover:underline"
-        >
-          ← Back to template
-        </Link>
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold">{templateName}</h1>
-          <Badge variant="outline">v{version}</Badge>
+    <WizardLayout
+      header={
+        <div className="space-y-2">
+          <Link
+            href={`/forms/templates/${templateId}`}
+            className="text-xs text-teal-700 hover:underline"
+          >
+            ← Back to template
+          </Link>
+          <div className="flex items-center justify-between gap-2">
+            <h1 className="text-xl font-semibold truncate">{templateName}</h1>
+            <Badge variant="outline">v{version}</Badge>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-slate-200">
+            <div
+              className="h-full rounded-full bg-teal-600 transition-all"
+              style={{ width: `${Math.max(8, completion)}%` }}
+            />
+          </div>
+          <div className="text-xs text-slate-500">
+            Step {step + 1} of {totalSteps} · {section.title?.en ?? section.id}
+          </div>
         </div>
-        <div className="h-1.5 rounded-full bg-slate-200">
-          <div
-            className="h-full rounded-full bg-teal-600 transition-all"
-            style={{ width: `${Math.max(8, completion)}%` }}
-          />
+      }
+      footer={
+        <div className="space-y-2">
+          {serverError ? (
+            <Alert variant="destructive">
+              <AlertTitle>Submit failed</AlertTitle>
+              <AlertDescription>{serverError}</AlertDescription>
+            </Alert>
+          ) : null}
+          <div className="flex items-center justify-between gap-2">
+            <Button variant="outline" onClick={back} disabled={step === 0}>
+              <ChevronLeft size={14} />
+              Back
+            </Button>
+            {step < totalSteps - 1 ? (
+              <Button onClick={next}>
+                Next <ChevronRight size={14} />
+              </Button>
+            ) : (
+              <Button onClick={submit} disabled={pending}>
+                <Check size={14} />
+                {pending ? 'Submitting…' : 'Submit'}
+              </Button>
+            )}
+          </div>
         </div>
-        <div className="text-xs text-slate-500">
-          Step {step + 1} of {totalSteps} · {section.title?.en ?? section.id}
-        </div>
-      </header>
-
+      }
+    >
       <Card>
         <CardHeader>
           <CardTitle>{section.title?.en ?? 'Section'}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Site picker always shown on the first section */}
           {step === 0 ? (
             <div className="space-y-1">
               <Label>Site</Label>
@@ -180,31 +208,7 @@ export function FormRenderer({
           )}
         </CardContent>
       </Card>
-
-      {serverError ? (
-        <Alert variant="destructive">
-          <AlertTitle>Submit failed</AlertTitle>
-          <AlertDescription>{serverError}</AlertDescription>
-        </Alert>
-      ) : null}
-
-      <div className="flex items-center justify-between gap-2">
-        <Button variant="outline" onClick={back} disabled={step === 0}>
-          <ChevronLeft size={14} />
-          Back
-        </Button>
-        {step < totalSteps - 1 ? (
-          <Button onClick={next}>
-            Next <ChevronRight size={14} />
-          </Button>
-        ) : (
-          <Button onClick={submit} disabled={pending}>
-            <Check size={14} />
-            {pending ? 'Submitting…' : 'Submit'}
-          </Button>
-        )}
-      </div>
-    </div>
+    </WizardLayout>
   )
 }
 

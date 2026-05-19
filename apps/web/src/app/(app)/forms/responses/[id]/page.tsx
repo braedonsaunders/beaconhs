@@ -24,6 +24,7 @@ import {
 import { requireRequestContext } from '@/lib/auth'
 import { DetailGrid } from '@/components/detail-grid'
 import { Section } from '@/components/section'
+import { PageContainer } from '@/components/page-layout'
 
 export const dynamic = 'force-dynamic'
 
@@ -68,72 +69,76 @@ export default async function FormResponsePage({ params }: { params: Promise<{ i
   const { response, template, version, site, subjectPerson, submitterAccount, steps } = data
 
   return (
-    <div className="space-y-5">
-      <DetailHeader
-        back={{ href: '/forms', label: 'Back to forms' }}
-        title={template.name}
-        subtitle={`${id.slice(0, 8)} · v${version.version}`}
-        badge={
-          <Badge variant={response.status === 'closed' || response.status === 'submitted' ? 'success' : 'warning'}>
-            {response.status.replace('_', ' ')}
-          </Badge>
-        }
-        actions={
-          <Button variant="outline">
-            <FileText size={14} /> PDF
-          </Button>
-        }
-      />
-
-      <Section title="Overview">
-        <DetailGrid
-          rows={[
-            {
-              label: 'Template',
-              value: (
-                <Link href={`/forms/templates/${template.id}`} className="text-teal-700 hover:underline">
-                  {template.name}
-                </Link>
-              ),
-            },
-            { label: 'Template version', value: `v${version.version}` },
-            { label: 'Status', value: response.status.replace('_', ' ') },
-            { label: 'Current step', value: response.currentStep ?? '—' },
-            { label: 'Site', value: site?.name ?? '—' },
-            { label: 'Subject', value: subjectPerson ? `${subjectPerson.firstName} ${subjectPerson.lastName}` : '—' },
-            { label: 'Submitted by', value: submitterAccount?.name ?? '—' },
-            { label: 'Submitted at', value: response.submittedAt ? new Date(response.submittedAt).toLocaleString() : '—' },
-            { label: 'Closed at', value: response.closedAt ? new Date(response.closedAt).toLocaleString() : '—' },
-          ]}
+    <PageContainer>
+      <div className="space-y-5">
+        <DetailHeader
+          back={{ href: '/forms', label: 'Back to forms' }}
+          title={template.name}
+          subtitle={`${id.slice(0, 8)} · v${version.version}`}
+          badge={
+            <Badge variant={response.status === 'closed' || response.status === 'submitted' ? 'success' : 'warning'}>
+              {response.status.replace('_', ' ')}
+            </Badge>
+          }
+          actions={
+            <Link href={`/forms/responses/${id}/pdf`}>
+              <Button variant="outline">
+                <FileText size={14} /> PDF
+              </Button>
+            </Link>
+          }
         />
-      </Section>
 
-      {version.schema.sections.map((sec) => (
-        <Section key={sec.id} title={sec.title?.en ?? sec.id} subtitle={sec.repeating ? 'repeating section' : undefined}>
-          {sec.repeating ? renderRepeating(sec, response.data) : renderFlat(sec, response.data)}
+        <Section title="Overview">
+          <DetailGrid
+            rows={[
+              {
+                label: 'Template',
+                value: (
+                  <Link href={`/forms/templates/${template.id}`} className="text-teal-700 hover:underline">
+                    {template.name}
+                  </Link>
+                ),
+              },
+              { label: 'Template version', value: `v${version.version}` },
+              { label: 'Status', value: response.status.replace('_', ' ') },
+              { label: 'Current step', value: response.currentStep ?? '—' },
+              { label: 'Site', value: site?.name ?? '—' },
+              { label: 'Subject', value: subjectPerson ? `${subjectPerson.firstName} ${subjectPerson.lastName}` : '—' },
+              { label: 'Submitted by', value: submitterAccount?.name ?? '—' },
+              { label: 'Submitted at', value: response.submittedAt ? new Date(response.submittedAt).toLocaleString() : '—' },
+              { label: 'Closed at', value: response.closedAt ? new Date(response.closedAt).toLocaleString() : '—' },
+            ]}
+          />
         </Section>
-      ))}
 
-      <Section title={`Workflow steps (${steps.length})`} defaultOpen={steps.length > 0}>
-        {steps.length === 0 ? (
-          <p className="text-sm text-slate-500">No steps recorded for this response.</p>
-        ) : (
-          <ul className="divide-y divide-slate-100 text-sm">
-            {steps.map((s) => (
-              <li key={s.id} className="flex items-center justify-between py-2">
-                <div>
-                  <div className="font-medium">{s.stepKey}</div>
-                  <div className="text-xs text-slate-500">
-                    {s.signedAt ? `signed ${new Date(s.signedAt).toLocaleString()}` : 'awaiting signature'}
+        {version.schema.sections.map((sec) => (
+          <Section key={sec.id} title={sec.title?.en ?? sec.id} subtitle={sec.repeating ? 'repeating section' : undefined}>
+            {sec.repeating ? renderRepeating(sec, response.data) : renderFlat(sec, response.data)}
+          </Section>
+        ))}
+
+        <Section title={`Workflow steps (${steps.length})`} defaultOpen={steps.length > 0}>
+          {steps.length === 0 ? (
+            <p className="text-sm text-slate-500">No steps recorded for this response.</p>
+          ) : (
+            <ul className="divide-y divide-slate-100 text-sm">
+              {steps.map((s) => (
+                <li key={s.id} className="flex items-center justify-between py-2">
+                  <div>
+                    <div className="font-medium">{s.stepKey}</div>
+                    <div className="text-xs text-slate-500">
+                      {s.signedAt ? `signed ${new Date(s.signedAt).toLocaleString()}` : 'awaiting signature'}
+                    </div>
                   </div>
-                </div>
-                <Badge variant={s.signedAt ? 'success' : 'warning'}>{s.signedAt ? 'signed' : 'open'}</Badge>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
-    </div>
+                  <Badge variant={s.signedAt ? 'success' : 'warning'}>{s.signedAt ? 'signed' : 'open'}</Badge>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+      </div>
+    </PageContainer>
   )
 }
 

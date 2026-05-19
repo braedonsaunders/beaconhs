@@ -22,6 +22,7 @@ import { parseListParams, pickString } from '@/lib/list-params'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
+import { ListPageLayout } from '@/components/page-layout'
 
 export const metadata = { title: 'Lone worker' }
 
@@ -93,34 +94,38 @@ export default async function LoneWorkerPage({
   const now = Date.now()
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="Lone worker"
-        description="Timer-based check-ins with auto-escalation. Workers on solo tasks open a session; the scheduler watches and pages the supervisor on missed check-ins."
-        actions={
-          <Link href="/lone-worker/new">
-            <Button>Start session</Button>
-          </Link>
-        }
-      />
+    <ListPageLayout
+      header={
+        <>
+          <PageHeader
+            title="Lone worker"
+            description="Timer-based check-ins with auto-escalation. Workers on solo tasks open a session; the scheduler watches and pages the supervisor on missed check-ins."
+            actions={
+              <Link href="/lone-worker/new">
+                <Button>Start session</Button>
+              </Link>
+            }
+          />
 
-      {activeCount > 0 ? (
-        <Alert variant="info">
-          <AlertTitle>{activeCount} active session{activeCount === 1 ? '' : 's'}</AlertTitle>
-          <AlertDescription>
-            The scheduled-tick worker checks every minute and escalates any overdue session.
-          </AlertDescription>
-        </Alert>
-      ) : null}
+          {activeCount > 0 ? (
+            <Alert variant="info">
+              <AlertTitle>{activeCount} active session{activeCount === 1 ? '' : 's'}</AlertTitle>
+              <AlertDescription>
+                The scheduled-tick worker checks every minute and escalates any overdue session.
+              </AlertDescription>
+            </Alert>
+          ) : null}
 
-      <FilterChips
-        basePath="/lone-worker"
-        currentParams={sp}
-        paramKey="status"
-        label="Status"
-        options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
-      />
-
+          <FilterChips
+            basePath="/lone-worker"
+            currentParams={sp}
+            paramKey="status"
+            label="Status"
+            options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
+          />
+        </>
+      }
+    >
       {rows.length === 0 ? (
         <EmptyState icon={<Timer size={32} />} title="No sessions yet" />
       ) : (
@@ -188,6 +193,6 @@ export default async function LoneWorkerPage({
           />
         </>
       )}
-    </div>
+    </ListPageLayout>
   )
 }

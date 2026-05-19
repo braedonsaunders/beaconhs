@@ -31,6 +31,7 @@ import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { DetailGrid } from '@/components/detail-grid'
 import { Section } from '@/components/section'
 import { ActivityFeed } from '@/components/activity-feed'
+import { PageContainer } from '@/components/page-layout'
 
 export const dynamic = 'force-dynamic'
 
@@ -119,123 +120,125 @@ export default async function CorrectiveActionPage({ params }: { params: Promise
   const activity = await recentActivityForEntity(ctx, 'corrective_action', id, 25)
 
   return (
-    <div className="space-y-5">
-      <DetailHeader
-        back={{ href: '/corrective-actions', label: 'Back to corrective actions' }}
-        title={ca.title}
-        subtitle={`${ca.reference}${ca.assignedOn ? ` · assigned ${ca.assignedOn}` : ''}`}
-        badge={
-          <div className="flex items-center gap-2">
-            <Badge
-              variant={
-                ca.severity === 'critical' || ca.severity === 'high'
-                  ? 'destructive'
-                  : ca.severity === 'medium'
-                    ? 'warning'
-                    : 'secondary'
-              }
-            >
-              {ca.severity}
-            </Badge>
-            <Badge variant={ca.status === 'closed' ? 'success' : 'warning'}>
-              {ca.status.replace('_', ' ')}
-            </Badge>
-            {ca.locked ? <Badge variant="outline">Locked</Badge> : null}
-          </div>
-        }
-        actions={
-          <Button variant="outline">
-            <FileText size={14} /> PDF
-          </Button>
-        }
-      />
-
-      {ca.locked ? (
-        <Alert variant="warning">
-          <AlertTitle>This action is locked</AlertTitle>
-          <AlertDescription>Closed on {ca.closedAt ? new Date(ca.closedAt).toLocaleDateString() : '—'}.</AlertDescription>
-        </Alert>
-      ) : null}
-
-      <Section title="General">
-        <DetailGrid
-          rows={[
-            { label: 'Reference', value: <span className="font-mono">{ca.reference}</span> },
-            { label: 'Source', value: source ? (
-              <Link href={source.href as any} className="text-teal-700 hover:underline">
-                {source.type} · {source.ref}
-              </Link>
-            ) : ca.source ?? '—' },
-            { label: 'Severity', value: ca.severity },
-            { label: 'Status', value: ca.status.replace('_', ' ') },
-            { label: 'Site', value: site?.name ?? '—' },
-            { label: 'Owner', value: ownerAccount?.name ?? owner?.displayName ?? '—' },
-            { label: 'Assigned on', value: ca.assignedOn ?? '—' },
-            { label: 'Due on', value: ca.dueOn ?? '—' },
-            { label: 'Closed on', value: ca.closedAt ? new Date(ca.closedAt).toLocaleDateString() : '—' },
-          ]}
-        />
-        {ca.description ? (
-          <div className="mt-4">
-            <div className="text-xs uppercase tracking-wide text-slate-500">Description</div>
-            <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{ca.description}</p>
-          </div>
-        ) : null}
-      </Section>
-
-      <Section title="Work">
-        <form action={updateAction} className="space-y-4">
-          <input type="hidden" name="id" value={id} />
-          <div>
-            <Label>Root cause</Label>
-            <Textarea name="rootCause" rows={3} defaultValue={ca.rootCause ?? ''} placeholder="What caused this?" />
-          </div>
-          <div>
-            <Label>Action taken</Label>
-            <Textarea name="actionTaken" rows={4} defaultValue={ca.actionTaken ?? ''} placeholder="What's been done to fix it?" />
-          </div>
-          <div>
-            <Label>Verification notes</Label>
-            <Textarea
-              name="verificationNotes"
-              rows={2}
-              defaultValue={ca.verificationNotes ?? ''}
-              placeholder="What did the verifier check?"
-            />
-          </div>
-          <div className="flex justify-end">
-            <Button type="submit" disabled={ca.locked}>
-              Save work
-            </Button>
-          </div>
-        </form>
-      </Section>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Status</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form action={updateStatus} className="flex items-end gap-3">
-            <input type="hidden" name="id" value={id} />
-            <div className="space-y-1.5">
-              <Label>Move to</Label>
-              <Select name="status" defaultValue={ca.status}>
-                {STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {s.replace('_', ' ')}
-                  </option>
-                ))}
-              </Select>
+    <PageContainer>
+      <div className="space-y-5">
+        <DetailHeader
+          back={{ href: '/corrective-actions', label: 'Back to corrective actions' }}
+          title={ca.title}
+          subtitle={`${ca.reference}${ca.assignedOn ? ` · assigned ${ca.assignedOn}` : ''}`}
+          badge={
+            <div className="flex items-center gap-2">
+              <Badge
+                variant={
+                  ca.severity === 'critical' || ca.severity === 'high'
+                    ? 'destructive'
+                    : ca.severity === 'medium'
+                      ? 'warning'
+                      : 'secondary'
+                }
+              >
+                {ca.severity}
+              </Badge>
+              <Badge variant={ca.status === 'closed' ? 'success' : 'warning'}>
+                {ca.status.replace('_', ' ')}
+              </Badge>
+              {ca.locked ? <Badge variant="outline">Locked</Badge> : null}
             </div>
-            <Button type="submit">Update</Button>
-          </form>
-        </CardContent>
-      </Card>
+          }
+          actions={
+            <Button variant="outline">
+              <FileText size={14} /> PDF
+            </Button>
+          }
+        />
 
-      <Section title={`Activity (${activity.length})`} defaultOpen={false}>
-        <ActivityFeed entries={activity} />
-      </Section>
-    </div>
+        {ca.locked ? (
+          <Alert variant="warning">
+            <AlertTitle>This action is locked</AlertTitle>
+            <AlertDescription>Closed on {ca.closedAt ? new Date(ca.closedAt).toLocaleDateString() : '—'}.</AlertDescription>
+          </Alert>
+        ) : null}
+
+        <Section title="General">
+          <DetailGrid
+            rows={[
+              { label: 'Reference', value: <span className="font-mono">{ca.reference}</span> },
+              { label: 'Source', value: source ? (
+                <Link href={source.href as any} className="text-teal-700 hover:underline">
+                  {source.type} · {source.ref}
+                </Link>
+              ) : ca.source ?? '—' },
+              { label: 'Severity', value: ca.severity },
+              { label: 'Status', value: ca.status.replace('_', ' ') },
+              { label: 'Site', value: site?.name ?? '—' },
+              { label: 'Owner', value: ownerAccount?.name ?? owner?.displayName ?? '—' },
+              { label: 'Assigned on', value: ca.assignedOn ?? '—' },
+              { label: 'Due on', value: ca.dueOn ?? '—' },
+              { label: 'Closed on', value: ca.closedAt ? new Date(ca.closedAt).toLocaleDateString() : '—' },
+            ]}
+          />
+          {ca.description ? (
+            <div className="mt-4">
+              <div className="text-xs uppercase tracking-wide text-slate-500">Description</div>
+              <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{ca.description}</p>
+            </div>
+          ) : null}
+        </Section>
+
+        <Section title="Work">
+          <form action={updateAction} className="space-y-4">
+            <input type="hidden" name="id" value={id} />
+            <div>
+              <Label>Root cause</Label>
+              <Textarea name="rootCause" rows={3} defaultValue={ca.rootCause ?? ''} placeholder="What caused this?" />
+            </div>
+            <div>
+              <Label>Action taken</Label>
+              <Textarea name="actionTaken" rows={4} defaultValue={ca.actionTaken ?? ''} placeholder="What's been done to fix it?" />
+            </div>
+            <div>
+              <Label>Verification notes</Label>
+              <Textarea
+                name="verificationNotes"
+                rows={2}
+                defaultValue={ca.verificationNotes ?? ''}
+                placeholder="What did the verifier check?"
+              />
+            </div>
+            <div className="flex justify-end">
+              <Button type="submit" disabled={ca.locked}>
+                Save work
+              </Button>
+            </div>
+          </form>
+        </Section>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Status</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form action={updateStatus} className="flex items-end gap-3">
+              <input type="hidden" name="id" value={id} />
+              <div className="space-y-1.5">
+                <Label>Move to</Label>
+                <Select name="status" defaultValue={ca.status}>
+                  {STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {s.replace('_', ' ')}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <Button type="submit">Update</Button>
+            </form>
+          </CardContent>
+        </Card>
+
+        <Section title={`Activity (${activity.length})`} defaultOpen={false}>
+          <ActivityFeed entries={activity} />
+        </Section>
+      </div>
+    </PageContainer>
   )
 }

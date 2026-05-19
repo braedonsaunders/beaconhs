@@ -16,6 +16,7 @@ import {
 } from '@beaconhs/ui'
 import { csPermits, orgUnits } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { PageContainer } from '@/components/page-layout'
 
 export const metadata = { title: 'New permit' }
 
@@ -74,69 +75,71 @@ export default async function NewPermitPage() {
   )
 
   return (
-    <div className="max-w-3xl space-y-6">
-      <DetailHeader
-        back={{ href: '/confined-space', label: 'Back to permits' }}
-        title="New confined-space permit"
-      />
-      <Alert variant="info">
-        <AlertTitle>About confined-space permits</AlertTitle>
-        <AlertDescription>
-          The permit lifecycle is open → active → closed. Atmospheric readings out of spec (O₂ &lt;
-          19.5% or &gt; 23%, LEL ≥ 10%, H₂S ≥ 10 ppm, CO ≥ 25 ppm) raise a critical alarm on the
-          permit page.
-        </AlertDescription>
-      </Alert>
-      <Card>
-        <CardContent className="pt-6">
-          <form action={createPermit} className="space-y-4">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label="Title" required className="sm:col-span-2">
-                <Input name="title" required placeholder="e.g. Tank 3 internal inspection" />
-              </Field>
-              <Field label="Site">
-                <Select name="siteOrgUnitId" defaultValue="">
-                  <option value="">—</option>
-                  {sites.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="Valid for (hours)">
-                <Input name="validHours" type="number" min="1" max="24" defaultValue="8" />
-              </Field>
-              <Field label="Space description" required className="sm:col-span-2">
-                <Textarea
-                  name="spaceDescription"
-                  rows={3}
-                  required
-                  placeholder="Type, location, manway access, ventilation"
-                />
-              </Field>
-              <Field label="Hazards identified (one per line)" className="sm:col-span-2">
-                <Textarea
-                  name="hazards"
-                  rows={3}
-                  placeholder={`H2S\nLow oxygen\nMechanical entrapment`}
-                />
-              </Field>
-              <Field label="Rescue plan" className="sm:col-span-2">
-                <Textarea
-                  name="rescuePlan"
-                  rows={3}
-                  placeholder="Attendant location, communication method, retrieval plan"
-                />
-              </Field>
-            </div>
-            <div className="flex justify-end">
-              <Button type="submit">Open permit</Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
+    <PageContainer>
+      <div className="max-w-3xl space-y-6">
+        <DetailHeader
+          back={{ href: '/confined-space', label: 'Back to permits' }}
+          title="New confined-space permit"
+        />
+        <Alert variant="info">
+          <AlertTitle>About confined-space permits</AlertTitle>
+          <AlertDescription>
+            The permit lifecycle is open → active → closed. Atmospheric readings out of spec (O₂ &lt;
+            19.5% or &gt; 23%, LEL ≥ 10%, H₂S ≥ 10 ppm, CO ≥ 25 ppm) raise a critical alarm on the
+            permit page.
+          </AlertDescription>
+        </Alert>
+        <Card>
+          <CardContent className="pt-6">
+            <form action={createPermit} className="space-y-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Field label="Title" required className="sm:col-span-2">
+                  <Input name="title" required placeholder="e.g. Tank 3 internal inspection" />
+                </Field>
+                <Field label="Site">
+                  <Select name="siteOrgUnitId" defaultValue="">
+                    <option value="">—</option>
+                    {sites.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Valid for (hours)">
+                  <Input name="validHours" type="number" min="1" max="24" defaultValue="8" />
+                </Field>
+                <Field label="Space description" required className="sm:col-span-2">
+                  <Textarea
+                    name="spaceDescription"
+                    rows={3}
+                    required
+                    placeholder="Type, location, manway access, ventilation"
+                  />
+                </Field>
+                <Field label="Hazards identified (one per line)" className="sm:col-span-2">
+                  <Textarea
+                    name="hazards"
+                    rows={3}
+                    placeholder={`H2S\nLow oxygen\nMechanical entrapment`}
+                  />
+                </Field>
+                <Field label="Rescue plan" className="sm:col-span-2">
+                  <Textarea
+                    name="rescuePlan"
+                    rows={3}
+                    placeholder="Attendant location, communication method, retrieval plan"
+                  />
+                </Field>
+              </div>
+              <div className="flex justify-end">
+                <Button type="submit">Open permit</Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    </PageContainer>
   )
 }
 

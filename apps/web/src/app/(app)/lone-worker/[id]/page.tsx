@@ -19,6 +19,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { DetailGrid } from '@/components/detail-grid'
 import { Section } from '@/components/section'
+import { PageContainer } from '@/components/page-layout'
 
 export const dynamic = 'force-dynamic'
 
@@ -103,80 +104,82 @@ export default async function LoneWorkerSessionPage({ params }: { params: Promis
   const minsUntilCheckin = Math.round((new Date(session.nextCheckinDueAt).getTime() - Date.now()) / 60_000)
 
   return (
-    <div className="space-y-5">
-      <DetailHeader
-        back={{ href: '/lone-worker', label: 'Back to sessions' }}
-        title={workerAccount?.name ?? 'Lone-worker session'}
-        subtitle={session.task ?? 'No task description'}
-        badge={
-          <Badge variant={isActive ? 'success' : session.status === 'missed' ? 'destructive' : 'secondary'}>
-            {session.status}
-          </Badge>
-        }
-        actions={
-          isActive ? (
-            <>
-              <form action={manualCheckin} className="inline">
-                <input type="hidden" name="sessionId" value={id} />
-                <Button type="submit">Check in</Button>
-              </form>
-              <form action={endSession} className="inline">
-                <input type="hidden" name="sessionId" value={id} />
-                <Button type="submit" variant="outline">End session</Button>
-              </form>
-            </>
-          ) : null
-        }
-      />
+    <PageContainer>
+      <div className="space-y-5">
+        <DetailHeader
+          back={{ href: '/lone-worker', label: 'Back to sessions' }}
+          title={workerAccount?.name ?? 'Lone-worker session'}
+          subtitle={session.task ?? 'No task description'}
+          badge={
+            <Badge variant={isActive ? 'success' : session.status === 'missed' ? 'destructive' : 'secondary'}>
+              {session.status}
+            </Badge>
+          }
+          actions={
+            isActive ? (
+              <>
+                <form action={manualCheckin} className="inline">
+                  <input type="hidden" name="sessionId" value={id} />
+                  <Button type="submit">Check in</Button>
+                </form>
+                <form action={endSession} className="inline">
+                  <input type="hidden" name="sessionId" value={id} />
+                  <Button type="submit" variant="outline">End session</Button>
+                </form>
+              </>
+            ) : null
+          }
+        />
 
-      {overdue ? (
-        <Alert variant="destructive">
-          <AlertTitle>Check-in overdue</AlertTitle>
-          <AlertDescription>
-            Next check-in was due {Math.abs(minsUntilCheckin)} minute(s) ago. The scheduled-tick
-            worker will escalate after the grace period.
-          </AlertDescription>
-        </Alert>
-      ) : null}
+        {overdue ? (
+          <Alert variant="destructive">
+            <AlertTitle>Check-in overdue</AlertTitle>
+            <AlertDescription>
+              Next check-in was due {Math.abs(minsUntilCheckin)} minute(s) ago. The scheduled-tick
+              worker will escalate after the grace period.
+            </AlertDescription>
+          </Alert>
+        ) : null}
 
-      <DetailGrid
-        rows={[
-          { label: 'Worker', value: workerAccount?.name ?? '—' },
-          { label: 'Site', value: site?.name ?? '—' },
-          { label: 'Started', value: new Date(session.startedAt).toLocaleString() },
-          { label: 'Expected end', value: new Date(session.expectedEndAt).toLocaleString() },
-          { label: 'Interval', value: `${session.intervalMinutes} min` },
-          { label: 'Grace period', value: `${session.gracePeriodMinutes} min` },
-          {
-            label: 'Next check-in',
-            value: (
-              <span className={overdue ? 'font-medium text-red-700' : ''}>
-                {new Date(session.nextCheckinDueAt).toLocaleString()}{' '}
-                {isActive ? `(${minsUntilCheckin > 0 ? `in ${minsUntilCheckin}m` : `${Math.abs(minsUntilCheckin)}m overdue`})` : ''}
-              </span>
-            ),
-          },
-          { label: 'Ended', value: session.endedAt ? new Date(session.endedAt).toLocaleString() : '—' },
-        ]}
-      />
+        <DetailGrid
+          rows={[
+            { label: 'Worker', value: workerAccount?.name ?? '—' },
+            { label: 'Site', value: site?.name ?? '—' },
+            { label: 'Started', value: new Date(session.startedAt).toLocaleString() },
+            { label: 'Expected end', value: new Date(session.expectedEndAt).toLocaleString() },
+            { label: 'Interval', value: `${session.intervalMinutes} min` },
+            { label: 'Grace period', value: `${session.gracePeriodMinutes} min` },
+            {
+              label: 'Next check-in',
+              value: (
+                <span className={overdue ? 'font-medium text-red-700' : ''}>
+                  {new Date(session.nextCheckinDueAt).toLocaleString()}{' '}
+                  {isActive ? `(${minsUntilCheckin > 0 ? `in ${minsUntilCheckin}m` : `${Math.abs(minsUntilCheckin)}m overdue`})` : ''}
+                </span>
+              ),
+            },
+            { label: 'Ended', value: session.endedAt ? new Date(session.endedAt).toLocaleString() : '—' },
+          ]}
+        />
 
-      <Section title={`Check-in log (${checkins.length})`}>
-        {checkins.length === 0 ? (
-          <p className="text-sm text-slate-500">No check-ins yet.</p>
-        ) : (
-          <ul className="divide-y divide-slate-100 text-sm">
-            {checkins.map((c) => (
-              <li key={c.id} className="flex items-center justify-between py-2">
-                <div className="flex items-center gap-2">
-                  <Timer size={14} className="text-slate-400" />
-                  <span className="font-medium">{c.kind.replace('_', ' ')}</span>
-                </div>
-                <span className="text-xs text-slate-500">{new Date(c.recordedAt).toLocaleString()}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
-    </div>
+        <Section title={`Check-in log (${checkins.length})`}>
+          {checkins.length === 0 ? (
+            <p className="text-sm text-slate-500">No check-ins yet.</p>
+          ) : (
+            <ul className="divide-y divide-slate-100 text-sm">
+              {checkins.map((c) => (
+                <li key={c.id} className="flex items-center justify-between py-2">
+                  <div className="flex items-center gap-2">
+                    <Timer size={14} className="text-slate-400" />
+                    <span className="font-medium">{c.kind.replace('_', ' ')}</span>
+                  </div>
+                  <span className="text-xs text-slate-500">{new Date(c.recordedAt).toLocaleString()}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+      </div>
+    </PageContainer>
   )
 }

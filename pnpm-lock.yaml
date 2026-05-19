@@ -138,6 +138,9 @@ importers:
       '@beaconhs/plugin-sdk':
         specifier: workspace:*
         version: link:../../packages/plugin-sdk
+      '@beaconhs/storage':
+        specifier: workspace:*
+        version: link:../../packages/storage
       bullmq:
         specifier: ^5.21.2
         version: 5.76.10

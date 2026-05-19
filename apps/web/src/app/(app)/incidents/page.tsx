@@ -20,6 +20,7 @@ import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
+import { ListPageLayout } from '@/components/page-layout'
 
 export const metadata = { title: 'Incidents' }
 
@@ -109,37 +110,41 @@ export default async function IncidentsPage({
   const sortProps = { basePath: '/incidents', currentParams: sp, dir: params.dir }
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="Incidents"
-        description="Reports, investigations, and closeouts."
-        actions={
-          <Link href="/incidents/new">
-            <Button>Report incident</Button>
-          </Link>
-        }
-      />
+    <ListPageLayout
+      header={
+        <>
+          <PageHeader
+            title="Incidents"
+            description="Reports, investigations, and closeouts."
+            actions={
+              <Link href="/incidents/new">
+                <Button>Report incident</Button>
+              </Link>
+            }
+          />
 
-      <div className="flex flex-wrap items-center gap-3">
-        <SearchInput placeholder="Search reference, title, description…" />
-      </div>
-      <div className="space-y-2">
-        <FilterChips
-          basePath="/incidents"
-          currentParams={sp}
-          paramKey="type"
-          label="Type"
-          options={TYPE_OPTIONS.map((o) => ({ ...o, count: typeCounts[o.value] }))}
-        />
-        <FilterChips
-          basePath="/incidents"
-          currentParams={sp}
-          paramKey="status"
-          label="Status"
-          options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
-        />
-      </div>
-
+          <div className="flex flex-wrap items-center gap-3">
+            <SearchInput placeholder="Search reference, title, description…" />
+          </div>
+          <div className="space-y-2">
+            <FilterChips
+              basePath="/incidents"
+              currentParams={sp}
+              paramKey="type"
+              label="Type"
+              options={TYPE_OPTIONS.map((o) => ({ ...o, count: typeCounts[o.value] }))}
+            />
+            <FilterChips
+              basePath="/incidents"
+              currentParams={sp}
+              paramKey="status"
+              label="Status"
+              options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
+            />
+          </div>
+        </>
+      }
+    >
       {rows.length === 0 ? (
         <EmptyState
           icon={<AlertTriangle size={32} />}
@@ -193,7 +198,7 @@ export default async function IncidentsPage({
           />
         </>
       )}
-    </div>
+    </ListPageLayout>
   )
 }
 

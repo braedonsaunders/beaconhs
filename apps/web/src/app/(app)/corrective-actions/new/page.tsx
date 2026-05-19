@@ -17,6 +17,7 @@ import {
 import { correctiveActions, incidents, orgUnits } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { pickString } from '@/lib/list-params'
+import { PageContainer } from '@/components/page-layout'
 
 export const metadata = { title: 'New corrective action' }
 
@@ -94,67 +95,69 @@ export default async function NewCAPage({
   })
 
   return (
-    <div className="max-w-3xl space-y-6">
-      <DetailHeader back={{ href: '/corrective-actions', label: 'Back to corrective actions' }} title="New corrective action" />
-      {sourceIncident ? (
-        <Alert variant="info">
-          <AlertTitle>Linked to incident</AlertTitle>
-          <AlertDescription>
-            {sourceIncident.reference} · {sourceIncident.title}
-          </AlertDescription>
-        </Alert>
-      ) : null}
-      <Card>
-        <CardContent className="pt-6">
-          <form action={createCA} className="space-y-4">
-            <input type="hidden" name="sourceEntityId" value={presetSourceId ?? ''} />
-            <input type="hidden" name="sourceEntityType" value={presetSourceType ?? ''} />
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label="Title" required className="sm:col-span-2">
-                <Input name="title" required placeholder="What needs to be done?" />
-              </Field>
-              <Field label="Description" className="sm:col-span-2">
-                <Textarea name="description" rows={3} placeholder="Context, scope, expected outcome" />
-              </Field>
-              <Field label="Severity" required>
-                <Select name="severity" defaultValue="medium">
-                  {SEVERITIES.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="Source">
-                <Select name="source" defaultValue={presetSourceType ?? 'observation'}>
-                  {SOURCES.map((s) => (
-                    <option key={s} value={s}>
-                      {s.replace('_', ' ')}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="Site">
-                <Select name="siteOrgUnitId" defaultValue="">
-                  <option value="">—</option>
-                  {sites.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="Due on">
-                <Input name="dueOn" type="date" />
-              </Field>
-            </div>
-            <div className="flex items-center justify-end gap-2">
-              <Button type="submit">Create action</Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
+    <PageContainer>
+      <div className="max-w-3xl space-y-6">
+        <DetailHeader back={{ href: '/corrective-actions', label: 'Back to corrective actions' }} title="New corrective action" />
+        {sourceIncident ? (
+          <Alert variant="info">
+            <AlertTitle>Linked to incident</AlertTitle>
+            <AlertDescription>
+              {sourceIncident.reference} · {sourceIncident.title}
+            </AlertDescription>
+          </Alert>
+        ) : null}
+        <Card>
+          <CardContent className="pt-6">
+            <form action={createCA} className="space-y-4">
+              <input type="hidden" name="sourceEntityId" value={presetSourceId ?? ''} />
+              <input type="hidden" name="sourceEntityType" value={presetSourceType ?? ''} />
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Field label="Title" required className="sm:col-span-2">
+                  <Input name="title" required placeholder="What needs to be done?" />
+                </Field>
+                <Field label="Description" className="sm:col-span-2">
+                  <Textarea name="description" rows={3} placeholder="Context, scope, expected outcome" />
+                </Field>
+                <Field label="Severity" required>
+                  <Select name="severity" defaultValue="medium">
+                    {SEVERITIES.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Source">
+                  <Select name="source" defaultValue={presetSourceType ?? 'observation'}>
+                    {SOURCES.map((s) => (
+                      <option key={s} value={s}>
+                        {s.replace('_', ' ')}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Site">
+                  <Select name="siteOrgUnitId" defaultValue="">
+                    <option value="">—</option>
+                    {sites.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Due on">
+                  <Input name="dueOn" type="date" />
+                </Field>
+              </div>
+              <div className="flex items-center justify-end gap-2">
+                <Button type="submit">Create action</Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    </PageContainer>
   )
 }
 

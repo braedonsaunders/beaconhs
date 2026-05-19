@@ -34,6 +34,7 @@ import {
   trainingRecords,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { PageContainer } from '@/components/page-layout'
 
 export const metadata = { title: 'Dashboard' }
 export const dynamic = 'force-dynamic'
@@ -150,7 +151,8 @@ export default async function DashboardPage() {
   const incidentTrend = incidentDelta < 0 ? 'down' : incidentDelta > 0 ? 'up' : 'flat'
 
   return (
-    <div className="space-y-5">
+    <PageContainer>
+      <div className="space-y-5">
       <header className="flex items-end justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Dashboard</h1>
@@ -368,7 +370,8 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
       </div>
-    </div>
+      </div>
+    </PageContainer>
   )
 }
 

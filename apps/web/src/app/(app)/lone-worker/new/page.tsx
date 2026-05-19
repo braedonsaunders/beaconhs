@@ -16,6 +16,7 @@ import {
 } from '@beaconhs/ui'
 import { lwSessions, orgUnits, tenantUsers, user } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { PageContainer } from '@/components/page-layout'
 
 export const metadata = { title: 'Start lone-worker session' }
 
@@ -74,72 +75,74 @@ export default async function NewLoneWorkerPage() {
   })
 
   return (
-    <div className="max-w-2xl space-y-6">
-      <DetailHeader
-        back={{ href: '/lone-worker', label: 'Back to sessions' }}
-        title="Start lone-worker session"
-      />
-      <Alert variant="info">
-        <AlertTitle>Heads up</AlertTitle>
-        <AlertDescription>
-          The scheduled-tick worker checks every minute. If a check-in is missed past the grace
-          period the session is marked <code>missed</code> and the supervisor is notified.
-        </AlertDescription>
-      </Alert>
-      <Card>
-        <CardContent className="pt-6">
-          <form action={startSession} className="space-y-4">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label="Worker" required className="sm:col-span-2">
-                <Select name="workerTenantUserId" required defaultValue="">
-                  <option value="">— select —</option>
-                  {members.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name} ({m.email})
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="Supervisor">
-                <Select name="supervisorTenantUserId" defaultValue="">
-                  <option value="">—</option>
-                  {members.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="Site">
-                <Select name="siteOrgUnitId" defaultValue="">
-                  <option value="">—</option>
-                  {sites.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="Task" className="sm:col-span-2">
-                <Textarea name="task" rows={2} placeholder="What you're doing alone" />
-              </Field>
-              <Field label="Check-in interval (min)" required>
-                <Input name="intervalMinutes" type="number" min="5" defaultValue="30" required />
-              </Field>
-              <Field label="Grace period (min)" required>
-                <Input name="gracePeriodMinutes" type="number" min="1" defaultValue="10" required />
-              </Field>
-              <Field label="Expected duration (min)" required className="sm:col-span-2">
-                <Input name="durationMinutes" type="number" min="15" defaultValue="120" required />
-              </Field>
-            </div>
-            <div className="flex justify-end">
-              <Button type="submit">Start session</Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
+    <PageContainer>
+      <div className="max-w-2xl space-y-6">
+        <DetailHeader
+          back={{ href: '/lone-worker', label: 'Back to sessions' }}
+          title="Start lone-worker session"
+        />
+        <Alert variant="info">
+          <AlertTitle>Heads up</AlertTitle>
+          <AlertDescription>
+            The scheduled-tick worker checks every minute. If a check-in is missed past the grace
+            period the session is marked <code>missed</code> and the supervisor is notified.
+          </AlertDescription>
+        </Alert>
+        <Card>
+          <CardContent className="pt-6">
+            <form action={startSession} className="space-y-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Field label="Worker" required className="sm:col-span-2">
+                  <Select name="workerTenantUserId" required defaultValue="">
+                    <option value="">— select —</option>
+                    {members.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name} ({m.email})
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Supervisor">
+                  <Select name="supervisorTenantUserId" defaultValue="">
+                    <option value="">—</option>
+                    {members.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Site">
+                  <Select name="siteOrgUnitId" defaultValue="">
+                    <option value="">—</option>
+                    {sites.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Task" className="sm:col-span-2">
+                  <Textarea name="task" rows={2} placeholder="What you're doing alone" />
+                </Field>
+                <Field label="Check-in interval (min)" required>
+                  <Input name="intervalMinutes" type="number" min="5" defaultValue="30" required />
+                </Field>
+                <Field label="Grace period (min)" required>
+                  <Input name="gracePeriodMinutes" type="number" min="1" defaultValue="10" required />
+                </Field>
+                <Field label="Expected duration (min)" required className="sm:col-span-2">
+                  <Input name="durationMinutes" type="number" min="15" defaultValue="120" required />
+                </Field>
+              </div>
+              <div className="flex justify-end">
+                <Button type="submit">Start session</Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    </PageContainer>
   )
 }
 

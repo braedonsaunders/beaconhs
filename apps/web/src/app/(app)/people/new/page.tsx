@@ -17,6 +17,7 @@ import { crews, departments, trades } from '@beaconhs/db/schema'
 import { people } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { revalidatePath } from 'next/cache'
+import { PageContainer } from '@/components/page-layout'
 
 export const metadata = { title: 'New person' }
 
@@ -67,75 +68,77 @@ export default async function NewPersonPage() {
   })
 
   return (
-    <div className="max-w-2xl space-y-6">
-      <DetailHeader back={{ href: '/people', label: 'Back to people' }} title="Add person" />
-      <Card>
-        <CardContent className="pt-6">
-          <form action={createPerson} className="space-y-4">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label="First name" required>
-                <Input name="firstName" required autoComplete="given-name" />
-              </Field>
-              <Field label="Last name" required>
-                <Input name="lastName" required autoComplete="family-name" />
-              </Field>
-              <Field label="Employee #">
-                <Input name="employeeNo" />
-              </Field>
-              <Field label="Hire date">
-                <Input name="hireDate" type="date" />
-              </Field>
-              <Field label="Email">
-                <Input name="email" type="email" autoComplete="email" />
-              </Field>
-              <Field label="Phone">
-                <Input name="phone" type="tel" autoComplete="tel" />
-              </Field>
-              <Field label="Department">
-                <Select name="departmentId" defaultValue="">
-                  <option value="">—</option>
-                  {depts.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.name}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="Trade">
-                <Select name="tradeId" defaultValue="">
-                  <option value="">—</option>
-                  {allTrades.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="Crew">
-                <Select name="crewId" defaultValue="">
-                  <option value="">—</option>
-                  {allCrews.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-            </div>
-            <Alert variant="info">
-              <AlertTitle>HRIS sync</AlertTitle>
-              <AlertDescription>
-                For ongoing tenants this list is typically synced from NetSuite or BambooHR via the
-                plugin framework. Manual adds are for one-offs.
-              </AlertDescription>
-            </Alert>
-            <div className="flex items-center justify-end gap-2">
-              <Button type="submit">Create person</Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
+    <PageContainer>
+      <div className="max-w-2xl space-y-6">
+        <DetailHeader back={{ href: '/people', label: 'Back to people' }} title="Add person" />
+        <Card>
+          <CardContent className="pt-6">
+            <form action={createPerson} className="space-y-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Field label="First name" required>
+                  <Input name="firstName" required autoComplete="given-name" />
+                </Field>
+                <Field label="Last name" required>
+                  <Input name="lastName" required autoComplete="family-name" />
+                </Field>
+                <Field label="Employee #">
+                  <Input name="employeeNo" />
+                </Field>
+                <Field label="Hire date">
+                  <Input name="hireDate" type="date" />
+                </Field>
+                <Field label="Email">
+                  <Input name="email" type="email" autoComplete="email" />
+                </Field>
+                <Field label="Phone">
+                  <Input name="phone" type="tel" autoComplete="tel" />
+                </Field>
+                <Field label="Department">
+                  <Select name="departmentId" defaultValue="">
+                    <option value="">—</option>
+                    {depts.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Trade">
+                  <Select name="tradeId" defaultValue="">
+                    <option value="">—</option>
+                    {allTrades.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Crew">
+                  <Select name="crewId" defaultValue="">
+                    <option value="">—</option>
+                    {allCrews.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              </div>
+              <Alert variant="info">
+                <AlertTitle>HRIS sync</AlertTitle>
+                <AlertDescription>
+                  For ongoing tenants this list is typically synced from NetSuite or BambooHR via the
+                  plugin framework. Manual adds are for one-offs.
+                </AlertDescription>
+              </Alert>
+              <div className="flex items-center justify-end gap-2">
+                <Button type="submit">Create person</Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    </PageContainer>
   )
 }
 

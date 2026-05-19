@@ -20,6 +20,7 @@
     "@beaconhs/forms-pdf": "workspace:*",
     "@beaconhs/jobs": "workspace:*",
     "@beaconhs/plugin-sdk": "workspace:*",
+    "@beaconhs/storage": "workspace:*",
     "bullmq": "^5.21.2",
     "drizzle-orm": "^0.36.4",
     "ioredis": "^5.4.1",
