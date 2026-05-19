@@ -73,9 +73,12 @@ export default async function FormTemplatePage({ params }: { params: Promise<{ i
         }
         actions={
           <>
-            <Button variant="outline" disabled>
-              Edit schema (designer Phase 1)
-            </Button>
+            <Link href={`/forms/templates/${tmpl.id}/designer`}>
+              <Button>Edit schema</Button>
+            </Link>
+            <Link href={`/forms/templates/${tmpl.id}/fill`}>
+              <Button variant="outline">Fill out</Button>
+            </Link>
           </>
         }
       />

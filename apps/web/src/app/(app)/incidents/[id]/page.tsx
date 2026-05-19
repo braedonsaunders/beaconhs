@@ -27,10 +27,12 @@ import {
   people,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { DetailGrid } from '@/components/detail-grid'
 import { Section } from '@/components/section'
 import { CheckIndicator } from '@/components/checkbox-field'
 import { SeverityRating } from '@/components/severity-rating'
+import { ActivityFeed } from '@/components/activity-feed'
 import { SeverityBadge, StatusBadge } from '../page'
 
 export const dynamic = 'force-dynamic'
@@ -55,6 +57,13 @@ async function updateStatus(formData: FormData) {
       })
       .where(eq(incidents.id, id)),
   )
+  await recordAudit(ctx, {
+    entityType: 'incident',
+    entityId: id,
+    action: closing ? 'update' : 'update',
+    summary: `Status changed to "${status.replace(/_/g, ' ')}"`,
+    after: { status },
+  })
   revalidatePath(`/incidents/${id}`)
   revalidatePath('/incidents')
 }
@@ -65,6 +74,13 @@ async function toggleLock(formData: FormData) {
   const id = String(formData.get('id') ?? '')
   const lock = formData.get('lock') === 'true'
   await ctx.db((tx) => tx.update(incidents).set({ locked: lock }).where(eq(incidents.id, id)))
+  await recordAudit(ctx, {
+    entityType: 'incident',
+    entityId: id,
+    action: 'update',
+    summary: lock ? 'Locked' : 'Unlocked',
+    after: { locked: lock },
+  })
   revalidatePath(`/incidents/${id}`)
 }
 
@@ -118,6 +134,7 @@ export default async function IncidentDetailPage({ params }: { params: Promise<{
 
   if (!data) notFound()
   const { incident, site, department, supervisor, injuries, lostTime, involved, linkedCAs } = data
+  const activity = await recentActivityForEntity(ctx, 'incident', id, 25)
 
   return (
     <div className="space-y-5">
@@ -407,6 +424,10 @@ export default async function IncidentDetailPage({ params }: { params: Promise<{
             ))}
           </ul>
         )}
+      </Section>
+
+      <Section title={`Activity (${activity.length})`} defaultOpen={false}>
+        <ActivityFeed entries={activity} />
       </Section>
 
       <Card>

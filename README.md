@@ -17,10 +17,12 @@ Updated as work lands. `✅` = done, `🟡` = in progress / stub, `⬜` = not ye
 - ✅ Drizzle schema for every module + RLS policies installed on all tenant-scoped tables
 - ✅ Tenants + Better-Auth (email/password + magic-link via Mailpit) + tenant memberships + 4 built-in roles
 - ✅ Tenant resolution + view-as for super-admin + tenant-switcher UI + impersonation banner
-- ✅ Sample data seed (10 people, 5 courses, 4 incidents with one fully populated, 4 CAs, 3 documents with versions/acks/reviews, 8 equipment items, 6 harnesses with inspection history)
-- ✅ List infrastructure: URL-driven search / sort / pagination / filter chips + reusable `Table`, `Pagination`, `SearchInput`, `SortableTh`, `FilterChips` primitives
-- ✅ Detail-page infrastructure: `Section` (accordion), `TabNav` (URL-driven tabs), `DetailGrid`, `DetailHeader`, `CheckIndicator`, `SeverityRating`
-- ⬜ Audit log writers wired into every mutation (helper exists, callers TBD)
+- ✅ Sample data seed (10 people with formal names + emergency contacts, 5 courses, 4 incidents with one fully populated, 4 CAs, 3 documents with versions/acks/reviews, 8 equipment items with location history + work orders, 6 harnesses with 4 inspections + issue report each)
+- ✅ List infrastructure: URL-driven search / sort / pagination / filter chips + reusable `Table` (sticky headers), `Pagination`, `SearchInput`, `SortableTh`, `FilterChips` primitives
+- ✅ Detail-page infrastructure: `Section` (accordion), `TabNav` (URL-driven tabs), `DetailGrid`, `DetailHeader`, `CheckIndicator`, `SeverityRating`, `ActivityFeed`
+- ✅ App-shell container layout: fixed sidebar + header, content scrolls internally (no body-level scroll); 6-group nav with bell + tenant switcher
+- ✅ Audit log helper + first wiring on incidents (status changes + lock/unlock)
+- ⬜ Audit log wired into every other mutation (CAs, PPE, equipment, etc.)
 - ⬜ R2 file storage actually wired (signed PUT + image-optimization job)
 - ⬜ Notifications worker wired into module events
 
@@ -30,37 +32,38 @@ Updated as work lands. `✅` = done, `🟡` = in progress / stub, `⬜` = not ye
 - ✅ Form template list + detail page (schema browser, version history, assignments, recent responses, raw-JSON debug)
 - ✅ Form response detail page (renders any response against any version's schema, including repeating sections)
 - ✅ Form responses list with filters / search / pagination
-- 🟡 Auto-PDF renderer (Puppeteer pipeline scaffolded; needs R2 upload + signed URL)
-- ⬜ Form designer UI (drag-drop palette + canvas + logic builder + i18n editor)
-- ⬜ Form renderer UI for end-users (mobile-first, autosave drafts, voice-to-text, geotag)
-- ⬜ Workflow step transitions + signature capture
+- ✅ **Form designer UI** — three-pane editor (palette / canvas / properties), section + field CRUD, reorder, choice-option editor, validation min/max, repeating sections, conditional flag, preview pane, immutable-version publish flow
+- ✅ **Form renderer UI** — section-by-section stepper with progress bar, conditional show/hide via showIf, validation per step, repeating-section rows, signature placeholder, person picker, pass/fail/N/A, yes/no+comment, traffic light, all standard inputs; submits via server action, extracts scores, audit-logs
+- 🟡 Auto-PDF renderer (Puppeteer pipeline exists; needs R2 upload + signed URL)
+- ⬜ Workflow step transitions + drawn-signature canvas
 - ⬜ Assignment dispatcher (scheduled / event-triggered tick consumer)
 
 ### Phase 2 — Form-driven modules
-Each module's list page has search + sort + pagination + filter chips and every row clicks through to a detail page.
+Every list has search + sort + pagination + filter chips. Every row clicks through.
 
 | Module | List | Detail | Edit / actions |
 |---|---|---|---|
-| Incidents | ✅ | ✅ Full legacy parity: 7 accordion sections (general / medical with conditional fields / key-metrics severity 1–5 / injuries / lost-time / investigation / linked CAs), lock-on-close, status workflow, alerts for critical+MOL | ✅ Report incident form (auto-generates `INC-YYYY-NNNN` reference); ⬜ Edit form |
-| Corrective Actions | ✅ | ✅ General + work form + status workflow + source-link to incidents | ✅ New CA form (preserves source link from query string) |
-| Forms — Templates | ✅ | ✅ Overview + schema browser (sections + field types) + assignments + recent responses + raw JSON | ⬜ Designer UI |
-| Forms — Responses | ✅ | ✅ Renders any response with full schema-aware sections (incl. repeating) + workflow steps | ⬜ Renderer/edit UI |
-| Toolbox talks | (uses Forms) | (uses Forms) | — |
+| Incidents | ✅ | ✅ Full legacy parity: 7 accordion sections + activity feed + status workflow + lock/unlock + critical alert | ✅ Report form (auto-ref); ⬜ Edit form |
+| Corrective Actions | ✅ | ✅ General + Work form + status workflow + source-link | ✅ New CA form (preserves source link via query) |
+| Inspections | ✅ | ✅ Lists form-template-driven inspection responses + per-template "new" entry points | (uses Forms designer + renderer) |
+| Toolbox talks | (uses Forms) | (uses Forms) | (uses Forms) |
+| Forms — Templates | ✅ | ✅ Overview + schema browser + versions + assignments + recent responses + raw JSON | ✅ **Designer** (three-pane) + ✅ **Filler** (stepper) |
+| Forms — Responses | ✅ | ✅ Schema-aware render with repeating sections + workflow steps | — |
 
 ### Phase 3 — Specialty modules
 | Module | List | Detail | Notes |
 |---|---|---|---|
-| People | ✅ | ✅ 4-tab profile (Transcript / Compliance / Incidents / PPE / Edit) + sidebar profile card + emergency contact + notes | ✅ Add person form; ⬜ Inline edit form |
-| Training — Courses | ✅ (within /training) | ✅ Course details + records list + scheduled classes | — |
-| Training — Records | ✅ (within /training) | ✅ Record detail + cert verification info + wallet/cert PDF buttons | ⬜ PDF generators wired |
-| Equipment | ✅ | ✅ 4-tab detail (Maintenance / Work orders / Location / Edit) + sidebar asset card + report-missing/found actions | ⬜ Inline edit form; ⬜ QR label generator |
-| PPE | ✅ | ✅ Inspection log + new-inspection form + issue-report form + issuance log + status changer + alerts on open issues | — |
-| Documents | ✅ | ✅ 4-tab detail (Overview / Versions / Acknowledgments / Reviews) + publish/unpublish buttons | ⬜ Acknowledge action wired; ⬜ Versioning editor |
-| Confined Space | ⬜ | ⬜ | Schema exists; UI deferred |
-| Lone Worker | ⬜ | ⬜ | Schema exists; UI deferred |
+| People | ✅ | ✅ 5-tab profile + sidebar profile card + emergency contact + notes | ✅ Add + ✅ **Edit** (full form with audit-log) |
+| Training — Courses | ✅ (within /training) | ✅ Course details + records list + classes | — |
+| Training — Records | ✅ (within /training) | ✅ Record detail + cert verify info | ⬜ PDF generators wired |
+| Equipment | ✅ | ✅ 4-tab detail (Maintenance / Work orders / Location / Edit) + sidebar asset card + report-missing/found | ✅ **Edit** (full form with audit-log); ⬜ QR label generator |
+| PPE | ✅ | ✅ Inspection log + new-inspection form + issue-report form + issuance log + status changer | — |
+| Documents | ✅ | ✅ 4-tab detail (Overview / Versions / Acknowledgments / Reviews) + publish/unpublish | ⬜ Acknowledge action wired; ⬜ Versioning editor |
+| **Confined Space** | ✅ | ✅ Permit detail + atmospheric-readings table + new-reading form + out-of-spec alarm + activate/close actions | ✅ New-permit form (auto-ref + hours-based expiry) |
+| **Lone Worker** | ✅ | ✅ Session detail + check-in log + manual check-in + end-session + overdue alert | ✅ Start-session form |
 
 ### Phase 4 — Dashboards + reports + plugin framework
-- 🟡 Dashboard with stat tiles (4 KPI tiles wired to live queries)
+- ✅ **Dashboard upgraded**: 8 KPI tiles with trend deltas, 4 list widgets (recent incidents, due CAs, expiring certs, inbox)
 - ⬜ Drag-drop widget builder
 - ⬜ Pre-built reports + custom report builder
 - ⬜ Scheduled reports
@@ -72,14 +75,16 @@ Each module's list page has search + sort + pagination + filter chips and every 
 - ⬜ Dry runs + cutover
 
 ### Admin
-- ✅ Admin landing page (cards for each admin area)
-- ✅ /admin/tenants list with member/people/incident counts + "View as" button (super-admin only)
-- ⬜ /admin/users (invitations, role assignments)
+- ✅ Admin landing page
+- ✅ /admin/tenants list + "View as"
+- ✅ **/admin/users** — every member with roles + status + joined date
+- ✅ **/admin/audit** — full audit log viewer with filters
 - ⬜ /admin/org (configurable hierarchy editor)
 - ⬜ /admin/settings (branding, risk matrix, hierarchy depth, languages)
-- ⬜ /admin/audit log viewer
 
-### Public-facing
+### Cross-cutting
+- ✅ **Notifications inbox** at /notifications + bell-icon unread count in header + mark-read / mark-all-read actions
+- ✅ App-shell sidebar grouped: Overview / Frontline / Programs / Assets & people / Insight / Settings
 - ✅ `/verify/<token>` certificate verification page (handles valid / expired / revoked / not-found)
 - ✅ `/manifest.webmanifest` + service worker for PWA install
 

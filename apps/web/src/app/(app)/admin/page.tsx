@@ -5,11 +5,12 @@ export const metadata = { title: 'Admin' }
 
 const SECTIONS = [
   { href: '/admin/users', title: 'Users & roles', desc: 'Invite users, assign roles, manage scopes.' },
+  { href: '/admin/tenants', title: 'Tenants (super-admin)', desc: 'List + view-as every tenant on this deployment.' },
   { href: '/admin/org', title: 'Org hierarchy', desc: 'Customers, projects, sites, areas, crews.' },
   { href: '/admin/settings', title: 'Tenant settings', desc: 'Branding, languages, risk matrix, hierarchy depth.' },
   { href: '/admin/plugins', title: 'Plugins', desc: 'Enable + configure first-party integrations.' },
   { href: '/admin/api-keys', title: 'API keys', desc: 'Manage public REST API credentials.' },
-  { href: '/admin/audit', title: 'Audit log', desc: 'Every write captured with diffs.' },
+  { href: '/admin/audit', title: 'Audit log', desc: 'Every write captured with actor + diffs.' },
 ] as const
 
 export default function AdminPage() {

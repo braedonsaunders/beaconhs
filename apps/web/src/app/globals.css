@@ -29,4 +29,26 @@
   body {
     height: 100%;
   }
+
+  /* Custom scrollbar (Mac-style, narrow) for app-shell scroll containers */
+  .app-scroll {
+    scrollbar-gutter: stable;
+  }
+  .app-scroll::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  .app-scroll::-webkit-scrollbar-thumb {
+    background: rgb(203 213 225);
+    border-radius: 6px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  .app-scroll::-webkit-scrollbar-thumb:hover {
+    background: rgb(148 163 184);
+    background-clip: padding-box;
+  }
+  .app-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
 }
