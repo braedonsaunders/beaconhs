@@ -129,8 +129,13 @@ export default async function ConfinedSpacePage({
       {rows.length === 0 ? (
         <EmptyState
           icon={<ShieldCheck size={32} />}
-          title="No permits yet"
+          title={params.q || statusFilter ? 'No permits match these filters' : 'No permits yet'}
           description="Open a new permit before any confined-space entry."
+          action={
+            <Link href="/confined-space/new">
+              <Button>Open your first permit</Button>
+            </Link>
+          }
         />
       ) : (
         <>

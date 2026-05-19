@@ -15,7 +15,7 @@ import {
 } from '@beaconhs/ui'
 import { equipmentItems, equipmentTypes, orgUnits, people } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
-import { parseListParams, pickString } from '@/lib/list-params'
+import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
@@ -103,9 +103,14 @@ export default async function EquipmentPage({
             title="Equipment"
             description="Asset registry. QR scan + inspections + work orders."
             actions={
-              <Link href="/equipment/new">
-                <Button>Add equipment</Button>
-              </Link>
+              <div className="flex items-center gap-2">
+                <Link href={buildExportHref('/equipment/export.csv', sp)}>
+                  <Button variant="outline">Export CSV</Button>
+                </Link>
+                <Link href="/equipment/new">
+                  <Button>Add equipment</Button>
+                </Link>
+              </div>
             }
           />
           <div className="flex items-center gap-3">

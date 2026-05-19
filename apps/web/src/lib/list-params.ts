@@ -65,3 +65,16 @@ export function mergeHref(
   }
   return buildHref(base, merged)
 }
+
+/**
+ * Build an export URL that carries the current list filters but drops
+ * pagination params (export is always "all visible rows that match").
+ */
+export function buildExportHref(base: string, current: Search): string {
+  const merged: Record<string, string | number | undefined | null> = {}
+  for (const [k, v] of Object.entries(current)) {
+    if (k === 'page' || k === 'perPage') continue
+    merged[k] = pickString(v) ?? undefined
+  }
+  return buildHref(base, merged)
+}

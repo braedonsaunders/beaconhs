@@ -147,6 +147,11 @@ export default async function LocationsPage({
           icon={<MapPin size={32} />}
           title={params.q ? `No customers match "${params.q}"` : 'No customers yet'}
           description="Add a customer to start tracking projects, sites and on-site contacts."
+          action={
+            <Link href="/locations/new">
+              <Button>Add your first customer</Button>
+            </Link>
+          }
         />
       ) : (
         <>

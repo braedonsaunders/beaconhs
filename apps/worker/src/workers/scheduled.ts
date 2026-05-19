@@ -18,6 +18,8 @@ import {
 } from '@beaconhs/events'
 import { type ScheduledTick } from '@beaconhs/jobs'
 import { scanReportSchedules } from '../lib/report-scheduler'
+import { scanFormAssignments } from '../lib/form-assignment-scanner'
+import { runPluginCron } from '../lib/plugin-cron'
 
 export async function processScheduledTick(job: Job<ScheduledTick>): Promise<void> {
   switch (job.data.kind) {
@@ -33,10 +35,23 @@ export async function processScheduledTick(job: Job<ScheduledTick>): Promise<voi
       return scanCorrectiveActionOverdue()
     case 'report_schedule_scan':
       return scanReportSchedules()
-    case 'form_assignment_scan':
+    case 'form_assignment_scan': {
+      const r = await scanFormAssignments()
+      console.log(
+        `[scheduled] form_assignment_scan: ${r.dispatched} dispatched / ${r.skipped} skipped / ${r.errors} errors (${r.candidates} candidates)`,
+      )
+      return
+    }
+    case 'plugin_cron': {
+      const cadence = job.data.cadence ?? 'hourly'
+      const r = await runPluginCron(cadence)
+      console.log(
+        `[scheduled] plugin_cron(${cadence}): candidates=${r.candidates} recorded=${r.recorded} errors=${r.errors}`,
+      )
+      return
+    }
     case 'report_run':
-    case 'plugin_cron':
-      console.log(`[scheduled] ${job.data.kind} not yet implemented`)
+      console.log('[scheduled] report_run tick is a no-op (per-run dispatch handled by reports queue)')
       return
   }
 }

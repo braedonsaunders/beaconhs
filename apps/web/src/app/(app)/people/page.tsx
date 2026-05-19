@@ -13,7 +13,7 @@ import {
 } from '@beaconhs/ui'
 import { departments, people, trades } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
-import { parseListParams } from '@/lib/list-params'
+import { buildExportHref, parseListParams } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
@@ -86,9 +86,14 @@ export default async function PeoplePage({
             title="People"
             description="Workers, contractors, supervisors. Sync from your HRIS via the plugin framework."
             actions={
-              <Link href="/people/new">
-                <Button>Add person</Button>
-              </Link>
+              <div className="flex items-center gap-2">
+                <Link href={buildExportHref('/people/export.csv', sp)}>
+                  <Button variant="outline">Export CSV</Button>
+                </Link>
+                <Link href="/people/new">
+                  <Button>Add person</Button>
+                </Link>
+              </div>
             }
           />
           <div className="flex items-center gap-3">

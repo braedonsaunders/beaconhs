@@ -5,7 +5,6 @@ export type PdfJobData =
   | { kind: 'form_response'; tenantId: string; responseId: string }
   | { kind: 'incident'; tenantId: string; incidentId: string }
   | { kind: 'certificate'; tenantId: string; certificateId: string }
-  | { kind: 'report'; tenantId: string; reportRunId: string }
 
 export const pdfQueue = new Queue<PdfJobData>('pdfs', {
   connection,

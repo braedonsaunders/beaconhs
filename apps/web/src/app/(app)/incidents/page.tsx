@@ -15,7 +15,7 @@ import {
 import { incidents, orgUnits } from '@beaconhs/db/schema'
 import { SeverityBadge, StatusBadge } from './_badges'
 import { requireRequestContext } from '@/lib/auth'
-import { parseListParams, pickString } from '@/lib/list-params'
+import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
@@ -117,9 +117,14 @@ export default async function IncidentsPage({
             title="Incidents"
             description="Reports, investigations, and closeouts."
             actions={
-              <Link href="/incidents/new">
-                <Button>Report incident</Button>
-              </Link>
+              <div className="flex items-center gap-2">
+                <Link href={buildExportHref('/incidents/export.csv', sp)}>
+                  <Button variant="outline">Export CSV</Button>
+                </Link>
+                <Link href="/incidents/new">
+                  <Button>Report incident</Button>
+                </Link>
+              </div>
             }
           />
 
@@ -150,6 +155,11 @@ export default async function IncidentsPage({
           icon={<AlertTriangle size={32} />}
           title={params.q || typeFilter || statusFilter ? 'No incidents match these filters' : 'No incidents reported'}
           description="When a worker reports an injury, illness, or near-miss it shows up here."
+          action={
+            <Link href="/incidents/new">
+              <Button>Report an incident</Button>
+            </Link>
+          }
         />
       ) : (
         <>

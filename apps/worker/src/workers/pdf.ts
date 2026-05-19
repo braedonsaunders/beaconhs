@@ -49,9 +49,6 @@ export async function processPdf(job: Job<PdfJobData>): Promise<void> {
         return await renderIncident(data.tenantId, data.incidentId)
       case 'certificate':
         return await renderCertificate(data.tenantId, data.certificateId)
-      case 'report':
-        console.warn(`[pdf] ${data.kind} renderer not yet implemented`)
-        return
     }
   } catch (err) {
     console.error(`[pdf] job ${job.id} failed:`, err)

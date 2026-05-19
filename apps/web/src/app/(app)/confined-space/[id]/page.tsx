@@ -1,8 +1,8 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { desc, eq } from 'drizzle-orm'
-import { Activity, AlertTriangle, Wind } from 'lucide-react'
+import { asc, desc, eq } from 'drizzle-orm'
+import { Activity, AlertTriangle, LogOut, UserPlus, Wind } from 'lucide-react'
 import {
   Alert,
   AlertDescription,
@@ -14,25 +14,29 @@ import {
   CardHeader,
   CardTitle,
   DetailHeader,
+  EmptyState,
   Input,
   Label,
+  Select,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
-  Textarea,
 } from '@beaconhs/ui'
 import {
   csAtmosphericReadings,
+  csPermitPersonnel,
   csPermits,
   orgUnits,
+  people,
   tenantUsers,
   user,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
-import { recordAudit } from '@/lib/audit'
+import { recentActivityForEntity, recordAudit } from '@/lib/audit'
+import { ActivityFeed } from '@/components/activity-feed'
 import { DetailGrid } from '@/components/detail-grid'
 import { Section } from '@/components/section'
 import { DetailPageLayout } from '@/components/page-layout'
@@ -40,8 +44,12 @@ import { TabNav, pickActiveTab } from '@/components/tab-nav'
 
 export const dynamic = 'force-dynamic'
 
-const CS_TABS = ['overview', 'readings'] as const
+const CS_TABS = ['overview', 'readings', 'personnel', 'activity'] as const
 type CsTab = (typeof CS_TABS)[number]
+
+const PERSONNEL_ROLES = ['entrant', 'attendant', 'supervisor', 'rescue'] as const
+
+// ---------- Server actions ----------
 
 async function closePermit(formData: FormData) {
   'use server'
@@ -88,7 +96,6 @@ async function addReading(formData: FormData) {
   const sensorIdentifier = String(formData.get('sensorIdentifier') ?? '').trim() || null
   const note = String(formData.get('note') ?? '').trim() || null
 
-  // Industry-standard pass thresholds: 19.5%–23% O2; LEL <10%; H2S <10ppm; CO <25ppm
   const outOfSpec =
     (oxygenPct !== null && (oxygenPct < 19.5 || oxygenPct > 23)) ||
     (lelPct !== null && lelPct >= 10) ||
@@ -118,6 +125,77 @@ async function addReading(formData: FormData) {
   })
   revalidatePath(`/confined-space/${permitId}`)
 }
+
+async function addPersonnel(formData: FormData) {
+  'use server'
+  const ctx = await requireRequestContext()
+  const permitId = String(formData.get('permitId') ?? '')
+  const personId = String(formData.get('personId') ?? '')
+  const role = String(formData.get('role') ?? '') as (typeof PERSONNEL_ROLES)[number]
+  const markEntered = formData.get('markEntered') === 'on'
+  const note = String(formData.get('note') ?? '').trim() || null
+
+  if (!permitId || !personId || !PERSONNEL_ROLES.includes(role)) return
+
+  await ctx.db((tx) =>
+    tx.insert(csPermitPersonnel).values({
+      tenantId: ctx.tenantId,
+      permitId,
+      personId,
+      role,
+      enteredAt: markEntered ? new Date() : null,
+      note,
+    }),
+  )
+  await recordAudit(ctx, {
+    entityType: 'cs_permit',
+    entityId: permitId,
+    action: 'update',
+    summary: `Added ${role} to permit`,
+    after: { personId, role, entered: markEntered },
+  })
+  revalidatePath(`/confined-space/${permitId}`)
+}
+
+async function markEntered(formData: FormData) {
+  'use server'
+  const ctx = await requireRequestContext()
+  const id = String(formData.get('id') ?? '')
+  const permitId = String(formData.get('permitId') ?? '')
+  if (!id) return
+  await ctx.db((tx) =>
+    tx.update(csPermitPersonnel).set({ enteredAt: new Date() }).where(eq(csPermitPersonnel.id, id)),
+  )
+  await recordAudit(ctx, {
+    entityType: 'cs_permit',
+    entityId: permitId,
+    action: 'update',
+    summary: 'Personnel entered space',
+    after: { personnelId: id },
+  })
+  if (permitId) revalidatePath(`/confined-space/${permitId}`)
+}
+
+async function markExited(formData: FormData) {
+  'use server'
+  const ctx = await requireRequestContext()
+  const id = String(formData.get('id') ?? '')
+  const permitId = String(formData.get('permitId') ?? '')
+  if (!id) return
+  await ctx.db((tx) =>
+    tx.update(csPermitPersonnel).set({ exitedAt: new Date() }).where(eq(csPermitPersonnel.id, id)),
+  )
+  await recordAudit(ctx, {
+    entityType: 'cs_permit',
+    entityId: permitId,
+    action: 'update',
+    summary: 'Personnel exited space',
+    after: { personnelId: id },
+  })
+  if (permitId) revalidatePath(`/confined-space/${permitId}`)
+}
+
+// ---------- Page ----------
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -151,16 +229,34 @@ export default async function CSPermitDetailPage({
       .where(eq(csPermits.id, id))
       .limit(1)
     if (!row) return null
-    const readings = await tx
-      .select()
-      .from(csAtmosphericReadings)
-      .where(eq(csAtmosphericReadings.permitId, id))
-      .orderBy(desc(csAtmosphericReadings.recordedAt))
-    return { ...row, readings }
+    const [readings, personnel, allPeople] = await Promise.all([
+      tx
+        .select()
+        .from(csAtmosphericReadings)
+        .where(eq(csAtmosphericReadings.permitId, id))
+        .orderBy(desc(csAtmosphericReadings.recordedAt)),
+      tx
+        .select({ row: csPermitPersonnel, person: people })
+        .from(csPermitPersonnel)
+        .innerJoin(people, eq(people.id, csPermitPersonnel.personId))
+        .where(eq(csPermitPersonnel.permitId, id))
+        .orderBy(desc(csPermitPersonnel.createdAt)),
+      tx
+        .select()
+        .from(people)
+        .where(eq(people.status, 'active'))
+        .orderBy(asc(people.lastName), asc(people.firstName))
+        .limit(500),
+    ])
+    return { ...row, readings, personnel, allPeople }
   })
   if (!data) notFound()
-  const { permit, site, issuerAccount, readings } = data
+  const { permit, site, issuerAccount, readings, personnel, allPeople } = data
   const outOfSpec = readings.find((r) => r.outOfSpec === 1)
+
+  const currentlyInside = personnel.filter((p) => p.row.enteredAt && !p.row.exitedAt)
+  const activity =
+    active === 'activity' ? await recentActivityForEntity(ctx, 'cs_permit', id, 50) : []
 
   const basePath = `/confined-space/${id}`
   return (
@@ -193,7 +289,9 @@ export default async function CSPermitDetailPage({
               ) : permit.status === 'active' ? (
                 <form action={closePermit} className="inline">
                   <input type="hidden" name="id" value={id} />
-                  <Button type="submit" variant="outline">Close permit</Button>
+                  <Button type="submit" variant="outline">
+                    Close permit
+                  </Button>
                 </form>
               ) : null}
             </>
@@ -201,16 +299,32 @@ export default async function CSPermitDetailPage({
         />
       }
       alerts={
-        outOfSpec ? (
-          <Alert variant="destructive">
-            <AlertTriangle size={16} />
-            <AlertTitle>Out-of-spec atmospheric reading detected</AlertTitle>
-            <AlertDescription>
-              Most recent out-of-spec reading was on{' '}
-              {new Date(outOfSpec.recordedAt).toLocaleString()}. Review before allowing further entry.
-            </AlertDescription>
-          </Alert>
-        ) : null
+        <>
+          {outOfSpec ? (
+            <Alert variant="destructive">
+              <AlertTriangle size={16} />
+              <AlertTitle>Out-of-spec atmospheric reading detected</AlertTitle>
+              <AlertDescription>
+                Most recent out-of-spec reading was on{' '}
+                {new Date(outOfSpec.recordedAt).toLocaleString()}. Review before allowing further
+                entry.
+              </AlertDescription>
+            </Alert>
+          ) : null}
+          {currentlyInside.length > 0 ? (
+            <Alert variant="warning">
+              <AlertTitle>
+                {currentlyInside.length} person{currentlyInside.length === 1 ? '' : 's'} currently
+                inside
+              </AlertTitle>
+              <AlertDescription>
+                {currentlyInside
+                  .map((p) => `${p.person.firstName} ${p.person.lastName} (${p.row.role})`)
+                  .join(', ')}
+              </AlertDescription>
+            </Alert>
+          ) : null}
+        </>
       }
       subtabs={
         <TabNav
@@ -220,119 +334,280 @@ export default async function CSPermitDetailPage({
           tabs={[
             { key: 'overview', label: 'Overview' },
             { key: 'readings', label: 'Atmospheric readings', count: readings.length },
+            { key: 'personnel', label: 'Entrants & attendants', count: personnel.length },
+            { key: 'activity', label: 'Activity' },
           ]}
         />
       }
     >
       <div className="space-y-5">
         {active === 'overview' ? (
-        <Section title="Permit details">
-          <DetailGrid
-            rows={[
-              { label: 'Reference', value: <span className="font-mono">{permit.reference}</span> },
-              { label: 'Site', value: site?.name ?? '—' },
-              { label: 'Issued by', value: issuerAccount?.name ?? '—' },
-              { label: 'Issued at', value: new Date(permit.issuedAt).toLocaleString() },
-              { label: 'Expires at', value: new Date(permit.expiresAt).toLocaleString() },
-              {
-                label: 'Closed at',
-                value: permit.closedAt ? new Date(permit.closedAt).toLocaleString() : '—',
-              },
-            ]}
-          />
-          <div className="mt-4 space-y-2 text-sm">
-            <TextBlock label="Space description">{permit.spaceDescription}</TextBlock>
-            <TextBlock label="Hazards identified">
-              {permit.hazardIdentification.length > 0 ? (
-                <ul className="list-disc pl-5">
-                  {permit.hazardIdentification.map((h, i) => (
-                    <li key={i}>{h}</li>
-                  ))}
-                </ul>
-              ) : (
-                <span className="text-slate-500">—</span>
-              )}
-            </TextBlock>
-            <TextBlock label="Rescue plan">
-              {permit.rescuePlan ?? <span className="text-slate-500">—</span>}
-            </TextBlock>
-          </div>
-        </Section>
+          <Section title="Permit details">
+            <DetailGrid
+              rows={[
+                {
+                  label: 'Reference',
+                  value: <span className="font-mono">{permit.reference}</span>,
+                },
+                { label: 'Site', value: site?.name ?? '—' },
+                { label: 'Issued by', value: issuerAccount?.name ?? '—' },
+                { label: 'Issued at', value: new Date(permit.issuedAt).toLocaleString() },
+                { label: 'Expires at', value: new Date(permit.expiresAt).toLocaleString() },
+                {
+                  label: 'Closed at',
+                  value: permit.closedAt ? new Date(permit.closedAt).toLocaleString() : '—',
+                },
+              ]}
+            />
+            <div className="mt-4 space-y-2 text-sm">
+              <TextBlock label="Space description">{permit.spaceDescription}</TextBlock>
+              <TextBlock label="Hazards identified">
+                {permit.hazardIdentification.length > 0 ? (
+                  <ul className="list-disc pl-5">
+                    {permit.hazardIdentification.map((h, i) => (
+                      <li key={i}>{h}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <span className="text-slate-500">—</span>
+                )}
+              </TextBlock>
+              <TextBlock label="Rescue plan">
+                {permit.rescuePlan ?? <span className="text-slate-500">—</span>}
+              </TextBlock>
+            </div>
+          </Section>
         ) : null}
 
         {active === 'readings' ? (
-        <Section title={`Atmospheric readings (${readings.length})`}>
-          {readings.length === 0 ? (
-            <p className="text-sm text-slate-500">No readings recorded yet.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Time</TableHead>
-                  <TableHead>O₂ %</TableHead>
-                  <TableHead>LEL %</TableHead>
-                  <TableHead>H₂S ppm</TableHead>
-                  <TableHead>CO ppm</TableHead>
-                  <TableHead>Sensor</TableHead>
-                  <TableHead>Result</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {readings.map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell>{new Date(r.recordedAt).toLocaleString()}</TableCell>
-                    <TableCell>{r.oxygenPct ?? '—'}</TableCell>
-                    <TableCell>{r.lelPct ?? '—'}</TableCell>
-                    <TableCell>{r.h2sPpm ?? '—'}</TableCell>
-                    <TableCell>{r.coPpm ?? '—'}</TableCell>
-                    <TableCell className="text-slate-600">{r.sensorIdentifier ?? '—'}</TableCell>
-                    <TableCell>
-                      <Badge variant={r.outOfSpec ? 'destructive' : 'success'}>
-                        {r.outOfSpec ? 'Out of spec' : 'Pass'}
-                      </Badge>
-                    </TableCell>
+          <Section title={`Atmospheric readings (${readings.length})`}>
+            {readings.length === 0 ? (
+              <EmptyState
+                icon={<Wind size={24} />}
+                title="No readings recorded yet"
+                description="Log the first atmospheric reading below. Industry-standard pass thresholds: 19.5–23% O₂, LEL <10%, H₂S <10 ppm, CO <25 ppm."
+              />
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Time</TableHead>
+                    <TableHead>O₂ %</TableHead>
+                    <TableHead>LEL %</TableHead>
+                    <TableHead>H₂S ppm</TableHead>
+                    <TableHead>CO ppm</TableHead>
+                    <TableHead>Sensor</TableHead>
+                    <TableHead>Result</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
+                </TableHeader>
+                <TableBody>
+                  {readings.map((r) => (
+                    <TableRow key={r.id}>
+                      <TableCell>{new Date(r.recordedAt).toLocaleString()}</TableCell>
+                      <TableCell>{r.oxygenPct ?? '—'}</TableCell>
+                      <TableCell>{r.lelPct ?? '—'}</TableCell>
+                      <TableCell>{r.h2sPpm ?? '—'}</TableCell>
+                      <TableCell>{r.coPpm ?? '—'}</TableCell>
+                      <TableCell className="text-slate-600">
+                        {r.sensorIdentifier ?? '—'}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={r.outOfSpec ? 'destructive' : 'success'}>
+                          {r.outOfSpec ? 'Out of spec' : 'Pass'}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
 
-          <Card className="mt-4 border-dashed">
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-sm">
-                <Wind size={14} /> Record a new reading
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <form action={addReading} className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Card className="mt-4 border-dashed">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <Wind size={14} /> Record a new reading
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <form action={addReading} className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <input type="hidden" name="permitId" value={id} />
+                  <Field label="O₂ %">
+                    <Input name="oxygenPct" type="number" step="0.1" placeholder="20.9" />
+                  </Field>
+                  <Field label="LEL %">
+                    <Input name="lelPct" type="number" step="0.1" placeholder="0" />
+                  </Field>
+                  <Field label="H₂S ppm">
+                    <Input name="h2sPpm" type="number" step="0.1" placeholder="0" />
+                  </Field>
+                  <Field label="CO ppm">
+                    <Input name="coPpm" type="number" step="0.1" placeholder="0" />
+                  </Field>
+                  <Field label="Sensor ID" className="sm:col-span-2">
+                    <Input name="sensorIdentifier" placeholder="e.g. GASMON-04" />
+                  </Field>
+                  <Field label="Note" className="sm:col-span-2">
+                    <Input name="note" placeholder="Optional" />
+                  </Field>
+                  <div className="sm:col-span-4">
+                    <Button type="submit">
+                      <Activity size={14} /> Record reading
+                    </Button>
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
+          </Section>
+        ) : null}
+
+        {active === 'personnel' ? (
+          <div className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  Permit personnel ({personnel.length}) ·{' '}
+                  <span className="text-sm font-normal text-slate-500">
+                    {currentlyInside.length} inside now
+                  </span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {personnel.length === 0 ? (
+                  <EmptyState
+                    icon={<UserPlus size={24} />}
+                    title="No personnel assigned to this permit"
+                    description="Add entrants, attendants, supervisors, and rescue contacts below."
+                  />
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Person</TableHead>
+                        <TableHead>Role</TableHead>
+                        <TableHead>Entered</TableHead>
+                        <TableHead>Exited</TableHead>
+                        <TableHead>Note</TableHead>
+                        <TableHead></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {personnel.map((row) => (
+                        <TableRow key={row.row.id}>
+                          <TableCell>
+                            <Link
+                              href={`/people/${row.person.id}`}
+                              className="font-medium hover:underline"
+                            >
+                              {row.person.firstName} {row.person.lastName}
+                            </Link>
+                            {row.person.jobTitle ? (
+                              <div className="text-xs text-slate-500">{row.person.jobTitle}</div>
+                            ) : null}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="secondary">{row.row.role}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            {row.row.enteredAt
+                              ? new Date(row.row.enteredAt).toLocaleString()
+                              : '—'}
+                          </TableCell>
+                          <TableCell>
+                            {row.row.exitedAt ? (
+                              new Date(row.row.exitedAt).toLocaleString()
+                            ) : row.row.enteredAt ? (
+                              <Badge variant="warning">Inside</Badge>
+                            ) : (
+                              '—'
+                            )}
+                          </TableCell>
+                          <TableCell className="text-xs text-slate-600">
+                            {row.row.note ?? '—'}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {!row.row.enteredAt ? (
+                              <form action={markEntered} className="inline">
+                                <input type="hidden" name="id" value={row.row.id} />
+                                <input type="hidden" name="permitId" value={id} />
+                                <Button type="submit" size="sm" variant="outline">
+                                  Mark entered
+                                </Button>
+                              </form>
+                            ) : !row.row.exitedAt ? (
+                              <form action={markExited} className="inline">
+                                <input type="hidden" name="id" value={row.row.id} />
+                                <input type="hidden" name="permitId" value={id} />
+                                <Button type="submit" size="sm" variant="outline">
+                                  <LogOut size={12} /> Mark exited
+                                </Button>
+                              </form>
+                            ) : null}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+            <Section title="Add personnel">
+              <form
+                action={addPersonnel}
+                className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+              >
                 <input type="hidden" name="permitId" value={id} />
-                <Field label="O₂ %">
-                  <Input name="oxygenPct" type="number" step="0.1" placeholder="20.9" />
+                <Field label="Person" required>
+                  <Select name="personId" required defaultValue="">
+                    <option value="">— Select —</option>
+                    {allPeople.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.lastName}, {p.firstName}
+                        {p.employeeNo ? ` (#${p.employeeNo})` : ''}
+                      </option>
+                    ))}
+                  </Select>
                 </Field>
-                <Field label="LEL %">
-                  <Input name="lelPct" type="number" step="0.1" placeholder="0" />
-                </Field>
-                <Field label="H₂S ppm">
-                  <Input name="h2sPpm" type="number" step="0.1" placeholder="0" />
-                </Field>
-                <Field label="CO ppm">
-                  <Input name="coPpm" type="number" step="0.1" placeholder="0" />
-                </Field>
-                <Field label="Sensor ID" className="sm:col-span-2">
-                  <Input name="sensorIdentifier" placeholder="e.g. GASMON-04" />
+                <Field label="Role" required>
+                  <Select name="role" required defaultValue="entrant">
+                    <option value="entrant">Entrant</option>
+                    <option value="attendant">Attendant</option>
+                    <option value="supervisor">Supervisor</option>
+                    <option value="rescue">Rescue</option>
+                  </Select>
                 </Field>
                 <Field label="Note" className="sm:col-span-2">
-                  <Input name="note" placeholder="Optional" />
+                  <Input name="note" placeholder="Optional — e.g. shift label, contact number" />
                 </Field>
-                <div className="sm:col-span-4">
-                  <Button type="submit">
-                    <Activity size={14} /> Record reading
-                  </Button>
+                <div className="sm:col-span-2 flex items-center gap-3">
+                  <input
+                    id="cs-mark-entered"
+                    type="checkbox"
+                    name="markEntered"
+                    className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                  />
+                  <Label htmlFor="cs-mark-entered" className="text-sm">
+                    Mark as entered now
+                  </Label>
+                  <div className="ml-auto">
+                    <Button type="submit">
+                      <UserPlus size={14} /> Add to permit
+                    </Button>
+                  </div>
                 </div>
               </form>
+            </Section>
+          </div>
+        ) : null}
+
+        {active === 'activity' ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Activity</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ActivityFeed entries={activity} />
             </CardContent>
           </Card>
-        </Section>
         ) : null}
       </div>
     </DetailPageLayout>
@@ -348,10 +623,23 @@ function TextBlock({ label, children }: { label: string; children: React.ReactNo
   )
 }
 
-function Field({ label, className, children }: { label: string; className?: string; children: React.ReactNode }) {
+function Field({
+  label,
+  required,
+  className,
+  children,
+}: {
+  label: string
+  required?: boolean
+  className?: string
+  children: React.ReactNode
+}) {
   return (
     <div className={`space-y-1 ${className ?? ''}`}>
-      <Label className="text-xs">{label}</Label>
+      <Label className="text-xs">
+        {label}
+        {required ? <span className="text-red-600"> *</span> : null}
+      </Label>
       {children}
     </div>
   )

@@ -15,7 +15,7 @@ import {
 } from '@beaconhs/ui'
 import { correctiveActions, orgUnits } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
-import { parseListParams, pickString } from '@/lib/list-params'
+import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
@@ -117,9 +117,14 @@ export default async function CorrectiveActionsPage({
             title="Corrective Actions"
             description="Standalone records, linkable to incidents, inspections, audits, JSHAs."
             actions={
-              <Link href="/corrective-actions/new">
-                <Button>New action</Button>
-              </Link>
+              <div className="flex items-center gap-2">
+                <Link href={buildExportHref('/corrective-actions/export.csv', sp)}>
+                  <Button variant="outline">Export CSV</Button>
+                </Link>
+                <Link href="/corrective-actions/new">
+                  <Button>New action</Button>
+                </Link>
+              </div>
             }
           />
           <div className="flex items-center gap-3">

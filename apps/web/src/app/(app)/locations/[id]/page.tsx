@@ -331,7 +331,7 @@ async function renderCustomer({
       {active === 'projects' ? <ProjectsTab unit={unit} projects={projects} /> : null}
       {active === 'sites' ? <SitesTab sites={allSites} parentNameFor={projectParentName} /> : null}
       {active === 'contacts' ? <ContactsTab unit={unit} contacts={contacts} /> : null}
-      {active === 'incidents' ? <IncidentsTab incidents={allIncidents} /> : null}
+      {active === 'incidents' ? <IncidentsTab rows={allIncidents} /> : null}
       {active === 'equipment' ? <EquipmentTab equipment={allEquipment} /> : null}
       {active === 'activity' ? <ActivityFeed entries={activity} /> : null}
     </DetailPageLayout>
@@ -414,7 +414,7 @@ async function renderProject({
       {active === 'overview' ? <OverviewTab unit={unit} /> : null}
       {active === 'sites' ? <SitesTab sites={sites} /> : null}
       {active === 'contacts' ? <ContactsTab unit={unit} contacts={contacts} /> : null}
-      {active === 'incidents' ? <IncidentsTab incidents={allIncidents} /> : null}
+      {active === 'incidents' ? <IncidentsTab rows={allIncidents} /> : null}
       {active === 'equipment' ? <EquipmentTab equipment={allEquipment} /> : null}
       {active === 'activity' ? <ActivityFeed entries={activity} /> : null}
     </DetailPageLayout>
@@ -491,7 +491,7 @@ async function renderSite({
     >
       {active === 'overview' ? <OverviewTab unit={unit} /> : null}
       {active === 'contacts' ? <ContactsTab unit={unit} contacts={contacts} /> : null}
-      {active === 'incidents' ? <IncidentsTab incidents={siteIncidents} /> : null}
+      {active === 'incidents' ? <IncidentsTab rows={siteIncidents} /> : null}
       {active === 'equipment' ? <EquipmentTab equipment={siteEquipment} /> : null}
       {active === 'activity' ? <ActivityFeed entries={activity} /> : null}
     </DetailPageLayout>
@@ -821,7 +821,7 @@ function ContactsTab({
   )
 }
 
-function IncidentsTab({ incidents: rows }: { incidents: (typeof incidents.$inferSelect)[] }) {
+function IncidentsTab({ rows }: { rows: (typeof incidents.$inferSelect)[] }) {
   if (rows.length === 0) {
     return (
       <EmptyState
@@ -948,9 +948,9 @@ function EquipmentTab({
 // ---------- Helpers ----------
 
 function severityVariant(s: string): 'success' | 'warning' | 'destructive' | 'secondary' {
-  if (s === 'critical' || s === 'high') return 'destructive'
-  if (s === 'medium') return 'warning'
-  if (s === 'low') return 'secondary'
+  if (s === 'fatality' || s === 'lost_time') return 'destructive'
+  if (s === 'medical_aid') return 'warning'
+  if (s === 'first_aid_only') return 'secondary'
   return 'secondary'
 }
 

@@ -15,7 +15,7 @@ import {
 } from '@beaconhs/ui'
 import { documents } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
-import { parseListParams, pickString } from '@/lib/list-params'
+import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
@@ -91,9 +91,14 @@ export default async function DocumentsPage({
             title="Documents"
             description="Versioned library + read-and-acknowledge + periodic review + management review books."
             actions={
-              <Link href="/documents/new">
-                <Button>New document</Button>
-              </Link>
+              <div className="flex items-center gap-2">
+                <Link href={buildExportHref('/documents/export.csv', sp)}>
+                  <Button variant="outline">Export CSV</Button>
+                </Link>
+                <Link href="/documents/new">
+                  <Button>New document</Button>
+                </Link>
+              </div>
             }
           />
           <div className="flex items-center gap-3">

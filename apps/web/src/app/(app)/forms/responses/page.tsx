@@ -3,6 +3,7 @@ import { ClipboardCheck } from 'lucide-react'
 import { and, asc, count, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
 import {
   Badge,
+  Button,
   EmptyState,
   PageHeader,
   Table,
@@ -115,7 +116,16 @@ export default async function FormResponsesPage({
       }
     >
       {rows.length === 0 ? (
-        <EmptyState icon={<ClipboardCheck size={32} />} title="No responses yet" />
+        <EmptyState
+          icon={<ClipboardCheck size={32} />}
+          title={statusFilter || params.q ? 'No responses match these filters' : 'No responses yet'}
+          description="Pick a template to fill out a new form."
+          action={
+            <Link href="/forms">
+              <Button>Browse templates</Button>
+            </Link>
+          }
+        />
       ) : (
         <>
           <Table>
