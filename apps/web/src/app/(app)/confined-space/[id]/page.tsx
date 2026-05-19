@@ -35,9 +35,13 @@ import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { DetailGrid } from '@/components/detail-grid'
 import { Section } from '@/components/section'
-import { PageContainer } from '@/components/page-layout'
+import { DetailPageLayout } from '@/components/page-layout'
+import { TabNav, pickActiveTab } from '@/components/tab-nav'
 
 export const dynamic = 'force-dynamic'
+
+const CS_TABS = ['overview', 'readings'] as const
+type CsTab = (typeof CS_TABS)[number]
 
 async function closePermit(formData: FormData) {
   'use server'
@@ -120,8 +124,16 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   return { title: `Permit · ${id.slice(0, 8)}` }
 }
 
-export default async function CSPermitDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function CSPermitDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
   const { id } = await params
+  const sp = await searchParams
+  const active: CsTab = pickActiveTab(sp, CS_TABS, 'overview')
   const ctx = await requireRequestContext()
 
   const data = await ctx.db(async (tx) => {
@@ -150,9 +162,10 @@ export default async function CSPermitDetailPage({ params }: { params: Promise<{
   const { permit, site, issuerAccount, readings } = data
   const outOfSpec = readings.find((r) => r.outOfSpec === 1)
 
+  const basePath = `/confined-space/${id}`
   return (
-    <PageContainer>
-      <div className="space-y-5">
+    <DetailPageLayout
+      header={
         <DetailHeader
           back={{ href: '/confined-space', label: 'Back to permits' }}
           title={permit.title}
@@ -186,8 +199,9 @@ export default async function CSPermitDetailPage({ params }: { params: Promise<{
             </>
           }
         />
-
-        {outOfSpec ? (
+      }
+      alerts={
+        outOfSpec ? (
           <Alert variant="destructive">
             <AlertTriangle size={16} />
             <AlertTitle>Out-of-spec atmospheric reading detected</AlertTitle>
@@ -196,8 +210,22 @@ export default async function CSPermitDetailPage({ params }: { params: Promise<{
               {new Date(outOfSpec.recordedAt).toLocaleString()}. Review before allowing further entry.
             </AlertDescription>
           </Alert>
-        ) : null}
-
+        ) : null
+      }
+      subtabs={
+        <TabNav
+          basePath={basePath}
+          currentParams={sp}
+          active={active}
+          tabs={[
+            { key: 'overview', label: 'Overview' },
+            { key: 'readings', label: 'Atmospheric readings', count: readings.length },
+          ]}
+        />
+      }
+    >
+      <div className="space-y-5">
+        {active === 'overview' ? (
         <Section title="Permit details">
           <DetailGrid
             rows={[
@@ -230,7 +258,9 @@ export default async function CSPermitDetailPage({ params }: { params: Promise<{
             </TextBlock>
           </div>
         </Section>
+        ) : null}
 
+        {active === 'readings' ? (
         <Section title={`Atmospheric readings (${readings.length})`}>
           {readings.length === 0 ? (
             <p className="text-sm text-slate-500">No readings recorded yet.</p>
@@ -303,8 +333,9 @@ export default async function CSPermitDetailPage({ params }: { params: Promise<{
             </CardContent>
           </Card>
         </Section>
+        ) : null}
       </div>
-    </PageContainer>
+    </DetailPageLayout>
   )
 }
 

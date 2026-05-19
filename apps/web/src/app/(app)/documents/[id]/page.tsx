@@ -24,7 +24,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { DetailGrid } from '@/components/detail-grid'
 import { Section } from '@/components/section'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
-import { PageContainer } from '@/components/page-layout'
+import { DetailPageLayout } from '@/components/page-layout'
 
 export const dynamic = 'force-dynamic'
 
@@ -76,8 +76,8 @@ export default async function DocumentDetailPage({
   const basePath = `/documents/${id}`
 
   return (
-    <PageContainer>
-      <div className="space-y-5">
+    <DetailPageLayout
+      header={
         <DetailHeader
           back={{ href: '/documents', label: 'Back to documents' }}
           title={doc.title}
@@ -101,7 +101,8 @@ export default async function DocumentDetailPage({
             </>
           }
         />
-
+      }
+      subtabs={
         <TabNav
           basePath={basePath}
           currentParams={sp}
@@ -113,7 +114,9 @@ export default async function DocumentDetailPage({
             { key: 'reviews', label: 'Reviews', count: reviews.length },
           ]}
         />
-
+      }
+    >
+      <div className="space-y-5">
         {active === 'overview' ? (
           <>
             <Section title="General">
@@ -224,6 +227,6 @@ export default async function DocumentDetailPage({
           </Card>
         ) : null}
       </div>
-    </PageContainer>
+    </DetailPageLayout>
   )
 }

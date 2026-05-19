@@ -21,17 +21,29 @@ import {
 import { requireRequestContext } from '@/lib/auth'
 import { DetailGrid } from '@/components/detail-grid'
 import { Section } from '@/components/section'
-import { PageContainer } from '@/components/page-layout'
+import { DetailPageLayout } from '@/components/page-layout'
+import { TabNav, pickActiveTab } from '@/components/tab-nav'
 
 export const dynamic = 'force-dynamic'
+
+const FORM_TABS = ['overview', 'schema', 'assignments', 'responses', 'raw'] as const
+type FormTab = (typeof FORM_TABS)[number]
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   return { title: `Form template · ${id.slice(0, 8)}` }
 }
 
-export default async function FormTemplatePage({ params }: { params: Promise<{ id: string }> }) {
+export default async function FormTemplatePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
   const { id } = await params
+  const sp = await searchParams
+  const active: FormTab = pickActiveTab(sp, FORM_TABS, 'overview')
   const ctx = await requireRequestContext()
 
   const data = await ctx.db(async (tx) => {
@@ -60,9 +72,10 @@ export default async function FormTemplatePage({ params }: { params: Promise<{ i
     ? current.schema.sections.reduce((acc, s) => acc + s.fields.length, 0)
     : 0
 
+  const basePath = `/forms/templates/${id}`
   return (
-    <PageContainer>
-      <div className="space-y-5">
+    <DetailPageLayout
+      header={
         <DetailHeader
           back={{ href: '/forms', label: 'Back to forms' }}
           title={tmpl.name}
@@ -84,7 +97,24 @@ export default async function FormTemplatePage({ params }: { params: Promise<{ i
             </>
           }
         />
-
+      }
+      subtabs={
+        <TabNav
+          basePath={basePath}
+          currentParams={sp}
+          active={active}
+          tabs={[
+            { key: 'overview', label: 'Overview' },
+            { key: 'schema', label: 'Schema', count: totalFields },
+            { key: 'assignments', label: 'Assignments', count: assignments.length },
+            { key: 'responses', label: 'Recent responses', count: recent.length },
+            { key: 'raw', label: 'Raw JSON' },
+          ]}
+        />
+      }
+    >
+      <div className="space-y-5">
+        {active === 'overview' ? (
         <Section title="Overview">
           <DetailGrid
             rows={[
@@ -104,8 +134,9 @@ export default async function FormTemplatePage({ params }: { params: Promise<{ i
             </div>
           ) : null}
         </Section>
+        ) : null}
 
-        {current ? (
+        {active === 'schema' && current ? (
           <Section title={`Schema (v${current.version})`} subtitle="Sections + fields the renderer will display">
             <ul className="space-y-3">
               {current.schema.sections.map((sec) => (
@@ -136,6 +167,7 @@ export default async function FormTemplatePage({ params }: { params: Promise<{ i
           </Section>
         ) : null}
 
+        {active === 'assignments' ? (
         <Section title={`Assignments (${assignments.length})`}>
           {assignments.length === 0 ? (
             <p className="text-sm text-slate-500">No assignments configured.</p>
@@ -156,7 +188,9 @@ export default async function FormTemplatePage({ params }: { params: Promise<{ i
             </ul>
           )}
         </Section>
+        ) : null}
 
+        {active === 'responses' ? (
         <Section title={`Recent responses (${recent.length})`}>
           {recent.length === 0 ? (
             <EmptyState icon={<ClipboardCheck size={24} />} title="No responses yet" />
@@ -175,13 +209,16 @@ export default async function FormTemplatePage({ params }: { params: Promise<{ i
             </ul>
           )}
         </Section>
+        ) : null}
 
-        <Section title="Raw schema (debug)" defaultOpen={false}>
+        {active === 'raw' ? (
+        <Section title="Raw schema (debug)">
           <pre className="overflow-x-auto rounded-md border border-slate-200 bg-slate-50/50 p-3 text-xs text-slate-700">
             {JSON.stringify(current?.schema, null, 2)}
           </pre>
         </Section>
+        ) : null}
       </div>
-    </PageContainer>
+    </DetailPageLayout>
   )
 }

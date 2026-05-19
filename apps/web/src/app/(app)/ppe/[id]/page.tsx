@@ -37,9 +37,13 @@ import {
 import { requireRequestContext } from '@/lib/auth'
 import { DetailGrid } from '@/components/detail-grid'
 import { Section } from '@/components/section'
-import { PageContainer } from '@/components/page-layout'
+import { DetailPageLayout } from '@/components/page-layout'
+import { TabNav, pickActiveTab } from '@/components/tab-nav'
 
 export const dynamic = 'force-dynamic'
+
+const PPE_TABS = ['overview', 'inspections', 'issues', 'history', 'status'] as const
+type PpeTab = (typeof PPE_TABS)[number]
 
 async function recordInspection(formData: FormData) {
   'use server'
@@ -108,8 +112,16 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   return { title: `PPE · ${id.slice(0, 8)}` }
 }
 
-export default async function PpeDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function PpeDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
   const { id } = await params
+  const sp = await searchParams
+  const active: PpeTab = pickActiveTab(sp, PPE_TABS, 'overview')
   const ctx = await requireRequestContext()
 
   const data = await ctx.db(async (tx) => {
@@ -147,9 +159,10 @@ export default async function PpeDetailPage({ params }: { params: Promise<{ id: 
   const { item, type, holder, inspections, issuesLog, issueReports } = data
   const openIssues = issueReports.filter((r) => r.status === 'open')
 
+  const basePath = `/ppe/${id}`
   return (
-    <PageContainer>
-      <div className="space-y-5">
+    <DetailPageLayout
+      header={
         <DetailHeader
           back={{ href: '/ppe', label: 'Back to PPE' }}
           title={`${type.name} · ${item.serialNumber ?? 'no serial'}`}
@@ -165,14 +178,32 @@ export default async function PpeDetailPage({ params }: { params: Promise<{ id: 
             </div>
           }
         />
-
-        {openIssues.length > 0 ? (
+      }
+      alerts={
+        openIssues.length > 0 ? (
           <Alert variant="destructive">
             <AlertTitle>Open issue report</AlertTitle>
             <AlertDescription>{openIssues[0]!.description}</AlertDescription>
           </Alert>
-        ) : null}
-
+        ) : null
+      }
+      subtabs={
+        <TabNav
+          basePath={basePath}
+          currentParams={sp}
+          active={active}
+          tabs={[
+            { key: 'overview', label: 'Overview' },
+            { key: 'inspections', label: 'Inspections', count: inspections.length },
+            { key: 'issues', label: 'Issues', count: issueReports.length },
+            { key: 'history', label: 'History', count: issuesLog.length },
+            { key: 'status', label: 'Status' },
+          ]}
+        />
+      }
+    >
+      <div className="space-y-5">
+        {active === 'overview' ? (
         <Section title="General">
           <DetailGrid
             rows={[
@@ -189,7 +220,9 @@ export default async function PpeDetailPage({ params }: { params: Promise<{ id: 
             ]}
           />
         </Section>
+        ) : null}
 
+        {active === 'inspections' ? (
         <Section title={`Inspections (${inspections.length})`}>
           {inspections.length === 0 ? (
             <EmptyState icon={<HardHat size={24} />} title="No inspections recorded" />
@@ -250,7 +283,9 @@ export default async function PpeDetailPage({ params }: { params: Promise<{ id: 
             </form>
           </div>
         </Section>
+        ) : null}
 
+        {active === 'issues' ? (
         <Section title={`Issue reports (${issueReports.length})`}>
           {issueReports.length === 0 ? (
             <p className="text-sm text-slate-500">No issues reported.</p>
@@ -286,8 +321,10 @@ export default async function PpeDetailPage({ params }: { params: Promise<{ id: 
             </form>
           </div>
         </Section>
+        ) : null}
 
-        <Section title={`Issue / return / replace log (${issuesLog.length})`} defaultOpen={false}>
+        {active === 'history' ? (
+        <Section title={`Issue / return / replace log (${issuesLog.length})`}>
           {issuesLog.length === 0 ? (
             <p className="text-sm text-slate-500">No issuance history.</p>
           ) : (
@@ -321,7 +358,9 @@ export default async function PpeDetailPage({ params }: { params: Promise<{ id: 
             </Table>
           )}
         </Section>
+        ) : null}
 
+        {active === 'status' ? (
         <Card>
           <CardHeader>
             <CardTitle>Status</CardTitle>
@@ -343,7 +382,8 @@ export default async function PpeDetailPage({ params }: { params: Promise<{ id: 
             </form>
           </CardContent>
         </Card>
+        ) : null}
       </div>
-    </PageContainer>
+    </DetailPageLayout>
   )
 }

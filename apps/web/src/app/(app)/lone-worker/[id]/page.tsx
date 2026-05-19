@@ -19,9 +19,13 @@ import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { DetailGrid } from '@/components/detail-grid'
 import { Section } from '@/components/section'
-import { PageContainer } from '@/components/page-layout'
+import { DetailPageLayout } from '@/components/page-layout'
+import { TabNav, pickActiveTab } from '@/components/tab-nav'
 
 export const dynamic = 'force-dynamic'
+
+const LW_TABS = ['overview', 'checkins'] as const
+type LwTab = (typeof LW_TABS)[number]
 
 async function manualCheckin(formData: FormData) {
   'use server'
@@ -72,8 +76,16 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   return { title: `Lone-worker · ${id.slice(0, 8)}` }
 }
 
-export default async function LoneWorkerSessionPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function LoneWorkerSessionPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
   const { id } = await params
+  const sp = await searchParams
+  const active: LwTab = pickActiveTab(sp, LW_TABS, 'overview')
   const ctx = await requireRequestContext()
   const data = await ctx.db(async (tx) => {
     const [row] = await tx
@@ -103,9 +115,10 @@ export default async function LoneWorkerSessionPage({ params }: { params: Promis
   const overdue = isActive && new Date(session.nextCheckinDueAt).getTime() < Date.now()
   const minsUntilCheckin = Math.round((new Date(session.nextCheckinDueAt).getTime() - Date.now()) / 60_000)
 
+  const basePath = `/lone-worker/${id}`
   return (
-    <PageContainer>
-      <div className="space-y-5">
+    <DetailPageLayout
+      header={
         <DetailHeader
           back={{ href: '/lone-worker', label: 'Back to sessions' }}
           title={workerAccount?.name ?? 'Lone-worker session'}
@@ -130,8 +143,9 @@ export default async function LoneWorkerSessionPage({ params }: { params: Promis
             ) : null
           }
         />
-
-        {overdue ? (
+      }
+      alerts={
+        overdue ? (
           <Alert variant="destructive">
             <AlertTitle>Check-in overdue</AlertTitle>
             <AlertDescription>
@@ -139,8 +153,22 @@ export default async function LoneWorkerSessionPage({ params }: { params: Promis
               worker will escalate after the grace period.
             </AlertDescription>
           </Alert>
-        ) : null}
-
+        ) : null
+      }
+      subtabs={
+        <TabNav
+          basePath={basePath}
+          currentParams={sp}
+          active={active}
+          tabs={[
+            { key: 'overview', label: 'Overview' },
+            { key: 'checkins', label: 'Check-ins', count: checkins.length },
+          ]}
+        />
+      }
+    >
+      <div className="space-y-5">
+        {active === 'overview' ? (
         <DetailGrid
           rows={[
             { label: 'Worker', value: workerAccount?.name ?? '—' },
@@ -161,7 +189,9 @@ export default async function LoneWorkerSessionPage({ params }: { params: Promis
             { label: 'Ended', value: session.endedAt ? new Date(session.endedAt).toLocaleString() : '—' },
           ]}
         />
+        ) : null}
 
+        {active === 'checkins' ? (
         <Section title={`Check-in log (${checkins.length})`}>
           {checkins.length === 0 ? (
             <p className="text-sm text-slate-500">No check-ins yet.</p>
@@ -179,7 +209,8 @@ export default async function LoneWorkerSessionPage({ params }: { params: Promis
             </ul>
           )}
         </Section>
+        ) : null}
       </div>
-    </PageContainer>
+    </DetailPageLayout>
   )
 }
