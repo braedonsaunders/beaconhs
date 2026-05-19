@@ -1,27 +1,21 @@
 import Link from 'next/link'
 import { Wrench } from 'lucide-react'
-import { and, asc, count, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, isNull, or, type SQL } from 'drizzle-orm'
 import {
-  Badge,
   Button,
   EmptyState,
   PageHeader,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
 } from '@beaconhs/ui'
 import { equipmentItems, equipmentTypes, orgUnits, people } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
-import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
 import { EquipmentSubNav } from '@/components/equipment-sub-nav'
+import { listPeopleForBulkHolder, listSiteOrgUnits } from './_actions'
+import { EquipmentRecordsTable, type EquipmentTableRow } from './_records-table'
 
 export const metadata = { title: 'Equipment' }
 
@@ -52,7 +46,7 @@ export default async function EquipmentPage({
   const ctx = await requireRequestContext()
 
   const { rows, total, statusCounts, availabilityCounts } = await ctx.db(async (tx) => {
-    const filters: SQL<unknown>[] = []
+    const filters: SQL<unknown>[] = [isNull(equipmentItems.deletedAt)]
     if (params.q) {
       const term = `%${params.q}%`
       const cond = or(
@@ -68,7 +62,7 @@ export default async function EquipmentPage({
     } else if (availabilityFilter === 'checked_out') {
       filters.push(eq(equipmentItems.isAvailableForCheckout, false))
     }
-    const whereClause = filters.length > 0 ? and(...filters) : undefined
+    const whereClause = and(...filters)
 
     const orderBy =
       params.sort === 'name'
@@ -113,7 +107,21 @@ export default async function EquipmentPage({
     }
   })
 
-  const sortProps = { basePath: '/equipment', currentParams: sp, dir: params.dir }
+  const [sites, holders] = await Promise.all([
+    listSiteOrgUnits(),
+    listPeopleForBulkHolder(),
+  ])
+
+  const tableRows: EquipmentTableRow[] = rows.map(({ item, type, site, holder }) => ({
+    id: item.id,
+    assetTag: item.assetTag,
+    name: item.name,
+    typeName: type?.name ?? null,
+    status: item.status,
+    siteName: site?.name ?? null,
+    holderName: holder ? `${holder.firstName} ${holder.lastName}` : null,
+    isMissing: item.isMissing,
+  }))
 
   return (
     <ListPageLayout
@@ -173,43 +181,7 @@ export default async function EquipmentPage({
         />
       ) : (
         <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortableTh {...sortProps} column="asset_tag" active={params.sort === 'asset_tag'}>Asset tag</SortableTh>
-                <SortableTh {...sortProps} column="name" active={params.sort === 'name'}>Name</SortableTh>
-                <TableHead>Type</TableHead>
-                <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>Status</SortableTh>
-                <SortableTh {...sortProps} column="site" active={params.sort === 'site'}>Site</SortableTh>
-                <SortableTh {...sortProps} column="holder" active={params.sort === 'holder'}>Holder</SortableTh>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map(({ item, type, site, holder }) => (
-                <TableRow key={item.id}>
-                  <TableCell className="font-mono text-xs">
-                    <Link href={`/equipment/${item.id}`} className="hover:underline">{item.assetTag}</Link>
-                  </TableCell>
-                  <TableCell>
-                    <Link href={`/equipment/${item.id}`} className="font-medium text-slate-900 hover:underline">
-                      {item.name}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="text-slate-600">{type?.name ?? '—'}</TableCell>
-                  <TableCell>
-                    <Badge variant={item.status === 'in_service' ? 'success' : 'warning'}>
-                      {item.status.replace('_', ' ')}
-                    </Badge>
-                    {item.isMissing ? <Badge variant="destructive" className="ml-1">missing</Badge> : null}
-                  </TableCell>
-                  <TableCell className="text-slate-600">{site?.name ?? '—'}</TableCell>
-                  <TableCell className="text-slate-600">
-                    {holder ? `${holder.firstName} ${holder.lastName}` : '—'}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <EquipmentRecordsTable rows={tableRows} sites={sites} holders={holders} />
           <Pagination
             basePath="/equipment"
             currentParams={sp}

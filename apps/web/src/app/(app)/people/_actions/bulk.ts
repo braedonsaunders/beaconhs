@@ -1,0 +1,361 @@
+'use server'
+
+// Bulk-action server actions for /people.
+//
+// Four actions surface in the floating bulk-action bar:
+//   - bulkAssignPeopleToGroup     insert person_group_memberships (idempotent via onConflictDoNothing)
+//   - bulkAssignPeopleToDivision  insert person_division_memberships (idempotent)
+//   - bulkSetPeopleStatus         change people.status enum on N rows
+//   - bulkExportPeopleCsv         download just the checked rows
+//
+// Membership inserts also refresh the denormalised `people.groupIds` /
+// `people.divisionIds` caches so list-page filters stay accurate.
+
+import { revalidatePath } from 'next/cache'
+import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm'
+import {
+  departments,
+  people,
+  personDivisionMemberships,
+  personDivisions,
+  personGroupMemberships,
+  personGroups,
+  trades,
+} from '@beaconhs/db/schema'
+import { requireRequestContext } from '@/lib/auth'
+import { recordAudit } from '@/lib/audit'
+import { csvRow } from '@/lib/csv'
+
+export type BulkActionResult =
+  | { ok: true; updated: number; skipped: number }
+  | { ok: false; error: string }
+
+export type BulkCsvResult =
+  | { ok: true; filename: string; content: string }
+  | { ok: false; error: string }
+
+const MAX_BULK = 500
+
+function makeBatchId(): string {
+  return `bat_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+}
+
+/**
+ * Add N people to a single person_group. Idempotent — re-running with the
+ * same set is a no-op (uniqueMembership index + onConflictDoNothing).
+ */
+export async function bulkAssignPeopleToGroup(args: {
+  personIds: string[]
+  groupId: string
+}): Promise<BulkActionResult> {
+  const ctx = await requireRequestContext()
+  if (args.personIds.length === 0) return { ok: false, error: 'No people selected.' }
+  if (!args.groupId) return { ok: false, error: 'Pick a group.' }
+  const ids = args.personIds.slice(0, MAX_BULK)
+  const batchId = makeBatchId()
+
+  const groupExists = await ctx.db(async (tx) => {
+    const [g] = await tx
+      .select({ id: personGroups.id })
+      .from(personGroups)
+      .where(and(eq(personGroups.id, args.groupId), isNull(personGroups.deletedAt)))
+      .limit(1)
+    return Boolean(g)
+  })
+  if (!groupExists) return { ok: false, error: 'Group not found.' }
+
+  const result = await ctx.db(async (tx) => {
+    // Filter out deleted people up-front so we don't audit dead rows.
+    const validRows = await tx
+      .select({ id: people.id })
+      .from(people)
+      .where(and(inArray(people.id, ids), isNull(people.deletedAt)))
+    const validIds = validRows.map((r) => r.id)
+    const skipped = ids.length - validIds.length
+
+    if (validIds.length === 0) return { updated: 0, skipped }
+
+    await tx
+      .insert(personGroupMemberships)
+      .values(
+        validIds.map((personId) => ({
+          tenantId: ctx.tenantId,
+          groupId: args.groupId,
+          personId,
+        })),
+      )
+      .onConflictDoNothing()
+
+    // Refresh the denormalised cache on people for filtering.
+    await tx.execute(sql`
+      UPDATE people
+      SET group_ids = COALESCE((
+        SELECT jsonb_agg(group_id ORDER BY group_id)
+        FROM person_group_memberships
+        WHERE person_id = people.id AND tenant_id = ${ctx.tenantId}
+      ), '[]'::jsonb)
+      WHERE id IN (${sql.join(validIds.map((v) => sql`${v}::uuid`), sql`, `)})
+        AND tenant_id = ${ctx.tenantId}
+    `)
+
+    return { updated: validIds.length, skipped, validIds }
+  })
+
+  if ('validIds' in result && result.validIds) {
+    for (const id of result.validIds) {
+      await recordAudit(ctx, {
+        entityType: 'person',
+        entityId: id,
+        action: 'update',
+        summary: 'Bulk action: assigned to group',
+        metadata: { batchId, groupId: args.groupId },
+      })
+    }
+    await recordAudit(ctx, {
+      entityType: 'person',
+      action: 'update',
+      summary: `Bulk assigned ${result.validIds.length} person${result.validIds.length === 1 ? '' : 's'} to a group`,
+      metadata: {
+        batchId,
+        groupId: args.groupId,
+        personIds: result.validIds,
+        skipped: result.skipped,
+      },
+    })
+  }
+
+  revalidatePath('/people')
+  revalidatePath(`/people/groups/${args.groupId}`)
+  return { ok: true, updated: result.updated, skipped: result.skipped }
+}
+
+export async function bulkAssignPeopleToDivision(args: {
+  personIds: string[]
+  divisionId: string
+}): Promise<BulkActionResult> {
+  const ctx = await requireRequestContext()
+  if (args.personIds.length === 0) return { ok: false, error: 'No people selected.' }
+  if (!args.divisionId) return { ok: false, error: 'Pick a division.' }
+  const ids = args.personIds.slice(0, MAX_BULK)
+  const batchId = makeBatchId()
+
+  const divExists = await ctx.db(async (tx) => {
+    const [d] = await tx
+      .select({ id: personDivisions.id })
+      .from(personDivisions)
+      .where(
+        and(eq(personDivisions.id, args.divisionId), isNull(personDivisions.deletedAt)),
+      )
+      .limit(1)
+    return Boolean(d)
+  })
+  if (!divExists) return { ok: false, error: 'Division not found.' }
+
+  const result = await ctx.db(async (tx) => {
+    const validRows = await tx
+      .select({ id: people.id })
+      .from(people)
+      .where(and(inArray(people.id, ids), isNull(people.deletedAt)))
+    const validIds = validRows.map((r) => r.id)
+    const skipped = ids.length - validIds.length
+
+    if (validIds.length === 0) return { updated: 0, skipped }
+
+    await tx
+      .insert(personDivisionMemberships)
+      .values(
+        validIds.map((personId) => ({
+          tenantId: ctx.tenantId,
+          divisionId: args.divisionId,
+          personId,
+        })),
+      )
+      .onConflictDoNothing()
+
+    await tx.execute(sql`
+      UPDATE people
+      SET division_ids = COALESCE((
+        SELECT jsonb_agg(division_id ORDER BY division_id)
+        FROM person_division_memberships
+        WHERE person_id = people.id AND tenant_id = ${ctx.tenantId}
+      ), '[]'::jsonb)
+      WHERE id IN (${sql.join(validIds.map((v) => sql`${v}::uuid`), sql`, `)})
+        AND tenant_id = ${ctx.tenantId}
+    `)
+
+    return { updated: validIds.length, skipped, validIds }
+  })
+
+  if ('validIds' in result && result.validIds) {
+    for (const id of result.validIds) {
+      await recordAudit(ctx, {
+        entityType: 'person',
+        entityId: id,
+        action: 'update',
+        summary: 'Bulk action: assigned to division',
+        metadata: { batchId, divisionId: args.divisionId },
+      })
+    }
+    await recordAudit(ctx, {
+      entityType: 'person',
+      action: 'update',
+      summary: `Bulk assigned ${result.validIds.length} person${result.validIds.length === 1 ? '' : 's'} to a division`,
+      metadata: {
+        batchId,
+        divisionId: args.divisionId,
+        personIds: result.validIds,
+        skipped: result.skipped,
+      },
+    })
+  }
+
+  revalidatePath('/people')
+  revalidatePath(`/people/divisions/${args.divisionId}`)
+  return { ok: true, updated: result.updated, skipped: result.skipped }
+}
+
+export type PeopleStatus = 'active' | 'inactive' | 'terminated'
+
+export async function bulkSetPeopleStatus(args: {
+  personIds: string[]
+  status: PeopleStatus
+}): Promise<BulkActionResult> {
+  const ctx = await requireRequestContext()
+  if (args.personIds.length === 0) return { ok: false, error: 'No people selected.' }
+  if (!['active', 'inactive', 'terminated'].includes(args.status)) {
+    return { ok: false, error: 'Invalid status.' }
+  }
+  const ids = args.personIds.slice(0, MAX_BULK)
+  const batchId = makeBatchId()
+
+  const result = await ctx.db(async (tx) => {
+    const rows = await tx
+      .select({ id: people.id, status: people.status, deletedAt: people.deletedAt })
+      .from(people)
+      .where(inArray(people.id, ids))
+    const editable = rows.filter((r) => r.deletedAt === null).map((r) => r.id)
+    const skipped = rows.length - editable.length
+    if (editable.length === 0) return { updated: 0, skipped }
+    await tx
+      .update(people)
+      .set({ status: args.status })
+      .where(inArray(people.id, editable))
+    return { updated: editable.length, skipped, editable }
+  })
+
+  if ('editable' in result && result.editable) {
+    for (const id of result.editable) {
+      await recordAudit(ctx, {
+        entityType: 'person',
+        entityId: id,
+        action: 'update',
+        summary: `Bulk action: set status ${args.status}`,
+        after: { status: args.status },
+        metadata: { batchId },
+      })
+    }
+    await recordAudit(ctx, {
+      entityType: 'person',
+      action: 'update',
+      summary: `Bulk set status to ${args.status} on ${result.editable.length} person${result.editable.length === 1 ? '' : 's'}`,
+      metadata: { batchId, status: args.status, personIds: result.editable, skipped: result.skipped },
+    })
+  }
+
+  revalidatePath('/people')
+  return { ok: true, updated: result.updated, skipped: result.skipped }
+}
+
+export async function bulkExportPeopleCsv(args: {
+  personIds: string[]
+}): Promise<BulkCsvResult> {
+  const ctx = await requireRequestContext()
+  if (args.personIds.length === 0) return { ok: false, error: 'No people selected.' }
+  const ids = args.personIds.slice(0, MAX_BULK)
+  const batchId = makeBatchId()
+
+  const rows = await ctx.db((tx) =>
+    tx
+      .select({ person: people, department: departments, trade: trades })
+      .from(people)
+      .leftJoin(departments, eq(departments.id, people.departmentId))
+      .leftJoin(trades, eq(trades.id, people.tradeId))
+      .where(inArray(people.id, ids))
+      .orderBy(asc(people.lastName), asc(people.firstName)),
+  )
+
+  const headers = [
+    'Last name',
+    'First name',
+    'Employee #',
+    'Department',
+    'Trade',
+    'Hire date',
+    'Email',
+    'Phone',
+    'Status',
+  ]
+  const csvLines = [csvRow(headers)]
+  for (const { person, department, trade } of rows) {
+    csvLines.push(
+      csvRow([
+        person.lastName,
+        person.firstName,
+        person.employeeNo ?? '',
+        department?.name ?? '',
+        trade?.name ?? '',
+        person.hireDate ?? '',
+        person.email ?? '',
+        person.phone ?? '',
+        person.status,
+      ]),
+    )
+  }
+  const content = csvLines.join('\r\n') + '\r\n'
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
+  const filename = `people-selected-${stamp}.csv`
+
+  for (const { person } of rows) {
+    await recordAudit(ctx, {
+      entityType: 'person',
+      entityId: person.id,
+      action: 'export',
+      summary: 'Bulk action: exported to CSV',
+      metadata: { batchId },
+    })
+  }
+  await recordAudit(ctx, {
+    entityType: 'person',
+    action: 'export',
+    summary: `Bulk exported ${rows.length} person${rows.length === 1 ? '' : 's'} to CSV`,
+    metadata: { batchId, personIds: rows.map((r) => r.person.id), format: 'csv' },
+  })
+
+  return { ok: true, filename, content }
+}
+
+// ---------- Lookups (used by bulk-bar dropdowns) ----------------------------
+
+export async function listPersonGroupsForBulk(): Promise<{ id: string; name: string }[]> {
+  const ctx = await requireRequestContext()
+  return ctx.db(async (tx) =>
+    tx
+      .select({ id: personGroups.id, name: personGroups.name })
+      .from(personGroups)
+      .where(isNull(personGroups.deletedAt))
+      .orderBy(asc(personGroups.name)),
+  )
+}
+
+export async function listPersonDivisionsForBulk(): Promise<
+  { id: string; name: string }[]
+> {
+  const ctx = await requireRequestContext()
+  return ctx.db(async (tx) =>
+    tx
+      .select({ id: personDivisions.id, name: personDivisions.name })
+      .from(personDivisions)
+      .where(isNull(personDivisions.deletedAt))
+      .orderBy(asc(personDivisions.name)),
+  )
+}

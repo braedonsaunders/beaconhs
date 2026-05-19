@@ -1,27 +1,21 @@
 import Link from 'next/link'
 import { HardHat } from 'lucide-react'
-import { and, asc, count, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, isNull, or, type SQL } from 'drizzle-orm'
 import {
-  Badge,
   Button,
   EmptyState,
   PageHeader,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
 } from '@beaconhs/ui'
 import { people, ppeItems, ppeTypes } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
-import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
 import { PpeSubNav } from '@/components/ppe-sub-nav'
+import { listPeopleForBulkPpe } from './_actions'
+import { PpeRecordsTable, type PpeTableRow } from './_records-table'
 
 export const metadata = { title: 'PPE' }
 
@@ -47,14 +41,14 @@ export default async function PpePage({
   const ctx = await requireRequestContext()
 
   const { rows, total, statusCounts } = await ctx.db(async (tx) => {
-    const filters: SQL<unknown>[] = []
+    const filters: SQL<unknown>[] = [isNull(ppeItems.deletedAt)]
     if (params.q) {
       const term = `%${params.q}%`
       const cond = or(ilike(ppeItems.serialNumber, term), ilike(ppeTypes.name, term))
       if (cond) filters.push(cond)
     }
     if (statusFilter) filters.push(eq(ppeItems.status, statusFilter as any))
-    const whereClause = filters.length > 0 ? and(...filters) : undefined
+    const whereClause = and(...filters)
 
     const orderBy =
       params.sort === 'serial'
@@ -92,7 +86,17 @@ export default async function PpePage({
     }
   })
 
-  const sortProps = { basePath: '/ppe', currentParams: sp, dir: params.dir }
+  const holders = await listPeopleForBulkPpe()
+
+  const tableRows: PpeTableRow[] = rows.map(({ item, type, holder }) => ({
+    id: item.id,
+    typeName: type.name,
+    serialNumber: item.serialNumber,
+    size: item.size,
+    status: item.status,
+    holderName: holder ? `${holder.firstName} ${holder.lastName}` : null,
+    nextInspectionDue: item.nextInspectionDue,
+  }))
 
   return (
     <ListPageLayout
@@ -139,40 +143,7 @@ export default async function PpePage({
         />
       ) : (
         <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortableTh {...sortProps} column="type" active={params.sort === 'type'}>Type</SortableTh>
-                <SortableTh {...sortProps} column="serial" active={params.sort === 'serial'}>Serial #</SortableTh>
-                <SortableTh {...sortProps} column="size" active={params.sort === 'size'}>Size</SortableTh>
-                <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>Status</SortableTh>
-                <SortableTh {...sortProps} column="holder" active={params.sort === 'holder'}>Holder</SortableTh>
-                <TableHead>Next inspection</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map(({ item, type, holder }) => (
-                <TableRow key={item.id}>
-                  <TableCell>
-                    <Link href={`/ppe/${item.id}`} className="font-medium text-slate-900 hover:underline">
-                      {type.name}
-                    </Link>
-                  </TableCell>
-                  <TableCell>{item.serialNumber ?? '—'}</TableCell>
-                  <TableCell>{item.size ?? '—'}</TableCell>
-                  <TableCell>
-                    <Badge variant={item.status === 'issued' ? 'success' : item.status === 'in_stock' ? 'secondary' : 'warning'}>
-                      {item.status.replace('_', ' ')}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-slate-600">
-                    {holder ? `${holder.firstName} ${holder.lastName}` : '—'}
-                  </TableCell>
-                  <TableCell className="text-slate-600">{item.nextInspectionDue ?? '—'}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <PpeRecordsTable rows={tableRows} holders={holders} />
           <Pagination
             basePath="/ppe"
             currentParams={sp}

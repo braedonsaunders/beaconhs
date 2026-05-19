@@ -1,27 +1,21 @@
 import Link from 'next/link'
 import { AlertTriangle } from 'lucide-react'
-import { and, asc, count, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, isNull, or, type SQL } from 'drizzle-orm'
 import {
   Button,
   EmptyState,
   PageHeader,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
 } from '@beaconhs/ui'
 import { incidents, orgUnits } from '@beaconhs/db/schema'
-import { SeverityBadge, StatusBadge } from './_badges'
 import { IncidentsSubNav } from './_sub-nav'
 import { requireRequestContext } from '@/lib/auth'
 import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
-import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
+import { listIncidentClassifications } from './_actions'
+import { IncidentsRecordsTable, type IncidentsTableRow } from './_records-table'
 
 export const metadata = { title: 'Incidents' }
 
@@ -62,7 +56,7 @@ export default async function IncidentsPage({
   const ctx = await requireRequestContext()
 
   const { rows, total, typeCounts, statusCounts } = await ctx.db(async (tx) => {
-    const filters: SQL<unknown>[] = []
+    const filters: SQL<unknown>[] = [isNull(incidents.deletedAt)]
     if (params.q) {
       const term = `%${params.q}%`
       const cond = or(
@@ -74,7 +68,7 @@ export default async function IncidentsPage({
     }
     if (typeFilter) filters.push(eq(incidents.type, typeFilter as any))
     if (statusFilter) filters.push(eq(incidents.status, statusFilter as any))
-    const whereClause = filters.length > 0 ? and(...filters) : undefined
+    const whereClause = and(...filters)
 
     const orderBy =
       params.sort === 'reference'
@@ -108,7 +102,19 @@ export default async function IncidentsPage({
     }
   })
 
-  const sortProps = { basePath: '/incidents', currentParams: sp, dir: params.dir }
+  const classifications = await listIncidentClassifications()
+
+  const tableRows: IncidentsTableRow[] = rows.map(({ incident, site }) => ({
+    id: incident.id,
+    reference: incident.reference,
+    occurredAt: incident.occurredAt.toISOString(),
+    type: incident.type,
+    severity: incident.severity,
+    status: incident.status,
+    title: incident.title,
+    siteName: site?.name ?? null,
+    locked: incident.locked,
+  }))
 
   return (
     <ListPageLayout
@@ -165,42 +171,7 @@ export default async function IncidentsPage({
         />
       ) : (
         <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortableTh {...sortProps} column="reference" active={params.sort === 'reference'}>Ref</SortableTh>
-                <SortableTh {...sortProps} column="occurred_at" active={params.sort === 'occurred_at'}>Occurred</SortableTh>
-                <SortableTh {...sortProps} column="type" active={params.sort === 'type'}>Type</SortableTh>
-                <SortableTh {...sortProps} column="severity" active={params.sort === 'severity'}>Severity</SortableTh>
-                <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>Status</SortableTh>
-                <TableHead>Title</TableHead>
-                <TableHead>Site</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map(({ incident, site }) => (
-                <TableRow key={incident.id}>
-                  <TableCell className="font-mono text-xs text-slate-600">
-                    <Link href={`/incidents/${incident.id}`} className="hover:underline">
-                      {incident.reference}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="text-slate-600">
-                    {new Date(incident.occurredAt).toLocaleDateString()}
-                  </TableCell>
-                  <TableCell className="text-slate-600">{incident.type.replace('_', ' ')}</TableCell>
-                  <TableCell><SeverityBadge severity={incident.severity} /></TableCell>
-                  <TableCell><StatusBadge status={incident.status} /></TableCell>
-                  <TableCell>
-                    <Link href={`/incidents/${incident.id}`} className="font-medium text-slate-900 hover:underline">
-                      {incident.title}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="text-slate-600">{site?.name ?? '—'}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <IncidentsRecordsTable rows={tableRows} classifications={classifications} />
           <Pagination
             basePath="/incidents"
             currentParams={sp}

@@ -1,26 +1,20 @@
 import Link from 'next/link'
 import { BookOpen } from 'lucide-react'
-import { and, asc, count, desc, ilike, or, eq, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, ilike, isNull, or, eq, type SQL } from 'drizzle-orm'
 import {
-  Badge,
   Button,
   EmptyState,
   PageHeader,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
 } from '@beaconhs/ui'
 import { documents } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
-import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
+import { listDocumentBooksForBulk } from './_actions'
+import { DocumentsRecordsTable, type DocumentsTableRow } from './_records-table'
 
 export const metadata = { title: 'Documents' }
 
@@ -44,14 +38,14 @@ export default async function DocumentsPage({
   const ctx = await requireRequestContext()
 
   const { rows, total, statusCounts } = await ctx.db(async (tx) => {
-    const filters: SQL<unknown>[] = []
+    const filters: SQL<unknown>[] = [isNull(documents.deletedAt)]
     if (params.q) {
       const term = `%${params.q}%`
       const cond = or(ilike(documents.title, term), ilike(documents.description, term))
       if (cond) filters.push(cond)
     }
     if (statusFilter) filters.push(eq(documents.status, statusFilter as any))
-    const whereClause = filters.length > 0 ? and(...filters) : undefined
+    const whereClause = and(...filters)
 
     const orderBy =
       params.sort === 'category'
@@ -81,7 +75,15 @@ export default async function DocumentsPage({
     }
   })
 
-  const sortProps = { basePath: '/documents', currentParams: sp, dir: params.dir }
+  const books = await listDocumentBooksForBulk()
+
+  const tableRows: DocumentsTableRow[] = rows.map((d) => ({
+    id: d.id,
+    title: d.title,
+    category: d.category,
+    status: d.status,
+    nextReviewOn: d.nextReviewOn,
+  }))
 
   return (
     <ListPageLayout
@@ -147,32 +149,7 @@ export default async function DocumentsPage({
         />
       ) : (
         <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortableTh {...sortProps} column="title" active={params.sort === 'title'}>Title</SortableTh>
-                <SortableTh {...sortProps} column="category" active={params.sort === 'category'}>Category</SortableTh>
-                <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>Status</SortableTh>
-                <SortableTh {...sortProps} column="next_review_on" active={params.sort === 'next_review_on'}>Next review</SortableTh>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((d) => (
-                <TableRow key={d.id}>
-                  <TableCell>
-                    <Link href={`/documents/${d.id}`} className="font-medium text-slate-900 hover:underline">
-                      {d.title}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="text-slate-600">{d.category ?? '—'}</TableCell>
-                  <TableCell>
-                    <Badge variant={d.status === 'published' ? 'success' : 'secondary'}>{d.status}</Badge>
-                  </TableCell>
-                  <TableCell className="text-slate-600">{d.nextReviewOn ?? '—'}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <DocumentsRecordsTable rows={tableRows} books={books} />
           <Pagination
             basePath="/documents"
             currentParams={sp}

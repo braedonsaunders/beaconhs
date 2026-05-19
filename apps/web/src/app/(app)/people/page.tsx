@@ -1,24 +1,20 @@
 import Link from 'next/link'
 import { Users } from 'lucide-react'
-import { and, asc, count, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, isNull, or, type SQL } from 'drizzle-orm'
 import {
   Button,
   EmptyState,
   PageHeader,
-  Table,
-  TableBody,
-  TableCell,
-  TableHeader,
-  TableRow,
 } from '@beaconhs/ui'
 import { departments, people, trades } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { buildExportHref, parseListParams } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
-import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { ListPageLayout } from '@/components/page-layout'
 import { PeopleSubNav } from './_components/people-sub-nav'
+import { listPersonDivisionsForBulk, listPersonGroupsForBulk } from './_actions/bulk'
+import { PeopleRecordsTable, type PeopleTableRow } from './_records-table'
 
 export const metadata = { title: 'People' }
 
@@ -34,7 +30,7 @@ export default async function PeoplePage({
   const ctx = await requireRequestContext()
 
   const { rows, total } = await ctx.db(async (tx) => {
-    const filters: SQL<unknown>[] = []
+    const filters: SQL<unknown>[] = [isNull(people.deletedAt)]
     if (params.q) {
       const term = `%${params.q}%`
       const cond = or(
@@ -44,7 +40,7 @@ export default async function PeoplePage({
       )
       if (cond) filters.push(cond)
     }
-    const whereClause = filters.length > 0 ? and(...filters) : undefined
+    const whereClause = and(...filters)
 
     const orderBy =
       params.sort === 'name'
@@ -77,7 +73,21 @@ export default async function PeoplePage({
     return { rows: data, total: Number(tot?.c ?? 0) }
   })
 
-  const sortProps = { basePath: '/people', currentParams: sp, dir: params.dir }
+  const [groups, divisions] = await Promise.all([
+    listPersonGroupsForBulk(),
+    listPersonDivisionsForBulk(),
+  ])
+
+  const tableRows: PeopleTableRow[] = rows.map(({ person, department, trade }) => ({
+    id: person.id,
+    firstName: person.firstName,
+    lastName: person.lastName,
+    employeeNo: person.employeeNo,
+    departmentName: department?.name ?? null,
+    tradeName: trade?.name ?? null,
+    hireDate: person.hireDate,
+    status: person.status,
+  }))
 
   return (
     <ListPageLayout
@@ -117,35 +127,7 @@ export default async function PeoplePage({
         />
       ) : (
         <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortableTh {...sortProps} column="name" active={params.sort === 'name'}>Name</SortableTh>
-                <SortableTh {...sortProps} column="employee_no" active={params.sort === 'employee_no'}>Employee #</SortableTh>
-                <SortableTh {...sortProps} column="department" active={params.sort === 'department'}>Department</SortableTh>
-                <SortableTh {...sortProps} column="trade" active={params.sort === 'trade'}>Trade</SortableTh>
-                <SortableTh {...sortProps} column="hire_date" active={params.sort === 'hire_date'}>Hire date</SortableTh>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map(({ person, department, trade }) => (
-                <TableRow key={person.id}>
-                  <TableCell>
-                    <Link
-                      href={`/people/${person.id}`}
-                      className="font-medium text-slate-900 hover:underline"
-                    >
-                      {person.lastName}, {person.firstName}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="text-slate-600">{person.employeeNo ?? '—'}</TableCell>
-                  <TableCell className="text-slate-600">{department?.name ?? '—'}</TableCell>
-                  <TableCell className="text-slate-600">{trade?.name ?? '—'}</TableCell>
-                  <TableCell className="text-slate-600">{person.hireDate ?? '—'}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <PeopleRecordsTable rows={tableRows} groups={groups} divisions={divisions} />
           <Pagination
             basePath="/people"
             currentParams={sp}
