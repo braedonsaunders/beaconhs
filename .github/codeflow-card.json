@@ -510,6 +510,108 @@
           "total": 557
         }
       ]
+    },
+    {
+      "at": "2026-05-19T23:34:03.744Z",
+      "sha": "6a2411ee6f4a75525d3f5105047f0c923f943b36",
+      "pr": null,
+      "actor": "braedonsaunders",
+      "files": 641,
+      "functions": 1751,
+      "loc": 296517,
+      "languages": 15,
+      "topLanguages": [
+        {
+          "ext": "json",
+          "pct": 54,
+          "lines": 160568
+        },
+        {
+          "ext": "tsx",
+          "pct": 27,
+          "lines": 81427
+        },
+        {
+          "ext": "ts",
+          "pct": 14,
+          "lines": 42522
+        },
+        {
+          "ext": "yaml",
+          "pct": 2,
+          "lines": 6104
+        },
+        {
+          "ext": "sql",
+          "pct": 2,
+          "lines": 4558
+        }
+      ],
+      "dead": 35,
+      "deadPct": 2,
+      "circular": 1,
+      "godObjects": 1,
+      "avgCoupling": 5.1,
+      "securityIssues": 22,
+      "patterns": 7,
+      "duplicates": 55,
+      "layerViolations": 189,
+      "connections": 3242,
+      "avgFnLines": 15.5,
+      "longestFn": 16,
+      "testFiles": 1,
+      "testRatio": 0.2,
+      "topFolders": [
+        {
+          "name": "apps",
+          "count": 457
+        },
+        {
+          "name": "packages",
+          "count": 171
+        },
+        {
+          "name": "root",
+          "count": 11
+        },
+        {
+          "name": "docker",
+          "count": 1
+        },
+        {
+          "name": "docs",
+          "count": 1
+        }
+      ],
+      "folders": 5,
+      "grade": "D",
+      "score": 66,
+      "topBlast": {
+        "path": "apps/web/src/lib/auth.ts",
+        "direct": 300,
+        "transitive": 420,
+        "total": 720
+      },
+      "fragility": [
+        {
+          "path": "apps/web/src/lib/auth.ts",
+          "direct": 300,
+          "transitive": 420,
+          "total": 720
+        },
+        {
+          "path": "apps/web/src/app/(app)/lift-plans/_actions.ts",
+          "direct": 157,
+          "transitive": 417,
+          "total": 574
+        },
+        {
+          "path": "packages/ui/src/badge.tsx",
+          "direct": 165,
+          "transitive": 393,
+          "total": 558
+        }
+      ]
     }
   ]
 }
