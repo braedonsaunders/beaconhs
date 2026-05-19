@@ -50,7 +50,7 @@ export default async function TrainingPage() {
         <header>
           <h1 className="text-2xl font-semibold">Training</h1>
           <p className="text-sm text-slate-500">
-            Courses, records, and expiry tracking. Full matrix view + cert verification in Phase 3.
+            Courses, records, classes, certificates, and expiry tracking. Skill authorities + skill types live in Library.
           </p>
         </header>
 

@@ -22,7 +22,7 @@ export default async function FormsPage() {
             <div>
               <h1 className="text-2xl font-semibold">Forms</h1>
               <p className="text-sm text-slate-500">
-                Templates, assignments, and submissions. Designer launches in Phase 1.
+                Templates, assignments, and submissions. Drag-drop designer + visual logic builder.
               </p>
             </div>
             <Link href="/forms/templates/new">

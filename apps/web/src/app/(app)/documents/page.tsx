@@ -3,6 +3,7 @@ import { BookOpen } from 'lucide-react'
 import { and, asc, count, desc, ilike, or, eq, type SQL } from 'drizzle-orm'
 import {
   Badge,
+  Button,
   EmptyState,
   PageHeader,
   Table,
@@ -89,6 +90,11 @@ export default async function DocumentsPage({
           <PageHeader
             title="Documents"
             description="Versioned library + read-and-acknowledge + periodic review + management review books."
+            actions={
+              <Link href="/documents/new">
+                <Button>New document</Button>
+              </Link>
+            }
           />
           <div className="flex items-center gap-3">
             <SearchInput placeholder="Search title or description" />
@@ -104,7 +110,16 @@ export default async function DocumentsPage({
       }
     >
       {rows.length === 0 ? (
-        <EmptyState icon={<BookOpen size={32} />} title="No documents match" />
+        <EmptyState
+          icon={<BookOpen size={32} />}
+          title={params.q || statusFilter ? 'No documents match these filters' : 'No documents yet'}
+          description="Add policies, procedures, SDS sheets, manuals, and have workers acknowledge them."
+          action={
+            <Link href="/documents/new">
+              <Button>Create your first document</Button>
+            </Link>
+          }
+        />
       ) : (
         <>
           <Table>

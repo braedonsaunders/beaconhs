@@ -3,6 +3,7 @@ import { HardHat } from 'lucide-react'
 import { and, asc, count, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
 import {
   Badge,
+  Button,
   EmptyState,
   PageHeader,
   Table,
@@ -99,6 +100,11 @@ export default async function PpePage({
           <PageHeader
             title="PPE"
             description="Issue, return, replace, discard — plus scheduled inspections for inspectable PPE."
+            actions={
+              <Link href="/ppe/new">
+                <Button>New PPE item</Button>
+              </Link>
+            }
           />
           <div className="flex items-center gap-3">
             <SearchInput placeholder="Search type or serial #" />
@@ -114,7 +120,16 @@ export default async function PpePage({
       }
     >
       {rows.length === 0 ? (
-        <EmptyState icon={<HardHat size={32} />} title="No PPE matches" />
+        <EmptyState
+          icon={<HardHat size={32} />}
+          title={params.q || statusFilter ? 'No PPE matches these filters' : 'No PPE registered yet'}
+          description="Add helmets, harnesses, glasses, gloves — every inspectable item lives here."
+          action={
+            <Link href="/ppe/new">
+              <Button>Add your first PPE item</Button>
+            </Link>
+          }
+        />
       ) : (
         <>
           <Table>
