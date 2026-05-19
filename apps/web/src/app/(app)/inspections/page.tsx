@@ -24,6 +24,7 @@ import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
+import { TabNav } from '@/components/tab-nav'
 
 export const metadata = { title: 'Inspections' }
 
@@ -121,6 +122,26 @@ export default async function InspectionsPage({
               )
             }
           />
+          <nav className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/inspections"
+              className="rounded-full border border-teal-500 bg-teal-50 px-3 py-1 text-xs font-medium text-teal-700"
+            >
+              Recent inspections
+            </Link>
+            <Link
+              href="/forms?category=inspection"
+              className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:border-teal-500 hover:bg-teal-50 hover:text-teal-700"
+            >
+              Templates
+            </Link>
+            <Link
+              href="/inspections/banks"
+              className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:border-teal-500 hover:bg-teal-50 hover:text-teal-700"
+            >
+              Inspection banks
+            </Link>
+          </nav>
         </>
       }
     >

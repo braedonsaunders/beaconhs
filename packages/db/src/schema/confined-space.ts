@@ -15,7 +15,7 @@ import {
 } from 'drizzle-orm/pg-core'
 import { id, timestamps } from './_helpers'
 import { tenants, tenantUsers } from './core'
-import { orgUnits } from './org'
+import { orgUnits, people } from './org'
 
 export const csPermitStatus = pgEnum('cs_permit_status', [
   'open',
@@ -83,7 +83,49 @@ export const csAtmosphericReadings = pgTable(
   }),
 )
 
+// Per-permit personnel log: entrants, attendants, supervisors, rescue.
+// Tracks entry/exit timestamps for live attendance audit.
+export const csPermitPersonnelRole = pgEnum('cs_permit_personnel_role', [
+  'entrant',
+  'attendant',
+  'supervisor',
+  'rescue',
+])
+
+export const csPermitPersonnel = pgTable(
+  'cs_permit_personnel',
+  {
+    id: id(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    permitId: uuid('permit_id')
+      .notNull()
+      .references(() => csPermits.id, { onDelete: 'cascade' }),
+    personId: uuid('person_id')
+      .notNull()
+      .references(() => people.id, { onDelete: 'cascade' }),
+    role: csPermitPersonnelRole('role').notNull(),
+    enteredAt: timestamp('entered_at', { withTimezone: true }),
+    exitedAt: timestamp('exited_at', { withTimezone: true }),
+    note: text('note'),
+    ...timestamps,
+  },
+  (t) => ({
+    permitIdx: index('cs_permit_personnel_permit_idx').on(t.permitId),
+    personIdx: index('cs_permit_personnel_person_idx').on(t.tenantId, t.personId),
+    tenantIdx: index('cs_permit_personnel_tenant_idx').on(t.tenantId),
+  }),
+)
+
 export const csPermitsRelations = relations(csPermits, ({ one, many }) => ({
   tenant: one(tenants, { fields: [csPermits.tenantId], references: [tenants.id] }),
   readings: many(csAtmosphericReadings),
+  personnel: many(csPermitPersonnel),
+}))
+
+export const csPermitPersonnelRelations = relations(csPermitPersonnel, ({ one }) => ({
+  tenant: one(tenants, { fields: [csPermitPersonnel.tenantId], references: [tenants.id] }),
+  permit: one(csPermits, { fields: [csPermitPersonnel.permitId], references: [csPermits.id] }),
+  person: one(people, { fields: [csPermitPersonnel.personId], references: [people.id] }),
 }))

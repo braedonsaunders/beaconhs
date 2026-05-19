@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { desc, eq } from 'drizzle-orm'
-import { FileText, Mail, Pencil, Phone } from 'lucide-react'
+import { Award, FileText, HardHat, Mail, Pencil, Phone, ShieldCheck } from 'lucide-react'
 import {
   Badge,
   Button,
@@ -23,6 +23,8 @@ import {
   departments,
   documentAcknowledgments,
   documents,
+  formResponses,
+  formTemplates,
   incidentInjuries,
   incidentPeople,
   incidents,
@@ -33,15 +35,32 @@ import {
   trades,
   trainingCourses,
   trainingRecords,
+  trainingSkillAssignments,
+  trainingSkillAuthorities,
+  trainingSkillTypes,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { recentActivityForEntity } from '@/lib/audit'
+import { ActivityFeed } from '@/components/activity-feed'
+import { Section } from '@/components/section'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { PersonEditTab } from './person-edit-tab'
 import { PageContainer } from '@/components/page-layout'
 
 export const dynamic = 'force-dynamic'
 
-const TABS = ['transcript', 'compliance', 'incidents', 'ppe', 'edit'] as const
+const TABS = [
+  'profile',
+  'employment',
+  'training',
+  'skills',
+  'ppe',
+  'documents',
+  'incidents',
+  'forms',
+  'activity',
+  'edit',
+] as const
 type Tab = (typeof TABS)[number]
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
@@ -58,7 +77,7 @@ export default async function PersonDetailPage({
 }) {
   const { id } = await params
   const sp = await searchParams
-  const active: Tab = pickActiveTab(sp, TABS, 'transcript')
+  const active: Tab = pickActiveTab(sp, TABS, 'profile')
 
   const ctx = await requireRequestContext()
   const data = await ctx.db(async (tx) => {
@@ -72,54 +91,104 @@ export default async function PersonDetailPage({
       .limit(1)
     if (!row) return null
 
-    const [training, incidentInvolvement, injuryRows, ppeAssigned, ppeIssueLog, ackedDocs] =
-      await Promise.all([
-        tx
-          .select({ record: trainingRecords, course: trainingCourses })
-          .from(trainingRecords)
-          .innerJoin(trainingCourses, eq(trainingCourses.id, trainingRecords.courseId))
-          .where(eq(trainingRecords.personId, id))
-          .orderBy(desc(trainingRecords.completedOn)),
-        tx
-          .select({ link: incidentPeople, incident: incidents })
-          .from(incidentPeople)
-          .innerJoin(incidents, eq(incidents.id, incidentPeople.incidentId))
-          .where(eq(incidentPeople.personId, id))
-          .orderBy(desc(incidents.occurredAt)),
-        tx
-          .select({ injury: incidentInjuries, incident: incidents })
-          .from(incidentInjuries)
-          .innerJoin(incidents, eq(incidents.id, incidentInjuries.incidentId))
-          .where(eq(incidentInjuries.personId, id))
-          .orderBy(desc(incidents.occurredAt)),
-        tx
-          .select({ item: ppeItems, type: ppeTypes })
-          .from(ppeItems)
-          .innerJoin(ppeTypes, eq(ppeTypes.id, ppeItems.typeId))
-          .where(eq(ppeItems.currentHolderPersonId, id)),
-        tx
-          .select({ issue: ppeIssues, item: ppeItems, type: ppeTypes })
-          .from(ppeIssues)
-          .innerJoin(ppeItems, eq(ppeItems.id, ppeIssues.itemId))
-          .innerJoin(ppeTypes, eq(ppeTypes.id, ppeItems.typeId))
-          .where(eq(ppeIssues.personId, id))
-          .orderBy(desc(ppeIssues.occurredAt)),
-        tx
-          .select({ ack: documentAcknowledgments, doc: documents })
-          .from(documentAcknowledgments)
-          .innerJoin(documents, eq(documents.id, documentAcknowledgments.documentId))
-          .where(eq(documentAcknowledgments.personId, id))
-          .orderBy(desc(documentAcknowledgments.acknowledgedAt)),
-      ])
+    const [
+      training,
+      skills,
+      incidentInvolvement,
+      injuryRows,
+      ppeAssigned,
+      ppeIssueLog,
+      ackedDocs,
+      submittedForms,
+    ] = await Promise.all([
+      tx
+        .select({ record: trainingRecords, course: trainingCourses })
+        .from(trainingRecords)
+        .innerJoin(trainingCourses, eq(trainingCourses.id, trainingRecords.courseId))
+        .where(eq(trainingRecords.personId, id))
+        .orderBy(desc(trainingRecords.completedOn)),
+      tx
+        .select({
+          assignment: trainingSkillAssignments,
+          skillType: trainingSkillTypes,
+          authority: trainingSkillAuthorities,
+        })
+        .from(trainingSkillAssignments)
+        .innerJoin(
+          trainingSkillTypes,
+          eq(trainingSkillTypes.id, trainingSkillAssignments.skillTypeId),
+        )
+        .leftJoin(
+          trainingSkillAuthorities,
+          eq(trainingSkillAuthorities.id, trainingSkillTypes.authorityId),
+        )
+        .where(eq(trainingSkillAssignments.personId, id))
+        .orderBy(desc(trainingSkillAssignments.grantedOn)),
+      tx
+        .select({ link: incidentPeople, incident: incidents })
+        .from(incidentPeople)
+        .innerJoin(incidents, eq(incidents.id, incidentPeople.incidentId))
+        .where(eq(incidentPeople.personId, id))
+        .orderBy(desc(incidents.occurredAt)),
+      tx
+        .select({ injury: incidentInjuries, incident: incidents })
+        .from(incidentInjuries)
+        .innerJoin(incidents, eq(incidents.id, incidentInjuries.incidentId))
+        .where(eq(incidentInjuries.personId, id))
+        .orderBy(desc(incidents.occurredAt)),
+      tx
+        .select({ item: ppeItems, type: ppeTypes })
+        .from(ppeItems)
+        .innerJoin(ppeTypes, eq(ppeTypes.id, ppeItems.typeId))
+        .where(eq(ppeItems.currentHolderPersonId, id)),
+      tx
+        .select({ issue: ppeIssues, item: ppeItems, type: ppeTypes })
+        .from(ppeIssues)
+        .innerJoin(ppeItems, eq(ppeItems.id, ppeIssues.itemId))
+        .innerJoin(ppeTypes, eq(ppeTypes.id, ppeItems.typeId))
+        .where(eq(ppeIssues.personId, id))
+        .orderBy(desc(ppeIssues.occurredAt)),
+      tx
+        .select({ ack: documentAcknowledgments, doc: documents })
+        .from(documentAcknowledgments)
+        .innerJoin(documents, eq(documents.id, documentAcknowledgments.documentId))
+        .where(eq(documentAcknowledgments.personId, id))
+        .orderBy(desc(documentAcknowledgments.acknowledgedAt)),
+      tx
+        .select({ response: formResponses, template: formTemplates })
+        .from(formResponses)
+        .innerJoin(formTemplates, eq(formTemplates.id, formResponses.templateId))
+        .where(eq(formResponses.subjectPersonId, id))
+        .orderBy(desc(formResponses.submittedAt)),
+    ])
 
-    return { ...row, training, incidentInvolvement, injuryRows, ppeAssigned, ppeIssueLog, ackedDocs }
+    return {
+      ...row,
+      training,
+      skills,
+      incidentInvolvement,
+      injuryRows,
+      ppeAssigned,
+      ppeIssueLog,
+      ackedDocs,
+      submittedForms,
+    }
   })
 
   if (!data) notFound()
   const {
-    person, department, trade, crew,
-    training, incidentInvolvement, injuryRows,
-    ppeAssigned, ppeIssueLog, ackedDocs,
+    person,
+    department,
+    trade,
+    crew,
+    training,
+    skills,
+    incidentInvolvement,
+    injuryRows,
+    ppeAssigned,
+    ppeIssueLog,
+    ackedDocs,
+    submittedForms,
   } = data
 
   const today = new Date()
@@ -136,19 +205,36 @@ export default async function PersonDetailPage({
       return rank[a.status] - rank[b.status]
     })
 
+  const skillsWithStatus = skills
+    .map((s) => {
+      const exp = s.assignment.expiresOn ? new Date(s.assignment.expiresOn) : null
+      const daysLeft = exp ? Math.round((exp.getTime() - today.getTime()) / 86_400_000) : null
+      const status: 'ok' | 'expiring' | 'expired' | 'no_expiry' =
+        daysLeft === null ? 'no_expiry' : daysLeft < 0 ? 'expired' : daysLeft <= 30 ? 'expiring' : 'ok'
+      return { ...s, daysLeft, status }
+    })
+    .sort((a, b) => {
+      const rank = { expired: 0, expiring: 1, ok: 2, no_expiry: 3 } as const
+      return rank[a.status] - rank[b.status]
+    })
+
   const expiredCount = trainingWithStatus.filter((t) => t.status === 'expired').length
   const expiringCount = trainingWithStatus.filter((t) => t.status === 'expiring').length
 
   const incidentMap = new Map<string, { incident: typeof incidents.$inferSelect; injured: boolean }>()
-  for (const r of incidentInvolvement) incidentMap.set(r.incident.id, { incident: r.incident, injured: false })
+  for (const r of incidentInvolvement)
+    incidentMap.set(r.incident.id, { incident: r.incident, injured: false })
   for (const r of injuryRows) {
     const existing = incidentMap.get(r.incident.id)
     if (existing) existing.injured = true
     else incidentMap.set(r.incident.id, { incident: r.incident, injured: true })
   }
   const allIncidents = Array.from(incidentMap.values()).sort(
-    (a, b) => new Date(b.incident.occurredAt).getTime() - new Date(a.incident.occurredAt).getTime(),
+    (a, b) =>
+      new Date(b.incident.occurredAt).getTime() - new Date(a.incident.occurredAt).getTime(),
   )
+
+  const activity = active === 'activity' ? await recentActivityForEntity(ctx, 'person', id, 50) : []
 
   const basePath = `/people/${id}`
   return (
@@ -158,7 +244,11 @@ export default async function PersonDetailPage({
           back={{ href: '/people', label: 'Back to people' }}
           title={`${person.firstName} ${person.lastName}`}
           subtitle={person.formalName ?? (person.employeeNo ? `Employee ${person.employeeNo}` : undefined)}
-          badge={<Badge variant={person.status === 'active' ? 'success' : 'secondary'}>{person.status}</Badge>}
+          badge={
+            <Badge variant={person.status === 'active' ? 'success' : 'secondary'}>
+              {person.status}
+            </Badge>
+          }
           actions={
             <Link href={`${basePath}?tab=edit`}>
               <Button variant="outline">
@@ -216,7 +306,10 @@ export default async function PersonDetailPage({
                 <CardContent className="space-y-1 pt-0 text-sm">
                   <div className="font-medium">{person.emergencyContactName ?? '—'}</div>
                   {person.emergencyContactPhone ? (
-                    <a href={`tel:${person.emergencyContactPhone}`} className="text-teal-700 hover:underline">
+                    <a
+                      href={`tel:${person.emergencyContactPhone}`}
+                      className="text-teal-700 hover:underline"
+                    >
                       {person.emergencyContactPhone}
                     </a>
                   ) : null}
@@ -241,47 +334,215 @@ export default async function PersonDetailPage({
               currentParams={sp}
               active={active}
               tabs={[
-                { key: 'transcript', label: 'Transcript', count: training.length },
-                { key: 'compliance', label: 'Compliance', count: expiredCount + expiringCount },
-                { key: 'incidents', label: 'Incidents', count: allIncidents.length },
+                { key: 'profile', label: 'Profile' },
+                { key: 'employment', label: 'Employment' },
+                {
+                  key: 'training',
+                  label: 'Training matrix',
+                  count: training.length,
+                },
+                { key: 'skills', label: 'Skills', count: skills.length },
                 { key: 'ppe', label: 'PPE', count: ppeAssigned.length },
+                {
+                  key: 'documents',
+                  label: 'Documents',
+                  count: ackedDocs.length,
+                },
+                {
+                  key: 'incidents',
+                  label: 'Incidents',
+                  count: allIncidents.length,
+                },
+                {
+                  key: 'forms',
+                  label: 'Forms',
+                  count: submittedForms.length,
+                },
+                { key: 'activity', label: 'Activity' },
                 { key: 'edit', label: 'Edit' },
               ]}
             />
 
-            {active === 'transcript' ? (
+            {active === 'profile' ? (
+              <Section title="Profile" subtitle="Identification and contact info">
+                <dl className="grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
+                  <ProfileRow label="First name">{person.firstName}</ProfileRow>
+                  <ProfileRow label="Last name">{person.lastName}</ProfileRow>
+                  <ProfileRow label="Formal name">{person.formalName ?? '—'}</ProfileRow>
+                  <ProfileRow label="Job title">{person.jobTitle ?? '—'}</ProfileRow>
+                  <ProfileRow label="Date of birth">{person.dateOfBirth ?? '—'}</ProfileRow>
+                  <ProfileRow label="Employee #">{person.employeeNo ?? '—'}</ProfileRow>
+                  <ProfileRow label="Email">{person.email ?? '—'}</ProfileRow>
+                  <ProfileRow label="Phone">{person.phone ?? '—'}</ProfileRow>
+                  <ProfileRow label="Emergency contact">
+                    {person.emergencyContactName ?? '—'}
+                  </ProfileRow>
+                  <ProfileRow label="Emergency phone">
+                    {person.emergencyContactPhone ?? '—'}
+                  </ProfileRow>
+                </dl>
+              </Section>
+            ) : null}
+
+            {active === 'employment' ? (
+              <Section title="Employment" subtitle="Trade, crew, department, and dates">
+                <dl className="grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
+                  <ProfileRow label="Status">{person.status}</ProfileRow>
+                  <ProfileRow label="Hire date">{person.hireDate ?? '—'}</ProfileRow>
+                  <ProfileRow label="Termination date">{person.terminationDate ?? '—'}</ProfileRow>
+                  <ProfileRow label="Department">{department?.name ?? '—'}</ProfileRow>
+                  <ProfileRow label="Trade">{trade?.name ?? '—'}</ProfileRow>
+                  <ProfileRow label="Crew">{crew?.name ?? '—'}</ProfileRow>
+                  <ProfileRow label="Job title">{person.jobTitle ?? '—'}</ProfileRow>
+                  <ProfileRow label="System user link">
+                    {person.userId ? <Badge variant="success">Linked</Badge> : '—'}
+                  </ProfileRow>
+                </dl>
+              </Section>
+            ) : null}
+
+            {active === 'training' ? (
+              <div className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Training matrix</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {trainingWithStatus.length === 0 ? (
+                      <EmptyState
+                        icon={<FileText size={24} />}
+                        title="No training records"
+                        description="Records appear here as the person completes courses or uploads external certificates."
+                        action={
+                          <Link href={`/training/records?personId=${id}`}>
+                            <Button variant="outline" size="sm">
+                              View training module →
+                            </Button>
+                          </Link>
+                        }
+                      />
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Course</TableHead>
+                            <TableHead>Completed</TableHead>
+                            <TableHead>Expires</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead>Grade</TableHead>
+                            <TableHead></TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {trainingWithStatus.map((row) => (
+                            <TableRow key={row.record.id}>
+                              <TableCell className="font-medium">
+                                <Link
+                                  href={`/training/records/${row.record.id}`}
+                                  className="hover:underline"
+                                >
+                                  {row.course.name}
+                                </Link>
+                                <div className="text-xs text-slate-500">{row.course.code}</div>
+                              </TableCell>
+                              <TableCell>{row.record.completedOn}</TableCell>
+                              <TableCell>{row.record.expiresOn ?? '—'}</TableCell>
+                              <TableCell>
+                                {row.status === 'expired' ? (
+                                  <Badge variant="destructive">
+                                    Expired {Math.abs(row.daysLeft!)}d ago
+                                  </Badge>
+                                ) : row.status === 'expiring' ? (
+                                  <Badge variant="warning">{row.daysLeft}d left</Badge>
+                                ) : row.status === 'ok' ? (
+                                  <Badge variant="success">Valid</Badge>
+                                ) : (
+                                  <Badge variant="secondary">No expiry</Badge>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                {row.record.grade != null ? `${row.record.grade}%` : '—'}
+                              </TableCell>
+                              <TableCell>
+                                <Link
+                                  href={`/training/records/${row.record.id}`}
+                                  className="text-xs text-teal-700 hover:underline"
+                                >
+                                  View →
+                                </Link>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )}
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Compliance summary</CardTitle>
+                  </CardHeader>
+                  <CardContent className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
+                    <Stat
+                      label="Valid certifications"
+                      value={trainingWithStatus.filter((t) => t.status === 'ok').length}
+                      tone="success"
+                    />
+                    <Stat
+                      label="Expiring within 30 days"
+                      value={expiringCount}
+                      tone="warning"
+                    />
+                    <Stat label="Expired" value={expiredCount} tone="destructive" />
+                  </CardContent>
+                </Card>
+              </div>
+            ) : null}
+
+            {active === 'skills' ? (
               <Card>
                 <CardHeader>
-                  <CardTitle>Training transcript</CardTitle>
+                  <CardTitle>Skill assignments</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {trainingWithStatus.length === 0 ? (
-                    <EmptyState icon={<FileText size={24} />} title="No training records" />
+                  {skillsWithStatus.length === 0 ? (
+                    <EmptyState
+                      icon={<Award size={24} />}
+                      title="No skill assignments"
+                      description="External skill credentials (e.g. trade certifications, ticketed competencies) appear here."
+                    />
                   ) : (
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Course</TableHead>
-                          <TableHead>Completed</TableHead>
+                          <TableHead>Skill</TableHead>
+                          <TableHead>Authority</TableHead>
+                          <TableHead>Granted</TableHead>
                           <TableHead>Expires</TableHead>
                           <TableHead>Status</TableHead>
-                          <TableHead>Grade</TableHead>
-                          <TableHead></TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {trainingWithStatus.map((row) => (
-                          <TableRow key={row.record.id}>
+                        {skillsWithStatus.map((row) => (
+                          <TableRow key={row.assignment.id}>
                             <TableCell className="font-medium">
-                              <Link href={`/training/records/${row.record.id}`} className="hover:underline">
-                                {row.course.name}
-                              </Link>
+                              {row.skillType.name}
+                              {row.skillType.code ? (
+                                <div className="font-mono text-xs text-slate-500">
+                                  {row.skillType.code}
+                                </div>
+                              ) : null}
                             </TableCell>
-                            <TableCell>{row.record.completedOn}</TableCell>
-                            <TableCell>{row.record.expiresOn ?? '—'}</TableCell>
+                            <TableCell className="text-slate-600">
+                              {row.authority?.name ?? '—'}
+                            </TableCell>
+                            <TableCell>{row.assignment.grantedOn}</TableCell>
+                            <TableCell>{row.assignment.expiresOn ?? '—'}</TableCell>
                             <TableCell>
                               {row.status === 'expired' ? (
-                                <Badge variant="destructive">Expired {Math.abs(row.daysLeft!)}d ago</Badge>
+                                <Badge variant="destructive">
+                                  Expired {Math.abs(row.daysLeft!)}d ago
+                                </Badge>
                               ) : row.status === 'expiring' ? (
                                 <Badge variant="warning">{row.daysLeft}d left</Badge>
                               ) : row.status === 'ok' ? (
@@ -290,94 +551,6 @@ export default async function PersonDetailPage({
                                 <Badge variant="secondary">No expiry</Badge>
                               )}
                             </TableCell>
-                            <TableCell>{row.record.grade != null ? `${row.record.grade}%` : '—'}</TableCell>
-                            <TableCell>
-                              <Link href={`/training/records/${row.record.id}`} className="text-xs text-teal-700 hover:underline">
-                                View →
-                              </Link>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  )}
-                </CardContent>
-              </Card>
-            ) : null}
-
-            {active === 'compliance' ? (
-              <div className="space-y-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Compliance summary</CardTitle>
-                  </CardHeader>
-                  <CardContent className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
-                    <Stat label="Valid certifications" value={trainingWithStatus.filter((t) => t.status === 'ok').length} tone="success" />
-                    <Stat label="Expiring within 30 days" value={expiringCount} tone="warning" />
-                    <Stat label="Expired" value={expiredCount} tone="destructive" />
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Acknowledged documents ({ackedDocs.length})</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {ackedDocs.length === 0 ? (
-                      <p className="text-sm text-slate-500">No documents acknowledged.</p>
-                    ) : (
-                      <ul className="divide-y divide-slate-100 text-sm">
-                        {ackedDocs.map((row) => (
-                          <li key={row.ack.id} className="flex items-center justify-between py-2">
-                            <Link href={`/documents/${row.doc.id}`} className="font-medium hover:underline">
-                              {row.doc.title}
-                            </Link>
-                            <span className="text-xs text-slate-500">
-                              {new Date(row.ack.acknowledgedAt).toLocaleDateString()}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-            ) : null}
-
-            {active === 'incidents' ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Incidents involving this person</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {allIncidents.length === 0 ? (
-                    <EmptyState icon={<FileText size={24} />} title="Not involved in any incidents" />
-                  ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Ref</TableHead>
-                          <TableHead>Occurred</TableHead>
-                          <TableHead>Title</TableHead>
-                          <TableHead>Role</TableHead>
-                          <TableHead>Status</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {allIncidents.map(({ incident, injured }) => (
-                          <TableRow key={incident.id}>
-                            <TableCell className="font-mono text-xs">
-                              <Link href={`/incidents/${incident.id}`} className="hover:underline">
-                                {incident.reference}
-                              </Link>
-                            </TableCell>
-                            <TableCell>{new Date(incident.occurredAt).toLocaleDateString()}</TableCell>
-                            <TableCell>{incident.title}</TableCell>
-                            <TableCell>
-                              <Badge variant={injured ? 'destructive' : 'secondary'}>
-                                {injured ? 'Injured' : 'Involved'}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-slate-600">{incident.status.replace(/_/g, ' ')}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -414,10 +587,15 @@ export default async function PersonDetailPage({
                               <TableCell>{row.item.serialNumber ?? '—'}</TableCell>
                               <TableCell>{row.item.size ?? '—'}</TableCell>
                               <TableCell>
-                                <Badge variant="secondary">{row.item.status.replace('_', ' ')}</Badge>
+                                <Badge variant="secondary">
+                                  {row.item.status.replace('_', ' ')}
+                                </Badge>
                               </TableCell>
                               <TableCell>
-                                <Link href={`/ppe/${row.item.id}`} className="text-xs text-teal-700 hover:underline">
+                                <Link
+                                  href={`/ppe/${row.item.id}`}
+                                  className="text-xs text-teal-700 hover:underline"
+                                >
                                   View →
                                 </Link>
                               </TableCell>
@@ -436,24 +614,230 @@ export default async function PersonDetailPage({
                     {ppeIssueLog.length === 0 ? (
                       <p className="text-sm text-slate-500">No issue history.</p>
                     ) : (
-                      <ul className="divide-y divide-slate-100 text-sm">
-                        {ppeIssueLog.map((row) => (
-                          <li key={row.issue.id} className="flex items-center justify-between py-2">
-                            <div>
-                              <span className="font-medium">{row.type.name}</span>{' '}
-                              <span className="text-slate-500">{row.item.serialNumber ?? ''}</span>
-                              <div className="text-xs text-slate-500">{row.issue.action}</div>
-                            </div>
-                            <span className="text-xs text-slate-500">
-                              {new Date(row.issue.occurredAt).toLocaleDateString()}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>When</TableHead>
+                            <TableHead>Action</TableHead>
+                            <TableHead>Type</TableHead>
+                            <TableHead>Serial #</TableHead>
+                            <TableHead>Note</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {ppeIssueLog.map((row) => (
+                            <TableRow key={row.issue.id}>
+                              <TableCell>
+                                {new Date(row.issue.occurredAt).toLocaleDateString()}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="secondary">
+                                  {row.issue.action.replace('_', ' ')}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>{row.type.name}</TableCell>
+                              <TableCell className="font-mono text-xs">
+                                {row.item.serialNumber ?? '—'}
+                              </TableCell>
+                              <TableCell className="text-xs text-slate-600">
+                                {row.issue.note ?? '—'}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
                     )}
                   </CardContent>
                 </Card>
               </div>
+            ) : null}
+
+            {active === 'documents' ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Documents acknowledged ({ackedDocs.length})</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {ackedDocs.length === 0 ? (
+                    <EmptyState
+                      icon={<ShieldCheck size={24} />}
+                      title="No documents acknowledged"
+                      description="Acknowledgements appear here once the person signs off on policies, SDS, or procedures."
+                      action={
+                        <Link href={`/documents`}>
+                          <Button variant="outline" size="sm">
+                            Browse documents →
+                          </Button>
+                        </Link>
+                      }
+                    />
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Document</TableHead>
+                          <TableHead>Category</TableHead>
+                          <TableHead>Acknowledged at</TableHead>
+                          <TableHead></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {ackedDocs.map((row) => (
+                          <TableRow key={row.ack.id}>
+                            <TableCell className="font-medium">
+                              <Link
+                                href={`/documents/${row.doc.id}`}
+                                className="hover:underline"
+                              >
+                                {row.doc.title}
+                              </Link>
+                            </TableCell>
+                            <TableCell className="text-slate-600">
+                              {row.doc.category ?? '—'}
+                            </TableCell>
+                            <TableCell>
+                              {new Date(row.ack.acknowledgedAt).toLocaleString()}
+                            </TableCell>
+                            <TableCell>
+                              <Link
+                                href={`/documents/${row.doc.id}`}
+                                className="text-xs text-teal-700 hover:underline"
+                              >
+                                View →
+                              </Link>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </CardContent>
+              </Card>
+            ) : null}
+
+            {active === 'incidents' ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Incidents involving this person</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {allIncidents.length === 0 ? (
+                    <EmptyState
+                      icon={<HardHat size={24} />}
+                      title="Not involved in any incidents"
+                    />
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Ref</TableHead>
+                          <TableHead>Occurred</TableHead>
+                          <TableHead>Title</TableHead>
+                          <TableHead>Role</TableHead>
+                          <TableHead>Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {allIncidents.map(({ incident, injured }) => (
+                          <TableRow key={incident.id}>
+                            <TableCell className="font-mono text-xs">
+                              <Link
+                                href={`/incidents/${incident.id}`}
+                                className="hover:underline"
+                              >
+                                {incident.reference}
+                              </Link>
+                            </TableCell>
+                            <TableCell>
+                              {new Date(incident.occurredAt).toLocaleDateString()}
+                            </TableCell>
+                            <TableCell>{incident.title}</TableCell>
+                            <TableCell>
+                              <Badge variant={injured ? 'destructive' : 'secondary'}>
+                                {injured ? 'Injured' : 'Involved'}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-slate-600">
+                              {incident.status.replace(/_/g, ' ')}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </CardContent>
+              </Card>
+            ) : null}
+
+            {active === 'forms' ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Forms about this person ({submittedForms.length})</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {submittedForms.length === 0 ? (
+                    <EmptyState
+                      icon={<FileText size={24} />}
+                      title="No forms about this person"
+                      description="JSHAs, incident investigations, evaluations and other forms where this person is the subject will show here."
+                    />
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Form</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Submitted</TableHead>
+                          <TableHead></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {submittedForms.map((row) => (
+                          <TableRow key={row.response.id}>
+                            <TableCell className="font-medium">{row.template.name}</TableCell>
+                            <TableCell>
+                              <Badge
+                                variant={
+                                  row.response.status === 'closed' ||
+                                  row.response.status === 'submitted'
+                                    ? 'success'
+                                    : 'warning'
+                                }
+                              >
+                                {row.response.status.replace('_', ' ')}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              {row.response.submittedAt
+                                ? new Date(row.response.submittedAt).toLocaleDateString()
+                                : '—'}
+                            </TableCell>
+                            <TableCell>
+                              <Link
+                                href={`/forms/responses/${row.response.id}`}
+                                className="text-xs text-teal-700 hover:underline"
+                              >
+                                View →
+                              </Link>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </CardContent>
+              </Card>
+            ) : null}
+
+            {active === 'activity' ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Activity</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ActivityFeed entries={activity} />
+                </CardContent>
+              </Card>
             ) : null}
 
             {active === 'edit' ? <PersonEditTab personId={id} /> : null}
@@ -473,8 +857,30 @@ function SidebarRow({ label, children }: { label: string; children: React.ReactN
   )
 }
 
-function Stat({ label, value, tone }: { label: string; value: number; tone: 'success' | 'warning' | 'destructive' }) {
-  const colour = tone === 'success' ? 'text-emerald-700' : tone === 'warning' ? 'text-amber-700' : 'text-red-700'
+function ProfileRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col">
+      <dt className="text-xs uppercase tracking-wide text-slate-500">{label}</dt>
+      <dd className="text-slate-900">{children}</dd>
+    </div>
+  )
+}
+
+function Stat({
+  label,
+  value,
+  tone,
+}: {
+  label: string
+  value: number
+  tone: 'success' | 'warning' | 'destructive'
+}) {
+  const colour =
+    tone === 'success'
+      ? 'text-emerald-700'
+      : tone === 'warning'
+        ? 'text-amber-700'
+        : 'text-red-700'
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4">
       <div className="text-xs uppercase tracking-wide text-slate-500">{label}</div>

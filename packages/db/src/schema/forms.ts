@@ -317,6 +317,28 @@ export const formResponseSteps = pgTable(
   }),
 )
 
+// Comments on a form response — used for back-and-forth between reviewer and
+// submitter, follow-up notes, or correction history.
+export const formResponseComments = pgTable(
+  'form_response_comments',
+  {
+    id: id(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    responseId: uuid('response_id')
+      .notNull()
+      .references(() => formResponses.id, { onDelete: 'cascade' }),
+    authorTenantUserId: uuid('author_tenant_user_id').references(() => tenantUsers.id),
+    body: text('body').notNull(),
+    ...timestamps,
+  },
+  (t) => ({
+    responseIdx: index('form_response_comments_response_idx').on(t.responseId, t.createdAt),
+    tenantIdx: index('form_response_comments_tenant_idx').on(t.tenantId),
+  }),
+)
+
 // Extracted compliance scores per response, for analytic roll-ups.
 // One row per scored field per response.
 export const formResponseScores = pgTable(

@@ -17,6 +17,7 @@ import {
 import { correctiveActions, incidents, orgUnits } from '@beaconhs/db/schema'
 import { emitCorrectiveActionAssigned } from '@beaconhs/events'
 import { requireRequestContext } from '@/lib/auth'
+import { recordAudit } from '@/lib/audit'
 import { pickString } from '@/lib/list-params'
 import { PageContainer } from '@/components/page-layout'
 
@@ -68,7 +69,13 @@ async function createCA(formData: FormData) {
   })
   revalidatePath('/corrective-actions')
   if (row) {
-    // Fire-and-forget; emit function never throws.
+    await recordAudit(ctx, {
+      entityType: 'corrective_action',
+      entityId: row.id,
+      action: 'create',
+      summary: `Created ${row.reference}: ${title}`,
+      after: { reference: row.reference, severity, source, dueOn, siteOrgUnitId },
+    })
     await emitCorrectiveActionAssigned(ctx, {
       caId: row.id,
       assigneeUserId: null,

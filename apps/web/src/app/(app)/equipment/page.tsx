@@ -122,7 +122,16 @@ export default async function EquipmentPage({
       }
     >
       {rows.length === 0 ? (
-        <EmptyState icon={<Wrench size={32} />} title="No equipment matches these filters" />
+        <EmptyState
+          icon={<Wrench size={32} />}
+          title={params.q || statusFilter ? 'No equipment matches these filters' : 'No equipment yet'}
+          description="Add your first asset to start tracking inspections, transfers, and work orders."
+          action={
+            <Link href="/equipment/new">
+              <Button>Add your first asset</Button>
+            </Link>
+          }
+        />
       ) : (
         <>
           <Table>

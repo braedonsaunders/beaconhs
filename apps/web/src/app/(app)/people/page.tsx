@@ -101,7 +101,12 @@ export default async function PeoplePage({
         <EmptyState
           icon={<Users size={32} />}
           title={params.q ? `No people match "${params.q}"` : 'No people yet'}
-          description="Import via CSV from Admin → Import, or enable the NetSuite plugin."
+          description="Add people one at a time, import via CSV from Admin → Import, or enable the NetSuite plugin."
+          action={
+            <Link href="/people/new">
+              <Button>Add your first person</Button>
+            </Link>
+          }
         />
       ) : (
         <>

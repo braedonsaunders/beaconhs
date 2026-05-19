@@ -99,6 +99,20 @@ export default async function ConfinedSpacePage({
               </Link>
             }
           />
+          <nav className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/confined-space"
+              className="rounded-full border border-teal-500 bg-teal-50 px-3 py-1 text-xs font-medium text-teal-700"
+            >
+              Permits
+            </Link>
+            <Link
+              href="/confined-space/sensors"
+              className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:border-teal-500 hover:bg-teal-50 hover:text-teal-700"
+            >
+              Atmospheric sensors
+            </Link>
+          </nav>
           <div className="flex items-center gap-3">
             <SearchInput placeholder="Search by permit title" />
           </div>

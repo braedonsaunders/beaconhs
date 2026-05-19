@@ -16,6 +16,7 @@ import {
 import { crews, departments, trades } from '@beaconhs/db/schema'
 import { people } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { recordAudit } from '@/lib/audit'
 import { revalidatePath } from 'next/cache'
 import { PageContainer } from '@/components/page-layout'
 
@@ -54,7 +55,16 @@ async function createPerson(formData: FormData) {
       .returning(),
   )
   revalidatePath('/people')
-  if (row) redirect(`/people/${row.id}`)
+  if (row) {
+    await recordAudit(ctx, {
+      entityType: 'person',
+      entityId: row.id,
+      action: 'create',
+      summary: `Added person ${firstName} ${lastName}`,
+      after: { firstName, lastName, employeeNo, email, hireDate, departmentId, tradeId, crewId },
+    })
+    redirect(`/people/${row.id}`)
+  }
   redirect('/people')
 }
 

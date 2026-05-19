@@ -17,6 +17,7 @@ import {
 import { incidents, orgUnits } from '@beaconhs/db/schema'
 import { emitIncidentReported } from '@beaconhs/events'
 import { requireRequestContext } from '@/lib/auth'
+import { recordAudit } from '@/lib/audit'
 import { PageContainer } from '@/components/page-layout'
 
 export const metadata = { title: 'Report incident' }
@@ -73,6 +74,13 @@ async function reportIncident(formData: FormData) {
 
   revalidatePath('/incidents')
   if (row) {
+    await recordAudit(ctx, {
+      entityType: 'incident',
+      entityId: row.id,
+      action: 'create',
+      summary: `Reported ${row.reference}: ${title}`,
+      after: { reference: row.reference, type, severity, occurredAt, siteOrgUnitId },
+    })
     // Fire-and-forget notification; the emit function never throws.
     await emitIncidentReported(ctx, { incidentId: row.id })
     redirect(`/incidents/${row.id}`)

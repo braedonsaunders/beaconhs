@@ -145,7 +145,20 @@ export default async function CorrectiveActionsPage({
       }
     >
       {rows.length === 0 ? (
-        <EmptyState icon={<ListChecks size={32} />} title="No corrective actions match these filters" />
+        <EmptyState
+          icon={<ListChecks size={32} />}
+          title={
+            params.q || statusFilter || sevFilter
+              ? 'No corrective actions match these filters'
+              : 'No corrective actions yet'
+          }
+          description="Create one to assign accountability for a fix and track it to verification."
+          action={
+            <Link href="/corrective-actions/new">
+              <Button>Create your first action</Button>
+            </Link>
+          }
+        />
       ) : (
         <>
           <Table>

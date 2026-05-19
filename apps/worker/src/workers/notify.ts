@@ -4,11 +4,13 @@ import { db, withTenant } from '@beaconhs/db'
 import {
   notificationPreferences,
   notifications,
+  people,
   users,
   webpushSubscriptions,
 } from '@beaconhs/db/schema'
 import { enqueueEmail, type NotifyJobData } from '@beaconhs/jobs'
 import webpush from 'web-push'
+import { sendSms, smsConfigured } from '../lib/twilio'
 
 const vapidPub = process.env.VAPID_PUBLIC_KEY
 const vapidPriv = process.env.VAPID_PRIVATE_KEY
@@ -82,8 +84,27 @@ export async function processNotification(job: Job<NotifyJobData>): Promise<void
 
       // SMS only for critical + channel selected.
       if (d.isCritical && d.channels?.includes('sms')) {
-        console.log(`[sms] would send to ${t.user.email}: ${d.title}`)
-        // TODO: Twilio client
+        if (!smsConfigured()) {
+          console.log(`[sms] skipped: TWILIO_* not configured (would send to ${t.user.email}: ${d.title})`)
+        } else {
+          const [person] = await tx
+            .select({ phone: people.phone })
+            .from(people)
+            .where(eq(people.userId, t.user.id))
+            .limit(1)
+          const phone = person?.phone?.trim()
+          if (!phone) {
+            console.log(`[sms] skipped: no phone on file for ${t.user.email}`)
+          } else {
+            const text = d.body ? `${d.title}\n${d.body}` : d.title
+            const result = await sendSms({ to: phone, body: text.slice(0, 1500) })
+            if (result.sent) {
+              console.log(`[sms] sent ${result.sid} to ${t.user.email}`)
+            } else {
+              console.warn(`[sms] failed for ${t.user.email}: ${result.reason}`)
+            }
+          }
+        }
       }
     }
   })

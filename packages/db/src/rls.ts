@@ -64,6 +64,7 @@ export const TENANT_SCOPED_TABLES = [
   'form_responses',
   'form_response_steps',
   'form_response_scores',
+  'form_response_comments',
   'incidents',
   'incident_injuries',
   'incident_lost_time_events',
@@ -90,6 +91,7 @@ export const TENANT_SCOPED_TABLES = [
   'corrective_actions',
   'cs_permits',
   'cs_atmospheric_readings',
+  'cs_permit_personnel',
   'lw_sessions',
   'lw_checkins',
   'notifications',
@@ -109,4 +111,6 @@ export const TENANT_SCOPED_TABLES = [
   'report_schedules',
   'report_runs',
   'tenant_notification_recipients',
+  'form_assignment_dispatches',
+  'plugin_runs',
 ] as const

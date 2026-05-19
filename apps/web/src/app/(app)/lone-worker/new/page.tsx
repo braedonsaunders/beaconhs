@@ -16,6 +16,7 @@ import {
 } from '@beaconhs/ui'
 import { lwSessions, orgUnits, tenantUsers, user } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { recordAudit } from '@/lib/audit'
 import { PageContainer } from '@/components/page-layout'
 
 export const metadata = { title: 'Start lone-worker session' }
@@ -53,7 +54,22 @@ async function startSession(formData: FormData) {
       .returning(),
   )
   revalidatePath('/lone-worker')
-  if (row) redirect(`/lone-worker/${row.id}`)
+  if (row) {
+    await recordAudit(ctx, {
+      entityType: 'lw_session',
+      entityId: row.id,
+      action: 'create',
+      summary: `Started lone-worker session${task ? `: ${task}` : ''}`,
+      after: {
+        workerTenantUserId,
+        supervisorTenantUserId,
+        siteOrgUnitId,
+        intervalMinutes,
+        durationMinutes,
+      },
+    })
+    redirect(`/lone-worker/${row.id}`)
+  }
   redirect('/lone-worker')
 }
 

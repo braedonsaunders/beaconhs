@@ -16,6 +16,7 @@ import {
 } from '@beaconhs/ui'
 import { csPermits, orgUnits } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { recordAudit } from '@/lib/audit'
 import { PageContainer } from '@/components/page-layout'
 
 export const metadata = { title: 'New permit' }
@@ -60,7 +61,16 @@ async function createPermit(formData: FormData) {
       .returning()
   })
   revalidatePath('/confined-space')
-  if (row) redirect(`/confined-space/${row.id}`)
+  if (row) {
+    await recordAudit(ctx, {
+      entityType: 'cs_permit',
+      entityId: row.id,
+      action: 'create',
+      summary: `Issued ${row.reference}: ${title}`,
+      after: { reference: row.reference, siteOrgUnitId, hazardIdentification: hazards },
+    })
+    redirect(`/confined-space/${row.id}`)
+  }
   redirect('/confined-space')
 }
 
