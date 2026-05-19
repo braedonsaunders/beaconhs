@@ -24,7 +24,7 @@ Updated as work lands. `✅` = done, `🟡` = in progress / stub, `⬜` = not ye
 - ✅ Audit log helper + first wiring on incidents (status changes + lock/unlock)
 - ⬜ Audit log wired into every other mutation (CAs, PPE, equipment, etc.)
 - ⬜ R2 file storage actually wired (signed PUT + image-optimization job)
-- ⬜ Notifications worker wired into module events
+- ✅ **Notifications worker wired into module events**: `@beaconhs/events` package with `emit*` functions for incident.reported / incident.statusChanged / ca.assigned / ca.completed / ca.overdue / training.expiring / training.expired / document.reviewDue / loneWorker.overdue / csPermit.expiring. Audience resolution: tenant-overridable via `tenant_notification_recipients`, falls back to safety_manager + tenant_admin roles. Scheduled-tick worker actually emits now (incl. a new hourly CA-overdue scan). Each event fan-outs to in-app + push (via notify queue) **and** a properly-templated email (subject + body + Open-in-app button)
 
 ### Phase 1 — Form builder
 - ✅ Schema + Zod validation (`FormSchemaV1`, every field type, conditional logic, multi-step workflow)
@@ -67,7 +67,7 @@ Every list has search + sort + pagination + filter chips. Every row clicks throu
 - ✅ **Dashboard upgraded**: 8 KPI tiles with trend deltas, 4 list widgets (recent incidents, due CAs, expiring certs, inbox)
 - ⬜ Drag-drop widget builder
 - ⬜ Pre-built reports + custom report builder
-- ⬜ Scheduled reports
+- ✅ **Scheduled reports** at `/reports`: 5 built-in report definitions (incidents_summary, training_expiring, corrective_actions_open, inspections_completed, documents_overdue_review). Per-tenant `report_schedules` table (daily/weekly/monthly cadence with day-of-week/day-of-month/hour/minute, timezone, recipient userIds + emails, optional filters). `report_runs` log captures status + PDF attachment + row count + error. `/5min report-scheduler scan picks up due schedules, a dedicated `reports` BullMQ queue dispatches PDF generation + email delivery. Full UI: list (definitions + your schedules), create-schedule wizard, schedule detail (edit + run history), run-detail (download generated PDF)
 - ⬜ Plugin SDK runtime + first-party plugins
 
 ### Phase 5 — Migration + cutover
@@ -87,7 +87,7 @@ Every list has search + sort + pagination + filter chips. Every row clicks throu
 
 ### Cross-cutting
 - ✅ **Container-app shell**: AppShell is `h-screen overflow-hidden`. Pages choose `PageContainer` (whole-page scroll), `ListPageLayout` (sticky header + scrolling body), `DetailPageLayout` (sticky header + subtabs + scrolling body), `DetailSplitLayout` (sticky header + sticky sidebar + scrolling body), or `WizardLayout` (sticky header + scrolling body + sticky footer for forms).
-- ✅ **Horizontal subtabs** on Incident detail (Overview / Medical / Injuries / Investigation / Photos / Activity) and existing tabs on People, Equipment, Documents, Locations.
+- ✅ **Horizontal subtabs everywhere**: Incident (Overview/Medical/Injuries/Investigation/Photos/Activity), Corrective Action (Overview/Work/Status/Activity), PPE (Overview/Inspections/Issues/History/Status), Confined Space (Overview/Atmospheric readings), Lone Worker (Overview/Check-ins), Document (Overview/Versions/Acknowledgments/Reviews), Forms Template (Overview/Schema/Assignments/Recent responses/Raw JSON), plus existing tabs on People, Equipment, Locations.
 - ✅ **Notifications inbox** at /notifications + bell-icon unread count in header + mark-read / mark-all-read actions
 - ✅ App-shell sidebar grouped: Overview / Frontline (Forms / Inspections / Inspection Banks / Incidents / CAs) / Programs (Training + Skills + Authorities / Documents / CS + Sensors / Lone Worker) / Assets & people (People / Locations / Equipment / PPE) / Insight / Settings
 - ✅ `/verify/<token>` certificate verification page (handles valid / expired / revoked / not-found)
