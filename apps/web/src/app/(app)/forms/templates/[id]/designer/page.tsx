@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import { desc, eq } from 'drizzle-orm'
 import { formTemplateVersions, formTemplates } from '@beaconhs/db/schema'
+import type { FormSchemaV1 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { FormDesigner } from './form-designer'
 
@@ -9,6 +10,23 @@ export const dynamic = 'force-dynamic'
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   return { title: `Designer · ${id.slice(0, 8)}` }
+}
+
+function bootstrapSchema(name: string): FormSchemaV1 {
+  return {
+    schemaVersion: 1,
+    title: { en: name },
+    sections: [
+      {
+        id: 'sec_intro',
+        title: { en: 'Section 1' },
+        fields: [
+          { id: 'field_notes', type: 'long_text', label: { en: 'Notes' }, required: false },
+        ],
+      },
+    ],
+    workflow: { steps: [{ key: 'submit', label: { en: 'Submit' } }] },
+  }
 }
 
 export default async function FormDesignerPage({ params }: { params: Promise<{ id: string }> }) {
@@ -26,21 +44,31 @@ export default async function FormDesignerPage({ params }: { params: Promise<{ i
   })
 
   if (!data) notFound()
+  let latestSchema: FormSchemaV1
+  let currentVersion: number
   if (!data.latestVersion) {
-    // bootstrap a v1 if none exists
-    return (
-      <div className="p-6 text-sm text-slate-600">
-        No version yet. Initial draft will be created on first publish.
-      </div>
-    )
+    const schema = bootstrapSchema(data.tmpl.name)
+    await ctx.db(async (tx) => {
+      await tx.insert(formTemplateVersions).values({
+        tenantId: ctx.tenantId,
+        templateId: id,
+        version: 1,
+        schema,
+      })
+    })
+    latestSchema = schema
+    currentVersion = 1
+  } else {
+    latestSchema = data.latestVersion.schema
+    currentVersion = data.latestVersion.version
   }
 
   return (
     <FormDesigner
       templateId={id}
       templateName={data.tmpl.name}
-      initialSchema={data.latestVersion.schema}
-      currentVersion={data.latestVersion.version}
+      initialSchema={latestSchema}
+      currentVersion={currentVersion}
     />
   )
 }

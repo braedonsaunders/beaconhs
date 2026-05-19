@@ -1,8 +1,6 @@
 import Link from 'next/link'
 import {
-  Activity,
   AlertTriangle,
-  Award,
   BellRing,
   BookOpen,
   ClipboardCheck,
@@ -14,11 +12,9 @@ import {
   Layers,
   ListChecks,
   MapPin,
-  ShieldAlert,
   Settings,
   ShieldCheck,
   Timer,
-  UserCircle2,
   Users,
   Wrench,
 } from 'lucide-react'
@@ -49,7 +45,6 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     items: [
       { href: '/forms', label: 'Forms', icon: ClipboardCheck },
       { href: '/inspections', label: 'Inspections', icon: ClipboardList },
-      { href: '/inspections/banks', label: 'Inspection Banks', icon: Layers },
       { href: '/incidents', label: 'Incidents', icon: AlertTriangle },
       { href: '/corrective-actions', label: 'Corrective Actions', icon: ListChecks },
     ],
@@ -58,11 +53,8 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     label: 'Programs',
     items: [
       { href: '/training', label: 'Training', icon: GraduationCap },
-      { href: '/training/authorities', label: 'Skill Authorities', icon: Award },
-      { href: '/training/skills', label: 'Skills', icon: Activity },
       { href: '/documents', label: 'Documents', icon: BookOpen },
       { href: '/confined-space', label: 'Confined Space', icon: ShieldCheck },
-      { href: '/confined-space/sensors', label: 'Atmospheric Sensors', icon: Activity },
       { href: '/lone-worker', label: 'Lone Worker', icon: Timer },
     ],
   },
@@ -81,7 +73,10 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   },
   {
     label: 'Settings',
-    items: [{ href: '/admin', label: 'Admin', icon: Settings }],
+    items: [
+      { href: '/admin', label: 'Admin', icon: Settings },
+      { href: '/admin/library', label: 'Library & catalogues', icon: Layers },
+    ],
   },
 ]
 
