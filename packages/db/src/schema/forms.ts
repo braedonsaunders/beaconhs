@@ -135,6 +135,16 @@ export type FormResponseWorkflowState = {
   lastReason?: string | null
 }
 
+// In-flight autosave payload written by the form filler while the user is
+// still typing. Keyed shape mirrors the runtime state in form-renderer:
+//   - `values` is the top-level field map (fieldId → value)
+//   - `rows` is per-section row arrays (sectionId → Row[]) for repeating sections
+// Persisted to form_responses.draft_data; cleared once status leaves 'draft'.
+export type FormResponseDraftData = {
+  values: Record<string, unknown>
+  rows: Record<string, Array<Record<string, unknown>>>
+}
+
 // --- Assignments -----------------------------------------------------------
 
 export const formAssignmentMode = pgEnum('form_assignment_mode', [
@@ -227,6 +237,15 @@ export const formResponses = pgTable(
     closedAt: timestamp('closed_at', { withTimezone: true }),
     // The actual response payload (keyed by field id)
     data: jsonb('data').$type<Record<string, unknown>>().default({}).notNull(),
+    // In-flight draft state — written by the autosave path while the user is
+    // still filling out the form. Distinct from `data` (which is set on the
+    // canonical submit). Shape: { values, rows } where `values` is the
+    // top-level field map and `rows` is per-repeating-section row arrays.
+    // Cleared (or simply ignored) once status moves to anything other than
+    // 'draft' / 'in_progress'.
+    draftData: jsonb('draft_data').$type<FormResponseDraftData | null>(),
+    draftUpdatedAt: timestamp('draft_updated_at', { withTimezone: true }),
+    draftStepIndex: integer('draft_step_index'),
     // Optional link to source event (e.g. the incident that triggered this investigation form)
     sourceEntityType: text('source_entity_type'),
     sourceEntityId: uuid('source_entity_id'),

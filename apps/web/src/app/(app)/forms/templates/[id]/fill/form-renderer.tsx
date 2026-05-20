@@ -16,10 +16,10 @@
 // top-level fields, plus `data[sectionId]` = `Array<Record<fieldId, value>>`
 // for repeating sections. Same convention the response-viewer already reads.
 
-import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Check, ChevronLeft, ChevronRight, Plus, Trash2 } from 'lucide-react'
+import { AlertCircle, Check, ChevronLeft, ChevronRight, Cloud, CloudOff, Plus, Trash2 } from 'lucide-react'
 import {
   Alert,
   AlertDescription,
@@ -50,7 +50,12 @@ import {
   type DefaultValueExpression,
   type LogicRule,
 } from '@beaconhs/forms-core'
-import { fetchEntityAttrs, submitFormResponse } from './actions'
+import {
+  createDraftResponse,
+  fetchEntityAttrs,
+  saveFormResponseDraft,
+  submitFormResponse,
+} from './actions'
 import { SignaturePad } from '@/components/signature-pad'
 import { FileUpload, dataUrlToFile, type AttachedFile } from '@/components/file-upload'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
