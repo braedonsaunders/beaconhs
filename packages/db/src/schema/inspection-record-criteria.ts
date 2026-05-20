@@ -75,9 +75,16 @@ export const inspectionRecordCriteria = pgTable(
     compliantNote: text('compliant_note'),
 
     // Who's on the hook to fix it, and when
-    assignedToPersonId: uuid('assigned_to_person_id').references(() => people.id),
-    assignedToTenantUserId: uuid('assigned_to_tenant_user_id').references(() => tenantUsers.id),
+    assignedToPersonId: uuid('assigned_to_person_id').references(() => people.id, {
+      onDelete: 'set null',
+    }),
+    assignedToTenantUserId: uuid('assigned_to_tenant_user_id').references(() => tenantUsers.id, {
+      onDelete: 'set null',
+    }),
     assignedDueDate: date('assigned_due_date'),
+    // When the non-compliance was actually fixed (so the UI can flag overdue items
+    // when the inspection date is in the past and this is still null).
+    correctedOn: date('corrected_on'),
 
     // Attachment ids — kept as a jsonb array of UUIDs so we don't need a
     // separate join table just for per-criterion photos. The attachments
@@ -125,6 +132,10 @@ export const inspectionRecordCriteriaRelations = relations(
     assignedToPerson: one(people, {
       fields: [inspectionRecordCriteria.assignedToPersonId],
       references: [people.id],
+    }),
+    assignedToTenantUser: one(tenantUsers, {
+      fields: [inspectionRecordCriteria.assignedToTenantUserId],
+      references: [tenantUsers.id],
     }),
   }),
 )

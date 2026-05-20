@@ -3,9 +3,11 @@ import { notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
 import {
+  AlertOctagon,
   ClipboardCheck,
   FileText,
   Lock,
+  Pencil,
   ShieldAlert,
   Unlock,
 } from 'lucide-react'
@@ -24,6 +26,7 @@ import {
   Label,
   Select,
   Textarea,
+  UrlDrawer,
 } from '@beaconhs/ui'
 import {
   attachments,
@@ -40,6 +43,7 @@ import {
 } from '@beaconhs/db/schema'
 import { publicUrl } from '@beaconhs/storage'
 import { requireRequestContext } from '@/lib/auth'
+import { pickString } from '@/lib/list-params'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { ActivityFeed } from '@/components/activity-feed'
 import { DetailGrid } from '@/components/detail-grid'
@@ -284,6 +288,151 @@ async function setCriterionAssignment(formData: FormData) {
   revalidatePath(`/inspections/records/${recordId}`)
 }
 
+async function setCriterionCorrectedOn(formData: FormData) {
+  'use server'
+  const ctx = await requireRequestContext()
+  const recordId = String(formData.get('recordId') ?? '')
+  const rowId = String(formData.get('rowId') ?? '')
+  const value = String(formData.get('correctedOn') ?? '').trim() || null
+  if (!recordId || !rowId) return
+  await ctx.db((tx) =>
+    tx
+      .update(inspectionRecordCriteria)
+      .set({ correctedOn: value })
+      .where(eq(inspectionRecordCriteria.id, rowId)),
+  )
+  await logRecordAudit(
+    ctx,
+    recordId,
+    value ? `Marked finding corrected on ${value}` : 'Cleared corrected-on date',
+    'update',
+    { rowId, correctedOn: value },
+  )
+  revalidatePath(`/inspections/records/${recordId}`)
+}
+
+/**
+ * Bulk-save the full set of per-criterion answer fields. Typed object input
+ * + `{ ok, error? }` return value to match the in-house server-action shape.
+ *
+ * If `answer` flips to 'pass'/'n_a' we wipe the fail-only fields to keep the
+ * row coherent (same behaviour as `setCriterionAnswer`). If it flips to
+ * 'fail' we wipe `compliantNote`. If no answer is provided we patch the
+ * loose fields without touching `answer` itself.
+ */
+async function saveCriterionDetails(input: {
+  recordId: string
+  rowId: string
+  answer: 'pass' | 'fail' | 'n_a' | null
+  severity: 'low' | 'medium' | 'high' | 'critical' | null
+  nonComplianceDescription: string | null
+  actionTaken: string | null
+  compliantNote: string | null
+  assignedToPersonId: string | null
+  assignedDueDate: string | null
+  correctedOn: string | null
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  'use server'
+  try {
+    const ctx = await requireRequestContext()
+    if (!input.recordId || !input.rowId) {
+      return { ok: false, error: 'Missing recordId or rowId' }
+    }
+
+    const isFail = input.answer === 'fail'
+    const patch: Record<string, unknown> = {
+      ...(input.answer
+        ? {
+            answer: input.answer,
+            answeredAt: new Date(),
+            answeredByTenantUserId: ctx.membership?.id ?? null,
+          }
+        : {}),
+      ...(isFail
+        ? {
+            severity: input.severity ?? null,
+            nonComplianceDescription: input.nonComplianceDescription,
+            actionTaken: input.actionTaken,
+            assignedToPersonId: input.assignedToPersonId,
+            assignedDueDate: input.assignedDueDate,
+            correctedOn: input.correctedOn,
+            compliantNote: null,
+          }
+        : input.answer
+          ? {
+              severity: null,
+              nonComplianceDescription: null,
+              actionTaken: null,
+              assignedToPersonId: null,
+              assignedDueDate: null,
+              correctedOn: null,
+              compliantNote: input.compliantNote,
+            }
+          : {
+              severity: input.severity ?? null,
+              nonComplianceDescription: input.nonComplianceDescription,
+              actionTaken: input.actionTaken,
+              compliantNote: input.compliantNote,
+              assignedToPersonId: input.assignedToPersonId,
+              assignedDueDate: input.assignedDueDate,
+              correctedOn: input.correctedOn,
+            }),
+    }
+
+    await ctx.db(async (tx) => {
+      await tx
+        .update(inspectionRecordCriteria)
+        .set(patch as any)
+        .where(eq(inspectionRecordCriteria.id, input.rowId))
+      // Mirror the auto-transition behaviour from setCriterionAnswer.
+      if (input.answer) {
+        await tx
+          .update(inspectionRecords)
+          .set({ status: 'in_progress' })
+          .where(
+            and(
+              eq(inspectionRecords.id, input.recordId),
+              eq(inspectionRecords.status, 'draft'),
+            ),
+          )
+      }
+    })
+    await logRecordAudit(ctx, input.recordId, 'Edited criterion details', 'update', {
+      ...input,
+    })
+    await syncCorrectiveActionForCriterion(ctx, input.rowId)
+    revalidatePath(`/inspections/records/${input.recordId}`)
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
+}
+
+/**
+ * Form-action adapter — drawer form posts FormData; we parse + delegate to the
+ * typed `saveCriterionDetails` and throw on failure so the redirect flow stays
+ * clean.
+ */
+async function saveCriterionDetailsForm(formData: FormData): Promise<void> {
+  'use server'
+  const result = await saveCriterionDetails({
+    recordId: String(formData.get('recordId') ?? ''),
+    rowId: String(formData.get('rowId') ?? ''),
+    answer: parseAnswer(formData.get('answer')),
+    severity: parseSeverity(formData.get('severity')),
+    nonComplianceDescription:
+      String(formData.get('nonComplianceDescription') ?? '').trim() || null,
+    actionTaken: String(formData.get('actionTaken') ?? '').trim() || null,
+    compliantNote: String(formData.get('compliantNote') ?? '').trim() || null,
+    assignedToPersonId:
+      String(formData.get('assignedToPersonId') ?? '').trim() || null,
+    assignedDueDate:
+      String(formData.get('assignedDueDate') ?? '').trim() || null,
+    correctedOn: String(formData.get('correctedOn') ?? '').trim() || null,
+  })
+  if (!result.ok) throw new Error(result.error)
+}
+
 async function addCriterionPhoto(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
@@ -512,6 +661,16 @@ export default async function InspectionRecordDetailPage({
 
   const basePath = `/inspections/records/${id}`
 
+  // Drawer state: ?drawer=edit-criterion&id=<rowId>. Close URL keeps the
+  // current tab so the user lands back on the criteria view.
+  const drawerKey = pickString(sp.drawer)
+  const drawerRowId = pickString(sp.id)
+  const closeHref = `${basePath}?tab=${active}`
+  const editingRow =
+    drawerKey === 'edit-criterion' && drawerRowId
+      ? criteria.find((c) => c.c.id === drawerRowId) ?? null
+      : null
+
   return (
     <DetailPageLayout
       header={
@@ -727,9 +886,11 @@ export default async function InspectionRecordDetailPage({
                 answer={row.c.answer}
                 severity={row.c.severity}
                 nonComplianceDescription={row.c.nonComplianceDescription}
+                actionTaken={row.c.actionTaken}
                 compliantNote={row.c.compliantNote}
                 assignedToPersonId={row.c.assignedToPersonId}
                 assignedDueDate={row.c.assignedDueDate}
+                correctedOn={row.c.correctedOn}
                 photoAttachmentIds={row.c.photoAttachmentIds ?? []}
                 correctiveActionRef={row.ca?.reference ?? null}
                 correctiveActionId={row.c.correctiveActionId}
@@ -747,6 +908,8 @@ export default async function InspectionRecordDetailPage({
                 criterionPhotoMap={criterionPhotoMap}
                 locked={record.locked}
                 allowCompliantNotes={type.allowCompliantNotes}
+                recordOccurredAt={record.occurredAt}
+                editHref={`${basePath}?tab=${active}&drawer=edit-criterion&id=${row.c.id}`}
               />
             ))}
           </div>
@@ -872,6 +1035,44 @@ export default async function InspectionRecordDetailPage({
           </Section>
         ) : null}
       </div>
+
+      {/*
+       * Per-criterion edit drawer. URL-driven via `?drawer=edit-criterion&id=…`.
+       * Lets the inspector adjust every answer field in one place — handy for
+       * follow-up clean-ups (mark corrected, switch severity, reassign) without
+       * piecemeal form submits.
+       */}
+      <UrlDrawer
+        open={Boolean(editingRow) && !record.locked}
+        closeHref={closeHref}
+        title="Edit criterion answer"
+        description={editingRow?.c.questionTextSnapshot ?? undefined}
+        size="lg"
+        footer={
+          <>
+            <Link href={closeHref}>
+              <Button variant="ghost">Cancel</Button>
+            </Link>
+            <Button type="submit" form="criterion-edit-form">
+              Save
+            </Button>
+          </>
+        }
+      >
+        {editingRow ? (
+          <CriterionEditForm
+            formId="criterion-edit-form"
+            recordId={id}
+            row={editingRow}
+            peopleList={peopleList.map((p) => ({
+              id: p.id,
+              name: `${p.firstName} ${p.lastName}`,
+            }))}
+            recordOccurredAt={record.occurredAt}
+            action={saveCriterionDetailsForm}
+          />
+        ) : null}
+      </UrlDrawer>
     </DetailPageLayout>
   )
 }
@@ -907,6 +1108,55 @@ function Stat({
   )
 }
 
+/**
+ * Severity → Tailwind class triple. Mirrors the legacy app's colour map:
+ * low=slate, medium=amber, high=orange, critical=rose.
+ */
+function severityBadgeClasses(
+  severity: 'low' | 'medium' | 'high' | 'critical' | null,
+): string {
+  switch (severity) {
+    case 'low':
+      return 'border-slate-300 bg-slate-100 text-slate-700'
+    case 'medium':
+      return 'border-amber-300 bg-amber-100 text-amber-800'
+    case 'high':
+      return 'border-orange-300 bg-orange-100 text-orange-800'
+    case 'critical':
+      return 'border-rose-300 bg-rose-100 text-rose-800'
+    default:
+      return 'border-slate-200 bg-white text-slate-500'
+  }
+}
+
+/**
+ * A finding is overdue when:
+ *   - it's marked `fail`
+ *   - it has an assigned due date that's strictly in the past
+ *   - it has NOT been corrected yet (`correctedOn` is null)
+ * The inspection's `occurredAt` is the floor: if the due date is before the
+ * inspection itself we treat that as a data-entry artefact and don't flag.
+ */
+function isOverdue(args: {
+  answer: 'pass' | 'fail' | 'n_a' | null
+  assignedDueDate: string | null
+  correctedOn: string | null
+  recordOccurredAt: Date
+}): boolean {
+  if (args.answer !== 'fail') return false
+  if (args.correctedOn) return false
+  if (!args.assignedDueDate) return false
+  const due = new Date(args.assignedDueDate + 'T00:00:00')
+  if (Number.isNaN(due.getTime())) return false
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  if (due >= today) return false
+  // Don't flag findings whose due date pre-dates the inspection itself.
+  const floor = new Date(args.recordOccurredAt)
+  floor.setHours(0, 0, 0, 0)
+  return due >= floor
+}
+
 function CriterionCard(props: {
   rowId: string
   recordId: string
@@ -915,9 +1165,11 @@ function CriterionCard(props: {
   answer: 'pass' | 'fail' | 'n_a' | null
   severity: 'low' | 'medium' | 'high' | 'critical' | null
   nonComplianceDescription: string | null
+  actionTaken: string | null
   compliantNote: string | null
   assignedToPersonId: string | null
   assignedDueDate: string | null
+  correctedOn: string | null
   photoAttachmentIds: string[]
   correctiveActionRef: string | null
   correctiveActionId: string | null
@@ -928,6 +1180,8 @@ function CriterionCard(props: {
   criterionPhotoMap: Map<string, { id: string; url: string; filename: string }>
   locked: boolean
   allowCompliantNotes: boolean
+  recordOccurredAt: Date
+  editHref: string
 }) {
   const {
     rowId,
@@ -937,9 +1191,11 @@ function CriterionCard(props: {
     answer,
     severity,
     nonComplianceDescription,
+    actionTaken,
     compliantNote,
     assignedToPersonId,
     assignedDueDate,
+    correctedOn,
     photoAttachmentIds,
     correctiveActionRef,
     correctiveActionId,
@@ -949,7 +1205,10 @@ function CriterionCard(props: {
     criterionPhotoMap,
     locked,
     allowCompliantNotes,
+    recordOccurredAt,
+    editHref,
   } = props
+  const overdue = isOverdue({ answer, assignedDueDate, correctedOn, recordOccurredAt })
 
   const photoPreviews = photoAttachmentIds
     .map((aid) => criterionPhotoMap.get(aid))
@@ -971,14 +1230,39 @@ function CriterionCard(props: {
         <div className="min-w-0 flex-1">
           <div className="text-xs text-slate-500">#{index + 1}</div>
           <div className="mt-0.5 text-sm font-medium text-slate-900">{question}</div>
-          <div className="mt-1 flex flex-wrap items-center gap-1 text-xs text-slate-500">
+          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
             {requiresPhoto ? <Badge variant="secondary">Photo required</Badge> : null}
+            {severity && answer === 'fail' ? (
+              <span
+                className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${severityBadgeClasses(severity)}`}
+              >
+                {severity}
+              </span>
+            ) : null}
+            {overdue ? (
+              <span className="inline-flex items-center gap-1 rounded-full border border-red-300 bg-red-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-700">
+                <AlertOctagon size={10} /> Overdue
+              </span>
+            ) : null}
+            {correctedOn && answer === 'fail' ? (
+              <span className="inline-flex items-center rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
+                Corrected {correctedOn}
+              </span>
+            ) : null}
             {correctiveActionRef ? (
               <Link
                 href={`/corrective-actions/${correctiveActionId}`}
                 className="text-teal-700 hover:underline"
               >
                 ↳ {correctiveActionRef}
+              </Link>
+            ) : null}
+            {!locked ? (
+              <Link
+                href={editHref as any}
+                className="ml-auto inline-flex items-center gap-1 text-xs text-teal-700 hover:underline"
+              >
+                <Pencil size={11} /> Edit details
               </Link>
             ) : null}
           </div>
@@ -1145,11 +1429,185 @@ function CriterionCard(props: {
           {nonComplianceDescription ? (
             <div>Non-compliance: {nonComplianceDescription}</div>
           ) : null}
+          {actionTaken ? <div>Action taken: {actionTaken}</div> : null}
           {assignee ? <div>Assigned: {assignee.name}</div> : null}
           {assignedDueDate ? <div>Due: {assignedDueDate}</div> : null}
+          {correctedOn ? <div>Corrected on: {correctedOn}</div> : null}
           {compliantNote ? <div>Notes: {compliantNote}</div> : null}
         </div>
       ) : null}
     </div>
+  )
+}
+
+// ----------------------------------------------------------------------------
+// Per-criterion edit form (rendered inside the drawer). Captures every
+// answer-depth field in one go and posts to the bulk save action.
+// ----------------------------------------------------------------------------
+function CriterionEditForm({
+  formId,
+  recordId,
+  row,
+  peopleList,
+  recordOccurredAt,
+  action,
+}: {
+  formId: string
+  recordId: string
+  row: {
+    c: {
+      id: string
+      answer: 'pass' | 'fail' | 'n_a' | null
+      severity: 'low' | 'medium' | 'high' | 'critical' | null
+      nonComplianceDescription: string | null
+      actionTaken: string | null
+      compliantNote: string | null
+      assignedToPersonId: string | null
+      assignedDueDate: string | null
+      correctedOn: string | null
+      questionTextSnapshot: string
+    }
+    ca: { reference: string } | null
+  }
+  peopleList: { id: string; name: string }[]
+  recordOccurredAt: Date
+  action: (formData: FormData) => Promise<void>
+}) {
+  const a = row.c.answer
+  const overdue = isOverdue({
+    answer: a,
+    assignedDueDate: row.c.assignedDueDate,
+    correctedOn: row.c.correctedOn,
+    recordOccurredAt,
+  })
+  return (
+    <form id={formId} action={action} className="space-y-4">
+      <input type="hidden" name="recordId" value={recordId} />
+      <input type="hidden" name="rowId" value={row.c.id} />
+
+      {overdue ? (
+        <Alert variant="destructive">
+          <AlertTitle className="flex items-center gap-2">
+            <AlertOctagon size={14} /> This finding is overdue
+          </AlertTitle>
+          <AlertDescription>
+            Due date {row.c.assignedDueDate} has passed without a correction. Set the
+            "Corrected on" date below to clear the flag.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      <div className="space-y-1.5">
+        <Label className="text-xs uppercase tracking-wide text-slate-500">Result</Label>
+        <Select name="answer" defaultValue={a ?? ''}>
+          <option value="">— Unanswered —</option>
+          <option value="pass">Pass</option>
+          <option value="fail">Fail (non-compliant)</option>
+          <option value="n_a">N/A</option>
+        </Select>
+        <p className="text-xs text-slate-500">
+          Switching to pass or N/A clears the failure metadata below.
+        </p>
+      </div>
+
+      <fieldset className="space-y-3 rounded-md border border-slate-200 bg-slate-50/60 p-3">
+        <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          Non-compliance
+        </legend>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Severity</Label>
+            <Select name="severity" defaultValue={row.c.severity ?? ''}>
+              <option value="">— pick —</option>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High (spawns CA)</option>
+              <option value="critical">Critical (spawns CA)</option>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Assigned to</Label>
+            <Select
+              name="assignedToPersonId"
+              defaultValue={row.c.assignedToPersonId ?? ''}
+            >
+              <option value="">— unassigned —</option>
+              {peopleList.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Due date</Label>
+            <Input
+              name="assignedDueDate"
+              type="date"
+              defaultValue={row.c.assignedDueDate ?? ''}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Corrected on</Label>
+            <Input
+              name="correctedOn"
+              type="date"
+              defaultValue={row.c.correctedOn ?? ''}
+            />
+            <p className="text-[11px] text-slate-500">
+              Fill this in once the fix is verified — clears the overdue flag.
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="text-xs">Reason for non-compliance</Label>
+          <Textarea
+            name="nonComplianceDescription"
+            rows={3}
+            defaultValue={row.c.nonComplianceDescription ?? ''}
+            placeholder="What's wrong?"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="text-xs">Action taken on the spot</Label>
+          <Textarea
+            name="actionTaken"
+            rows={3}
+            defaultValue={row.c.actionTaken ?? ''}
+            placeholder="What did the inspector do about it right away?"
+          />
+          {row.ca?.reference ? (
+            <p className="text-[11px] text-slate-500">
+              Synced to corrective action{' '}
+              <Link
+                href={`/corrective-actions/`}
+                className="text-teal-700 hover:underline"
+              >
+                {row.ca.reference}
+              </Link>
+              .
+            </p>
+          ) : null}
+        </div>
+      </fieldset>
+
+      <fieldset className="space-y-2 rounded-md border border-slate-200 p-3">
+        <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          Compliant context (only used on pass / N/A)
+        </legend>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Compliant note</Label>
+          <Textarea
+            name="compliantNote"
+            rows={2}
+            defaultValue={row.c.compliantNote ?? ''}
+            placeholder='e.g. "torque verified at 50 ft-lbs"'
+          />
+        </div>
+      </fieldset>
+    </form>
   )
 }

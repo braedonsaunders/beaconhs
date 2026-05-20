@@ -92,6 +92,27 @@
       "when": 1779400000000,
       "tag": "0012_acoustic_jazinda",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1779500000000,
+      "tag": "0013_inspection_criterion_corrected_on",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1779600000000,
+      "tag": "0014_incident_investigation",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1779700000000,
+      "tag": "0015_hazid_hazard_risk_ratings",
+      "breakpoints": true
     }
   ]
 }

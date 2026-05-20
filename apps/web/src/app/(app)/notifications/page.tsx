@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { revalidatePath } from 'next/cache'
 import { and, desc, eq, isNull } from 'drizzle-orm'
-import { Bell, Check } from 'lucide-react'
+import { Bell, Check, Settings } from 'lucide-react'
 import {
   Badge,
   Button,
@@ -64,13 +64,20 @@ export default async function InboxPage() {
           title="Inbox"
           description="In-app notifications. Email + Web Push + SMS are wired through the worker; you'll see the in-app copy here regardless."
           actions={
-            unread > 0 ? (
-              <form action={markAllRead}>
+            <div className="flex items-center gap-2">
+              <Link href="/notifications/preferences">
                 <Button variant="outline">
-                  <Check size={14} /> Mark all read
+                  <Settings size={14} /> Preferences
                 </Button>
-              </form>
-            ) : undefined
+              </Link>
+              {unread > 0 ? (
+                <form action={markAllRead}>
+                  <Button variant="outline">
+                    <Check size={14} /> Mark all read
+                  </Button>
+                </form>
+              ) : null}
+            </div>
           }
         />
 

@@ -174,6 +174,14 @@ export const hazidAssessmentTasks = pgTable(
 
 // ----------------------------------------------------------------------------
 // Assessment Hazards
+//
+// Risk ratings use the standard L×S = R 5×5 matrix. We store the pre-control
+// scores (the inherent risk before mitigations) AND the post-control scores
+// (the residual risk after the controls listed in `controls` are applied) so
+// the assessment can show that controls actually reduce the risk. The score
+// columns themselves are derived in app code from likelihood × severity rather
+// than via a Postgres GENERATED column — keeps the migration simple and lets
+// us treat missing inputs as "not yet rated" without funky NULL semantics.
 // ----------------------------------------------------------------------------
 export const hazidAssessmentHazards = pgTable(
   'hazid_assessment_hazards',
@@ -191,6 +199,14 @@ export const hazidAssessmentHazards = pgTable(
     specificControls: text('specific_controls'), // free-text per-job override
     applicable: boolean('applicable').default(true).notNull(),
     entityOrder: integer('entity_order').default(1).notNull(),
+    // ---- Pre-control risk rating (inherent risk, no controls applied) -----
+    preLikelihood: integer('pre_likelihood'), // 1-5
+    preSeverity: integer('pre_severity'), // 1-5
+    // ---- Controls applied to reduce risk -----------------------------------
+    controls: text('controls'),
+    // ---- Post-control risk rating (residual risk after controls) -----------
+    postLikelihood: integer('post_likelihood'), // 1-5
+    postSeverity: integer('post_severity'), // 1-5
     ...timestamps,
   },
   (t) => ({

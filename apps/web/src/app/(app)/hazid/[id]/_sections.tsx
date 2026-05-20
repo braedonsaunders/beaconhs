@@ -516,6 +516,11 @@ export function EditHazardDrawerBody({
     standardControls: string | null
     specificControls: string | null
     applicable: boolean
+    preLikelihood: number | null
+    preSeverity: number | null
+    controls: string | null
+    postLikelihood: number | null
+    postSeverity: number | null
   }
   libraryName: string | null
   updateAction: (formData: FormData) => Promise<void>
@@ -525,7 +530,25 @@ export function EditHazardDrawerBody({
   const [standard, setStandard] = useState<string>(row.standardControls ?? '')
   const [specific, setSpecific] = useState<string>(row.specificControls ?? '')
   const [applicable, setApplicable] = useState<boolean>(row.applicable)
+  // Risk-rating inputs live as strings so an empty field stays empty (== "not
+  // yet rated") instead of being coerced to 0.
+  const [preLikelihood, setPreLikelihood] = useState<string>(
+    row.preLikelihood == null ? '' : String(row.preLikelihood),
+  )
+  const [preSeverity, setPreSeverity] = useState<string>(
+    row.preSeverity == null ? '' : String(row.preSeverity),
+  )
+  const [controls, setControls] = useState<string>(row.controls ?? '')
+  const [postLikelihood, setPostLikelihood] = useState<string>(
+    row.postLikelihood == null ? '' : String(row.postLikelihood),
+  )
+  const [postSeverity, setPostSeverity] = useState<string>(
+    row.postSeverity == null ? '' : String(row.postSeverity),
+  )
   const [pending, start] = useTransition()
+
+  const preScore = riskScore(preLikelihood, preSeverity)
+  const postScore = riskScore(postLikelihood, postSeverity)
 
   function submit() {
     const fd = new FormData()
@@ -535,6 +558,13 @@ export function EditHazardDrawerBody({
     fd.set('standardControls', standard)
     fd.set('specificControls', specific)
     if (applicable) fd.set('applicable', 'on')
+    // Always send risk-rating fields so the server can null them out when
+    // cleared by the user.
+    fd.set('preLikelihood', preLikelihood)
+    fd.set('preSeverity', preSeverity)
+    fd.set('controls', controls)
+    fd.set('postLikelihood', postLikelihood)
+    fd.set('postSeverity', postSeverity)
     start(async () => {
       await updateAction(fd)
       close()
@@ -561,12 +591,83 @@ export function EditHazardDrawerBody({
             />
           </div>
         )}
+
+        {/* ---------------------------------------------------------------- */}
+        {/* Risk-rating block — pre-control L×S = R, then controls textarea, */}
+        {/* then post-control L×S = R. Shows the live computed score chip   */}
+        {/* next to each set of inputs so users see the rating change as   */}
+        {/* they pick values.                                              */}
+        {/* ---------------------------------------------------------------- */}
+        <div className="space-y-3 rounded-md border border-slate-200 bg-slate-50/60 p-3">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+            Pre-control risk (before mitigations)
+          </div>
+          <div className="grid grid-cols-[1fr_1fr_auto] items-end gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Likelihood (1–5)</Label>
+              <RiskRatingSelect
+                value={preLikelihood}
+                onChange={setPreLikelihood}
+                name="preLikelihood"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Severity (1–5)</Label>
+              <RiskRatingSelect
+                value={preSeverity}
+                onChange={setPreSeverity}
+                name="preSeverity"
+              />
+            </div>
+            <RiskScoreChip score={preScore} />
+          </div>
+        </div>
+
         <div className="space-y-1.5">
-          <Label>Standard controls</Label>
+          <Label>Controls applied</Label>
+          <Textarea
+            value={controls}
+            onChange={(e) => setControls(e.target.value)}
+            rows={3}
+            placeholder="What controls reduce this risk? e.g. lockout/tagout, barricades, signage"
+          />
+        </div>
+
+        <div className="space-y-3 rounded-md border border-slate-200 bg-slate-50/60 p-3">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+            Post-control risk (after mitigations)
+          </div>
+          <div className="grid grid-cols-[1fr_1fr_auto] items-end gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Likelihood (1–5)</Label>
+              <RiskRatingSelect
+                value={postLikelihood}
+                onChange={setPostLikelihood}
+                name="postLikelihood"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Severity (1–5)</Label>
+              <RiskRatingSelect
+                value={postSeverity}
+                onChange={setPostSeverity}
+                name="postSeverity"
+              />
+            </div>
+            <RiskScoreChip score={postScore} />
+          </div>
+        </div>
+
+        {/* ---------------------------------------------------------------- */}
+        {/* Legacy free-text controls — kept so existing data still renders */}
+        {/* and library snapshots remain editable. Optional for new hazards.*/}
+        {/* ---------------------------------------------------------------- */}
+        <div className="space-y-1.5">
+          <Label>Standard controls (library snapshot)</Label>
           <Textarea
             value={standard}
             onChange={(e) => setStandard(e.target.value)}
-            rows={3}
+            rows={2}
             placeholder="From the library; editable for this job"
           />
         </div>
@@ -575,7 +676,7 @@ export function EditHazardDrawerBody({
           <Textarea
             value={specific}
             onChange={(e) => setSpecific(e.target.value)}
-            rows={3}
+            rows={2}
             placeholder="Site-specific controls"
           />
         </div>
@@ -590,6 +691,77 @@ export function EditHazardDrawerBody({
       </div>
       <DrawerSubmitHandle pending={pending} onSubmit={submit} closeHref={closeHref} submitLabel="Save" />
     </>
+  )
+}
+
+// 1-5 select used for both pre- and post-control likelihood/severity inputs.
+// Empty option means "not yet rated" — distinct from a 0 score.
+function RiskRatingSelect({
+  value,
+  onChange,
+  name,
+}: {
+  value: string
+  onChange: (next: string) => void
+  name: string
+}) {
+  return (
+    <Select name={name} value={value} onChange={(e) => onChange(e.target.value)}>
+      <option value="">—</option>
+      <option value="1">1</option>
+      <option value="2">2</option>
+      <option value="3">3</option>
+      <option value="4">4</option>
+      <option value="5">5</option>
+    </Select>
+  )
+}
+
+// Computes the risk score from string inputs. Returns null if either side is
+// missing so the chip can render a "—" placeholder.
+function riskScore(likelihood: string, severity: string): number | null {
+  if (!likelihood || !severity) return null
+  const l = Number(likelihood)
+  const s = Number(severity)
+  if (!Number.isFinite(l) || !Number.isFinite(s)) return null
+  if (l < 1 || l > 5 || s < 1 || s > 5) return null
+  return l * s
+}
+
+// Maps a numeric risk score (1-25 on a 5×5 matrix) to a colored chip.
+// Tone scheme follows the typical safety risk matrix:
+//   low (1-4)        → green
+//   moderate (5-9)   → yellow
+//   high (10-14)     → orange
+//   extreme (15+)    → red
+function RiskScoreChip({ score }: { score: number | null }) {
+  if (score == null) {
+    return (
+      <div className="flex h-9 w-12 items-center justify-center rounded-md border border-dashed border-slate-300 bg-white text-xs text-slate-400">
+        —
+      </div>
+    )
+  }
+  let bg = 'bg-emerald-100 text-emerald-900 border-emerald-200'
+  let label = 'Low'
+  if (score >= 15) {
+    bg = 'bg-red-100 text-red-900 border-red-300'
+    label = 'Extreme'
+  } else if (score >= 10) {
+    bg = 'bg-orange-100 text-orange-900 border-orange-300'
+    label = 'High'
+  } else if (score >= 5) {
+    bg = 'bg-amber-100 text-amber-900 border-amber-300'
+    label = 'Moderate'
+  }
+  return (
+    <div
+      className={`flex h-9 w-12 flex-col items-center justify-center rounded-md border text-xs font-semibold ${bg}`}
+      title={`${label} risk · score ${score}`}
+    >
+      <span className="text-sm leading-none">{score}</span>
+      <span className="text-[9px] font-medium leading-none tracking-wide">{label}</span>
+    </div>
   )
 }
 
@@ -613,6 +785,11 @@ export function HazardRow({
     specificControls: string | null
     applicable: boolean
     entityOrder: number
+    preLikelihood: number | null
+    preSeverity: number | null
+    controls: string | null
+    postLikelihood: number | null
+    postSeverity: number | null
   }
   assessmentId: string
   index: number
@@ -624,8 +801,17 @@ export function HazardRow({
   moveAction: (formData: FormData) => Promise<void>
   deleteAction: (formData: FormData) => Promise<void>
 }) {
+  const preScore =
+    row.preLikelihood != null && row.preSeverity != null
+      ? row.preLikelihood * row.preSeverity
+      : null
+  const postScore =
+    row.postLikelihood != null && row.postSeverity != null
+      ? row.postLikelihood * row.postSeverity
+      : null
   return (
     <li className={`space-y-2 rounded-md border border-slate-200 bg-white p-3 ${row.applicable ? '' : 'opacity-60'}`}>
+      {/* Header: index + name + row actions */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="text-xs uppercase tracking-wide text-slate-500">
@@ -647,6 +833,36 @@ export function HazardRow({
           </div>
         )}
       </div>
+
+      {/* Risk-rating block: pre-risk chip · controls · post-risk chip */}
+      <div className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[auto_1fr_auto]">
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+            Pre
+          </span>
+          <RiskScoreChip score={preScore} />
+        </div>
+        <div className="min-w-0 rounded bg-slate-50 px-2 py-1 text-xs text-slate-700">
+          {row.controls ? (
+            <>
+              <span className="font-medium uppercase tracking-wide text-slate-500">
+                Controls:
+              </span>{' '}
+              {row.controls}
+            </>
+          ) : (
+            <span className="italic text-slate-400">No controls captured yet.</span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+            Post
+          </span>
+          <RiskScoreChip score={postScore} />
+        </div>
+      </div>
+
+      {/* Legacy standard/specific control snapshots — kept for parity. */}
       {row.standardControls ? (
         <div className="rounded bg-slate-50 px-2 py-1 text-xs text-slate-700">
           <span className="font-medium uppercase tracking-wide text-slate-500">

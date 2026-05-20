@@ -290,6 +290,131 @@ export const incidentAttachments = pgTable(
   }),
 )
 
+// ---- Investigation sub-tables ---------------------------------------------
+//
+// Five-step investigation flow (matches legacy Laravel app):
+//   1. Data        -> existing incident detail fields
+//   2. Events      -> incident_events  (chronological log)
+//   3. Cause       -> incident_contributing_factors  (categorised list)
+//   4. Root cause  -> incidents.rootCause (text) + incident_root_cause_whys
+//                     (optional 1–5 "why" chain)
+//   5. Prevention  -> incident_preventative_steps  (owner + target date + status)
+
+// Chronological "what happened, when" entries.
+export const incidentEvents = pgTable(
+  'incident_events',
+  {
+    id: id(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    incidentId: uuid('incident_id')
+      .notNull()
+      .references(() => incidents.id, { onDelete: 'cascade' }),
+    occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
+    recordedByTenantUserId: uuid('recorded_by_tenant_user_id').references(
+      () => tenantUsers.id,
+      { onDelete: 'set null' },
+    ),
+    description: text('description').notNull(),
+    ...timestamps,
+  },
+  (t) => ({
+    incidentIdx: index('incident_events_incident_idx').on(t.incidentId),
+    tenantIdx: index('incident_events_tenant_idx').on(t.tenantId),
+    occurredIdx: index('incident_events_occurred_idx').on(t.incidentId, t.occurredAt),
+  }),
+)
+
+// Immediate / contributing factors, categorised.
+export const incidentFactorCategory = pgEnum('incident_factor_category', [
+  'equipment',
+  'procedure',
+  'training',
+  'environment',
+  'human',
+  'other',
+])
+
+export const incidentContributingFactors = pgTable(
+  'incident_contributing_factors',
+  {
+    id: id(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    incidentId: uuid('incident_id')
+      .notNull()
+      .references(() => incidents.id, { onDelete: 'cascade' }),
+    category: incidentFactorCategory('category').notNull(),
+    description: text('description').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    incidentIdx: index('incident_contributing_factors_incident_idx').on(t.incidentId),
+    tenantIdx: index('incident_contributing_factors_tenant_idx').on(t.tenantId),
+  }),
+)
+
+// Optional 5-whys chain.  Ordinal 1..5 — caller controls how many rows exist.
+export const incidentRootCauseWhys = pgTable(
+  'incident_root_cause_whys',
+  {
+    id: id(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    incidentId: uuid('incident_id')
+      .notNull()
+      .references(() => incidents.id, { onDelete: 'cascade' }),
+    ordinal: integer('ordinal').notNull(),
+    whyText: text('why_text').notNull(),
+    ...timestamps,
+  },
+  (t) => ({
+    incidentIdx: index('incident_root_cause_whys_incident_idx').on(t.incidentId),
+    tenantIdx: index('incident_root_cause_whys_tenant_idx').on(t.tenantId),
+    incidentOrdinalUx: index('incident_root_cause_whys_incident_ordinal_idx').on(
+      t.incidentId,
+      t.ordinal,
+    ),
+  }),
+)
+
+// Preventative / corrective steps (lighter-weight than corrective_actions —
+// captured inline on the investigation tab.  Linking to a full CAPA record is
+// a follow-up.)
+export const incidentPreventativeStepStatus = pgEnum('incident_preventative_step_status', [
+  'planned',
+  'in_progress',
+  'completed',
+])
+
+export const incidentPreventativeSteps = pgTable(
+  'incident_preventative_steps',
+  {
+    id: id(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    incidentId: uuid('incident_id')
+      .notNull()
+      .references(() => incidents.id, { onDelete: 'cascade' }),
+    description: text('description').notNull(),
+    ownerPersonId: uuid('owner_person_id').references(() => people.id, {
+      onDelete: 'set null',
+    }),
+    targetDate: date('target_date'),
+    status: incidentPreventativeStepStatus('status').default('planned').notNull(),
+    ...timestamps,
+  },
+  (t) => ({
+    incidentIdx: index('incident_preventative_steps_incident_idx').on(t.incidentId),
+    tenantIdx: index('incident_preventative_steps_tenant_idx').on(t.tenantId),
+    statusIdx: index('incident_preventative_steps_status_idx').on(t.tenantId, t.status),
+  }),
+)
+
 export const incidentsRelations = relations(incidents, ({ one, many }) => ({
   tenant: one(tenants, { fields: [incidents.tenantId], references: [tenants.id] }),
   site: one(orgUnits, { fields: [incidents.siteOrgUnitId], references: [orgUnits.id] }),
@@ -301,7 +426,53 @@ export const incidentsRelations = relations(incidents, ({ one, many }) => ({
   lostTimeEvents: many(incidentLostTimeEvents),
   involved: many(incidentPeople),
   attachments: many(incidentAttachments),
+  events: many(incidentEvents),
+  contributingFactorRows: many(incidentContributingFactors),
+  rootCauseWhys: many(incidentRootCauseWhys),
+  preventativeSteps: many(incidentPreventativeSteps),
 }))
+
+export const incidentEventsRelations = relations(incidentEvents, ({ one }) => ({
+  incident: one(incidents, {
+    fields: [incidentEvents.incidentId],
+    references: [incidents.id],
+  }),
+  recordedBy: one(tenantUsers, {
+    fields: [incidentEvents.recordedByTenantUserId],
+    references: [tenantUsers.id],
+  }),
+}))
+
+export const incidentContributingFactorsRelations = relations(
+  incidentContributingFactors,
+  ({ one }) => ({
+    incident: one(incidents, {
+      fields: [incidentContributingFactors.incidentId],
+      references: [incidents.id],
+    }),
+  }),
+)
+
+export const incidentRootCauseWhysRelations = relations(incidentRootCauseWhys, ({ one }) => ({
+  incident: one(incidents, {
+    fields: [incidentRootCauseWhys.incidentId],
+    references: [incidents.id],
+  }),
+}))
+
+export const incidentPreventativeStepsRelations = relations(
+  incidentPreventativeSteps,
+  ({ one }) => ({
+    incident: one(incidents, {
+      fields: [incidentPreventativeSteps.incidentId],
+      references: [incidents.id],
+    }),
+    owner: one(people, {
+      fields: [incidentPreventativeSteps.ownerPersonId],
+      references: [people.id],
+    }),
+  }),
+)
 
 export const incidentInjuriesRelations = relations(incidentInjuries, ({ one }) => ({
   incident: one(incidents, {

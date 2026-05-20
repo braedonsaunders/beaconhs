@@ -39,6 +39,7 @@ import {
 } from './_widget-registry'
 import type { RoleTier } from './_role-tier'
 import { resetDashboardLayout, saveDashboardLayout } from './actions'
+import { toast } from '@/lib/toast'
 
 // react-grid-layout's ResponsiveGridLayout is purely client (DOM-measured).
 const Responsive = dynamic(
@@ -145,9 +146,10 @@ export function DashboardGrid({
       const res = await saveDashboardLayout({ widgets: layout })
       if (res.ok) {
         baselineRef.current = JSON.stringify(layout)
+        toast.success('Layout saved')
         router.push('/dashboard')
-      } else if (res.error) {
-        alert(res.error)
+      } else {
+        toast.error(res.error ?? 'Save failed')
       }
     } finally {
       setSaving(false)
@@ -159,6 +161,7 @@ export function DashboardGrid({
     setResetting(true)
     try {
       await resetDashboardLayout()
+      toast.success('Layout reset to default')
       router.refresh()
     } finally {
       setResetting(false)

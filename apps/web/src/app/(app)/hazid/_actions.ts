@@ -489,6 +489,199 @@ export async function deleteAssessment(formData: FormData) {
   revalidatePath('/hazid')
 }
 
+// Duplicate an existing assessment as a fresh draft. Common workflow when the
+// next job is similar to the previous one — copy the prior assessment, rename,
+// tweak. We copy:
+//   • the assessment row (new id, new reference, fresh occurred_at = now,
+//     unlocked, job-scope suffixed with "(copy)" if non-empty)
+//   • all hazards (with their pre/post risk ratings + controls)
+//   • all tasks
+//   • all PPE rows (without the user's prior yes/no/na answers)
+//   • all questions (without the user's prior answer)
+// We deliberately do NOT copy:
+//   • signatures (every assessment needs its own sign-off)
+//   • photos / file attachments (those are job-specific evidence)
+//   • CS atmospheric readings / entry log (job-specific data points)
+//   • signed-report bundles (different lifecycle)
+// After the copy we redirect to the new detail page.
+export async function copyAssessment(formData: FormData) {
+  const ctx = await ctxWithTenant()
+  const sourceId = String(formData.get('id') ?? '')
+  if (!sourceId) throw new Error('Missing id')
+
+  const created = await ctx.db(async (tx) => {
+    const [src] = await tx
+      .select()
+      .from(hazidAssessments)
+      .where(eq(hazidAssessments.id, sourceId))
+      .limit(1)
+    if (!src) throw new Error('Source assessment not found')
+
+    // Reuse the same numbering scheme as createAssessment so references stay
+    // consistent: HAZ-<year>-<counter>.
+    const year = new Date().getFullYear()
+    const counted = await tx
+      .select({ c: count() })
+      .from(hazidAssessments)
+      .where(sql`extract(year from ${hazidAssessments.createdAt}) = ${year}`)
+    const c = counted[0]?.c ?? 0
+    const reference = `HAZ-${year}-${String(Number(c) + 1).padStart(4, '0')}`
+
+    const jobScope = src.jobScope ? `${src.jobScope} (copy)` : '(copy)'
+
+    const [row] = await tx
+      .insert(hazidAssessments)
+      .values({
+        tenantId: ctx.tenantId,
+        reference,
+        occurredAt: new Date(),
+        siteOrgUnitId: src.siteOrgUnitId,
+        projectOrgUnitId: src.projectOrgUnitId,
+        locationOnSite: src.locationOnSite,
+        supervisorPersonId: src.supervisorPersonId,
+        supervisorTenantUserId: src.supervisorTenantUserId,
+        reportedByTenantUserId: ctx.membership?.id ?? null,
+        assessmentTypeId: src.assessmentTypeId,
+        jobScope,
+        // WAH
+        wah: src.wah,
+        wahType: src.wahType,
+        wahCommunication: src.wahCommunication,
+        wahAccess: src.wahAccess,
+        wahEquipment: src.wahEquipment,
+        wahRescue: src.wahRescue,
+        wahPermitNumber: src.wahPermitNumber,
+        // CS
+        confinedSpace: src.confinedSpace,
+        csType: src.csType,
+        csDescription: src.csDescription,
+        csCommunication: src.csCommunication,
+        csCommunicationRescue: src.csCommunicationRescue,
+        csRescue: src.csRescue,
+        csWorkPerformed: src.csWorkPerformed,
+        csDiagramBase64: src.csDiagramBase64,
+        csRescueStyle: src.csRescueStyle,
+        csRescueProcedure: src.csRescueProcedure,
+        csAtmosphericSensorId: src.csAtmosphericSensorId,
+        csPermitNumber: null, // permits are job-specific; force re-entry
+        // Arc Flash
+        arcFlash: src.arcFlash,
+        arcFlashLevel: src.arcFlashLevel,
+        arcFlashBoundary: src.arcFlashBoundary,
+        arcFlashIncidentEnergy: src.arcFlashIncidentEnergy,
+        arcFlashEquipment: src.arcFlashEquipment,
+        arcFlashProcedures: src.arcFlashProcedures,
+        arcFlashQualifiedPerson: src.arcFlashQualifiedPerson,
+        // Lock state — always start as draft / in-progress.
+        inProgress: true,
+        locked: false,
+      })
+      .returning()
+    if (!row) throw new Error('Failed to insert copied assessment')
+
+    // Hazards — include pre/post risk ratings + controls.
+    const srcHazards = await tx
+      .select()
+      .from(hazidAssessmentHazards)
+      .where(eq(hazidAssessmentHazards.assessmentId, src.id))
+      .orderBy(asc(hazidAssessmentHazards.entityOrder))
+    if (srcHazards.length > 0) {
+      await tx.insert(hazidAssessmentHazards).values(
+        srcHazards.map((h) => ({
+          tenantId: ctx.tenantId,
+          assessmentId: row.id,
+          hazardId: h.hazardId,
+          name: h.name,
+          standardControls: h.standardControls,
+          specificControls: h.specificControls,
+          applicable: h.applicable,
+          entityOrder: h.entityOrder,
+          preLikelihood: h.preLikelihood,
+          preSeverity: h.preSeverity,
+          controls: h.controls,
+          postLikelihood: h.postLikelihood,
+          postSeverity: h.postSeverity,
+        })),
+      )
+    }
+
+    // Tasks
+    const srcTasks = await tx
+      .select()
+      .from(hazidAssessmentTasks)
+      .where(eq(hazidAssessmentTasks.assessmentId, src.id))
+      .orderBy(asc(hazidAssessmentTasks.entityOrder))
+    if (srcTasks.length > 0) {
+      await tx.insert(hazidAssessmentTasks).values(
+        srcTasks.map((t) => ({
+          tenantId: ctx.tenantId,
+          assessmentId: row.id,
+          taskId: t.taskId,
+          description: t.description,
+          hazardIds: t.hazardIds,
+          controls: t.controls,
+          entityOrder: t.entityOrder,
+        })),
+      )
+    }
+
+    // PPE — clear any prior yes/no/na answers; the new job re-answers.
+    const srcPPE = await tx
+      .select()
+      .from(hazidAssessmentPPE)
+      .where(eq(hazidAssessmentPPE.assessmentId, src.id))
+      .orderBy(asc(hazidAssessmentPPE.entityOrder))
+    if (srcPPE.length > 0) {
+      await tx.insert(hazidAssessmentPPE).values(
+        srcPPE.map((p) => ({
+          tenantId: ctx.tenantId,
+          assessmentId: row.id,
+          name: p.name,
+          description: p.description,
+          required: p.required,
+          entityOrder: p.entityOrder,
+          answer: null,
+        })),
+      )
+    }
+
+    // Questions — clear any prior text answers.
+    const srcQ = await tx
+      .select()
+      .from(hazidAssessmentQuestions)
+      .where(eq(hazidAssessmentQuestions.assessmentId, src.id))
+      .orderBy(asc(hazidAssessmentQuestions.entityOrder))
+    if (srcQ.length > 0) {
+      await tx.insert(hazidAssessmentQuestions).values(
+        srcQ.map((q) => ({
+          tenantId: ctx.tenantId,
+          assessmentId: row.id,
+          question: q.question,
+          questionType: q.questionType,
+          answers: q.answers,
+          requiresYes: q.requiresYes,
+          entityOrder: q.entityOrder,
+          answer: null,
+        })),
+      )
+    }
+
+    return { row, src }
+  })
+
+  await recordAudit(ctx, {
+    entityType: 'hazid_assessment',
+    entityId: created.row.id,
+    action: 'copy',
+    summary: `Copied from ${created.src.reference} as ${created.row.reference}`,
+    after: { copiedFrom: created.src.id, copiedFromReference: created.src.reference },
+  })
+
+  revalidatePath('/hazid')
+  revalidatePath(`/hazid/${created.row.id}`)
+  redirect(`/hazid/${created.row.id}` as any)
+}
+
 // ------------------------------------------------------------------
 // Tasks
 // ------------------------------------------------------------------
@@ -670,9 +863,16 @@ export async function updateHazard(formData: FormData) {
   const applicable = formData.get('applicable') === 'on' || formData.get('applicable') === 'true'
   const standardControls = nullable(formData.get('standardControls'))
   const name = nullable(formData.get('name'))
+  // Risk-rating fields are optional 1-5 ints; absent → leave the column alone,
+  // empty → null it out, otherwise clamp into the valid range.
   const updates: Record<string, unknown> = { specificControls, applicable }
   if (standardControls !== undefined) updates.standardControls = standardControls
   if (name !== undefined) updates.name = name
+  if (formData.has('preLikelihood')) updates.preLikelihood = riskRating(formData.get('preLikelihood'))
+  if (formData.has('preSeverity')) updates.preSeverity = riskRating(formData.get('preSeverity'))
+  if (formData.has('postLikelihood')) updates.postLikelihood = riskRating(formData.get('postLikelihood'))
+  if (formData.has('postSeverity')) updates.postSeverity = riskRating(formData.get('postSeverity'))
+  if (formData.has('controls')) updates.controls = nullable(formData.get('controls'))
   await ctx.db((tx) => tx.update(hazidAssessmentHazards).set(updates).where(eq(hazidAssessmentHazards.id, id)))
   await recordAudit(ctx, {
     entityType: 'hazid_assessment_hazard',
@@ -681,6 +881,19 @@ export async function updateHazard(formData: FormData) {
     summary: 'Updated hazard',
   })
   revalidateAssessment(assessmentId)
+}
+
+// Coerces an incoming risk-rating form value to a clamped 1-5 int, or null
+// when the field is empty / not a number.
+function riskRating(v: FormDataEntryValue | null): number | null {
+  if (v === null) return null
+  const s = String(v).trim()
+  if (s === '') return null
+  const n = Number(s)
+  if (!Number.isFinite(n)) return null
+  const i = Math.round(n)
+  if (i < 1 || i > 5) return null
+  return i
 }
 
 export async function deleteHazard(formData: FormData) {

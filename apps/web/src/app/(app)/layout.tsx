@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { and, count, eq, isNull, sql } from 'drizzle-orm'
+import { Toaster } from 'sonner'
 import { db } from '@beaconhs/db'
 import { notifications, tenants } from '@beaconhs/db/schema'
 import { getRequestContext, listAccessibleTenants } from '@/lib/auth'
@@ -42,6 +43,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       unreadCount={unread}
     >
       {children}
+      <Toaster richColors position="top-right" />
     </AppShell>
   )
 }

@@ -1,8 +1,18 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { and, asc, count, eq, sql } from 'drizzle-orm'
-import { AlertTriangle, Copy, FileText, Lock, Mail, Trash2, Unlock } from 'lucide-react'
+import { and, asc, count, desc, eq, sql } from 'drizzle-orm'
+import {
+  AlertTriangle,
+  Copy,
+  FileText,
+  Lock,
+  Mail,
+  Pencil,
+  Plus,
+  Trash2,
+  Unlock,
+} from 'lucide-react'
 import {
   Alert,
   AlertDescription,
@@ -14,6 +24,7 @@ import {
   CardHeader,
   CardTitle,
   DetailHeader,
+  EmptyState,
   Input,
   Label,
   Select,
@@ -25,15 +36,29 @@ import {
   correctiveActions,
   departments,
   incidentAttachments,
+  incidentContributingFactors,
+  incidentEvents,
   incidentInjuries,
   incidentLostTimeEvents,
   incidentPeople,
+  incidentPreventativeSteps,
+  incidentRootCauseWhys,
   incidents,
   orgUnits,
   people,
 } from '@beaconhs/db/schema'
 import { sendIncidentEmail } from './_send-email'
 import { LostTimeAddForm } from './_lost-time-form'
+import {
+  EventDrawer,
+  FactorDrawer,
+  PrevStepDrawer,
+  WhyDrawer,
+  FACTOR_CATEGORIES,
+  PREV_STEP_STATUSES,
+  type FactorCategory,
+  type PrevStepStatus,
+} from './_investigation-drawers'
 import { pickString } from '@/lib/list-params'
 import { publicUrl } from '@beaconhs/storage'
 import { requireRequestContext } from '@/lib/auth'
@@ -279,6 +304,423 @@ async function deleteLostTimeEvent(formData: FormData) {
   revalidatePath(`/incidents/${incidentId}`)
 }
 
+// ---- Investigation: events --------------------------------------------------
+
+async function saveEventAction(input: {
+  id?: string
+  incidentId: string
+  occurredAt: string
+  description: string
+}): Promise<{ ok: boolean; error?: string }> {
+  'use server'
+  const ctx = await requireRequestContext()
+  const desc = input.description.trim()
+  if (!input.incidentId || !desc) return { ok: false, error: 'Description is required.' }
+  if (!input.occurredAt) return { ok: false, error: 'Timestamp is required.' }
+  const occurred = new Date(input.occurredAt)
+  if (Number.isNaN(occurred.getTime())) return { ok: false, error: 'Invalid timestamp.' }
+
+  if (input.id) {
+    const before = await ctx.db(async (tx) => {
+      const [row] = await tx
+        .select()
+        .from(incidentEvents)
+        .where(eq(incidentEvents.id, input.id!))
+        .limit(1)
+      return row ?? null
+    })
+    if (!before) return { ok: false, error: 'Event not found.' }
+    await ctx.db((tx) =>
+      tx
+        .update(incidentEvents)
+        .set({ occurredAt: occurred, description: desc })
+        .where(eq(incidentEvents.id, input.id!)),
+    )
+    await recordAudit(ctx, {
+      entityType: 'incident',
+      entityId: input.incidentId,
+      action: 'update',
+      summary: `Edited timeline event`,
+      before: { occurredAt: before.occurredAt, description: before.description },
+      after: { occurredAt: occurred, description: desc },
+    })
+  } else {
+    const [row] = await ctx.db((tx) =>
+      tx
+        .insert(incidentEvents)
+        .values({
+          tenantId: ctx.tenantId,
+          incidentId: input.incidentId,
+          occurredAt: occurred,
+          recordedByTenantUserId: ctx.membership?.id ?? null,
+          description: desc,
+        })
+        .returning(),
+    )
+    if (!row) return { ok: false, error: 'Failed to insert event.' }
+    await recordAudit(ctx, {
+      entityType: 'incident',
+      entityId: input.incidentId,
+      action: 'create',
+      summary: `Added timeline event`,
+      after: { occurredAt: occurred, description: desc },
+    })
+  }
+  revalidatePath(`/incidents/${input.incidentId}`)
+  return { ok: true }
+}
+
+async function deleteEvent(formData: FormData) {
+  'use server'
+  const ctx = await requireRequestContext()
+  const id = String(formData.get('id') ?? '')
+  const incidentId = String(formData.get('incidentId') ?? '')
+  if (!id || !incidentId) return
+  const before = await ctx.db(async (tx) => {
+    const [row] = await tx.select().from(incidentEvents).where(eq(incidentEvents.id, id)).limit(1)
+    return row ?? null
+  })
+  if (!before) return
+  await ctx.db((tx) => tx.delete(incidentEvents).where(eq(incidentEvents.id, id)))
+  await recordAudit(ctx, {
+    entityType: 'incident',
+    entityId: incidentId,
+    action: 'update',
+    summary: `Removed timeline event`,
+    before: { occurredAt: before.occurredAt, description: before.description },
+  })
+  revalidatePath(`/incidents/${incidentId}`)
+}
+
+// ---- Investigation: contributing factors ------------------------------------
+
+async function saveFactorAction(input: {
+  id?: string
+  incidentId: string
+  category: FactorCategory
+  description: string
+}): Promise<{ ok: boolean; error?: string }> {
+  'use server'
+  const ctx = await requireRequestContext()
+  const desc = input.description.trim()
+  if (!input.incidentId || !desc) return { ok: false, error: 'Description is required.' }
+  if (!FACTOR_CATEGORIES.includes(input.category))
+    return { ok: false, error: 'Invalid category.' }
+
+  if (input.id) {
+    const before = await ctx.db(async (tx) => {
+      const [row] = await tx
+        .select()
+        .from(incidentContributingFactors)
+        .where(eq(incidentContributingFactors.id, input.id!))
+        .limit(1)
+      return row ?? null
+    })
+    if (!before) return { ok: false, error: 'Factor not found.' }
+    await ctx.db((tx) =>
+      tx
+        .update(incidentContributingFactors)
+        .set({ category: input.category, description: desc })
+        .where(eq(incidentContributingFactors.id, input.id!)),
+    )
+    await recordAudit(ctx, {
+      entityType: 'incident',
+      entityId: input.incidentId,
+      action: 'update',
+      summary: `Edited contributing factor (${input.category})`,
+      before: { category: before.category, description: before.description },
+      after: { category: input.category, description: desc },
+    })
+  } else {
+    const [row] = await ctx.db((tx) =>
+      tx
+        .insert(incidentContributingFactors)
+        .values({
+          tenantId: ctx.tenantId,
+          incidentId: input.incidentId,
+          category: input.category,
+          description: desc,
+        })
+        .returning(),
+    )
+    if (!row) return { ok: false, error: 'Failed to insert factor.' }
+    await recordAudit(ctx, {
+      entityType: 'incident',
+      entityId: input.incidentId,
+      action: 'create',
+      summary: `Added contributing factor (${input.category})`,
+      after: { category: input.category, description: desc },
+    })
+  }
+  revalidatePath(`/incidents/${input.incidentId}`)
+  return { ok: true }
+}
+
+async function deleteFactor(formData: FormData) {
+  'use server'
+  const ctx = await requireRequestContext()
+  const id = String(formData.get('id') ?? '')
+  const incidentId = String(formData.get('incidentId') ?? '')
+  if (!id || !incidentId) return
+  const before = await ctx.db(async (tx) => {
+    const [row] = await tx
+      .select()
+      .from(incidentContributingFactors)
+      .where(eq(incidentContributingFactors.id, id))
+      .limit(1)
+    return row ?? null
+  })
+  if (!before) return
+  await ctx.db((tx) =>
+    tx.delete(incidentContributingFactors).where(eq(incidentContributingFactors.id, id)),
+  )
+  await recordAudit(ctx, {
+    entityType: 'incident',
+    entityId: incidentId,
+    action: 'update',
+    summary: `Removed contributing factor (${before.category})`,
+    before: { category: before.category, description: before.description },
+  })
+  revalidatePath(`/incidents/${incidentId}`)
+}
+
+// ---- Investigation: root-cause whys -----------------------------------------
+
+async function saveRootCause(formData: FormData) {
+  'use server'
+  const ctx = await requireRequestContext()
+  const incidentId = String(formData.get('id') ?? '')
+  const rootCause = String(formData.get('rootCause') ?? '').trim() || null
+  if (!incidentId) return
+  const before = await ctx.db(async (tx) => {
+    const [row] = await tx
+      .select({ rootCause: incidents.rootCause })
+      .from(incidents)
+      .where(eq(incidents.id, incidentId))
+      .limit(1)
+    return row ?? null
+  })
+  await ctx.db((tx) =>
+    tx.update(incidents).set({ rootCause }).where(eq(incidents.id, incidentId)),
+  )
+  await recordAudit(ctx, {
+    entityType: 'incident',
+    entityId: incidentId,
+    action: 'update',
+    summary: rootCause ? 'Updated root cause' : 'Cleared root cause',
+    before: { rootCause: before?.rootCause ?? null },
+    after: { rootCause },
+  })
+  revalidatePath(`/incidents/${incidentId}`)
+}
+
+async function saveWhyAction(input: {
+  id?: string
+  incidentId: string
+  ordinal: number
+  whyText: string
+}): Promise<{ ok: boolean; error?: string }> {
+  'use server'
+  const ctx = await requireRequestContext()
+  const text = input.whyText.trim()
+  if (!input.incidentId || !text) return { ok: false, error: 'Why text is required.' }
+  if (!Number.isInteger(input.ordinal) || input.ordinal < 1 || input.ordinal > 5)
+    return { ok: false, error: 'Ordinal must be between 1 and 5.' }
+
+  if (input.id) {
+    const before = await ctx.db(async (tx) => {
+      const [row] = await tx
+        .select()
+        .from(incidentRootCauseWhys)
+        .where(eq(incidentRootCauseWhys.id, input.id!))
+        .limit(1)
+      return row ?? null
+    })
+    if (!before) return { ok: false, error: 'Why step not found.' }
+    await ctx.db((tx) =>
+      tx
+        .update(incidentRootCauseWhys)
+        .set({ ordinal: input.ordinal, whyText: text })
+        .where(eq(incidentRootCauseWhys.id, input.id!)),
+    )
+    await recordAudit(ctx, {
+      entityType: 'incident',
+      entityId: input.incidentId,
+      action: 'update',
+      summary: `Edited "why" step #${input.ordinal}`,
+      before: { ordinal: before.ordinal, whyText: before.whyText },
+      after: { ordinal: input.ordinal, whyText: text },
+    })
+  } else {
+    const [row] = await ctx.db((tx) =>
+      tx
+        .insert(incidentRootCauseWhys)
+        .values({
+          tenantId: ctx.tenantId,
+          incidentId: input.incidentId,
+          ordinal: input.ordinal,
+          whyText: text,
+        })
+        .returning(),
+    )
+    if (!row) return { ok: false, error: 'Failed to insert why step.' }
+    await recordAudit(ctx, {
+      entityType: 'incident',
+      entityId: input.incidentId,
+      action: 'create',
+      summary: `Added "why" step #${input.ordinal}`,
+      after: { ordinal: input.ordinal, whyText: text },
+    })
+  }
+  revalidatePath(`/incidents/${input.incidentId}`)
+  return { ok: true }
+}
+
+async function deleteWhy(formData: FormData) {
+  'use server'
+  const ctx = await requireRequestContext()
+  const id = String(formData.get('id') ?? '')
+  const incidentId = String(formData.get('incidentId') ?? '')
+  if (!id || !incidentId) return
+  const before = await ctx.db(async (tx) => {
+    const [row] = await tx
+      .select()
+      .from(incidentRootCauseWhys)
+      .where(eq(incidentRootCauseWhys.id, id))
+      .limit(1)
+    return row ?? null
+  })
+  if (!before) return
+  await ctx.db((tx) => tx.delete(incidentRootCauseWhys).where(eq(incidentRootCauseWhys.id, id)))
+  await recordAudit(ctx, {
+    entityType: 'incident',
+    entityId: incidentId,
+    action: 'update',
+    summary: `Removed "why" step #${before.ordinal}`,
+    before: { ordinal: before.ordinal, whyText: before.whyText },
+  })
+  revalidatePath(`/incidents/${incidentId}`)
+}
+
+// ---- Investigation: preventative steps --------------------------------------
+
+async function savePrevStepAction(input: {
+  id?: string
+  incidentId: string
+  description: string
+  ownerPersonId: string | null
+  targetDate: string | null
+  status: PrevStepStatus
+}): Promise<{ ok: boolean; error?: string }> {
+  'use server'
+  const ctx = await requireRequestContext()
+  const desc = input.description.trim()
+  if (!input.incidentId || !desc) return { ok: false, error: 'Description is required.' }
+  if (!PREV_STEP_STATUSES.includes(input.status))
+    return { ok: false, error: 'Invalid status.' }
+
+  if (input.id) {
+    const before = await ctx.db(async (tx) => {
+      const [row] = await tx
+        .select()
+        .from(incidentPreventativeSteps)
+        .where(eq(incidentPreventativeSteps.id, input.id!))
+        .limit(1)
+      return row ?? null
+    })
+    if (!before) return { ok: false, error: 'Preventative step not found.' }
+    await ctx.db((tx) =>
+      tx
+        .update(incidentPreventativeSteps)
+        .set({
+          description: desc,
+          ownerPersonId: input.ownerPersonId,
+          targetDate: input.targetDate,
+          status: input.status,
+        })
+        .where(eq(incidentPreventativeSteps.id, input.id!)),
+    )
+    await recordAudit(ctx, {
+      entityType: 'incident',
+      entityId: input.incidentId,
+      action: 'update',
+      summary: `Edited preventative step (${input.status.replace(/_/g, ' ')})`,
+      before: {
+        description: before.description,
+        ownerPersonId: before.ownerPersonId,
+        targetDate: before.targetDate,
+        status: before.status,
+      },
+      after: {
+        description: desc,
+        ownerPersonId: input.ownerPersonId,
+        targetDate: input.targetDate,
+        status: input.status,
+      },
+    })
+  } else {
+    const [row] = await ctx.db((tx) =>
+      tx
+        .insert(incidentPreventativeSteps)
+        .values({
+          tenantId: ctx.tenantId,
+          incidentId: input.incidentId,
+          description: desc,
+          ownerPersonId: input.ownerPersonId,
+          targetDate: input.targetDate,
+          status: input.status,
+        })
+        .returning(),
+    )
+    if (!row) return { ok: false, error: 'Failed to insert preventative step.' }
+    await recordAudit(ctx, {
+      entityType: 'incident',
+      entityId: input.incidentId,
+      action: 'create',
+      summary: `Added preventative step (${input.status.replace(/_/g, ' ')})`,
+      after: {
+        description: desc,
+        ownerPersonId: input.ownerPersonId,
+        targetDate: input.targetDate,
+        status: input.status,
+      },
+    })
+  }
+  revalidatePath(`/incidents/${input.incidentId}`)
+  return { ok: true }
+}
+
+async function deletePrevStep(formData: FormData) {
+  'use server'
+  const ctx = await requireRequestContext()
+  const id = String(formData.get('id') ?? '')
+  const incidentId = String(formData.get('incidentId') ?? '')
+  if (!id || !incidentId) return
+  const before = await ctx.db(async (tx) => {
+    const [row] = await tx
+      .select()
+      .from(incidentPreventativeSteps)
+      .where(eq(incidentPreventativeSteps.id, id))
+      .limit(1)
+    return row ?? null
+  })
+  if (!before) return
+  await ctx.db((tx) =>
+    tx.delete(incidentPreventativeSteps).where(eq(incidentPreventativeSteps.id, id)),
+  )
+  await recordAudit(ctx, {
+    entityType: 'incident',
+    entityId: incidentId,
+    action: 'update',
+    summary: `Removed preventative step`,
+    before: {
+      description: before.description,
+      status: before.status,
+    },
+  })
+  revalidatePath(`/incidents/${incidentId}`)
+}
+
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   return { title: `Incident · ${id.slice(0, 8)}` }
@@ -306,6 +748,7 @@ export default async function IncidentDetailPage({
   const sp = await searchParams
   const active: IncidentTab = pickActiveTab(sp, INCIDENT_TABS, 'overview')
   const drawer = pickString(sp.drawer)
+  const editId = pickString(sp.editId)
   const ctx = await requireRequestContext()
 
   const data = await ctx.db(async (tx) => {
@@ -352,12 +795,76 @@ export default async function IncidentDetailPage({
       .from(incidentAttachments)
       .innerJoin(attachments, eq(attachments.id, incidentAttachments.attachmentId))
       .where(eq(incidentAttachments.incidentId, id))
-    return { ...row, injuries, lostTime, involved, linkedCAs, photos }
+    const timelineEvents = await tx
+      .select()
+      .from(incidentEvents)
+      .where(eq(incidentEvents.incidentId, id))
+      .orderBy(asc(incidentEvents.occurredAt))
+    const factors = await tx
+      .select()
+      .from(incidentContributingFactors)
+      .where(eq(incidentContributingFactors.incidentId, id))
+      .orderBy(asc(incidentContributingFactors.category), desc(incidentContributingFactors.createdAt))
+    const whys = await tx
+      .select()
+      .from(incidentRootCauseWhys)
+      .where(eq(incidentRootCauseWhys.incidentId, id))
+      .orderBy(asc(incidentRootCauseWhys.ordinal))
+    const prevSteps = await tx
+      .select({ step: incidentPreventativeSteps, owner: people })
+      .from(incidentPreventativeSteps)
+      .leftJoin(people, eq(people.id, incidentPreventativeSteps.ownerPersonId))
+      .where(eq(incidentPreventativeSteps.incidentId, id))
+      .orderBy(asc(incidentPreventativeSteps.status), asc(incidentPreventativeSteps.targetDate))
+    return {
+      ...row,
+      injuries,
+      lostTime,
+      involved,
+      linkedCAs,
+      photos,
+      timelineEvents,
+      factors,
+      whys,
+      prevSteps,
+    }
   })
 
   if (!data) notFound()
-  const { incident, site, department, supervisor, injuries, lostTime, involved, linkedCAs, photos } =
-    data
+  const {
+    incident,
+    site,
+    department,
+    supervisor,
+    injuries,
+    lostTime,
+    involved,
+    linkedCAs,
+    photos,
+    timelineEvents,
+    factors,
+    whys,
+    prevSteps,
+  } = data
+
+  // Smallest unused ordinal (1..5) for adding a new "why" row.
+  const usedOrdinals = new Set(whys.map((w) => w.ordinal))
+  const nextWhyOrdinal = [1, 2, 3, 4, 5].find((n) => !usedOrdinals.has(n)) ?? 5
+
+  // People list (for preventative-step owner select). Limited to 200 to keep
+  // the drawer payload small; matches the cap used by the equipment work-order
+  // drawer.
+  const peopleList =
+    active === 'investigation'
+      ? await ctx.db((tx) =>
+          tx
+            .select({ id: people.id, firstName: people.firstName, lastName: people.lastName })
+            .from(people)
+            .orderBy(asc(people.lastName), asc(people.firstName))
+            .limit(200),
+        )
+      : []
+
   const activity = await recentActivityForEntity(ctx, 'incident', id, 25)
   const galleryPhotos = photos.map((p) => ({
     id: p.link.id,
@@ -457,7 +964,16 @@ export default async function IncidentDetailPage({
             { key: 'medical', label: 'Medical' },
             { key: 'injuries', label: 'Injuries', count: injuries.length },
             { key: 'lost-time', label: 'Lost time', count: lostTime.length },
-            { key: 'investigation', label: 'Investigation', count: linkedCAs.length },
+            {
+              key: 'investigation',
+              label: 'Investigation',
+              count:
+                timelineEvents.length +
+                factors.length +
+                whys.length +
+                prevSteps.length +
+                linkedCAs.length,
+            },
             { key: 'photos', label: 'Photos & files', count: photos.length },
             { key: 'activity', label: 'Activity', count: activity.length },
           ]}
@@ -777,24 +1293,291 @@ export default async function IncidentDetailPage({
 
         {active === 'investigation' ? (
         <>
-        <Section title="Investigation" subtitle="Root cause + contributing factors">
-          <div className="space-y-3 text-sm">
-            <TextBlock label="Root cause">{incident.rootCause ?? <span className="text-slate-500">—</span>}</TextBlock>
-            <TextBlock label="Contributing factors">
-              {incident.contributingFactors.length > 0 ? (
-                <ul className="list-disc pl-5">
-                  {incident.contributingFactors.map((f, i) => (
-                    <li key={i}>{f}</li>
-                  ))}
-                </ul>
+        {/* Step 2 — Event timeline */}
+        <Section
+          title={`Event timeline (${timelineEvents.length})`}
+          subtitle="Chronological log of what happened, in the order it happened."
+          actions={
+            !incident.locked ? (
+              <Link href={`/incidents/${id}?tab=investigation&drawer=new-event`}>
+                <Button size="sm" variant="outline">
+                  <Plus size={14} /> Add event
+                </Button>
+              </Link>
+            ) : null
+          }
+        >
+          {timelineEvents.length === 0 ? (
+            <EmptyState
+              title="No events logged yet"
+              description="Add a timeline entry to start reconstructing what happened."
+            />
+          ) : (
+            <ol className="relative space-y-3 border-l border-slate-200 pl-5 text-sm">
+              {timelineEvents.map((e) => (
+                <li key={e.id} className="group relative">
+                  <span className="absolute -left-[26px] top-1 h-2.5 w-2.5 rounded-full border-2 border-white bg-teal-500 shadow" />
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="font-mono text-xs text-slate-500">
+                        {new Date(e.occurredAt).toLocaleString()}
+                      </div>
+                      <div className="mt-0.5 whitespace-pre-wrap text-slate-900">
+                        {e.description}
+                      </div>
+                    </div>
+                    {!incident.locked ? (
+                      <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                        <Link
+                          href={`/incidents/${id}?tab=investigation&drawer=edit-event&editId=${e.id}`}
+                          className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                          title="Edit event"
+                        >
+                          <Pencil size={14} />
+                        </Link>
+                        <form action={deleteEvent} className="inline">
+                          <input type="hidden" name="id" value={e.id} />
+                          <input type="hidden" name="incidentId" value={id} />
+                          <button
+                            type="submit"
+                            className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700"
+                            title="Delete event"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </form>
+                      </div>
+                    ) : null}
+                  </div>
+                </li>
+              ))}
+            </ol>
+          )}
+        </Section>
+
+        {/* Step 3 — Cause analysis */}
+        <Section
+          title={`Cause analysis (${factors.length})`}
+          subtitle="Immediate causes / contributing factors, grouped by category."
+          actions={
+            !incident.locked ? (
+              <Link href={`/incidents/${id}?tab=investigation&drawer=new-factor`}>
+                <Button size="sm" variant="outline">
+                  <Plus size={14} /> Add factor
+                </Button>
+              </Link>
+            ) : null
+          }
+        >
+          {factors.length === 0 ? (
+            <EmptyState
+              title="No contributing factors recorded"
+              description="Capture the conditions, behaviours, or system gaps that led to the incident."
+            />
+          ) : (
+            <ul className="divide-y divide-slate-100 text-sm">
+              {factors.map((f) => (
+                <li key={f.id} className="group flex items-start justify-between gap-3 py-3">
+                  <div className="min-w-0 flex-1">
+                    <Badge variant="outline" className="mb-1 uppercase tracking-wide">
+                      {f.category}
+                    </Badge>
+                    <div className="whitespace-pre-wrap text-slate-900">{f.description}</div>
+                  </div>
+                  {!incident.locked ? (
+                    <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                      <Link
+                        href={`/incidents/${id}?tab=investigation&drawer=edit-factor&editId=${f.id}`}
+                        className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                        title="Edit factor"
+                      >
+                        <Pencil size={14} />
+                      </Link>
+                      <form action={deleteFactor} className="inline">
+                        <input type="hidden" name="id" value={f.id} />
+                        <input type="hidden" name="incidentId" value={id} />
+                        <button
+                          type="submit"
+                          className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700"
+                          title="Delete factor"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </form>
+                    </div>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+
+        {/* Step 4 — Root cause analysis */}
+        <Section
+          title="Root cause analysis"
+          subtitle={`Free-form root cause plus an optional 5-whys chain (${whys.length}/5).`}
+          actions={
+            !incident.locked && whys.length < 5 ? (
+              <Link href={`/incidents/${id}?tab=investigation&drawer=new-why`}>
+                <Button size="sm" variant="outline">
+                  <Plus size={14} /> Add "why"
+                </Button>
+              </Link>
+            ) : null
+          }
+        >
+          <div className="space-y-5">
+            <form action={saveRootCause} className="space-y-2">
+              <input type="hidden" name="id" value={id} />
+              <Label htmlFor="root-cause-text">Root cause statement</Label>
+              <Textarea
+                id="root-cause-text"
+                name="rootCause"
+                defaultValue={incident.rootCause ?? ''}
+                rows={3}
+                placeholder="One- or two-sentence summary of why this happened."
+                disabled={incident.locked}
+              />
+              {!incident.locked ? (
+                <div className="flex justify-end">
+                  <Button type="submit" size="sm" variant="outline">
+                    Save root cause
+                  </Button>
+                </div>
+              ) : null}
+            </form>
+
+            <div>
+              <div className="mb-2 text-xs uppercase tracking-wide text-slate-500">
+                5-Whys chain
+              </div>
+              {whys.length === 0 ? (
+                <p className="text-sm text-slate-500">
+                  Optional. Drill from the surface cause toward the root by asking "why" up to five
+                  times.
+                </p>
               ) : (
-                <span className="text-slate-500">—</span>
+                <ol className="space-y-2 text-sm">
+                  {whys.map((w) => (
+                    <li
+                      key={w.id}
+                      className="group flex items-start justify-between gap-3 rounded-md border border-slate-200 bg-slate-50/60 px-3 py-2"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <span className="mr-2 inline-flex h-5 w-12 items-center justify-center rounded bg-teal-100 text-[10px] font-semibold uppercase tracking-wide text-teal-800">
+                          Why #{w.ordinal}
+                        </span>
+                        <span className="whitespace-pre-wrap text-slate-900">{w.whyText}</span>
+                      </div>
+                      {!incident.locked ? (
+                        <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                          <Link
+                            href={`/incidents/${id}?tab=investigation&drawer=edit-why&editId=${w.id}`}
+                            className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                            title="Edit why step"
+                          >
+                            <Pencil size={14} />
+                          </Link>
+                          <form action={deleteWhy} className="inline">
+                            <input type="hidden" name="id" value={w.id} />
+                            <input type="hidden" name="incidentId" value={id} />
+                            <button
+                              type="submit"
+                              className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700"
+                              title="Delete why step"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </form>
+                        </div>
+                      ) : null}
+                    </li>
+                  ))}
+                </ol>
               )}
-            </TextBlock>
+            </div>
           </div>
         </Section>
 
-        <Section title={`Linked corrective actions (${linkedCAs.length})`} defaultOpen={true}>
+        {/* Step 5 — Preventative steps */}
+        <Section
+          title={`Preventative steps (${prevSteps.length})`}
+          subtitle="What will be done so this doesn't happen again."
+          actions={
+            !incident.locked ? (
+              <Link href={`/incidents/${id}?tab=investigation&drawer=new-prev-step`}>
+                <Button size="sm" variant="outline">
+                  <Plus size={14} /> Add step
+                </Button>
+              </Link>
+            ) : null
+          }
+        >
+          {prevSteps.length === 0 ? (
+            <EmptyState
+              title="No preventative steps yet"
+              description="Capture what your team will change to prevent a repeat. Promote any of these to a full CAPA later."
+            />
+          ) : (
+            <ul className="divide-y divide-slate-100 text-sm">
+              {prevSteps.map((row) => (
+                <li
+                  key={row.step.id}
+                  className="group flex items-start justify-between gap-3 py-3"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <PrevStepStatusBadge status={row.step.status} />
+                      {row.step.targetDate ? (
+                        <span className="text-xs text-slate-500">
+                          due <span className="font-mono">{row.step.targetDate}</span>
+                        </span>
+                      ) : null}
+                      {row.owner ? (
+                        <span className="text-xs text-slate-500">
+                          owner:{' '}
+                          <Link
+                            href={`/people/${row.owner.id}`}
+                            className="text-teal-700 hover:underline"
+                          >
+                            {row.owner.firstName} {row.owner.lastName}
+                          </Link>
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="mt-1 whitespace-pre-wrap text-slate-900">
+                      {row.step.description}
+                    </div>
+                  </div>
+                  {!incident.locked ? (
+                    <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                      <Link
+                        href={`/incidents/${id}?tab=investigation&drawer=edit-prev-step&editId=${row.step.id}`}
+                        className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                        title="Edit step"
+                      >
+                        <Pencil size={14} />
+                      </Link>
+                      <form action={deletePrevStep} className="inline">
+                        <input type="hidden" name="id" value={row.step.id} />
+                        <input type="hidden" name="incidentId" value={id} />
+                        <button
+                          type="submit"
+                          className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700"
+                          title="Delete step"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </form>
+                    </div>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+
+        <Section title={`Linked corrective actions (${linkedCAs.length})`} defaultOpen={false}>
           {linkedCAs.length === 0 ? (
             <div className="flex items-center justify-between text-sm text-slate-500">
               <span>No corrective actions linked yet.</span>
@@ -1001,12 +1784,160 @@ export default async function IncidentDetailPage({
           </div>
         </form>
       </UrlDrawer>
+
+      {/* Investigation sub-entity drawers */}
+      {active === 'investigation' ? (
+        <>
+          <EventDrawer
+            open={drawer === 'new-event'}
+            closeHref={`/incidents/${id}?tab=investigation`}
+            incidentId={id}
+            action={saveEventAction}
+            mode="create"
+          />
+          {(() => {
+            const editingEvent = editId
+              ? timelineEvents.find((e) => e.id === editId)
+              : undefined
+            return (
+              <EventDrawer
+                open={drawer === 'edit-event' && !!editingEvent}
+                closeHref={`/incidents/${id}?tab=investigation`}
+                incidentId={id}
+                action={saveEventAction}
+                mode="edit"
+                defaults={
+                  editingEvent
+                    ? {
+                        id: editingEvent.id,
+                        occurredAt: toLocalDatetime(editingEvent.occurredAt),
+                        description: editingEvent.description,
+                      }
+                    : undefined
+                }
+              />
+            )
+          })()}
+
+          <FactorDrawer
+            open={drawer === 'new-factor'}
+            closeHref={`/incidents/${id}?tab=investigation`}
+            incidentId={id}
+            action={saveFactorAction}
+            mode="create"
+          />
+          {(() => {
+            const editingFactor = editId ? factors.find((f) => f.id === editId) : undefined
+            return (
+              <FactorDrawer
+                open={drawer === 'edit-factor' && !!editingFactor}
+                closeHref={`/incidents/${id}?tab=investigation`}
+                incidentId={id}
+                action={saveFactorAction}
+                mode="edit"
+                defaults={
+                  editingFactor
+                    ? {
+                        id: editingFactor.id,
+                        category: editingFactor.category as FactorCategory,
+                        description: editingFactor.description,
+                      }
+                    : undefined
+                }
+              />
+            )
+          })()}
+
+          <WhyDrawer
+            open={drawer === 'new-why' && whys.length < 5}
+            closeHref={`/incidents/${id}?tab=investigation`}
+            incidentId={id}
+            action={saveWhyAction}
+            mode="create"
+            nextOrdinal={nextWhyOrdinal}
+          />
+          {(() => {
+            const editingWhy = editId ? whys.find((w) => w.id === editId) : undefined
+            return (
+              <WhyDrawer
+                open={drawer === 'edit-why' && !!editingWhy}
+                closeHref={`/incidents/${id}?tab=investigation`}
+                incidentId={id}
+                action={saveWhyAction}
+                mode="edit"
+                nextOrdinal={nextWhyOrdinal}
+                defaults={
+                  editingWhy
+                    ? {
+                        id: editingWhy.id,
+                        ordinal: editingWhy.ordinal,
+                        whyText: editingWhy.whyText,
+                      }
+                    : undefined
+                }
+              />
+            )
+          })()}
+
+          <PrevStepDrawer
+            open={drawer === 'new-prev-step'}
+            closeHref={`/incidents/${id}?tab=investigation`}
+            incidentId={id}
+            action={savePrevStepAction}
+            mode="create"
+            people={peopleList}
+          />
+          {(() => {
+            const editingPrevRow = editId
+              ? prevSteps.find((r) => r.step.id === editId)
+              : undefined
+            const editingPrev = editingPrevRow?.step
+            return (
+              <PrevStepDrawer
+                open={drawer === 'edit-prev-step' && !!editingPrev}
+                closeHref={`/incidents/${id}?tab=investigation`}
+                incidentId={id}
+                action={savePrevStepAction}
+                mode="edit"
+                people={peopleList}
+                defaults={
+                  editingPrev
+                    ? {
+                        id: editingPrev.id,
+                        description: editingPrev.description,
+                        ownerPersonId: editingPrev.ownerPersonId,
+                        targetDate: editingPrev.targetDate,
+                        status: editingPrev.status as PrevStepStatus,
+                      }
+                    : undefined
+                }
+              />
+            )
+          })()}
+        </>
+      ) : null}
     </DetailPageLayout>
   )
 }
 
 function yesNo(b: boolean | null | undefined): string {
   return b ? 'Yes' : 'No'
+}
+
+// Convert a UTC Date into the local "YYYY-MM-DDTHH:MM" form that
+// <input type="datetime-local"> expects.
+function toLocalDatetime(d: Date | string): string {
+  const date = typeof d === 'string' ? new Date(d) : d
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
+    date.getHours(),
+  )}:${pad(date.getMinutes())}`
+}
+
+function PrevStepStatusBadge({ status }: { status: PrevStepStatus }) {
+  if (status === 'completed') return <Badge variant="success">Completed</Badge>
+  if (status === 'in_progress') return <Badge variant="warning">In progress</Badge>
+  return <Badge variant="outline">Planned</Badge>
 }
 
 function TextBlock({ label, children }: { label: string; children: React.ReactNode }) {

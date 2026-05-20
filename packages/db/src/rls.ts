@@ -185,6 +185,11 @@ export const TENANT_SCOPED_TABLES = [
   'incident_injury_types',
   'incident_hours_periods',
   'incident_people',
+  // Investigation sub-tables (5-step flow)
+  'incident_events',
+  'incident_contributing_factors',
+  'incident_root_cause_whys',
+  'incident_preventative_steps',
   // Job-title task tracking
   'job_title_tasks',
   'job_title_task_acknowledgments',

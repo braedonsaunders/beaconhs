@@ -22,6 +22,7 @@ import {
   UrlDrawer,
 } from '@beaconhs/ui'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
+import { toast } from '@/lib/toast'
 
 type RecordReviewAction = (input: {
   documentId: string
@@ -105,10 +106,13 @@ function RecordReviewDrawer({
         nextReviewOn: nextReviewOn.trim() || null,
       })
       if (res.ok) {
+        toast.success('Review recorded')
         router.push(closeHref)
         router.refresh()
       } else {
-        setError(res.error ?? 'Failed to record review')
+        const message = res.error ?? 'Failed to record review'
+        setError(message)
+        toast.error(message)
       }
     })
   }
@@ -226,10 +230,13 @@ function NewVersionDrawer({
         contentAttachmentId: mode === 'upload' ? uploaded!.attachmentId : null,
       })
       if (res.ok) {
+        toast.success('Draft version created')
         router.push(closeHref)
         router.refresh()
       } else {
-        setError(res.error ?? 'Failed to create version')
+        const message = res.error ?? 'Failed to create version'
+        setError(message)
+        toast.error(message)
       }
     })
   }

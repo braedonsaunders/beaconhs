@@ -13,6 +13,7 @@ export type AuditAction =
   | 'login'
   | 'logout'
   | 'export'
+  | 'copy'
   | 'view_sensitive'
 
 export async function recordAudit(

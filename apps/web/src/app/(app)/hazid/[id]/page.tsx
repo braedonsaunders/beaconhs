@@ -10,7 +10,7 @@ import {
   DetailHeader,
   UrlDrawer,
 } from '@beaconhs/ui'
-import { FileText, Lock, Mail, Plus, Unlock } from 'lucide-react'
+import { Copy, FileText, Lock, Mail, Plus, Unlock } from 'lucide-react'
 import {
   atmosphericSensors,
   attachments,
@@ -56,6 +56,7 @@ import {
   answerPPE,
   answerQuestion,
   attachPhotos,
+  copyAssessment,
   deleteCSAtmospheric,
   deleteCSEntry,
   deleteHazard,
@@ -402,6 +403,14 @@ export default async function HazidAssessmentDetailPage({
                     <Mail size={14} /> Send email
                   </Button>
                 </Link>
+                {/* Copy duplicates this assessment as a new draft, redirects */}
+                {/* to the new detail page. Works whether locked or not.     */}
+                <form action={copyAssessment}>
+                  <input type="hidden" name="id" value={id} />
+                  <Button variant="outline" type="submit">
+                    <Copy size={14} /> Copy assessment
+                  </Button>
+                </form>
                 {locked ? (
                   <form action={unlockAssessment}>
                     <input type="hidden" name="id" value={id} />
