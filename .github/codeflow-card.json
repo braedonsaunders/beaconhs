@@ -1428,6 +1428,108 @@
           "total": 578
         }
       ]
+    },
+    {
+      "at": "2026-05-20T02:10:20.140Z",
+      "sha": "0c55459aafc0bf91d089a5fbf0ae5b7c9c53f7e3",
+      "pr": null,
+      "actor": "braedonsaunders",
+      "files": 675,
+      "functions": 1827,
+      "loc": 333102,
+      "languages": 15,
+      "topLanguages": [
+        {
+          "ext": "json",
+          "pct": 57,
+          "lines": 189945
+        },
+        {
+          "ext": "tsx",
+          "pct": 26,
+          "lines": 86827
+        },
+        {
+          "ext": "ts",
+          "pct": 13,
+          "lines": 43564
+        },
+        {
+          "ext": "yaml",
+          "pct": 2,
+          "lines": 6751
+        },
+        {
+          "ext": "sql",
+          "pct": 1,
+          "lines": 4581
+        }
+      ],
+      "dead": 37,
+      "deadPct": 2,
+      "circular": 1,
+      "godObjects": 1,
+      "avgCoupling": 5,
+      "securityIssues": 23,
+      "patterns": 7,
+      "duplicates": 59,
+      "layerViolations": 194,
+      "connections": 3365,
+      "avgFnLines": 15.6,
+      "longestFn": 16,
+      "testFiles": 1,
+      "testRatio": 0.1,
+      "topFolders": [
+        {
+          "name": "apps",
+          "count": 482
+        },
+        {
+          "name": "packages",
+          "count": 180
+        },
+        {
+          "name": "root",
+          "count": 11
+        },
+        {
+          "name": "docker",
+          "count": 1
+        },
+        {
+          "name": "docs",
+          "count": 1
+        }
+      ],
+      "folders": 5,
+      "grade": "D",
+      "score": 66,
+      "topBlast": {
+        "path": "apps/web/src/lib/auth.ts",
+        "direct": 302,
+        "transitive": 425,
+        "total": 727
+      },
+      "fragility": [
+        {
+          "path": "apps/web/src/lib/auth.ts",
+          "direct": 302,
+          "transitive": 425,
+          "total": 727
+        },
+        {
+          "path": "packages/ui/src/badge.tsx",
+          "direct": 165,
+          "transitive": 448,
+          "total": 613
+        },
+        {
+          "path": "apps/web/src/app/(app)/lift-plans/_actions.ts",
+          "direct": 160,
+          "transitive": 422,
+          "total": 582
+        }
+      ]
     }
   ]
 }
