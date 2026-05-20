@@ -163,83 +163,7 @@ const toolboxSchema: FormSchemaV1 = {
   workflow: SUBMIT_WORKFLOW,
 }
 
-// 3) Lift Plan / Critical Lift --------------------------------------------
-const liftPlanSchema: FormSchemaV1 = {
-  schemaVersion: 1,
-  title: { en: 'Critical Lift Plan' },
-  description: {
-    en: 'Pre-lift engineering plan: load, equipment, capacity utilisation, hazards & controls, sign-off.',
-  },
-  sections: [
-    {
-      id: 'project',
-      title: { en: 'Project' },
-      fields: [
-        { id: 'project_name', type: 'text', label: { en: 'Project name' }, required: true },
-        { id: 'site', type: 'site_picker', label: { en: 'Site' }, required: true },
-        { id: 'lift_date', type: 'date', label: { en: 'Lift date' }, required: true },
-        { id: 'lift_supervisor', type: 'person_picker', label: { en: 'Lift supervisor' }, required: true },
-        { id: 'operator', type: 'person_picker', label: { en: 'Crane operator' }, required: true },
-        { id: 'rigger', type: 'person_picker', label: { en: 'Rigger' }, required: true },
-      ],
-    },
-    {
-      id: 'load',
-      title: { en: 'Load' },
-      fields: [
-        { id: 'load_description', type: 'text', label: { en: 'Load description' }, required: true },
-        { id: 'load_weight_kg', type: 'number', label: { en: 'Load weight (kg)' }, required: true },
-        {
-          id: 'load_dimensions_max_mm',
-          type: 'number',
-          label: { en: 'Max load dimension (mm)' },
-        },
-      ],
-    },
-    {
-      id: 'equipment',
-      title: { en: 'Equipment' },
-      fields: [
-        { id: 'crane_make_model', type: 'text', label: { en: 'Crane make / model' }, required: true },
-        { id: 'crane_capacity_kg', type: 'number', label: { en: 'Crane capacity (kg)' }, required: true },
-        { id: 'boom_length_m', type: 'number', label: { en: 'Boom length (m)' }, required: true },
-        { id: 'radius_m', type: 'number', label: { en: 'Radius (m)' }, required: true },
-        {
-          id: 'capacity_used_pct',
-          type: 'calc',
-          label: { en: 'Capacity used (%)' },
-          helpText: { en: 'Auto-calculated: load weight / crane capacity × 100.' },
-          config: { formula: 'load_weight_kg / crane_capacity_kg * 100' },
-        },
-      ],
-    },
-    {
-      id: 'hazards',
-      title: { en: 'Hazards & controls' },
-      fields: [
-        { id: 'site_hazards', type: 'long_text', label: { en: 'Site hazards' }, required: true },
-        { id: 'controls_in_place', type: 'long_text', label: { en: 'Controls in place' }, required: true },
-        {
-          id: 'ppe_required',
-          type: 'multi_select',
-          label: { en: 'PPE required' },
-          validation: { options: PPE_OPTIONS },
-        },
-      ],
-    },
-    {
-      id: 'sign_off',
-      title: { en: 'Sign-off' },
-      fields: [
-        { id: 'supervisor_signature', type: 'signature', label: { en: 'Supervisor signature' }, required: true },
-        { id: 'operator_signature', type: 'signature', label: { en: 'Operator signature' }, required: true },
-      ],
-    },
-  ],
-  workflow: SUBMIT_WORKFLOW,
-}
-
-// 4) Working at Heights Rescue Plan ---------------------------------------
+// 3) Working at Heights Rescue Plan ---------------------------------------
 const wahRescueSchema: FormSchemaV1 = {
   schemaVersion: 1,
   title: { en: 'Working at Heights Rescue Plan' },
@@ -339,6 +263,11 @@ const wahRescueSchema: FormSchemaV1 = {
 // readings, etc. The form-template gallery would have been confusing
 // alongside the native module, so we skipped it. The `jshaSchema` constant
 // is kept above for reference; it isn't exported.
+//
+// Lift Plan is ALSO not a canonical template — it's now a per-tenant built-in
+// template seeded by packages/db/src/seed/lift-plan-template.ts, surfaced at
+// /inspections?bound=lift_plan. The gallery is for "start from a template",
+// which doesn't make sense for a built-in that's already provisioned.
 export const CANONICAL_TEMPLATES: CanonicalTemplate[] = [
   {
     key: 'toolbox_v1',
@@ -348,15 +277,6 @@ export const CANONICAL_TEMPLATES: CanonicalTemplate[] = [
     description:
       'Pre-shift safety discussion with topic, attendees, key points, action items, photos. Used daily on every active site.',
     schema: toolboxSchema,
-  },
-  {
-    key: 'lift_plan_v1',
-    name: 'Critical Lift Plan',
-    category: 'lift_plan',
-    moduleBinding: 'lift_plan',
-    description:
-      'Engineering plan for any critical lift: load, crane, capacity utilisation, site hazards, sign-off by supervisor + operator.',
-    schema: liftPlanSchema,
   },
   {
     key: 'wah_rescue_v1',

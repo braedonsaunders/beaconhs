@@ -195,14 +195,6 @@ export const TENANT_SCOPED_TABLES = [
   // Job-title task tracking
   'job_title_tasks',
   'job_title_task_acknowledgments',
-  // Lift Plans — main + sub-tables
-  'lift_plans',
-  'lift_plan_loads',
-  'lift_plan_equipment',
-  'lift_plan_hazards',
-  'lift_plan_ppe',
-  'lift_plan_signatures',
-  'lift_plan_photos',
   // People — divisions / groups / titles assignments
   'person_divisions',
   'person_division_memberships',

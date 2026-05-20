@@ -134,6 +134,13 @@
       "when": 1780100000000,
       "tag": "0019_people_org_chart_files_signature",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1780200000000,
+      "tag": "0020_drop_native_lift_plans",
+      "breakpoints": true
     }
   ]
 }

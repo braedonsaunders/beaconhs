@@ -7,7 +7,7 @@
 // source row (form_responses.pdfAttachmentId, training_certificates.pdfAttachmentId,
 // or inserts an incident_attachments link for incidents).
 //
-// Wave-6 kinds (hazid / lift_plan / toolbox / ca / document / document_book /
+// Wave-6 kinds (hazid / toolbox / ca / document / document_book /
 // equipment_workorder / ppe_issue) write a row into `attachments` and rely on
 // the GET /pdf route to look up the latest matching attachment by tenant +
 // entity + kind, then 307 redirect to a presigned URL.
@@ -66,19 +66,6 @@ export async function requestHazidPdf(assessmentId: string): Promise<RequestPdfR
     entityId: assessmentId,
     action: 'export',
     summary: 'Requested HazID assessment PDF render',
-  })
-  return { ok: true }
-}
-
-export async function requestLiftPlanPdf(liftPlanId: string): Promise<RequestPdfResult> {
-  const ctx = await requireRequestContext()
-  if (!ctx.tenantId) return { ok: false, error: 'No active tenant' }
-  await enqueuePdf({ kind: 'lift_plan', tenantId: ctx.tenantId, liftPlanId })
-  await recordAudit(ctx, {
-    entityType: 'lift_plan',
-    entityId: liftPlanId,
-    action: 'export',
-    summary: 'Requested lift plan PDF render',
   })
   return { ok: true }
 }

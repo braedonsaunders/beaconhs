@@ -12,6 +12,7 @@ import {
 } from '@beaconhs/ui'
 import { db } from '@beaconhs/db'
 import { auditLog, tenants } from '@beaconhs/db/schema'
+import { seedLiftPlanTemplate } from '@beaconhs/db/seed/lift-plan-template'
 import { getCurrentUserId } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
 
@@ -72,6 +73,10 @@ async function createTenant(formData: FormData): Promise<void> {
         summary: `Created tenant "${name}" (${slug})`,
         after: { name, slug, region, defaultLanguage, enabledLanguages },
       })
+      // Seed every built-in form template that's required on day-one. Done
+      // inside the same transaction so a seeder failure rolls back the
+      // tenant create — we never want a half-provisioned tenant.
+      await seedLiftPlanTemplate(tx, created.id)
     }
   })
 

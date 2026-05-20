@@ -32,7 +32,7 @@ const NAV_GROUPS: SidebarNavGroup[] = [
       { href: '/inspections', label: 'Inspections', iconKey: 'clipboard' },
       { href: '/hazid', label: 'JSHA / HazID', iconKey: 'radiation' },
       { href: '/toolbox', label: 'Toolbox talks', iconKey: 'message' },
-      { href: '/lift-plans', label: 'Lift plans', iconKey: 'construction' },
+      { href: '/inspections?bound=lift_plan', label: 'Lift plans', iconKey: 'construction' },
       { href: '/incidents', label: 'Incidents', iconKey: 'alert' },
       { href: '/corrective-actions', label: 'Corrective Actions', iconKey: 'list-checks' },
     ],

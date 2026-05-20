@@ -366,8 +366,8 @@ export const formResponseSteps = pgTable(
     // Lifecycle status. Defaults to 'pending'; populated by the workflow
     // server actions in apps/web/src/app/(app)/forms/responses/[id]/_actions.ts.
     status: text('status').default('pending').notNull(),
-    // Inline signature data URL (PNG). Mirrors the lift_plan_signatures
-    // pattern — fast to render in PDFs without a separate fetch.
+    // Inline signature data URL (PNG). Stored alongside the attachment-id
+    // pointer so PDFs can render the signature without a separate fetch.
     signatureDataUrl: text('signature_data_url'),
     // Whose person record the signer represents (if internal).
     signedByPersonId: uuid('signed_by_person_id').references(() => people.id),

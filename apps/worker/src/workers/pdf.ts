@@ -2,10 +2,10 @@
 //
 // Consumes the `pdfs` BullMQ queue and renders all worker-rendered PDF kinds.
 // Older kinds (form_response / incident / certificate) attach the resulting
-// PDF to the source row directly; the new wave-6 kinds (hazid / lift_plan /
-// toolbox / ca / document / document_book / equipment_workorder / ppe_issue)
-// write the rendered PDF into the `attachments` table and rely on the GET
-// /pdf route to look up the latest matching attachment by tenant+entity+kind.
+// PDF to the source row directly; the new wave-6 kinds (hazid / toolbox / ca /
+// document / document_book / equipment_workorder / ppe_issue) write the
+// rendered PDF into the `attachments` table and rely on the GET /pdf route
+// to look up the latest matching attachment by tenant+entity+kind.
 //
 // All renders are uploaded straight to MinIO/R2 via the storage package and
 // recorded in the attachments table + audit_log (action='export').
@@ -48,13 +48,6 @@ import {
   incidentLostTimeEvents,
   incidentPeople,
   incidents,
-  liftPlanEquipment,
-  liftPlanHazards,
-  liftPlanLoads,
-  liftPlanPhotos,
-  liftPlanPpe,
-  liftPlanSignatures,
-  liftPlans,
   orgUnits,
   people,
   ppeIssueReports,
@@ -80,7 +73,6 @@ import {
   renderHazidPdf,
   renderHazidSignedReportPdf,
   renderIncidentPdf,
-  renderLiftPlanPdf,
   renderPpeIssuePdf,
   renderToolboxPdf,
   type HazidRenderInput,
@@ -101,8 +93,6 @@ export async function processPdf(job: Job<PdfJobData>): Promise<void> {
         return await renderCertificate(data.tenantId, data.certificateId)
       case 'hazid':
         return await renderHazid(data.tenantId, data.assessmentId)
-      case 'lift_plan':
-        return await renderLiftPlan(data.tenantId, data.liftPlanId)
       case 'toolbox':
         return await renderToolbox(data.tenantId, data.journalId)
       case 'ca':
@@ -1165,163 +1155,6 @@ function escapeHtml(s: string | null | undefined): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;')
-}
-
-// --- lift_plan -------------------------------------------------------------
-
-async function renderLiftPlan(tenantId: string, liftPlanId: string): Promise<void> {
-  const data = await withTenant(db, tenantId, async (tx) => {
-    const [row] = await tx
-      .select({
-        p: liftPlans,
-        site: orgUnits,
-        supervisorMember: tenantUsers,
-        supervisorUser: user,
-        operator: people,
-        tenant: tenants,
-      })
-      .from(liftPlans)
-      .leftJoin(orgUnits, eq(orgUnits.id, liftPlans.siteOrgUnitId))
-      .leftJoin(tenantUsers, eq(tenantUsers.id, liftPlans.supervisorTenantUserId))
-      .leftJoin(user, eq(user.id, tenantUsers.userId))
-      .leftJoin(people, eq(people.id, liftPlans.operatorPersonId))
-      .innerJoin(tenants, eq(tenants.id, liftPlans.tenantId))
-      .where(eq(liftPlans.id, liftPlanId))
-      .limit(1)
-    if (!row) return null
-
-    let projectName: string | null = null
-    if (row.p.projectOrgUnitId) {
-      const [proj] = await tx
-        .select({ name: orgUnits.name })
-        .from(orgUnits)
-        .where(eq(orgUnits.id, row.p.projectOrgUnitId))
-        .limit(1)
-      projectName = proj?.name ?? null
-    }
-    let rigger: { firstName: string; lastName: string } | null = null
-    if (row.p.riggerPersonId) {
-      const [r] = await tx
-        .select({ firstName: people.firstName, lastName: people.lastName })
-        .from(people)
-        .where(eq(people.id, row.p.riggerPersonId))
-        .limit(1)
-      rigger = r ?? null
-    }
-
-    const loads = await tx
-      .select()
-      .from(liftPlanLoads)
-      .where(eq(liftPlanLoads.liftPlanId, liftPlanId))
-      .orderBy(asc(liftPlanLoads.entityOrder))
-
-    const equipment = await tx
-      .select({ row: liftPlanEquipment, item: equipmentItems })
-      .from(liftPlanEquipment)
-      .leftJoin(equipmentItems, eq(equipmentItems.id, liftPlanEquipment.equipmentItemId))
-      .where(eq(liftPlanEquipment.liftPlanId, liftPlanId))
-      .orderBy(asc(liftPlanEquipment.entityOrder))
-
-    const hazards = await tx
-      .select()
-      .from(liftPlanHazards)
-      .where(eq(liftPlanHazards.liftPlanId, liftPlanId))
-      .orderBy(asc(liftPlanHazards.entityOrder))
-
-    const ppe = await tx
-      .select()
-      .from(liftPlanPpe)
-      .where(eq(liftPlanPpe.liftPlanId, liftPlanId))
-      .orderBy(asc(liftPlanPpe.entityOrder))
-
-    const signatures = await tx
-      .select({ row: liftPlanSignatures, person: people })
-      .from(liftPlanSignatures)
-      .leftJoin(people, eq(people.id, liftPlanSignatures.personId))
-      .where(eq(liftPlanSignatures.liftPlanId, liftPlanId))
-      .orderBy(asc(liftPlanSignatures.createdAt))
-
-    const photos = await tx
-      .select({ link: liftPlanPhotos, att: attachments })
-      .from(liftPlanPhotos)
-      .innerJoin(attachments, eq(attachments.id, liftPlanPhotos.attachmentId))
-      .where(eq(liftPlanPhotos.liftPlanId, liftPlanId))
-
-    return { ...row, projectName, rigger, loads, equipment, hazards, ppe, signatures, photos }
-  })
-
-  if (!data) {
-    console.warn(`[pdf] lift_plan ${liftPlanId} not found`)
-    return
-  }
-
-  const p = data.p
-  const t = data.tenant
-
-  const pdf = await renderLiftPlanPdf({
-    tenantName: t.name,
-    tenantLogoUrl: t.branding.logoUrl,
-    primaryColor: t.branding.primaryColor,
-    liftPlan: {
-      reference: p.reference,
-      liftDate: p.liftDate,
-      description: p.description,
-      status: p.status,
-      locked: p.locked,
-      siteName: data.site?.name ?? null,
-      projectName: data.projectName,
-      supervisorName: memberDisplayName({
-        member: data.supervisorMember,
-        user: data.supervisorUser,
-      }),
-      operatorName: personName(data.operator),
-      riggerName: personName(data.rigger),
-      cancellationReason: p.cancellationReason,
-      completedAt: p.completedAt,
-    },
-    loads: data.loads.map((l) => ({
-      description: l.description,
-      weightKg: l.weightKg,
-      dimensionsMaxMm: l.dimensionsMaxMm,
-      attachmentMethod: l.attachmentMethod,
-    })),
-    equipment: data.equipment.map((e) => ({
-      name: e.item?.name ?? e.row.equipmentDescription ?? '—',
-      capacityKg: e.row.capacityKg,
-      boomLengthM: e.row.boomLengthM,
-      radiusM: e.row.radiusM,
-      capacityUsedPct: e.row.capacityUsedPct,
-    })),
-    hazards: data.hazards.map((h) => ({
-      hazardDescription: h.hazardDescription,
-      controls: h.controls,
-    })),
-    ppe: data.ppe.map((p) => ({ ppeName: p.ppeName, required: p.required })),
-    signatures: data.signatures.map((s) => ({
-      role: s.row.role,
-      name: s.person ? personName(s.person)! : s.row.externalName ?? 'Unknown',
-      signatureDataUrl: s.row.signatureDataUrl,
-      signedAt: s.row.signedAt,
-    })),
-    photos: data.photos.map((ph) => ({
-      url: publicUrl(ph.att.r2Key),
-      caption: ph.link.caption,
-    })),
-    generatedAt: new Date(),
-  })
-
-  const stamp = Date.now()
-  await storePdfArtifact({
-    tenantId,
-    pdf,
-    filename: `lift-plan-${p.reference || liftPlanId.slice(0, 8)}-${stamp}.pdf`,
-    r2Key: `pdfs/lift-plans/${liftPlanId}-${stamp}.pdf`,
-    entityType: 'lift_plan',
-    entityId: liftPlanId,
-    summary: 'Rendered lift plan PDF',
-  })
-
-  console.log(`[pdf] lift_plan ${liftPlanId} rendered (${pdf.length} bytes)`)
 }
 
 // --- toolbox ---------------------------------------------------------------

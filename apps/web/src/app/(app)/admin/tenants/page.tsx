@@ -54,9 +54,14 @@ export default async function AdminTenantsPage() {
           title="All tenants"
           subtitle="Super-admin view of every tenant on this deployment"
           actions={
-            <Link href="/admin/tenants/new">
-              <Button>New tenant</Button>
-            </Link>
+            <div className="flex items-center gap-2">
+              <Link href="/admin/tenants/seed-templates">
+                <Button variant="outline">Seed built-in templates</Button>
+              </Link>
+              <Link href="/admin/tenants/new">
+                <Button>New tenant</Button>
+              </Link>
+            </div>
           }
         />
 

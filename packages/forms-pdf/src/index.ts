@@ -11,7 +11,6 @@ import { renderCertificateHtml, type CertificateRenderInput } from './templates/
 import { renderWalletHtml, type WalletRenderInput } from './templates/wallet'
 import { renderReportHtml, type ReportRenderInput, type ReportGroup } from './templates/report'
 import { renderHazidHtml, type HazidRenderInput } from './templates/hazid'
-import { renderLiftPlanHtml, type LiftPlanRenderInput } from './templates/lift-plan'
 import { renderToolboxHtml, type ToolboxRenderInput } from './templates/toolbox'
 import { renderCaHtml, type CaRenderInput } from './templates/ca'
 import {
@@ -34,7 +33,6 @@ export type {
   ReportRenderInput,
   ReportGroup,
   HazidRenderInput,
-  LiftPlanRenderInput,
   ToolboxRenderInput,
   CaRenderInput,
   DocumentRenderInput,
@@ -50,7 +48,6 @@ export {
   renderWalletHtml,
   renderReportHtml,
   renderHazidHtml,
-  renderLiftPlanHtml,
   renderToolboxHtml,
   renderCaHtml,
   renderDocumentHtml,
@@ -355,10 +352,10 @@ export async function renderReportPdf(input: ReportRenderInput): Promise<Buffer>
 
 // --- Generic letterhead body renderer -------------------------------------
 //
-// Used by hazid / lift_plan / toolbox / ca / document / equipment_workorder /
-// ppe_issue. Each template produces a self-contained body fragment (style + DOM)
-// which we wrap in <html><head><title>...</head><body>...</body></html> and
-// print on Letter-sized pages with a small footer (page n / total).
+// Used by hazid / toolbox / ca / document / equipment_workorder / ppe_issue.
+// Each template produces a self-contained body fragment (style + DOM) which
+// we wrap in <html><head><title>...</head><body>...</body></html> and print
+// on Letter-sized pages with a small footer (page n / total).
 
 async function printLetterheadPdf(args: {
   body: string
@@ -573,17 +570,6 @@ function formatBundleDateTime(d: string | Date): string {
   const date = typeof d === 'string' ? new Date(d) : d
   if (Number.isNaN(date.getTime())) return String(d)
   return date.toISOString().slice(0, 19).replace('T', ' ')
-}
-
-// --- Lift Plan PDF --------------------------------------------------------
-
-export async function renderLiftPlanPdf(input: LiftPlanRenderInput): Promise<Buffer> {
-  return printLetterheadPdf({
-    body: renderLiftPlanHtml(input),
-    title: 'Critical Lift Plan',
-    footerLeft: input.tenantName,
-    footerRight: `Lift Plan ${input.liftPlan.reference}`,
-  })
 }
 
 // --- Toolbox Journal PDF --------------------------------------------------

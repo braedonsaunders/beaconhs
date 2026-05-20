@@ -127,9 +127,9 @@ export const people = pgTable(
     managerPersonId: uuid('manager_person_id').references((): any => people.id, {
       onDelete: 'set null',
     }),
-    // User's saved signature image — referenced by inspection / lift-plan /
-    // form-sign-off flows when this person is the signer. Stored as a regular
-    // attachment so it benefits from the same upload + audit pipeline.
+    // User's saved signature image — referenced by inspection / form-sign-off
+    // flows when this person is the signer. Stored as a regular attachment so
+    // it benefits from the same upload + audit pipeline.
     signatureAttachmentId: uuid('signature_attachment_id'),
     emergencyContactName: text('emergency_contact_name'),
     emergencyContactPhone: text('emergency_contact_phone'),

@@ -4,7 +4,6 @@ import Link from 'next/link'
 import {
   ArrowRight,
   CheckCircle2,
-  Construction,
   HardHat,
   MessageSquare,
   Sparkles,
@@ -60,7 +59,6 @@ const MODULE_BINDINGS = [
 const CANONICAL_ICONS: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
   jsha_v1: HardHat,
   toolbox_v1: MessageSquare,
-  lift_plan_v1: Construction,
   wah_rescue_v1: CheckCircle2,
 }
 

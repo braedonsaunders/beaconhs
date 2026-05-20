@@ -7,8 +7,6 @@ import { useRouter } from 'next/navigation'
 import {
   AlertTriangle,
   BookOpen,
-  ClipboardList,
-  Construction,
   ListChecks,
   Loader2,
   MessageSquare,
@@ -62,11 +60,6 @@ const ENTITY_META: Record<
     label: 'Toolbox talks',
     icon: MessageSquare,
     viewAllHref: (q) => `/toolbox?q=${encodeURIComponent(q)}`,
-  },
-  lift_plans: {
-    label: 'Lift plans',
-    icon: Construction,
-    viewAllHref: (q) => `/lift-plans?q=${encodeURIComponent(q)}`,
   },
 }
 

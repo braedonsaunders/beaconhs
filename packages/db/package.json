@@ -10,7 +10,8 @@
     "./schema": "./src/schema/index.ts",
     "./client": "./src/client.ts",
     "./rls": "./src/rls.ts",
-    "./canonical-templates": "./src/canonical-templates.ts"
+    "./canonical-templates": "./src/canonical-templates.ts",
+    "./seed/lift-plan-template": "./src/seed/lift-plan-template.ts"
   },
   "scripts": {
     "generate": "drizzle-kit generate",

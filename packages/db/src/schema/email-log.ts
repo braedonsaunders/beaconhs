@@ -62,9 +62,9 @@ export const emailLog = pgTable(
     textBody: text('text_body'),
     status: emailLogStatus('status').default('queued').notNull(),
     // Category for filtering — e.g. 'incident_reported', 'ca_assigned',
-    // 'lift_plan_send', 'document_send', 'magic_link', 'training_expiring'.
+    // 'document_send', 'magic_link', 'training_expiring'.
     categoryKey: text('category_key'),
-    // Free-form metadata: { incidentId, liftPlanId, retryAttempt, etc. }
+    // Free-form metadata: { incidentId, retryAttempt, etc. }
     meta: jsonb('meta').$type<Record<string, unknown>>().default({}).notNull(),
     // Lifecycle timestamps
     sentAt: timestamp('sent_at', { withTimezone: true }),

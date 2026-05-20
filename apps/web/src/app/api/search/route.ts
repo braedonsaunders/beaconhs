@@ -13,7 +13,6 @@ import {
   equipmentItems,
   hazidAssessments,
   incidents,
-  liftPlans,
   people,
   toolboxJournals,
 } from '@beaconhs/db/schema'
@@ -37,7 +36,6 @@ export type SearchGroup = {
     | 'documents'
     | 'hazid_assessments'
     | 'toolbox_journals'
-    | 'lift_plans'
   total: number
   items: SearchResultItem[]
 }
@@ -92,8 +90,6 @@ export async function GET(req: Request): Promise<NextResponse> {
       hazidTotal,
       toolboxRows,
       toolboxTotal,
-      liftPlanRows,
-      liftPlanTotal,
     ] = await Promise.all([
       // ---- incidents (reference / title / description, last 1 year) ------
       (() => {
@@ -316,35 +312,6 @@ export async function GET(req: Request): Promise<NextResponse> {
         return tx.select({ c: count() }).from(toolboxJournals).where(and(...where))
       })(),
 
-      // ---- lift_plans (reference) --------------------------------------
-      (() => {
-        const where: SQL<unknown>[] = [isNull(liftPlans.deletedAt)]
-        const match = or(
-          ilike(liftPlans.reference, term),
-          ilike(liftPlans.description, term),
-        )
-        if (match) where.push(match)
-        return tx
-          .select({
-            id: liftPlans.id,
-            reference: liftPlans.reference,
-            description: liftPlans.description,
-            liftDate: liftPlans.liftDate,
-          })
-          .from(liftPlans)
-          .where(and(...where))
-          .orderBy(desc(liftPlans.liftDate))
-          .limit(PER_GROUP_LIMIT)
-      })(),
-      (() => {
-        const where: SQL<unknown>[] = [isNull(liftPlans.deletedAt)]
-        const match = or(
-          ilike(liftPlans.reference, term),
-          ilike(liftPlans.description, term),
-        )
-        if (match) where.push(match)
-        return tx.select({ c: count() }).from(liftPlans).where(and(...where))
-      })(),
     ])
 
     return {
@@ -362,8 +329,6 @@ export async function GET(req: Request): Promise<NextResponse> {
       hazidTotal: Number(hazidTotal[0]?.c ?? 0),
       toolboxRows,
       toolboxTotal: Number(toolboxTotal[0]?.c ?? 0),
-      liftPlanRows,
-      liftPlanTotal: Number(liftPlanTotal[0]?.c ?? 0),
     }
   })
 
@@ -452,18 +417,6 @@ export async function GET(req: Request): Promise<NextResponse> {
         label: `${r.reference} — ${r.title}`,
         sublabel: r.topic ?? (r.occurredOn ?? undefined),
         href: `/toolbox/${r.id}`,
-      })),
-    })
-  }
-  if (data.liftPlanTotal > 0) {
-    groups.push({
-      type: 'lift_plans',
-      total: data.liftPlanTotal,
-      items: data.liftPlanRows.map((r) => ({
-        id: r.id,
-        label: r.reference,
-        sublabel: r.description ?? (r.liftDate ?? undefined),
-        href: `/lift-plans/${r.id}`,
       })),
     })
   }
