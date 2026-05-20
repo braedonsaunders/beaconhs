@@ -85,6 +85,13 @@
       "when": 1779300000000,
       "tag": "0011_hazid_signed_report_worker",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1779400000000,
+      "tag": "0012_acoustic_jazinda",
+      "breakpoints": true
     }
   ]
 }

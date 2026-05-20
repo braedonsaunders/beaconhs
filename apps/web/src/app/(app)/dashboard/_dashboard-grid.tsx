@@ -1,0 +1,398 @@
+'use client'
+
+// Dashboard grid powered by react-grid-layout v2.
+//
+// v2 dropped the WidthProvider HOC — you pass `width` directly. We measure the
+// container with a ResizeObserver. Drag/resize config moved into nested
+// `dragConfig` / `resizeConfig` objects.
+//
+// Two modes:
+//   • view — locked (no drag/resize). Cards still hover-lift in place.
+//   • edit — drag-anywhere, resize from any corner, palette adds new cards,
+//            X button removes. Top toolbar offers Save / Reset / Add.
+
+import 'react-grid-layout/css/styles.css'
+import './_grid-overrides.css'
+
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
+import dynamic from 'next/dynamic'
+import { useRouter } from 'next/navigation'
+import { motion } from 'framer-motion'
+import { Loader2, Plus, RotateCcw, Save, Settings, X } from 'lucide-react'
+import { Button } from '@beaconhs/ui'
+import type { Layout, LayoutItem } from 'react-grid-layout'
+import type { DashboardLayoutData } from '@beaconhs/db/schema'
+import {
+  WIDGETS,
+  CATEGORY_LABELS,
+  widgetsForRole,
+  type WidgetCategory,
+  type WidgetMeta,
+} from './_widget-registry'
+import type { RoleTier } from './_role-tier'
+import { resetDashboardLayout, saveDashboardLayout } from './actions'
+
+// react-grid-layout's ResponsiveGridLayout is purely client (DOM-measured).
+const Responsive = dynamic(
+  () => import('react-grid-layout').then((m) => m.Responsive),
+  { ssr: false },
+) as unknown as React.ComponentType<any>
+
+const COLS = { lg: 12, md: 12, sm: 6, xs: 4, xxs: 2 }
+const BREAKPOINTS = { lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }
+const ROW_HEIGHT = 48
+const MARGIN: readonly [number, number] = [16, 16]
+const RESIZE_HANDLES = ['se'] as const
+
+type LayoutWidget = DashboardLayoutData['widgets'][number]
+
+export function DashboardGrid({
+  initialLayout,
+  nodes,
+  role,
+  mode,
+}: {
+  initialLayout: DashboardLayoutData
+  nodes: Record<string, ReactNode>
+  role: RoleTier
+  mode: 'view' | 'edit'
+}) {
+  const router = useRouter()
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [width, setWidth] = useState(1024)
+  const [layout, setLayout] = useState<LayoutWidget[]>(initialLayout.widgets)
+  const [saving, setSaving] = useState(false)
+  const [resetting, setResetting] = useState(false)
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  const baselineRef = useRef(JSON.stringify(initialLayout.widgets))
+  const dirty = useMemo(() => JSON.stringify(layout) !== baselineRef.current, [layout])
+
+  // Measure container width via ResizeObserver — required by RGL v2.
+  useLayoutEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    setWidth(el.clientWidth)
+    if (typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0]
+      if (!entry) return
+      const next = Math.floor(entry.contentRect.width)
+      if (next > 0) setWidth(next)
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  // Resync local state when the server-provided layout changes (e.g. after save).
+  useEffect(() => {
+    const next = JSON.stringify(initialLayout.widgets)
+    if (next !== baselineRef.current) {
+      baselineRef.current = next
+      setLayout(initialLayout.widgets)
+    }
+  }, [initialLayout])
+
+  const rglLayout = useMemo<LayoutItem[]>(
+    () =>
+      layout.map((w) => {
+        const meta = WIDGETS[w.id]
+        return {
+          i: w.id,
+          x: w.x,
+          y: w.y,
+          w: w.w,
+          h: w.h,
+          minW: meta?.minSize.w ?? 2,
+          minH: meta?.minSize.h ?? 2,
+          maxW: meta?.maxSize?.w,
+          maxH: meta?.maxSize?.h,
+          isDraggable: mode === 'edit',
+          isResizable: mode === 'edit',
+        }
+      }),
+    [layout, mode],
+  )
+
+  const presentIds = useMemo(() => new Set(layout.map((w) => w.id)), [layout])
+
+  const handleAdd = useCallback(
+    (meta: WidgetMeta) => {
+      if (presentIds.has(meta.id)) return
+      const maxY = layout.reduce((m, w) => Math.max(m, w.y + w.h), 0)
+      setLayout((prev) => [
+        ...prev,
+        { id: meta.id, x: 0, y: maxY, w: meta.defaultSize.w, h: meta.defaultSize.h },
+      ])
+    },
+    [layout, presentIds],
+  )
+
+  const handleRemove = useCallback((id: string) => {
+    setLayout((prev) => prev.filter((w) => w.id !== id))
+  }, [])
+
+  const handleSave = useCallback(async () => {
+    setSaving(true)
+    try {
+      const res = await saveDashboardLayout({ widgets: layout })
+      if (res.ok) {
+        baselineRef.current = JSON.stringify(layout)
+        router.push('/dashboard')
+      } else if (res.error) {
+        alert(res.error)
+      }
+    } finally {
+      setSaving(false)
+    }
+  }, [layout, router])
+
+  const handleReset = useCallback(async () => {
+    if (!confirm('Reset to the default layout for your role? Your customisations will be lost.')) return
+    setResetting(true)
+    try {
+      await resetDashboardLayout()
+      router.refresh()
+    } finally {
+      setResetting(false)
+    }
+  }, [router])
+
+  const handleLayoutChange = useCallback(
+    (next: Layout) => {
+      if (mode !== 'edit') return
+      setLayout((prev) => {
+        // Keep ids that aren't in `next` filtered out, but the RGL `next` should
+        // already contain every grid item we passed in.
+        const map = new Map(prev.map((w) => [w.id, w]))
+        const updated: LayoutWidget[] = []
+        for (const item of next) {
+          if (!map.has(item.i)) continue
+          updated.push({ id: item.i, x: item.x, y: item.y, w: item.w, h: item.h })
+        }
+        return updated
+      })
+    },
+    [mode],
+  )
+
+  return (
+    <div className="space-y-4">
+      {mode === 'edit' ? (
+        <EditToolbar
+          dirty={dirty}
+          saving={saving}
+          resetting={resetting}
+          onSave={handleSave}
+          onReset={handleReset}
+          onTogglePalette={() => setPaletteOpen((v) => !v)}
+          paletteOpen={paletteOpen}
+        />
+      ) : null}
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_280px]">
+        <div ref={containerRef} className="min-w-0">
+          <Responsive
+            className="layout"
+            width={width}
+            layouts={{ lg: rglLayout, md: rglLayout, sm: rglLayout, xs: rglLayout, xxs: rglLayout }}
+            cols={COLS}
+            breakpoints={BREAKPOINTS}
+            rowHeight={ROW_HEIGHT}
+            margin={MARGIN}
+            containerPadding={[0, 0]}
+            dragConfig={{
+              enabled: mode === 'edit',
+              bounded: false,
+              cancel: '.no-drag,a,button,input,select,textarea',
+              threshold: 3,
+            }}
+            resizeConfig={{
+              enabled: mode === 'edit',
+              handles: RESIZE_HANDLES,
+            }}
+            onLayoutChange={handleLayoutChange}
+          >
+            {layout.map((w) => {
+              const node = nodes[w.id]
+              return (
+                <div key={w.id} className="group/cell">
+                  <div className="relative h-full w-full">
+                    {mode === 'edit' ? (
+                      <>
+                        <div className="pointer-events-none absolute inset-0 z-10 rounded-xl ring-1 ring-dashed ring-teal-300/0 transition group-hover/cell:ring-teal-400/80" />
+                        <button
+                          type="button"
+                          onClick={() => handleRemove(w.id)}
+                          aria-label="Remove widget"
+                          className="no-drag absolute -right-2 -top-2 z-20 inline-flex h-6 w-6 items-center justify-center rounded-full border border-rose-200 bg-white text-rose-600 opacity-0 shadow-sm transition hover:bg-rose-50 group-hover/cell:opacity-100"
+                        >
+                          <X size={12} />
+                        </button>
+                      </>
+                    ) : null}
+                    {node ?? (
+                      <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50 text-xs text-slate-500">
+                        Widget "{w.id}" not available
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </Responsive>
+        </div>
+
+        {mode === 'edit' && paletteOpen ? (
+          <WidgetPalette role={role} presentIds={presentIds} onAdd={handleAdd} />
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+// ---- Toolbar ----------------------------------------------------------------
+
+function EditToolbar({
+  dirty,
+  saving,
+  resetting,
+  onSave,
+  onReset,
+  onTogglePalette,
+  paletteOpen,
+}: {
+  dirty: boolean
+  saving: boolean
+  resetting: boolean
+  onSave: () => void
+  onReset: () => void
+  onTogglePalette: () => void
+  paletteOpen: boolean
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25 }}
+      className="sticky top-0 z-40 flex items-center justify-between gap-3 rounded-xl border border-teal-200 bg-teal-50/70 px-4 py-2.5 backdrop-blur"
+    >
+      <div className="flex items-center gap-2 text-sm">
+        <Settings size={14} className="text-teal-700" />
+        <span className="font-semibold text-teal-900">Customising your dashboard</span>
+        <span className="hidden text-xs text-teal-700/80 sm:inline">
+          Drag tiles to reorder, drag the bottom-right corner to resize, click ✕ to remove.
+        </span>
+      </div>
+      <div className="flex items-center gap-2">
+        <Button type="button" variant="ghost" onClick={onTogglePalette} className="h-8 text-xs">
+          <Plus size={13} className="mr-1" />
+          {paletteOpen ? 'Hide widgets' : 'Add widget'}
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={onReset}
+          disabled={resetting}
+          className="h-8 text-xs text-rose-700 hover:bg-rose-50"
+        >
+          {resetting ? (
+            <Loader2 size={13} className="mr-1 animate-spin" />
+          ) : (
+            <RotateCcw size={13} className="mr-1" />
+          )}
+          Reset to default
+        </Button>
+        <Button type="button" onClick={onSave} disabled={saving || !dirty} className="h-8 text-xs">
+          {saving ? (
+            <Loader2 size={13} className="mr-1 animate-spin" />
+          ) : (
+            <Save size={13} className="mr-1" />
+          )}
+          Save layout
+        </Button>
+      </div>
+    </motion.div>
+  )
+}
+
+// ---- Palette ----------------------------------------------------------------
+
+function WidgetPalette({
+  role,
+  presentIds,
+  onAdd,
+}: {
+  role: RoleTier
+  presentIds: Set<string>
+  onAdd: (w: WidgetMeta) => void
+}) {
+  const visible = widgetsForRole(role)
+  const byCategory = new Map<WidgetCategory, WidgetMeta[]>()
+  for (const w of visible) {
+    const arr = byCategory.get(w.category) ?? []
+    arr.push(w)
+    byCategory.set(w.category, arr)
+  }
+
+  return (
+    <motion.aside
+      initial={{ opacity: 0, x: 12 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.3 }}
+      className="app-scroll sticky top-16 max-h-[calc(100vh-160px)] overflow-y-auto rounded-xl border border-slate-200 bg-white p-3 shadow-sm"
+    >
+      <div className="mb-2 flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-slate-900">Widget library</h3>
+        <span className="text-[10px] uppercase tracking-wider text-slate-400">
+          {visible.length} available
+        </span>
+      </div>
+      <div className="space-y-3">
+        {[...byCategory.entries()].map(([cat, widgets]) => (
+          <div key={cat}>
+            <h4 className="mb-1 px-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              {CATEGORY_LABELS[cat]}
+            </h4>
+            <ul className="space-y-1">
+              {widgets.map((w) => {
+                const present = presentIds.has(w.id)
+                return (
+                  <li key={w.id}>
+                    <button
+                      type="button"
+                      onClick={() => onAdd(w)}
+                      disabled={present}
+                      className={`flex w-full items-start justify-between gap-2 rounded-lg border border-transparent px-2 py-1.5 text-left transition ${
+                        present
+                          ? 'cursor-not-allowed bg-slate-50 text-slate-400'
+                          : 'hover:border-teal-200 hover:bg-teal-50/50'
+                      }`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-xs font-medium text-slate-800">{w.label}</div>
+                        <div className="line-clamp-2 text-[10px] text-slate-500">{w.description}</div>
+                      </div>
+                      {present ? (
+                        <span className="shrink-0 text-[10px] text-slate-400">added</span>
+                      ) : (
+                        <Plus size={13} className="shrink-0 text-teal-600" />
+                      )}
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </motion.aside>
+  )
+}

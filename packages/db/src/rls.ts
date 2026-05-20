@@ -213,4 +213,6 @@ export const TENANT_SCOPED_TABLES = [
   // rows from regular tenant context. The /admin/email-log viewer uses
   // withSuperAdmin to see those.
   'email_log',
+  // Per-user dashboard layout customisations
+  'user_dashboard_layouts',
 ] as const

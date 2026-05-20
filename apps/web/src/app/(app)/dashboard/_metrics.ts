@@ -94,6 +94,24 @@ export type DashboardMetrics = {
 
   // CA aging
   openCAAgingDays: number | null
+  /** Open CAs bucketed by age. Used by the CAPA aging card on the dashboard. */
+  openCABuckets: { lt7: number; lt30: number; lt60: number; ge60: number }
+
+  // EHS cultural counters
+  /** Wall-clock days since the most recent recordable incident in this tenant. */
+  daysSinceLastRecordable: number | null
+  lastRecordableAt: Date | null
+
+  /** 12-month severity distribution — drives Heinrich-pyramid widget. */
+  severityDistribution: {
+    fatality: number
+    lostTime: number
+    medicalAid: number
+    firstAid: number
+    nearMiss: number
+    noInjury: number
+    propertyDamage: number
+  }
 
   // List widgets
   recentIncidents: Array<typeof incidents.$inferSelect>
@@ -132,6 +150,7 @@ export async function loadDashboardMetrics(
   const thirtyDaysAhead = new Date(now.getTime() + 30 * 86_400_000)
   const ninetyDaysAgo = new Date(now.getTime() - 90 * 86_400_000)
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+  const twelveMonthsAgo = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate())
   const todayStart = new Date(today)
   todayStart.setHours(0, 0, 0, 0)
   const todayIso = today.toISOString().slice(0, 10)
@@ -462,6 +481,99 @@ export async function loadDashboardMetrics(
     const openCAAgingDays =
       agingRow && Number(agingRow.avgDays) > 0 ? Math.round(Number(agingRow.avgDays)) : null
 
+    // CA bucket counts by age — the dashboard surfaces these as four small
+    // chips so safety leads can see at a glance whether actions are
+    // languishing.
+    const [bucketRow] = await tx
+      .select({
+        lt7: sql<number>`SUM(CASE WHEN now() - ${correctiveActions.createdAt} < interval '7 days' THEN 1 ELSE 0 END)::int`,
+        lt30: sql<number>`SUM(CASE WHEN now() - ${correctiveActions.createdAt} >= interval '7 days' AND now() - ${correctiveActions.createdAt} < interval '30 days' THEN 1 ELSE 0 END)::int`,
+        lt60: sql<number>`SUM(CASE WHEN now() - ${correctiveActions.createdAt} >= interval '30 days' AND now() - ${correctiveActions.createdAt} < interval '60 days' THEN 1 ELSE 0 END)::int`,
+        ge60: sql<number>`SUM(CASE WHEN now() - ${correctiveActions.createdAt} >= interval '60 days' THEN 1 ELSE 0 END)::int`,
+      })
+      .from(correctiveActions)
+      .where(isNull(correctiveActions.closedAt))
+    const openCABuckets = {
+      lt7: Number(bucketRow?.lt7 ?? 0),
+      lt30: Number(bucketRow?.lt30 ?? 0),
+      lt60: Number(bucketRow?.lt60 ?? 0),
+      ge60: Number(bucketRow?.ge60 ?? 0),
+    }
+
+    // --- Days since last recordable --------------------------------------
+    // "Recordable" follows the OSHA definition: medical_aid + lost_time +
+    // fatality. The number is iconic on safety dashboards — culture > data.
+    const [lastRecRow] = await tx
+      .select({
+        when: sql<Date | null>`MAX(${incidents.occurredAt})`,
+      })
+      .from(incidents)
+      .where(
+        and(
+          inArray(incidents.severity, ['medical_aid', 'lost_time', 'fatality']),
+          lte(incidents.occurredAt, now),
+        ),
+      )
+    const lastRecordableAt = lastRecRow?.when ? new Date(lastRecRow.when) : null
+    const daysSinceLastRecordable = lastRecordableAt
+      ? Math.max(0, Math.floor((now.getTime() - lastRecordableAt.getTime()) / 86400000))
+      : null
+
+    // --- 12-month severity distribution (Heinrich pyramid) ---------------
+    const severityRows = await tx
+      .select({
+        sev: incidents.severity,
+        n: count(),
+      })
+      .from(incidents)
+      .where(gte(incidents.occurredAt, twelveMonthsAgo))
+      .groupBy(incidents.severity)
+    const severityDistribution = {
+      fatality: 0,
+      lostTime: 0,
+      medicalAid: 0,
+      firstAid: 0,
+      nearMiss: 0,
+      noInjury: 0,
+      propertyDamage: 0,
+    }
+    for (const r of severityRows) {
+      const n = Number(r.n ?? 0)
+      switch (r.sev) {
+        case 'fatality':
+          severityDistribution.fatality = n
+          break
+        case 'lost_time':
+          severityDistribution.lostTime = n
+          break
+        case 'medical_aid':
+          severityDistribution.medicalAid = n
+          break
+        case 'first_aid_only':
+          severityDistribution.firstAid = n
+          break
+        case 'no_injury':
+          severityDistribution.noInjury = n
+          break
+      }
+    }
+    // Near-misses + property damage live on the incident.type column rather
+    // than the severity enum, so they need their own count.
+    const [nmRow] = await tx
+      .select({ n: count() })
+      .from(incidents)
+      .where(
+        and(gte(incidents.occurredAt, twelveMonthsAgo), eq(incidents.type, 'near_miss')),
+      )
+    severityDistribution.nearMiss = Number(nmRow?.n ?? 0)
+    const [pdRow] = await tx
+      .select({ n: count() })
+      .from(incidents)
+      .where(
+        and(gte(incidents.occurredAt, twelveMonthsAgo), eq(incidents.type, 'property_damage')),
+      )
+    severityDistribution.propertyDamage = Number(pdRow?.n ?? 0)
+
     // --- List widgets ----------------------------------------------------
     const recentIncidents = await tx
       .select()
@@ -609,6 +721,10 @@ export async function loadDashboardMetrics(
       documentComplianceTrend,
 
       openCAAgingDays,
+      openCABuckets,
+      daysSinceLastRecordable,
+      lastRecordableAt,
+      severityDistribution,
 
       recentIncidents,
       dueCAs,
