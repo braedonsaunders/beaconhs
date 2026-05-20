@@ -40,7 +40,9 @@ import {
   evaluateLogicRule,
   resolveDefaultValue,
   validateResponse,
+  entityKindForPicker,
   type EvalContext,
+  type EntityAttrsByField,
   type FormField,
   type FormSchemaV1,
   type FormSection,
@@ -48,7 +50,7 @@ import {
   type DefaultValueExpression,
   type LogicRule,
 } from '@beaconhs/forms-core'
-import { submitFormResponse } from './actions'
+import { fetchEntityAttrs, submitFormResponse } from './actions'
 import { SignaturePad } from '@/components/signature-pad'
 import { FileUpload, dataUrlToFile, type AttachedFile } from '@/components/file-upload'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
@@ -67,6 +69,7 @@ export function FormRenderer({
   schema,
   sites,
   people,
+  entitiesByField: initialEntitiesByField,
   currentUser,
 }: {
   templateId: string
@@ -75,6 +78,11 @@ export function FormRenderer({
   schema: FormSchemaV1
   sites: { id: string; name: string }[]
   people: { id: string; firstName: string; lastName: string }[]
+  // Per-picker entity-attribute maps preloaded server-side. Keyed by picker
+  // field id (NOT entity id) so the runtime can pick up the right map by
+  // field key in the evaluator. The client refreshes individual entries via
+  // `fetchEntityAttrs` when a picker selection changes.
+  entitiesByField: EntityAttrsByField
   currentUser: CurrentUser
 }) {
   const router = useRouter()
@@ -88,6 +96,15 @@ export function FormRenderer({
   const [serverError, setServerError] = useState<string | null>(null)
   const [pending, start] = useTransition()
   const appliedDefaults = useRef<Set<string>>(new Set())
+  // Per-picker entity attribute maps, fed into the evaluator on every render
+  // so `entity_attr` formula fields stay live. Refreshed via the
+  // fetchEntityAttrs server action whenever a picker's value changes.
+  const [entitiesByField, setEntitiesByField] = useState<EntityAttrsByField>(
+    initialEntitiesByField,
+  )
+  // Picker field ids currently mid-flight to the fetchEntityAttrs action.
+  // Drives the small "Looking up…" indicator next to the picker.
+  const [pickerLoading, setPickerLoading] = useState<Set<string>>(new Set())
 
   // Group sections by their workflow step. Each step is a "page". Sections
   // without an explicit `step` fall into the first workflow step.
@@ -113,18 +130,20 @@ export function FormRenderer({
   const stepSections = sectionsByStep.get(step.key) ?? []
 
   // Build the eval context used by visibility + formula evaluation. Includes
-  // every section's rows under its section id so cross-step sum_section works.
+  // every section's rows under its section id so cross-step sum_section works,
+  // and the per-picker entity-attr maps that `entity_attr` reads from.
   const evalCtx = useMemo<EvalContext>(() => {
     return {
       values,
       rows: rowsByStep,
+      entities: entitiesByField,
       requestContext: {
         now: new Date(),
         currentUserPersonId: currentUser.personId,
         currentUserName: currentUser.name,
       },
     }
-  }, [values, rowsByStep, currentUser])
+  }, [values, rowsByStep, entitiesByField, currentUser])
 
   // Apply default values on first render of a step. Tracked via a ref so we
   // don't re-apply when the user clears the field intentionally.
@@ -155,6 +174,19 @@ export function FormRenderer({
 
   // --- Helpers ---------------------------------------------------------------
 
+  // Map of fieldId → picker field type so picker-change refreshes can resolve
+  // the entity kind server-side without re-walking the schema.
+  const pickerFieldTypes = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const sec of schema.sections) {
+      if (sec.repeating) continue
+      for (const f of sec.fields) {
+        if (entityKindForPicker(f.type)) map.set(f.id, f.type)
+      }
+    }
+    return map
+  }, [schema])
+
   function setValue(fieldId: string, v: unknown) {
     setValues((s) => ({ ...s, [fieldId]: v }))
     setErrors((m) => {
@@ -162,6 +194,39 @@ export function FormRenderer({
       next.delete(fieldId)
       return next
     })
+    // If this field is a picker, refresh its entity-attr map. We clear any
+    // stale entry immediately (so an `entity_attr` field that no longer
+    // applies stops rendering its old value) before kicking off the async
+    // fetch. Multi-pickers (`multi_person_picker` etc.) aren't supported by
+    // entity_attr — `entityKindForPicker` returns null for them.
+    const pickerType = pickerFieldTypes.get(fieldId)
+    if (pickerType) {
+      setEntitiesByField((m) => ({ ...m, [fieldId]: null }))
+      if (typeof v === 'string' && v.length > 0) {
+        setPickerLoading((s) => {
+          const next = new Set(s)
+          next.add(fieldId)
+          return next
+        })
+        // Fire-and-forget — we only update local state on completion.
+        fetchEntityAttrs({ pickerFieldType: pickerType, entityId: v })
+          .then((res) => {
+            if (res.ok) {
+              setEntitiesByField((m) => ({ ...m, [fieldId]: res.attrs }))
+            }
+          })
+          .catch(() => {
+            // Swallow — picker still works, the formula field just shows '—'.
+          })
+          .finally(() => {
+            setPickerLoading((s) => {
+              const next = new Set(s)
+              next.delete(fieldId)
+              return next
+            })
+          })
+      }
+    }
   }
 
   function setRows(sectionId: string, rows: Record<string, unknown>[]) {
@@ -477,6 +542,7 @@ export function FormRenderer({
                         error={errors.get(f.id)}
                         people={people}
                         evalCtx={evalCtx}
+                        loading={pickerLoading.has(f.id)}
                       />
                     )
                   })
@@ -610,6 +676,7 @@ function FieldRow({
   error,
   people,
   evalCtx,
+  loading,
 }: {
   field: FormField
   value: unknown
@@ -617,6 +684,10 @@ function FieldRow({
   error?: string
   people: { id: string; firstName: string; lastName: string }[]
   evalCtx: EvalContext
+  // True when an `entity_attr` fetch is in flight for this picker. Renders
+  // a tiny "Looking up…" hint next to the label so users don't think the
+  // downstream entity-attr fields are broken during the 200ms round trip.
+  loading?: boolean
 }) {
   return (
     <div className="space-y-1">
@@ -624,6 +695,11 @@ function FieldRow({
         {field.label?.en ?? field.id}
         {field.required || field.validation?.required ? (
           <span className="text-red-600"> *</span>
+        ) : null}
+        {loading ? (
+          <span className="ml-2 text-[10px] font-normal text-slate-400">
+            Looking up…
+          </span>
         ) : null}
       </Label>
       {field.helpText?.en ? (
@@ -649,10 +725,17 @@ function FieldInput({
   evalCtx: EvalContext
 }) {
   // Formula fields are render-only: recompute the value on every render via
-  // the evaluator and pass through to the display input.
+  // the evaluator and pass through to the display input. When the formula
+  // resolves to null (e.g. an `entity_attr` whose picker is empty) we show
+  // the optional `field.config.defaultDisplay` placeholder or an em-dash.
   if ((field.type === 'formula' || field.type === 'calc') && field.formula) {
     const computed = evaluateFormulaTree(field.formula as FormulaExpression, evalCtx)
-    const display = computed === null || computed === undefined ? '' : String(computed)
+    const fallback =
+      (field.config?.defaultDisplay as string | undefined) ?? '—'
+    const display =
+      computed === null || computed === undefined || computed === ''
+        ? fallback
+        : String(computed)
     return (
       <Input
         value={display}

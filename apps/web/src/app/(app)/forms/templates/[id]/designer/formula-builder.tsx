@@ -13,19 +13,25 @@ import { useMemo, useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { Button, Input, Label, Select } from '@beaconhs/ui'
 import {
+  ENTITY_ATTRS,
   evaluateFormulaTree,
+  type EntityKind,
   type EvalContext,
   type FormulaExpression,
   type LogicRule,
 } from '@beaconhs/forms-core'
 import { LogicBuilder } from './logic-builder'
 
+// Designer-facing description of a single-entity picker field in the
+// template. Used to populate the `entity_attr` operator picker.
+export type PickerFieldDesc = { id: string; label: string; kind: EntityKind }
+
 // Each entry in this list is one supported operator. The shape carries enough
 // metadata for the picker UI to render the right input affordance.
 type OpDef = {
   kind: FormulaExpression['kind']
   label: string
-  group: 'value' | 'math' | 'section' | 'string' | 'cond'
+  group: 'value' | 'math' | 'section' | 'string' | 'cond' | 'entity'
   description: string
 }
 
@@ -47,17 +53,29 @@ const OPS: OpDef[] = [
   { kind: 'concat', label: 'Concatenate text', group: 'string', description: 'Join strings together' },
   // Conditional
   { kind: 'if', label: 'If / else', group: 'cond', description: 'Branch on a condition' },
+  // Entity
+  {
+    kind: 'entity_attr',
+    label: 'Entity attribute',
+    group: 'entity',
+    description: 'Read an attribute off the entity selected by a picker field',
+  },
 ]
 
 export function FormulaBuilder({
   value,
   allFields,
   repeatingSections,
+  pickerFields,
   onChange,
 }: {
   value: FormulaExpression | undefined
   allFields: { id: string; label: string }[]
   repeatingSections: { id: string; label: string; fields: { id: string; label: string }[] }[]
+  // Single-entity picker fields present elsewhere in this template. Drives
+  // the `entity_attr` operator's picker → attr dropdowns. May be empty —
+  // the operator is still selectable, just yields a "no pickers" placeholder.
+  pickerFields?: PickerFieldDesc[]
   onChange: (next: FormulaExpression | undefined) => void
 }) {
   // The preview pane lets the user fill in example values for any field /
@@ -104,6 +122,7 @@ export function FormulaBuilder({
         value={value}
         allFields={allFields}
         repeatingSections={repeatingSections}
+        pickerFields={pickerFields ?? []}
         onChange={onChange}
         onClear={() => onChange(undefined)}
       />
@@ -209,6 +228,7 @@ function Node({
   value,
   allFields,
   repeatingSections,
+  pickerFields,
   onChange,
   onClear,
   showClear = true,
@@ -216,6 +236,7 @@ function Node({
   value: FormulaExpression | undefined
   allFields: { id: string; label: string }[]
   repeatingSections: { id: string; label: string; fields: { id: string; label: string }[] }[]
+  pickerFields: PickerFieldDesc[]
   onChange: (next: FormulaExpression) => void
   onClear?: () => void
   showClear?: boolean
@@ -274,6 +295,7 @@ function Node({
         value={value}
         allFields={allFields}
         repeatingSections={repeatingSections}
+        pickerFields={pickerFields}
         onChange={onChange}
       />
     </div>
@@ -284,11 +306,13 @@ function NodeBody({
   value,
   allFields,
   repeatingSections,
+  pickerFields,
   onChange,
 }: {
   value: FormulaExpression
   allFields: { id: string; label: string }[]
   repeatingSections: { id: string; label: string; fields: { id: string; label: string }[] }[]
+  pickerFields: PickerFieldDesc[]
   onChange: (next: FormulaExpression) => void
 }) {
   switch (value.kind) {
@@ -331,6 +355,7 @@ function NodeBody({
           items={value.of}
           allFields={allFields}
           repeatingSections={repeatingSections}
+          pickerFields={pickerFields}
           onChange={(of) => onChange({ ...value, of })}
         >
           {value.kind === 'concat' ? (
@@ -356,6 +381,7 @@ function NodeBody({
               value={value.left}
               allFields={allFields}
               repeatingSections={repeatingSections}
+              pickerFields={pickerFields}
               onChange={(next) => onChange({ ...value, left: next })}
               showClear={false}
             />
@@ -366,6 +392,7 @@ function NodeBody({
               value={value.right}
               allFields={allFields}
               repeatingSections={repeatingSections}
+              pickerFields={pickerFields}
               onChange={(next) => onChange({ ...value, right: next })}
               showClear={false}
             />
@@ -441,6 +468,7 @@ function NodeBody({
               value={value.then}
               allFields={allFields}
               repeatingSections={repeatingSections}
+              pickerFields={pickerFields}
               onChange={(next) => onChange({ ...value, then: next })}
               showClear={false}
             />
@@ -451,12 +479,65 @@ function NodeBody({
               value={value.else}
               allFields={allFields}
               repeatingSections={repeatingSections}
+              pickerFields={pickerFields}
               onChange={(next) => onChange({ ...value, else: next })}
               showClear={false}
             />
           </div>
         </div>
       )
+
+    case 'entity_attr': {
+      // 2-step picker: choose a picker field, then choose an attribute from
+      // its kind's ENTITY_ATTRS list. The available attrs change when the
+      // picker selection changes, so we reset attrKey whenever the picker
+      // does — keeps designers from accidentally bouncing an attr off a
+      // mismatched kind.
+      const picker = pickerFields.find((p) => p.id === value.pickerFieldKey)
+      const attrs = picker ? ENTITY_ATTRS[picker.kind] : []
+      return (
+        <div className="space-y-1">
+          {pickerFields.length === 0 ? (
+            <p className="text-[10px] italic text-slate-500">
+              No picker fields in this template. Add an equipment / person /
+              site / PPE / document / course picker first.
+            </p>
+          ) : (
+            <Select
+              className="h-7 text-xs"
+              value={value.pickerFieldKey}
+              onChange={(e) =>
+                onChange({
+                  kind: 'entity_attr',
+                  pickerFieldKey: e.target.value,
+                  attrKey: '',
+                })
+              }
+            >
+              <option value="">— pick picker field —</option>
+              {pickerFields.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label} ({p.kind})
+                </option>
+              ))}
+            </Select>
+          )}
+          <Select
+            className="h-7 text-xs"
+            value={value.attrKey}
+            onChange={(e) => onChange({ ...value, attrKey: e.target.value })}
+            disabled={!picker}
+          >
+            <option value="">— pick attribute —</option>
+            {attrs.map((a) => (
+              <option key={a.key} value={a.key}>
+                {a.label}
+              </option>
+            ))}
+          </Select>
+        </div>
+      )
+    }
   }
 }
 
@@ -464,12 +545,14 @@ function NodeList({
   items,
   allFields,
   repeatingSections,
+  pickerFields,
   onChange,
   children,
 }: {
   items: FormulaExpression[]
   allFields: { id: string; label: string }[]
   repeatingSections: { id: string; label: string; fields: { id: string; label: string }[] }[]
+  pickerFields: PickerFieldDesc[]
   onChange: (next: FormulaExpression[]) => void
   children?: React.ReactNode
 }) {
@@ -482,6 +565,7 @@ function NodeList({
             value={it}
             allFields={allFields}
             repeatingSections={repeatingSections}
+            pickerFields={pickerFields}
             onChange={(next) => onChange(items.map((x, j) => (j === i ? next : x)))}
             onClear={() => onChange(items.filter((_, j) => j !== i))}
           />
@@ -504,6 +588,7 @@ const GROUPS: { kind: OpDef['group']; label: string }[] = [
   { kind: 'section', label: 'Repeating section' },
   { kind: 'string', label: 'Text' },
   { kind: 'cond', label: 'Conditional' },
+  { kind: 'entity', label: 'Entity attribute' },
 ]
 
 const ALWAYS_TRUE: LogicRule = { op: 'isSet', field: '__never_set__' }
@@ -539,5 +624,7 @@ function makeDefault(kind: FormulaExpression['kind']): FormulaExpression {
         then: { kind: 'literal', value: 0 },
         else: { kind: 'literal', value: 0 },
       }
+    case 'entity_attr':
+      return { kind: 'entity_attr', pickerFieldKey: '', attrKey: '' }
   }
 }

@@ -14,6 +14,7 @@ import {
   index,
   integer,
   jsonb,
+  numeric,
   pgEnum,
   pgTable,
   text,
@@ -186,6 +187,20 @@ export const formResponseStatus = pgEnum('form_response_status', [
   'in_review',
   'closed',
   'rejected',
+  // Auto-flagged when a response fails its score routing rules
+  // (threshold / hard-fail). Surfaced in the response viewer with a red
+  // compliance pill + Failed-checks panel + Create-CAPA shortcut.
+  'non_compliant',
+])
+
+// Higher-level status of the response's compliance verdict. Computed by the
+// score-router helper at submit time and persisted on form_responses. Distinct
+// from formResponseStatus (which tracks workflow position): a response can be
+// `submitted` + `non_compliant` simultaneously.
+export const formResponseComplianceStatus = pgEnum('form_response_compliance_status', [
+  'compliant',
+  'non_compliant',
+  'pending_review',
 ])
 
 export const formResponses = pgTable(
@@ -215,6 +230,12 @@ export const formResponses = pgTable(
     // Optional link to source event (e.g. the incident that triggered this investigation form)
     sourceEntityType: text('source_entity_type'),
     sourceEntityId: uuid('source_entity_id'),
+    // Compliance verdict written by the submit-side score-router helper. NULL
+    // until a response has been scored (e.g. no scoring fields on the
+    // template). complianceScore is 0–100; complianceStatus mirrors the
+    // formResponseComplianceStatus enum.
+    complianceScore: numeric('compliance_score', { precision: 6, scale: 2 }),
+    complianceStatus: formResponseComplianceStatus('compliance_status'),
     // Generated PDF
     pdfAttachmentId: uuid('pdf_attachment_id'),
     // Workflow state machine — captures the *response-level* view of where the

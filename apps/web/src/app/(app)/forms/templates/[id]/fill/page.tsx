@@ -7,6 +7,7 @@ import {
   people,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { loadEntitiesForPickers } from '@/app/(app)/forms/_lib/entity-loader'
 import { FormRenderer } from './form-renderer'
 
 export const dynamic = 'force-dynamic'
@@ -47,6 +48,13 @@ export default async function FillTemplatePage({ params }: { params: Promise<{ i
   })
 
   if (!data) notFound()
+
+  // Resolve picker-bound entity attributes for any default-valued pickers.
+  // On a brand-new response there's nothing selected yet, so this returns a
+  // map of `pickerFieldKey → null` — the client refreshes entries on picker
+  // change via the `fetchEntityAttrs` server action.
+  const entitiesByField = await loadEntitiesForPickers(ctx, data.version.schema, {})
+
   return (
     <FormRenderer
       templateId={data.tmpl.id}
@@ -55,6 +63,7 @@ export default async function FillTemplatePage({ params }: { params: Promise<{ i
       schema={data.version.schema}
       sites={data.sites}
       people={data.people}
+      entitiesByField={entitiesByField}
       currentUser={{
         personId: data.currentPerson?.id ?? null,
         name:

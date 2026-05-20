@@ -8,6 +8,7 @@
 import {
   evaluateFormulaTree,
   evaluateLogicRule,
+  type EntityAttrsByField,
   type EvalContext,
   type FormSchemaV1,
   type FormulaExpression,
@@ -66,6 +67,11 @@ export {
 export type RenderInput = {
   schema: FormSchemaV1
   values: Record<string, unknown>
+  // Picker-bound entity-attribute maps so `entity_attr` formula fields
+  // resolve to the same live values they showed in the filler. Optional —
+  // when omitted, those fields render as the configured `defaultDisplay`
+  // (or em-dash) on the resulting PDF.
+  entitiesByField?: EntityAttrsByField
   metadata: {
     title: string
     reference?: string
@@ -136,6 +142,7 @@ function buildHtml(input: RenderInput): string {
   const evalCtx: EvalContext = {
     values: input.values,
     rows,
+    entities: input.entitiesByField,
   }
 
   // Group sections by their workflow step so PDF rendering mirrors the

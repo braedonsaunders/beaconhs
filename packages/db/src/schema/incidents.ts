@@ -175,6 +175,12 @@ export const incidents = pgTable(
     closedAt: timestamp('closed_at', { withTimezone: true }),
     closedByTenantUserId: uuid('closed_by_tenant_user_id').references(() => tenantUsers.id),
 
+    // Typed FK shortcut to the form_response that spawned this incident from
+    // the Create-Incident drawer on the response detail page. Lets the
+    // response viewer link back to its spawned incident without joining via
+    // the polymorphic source columns.
+    sourceFormResponseId: uuid('source_form_response_id'),
+
     ...timestamps,
     ...softDelete,
   },

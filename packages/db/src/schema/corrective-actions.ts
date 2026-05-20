@@ -71,6 +71,10 @@ export const correctiveActions = pgTable(
     source: correctiveActionSource('source'),
     sourceEntityType: text('source_entity_type'), // 'incident' | 'form_response' | 'audit_finding'
     sourceEntityId: uuid('source_entity_id'),
+    // Typed FK shortcut to the form_response that spawned this CAPA. Coexists
+    // with the polymorphic sourceEntityType/Id pair so the response-detail
+    // page can join CAs back without an ad-hoc text equality filter.
+    sourceFormResponseId: uuid('source_form_response_id'),
     // Verification flow — gated by `verificationRequired`. When set, the CA
     // can only move to 'closed' through the Verification tab where a verifier
     // (often a different tenantUser from the owner) signs off.

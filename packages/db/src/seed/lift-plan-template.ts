@@ -102,6 +102,21 @@ export const LIFT_PLAN_TEMPLATE_SCHEMA: FormSchemaV1 = {
           required: true,
           defaultValue: { kind: 'current_user_person_id' },
         },
+        // Live entity-attr lookup: surface the supervisor's current job
+        // title from the people table. Recomputes whenever the picker
+        // changes. Demonstrates the entity_attr → entity-loader → filler
+        // pipeline end-to-end on a real seeded template.
+        {
+          id: 'supervisor_job_title',
+          type: 'formula',
+          label: { en: 'Supervisor — current job title' },
+          helpText: { en: 'Read-only. Pulled from the supervisor\'s people record.' },
+          formula: {
+            kind: 'entity_attr',
+            pickerFieldKey: 'supervisor',
+            attrKey: 'jobTitle',
+          },
+        },
         { id: 'description', type: 'textarea', label: { en: 'Description / scope' } },
       ],
     },
@@ -118,6 +133,27 @@ export const LIFT_PLAN_TEMPLATE_SCHEMA: FormSchemaV1 = {
         { id: 'crane_counterweight_lbs', type: 'number', label: { en: 'Counterweight (lbs)' } },
         { id: 'ground_bearing_psi', type: 'number', label: { en: 'Ground bearing (psi)' } },
         { id: 'tail_swing_ft', type: 'number', label: { en: 'Tail swing (ft)' } },
+        // Equipment-picker + entity-attr smoke pair: pick the actual crane
+        // asset, then surface its current status as a read-only formula.
+        // Optional so the template doesn't break for tenants that haven't
+        // registered their cranes in the equipment register yet.
+        {
+          id: 'crane_equipment',
+          type: 'equipment_picker',
+          label: { en: 'Crane (asset register)' },
+          helpText: { en: 'Optional. Link to the actual crane asset to surface live status.' },
+        },
+        {
+          id: 'crane_current_status',
+          type: 'formula',
+          label: { en: 'Crane — current status' },
+          helpText: { en: 'Read-only. Pulled from the equipment item\'s status column.' },
+          formula: {
+            kind: 'entity_attr',
+            pickerFieldKey: 'crane_equipment',
+            attrKey: 'status',
+          },
+        },
       ],
     },
     {

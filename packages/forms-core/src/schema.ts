@@ -53,6 +53,14 @@ export type FormulaExpression =
   | { kind: 'count_section'; sectionKey: string }
   | { kind: 'concat'; of: FormulaExpression[]; separator?: string }
   | { kind: 'if'; condition: LogicRule; then: FormulaExpression; else: FormulaExpression }
+  // Read an allowlisted attribute off the entity selected by a picker field.
+  // `pickerFieldKey` names the picker field (top-level field id of an
+  // equipment_picker / person_picker / site_picker / ppe_picker /
+  // document_picker / course_picker). `attrKey` must be present in
+  // ENTITY_ATTRS[<kind>] (see entity-attrs.ts) or the evaluator returns null.
+  // The runtime fetches the row attrs server-side and threads them into
+  // EvalContext.entities — see evaluator.ts and the filler RSC loader.
+  | { kind: 'entity_attr'; pickerFieldKey: string; attrKey: string }
 
 export const formulaExpressionSchema: z.ZodType<FormulaExpression> = z.lazy(() =>
   z.discriminatedUnion('kind', [
@@ -88,6 +96,11 @@ export const formulaExpressionSchema: z.ZodType<FormulaExpression> = z.lazy(() =
       condition: logicRuleSchema,
       then: formulaExpressionSchema,
       else: formulaExpressionSchema,
+    }),
+    z.object({
+      kind: z.literal('entity_attr'),
+      pickerFieldKey: z.string(),
+      attrKey: z.string(),
     }),
   ]),
 )
@@ -245,12 +258,47 @@ export const formWorkflowStepSchema = z.object({
 
 export type FormWorkflowStep = z.infer<typeof formWorkflowStepSchema>
 
+// --- Score-based routing ---------------------------------------------------
+//
+// Carried on FormSchemaV1.workflow.scoreRouting. The submit-side score-router
+// helper consumes this to compute a compliance score and decide whether to
+// auto-flag a response as non_compliant + suggest spawning CAPAs.
+//
+// Designer-UI wiring for `scoreFormula` is reserved for a later pass; for now
+// callers either omit it (we derive a default from pass_fail_na / yes_no_comment
+// fields) or set it programmatically in a seed.
+export const hardFailRuleSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('any_field_eq'),
+    fieldKeys: z.array(z.string()).min(1),
+    value: z.string(),
+  }),
+  z.object({
+    kind: z.literal('any_field_in'),
+    fieldKeys: z.array(z.string()).min(1),
+    values: z.array(z.string()).min(1),
+  }),
+])
+
+export type HardFailRule = z.infer<typeof hardFailRuleSchema>
+
+export const scoreRoutingSchema = z.object({
+  scoreFormula: formulaExpressionSchema.optional(),
+  thresholdScore: z.number().optional(),
+  hardFailRules: z.array(hardFailRuleSchema).optional(),
+})
+
+export type ScoreRouting = z.infer<typeof scoreRoutingSchema>
+
 export const formSchemaV1 = z.object({
   schemaVersion: z.literal(1),
   title: i18nStringSchema,
   description: i18nStringSchema.optional(),
   sections: z.array(formSectionSchema).min(1),
-  workflow: z.object({ steps: z.array(formWorkflowStepSchema).min(1) }),
+  workflow: z.object({
+    steps: z.array(formWorkflowStepSchema).min(1),
+    scoreRouting: scoreRoutingSchema.optional(),
+  }),
   permissions: z
     .object({
       fieldVisibility: z.record(z.string(), z.array(z.string())).optional(),

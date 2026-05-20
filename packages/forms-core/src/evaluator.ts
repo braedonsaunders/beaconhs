@@ -16,6 +16,7 @@
 // All evaluators are pure functions: no React, no DB. Bugs here corrupt every
 // response so the unit tests in `./evaluator.test.ts` exercise every operator.
 
+import { getEntityAttrDef } from './entity-attrs'
 import type { DefaultValueExpression, FormulaExpression, LogicRule } from './schema'
 
 export type FieldValueMap = Record<string, unknown>
@@ -24,16 +25,30 @@ export type FieldValueMap = Record<string, unknown>
 export type RowMap = Record<string, Array<FieldValueMap>>
 
 /**
+ * Map of picker field id → attribute map fetched from the picked entity.
+ *
+ * Keyed by the *picker field key* (not the entity id) so the runtime can
+ * prefetch one row per picker and let the evaluator look up attrs without
+ * needing to know what id the picker resolved to. `null` means the picker
+ * has no selection (or the entity wasn't found / RLS-blocked).
+ */
+export type EntityAttrsByField = Record<string, Record<string, unknown> | null>
+
+/**
  * Evaluation context shared by logic + formula evaluators.
  *
- * `values` — flat top-level field values (non-repeating sections).
- * `rows`   — per-section repeating-row arrays. `rows[sectionId][rowIndex][fieldKey]`.
+ * `values`   — flat top-level field values (non-repeating sections).
+ * `rows`     — per-section repeating-row arrays. `rows[sectionId][rowIndex][fieldKey]`.
+ * `entities` — allowlisted attribute maps for each picker field's selection,
+ *              loaded server-side and refreshed on picker change. Read by the
+ *              `entity_attr` formula operator.
  * `requestContext` — used by `resolveDefaultValue` to produce `today`, `now`,
  *                    `current_user_*` defaults.
  */
 export type EvalContext = {
   values: FieldValueMap
   rows: RowMap
+  entities?: EntityAttrsByField
   requestContext?: {
     now?: Date
     currentUserPersonId?: string | null
@@ -56,6 +71,37 @@ function coerceNumber(v: unknown): number {
   if (v === null || v === undefined || v === '') return 0
   const n = Number(v)
   return Number.isFinite(n) ? n : 0
+}
+
+/**
+ * Coerce a raw entity attribute value to match its declared EntityAttrDef
+ * valueType. We're intentionally permissive — null falls through unchanged
+ * so callers can render their own "—" fallback. Date columns may arrive as
+ * either a JS Date (from drizzle ORM) or an ISO string (from a JSON
+ * round-trip), so we normalise them to ISO strings either way.
+ */
+function coerceEntityAttr(
+  raw: unknown,
+  valueType: 'string' | 'number' | 'date' | 'boolean',
+): string | number | boolean | null {
+  if (raw === undefined || raw === null) return null
+  switch (valueType) {
+    case 'string':
+      return String(raw)
+    case 'number': {
+      const n = Number(raw)
+      return Number.isFinite(n) ? n : null
+    }
+    case 'boolean':
+      return Boolean(raw)
+    case 'date': {
+      if (raw instanceof Date) {
+        return Number.isNaN(raw.getTime()) ? null : raw.toISOString()
+      }
+      if (typeof raw === 'string') return raw
+      return null
+    }
+  }
 }
 
 /**
@@ -202,6 +248,47 @@ export function evaluateFormulaTree(
       return evaluateLogicRule(expr.condition, ctx)
         ? evaluateFormulaTree(expr.then, ctx)
         : evaluateFormulaTree(expr.else, ctx)
+
+    case 'entity_attr': {
+      // Read an attribute off the entity bound to a picker field. The runtime
+      // prefetches the row server-side and stashes it on ctx.entities keyed
+      // by the picker field id, so we just look it up here.
+      //
+      // The loader stamps a sidecar `__entityKind` (e.g. 'person', 'equipment')
+      // on each entity map. We use it to resolve the EntityAttrDef from the
+      // registry and coerce accordingly. Attrs not in ENTITY_ATTRS never made
+      // it onto the row (the loader allowlists at SELECT-time), so this lookup
+      // doubles as the runtime allowlist check.
+      const entities = ctx.entities
+      if (!entities) return null
+      const entity = entities[expr.pickerFieldKey]
+      if (!entity) return null
+      const raw = entity[expr.attrKey]
+      if (raw === undefined) return null
+      const kindHint = (entity as { __entityKind?: string }).__entityKind
+      if (kindHint) {
+        const def = getEntityAttrDef(
+          kindHint as Parameters<typeof getEntityAttrDef>[0],
+          expr.attrKey,
+        )
+        if (def) {
+          const coerced = coerceEntityAttr(raw, def.valueType)
+          // Booleans don't fit the formula return type. Coerce to number
+          // (0/1) so they compose with sum/product downstream — designers
+          // can `if(entity_attr=1)` etc.
+          if (typeof coerced === 'boolean') return coerced ? 1 : 0
+          return coerced
+        }
+      }
+      // Fallthrough: kindHint missing — accept primitive scalars, stringify
+      // Dates. We never return non-primitive shapes (objects / arrays).
+      if (raw instanceof Date) {
+        return Number.isNaN(raw.getTime()) ? null : raw.toISOString()
+      }
+      if (typeof raw === 'boolean') return raw ? 1 : 0
+      if (typeof raw === 'string' || typeof raw === 'number') return raw
+      return null
+    }
   }
 }
 

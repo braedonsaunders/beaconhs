@@ -12,7 +12,12 @@
 
 import type { Job } from 'bullmq'
 import { and, asc, desc, eq } from 'drizzle-orm'
-import { db, withTenant, type Database } from '@beaconhs/db'
+import {
+  db,
+  loadEntitiesForFormPickers,
+  withTenant,
+  type Database,
+} from '@beaconhs/db'
 import {
   atmosphericSensors,
   attachments,
@@ -146,9 +151,17 @@ async function renderFormResponse(tenantId: string, responseId: string): Promise
       ? (result.version.schema.title.en ?? result.template.name)
       : result.template.name
 
+  // Resolve any picker-bound entity attributes BEFORE the render call so
+  // `entity_attr` formula fields in the PDF show the same live values the
+  // filler did. RLS-scoped via withTenant.
+  const entitiesByField = await withTenant(db, tenantId, async (tx) =>
+    loadEntitiesForFormPickers(tx, result.version.schema, result.response.data),
+  )
+
   const pdf = await renderFormPdf({
     schema: result.version.schema,
     values: result.response.data,
+    entitiesByField,
     metadata: {
       title,
       reference: result.response.id.slice(0, 8),

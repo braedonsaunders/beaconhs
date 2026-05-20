@@ -72,6 +72,7 @@ import {
 } from '@beaconhs/ui'
 import {
   FIELD_TYPES,
+  entityKindForPicker,
   type DefaultValueExpression,
   type FieldType,
   type FormField,
@@ -914,6 +915,18 @@ function FieldProperties({
       label: s.title?.en ?? s.id,
       fields: s.fields.map((f) => ({ id: f.id, label: f.label?.en ?? f.id })),
     }))
+  // Single-entity picker fields the formula builder's entity_attr operator
+  // can target. Multi-pickers are excluded because entity_attr resolves one
+  // entity per picker, not a list.
+  const pickerFields = schema.sections
+    .filter((s) => !s.repeating)
+    .flatMap((s) => s.fields)
+    .filter((f) => entityKindForPicker(f.type) !== null)
+    .map((f) => ({
+      id: f.id,
+      label: f.label?.en ?? f.id,
+      kind: entityKindForPicker(f.type)!,
+    }))
 
   const tabs: { value: FieldPropTab; label: string; show: boolean }[] = [
     { value: 'basic', label: 'Basic', show: true },
@@ -979,6 +992,7 @@ function FieldProperties({
             value={field.formula as FormulaExpression | undefined}
             allFields={otherFields}
             repeatingSections={repeatingSections}
+            pickerFields={pickerFields}
             onChange={(next) => onChange({ formula: next })}
           />
         </div>

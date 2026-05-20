@@ -346,6 +346,188 @@ describe('evaluateFormulaTree', () => {
     }
     expect(evaluateFormulaTree(total, ctx)).toBe(1750)
   })
+
+  // -------- entity_attr -----------------------------------------------------
+
+  describe('entity_attr', () => {
+    it('returns the attr value when the entities map has an entry', () => {
+      const ctx = makeCtx({
+        values: { supervisor: 'person-1' },
+        entities: {
+          supervisor: {
+            __entityKind: 'person',
+            displayName: 'Alice Foreman',
+            jobTitle: 'Site Supervisor',
+          },
+        },
+      })
+      expect(
+        evaluateFormulaTree(
+          { kind: 'entity_attr', pickerFieldKey: 'supervisor', attrKey: 'jobTitle' },
+          ctx,
+        ),
+      ).toBe('Site Supervisor')
+      expect(
+        evaluateFormulaTree(
+          { kind: 'entity_attr', pickerFieldKey: 'supervisor', attrKey: 'displayName' },
+          ctx,
+        ),
+      ).toBe('Alice Foreman')
+    })
+
+    it('returns null when the picker is empty / entity not loaded', () => {
+      const ctxNoEntities = makeCtx({ values: { supervisor: 'person-1' } })
+      expect(
+        evaluateFormulaTree(
+          { kind: 'entity_attr', pickerFieldKey: 'supervisor', attrKey: 'jobTitle' },
+          ctxNoEntities,
+        ),
+      ).toBe(null)
+
+      const ctxNullEntry = makeCtx({
+        values: { supervisor: '' },
+        entities: { supervisor: null },
+      })
+      expect(
+        evaluateFormulaTree(
+          { kind: 'entity_attr', pickerFieldKey: 'supervisor', attrKey: 'jobTitle' },
+          ctxNullEntry,
+        ),
+      ).toBe(null)
+
+      const ctxMissingAttr = makeCtx({
+        entities: {
+          supervisor: { __entityKind: 'person', displayName: 'Alice Foreman' },
+        },
+      })
+      expect(
+        evaluateFormulaTree(
+          { kind: 'entity_attr', pickerFieldKey: 'supervisor', attrKey: 'jobTitle' },
+          ctxMissingAttr,
+        ),
+      ).toBe(null)
+    })
+
+    it('coerces according to EntityAttrDef.valueType', () => {
+      // Booleans collapse to 0/1 so they compose with sum/product.
+      const boolCtx = makeCtx({
+        entities: {
+          crane: {
+            __entityKind: 'equipment',
+            isMissing: true,
+            isAvailableForCheckout: false,
+          },
+        },
+      })
+      expect(
+        evaluateFormulaTree(
+          { kind: 'entity_attr', pickerFieldKey: 'crane', attrKey: 'isMissing' },
+          boolCtx,
+        ),
+      ).toBe(1)
+      expect(
+        evaluateFormulaTree(
+          {
+            kind: 'entity_attr',
+            pickerFieldKey: 'crane',
+            attrKey: 'isAvailableForCheckout',
+          },
+          boolCtx,
+        ),
+      ).toBe(0)
+
+      // Dates round-trip through ISO strings.
+      const fixed = new Date('2025-08-10T12:00:00Z')
+      const dateCtx = makeCtx({
+        entities: {
+          crane: { __entityKind: 'equipment', lastSeenAt: fixed },
+        },
+      })
+      expect(
+        evaluateFormulaTree(
+          { kind: 'entity_attr', pickerFieldKey: 'crane', attrKey: 'lastSeenAt' },
+          dateCtx,
+        ),
+      ).toBe('2025-08-10T12:00:00.000Z')
+
+      // Numbers stay numeric.
+      const numCtx = makeCtx({
+        entities: {
+          course: { __entityKind: 'course', durationMinutes: 90 },
+        },
+      })
+      expect(
+        evaluateFormulaTree(
+          {
+            kind: 'entity_attr',
+            pickerFieldKey: 'course',
+            attrKey: 'durationMinutes',
+          },
+          numCtx,
+        ),
+      ).toBe(90)
+    })
+
+    it('composes supervisor job title via entity_attr (end-to-end shape)', () => {
+      // Mirrors the lift-plan template's `supervisor_job_title` formula.
+      // The evaluator should resolve the attr against the loaded entities
+      // map the filler runtime passes through.
+      const ctx = makeCtx({
+        values: { supervisor: 'person-42' },
+        entities: {
+          supervisor: {
+            __entityKind: 'person',
+            displayName: 'Jordan Lopez',
+            jobTitle: 'Crane Supervisor',
+            email: 'jordan@example.com',
+          },
+        },
+      })
+      const formula: FormulaExpression = {
+        kind: 'entity_attr',
+        pickerFieldKey: 'supervisor',
+        attrKey: 'jobTitle',
+      }
+      expect(evaluateFormulaTree(formula, ctx)).toBe('Crane Supervisor')
+    })
+
+    it('falls back to primitive passthrough when __entityKind is missing', () => {
+      // Defence-in-depth: entity_attr should still surface scalar values
+      // even if the loader forgets to stamp __entityKind.
+      const ctx = makeCtx({
+        entities: {
+          supervisor: { jobTitle: 'Site Supervisor' },
+        },
+      })
+      expect(
+        evaluateFormulaTree(
+          { kind: 'entity_attr', pickerFieldKey: 'supervisor', attrKey: 'jobTitle' },
+          ctx,
+        ),
+      ).toBe('Site Supervisor')
+    })
+
+    it('returns null when the attr key is not in ENTITY_ATTRS for the kind', () => {
+      // A designer who hand-crafted JSON could request an attr we never
+      // allowlisted. The evaluator falls through to the primitive pathway,
+      // which still returns the value if it's scalar — but the loader is
+      // the gate; in production the row simply won't carry the column.
+      const ctx = makeCtx({
+        entities: {
+          supervisor: {
+            __entityKind: 'person',
+            // No `notAnAttr` allowlisted for 'person'.
+          },
+        },
+      })
+      expect(
+        evaluateFormulaTree(
+          { kind: 'entity_attr', pickerFieldKey: 'supervisor', attrKey: 'notAnAttr' },
+          ctx,
+        ),
+      ).toBe(null)
+    })
+  })
 })
 
 // =========================================================================

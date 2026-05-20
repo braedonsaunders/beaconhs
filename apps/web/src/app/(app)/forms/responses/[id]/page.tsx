@@ -1,8 +1,18 @@
 import Link from 'next/link'
-import { notFound, redirect } from 'next/navigation'
+import { notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { aliasedTable, asc, desc, eq } from 'drizzle-orm'
-import { FileText, MessageSquare, Plus, Send, Undo2 } from 'lucide-react'
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  FileText,
+  MessageSquare,
+  Plus,
+  Send,
+  ShieldAlert,
+  Undo2,
+} from 'lucide-react'
 import {
   Alert,
   AlertDescription,
@@ -18,12 +28,14 @@ import {
   Textarea,
 } from '@beaconhs/ui'
 import {
+  correctiveActions,
   formResponseComments,
   formResponseScores,
   formResponseSteps,
   formResponses,
   formTemplateVersions,
   formTemplates,
+  incidents,
   orgUnits,
   people,
   tenantUsers,
@@ -36,6 +48,7 @@ import {
   type EvalContext,
   type FormulaExpression,
 } from '@beaconhs/forms-core'
+import { loadEntitiesForPickers } from '@/app/(app)/forms/_lib/entity-loader'
 import { requireRequestContext } from '@/lib/auth'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { ActivityFeed } from '@/components/activity-feed'
@@ -43,7 +56,15 @@ import { DetailGrid } from '@/components/detail-grid'
 import { Section } from '@/components/section'
 import { DetailPageLayout } from '@/components/page-layout'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
+import { computeFormScore } from '@/app/(app)/forms/_lib/score-router'
+import { pickString } from '@/lib/list-params'
 import { WorkflowPanel, type WorkflowStepProp } from './_workflow-panel'
+import {
+  createCorrectiveActionFromResponse,
+  createIncidentFromResponse,
+} from './_spawn-actions'
+import { buildSpawnPrefill, labelForField } from './_spawn-prefill'
+import { SpawnDrawers, type SpawnDrawerKind } from './_spawn-drawers'
 
 export const dynamic = 'force-dynamic'
 
@@ -101,15 +122,6 @@ async function reopenResponse(formData: FormData) {
   revalidatePath(`/forms/responses/${responseId}`)
 }
 
-async function openCorrectiveAction(formData: FormData) {
-  'use server'
-  const responseId = String(formData.get('responseId') ?? '')
-  if (!responseId) return
-  redirect(
-    `/corrective-actions/new?sourceEntityType=form_response&sourceEntityId=${responseId}`,
-  )
-}
-
 // ---------- Page ----------
 
 export default async function FormResponsePage({
@@ -153,7 +165,7 @@ export default async function FormResponsePage({
     const rejectorTu = aliasedTable(tenantUsers, 'rejector_tu')
     const rejectorUser = aliasedTable(user, 'rejector_user')
 
-    const [steps, comments, scoreRows] = await Promise.all([
+    const [steps, comments, scoreRows, spawnedCAs, spawnedIncidents] = await Promise.all([
       tx
         .select({
           step: formResponseSteps,
@@ -182,8 +194,31 @@ export default async function FormResponsePage({
         .select()
         .from(formResponseScores)
         .where(eq(formResponseScores.responseId, id)),
+      // Show any CAPAs / incidents spawned from this response on the detail
+      // page so the "Create CAPA" button is contextual ("Already spawned 2").
+      tx
+        .select({
+          id: correctiveActions.id,
+          reference: correctiveActions.reference,
+          title: correctiveActions.title,
+          status: correctiveActions.status,
+          severity: correctiveActions.severity,
+        })
+        .from(correctiveActions)
+        .where(eq(correctiveActions.sourceFormResponseId, id))
+        .orderBy(desc(correctiveActions.createdAt)),
+      tx
+        .select({
+          id: incidents.id,
+          reference: incidents.reference,
+          title: incidents.title,
+          status: incidents.status,
+        })
+        .from(incidents)
+        .where(eq(incidents.sourceFormResponseId, id))
+        .orderBy(desc(incidents.reportedAt)),
     ])
-    return { ...row, steps, comments, scoreRows }
+    return { ...row, steps, comments, scoreRows, spawnedCAs, spawnedIncidents }
   })
 
   if (!data) notFound()
@@ -197,10 +232,62 @@ export default async function FormResponsePage({
     steps,
     comments,
     scoreRows,
+    spawnedCAs,
+    spawnedIncidents,
   } = data
+
+  // Resolve picker-bound entity attributes so `entity_attr` formula fields
+  // in the response viewer show the same live values the filler did.
+  // RLS-scoped via the request context.
+  const entitiesByField = await loadEntitiesForPickers(
+    ctx,
+    version.schema,
+    response.data,
+  )
 
   const failCount = scoreRows.filter((r) => r.score === 0).length
   const passCount = scoreRows.filter((r) => r.score === 1).length
+
+  // Re-run the score-router live against the persisted response data so the
+  // "Failed checks" panel reflects the current schema (handles older
+  // responses persisted before compliance columns existed). The persisted
+  // complianceScore/Status remain authoritative when present.
+  const evalRowsForScore: Record<string, Array<Record<string, unknown>>> = {}
+  for (const sec of version.schema.sections) {
+    if (!sec.repeating) continue
+    const v = response.data[sec.id]
+    evalRowsForScore[sec.id] = Array.isArray(v)
+      ? (v as Array<Record<string, unknown>>)
+      : []
+  }
+  const liveVerdict = computeFormScore(
+    version.schema,
+    response.data,
+    evalRowsForScore,
+  )
+  const persistedScore =
+    response.complianceScore != null ? Number(response.complianceScore) : null
+  const complianceScore = persistedScore ?? liveVerdict.score
+  const complianceStatus =
+    response.complianceStatus ?? liveVerdict.status
+  const failedFieldKeys = liveVerdict.failedFieldKeys
+  const referenceShort = id.slice(0, 8)
+  const spawnPrefill = buildSpawnPrefill({
+    templateName: template.name,
+    reference: referenceShort,
+    score: complianceScore,
+    schema: version.schema,
+    values: response.data,
+    failedFieldKeys,
+  })
+
+  const drawerParam = pickString(sp.drawer)
+  const openDrawer: SpawnDrawerKind =
+    drawerParam === 'spawn-ca'
+      ? 'spawn-ca'
+      : drawerParam === 'spawn-incident'
+        ? 'spawn-incident'
+        : null
 
   // Build the workflow-panel input by joining the template's declared steps
   // with whatever state rows already exist. Steps the user hasn't touched yet
@@ -253,6 +340,7 @@ export default async function FormResponsePage({
     active === 'audit' ? await recentActivityForEntity(ctx, 'form_response', id, 100) : []
 
   const basePath = `/forms/responses/${id}`
+  const closeHref = `${basePath}${active === 'response' ? '' : `?tab=${active}`}`
   return (
     <DetailPageLayout
       header={
@@ -261,36 +349,40 @@ export default async function FormResponsePage({
           title={template.name}
           subtitle={`${id.slice(0, 8)} · v${version.version}`}
           badge={
-            <Badge
-              variant={
-                response.status === 'closed' || response.status === 'submitted'
-                  ? 'success'
-                  : response.status === 'rejected'
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge
+                variant={
+                  response.status === 'non_compliant'
                     ? 'destructive'
-                    : 'warning'
-              }
-            >
-              {response.status.replace('_', ' ')}
-            </Badge>
+                    : response.status === 'closed' || response.status === 'submitted'
+                      ? 'success'
+                      : response.status === 'rejected'
+                        ? 'destructive'
+                        : 'warning'
+                }
+              >
+                {response.status.replace('_', ' ')}
+              </Badge>
+              <ComplianceBadge
+                status={complianceStatus}
+                score={complianceScore}
+              />
+            </div>
           }
           actions={
             <>
-              {flagsFollowup ? (
-                <form action={openCorrectiveAction} className="inline">
-                  <input type="hidden" name="responseId" value={id} />
-                  <Button type="submit">
-                    <Plus size={14} /> Open corrective action
-                  </Button>
-                </form>
-              ) : (
-                <Link
-                  href={`/corrective-actions/new?sourceEntityType=form_response&sourceEntityId=${id}`}
+              <Link href={`${basePath}?drawer=spawn-ca${active === 'response' ? '' : `&tab=${active}`}`}>
+                <Button
+                  variant={complianceStatus === 'non_compliant' ? 'default' : 'outline'}
                 >
-                  <Button variant="outline">
-                    <Plus size={14} /> Open corrective action
-                  </Button>
-                </Link>
-              )}
+                  <Plus size={14} /> Create CAPA
+                </Button>
+              </Link>
+              <Link href={`${basePath}?drawer=spawn-incident${active === 'response' ? '' : `&tab=${active}`}`}>
+                <Button variant="outline">
+                  <ShieldAlert size={14} /> Create incident
+                </Button>
+              </Link>
               {supportsReopen ? (
                 <form action={reopenResponse} className="inline">
                   <input type="hidden" name="responseId" value={id} />
@@ -309,7 +401,16 @@ export default async function FormResponsePage({
         />
       }
       alerts={
-        flagsFollowup ? (
+        complianceStatus === 'non_compliant' ? (
+          <Alert variant="destructive">
+            <AlertTitle>Non-compliant response</AlertTitle>
+            <AlertDescription>
+              Score {complianceScore.toFixed(1)} · {failedFieldKeys.length} failed
+              check{failedFieldKeys.length === 1 ? '' : 's'}. Spawn a corrective
+              action to address each failure.
+            </AlertDescription>
+          </Alert>
+        ) : flagsFollowup ? (
           <Alert variant="warning">
             <AlertTitle>Follow-up required</AlertTitle>
             <AlertDescription>
@@ -374,6 +475,105 @@ export default async function FormResponsePage({
               />
             </Section>
 
+            {failedFieldKeys.length > 0 ? (
+              <Section
+                title={`Failed checks (${failedFieldKeys.length})`}
+                subtitle="Each can be turned into its own corrective action."
+              >
+                <ul className="space-y-2 text-sm">
+                  {failedFieldKeys.map((key) => {
+                    const label = labelForField(version.schema, key)
+                    const raw = response.data[key]
+                    const displayValue =
+                      raw == null
+                        ? '—'
+                        : typeof raw === 'string'
+                          ? raw
+                          : typeof raw === 'object' && raw && 'answer' in raw
+                            ? String((raw as { answer?: string }).answer ?? '—')
+                            : JSON.stringify(raw)
+                    return (
+                      <li
+                        key={key}
+                        className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-rose-200 bg-rose-50/60 px-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <div className="font-medium text-rose-900">{label}</div>
+                          <div className="text-xs text-rose-700">
+                            Answer: <strong>{displayValue}</strong>
+                          </div>
+                        </div>
+                        <Link
+                          href={`${basePath}?drawer=spawn-ca&failedField=${encodeURIComponent(key)}${active === 'response' ? '' : `&tab=${active}`}`}
+                        >
+                          <Button size="sm" variant="outline">
+                            <Plus size={12} /> Create CAPA
+                          </Button>
+                        </Link>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </Section>
+            ) : null}
+
+            {(spawnedCAs.length > 0 || spawnedIncidents.length > 0) ? (
+              <Section title="Spawned from this response">
+                <div className="space-y-3 text-sm">
+                  {spawnedCAs.length > 0 ? (
+                    <div>
+                      <div className="mb-1 text-xs uppercase tracking-wide text-slate-500">
+                        Corrective actions ({spawnedCAs.length})
+                      </div>
+                      <ul className="space-y-1.5">
+                        {spawnedCAs.map((ca) => (
+                          <li key={ca.id}>
+                            <Link
+                              href={`/corrective-actions/${ca.id}`}
+                              className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2 hover:bg-slate-50"
+                            >
+                              <span className="flex items-center gap-2">
+                                <span className="font-mono text-xs text-slate-500">
+                                  {ca.reference}
+                                </span>
+                                <span className="text-slate-900">{ca.title}</span>
+                              </span>
+                              <Badge variant="secondary">{ca.status}</Badge>
+                            </Link>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                  {spawnedIncidents.length > 0 ? (
+                    <div>
+                      <div className="mb-1 text-xs uppercase tracking-wide text-slate-500">
+                        Incidents ({spawnedIncidents.length})
+                      </div>
+                      <ul className="space-y-1.5">
+                        {spawnedIncidents.map((inc) => (
+                          <li key={inc.id}>
+                            <Link
+                              href={`/incidents/${inc.id}`}
+                              className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2 hover:bg-slate-50"
+                            >
+                              <span className="flex items-center gap-2">
+                                <span className="font-mono text-xs text-slate-500">
+                                  {inc.reference}
+                                </span>
+                                <span className="text-slate-900">{inc.title}</span>
+                              </span>
+                              <Badge variant="secondary">{inc.status}</Badge>
+                            </Link>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                </div>
+              </Section>
+            ) : null}
+
             {scoreRows.length > 0 ? (
               <Section title="Compliance scoring">
                 <div className="flex flex-wrap items-center gap-3 text-sm">
@@ -397,7 +597,11 @@ export default async function FormResponsePage({
                 const v = response.data[sec.id]
                 rows[sec.id] = Array.isArray(v) ? (v as Array<Record<string, unknown>>) : []
               }
-              const evalCtx: EvalContext = { values: response.data, rows }
+              const evalCtx: EvalContext = {
+                values: response.data,
+                rows,
+                entities: entitiesByField,
+              }
               return version.schema.sections.map((sec) => {
                 // Section-level conditional visibility — skip entirely if false.
                 if (sec.showIf && !evaluateLogicRule(sec.showIf, evalCtx)) return null
@@ -501,7 +705,63 @@ export default async function FormResponsePage({
           </Card>
         ) : null}
       </div>
+
+      <SpawnDrawers
+        responseId={id}
+        openDrawer={openDrawer}
+        closeHref={closeHref}
+        prefill={
+          // Per-field CAPA spawn — recompute prefill scoped to the single
+          // failed field referenced in `?failedField=`. Cheap; runs once
+          // per render.
+          (() => {
+            const single = pickString(sp.failedField)
+            if (!single || !failedFieldKeys.includes(single)) return spawnPrefill
+            return buildSpawnPrefill({
+              templateName: template.name,
+              reference: referenceShort,
+              score: complianceScore,
+              schema: version.schema,
+              values: response.data,
+              failedFieldKeys,
+              singleFailedFieldKey: single,
+            })
+          })()
+        }
+        spawnCa={createCorrectiveActionFromResponse}
+        spawnIncident={createIncidentFromResponse}
+      />
     </DetailPageLayout>
+  )
+}
+
+// Visual chip that mirrors the persisted complianceStatus + score.
+// Rendered in the page header alongside the workflow-status badge.
+function ComplianceBadge({
+  status,
+  score,
+}: {
+  status: 'compliant' | 'non_compliant' | 'pending_review'
+  score: number
+}) {
+  if (status === 'compliant') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-800 ring-1 ring-emerald-200">
+        <CheckCircle2 size={12} /> Compliant · {score.toFixed(0)}%
+      </span>
+    )
+  }
+  if (status === 'non_compliant') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-800 ring-1 ring-rose-200">
+        <AlertTriangle size={12} /> Non-compliant · {score.toFixed(0)}%
+      </span>
+    )
+  }
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700 ring-1 ring-slate-200">
+      <Clock size={12} /> Pending review
+    </span>
   )
 }
 

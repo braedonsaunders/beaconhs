@@ -1,5 +1,6 @@
 export * from './schema'
 export * from './field-types'
+export * from './entity-attrs'
 export * from './logic'
 export * from './validator'
 export * from './scoring'
