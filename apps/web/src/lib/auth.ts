@@ -76,17 +76,29 @@ export async function getRequestContext(): Promise<RequestContext | null> {
       const [t] = await tx.select().from(tenants).where(eq(tenants.id, tenantId)).limit(1)
       if (!t) return null
 
-      // Super-admin has all permissions; no scoping.
-      // Membership is null (super-admin has no tenant_users row), so every
-      // `ctx.membership?.id` falls through to null in FK writes — important
-      // because tenant_users.id is a UUID column and any string-fallback would
-      // fail Postgres UUID parsing on insert.
+      // Super-admin has all permissions; no scoping. But they can ALSO have a
+      // tenant_users row in the active tenant — in which case we attach that
+      // membership so per-user features (saved dashboard layout, personal
+      // notifications, etc.) work the same as for a regular user.
+      const [m] = await tx
+        .select()
+        .from(tenantUsers)
+        .where(
+          and(
+            eq(tenantUsers.userId, userId),
+            eq(tenantUsers.tenantId, t.id),
+            eq(tenantUsers.status, 'active'),
+          ),
+        )
+        .limit(1)
       const permissions = new Set<string>(['*'])
       return makeTenantContext(db, {
         userId,
         tenantId: t.id,
         isSuperAdmin: true,
-        membership: null,
+        membership: m
+          ? { id: m.id, displayName: m.displayName ?? u.name }
+          : null,
         permissions,
         scopes: [{ type: 'tenant' }],
       })

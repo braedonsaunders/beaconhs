@@ -30,9 +30,18 @@ const LayoutSchema = z.object({
 export async function saveDashboardLayout(input: unknown) {
   const ctx = await requireRequestContext()
   if (!ctx.membership) {
-    // Super-admins don't have a tenant_users row — they can't customise their
-    // own layout. They view role defaults only.
-    return { ok: false as const, error: 'Super-admin cannot save personal layout.' }
+    // No tenant_users row in the active tenant — most often a super-admin
+    // who's just viewing the tenant without being a member. The user_dashboard
+    // layout table is keyed on (tenant_id, user_id), not membership_id, so
+    // we could technically still save — but without a membership we can't
+    // attribute the saved layout to a "role" and it would only ever resolve
+    // back to the super_admin default. Ask the user to be added as a member
+    // first if they want a personal layout in this tenant.
+    return {
+      ok: false as const,
+      error:
+        'You are not a member of this tenant. Add yourself as a tenant user to save a personal dashboard.',
+    }
   }
 
   const parsed = LayoutSchema.safeParse(input)
@@ -74,7 +83,9 @@ export async function saveDashboardLayout(input: unknown) {
 
 export async function resetDashboardLayout() {
   const ctx = await requireRequestContext()
-  if (!ctx.membership) return { ok: false as const, error: 'Super-admin: nothing to reset.' }
+  if (!ctx.membership) {
+    return { ok: false as const, error: 'Not a member of this tenant — nothing to reset.' }
+  }
   await ctx.db(async (tx) => {
     await tx
       .delete(userDashboardLayouts)
