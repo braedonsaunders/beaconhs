@@ -18,7 +18,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core'
 import { id, softDelete, timestamps } from './_helpers'
-import { tenants, tenantUsers } from './core'
+import { tenants, tenantUsers, user } from './core'
 import { orgUnits, people } from './org'
 
 // Free-form category lookup so admins can group equipment types into buckets
@@ -114,6 +114,19 @@ export const equipmentItems = pgTable(
     lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
     lastSeenSiteOrgUnitId: uuid('last_seen_site_org_unit_id').references(() => orgUnits.id),
     lastSeenHolderPersonId: uuid('last_seen_holder_person_id').references(() => people.id),
+    // ----- Report-missing / report-found workflow -----
+    // Set when a user files a "report missing" with last seen date / location /
+    // notes; cleared (with `missingFoundAt` set) when the item is reported
+    // found. Distinct from `lastSeenAt` above (which is a generic last-touch
+    // timestamp updated by transfers / checkouts).
+    missingReportedAt: timestamp('missing_reported_at', { withTimezone: true }),
+    missingReportedBy: text('missing_reported_by').references(() => user.id, {
+      onDelete: 'set null',
+    }),
+    missingLastSeenAt: date('missing_last_seen_at'),
+    missingLastSeenLocation: text('missing_last_seen_location'),
+    missingNotes: text('missing_notes'),
+    missingFoundAt: timestamp('missing_found_at', { withTimezone: true }),
     billingRateCategory: text('billing_rate_category'),
     // ----- Oil-change schedule (drives upcoming-oil-change report) -----
     requiresOilChange: boolean('requires_oil_change').default(false).notNull(),

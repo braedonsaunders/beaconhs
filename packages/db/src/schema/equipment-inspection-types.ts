@@ -93,6 +93,10 @@ export const equipmentInspectionCriteria = pgTable(
     severity: equipmentInspectionCriterionSeverity('severity').default('medium').notNull(),
     requiresPhoto: boolean('requires_photo').default(false).notNull(),
     requiresComment: boolean('requires_comment').default(false).notNull(),
+    // When true, the runtime form must collect an answer (no skip / leave-
+    // blank). Most inspections have all-required criteria; the flag exists so
+    // optional questions can coexist with mandatory ones inside one template.
+    isRequired: boolean('is_required').default(true).notNull(),
     // When true, a failing answer is treated as a critical defect (red flag
     // on the report and forced WO creation regardless of the template-level
     // `failsSpawnWorkOrders` setting).

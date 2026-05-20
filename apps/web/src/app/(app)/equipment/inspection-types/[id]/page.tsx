@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { revalidatePath } from 'next/cache'
 import { notFound } from 'next/navigation'
-import { ArrowDown, ArrowUp, ListChecks, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, ListChecks, Pencil, Trash2 } from 'lucide-react'
 import { and, asc, eq, sql } from 'drizzle-orm'
 import {
   Badge,
@@ -15,12 +15,6 @@ import {
   Label,
   PageHeader,
   Select,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
   Textarea,
 } from '@beaconhs/ui'
 import {
@@ -99,6 +93,9 @@ async function addCriterion(formData: FormData) {
   const severity = String(formData.get('severity') ?? 'medium').trim() || 'medium'
   const requiresPhoto = formData.get('requiresPhoto') === 'on'
   const requiresComment = formData.get('requiresComment') === 'on'
+  // `isRequired` defaults true; the checkbox is wired as "Optional" and we
+  // invert here so unchecked = required (the common case).
+  const isRequired = formData.get('isOptional') !== 'on'
   const isCritical = formData.get('isCritical') === 'on'
   if (!inspectionTypeId || !question) return
 
@@ -120,6 +117,7 @@ async function addCriterion(formData: FormData) {
         severity: severity as any,
         requiresPhoto,
         requiresComment,
+        isRequired,
         isCritical,
       })
       .returning({ id: equipmentInspectionCriteria.id })
@@ -131,10 +129,59 @@ async function addCriterion(formData: FormData) {
       entityId: inserted.id,
       action: 'create',
       summary: 'Added inspection criterion',
-      after: { inspectionTypeId, question, kind, severity, requiresPhoto, isCritical },
+      after: {
+        inspectionTypeId,
+        question,
+        kind,
+        severity,
+        requiresPhoto,
+        requiresComment,
+        isRequired,
+        isCritical,
+      },
     })
   }
   revalidatePath(`/equipment/inspection-types/${inspectionTypeId}`)
+}
+
+async function updateCriterion(formData: FormData) {
+  'use server'
+  const ctx = await requireRequestContext()
+  const id = String(formData.get('id') ?? '').trim()
+  const inspectionTypeId = String(formData.get('inspectionTypeId') ?? '').trim()
+  const question = String(formData.get('question') ?? '').trim()
+  const description = String(formData.get('description') ?? '').trim() || null
+  const kind = String(formData.get('kind') ?? 'pass_fail').trim() || 'pass_fail'
+  const severity = String(formData.get('severity') ?? 'medium').trim() || 'medium'
+  const requiresPhoto = formData.get('requiresPhoto') === 'on'
+  const requiresComment = formData.get('requiresComment') === 'on'
+  const isRequired = formData.get('isRequired') === 'on'
+  const isCritical = formData.get('isCritical') === 'on'
+  if (!id || !question) return
+
+  await ctx.db((tx) =>
+    tx
+      .update(equipmentInspectionCriteria)
+      .set({
+        question,
+        description,
+        kind: kind as any,
+        severity: severity as any,
+        requiresPhoto,
+        requiresComment,
+        isRequired,
+        isCritical,
+      })
+      .where(eq(equipmentInspectionCriteria.id, id)),
+  )
+  await recordAudit(ctx, {
+    entityType: 'equipment_inspection_criterion',
+    entityId: id,
+    action: 'update',
+    summary: 'Updated inspection criterion',
+    after: { question, kind, severity, requiresPhoto, requiresComment, isRequired, isCritical },
+  })
+  if (inspectionTypeId) revalidatePath(`/equipment/inspection-types/${inspectionTypeId}`)
 }
 
 async function moveCriterion(formData: FormData) {
@@ -317,35 +364,32 @@ export default async function InspectionTypeDetailPage({
             {criteria.length === 0 ? (
               <EmptyState
                 title="No criteria yet"
-                description="Add your first question below. Order the list with the up/down arrows."
+                description="Add your first question below. Reorder with the up/down arrows; click the pencil to edit a criterion in place."
               />
             ) : (
-              <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>#</TableHead>
-                      <TableHead>Question</TableHead>
-                      <TableHead>Kind</TableHead>
-                      <TableHead>Severity</TableHead>
-                      <TableHead>Flags</TableHead>
-                      <TableHead></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {criteria.map((c) => (
-                      <TableRow key={c.id}>
-                        <TableCell className="text-slate-500">{c.sequence}</TableCell>
-                        <TableCell>
-                          <div className="font-medium">{c.question}</div>
+              <ul className="space-y-2">
+                {criteria.map((c, idx) => (
+                  <li
+                    key={c.id}
+                    className="overflow-hidden rounded-lg border border-slate-200 bg-white"
+                  >
+                    <details className="group">
+                      <summary className="flex cursor-pointer items-center gap-3 px-3 py-2 transition-colors hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
+                        <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-slate-100 text-xs font-semibold text-slate-600">
+                          {c.sequence}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-medium text-slate-900">
+                            {c.question}
+                          </div>
                           {c.description ? (
-                            <div className="text-xs text-slate-500">{c.description}</div>
+                            <div className="truncate text-xs text-slate-500">
+                              {c.description}
+                            </div>
                           ) : null}
-                        </TableCell>
-                        <TableCell>
+                        </div>
+                        <div className="flex shrink-0 flex-wrap items-center gap-1">
                           <Badge variant="secondary">{c.kind.replace('_', ' ')}</Badge>
-                        </TableCell>
-                        <TableCell>
                           <Badge
                             variant={
                               c.severity === 'critical' || c.severity === 'high'
@@ -357,62 +401,150 @@ export default async function InspectionTypeDetailPage({
                           >
                             {c.severity}
                           </Badge>
-                        </TableCell>
-                        <TableCell className="space-x-1">
+                          {c.isRequired ? null : (
+                            <Badge variant="secondary">optional</Badge>
+                          )}
+                          {c.isCritical ? <Badge variant="destructive">critical</Badge> : null}
                           {c.requiresPhoto ? (
                             <Badge variant="secondary">photo</Badge>
                           ) : null}
                           {c.requiresComment ? (
                             <Badge variant="secondary">comment</Badge>
                           ) : null}
-                          {c.isCritical ? (
-                            <Badge variant="destructive">critical</Badge>
-                          ) : null}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex justify-end gap-1">
-                            <form action={moveCriterion}>
-                              <input type="hidden" name="id" value={c.id} />
-                              <input
-                                type="hidden"
-                                name="inspectionTypeId"
-                                value={t.id}
-                              />
-                              <input type="hidden" name="dir" value="up" />
-                              <Button type="submit" size="sm" variant="outline">
-                                <ArrowUp size={12} />
-                              </Button>
-                            </form>
-                            <form action={moveCriterion}>
-                              <input type="hidden" name="id" value={c.id} />
-                              <input
-                                type="hidden"
-                                name="inspectionTypeId"
-                                value={t.id}
-                              />
-                              <input type="hidden" name="dir" value="down" />
-                              <Button type="submit" size="sm" variant="outline">
-                                <ArrowDown size={12} />
-                              </Button>
-                            </form>
-                            <form action={deleteCriterion}>
-                              <input type="hidden" name="id" value={c.id} />
-                              <input
-                                type="hidden"
-                                name="inspectionTypeId"
-                                value={t.id}
-                              />
-                              <Button type="submit" size="sm" variant="outline">
-                                <Trash2 size={12} />
-                              </Button>
-                            </form>
+                        </div>
+                        <div className="ml-2 flex shrink-0 items-center gap-1">
+                          <form action={moveCriterion}>
+                            <input type="hidden" name="id" value={c.id} />
+                            <input type="hidden" name="inspectionTypeId" value={t.id} />
+                            <input type="hidden" name="dir" value="up" />
+                            <Button
+                              type="submit"
+                              size="sm"
+                              variant="outline"
+                              disabled={idx === 0}
+                              aria-label="Move up"
+                            >
+                              <ArrowUp size={12} />
+                            </Button>
+                          </form>
+                          <form action={moveCriterion}>
+                            <input type="hidden" name="id" value={c.id} />
+                            <input type="hidden" name="inspectionTypeId" value={t.id} />
+                            <input type="hidden" name="dir" value="down" />
+                            <Button
+                              type="submit"
+                              size="sm"
+                              variant="outline"
+                              disabled={idx === criteria.length - 1}
+                              aria-label="Move down"
+                            >
+                              <ArrowDown size={12} />
+                            </Button>
+                          </form>
+                          <span
+                            aria-label="Edit"
+                            className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-slate-200 text-slate-600 transition-colors group-open:bg-teal-50 group-open:text-teal-700"
+                          >
+                            <Pencil size={12} />
+                          </span>
+                          <form action={deleteCriterion}>
+                            <input type="hidden" name="id" value={c.id} />
+                            <input type="hidden" name="inspectionTypeId" value={t.id} />
+                            <Button
+                              type="submit"
+                              size="sm"
+                              variant="outline"
+                              aria-label="Delete"
+                            >
+                              <Trash2 size={12} />
+                            </Button>
+                          </form>
+                        </div>
+                      </summary>
+                      <div className="border-t border-slate-100 bg-slate-50 px-4 py-4">
+                        <form
+                          action={updateCriterion}
+                          className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+                        >
+                          <input type="hidden" name="id" value={c.id} />
+                          <input type="hidden" name="inspectionTypeId" value={t.id} />
+                          <div className="space-y-1.5 sm:col-span-2">
+                            <Label>Question *</Label>
+                            <Input name="question" defaultValue={c.question} required />
                           </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                          <div className="space-y-1.5">
+                            <Label>Kind</Label>
+                            <Select name="kind" defaultValue={c.kind}>
+                              {KIND_OPTIONS.map((o) => (
+                                <option key={o.value} value={o.value}>
+                                  {o.label}
+                                </option>
+                              ))}
+                            </Select>
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label>Severity</Label>
+                            <Select name="severity" defaultValue={c.severity}>
+                              {SEVERITY_OPTIONS.map((o) => (
+                                <option key={o.value} value={o.value}>
+                                  {o.label}
+                                </option>
+                              ))}
+                            </Select>
+                          </div>
+                          <div className="space-y-1.5 sm:col-span-2">
+                            <Label>Help text</Label>
+                            <Textarea
+                              name="description"
+                              rows={2}
+                              defaultValue={c.description ?? ''}
+                            />
+                          </div>
+                          <div className="flex flex-wrap items-center gap-3 text-sm sm:col-span-2">
+                            <label className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                name="isRequired"
+                                defaultChecked={c.isRequired}
+                              />
+                              <span>Required</span>
+                            </label>
+                            <label className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                name="requiresPhoto"
+                                defaultChecked={c.requiresPhoto}
+                              />
+                              <span>Photo required</span>
+                            </label>
+                            <label className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                name="requiresComment"
+                                defaultChecked={c.requiresComment}
+                              />
+                              <span>Comment required</span>
+                            </label>
+                            <label className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                name="isCritical"
+                                defaultChecked={c.isCritical}
+                              />
+                              <span>Critical (fail forces WO + red flag)</span>
+                            </label>
+                          </div>
+                          <div className="flex justify-end sm:col-span-2">
+                            <Button type="submit" size="sm">
+                              Save changes
+                            </Button>
+                          </div>
+                        </form>
+                      </div>
+                    </details>
+                  </li>
+                ))}
+              </ul>
             )}
           </CardContent>
         </Card>
@@ -453,6 +585,10 @@ export default async function InspectionTypeDetailPage({
               <Textarea name="description" rows={2} placeholder="Optional guidance" />
             </div>
             <div className="flex flex-wrap items-center gap-3 sm:col-span-2 text-sm">
+              <label className="flex items-center gap-2">
+                <input type="checkbox" name="isOptional" />
+                <span>Optional answer (default: required)</span>
+              </label>
               <label className="flex items-center gap-2">
                 <input type="checkbox" name="requiresPhoto" />
                 <span>Photo required</span>

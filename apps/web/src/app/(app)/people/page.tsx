@@ -99,6 +99,12 @@ export default async function PeoplePage({
             description="Workers, contractors, supervisors. Sync from your HRIS via the plugin framework."
             actions={
               <div className="flex items-center gap-2">
+                <Link href="/people/org-chart">
+                  <Button variant="outline">Org chart</Button>
+                </Link>
+                <Link href="/people/import">
+                  <Button variant="outline">Import people</Button>
+                </Link>
                 <Link href={buildExportHref('/people/export.csv', sp)}>
                   <Button variant="outline">Export CSV</Button>
                 </Link>

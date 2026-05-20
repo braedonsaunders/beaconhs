@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { CalendarCheck, GraduationCap } from 'lucide-react'
+import { CalendarCheck, CalendarDays } from 'lucide-react'
 import { and, asc, count, desc, eq, gte, lt, sql, type SQL } from 'drizzle-orm'
 import {
   Badge,
@@ -135,9 +135,16 @@ export default async function TrainingClassesPage({
             title="Training classes"
             description="Scheduled instructor-led classes. Roster attendees and mark completion to write training records."
             actions={
-              <Link href="/training/classes/new">
-                <Button>Schedule new class</Button>
-              </Link>
+              <div className="flex items-center gap-2">
+                <Link href="/training/classes/calendar">
+                  <Button variant="outline">
+                    <CalendarDays size={14} /> Calendar
+                  </Button>
+                </Link>
+                <Link href="/training/classes/new">
+                  <Button>Schedule new class</Button>
+                </Link>
+              </div>
             }
           />
           <TrainingSubNav active="classes" />

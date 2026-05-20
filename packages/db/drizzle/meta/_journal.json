@@ -113,6 +113,27 @@
       "when": 1779700000000,
       "tag": "0015_hazid_hazard_risk_ratings",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1779800000000,
+      "tag": "0016_training_extras",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1780000000000,
+      "tag": "0018_equipment_missing_workflow",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1780100000000,
+      "tag": "0019_people_org_chart_files_signature",
+      "breakpoints": true
     }
   ]
 }

@@ -5,6 +5,7 @@ import { and, asc, desc, eq, sql } from 'drizzle-orm'
 import {
   Activity,
   ArrowLeftRight,
+  BarChart3,
   ClipboardCheck,
   FileText,
   LogIn,
@@ -12,6 +13,7 @@ import {
   MapPin,
   Plus,
   QrCode,
+  Search,
   Truck,
   Wrench,
 } from 'lucide-react'
@@ -104,10 +106,27 @@ async function reportMissing(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
   const id = String(formData.get('id') ?? '')
+  const lastSeenDate = String(formData.get('lastSeenDate') ?? '').trim() || null
+  const lastSeenLocation = String(formData.get('lastSeenLocation') ?? '').trim() || null
+  const notes = String(formData.get('notes') ?? '').trim() || null
+  if (!id) return
+  const now = new Date()
   await ctx.db((tx) =>
     tx
       .update(equipmentItems)
-      .set({ isMissing: true, lastSeenAt: new Date() })
+      .set({
+        isMissing: true,
+        // Snapshot fields specific to the missing-report workflow.
+        missingReportedAt: now,
+        missingReportedBy: ctx.userId,
+        missingLastSeenAt: lastSeenDate,
+        missingLastSeenLocation: lastSeenLocation,
+        missingNotes: notes,
+        missingFoundAt: null,
+        // Also update the generic last-seen timestamp so existing UIs that
+        // read it stay coherent.
+        lastSeenAt: now,
+      })
       .where(eq(equipmentItems.id, id)),
   )
   await recordAudit(ctx, {
@@ -115,24 +134,47 @@ async function reportMissing(formData: FormData) {
     entityId: id,
     action: 'update',
     summary: 'Reported missing',
+    after: {
+      lastSeenDate,
+      lastSeenLocation,
+      notes,
+    },
   })
   revalidatePath(`/equipment/${id}`)
+  redirect(`/equipment/${id}`)
 }
 
 async function reportFound(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
   const id = String(formData.get('id') ?? '')
+  const foundNotes = String(formData.get('foundNotes') ?? '').trim() || null
+  if (!id) return
+  const now = new Date()
   await ctx.db((tx) =>
-    tx.update(equipmentItems).set({ isMissing: false }).where(eq(equipmentItems.id, id)),
+    tx
+      .update(equipmentItems)
+      .set({
+        isMissing: false,
+        missingFoundAt: now,
+        // Append the found-time notes onto the prior missing notes for
+        // posterity. If there were no prior notes, just use these.
+        missingNotes: foundNotes
+          ? sql`COALESCE(${equipmentItems.missingNotes}, '') || CASE WHEN COALESCE(${equipmentItems.missingNotes}, '') = '' THEN '' ELSE E'\n\n' END || ${`Found ${now.toISOString().slice(0, 10)}: ${foundNotes}`}`
+          : equipmentItems.missingNotes,
+        lastSeenAt: now,
+      })
+      .where(eq(equipmentItems.id, id)),
   )
   await recordAudit(ctx, {
     entityType: 'equipment',
     entityId: id,
     action: 'update',
     summary: 'Reported found',
+    after: { foundAt: now.toISOString(), foundNotes },
   })
   revalidatePath(`/equipment/${id}`)
+  redirect(`/equipment/${id}`)
 }
 
 async function transferLocation(formData: FormData) {
@@ -550,11 +592,13 @@ export default async function EquipmentDetailPage({
         type: equipmentTypes,
         site: orgUnits,
         holder: people,
+        missingReporter: { id: user.id, name: user.name },
       })
       .from(equipmentItems)
       .leftJoin(equipmentTypes, eq(equipmentTypes.id, equipmentItems.typeId))
       .leftJoin(orgUnits, eq(orgUnits.id, equipmentItems.currentSiteOrgUnitId))
       .leftJoin(people, eq(people.id, equipmentItems.currentHolderPersonId))
+      .leftJoin(user, eq(user.id, equipmentItems.missingReportedBy))
       .where(eq(equipmentItems.id, id))
       .limit(1)
     if (!row) return null
@@ -676,6 +720,7 @@ export default async function EquipmentDetailPage({
     type,
     site,
     holder,
+    missingReporter,
     history,
     workOrders,
     sites,
@@ -737,6 +782,12 @@ export default async function EquipmentDetailPage({
                   Log entry
                 </Button>
               </Link>
+              <Link href={`/equipment/${id}/roi`}>
+                <Button variant="outline">
+                  <BarChart3 size={14} />
+                  View ROI
+                </Button>
+              </Link>
               <Link href={`/equipment/${id}/qr`}>
                 <Button variant="outline">
                   <QrCode size={14} />
@@ -744,19 +795,19 @@ export default async function EquipmentDetailPage({
                 </Button>
               </Link>
               {item.isMissing ? (
-                <form action={reportFound}>
-                  <input type="hidden" name="id" value={id} />
-                  <Button type="submit" variant="outline">
-                    Report found
+                <Link href={`${basePath}?drawer=report-found` as any}>
+                  <Button variant="outline">
+                    <Search size={14} />
+                    Mark as found
                   </Button>
-                </form>
+                </Link>
               ) : (
-                <form action={reportMissing}>
-                  <input type="hidden" name="id" value={id} />
-                  <Button type="submit" variant="outline">
+                <Link href={`${basePath}?drawer=report-missing` as any}>
+                  <Button variant="outline">
+                    <Search size={14} />
                     Report missing
                   </Button>
-                </form>
+                </Link>
               )}
             </>
           }
@@ -766,8 +817,37 @@ export default async function EquipmentDetailPage({
           <Alert variant="destructive">
             <AlertTitle>Reported missing</AlertTitle>
             <AlertDescription>
-              Last seen {item.lastSeenAt ? new Date(item.lastSeenAt).toLocaleString() : '—'}. Use
-              Transfer below to update the location when found.
+              {(() => {
+                const parts: string[] = []
+                if (item.missingReportedAt) {
+                  parts.push(`Reported on ${new Date(item.missingReportedAt).toLocaleDateString()}`)
+                }
+                if (missingReporter?.name) {
+                  parts.push(`by ${missingReporter.name}`)
+                }
+                if (item.missingLastSeenAt) {
+                  parts.push(`— last seen ${item.missingLastSeenAt}`)
+                }
+                if (item.missingLastSeenLocation) {
+                  parts.push(`at ${item.missingLastSeenLocation}`)
+                }
+                const headline = parts.length
+                  ? parts.join(' ')
+                  : `Last seen ${item.lastSeenAt ? new Date(item.lastSeenAt).toLocaleString() : '—'}`
+                return (
+                  <>
+                    <div>{headline}.</div>
+                    {item.missingNotes ? (
+                      <div className="mt-1 whitespace-pre-wrap text-xs">
+                        {item.missingNotes}
+                      </div>
+                    ) : null}
+                    <div className="mt-1 text-xs">
+                      Use <strong>Mark as found</strong> when the asset is recovered.
+                    </div>
+                  </>
+                )
+              })()}
             </AlertDescription>
           </Alert>
         ) : null}
@@ -1648,6 +1728,79 @@ export default async function EquipmentDetailPage({
           <Field label="Details" required className="sm:col-span-2">
             <Textarea name="details" rows={5} required />
           </Field>
+        </form>
+      </UrlDrawer>
+
+      <UrlDrawer
+        open={drawerKey === 'report-missing' && !item.isMissing}
+        closeHref={closeHref}
+        title="Report missing"
+        description="Capture when and where the asset was last seen so a follow-up search has context. The detail page will switch to a missing alert until someone marks it as found."
+        size="md"
+        footer={
+          <Button type="submit" form="equipment-report-missing-form" variant="destructive">
+            <Search size={14} /> Report missing
+          </Button>
+        }
+      >
+        <form
+          id="equipment-report-missing-form"
+          action={reportMissing}
+          className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+        >
+          <input type="hidden" name="id" value={id} />
+          <Field label="Last seen date">
+            <Input
+              name="lastSeenDate"
+              type="date"
+              defaultValue={new Date().toISOString().slice(0, 10)}
+            />
+          </Field>
+          <Field label="Last seen location">
+            <Input
+              name="lastSeenLocation"
+              placeholder={site?.name ?? 'e.g. North yard, Truck 12, Apex shop'}
+            />
+          </Field>
+          <Field label="Notes" className="sm:col-span-2">
+            <Textarea
+              name="notes"
+              rows={3}
+              placeholder="Anything to help the search — who had it last, suspected loss vs theft, etc."
+            />
+          </Field>
+        </form>
+      </UrlDrawer>
+
+      <UrlDrawer
+        open={drawerKey === 'report-found' && item.isMissing}
+        closeHref={closeHref}
+        title="Mark as found"
+        description="Clear the missing flag and optionally note where the asset was recovered. The original missing report is retained for audit."
+        size="md"
+        footer={
+          <Button type="submit" form="equipment-report-found-form">
+            <Search size={14} /> Mark as found
+          </Button>
+        }
+      >
+        <form
+          id="equipment-report-found-form"
+          action={reportFound}
+          className="grid grid-cols-1 gap-3"
+        >
+          <input type="hidden" name="id" value={id} />
+          <Field label="Found notes (optional)">
+            <Textarea
+              name="foundNotes"
+              rows={3}
+              placeholder="Where was it recovered? Any damage to flag?"
+            />
+          </Field>
+          <p className="text-xs text-slate-500">
+            The found timestamp is set to now. Use the Location tab to record the
+            current site / holder once the asset is back in place.
+          </p>
         </form>
       </UrlDrawer>
 

@@ -5,11 +5,17 @@ import { cn } from '@beaconhs/ui'
 // plus the catch-all People directory. Rendered as a horizontal pill nav so
 // it matches the toolbox-sub-nav / equipment-sub-nav components.
 
-export type PeopleNavSection = 'directory' | 'groups' | 'divisions' | 'titles'
+export type PeopleNavSection =
+  | 'directory'
+  | 'org-chart'
+  | 'groups'
+  | 'divisions'
+  | 'titles'
 
 export function PeopleSubNav({ active }: { active: PeopleNavSection }) {
   const items: { key: PeopleNavSection; label: string; href: string }[] = [
     { key: 'directory', label: 'Directory', href: '/people' },
+    { key: 'org-chart', label: 'Org chart', href: '/people/org-chart' },
     { key: 'groups', label: 'Groups', href: '/people/groups' },
     { key: 'divisions', label: 'Divisions', href: '/people/divisions' },
     { key: 'titles', label: 'Titles', href: '/people/titles' },

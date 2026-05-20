@@ -121,6 +121,16 @@ export const people = pgTable(
     email: text('email'),
     phone: text('phone'),
     photoAttachmentId: uuid('photo_attachment_id'),
+    // Self-referential reporting line. Nullable for top-level reports
+    // (executives, contractors without a manager). The org-chart page builds
+    // a tree from this column with a simple in-memory cycle guard.
+    managerPersonId: uuid('manager_person_id').references((): any => people.id, {
+      onDelete: 'set null',
+    }),
+    // User's saved signature image — referenced by inspection / lift-plan /
+    // form-sign-off flows when this person is the signer. Stored as a regular
+    // attachment so it benefits from the same upload + audit pipeline.
+    signatureAttachmentId: uuid('signature_attachment_id'),
     emergencyContactName: text('emergency_contact_name'),
     emergencyContactPhone: text('emergency_contact_phone'),
     notes: text('notes'),
@@ -180,5 +190,11 @@ export const peopleRelations = relations(people, ({ one, many }) => ({
   department: one(departments, { fields: [people.departmentId], references: [departments.id] }),
   trade: one(trades, { fields: [people.tradeId], references: [trades.id] }),
   crew: one(crews, { fields: [people.crewId], references: [crews.id] }),
+  manager: one(people, {
+    fields: [people.managerPersonId],
+    references: [people.id],
+    relationName: 'manager',
+  }),
+  reports: many(people, { relationName: 'manager' }),
   assignments: many(peopleAssignments),
 }))

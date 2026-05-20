@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { asc, eq, sql } from 'drizzle-orm'
+import { and, asc, eq, sql } from 'drizzle-orm'
 import { Award, ListChecks } from 'lucide-react'
 import {
   Badge,
@@ -23,20 +23,24 @@ import {
   Textarea,
 } from '@beaconhs/ui'
 import {
+  trainingExtraFields,
   trainingSkillAssignments,
   trainingSkillAuthorities,
   trainingSkillTypes,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
+import { pickString } from '@/lib/list-params'
 import { DetailPageLayout } from '@/components/page-layout'
 import { DetailGrid } from '@/components/detail-grid'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { ActivityFeed } from '@/components/activity-feed'
+import { ExtraFieldsSection } from '../../_components/extra-fields-section'
+import { addExtraField, deleteExtraField } from '../../_lib/extra-fields-actions'
 
 export const dynamic = 'force-dynamic'
 
-const TABS = ['overview', 'skill_types', 'activity'] as const
+const TABS = ['overview', 'skill_types', 'extras', 'activity'] as const
 type Tab = (typeof TABS)[number]
 
 async function addSkillType(formData: FormData) {
@@ -107,17 +111,29 @@ export default async function AuthorityDetailPage({
       .where(eq(trainingSkillTypes.authorityId, id))
       .groupBy(trainingSkillTypes.id)
       .orderBy(asc(trainingSkillTypes.name))
-    return { authority, skillTypes }
+    const extras = await tx
+      .select()
+      .from(trainingExtraFields)
+      .where(
+        and(
+          eq(trainingExtraFields.ownerType, 'authority'),
+          eq(trainingExtraFields.ownerId, id),
+        ),
+      )
+      .orderBy(asc(trainingExtraFields.sortOrder), asc(trainingExtraFields.createdAt))
+    return { authority, skillTypes, extras }
   })
 
   if (!data) notFound()
-  const { authority, skillTypes } = data
+  const { authority, skillTypes, extras } = data
   const activity =
     active === 'activity'
       ? await recentActivityForEntity(ctx, 'training_skill_authority', id, 50)
       : []
 
   const basePath = `/training/authorities/${id}`
+  const drawer = pickString(sp.drawer)
+  const closeHref = `${basePath}${active === 'overview' ? '' : `?tab=${active}`}`
 
   return (
     <DetailPageLayout
@@ -139,6 +155,7 @@ export default async function AuthorityDetailPage({
           tabs={[
             { key: 'overview', label: 'Overview' },
             { key: 'skill_types', label: 'Skill types', count: skillTypes.length },
+            { key: 'extras', label: 'Additional fields', count: extras.length },
             { key: 'activity', label: 'Activity' },
           ]}
         />
@@ -259,6 +276,23 @@ export default async function AuthorityDetailPage({
             </CardContent>
           </Card>
         </div>
+      ) : null}
+
+      {active === 'extras' ? (
+        <ExtraFieldsSection
+          ownerType="authority"
+          ownerId={id}
+          rows={extras.map((e) => ({
+            id: e.id,
+            fieldKey: e.fieldKey,
+            fieldValue: e.fieldValue,
+          }))}
+          drawerOpen={drawer === 'add-extra-field'}
+          drawerCloseHref={closeHref}
+          addHref={`${basePath}?tab=extras&drawer=add-extra-field`}
+          addAction={addExtraField}
+          deleteAction={deleteExtraField}
+        />
       ) : null}
 
       {active === 'activity' ? (

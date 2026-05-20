@@ -133,6 +133,8 @@ export const TENANT_SCOPED_TABLES = [
   'training_audience_assignments',
   'training_audience_assignment_targets',
   'training_audience_assignment_records',
+  'training_course_files',
+  'training_extra_fields',
   'atmospheric_sensors',
   'atmospheric_calibrations',
   'report_schedules',
@@ -208,6 +210,8 @@ export const TENANT_SCOPED_TABLES = [
   'person_group_memberships',
   'person_titles',
   'person_title_assignments',
+  // Per-person uploaded files (resumes, certs, ID copies)
+  'person_files',
   // Corrective Actions — photos + multi-step complete wizard
   'ca_photos',
   'ca_complete_steps',

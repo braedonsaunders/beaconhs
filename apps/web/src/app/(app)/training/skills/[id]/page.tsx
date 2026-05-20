@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { asc, eq } from 'drizzle-orm'
+import { and, asc, eq } from 'drizzle-orm'
 import { Users } from 'lucide-react'
 import {
   Badge,
@@ -19,18 +19,22 @@ import {
 } from '@beaconhs/ui'
 import {
   people,
+  trainingExtraFields,
   trainingSkillAssignments,
   trainingSkillAuthorities,
   trainingSkillTypes,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { pickString } from '@/lib/list-params'
 import { DetailPageLayout } from '@/components/page-layout'
 import { DetailGrid } from '@/components/detail-grid'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
+import { ExtraFieldsSection } from '../../_components/extra-fields-section'
+import { addExtraField, deleteExtraField } from '../../_lib/extra-fields-actions'
 
 export const dynamic = 'force-dynamic'
 
-const TABS = ['overview', 'holders'] as const
+const TABS = ['overview', 'holders', 'extras'] as const
 type Tab = (typeof TABS)[number]
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
@@ -67,11 +71,23 @@ export default async function SkillTypeDetailPage({
       .innerJoin(people, eq(people.id, trainingSkillAssignments.personId))
       .where(eq(trainingSkillAssignments.skillTypeId, id))
       .orderBy(asc(trainingSkillAssignments.expiresOn))
-    return { ...row, holders }
+    const extras = await tx
+      .select()
+      .from(trainingExtraFields)
+      .where(
+        and(
+          eq(trainingExtraFields.ownerType, 'skill_type'),
+          eq(trainingExtraFields.ownerId, id),
+        ),
+      )
+      .orderBy(asc(trainingExtraFields.sortOrder), asc(trainingExtraFields.createdAt))
+    return { ...row, holders, extras }
   })
 
   if (!data) notFound()
-  const { type, authority, holders } = data
+  const { type, authority, holders, extras } = data
+  const drawer = pickString(sp.drawer)
+  const closeHref = `${`/training/skills/${id}`}${active === 'overview' ? '' : `?tab=${active}`}`
 
   const today = new Date()
   const holdersWithStatus = holders.map((h) => {
@@ -117,6 +133,7 @@ export default async function SkillTypeDetailPage({
           tabs={[
             { key: 'overview', label: 'Overview' },
             { key: 'holders', label: 'Holders', count: holders.length },
+            { key: 'extras', label: 'Additional fields', count: extras.length },
           ]}
         />
       }
@@ -173,6 +190,23 @@ export default async function SkillTypeDetailPage({
             ) : null}
           </CardContent>
         </Card>
+      ) : null}
+
+      {active === 'extras' ? (
+        <ExtraFieldsSection
+          ownerType="skill_type"
+          ownerId={id}
+          rows={extras.map((e) => ({
+            id: e.id,
+            fieldKey: e.fieldKey,
+            fieldValue: e.fieldValue,
+          }))}
+          drawerOpen={drawer === 'add-extra-field'}
+          drawerCloseHref={closeHref}
+          addHref={`/training/skills/${id}?tab=extras&drawer=add-extra-field`}
+          addAction={addExtraField}
+          deleteAction={deleteExtraField}
+        />
       ) : null}
 
       {active === 'holders' ? (

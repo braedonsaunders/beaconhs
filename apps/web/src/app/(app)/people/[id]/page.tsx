@@ -10,6 +10,8 @@ import {
   IdCard,
   Layers,
   Mail,
+  Paperclip,
+  PenLine,
   Pencil,
   Phone,
   ShieldCheck,
@@ -37,6 +39,7 @@ import {
   TableRow,
 } from '@beaconhs/ui'
 import {
+  attachments,
   crews,
   departments,
   documentAcknowledgments,
@@ -51,6 +54,7 @@ import {
   people,
   personDivisionMemberships,
   personDivisions,
+  personFiles,
   personGroupMemberships,
   personGroups,
   personTitleAssignments,
@@ -65,6 +69,7 @@ import {
   trainingSkillAuthorities,
   trainingSkillTypes,
 } from '@beaconhs/db/schema'
+import { publicUrl } from '@beaconhs/storage'
 import { requireRequestContext } from '@/lib/auth'
 import { recentActivityForEntity } from '@/lib/audit'
 import { ActivityFeed } from '@/components/activity-feed'
@@ -81,6 +86,8 @@ import {
   setPrimaryTitle,
   unassignTitleFromPerson,
 } from '../_actions/titles'
+import { clearPersonSignature, deletePersonFile } from '../_actions/files'
+import { PersonFilesDrawers } from './_files-drawers'
 
 export const dynamic = 'force-dynamic'
 
@@ -95,6 +102,7 @@ const TABS = [
   'skills',
   'ppe',
   'documents',
+  'files',
   'incidents',
   'forms',
   'activity',
@@ -145,6 +153,9 @@ export default async function PersonDetailPage({
       allDivisions,
       personTitleRows,
       allTitles,
+      fileRows,
+      signatureAtt,
+      managerRow,
     ] = await Promise.all([
       tx
         .select({ record: trainingRecords, course: trainingCourses })
@@ -232,6 +243,39 @@ export default async function PersonDetailPage({
         .where(eq(personTitleAssignments.personId, id))
         .orderBy(desc(personTitleAssignments.isPrimary), asc(personTitles.name)),
       tx.select().from(personTitles).orderBy(asc(personTitles.name)),
+      // Personal files (resumes, certs, ID copies) joined to their underlying
+      // attachment row so we can render a download link inline.
+      tx
+        .select({ file: personFiles, attachment: attachments })
+        .from(personFiles)
+        .leftJoin(attachments, eq(attachments.id, personFiles.attachmentId))
+        .where(eq(personFiles.personId, id))
+        .orderBy(desc(personFiles.uploadedAt)),
+      // Signature image attachment (single row) — used both on this page and
+      // inline by inspections / lift plans / form sign-offs when this person
+      // signs.
+      row.person.signatureAttachmentId
+        ? tx
+            .select()
+            .from(attachments)
+            .where(eq(attachments.id, row.person.signatureAttachmentId))
+            .limit(1)
+            .then((rs) => rs[0] ?? null)
+        : Promise.resolve(null),
+      // Manager for the side-panel "reports to" row + a quick org-chart link.
+      row.person.managerPersonId
+        ? tx
+            .select({
+              id: people.id,
+              firstName: people.firstName,
+              lastName: people.lastName,
+              jobTitle: people.jobTitle,
+            })
+            .from(people)
+            .where(eq(people.id, row.person.managerPersonId))
+            .limit(1)
+            .then((rs) => rs[0] ?? null)
+        : Promise.resolve(null),
     ])
 
     // Second pass for title tasks now that we know the titles
@@ -274,6 +318,9 @@ export default async function PersonDetailPage({
       allTitles,
       titleTasks: tasksForHeldTitles,
       titleTaskAcks: acksForThisPerson,
+      fileRows,
+      signatureAtt,
+      managerRow,
     }
   })
 
@@ -299,7 +346,13 @@ export default async function PersonDetailPage({
     allTitles,
     titleTasks,
     titleTaskAcks,
+    fileRows,
+    signatureAtt,
+    managerRow,
   } = data
+  const signatureUrl = signatureAtt ? publicUrl(signatureAtt.r2Key) : null
+  const openDrawer = typeof sp.drawer === 'string' ? sp.drawer : null
+  const basePathForDrawer = `/people/${id}${active === 'profile' ? '' : `?tab=${active}`}`
   const ackByTaskId = new Map(titleTaskAcks.map((a) => [a.taskId, a]))
 
   const today = new Date()
@@ -391,6 +444,18 @@ export default async function PersonDetailPage({
                 <SidebarRow label="Department">{department?.name ?? '—'}</SidebarRow>
                 <SidebarRow label="Crew">{crew?.name ?? '—'}</SidebarRow>
                 <SidebarRow label="Hire date">{person.hireDate ?? '—'}</SidebarRow>
+                <SidebarRow label="Reports to">
+                  {managerRow ? (
+                    <Link
+                      href={`/people/${managerRow.id}`}
+                      className="text-teal-700 hover:underline"
+                    >
+                      {managerRow.firstName} {managerRow.lastName}
+                    </Link>
+                  ) : (
+                    '—'
+                  )}
+                </SidebarRow>
                 {person.email ? (
                   <div className="flex items-center gap-2 text-sm">
                     <Mail size={14} className="text-slate-400" />
@@ -437,6 +502,52 @@ export default async function PersonDetailPage({
                 </CardContent>
               </Card>
             ) : null}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <PenLine size={14} className="text-slate-500" />
+                  Signature
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                {signatureUrl ? (
+                  <div className="space-y-2">
+                    <img
+                      src={signatureUrl}
+                      alt={`${person.firstName} ${person.lastName} signature`}
+                      className="max-h-16 w-full rounded border border-slate-200 bg-white object-contain p-1"
+                    />
+                    <div className="flex items-center gap-1">
+                      <Link href={`${basePath}?drawer=signature-upload`} className="flex-1">
+                        <Button variant="outline" size="sm" className="w-full">
+                          Replace
+                        </Button>
+                      </Link>
+                      <form action={clearPersonSignature} className="inline">
+                        <input type="hidden" name="personId" value={person.id} />
+                        <Button
+                          type="submit"
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-500 hover:text-red-700"
+                        >
+                          <Trash2 size={12} />
+                        </Button>
+                      </form>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2 text-xs text-slate-500">
+                    <p>No signature on file.</p>
+                    <Link href={`${basePath}?drawer=signature-upload`} className="block">
+                      <Button variant="outline" size="sm" className="w-full">
+                        Upload signature
+                      </Button>
+                    </Link>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </aside>
 
           <div className="space-y-4">
@@ -474,6 +585,11 @@ export default async function PersonDetailPage({
                   key: 'documents',
                   label: 'Documents',
                   count: ackedDocs.length,
+                },
+                {
+                  key: 'files',
+                  label: 'Files',
+                  count: fileRows.length,
                 },
                 {
                   key: 'incidents',
@@ -882,6 +998,87 @@ export default async function PersonDetailPage({
               </Card>
             ) : null}
 
+            {active === 'files' ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between text-base">
+                    <span className="flex items-center gap-2">
+                      <Paperclip size={16} />
+                      Personal files ({fileRows.length})
+                    </span>
+                    <Link href={`${basePath}?tab=files&drawer=upload-person-file`}>
+                      <Button size="sm">Upload file</Button>
+                    </Link>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {fileRows.length === 0 ? (
+                    <EmptyState
+                      icon={<Paperclip size={24} />}
+                      title="No files uploaded"
+                      description="Use the upload button to attach resumes, certifications, ID copies, and other personal documents."
+                    />
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Label</TableHead>
+                          <TableHead>Kind</TableHead>
+                          <TableHead>Filename</TableHead>
+                          <TableHead>Uploaded</TableHead>
+                          <TableHead></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {fileRows.map(({ file, attachment }) => (
+                          <TableRow key={file.id}>
+                            <TableCell className="font-medium">{file.label}</TableCell>
+                            <TableCell>
+                              <Badge variant="secondary">
+                                {file.kind.replace('_', ' ')}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-xs text-slate-600">
+                              {attachment ? (
+                                <a
+                                  href={publicUrl(attachment.r2Key)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-teal-700 hover:underline"
+                                >
+                                  {attachment.filename}
+                                </a>
+                              ) : (
+                                <span className="text-slate-400">file missing</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-xs text-slate-600">
+                              {new Date(file.uploadedAt).toLocaleDateString()}
+                            </TableCell>
+                            <TableCell>
+                              <form action={deletePersonFile} className="inline">
+                                <input type="hidden" name="id" value={file.id} />
+                                <input type="hidden" name="personId" value={person.id} />
+                                <Button
+                                  type="submit"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-red-500 hover:text-red-700"
+                                  title="Delete file"
+                                >
+                                  <Trash2 size={14} />
+                                </Button>
+                              </form>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </CardContent>
+              </Card>
+            ) : null}
+
             {active === 'incidents' ? (
               <Card>
                 <CardHeader>
@@ -1011,6 +1208,15 @@ export default async function PersonDetailPage({
           </div>
         </div>
       </div>
+      <PersonFilesDrawers
+        personId={person.id}
+        openDrawer={
+          openDrawer === 'upload-person-file' || openDrawer === 'signature-upload'
+            ? openDrawer
+            : null
+        }
+        closeHref={basePathForDrawer}
+      />
     </PageContainer>
   )
 }

@@ -1,4 +1,4 @@
-import { asc, eq } from 'drizzle-orm'
+import { asc, eq, ne } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { Button, Card, CardContent, Input, Label, Select, Textarea } from '@beaconhs/ui'
 import { crews, departments, people, trades } from '@beaconhs/db/schema'
@@ -14,6 +14,10 @@ async function savePerson(formData: FormData) {
     const [p] = await tx.select().from(people).where(eq(people.id, id)).limit(1)
     return p
   })
+  const rawManagerId = String(formData.get('managerPersonId') ?? '').trim() || null
+  // A person cannot be their own manager — silently drop the assignment if the
+  // form tries it. (The dropdown already filters self out, but defend anyway.)
+  const managerPersonId = rawManagerId && rawManagerId !== id ? rawManagerId : null
   const patch = {
     firstName: String(formData.get('firstName') ?? '').trim(),
     lastName: String(formData.get('lastName') ?? '').trim(),
@@ -26,6 +30,7 @@ async function savePerson(formData: FormData) {
     departmentId: String(formData.get('departmentId') ?? '').trim() || null,
     tradeId: String(formData.get('tradeId') ?? '').trim() || null,
     crewId: String(formData.get('crewId') ?? '').trim() || null,
+    managerPersonId,
     emergencyContactName: String(formData.get('emergencyContactName') ?? '').trim() || null,
     emergencyContactPhone: String(formData.get('emergencyContactPhone') ?? '').trim() || null,
     notes: String(formData.get('notes') ?? '').trim() || null,
@@ -45,13 +50,21 @@ async function savePerson(formData: FormData) {
 
 export async function PersonEditTab({ personId }: { personId: string }) {
   const ctx = await requireRequestContext()
-  const [person, depts, allTrades, allCrews] = await ctx.db(async (tx) => {
+  const [person, depts, allTrades, allCrews, allManagers] = await ctx.db(async (tx) => {
     const [p] = await tx.select().from(people).where(eq(people.id, personId)).limit(1)
-    if (!p) return [null, [], [], []] as const
+    if (!p) return [null, [], [], [], []] as const
     const d = await tx.select().from(departments).orderBy(asc(departments.name))
     const t = await tx.select().from(trades).orderBy(asc(trades.name))
     const c = await tx.select().from(crews).orderBy(asc(crews.name))
-    return [p, d, t, c] as const
+    // Exclude self from the manager picker. Note: doesn't guard against
+    // longer cycles (A → B → A); the org-chart renderer has an in-memory
+    // cycle guard for that case.
+    const m = await tx
+      .select({ id: people.id, firstName: people.firstName, lastName: people.lastName })
+      .from(people)
+      .where(ne(people.id, personId))
+      .orderBy(asc(people.lastName), asc(people.firstName))
+    return [p, d, t, c, m] as const
   })
   if (!person) return null
 
@@ -111,6 +124,16 @@ export async function PersonEditTab({ personId }: { personId: string }) {
                 {allCrews.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Reports to">
+              <Select name="managerPersonId" defaultValue={person.managerPersonId ?? ''}>
+                <option value="">— no manager —</option>
+                {allManagers.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.lastName}, {m.firstName}
                   </option>
                 ))}
               </Select>
