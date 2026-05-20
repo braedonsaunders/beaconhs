@@ -15,11 +15,8 @@ import {
   CardTitle,
   DetailHeader,
   EmptyState,
-  Input,
-  Label,
-  Select,
-  Textarea,
 } from '@beaconhs/ui'
+import { DocumentDrawers } from './_drawers'
 import {
   documentAcknowledgments,
   documentReviews,
@@ -145,18 +142,19 @@ async function acknowledge(formData: FormData) {
   revalidatePath(`/documents/${documentId}`)
 }
 
-async function recordReview(formData: FormData) {
+async function recordReviewAction(input: {
+  documentId: string
+  outcome: 'approved_no_change' | 'updated' | 'retired'
+  notes: string | null
+  nextReviewOn: string | null
+}): Promise<{ ok: boolean; error?: string }> {
   'use server'
   const ctx = await requireRequestContext()
-  const documentId = String(formData.get('documentId') ?? '')
-  const outcome = String(formData.get('outcome') ?? '') as
-    | 'approved_no_change'
-    | 'updated'
-    | 'retired'
-  const notes = String(formData.get('notes') ?? '').trim() || null
-  const nextReviewOnRaw = String(formData.get('nextReviewOn') ?? '').trim() || null
-  if (!documentId || !outcome) return
-  if (!ctx.membership?.id) return
+  const { documentId, outcome, notes, nextReviewOn: nextReviewOnRaw } = input
+  if (!documentId || !outcome) return { ok: false, error: 'Missing fields' }
+  if (!ctx.membership?.id) {
+    return { ok: false, error: 'Membership required to record reviews' }
+  }
 
   await ctx.db(async (tx) => {
     await tx.insert(documentReviews).values({
@@ -202,15 +200,19 @@ async function recordReview(formData: FormData) {
     after: { outcome, notes, nextReviewOn: nextReviewOnRaw },
   })
   revalidatePath(`/documents/${documentId}`)
+  return { ok: true }
 }
 
-async function newVersion(formData: FormData) {
+async function newVersionAction(input: {
+  documentId: string
+  changelog: string | null
+  contentHtml: string | null
+  contentAttachmentId: string | null
+}): Promise<{ ok: boolean; error?: string }> {
   'use server'
   const ctx = await requireRequestContext()
-  const documentId = String(formData.get('documentId') ?? '')
-  const changelog = String(formData.get('changelog') ?? '').trim() || null
-  const contentMarkdown = String(formData.get('contentMarkdown') ?? '').trim() || null
-  if (!documentId) return
+  const { documentId, changelog, contentHtml, contentAttachmentId } = input
+  if (!documentId) return { ok: false, error: 'Missing document id' }
 
   await ctx.db(async (tx) => {
     const [latest] = await tx
@@ -225,7 +227,8 @@ async function newVersion(formData: FormData) {
       documentId,
       version: nextNumber,
       changelog,
-      contentMarkdown,
+      contentMarkdown: contentHtml,
+      contentAttachmentId,
       // publishedAt left null = draft
     })
     // Move the document back to draft status until the new version is published
@@ -239,9 +242,10 @@ async function newVersion(formData: FormData) {
     entityId: documentId,
     action: 'create',
     summary: 'New draft version created',
-    after: { changelog },
+    after: { changelog, hasAttachment: !!contentAttachmentId },
   })
   revalidatePath(`/documents/${documentId}`)
+  return { ok: true }
 }
 
 // Inline server action for the Send-email dialog. Reads the dialog form
@@ -386,8 +390,13 @@ export default async function DocumentDetailPage({
           <Alert variant="warning">
             <AlertTitle>Periodic review overdue</AlertTitle>
             <AlertDescription>
-              This document was due for review on {doc.nextReviewOn}. Record a review on the Reviews
-              tab.
+              This document was due for review on {doc.nextReviewOn}.{' '}
+              <Link
+                href={`${basePath}?tab=reviews&drawer=record-review`}
+                className="font-medium underline-offset-2 hover:underline"
+              >
+                Record a review →
+              </Link>
             </AlertDescription>
           </Alert>
         ) : null
@@ -487,25 +496,13 @@ export default async function DocumentDetailPage({
                 )}
               </CardContent>
             </Card>
-            <Section title="Create a new draft version">
-              <form action={newVersion} className="space-y-3 text-sm">
-                <input type="hidden" name="documentId" value={id} />
-                <Field label="Changelog">
-                  <Input
-                    name="changelog"
-                    placeholder="e.g. Updated PPE section per new ANSI standard"
-                  />
-                </Field>
-                <Field label="Content (markdown, optional)">
-                  <Textarea name="contentMarkdown" rows={6} placeholder="# Document body…" />
-                </Field>
-                <div className="flex justify-end">
-                  <Button type="submit">
-                    <Plus size={14} /> Create draft
-                  </Button>
-                </div>
-              </form>
-            </Section>
+            <div className="flex justify-end">
+              <Link href={`${basePath}?tab=versions&drawer=new-version`}>
+                <Button type="button">
+                  <Plus size={14} /> New draft version
+                </Button>
+              </Link>
+            </div>
           </div>
         ) : null}
 
@@ -617,35 +614,13 @@ export default async function DocumentDetailPage({
                 )}
               </CardContent>
             </Card>
-            <Section title="Record a new review">
-              <form action={recordReview} className="space-y-3 text-sm">
-                <input type="hidden" name="documentId" value={id} />
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <Field label="Outcome" required>
-                    <Select name="outcome" required defaultValue="approved_no_change">
-                      <option value="approved_no_change">Approved — no change</option>
-                      <option value="updated">Updated</option>
-                      <option value="retired">Retired</option>
-                    </Select>
-                  </Field>
-                  <Field label="Next review on">
-                    <Input
-                      name="nextReviewOn"
-                      type="date"
-                      defaultValue={doc.nextReviewOn ?? ''}
-                    />
-                  </Field>
-                  <Field label="Notes" className="sm:col-span-2">
-                    <Textarea name="notes" rows={3} placeholder="What did you change?" />
-                  </Field>
-                </div>
-                <div className="flex justify-end">
-                  <Button type="submit">
-                    <Check size={14} /> Record review
-                  </Button>
-                </div>
-              </form>
-            </Section>
+            <div className="flex justify-end">
+              <Link href={`${basePath}?tab=reviews&drawer=record-review`}>
+                <Button type="button">
+                  <Check size={14} /> Record review
+                </Button>
+              </Link>
+            </div>
           </div>
         ) : null}
 
@@ -673,28 +648,20 @@ export default async function DocumentDetailPage({
           await sendEmailAction(fd)
         }}
       />
+      <DocumentDrawers
+        documentId={id}
+        openDrawer={
+          pickString(sp.drawer) === 'record-review'
+            ? 'record-review'
+            : pickString(sp.drawer) === 'new-version'
+              ? 'new-version'
+              : null
+        }
+        closeHref={`${basePath}${active === 'overview' ? '' : `?tab=${active}`}`}
+        defaultNextReviewOn={doc.nextReviewOn ?? null}
+        recordReviewAction={recordReviewAction}
+        newVersionAction={newVersionAction}
+      />
     </DetailPageLayout>
-  )
-}
-
-function Field({
-  label,
-  required,
-  className,
-  children,
-}: {
-  label: string
-  required?: boolean
-  className?: string
-  children: React.ReactNode
-}) {
-  return (
-    <div className={`space-y-1.5 ${className ?? ''}`}>
-      <Label>
-        {label}
-        {required ? <span className="text-red-600"> *</span> : null}
-      </Label>
-      {children}
-    </div>
   )
 }
