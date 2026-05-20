@@ -104,6 +104,12 @@ export default async function NewTruckLogEntryPage({
   const presetDate = pickString(sp.date) ?? new Date().toISOString().slice(0, 10)
   const presetMonth = pickString(sp.month)
   const initialDate = presetDate || (presetMonth ? `${presetMonth}-01` : new Date().toISOString().slice(0, 10))
+  // If we already know the truck, prefer the drawer on the parent detail
+  // page. The full-page route stays as a fallback when there is no item
+  // context (e.g. linked from the truck-log calendar without a row click).
+  if (presetTruckId) {
+    redirect(`/equipment/${presetTruckId}?tab=log&drawer=new-truck-log-entry`)
+  }
   const ctx = await requireRequestContext()
 
   const { trucks, sites, drivers } = await ctx.db(async (tx) => {

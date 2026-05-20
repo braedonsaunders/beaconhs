@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { revalidatePath } from 'next/cache'
 import { ClipboardList } from 'lucide-react'
 import { and, asc, count, desc, eq, ilike, sql, type SQL } from 'drizzle-orm'
 import {
@@ -15,14 +16,52 @@ import {
 } from '@beaconhs/ui'
 import { inspectionBankCriteria, inspectionBanks } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { recordAudit } from '@/lib/audit'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
 import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
+import { InspectionBanksDrawers } from './_drawers'
 
 export const metadata = { title: 'Inspection Banks' }
+
+async function createBankAction(input: {
+  name: string
+  description: string | null
+  category: string | null
+  isPublished: boolean
+}): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  'use server'
+  const ctx = await requireRequestContext()
+  const name = input.name.trim()
+  if (!name) return { ok: false, error: 'Name is required' }
+  const row = await ctx.db(async (tx) => {
+    const [r] = await tx
+      .insert(inspectionBanks)
+      .values({
+        tenantId: ctx.tenantId,
+        name,
+        description: input.description,
+        category: input.category,
+        isPublished: input.isPublished,
+        createdBy: ctx.userId,
+      })
+      .returning()
+    return r
+  })
+  if (!row) return { ok: false, error: 'Failed to create bank' }
+  await recordAudit(ctx, {
+    entityType: 'inspection_bank',
+    entityId: row.id,
+    action: 'create',
+    summary: `Created bank "${name}"`,
+    after: { name, category: input.category, isPublished: input.isPublished },
+  })
+  revalidatePath('/inspections/banks')
+  return { ok: true, id: row.id }
+}
 
 const SORTS = ['name', 'category', 'created_at', 'status'] as const
 
@@ -94,6 +133,7 @@ export default async function InspectionBanksPage({
   })
 
   const sortProps = { basePath: '/inspections/banks', currentParams: sp, dir: params.dir }
+  const openDrawer = pickString(sp.drawer) === 'new-bank' ? 'new-bank' : null
 
   return (
     <ListPageLayout
@@ -103,7 +143,7 @@ export default async function InspectionBanksPage({
             title="Inspection Banks"
             description="Reusable criteria templates — drop one into a new inspection to skip rewriting the question list every time."
             actions={
-              <Link href="/inspections/banks/new">
+              <Link href="/inspections/banks?drawer=new-bank" scroll={false}>
                 <Button>New bank</Button>
               </Link>
             }
@@ -212,6 +252,11 @@ export default async function InspectionBanksPage({
           />
         </>
       )}
+      <InspectionBanksDrawers
+        openDrawer={openDrawer}
+        closeHref="/inspections/banks"
+        createBankAction={createBankAction}
+      />
     </ListPageLayout>
   )
 }

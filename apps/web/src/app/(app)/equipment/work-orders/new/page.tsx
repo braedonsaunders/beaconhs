@@ -88,6 +88,12 @@ export default async function NewWorkOrderPage({
 }) {
   const sp = await searchParams
   const presetItemId = pickString(sp.itemId) ?? ''
+  // If we already know the equipment item, prefer the drawer on the parent
+  // detail page. The full-page route stays around as a fallback when there
+  // is no item context (e.g. linked from the work-orders list).
+  if (presetItemId) {
+    redirect(`/equipment/${presetItemId}?tab=work_orders&drawer=new-work-order`)
+  }
   const ctx = await requireRequestContext()
 
   const { items, assignees, reporters } = await ctx.db(async (tx) => {

@@ -188,7 +188,10 @@ export default async function SensorDetailPage({
             </div>
           }
           actions={
-            <Link href={`/confined-space/sensors/${id}/edit`}>
+            <Link
+              href={`/confined-space/sensors?drawer=edit-sensor&id=${id}`}
+              scroll={false}
+            >
               <Button variant="outline">
                 <Pencil size={14} />
                 Edit

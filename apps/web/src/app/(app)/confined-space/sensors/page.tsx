@@ -1,5 +1,6 @@
 import Link from 'next/link'
-import { Gauge } from 'lucide-react'
+import { revalidatePath } from 'next/cache'
+import { Gauge, Pencil } from 'lucide-react'
 import { and, asc, count, desc, eq, ilike, lte, or, sql, type SQL } from 'drizzle-orm'
 import {
   Badge,
@@ -15,12 +16,19 @@ import {
 } from '@beaconhs/ui'
 import { atmosphericSensors } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { recordAudit } from '@/lib/audit'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
 import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
+import {
+  SensorDrawers,
+  type EditSensorDefaults,
+  type SensorStatus,
+  type SensorType,
+} from './_drawers'
 
 export const metadata = { title: 'Atmospheric Sensors' }
 
@@ -37,6 +45,110 @@ const DUE_OPTIONS = [
   { value: 'soon', label: 'Due within 30d' },
 ]
 
+// ---------- Server actions (drawer-driven, typed object inputs) ----------
+
+async function createSensorAction(input: {
+  identifier: string
+  make: string | null
+  model: string | null
+  serialNumber: string | null
+  type: SensorType
+  gases: string[]
+  lastCalibrationOn: string | null
+  nextCalibrationDue: string | null
+  status: SensorStatus
+}): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  'use server'
+  const ctx = await requireRequestContext()
+  if (!ctx.tenantId) return { ok: false, error: 'Active tenant required' }
+  const identifier = input.identifier.trim()
+  if (!identifier) return { ok: false, error: 'Identifier is required' }
+  const row = await ctx.db(async (tx) => {
+    const [r] = await tx
+      .insert(atmosphericSensors)
+      .values({
+        tenantId: ctx.tenantId!,
+        identifier,
+        make: input.make,
+        model: input.model,
+        serialNumber: input.serialNumber,
+        type: input.type,
+        gases: input.gases,
+        lastCalibrationOn: input.lastCalibrationOn,
+        nextCalibrationDue: input.nextCalibrationDue,
+        status: input.status,
+      })
+      .returning()
+    return r
+  })
+  if (!row) return { ok: false, error: 'Failed to register sensor' }
+  await recordAudit(ctx, {
+    entityType: 'atmospheric_sensor',
+    entityId: row.id,
+    action: 'create',
+    summary: `Registered sensor ${identifier}`,
+    after: {
+      identifier,
+      make: input.make,
+      model: input.model,
+      type: input.type,
+      gases: input.gases,
+      status: input.status,
+    },
+  })
+  revalidatePath('/confined-space/sensors')
+  return { ok: true, id: row.id }
+}
+
+async function updateSensorAction(input: {
+  id: string
+  identifier: string
+  make: string | null
+  model: string | null
+  serialNumber: string | null
+  type: SensorType
+  gases: string[]
+  status: SensorStatus
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  'use server'
+  const ctx = await requireRequestContext()
+  if (!ctx.tenantId) return { ok: false, error: 'Active tenant required' }
+  if (!input.id) return { ok: false, error: 'Missing sensor id' }
+  const identifier = input.identifier.trim()
+  if (!identifier) return { ok: false, error: 'Identifier is required' }
+  await ctx.db((tx) =>
+    tx
+      .update(atmosphericSensors)
+      .set({
+        identifier,
+        make: input.make,
+        model: input.model,
+        serialNumber: input.serialNumber,
+        type: input.type,
+        gases: input.gases,
+        status: input.status,
+      })
+      .where(eq(atmosphericSensors.id, input.id)),
+  )
+  await recordAudit(ctx, {
+    entityType: 'atmospheric_sensor',
+    entityId: input.id,
+    action: 'update',
+    summary: 'Sensor details updated',
+    after: {
+      identifier,
+      make: input.make,
+      model: input.model,
+      type: input.type,
+      gases: input.gases,
+      status: input.status,
+    },
+  })
+  revalidatePath(`/confined-space/sensors/${input.id}`)
+  revalidatePath('/confined-space/sensors')
+  return { ok: true }
+}
+
 export default async function SensorsPage({
   searchParams,
 }: {
@@ -51,13 +163,15 @@ export default async function SensorsPage({
   })
   const statusFilter = pickString(sp.status)
   const dueFilter = pickString(sp.due)
+  const drawer = pickString(sp.drawer)
+  const editId = pickString(sp.id)
   const ctx = await requireRequestContext()
 
   const today = new Date()
   const todayIso = today.toISOString().slice(0, 10)
   const in30Iso = new Date(today.getTime() + 30 * 86_400_000).toISOString().slice(0, 10)
 
-  const { rows, total, statusCounts } = await ctx.db(async (tx) => {
+  const { rows, total, statusCounts, editTarget } = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = []
     if (params.q) {
       const term = `%${params.q}%`
@@ -117,10 +231,32 @@ export default async function SensorsPage({
       .select({ s: atmosphericSensors.status, c: count() })
       .from(atmosphericSensors)
       .groupBy(atmosphericSensors.status)
+    let editTarget: EditSensorDefaults | null = null
+    if (drawer === 'edit-sensor' && editId) {
+      const [target] = await tx
+        .select()
+        .from(atmosphericSensors)
+        .where(eq(atmosphericSensors.id, editId))
+        .limit(1)
+      if (target) {
+        editTarget = {
+          id: target.id,
+          identifier: target.identifier,
+          make: target.make,
+          model: target.model,
+          serialNumber: target.serialNumber,
+          type: target.type as SensorType,
+          gases: target.gases,
+          status: target.status as SensorStatus,
+        }
+      }
+    }
+
     return {
       rows: data,
       total: Number(tot?.c ?? 0),
       statusCounts: Object.fromEntries(ss.map((x) => [x.s, Number(x.c)])),
+      editTarget,
     }
   })
 
@@ -134,7 +270,7 @@ export default async function SensorsPage({
             title="Atmospheric Sensors"
             description="Gas monitors used for confined-space entry. Calibrations are tracked so you can flag overdue sensors before issue."
             actions={
-              <Link href="/confined-space/sensors/new">
+              <Link href="/confined-space/sensors?drawer=new-sensor" scroll={false}>
                 <Button>New sensor</Button>
               </Link>
             }
@@ -180,6 +316,11 @@ export default async function SensorsPage({
           icon={<Gauge size={32} />}
           title={params.q ? `No sensors match "${params.q}"` : 'No sensors yet'}
           description="Register a sensor to start tracking its calibration history."
+          action={
+            <Link href="/confined-space/sensors?drawer=new-sensor" scroll={false}>
+              <Button>New sensor</Button>
+            </Link>
+          }
         />
       ) : (
         <>
@@ -208,6 +349,7 @@ export default async function SensorsPage({
                 <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>
                   Status
                 </SortableTh>
+                <TableHead className="w-10" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -260,6 +402,16 @@ export default async function SensorsPage({
                         {s.status.replace(/_/g, ' ')}
                       </Badge>
                     </TableCell>
+                    <TableCell className="text-right">
+                      <Link
+                        href={`/confined-space/sensors?drawer=edit-sensor&id=${s.id}`}
+                        scroll={false}
+                        aria-label={`Edit ${s.identifier}`}
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                      >
+                        <Pencil size={14} />
+                      </Link>
+                    </TableCell>
                   </TableRow>
                 )
               })}
@@ -274,6 +426,19 @@ export default async function SensorsPage({
           />
         </>
       )}
+      <SensorDrawers
+        openDrawer={
+          drawer === 'new-sensor'
+            ? 'new-sensor'
+            : drawer === 'edit-sensor'
+              ? 'edit-sensor'
+              : null
+        }
+        closeHref="/confined-space/sensors"
+        createAction={createSensorAction}
+        updateAction={updateSensorAction}
+        editDefaults={editTarget}
+      />
     </ListPageLayout>
   )
 }

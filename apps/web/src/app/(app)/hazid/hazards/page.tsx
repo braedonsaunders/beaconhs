@@ -6,7 +6,8 @@
 // the new app's list pages.
 
 import Link from 'next/link'
-import { ShieldAlert, Image as ImageIcon } from 'lucide-react'
+import { revalidatePath } from 'next/cache'
+import { ShieldAlert, Image as ImageIcon, Pencil } from 'lucide-react'
 import { and, asc, count, desc, eq, ilike, isNull, or, sql, type SQL } from 'drizzle-orm'
 import {
   Badge,
@@ -26,6 +27,7 @@ import {
   hazidHazards,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { recordAudit } from '@/lib/audit'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
 import { SearchInput } from '@/components/search-input'
@@ -33,11 +35,86 @@ import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { HazidSubNav } from '../_subnav'
+import { HazardLibraryDrawers, type EditHazardDefaults } from './_drawers'
 
 export const metadata = { title: 'Hazard library' }
 export const dynamic = 'force-dynamic'
 
 const SORTS = ['name', 'type', 'updated', 'usage'] as const
+
+// ---------- Server actions (drawer-driven, typed object inputs) ----------
+
+async function createHazardAction(input: {
+  name: string
+  hazardTypeId: string | null
+  description: string | null
+  standardControls: string | null
+  risks: string | null
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  'use server'
+  const ctx = await requireRequestContext()
+  if (!ctx.tenantId) return { ok: false, error: 'Active tenant required' }
+  const name = input.name.trim()
+  if (!name) return { ok: false, error: 'Name is required' }
+  const [row] = await ctx.db((tx) =>
+    tx
+      .insert(hazidHazards)
+      .values({
+        tenantId: ctx.tenantId!,
+        name,
+        hazardTypeId: input.hazardTypeId,
+        description: input.description,
+        standardControls: input.standardControls,
+        risks: input.risks,
+      })
+      .returning(),
+  )
+  await recordAudit(ctx, {
+    entityType: 'hazid_hazard',
+    entityId: row?.id,
+    action: 'create',
+    summary: `Created hazard "${name}"`,
+  })
+  revalidatePath('/hazid/hazards')
+  return { ok: true }
+}
+
+async function updateHazardAction(input: {
+  id: string
+  name: string
+  hazardTypeId: string | null
+  description: string | null
+  standardControls: string | null
+  risks: string | null
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  'use server'
+  const ctx = await requireRequestContext()
+  if (!ctx.tenantId) return { ok: false, error: 'Active tenant required' }
+  if (!input.id) return { ok: false, error: 'Missing hazard id' }
+  const name = input.name.trim()
+  if (!name) return { ok: false, error: 'Name is required' }
+  await ctx.db((tx) =>
+    tx
+      .update(hazidHazards)
+      .set({
+        name,
+        hazardTypeId: input.hazardTypeId,
+        description: input.description,
+        standardControls: input.standardControls,
+        risks: input.risks,
+      })
+      .where(eq(hazidHazards.id, input.id)),
+  )
+  await recordAudit(ctx, {
+    entityType: 'hazid_hazard',
+    entityId: input.id,
+    action: 'update',
+    summary: 'Updated hazard',
+  })
+  revalidatePath('/hazid/hazards')
+  revalidatePath(`/hazid/hazards/${input.id}`)
+  return { ok: true }
+}
 
 export default async function HazardsLibraryPage({
   searchParams,
@@ -53,9 +130,11 @@ export default async function HazardsLibraryPage({
   })
   const typeFilter = pickString(sp.type)
   const photoFilter = pickString(sp.photo) // 'with' | 'without'
+  const drawer = pickString(sp.drawer)
+  const editId = pickString(sp.id)
   const ctx = await requireRequestContext()
 
-  const { rows, total, typeOptions, typeCounts } = await ctx.db(async (tx) => {
+  const { rows, total, typeOptions, typeCounts, editTarget } = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = [isNull(hazidHazards.deletedAt)]
     if (typeFilter) filters.push(eq(hazidHazards.hazardTypeId, typeFilter))
     if (photoFilter === 'with') filters.push(sql`${hazidHazards.photoAttachmentId} IS NOT NULL`)
@@ -119,7 +198,39 @@ export default async function HazardsLibraryPage({
     const counts: Record<string, number> = {}
     for (const r of typeRows) if (r.typeId) counts[r.typeId] = Number(r.c)
 
-    return { rows: data, total: Number(tot?.c ?? 0), typeOptions: types, typeCounts: counts }
+    let editTarget: EditHazardDefaults | null = null
+    if (drawer === 'edit-hazard' && editId) {
+      const [target] = await tx
+        .select({
+          id: hazidHazards.id,
+          name: hazidHazards.name,
+          hazardTypeId: hazidHazards.hazardTypeId,
+          description: hazidHazards.description,
+          standardControls: hazidHazards.standardControls,
+          risks: hazidHazards.risks,
+        })
+        .from(hazidHazards)
+        .where(eq(hazidHazards.id, editId))
+        .limit(1)
+      if (target) {
+        editTarget = {
+          id: target.id,
+          name: target.name,
+          hazardTypeId: target.hazardTypeId,
+          description: target.description,
+          standardControls: target.standardControls,
+          risks: target.risks,
+        }
+      }
+    }
+
+    return {
+      rows: data,
+      total: Number(tot?.c ?? 0),
+      typeOptions: types,
+      typeCounts: counts,
+      editTarget,
+    }
   })
 
   const sortProps = { basePath: '/hazid/hazards', currentParams: sp, dir: params.dir }
@@ -137,7 +248,7 @@ export default async function HazardsLibraryPage({
                 <Link href="/hazid/hazards/types" className="text-sm text-teal-700 hover:underline">
                   Manage types →
                 </Link>
-                <Link href="/hazid/hazards/new">
+                <Link href="/hazid/hazards?drawer=new-hazard" scroll={false}>
                   <Button>New hazard</Button>
                 </Link>
               </div>
@@ -182,7 +293,7 @@ export default async function HazardsLibraryPage({
           }
           description="Build out a hazard bank so crews don't have to invent it on every job."
           action={
-            <Link href="/hazid/hazards/new">
+            <Link href="/hazid/hazards?drawer=new-hazard" scroll={false}>
               <Button>Add a hazard</Button>
             </Link>
           }
@@ -207,6 +318,7 @@ export default async function HazardsLibraryPage({
                 <SortableTh {...sortProps} column="updated" active={params.sort === 'updated'}>
                   Updated
                 </SortableTh>
+                <TableHead className="w-10" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -262,6 +374,16 @@ export default async function HazardsLibraryPage({
                   <TableCell className="text-xs text-slate-500 tabular-nums">
                     {h.updatedAt ? new Date(h.updatedAt).toLocaleDateString() : '—'}
                   </TableCell>
+                  <TableCell className="text-right">
+                    <Link
+                      href={`/hazid/hazards?drawer=edit-hazard&id=${h.id}`}
+                      scroll={false}
+                      aria-label={`Edit ${h.name}`}
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                    >
+                      <Pencil size={14} />
+                    </Link>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -275,6 +397,20 @@ export default async function HazardsLibraryPage({
           />
         </>
       )}
+      <HazardLibraryDrawers
+        openDrawer={
+          drawer === 'new-hazard'
+            ? 'new-hazard'
+            : drawer === 'edit-hazard'
+              ? 'edit-hazard'
+              : null
+        }
+        closeHref="/hazid/hazards"
+        types={typeOptions}
+        createAction={createHazardAction}
+        updateAction={updateHazardAction}
+        editDefaults={editTarget}
+      />
     </ListPageLayout>
   )
 }

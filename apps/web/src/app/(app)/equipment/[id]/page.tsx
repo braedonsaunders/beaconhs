@@ -15,6 +15,8 @@ import {
   Truck,
   Wrench,
 } from 'lucide-react'
+import { NewWorkOrderDrawer } from './_work-order-drawer'
+import { NewTruckLogEntryDrawer } from './_truck-log-drawer'
 import {
   Alert,
   AlertDescription,
@@ -55,6 +57,9 @@ import {
   formTemplates,
   orgUnits,
   people,
+  tenantUsers,
+  truckLogEntries,
+  user,
 } from '@beaconhs/db/schema'
 import { publicUrl } from '@beaconhs/storage'
 import { requireRequestContext } from '@/lib/auth'
@@ -383,6 +388,142 @@ async function checkInFromItem(formData: FormData) {
   redirect(`/equipment/${itemId}?tab=checkouts`)
 }
 
+// ---------------- Typed server actions (drawer-friendly) ----------------
+
+// Drawers `await` these and surface inline errors instead of throwing. Keep
+// the bodies thin — most of the work delegates to the existing helpers /
+// audit writer.
+
+const PRIORITIES = ['low', 'med', 'high'] as const
+
+async function createWorkOrderAction(input: {
+  itemId: string
+  summary: string
+  description: string | null
+  priority: 'low' | 'med' | 'high'
+  assignedToTenantUserId: string | null
+  reportedByPersonId: string | null
+}): Promise<{ ok: boolean; error?: string }> {
+  'use server'
+  const ctx = await requireRequestContext()
+  const {
+    itemId,
+    summary,
+    description,
+    priority,
+    assignedToTenantUserId,
+    reportedByPersonId,
+  } = input
+  if (!itemId || !summary.trim()) return { ok: false, error: 'Summary is required.' }
+  if (!PRIORITIES.includes(priority)) return { ok: false, error: 'Invalid priority.' }
+
+  const row = await ctx.db(async (tx) => {
+    const year = new Date().getFullYear()
+    const counts = await tx
+      .select({ c: sql<number>`count(*)::int` })
+      .from(equipmentWorkOrders)
+      .where(sql`extract(year from ${equipmentWorkOrders.openedAt}) = ${year}`)
+    const c = counts[0]?.c ?? 0
+    const reference = `WO-${year}-${String(Number(c) + 1).padStart(4, '0')}`
+    const [inserted] = await tx
+      .insert(equipmentWorkOrders)
+      .values({
+        tenantId: ctx.tenantId,
+        itemId,
+        reference,
+        summary: summary.trim(),
+        description,
+        priority,
+        status: 'open',
+        reportedByPersonId,
+        assignedToTenantUserId,
+        openedByTenantUserId: ctx.membership?.id,
+      } as any)
+      .returning()
+    return inserted
+  })
+  if (!row) return { ok: false, error: 'Failed to insert work order.' }
+
+  await recordAudit(ctx, {
+    entityType: 'equipment_work_order',
+    entityId: row.id,
+    action: 'create',
+    summary: `Opened work order ${row.reference}: ${summary}`,
+    after: { reference: row.reference, itemId, priority, summary, status: 'open' },
+  })
+  revalidatePath('/equipment/work-orders')
+  revalidatePath(`/equipment/${itemId}`)
+  return { ok: true }
+}
+
+async function createTruckLogEntryAction(input: {
+  equipmentItemId: string
+  entryDate: string
+  driverPersonId: string | null
+  startOdometer: number | null
+  endOdometer: number | null
+  siteOrgUnitId: string | null
+  hoursOnSite: string | null
+  manpowerCount: number | null
+  notes: string | null
+}): Promise<{ ok: boolean; error?: string }> {
+  'use server'
+  const ctx = await requireRequestContext()
+  const {
+    equipmentItemId,
+    entryDate,
+    driverPersonId,
+    startOdometer,
+    endOdometer,
+    siteOrgUnitId,
+    hoursOnSite,
+    manpowerCount,
+    notes,
+  } = input
+  if (!equipmentItemId || !entryDate.trim())
+    return { ok: false, error: 'Truck and date are required.' }
+
+  const kmDriven =
+    typeof startOdometer === 'number' &&
+    typeof endOdometer === 'number' &&
+    endOdometer >= startOdometer
+      ? endOdometer - startOdometer
+      : null
+
+  const row = await ctx.db(async (tx) => {
+    const [inserted] = await tx
+      .insert(truckLogEntries)
+      .values({
+        tenantId: ctx.tenantId,
+        equipmentItemId,
+        entryDate,
+        driverPersonId,
+        startOdometer,
+        endOdometer,
+        kmDriven,
+        siteOrgUnitId,
+        hoursOnSite,
+        manpowerCount,
+        notes,
+        createdByTenantUserId: ctx.membership?.id,
+      } as any)
+      .returning()
+    return inserted
+  })
+  if (!row) return { ok: false, error: 'Failed to insert log entry.' }
+
+  await recordAudit(ctx, {
+    entityType: 'truck_log_entry',
+    entityId: row.id,
+    action: 'create',
+    summary: `Logged ${kmDriven ?? '—'} km on ${entryDate}`,
+    after: { equipmentItemId, entryDate, kmDriven, manpowerCount, hoursOnSite },
+  })
+  revalidatePath('/equipment/truck-log')
+  revalidatePath(`/equipment/${equipmentItemId}`)
+  return { ok: true }
+}
+
 // ---------------- Page ----------------
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
@@ -423,6 +564,7 @@ export default async function EquipmentDetailPage({
       workOrders,
       sites,
       holders,
+      assignees,
       certAttachments,
       inspectionResponses,
       rateRow,
@@ -446,6 +588,14 @@ export default async function EquipmentDetailPage({
           .limit(50),
         tx.select().from(orgUnits).orderBy(asc(orgUnits.name)).limit(200),
         tx.select().from(people).orderBy(asc(people.lastName), asc(people.firstName)).limit(200),
+        // Active tenant members for the work-order assignee dropdown.
+        tx
+          .select({ id: tenantUsers.id, displayName: tenantUsers.displayName, userName: user.name })
+          .from(tenantUsers)
+          .leftJoin(user, eq(user.id, tenantUsers.userId))
+          .where(eq(tenantUsers.status, 'active'))
+          .orderBy(asc(tenantUsers.displayName))
+          .limit(500),
         // "Certificates" — document-kind attachments linked to this equipment via metadata->>equipmentId
         tx
           .select()
@@ -510,6 +660,7 @@ export default async function EquipmentDetailPage({
       workOrders,
       sites,
       holders,
+      assignees,
       certAttachments,
       inspectionResponses,
       rate: rateRow[0] ?? null,
@@ -529,6 +680,7 @@ export default async function EquipmentDetailPage({
     workOrders,
     sites,
     holders,
+    assignees,
     certAttachments,
     inspectionResponses,
     rate,
@@ -573,6 +725,18 @@ export default async function EquipmentDetailPage({
           }
           actions={
             <>
+              <Link href={`${basePath}?tab=work_orders&drawer=new-work-order` as any}>
+                <Button variant="outline">
+                  <Wrench size={14} />
+                  New work order
+                </Button>
+              </Link>
+              <Link href={`${basePath}?tab=log&drawer=new-truck-log-entry` as any}>
+                <Button variant="outline">
+                  <Truck size={14} />
+                  Log entry
+                </Button>
+              </Link>
               <Link href={`/equipment/${id}/qr`}>
                 <Button variant="outline">
                   <QrCode size={14} />
@@ -1533,6 +1697,25 @@ export default async function EquipmentDetailPage({
           </Field>
         </form>
       </UrlDrawer>
+
+      <NewWorkOrderDrawer
+        open={drawerKey === 'new-work-order'}
+        closeHref={closeHref}
+        itemId={id}
+        assignees={assignees}
+        reporters={holders}
+        action={createWorkOrderAction}
+      />
+
+      <NewTruckLogEntryDrawer
+        open={drawerKey === 'new-truck-log-entry'}
+        closeHref={closeHref}
+        itemId={id}
+        drivers={holders}
+        sites={sites.filter((s) => s.level === 'site')}
+        defaultDate={new Date().toISOString().slice(0, 10)}
+        action={createTruckLogEntryAction}
+      />
 
       <UrlDrawer
         open={drawerKey === 'check-in' && !!openCheckout}

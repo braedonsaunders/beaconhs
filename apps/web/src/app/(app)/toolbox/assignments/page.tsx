@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { revalidatePath } from 'next/cache'
 import { CalendarClock } from 'lucide-react'
 import { and, asc, count, desc, eq, gte, sql, type SQL } from 'drizzle-orm'
 import {
@@ -14,19 +15,86 @@ import {
   TableRow,
 } from '@beaconhs/ui'
 import {
+  orgUnits,
+  people,
+  roles,
   toolboxJournalAssignmentDispatches,
   toolboxJournalAssignments,
   toolboxJournals,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { recordAudit } from '@/lib/audit'
+import { pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
 import { ToolboxSubNav } from '@/components/toolbox-sub-nav'
 import { computeAssignmentCompliance } from './_compliance'
+import { ToolboxAssignmentsDrawers } from './_drawers'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Toolbox assignments' }
 
-export default async function ToolboxAssignmentsPage() {
+type Audience = {
+  roleKeys: string[]
+  personIds: string[]
+  orgUnitIds: string[]
+}
+
+async function createAssignmentAction(input: {
+  name: string
+  description: string | null
+  cron: string
+  dueOffsetDays: number
+  compliantPercentage: number
+  active: boolean
+  audience: Audience
+}): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  'use server'
+  const ctx = await requireRequestContext()
+  const name = input.name.trim()
+  if (!name) return { ok: false, error: 'Name is required' }
+
+  const [row] = await ctx.db((tx) =>
+    tx
+      .insert(toolboxJournalAssignments)
+      .values({
+        tenantId: ctx.tenantId,
+        name,
+        description: input.description,
+        cron: input.cron,
+        dueOffsetDays: input.dueOffsetDays,
+        compliantPercentage: input.compliantPercentage,
+        active: input.active,
+        audience: input.audience,
+        createdByTenantUserId: ctx.membership?.id ?? null,
+      })
+      .returning(),
+  )
+  if (!row) {
+    return { ok: false, error: 'Failed to create assignment' }
+  }
+  await recordAudit(ctx, {
+    entityType: 'toolbox_journal_assignment',
+    entityId: row.id,
+    action: 'create',
+    summary: `Created assignment "${name}"`,
+    after: {
+      name,
+      cron: input.cron,
+      audience: input.audience,
+      active: input.active,
+      compliantPercentage: input.compliantPercentage,
+    },
+  })
+  revalidatePath('/toolbox/assignments')
+  return { ok: true, id: row.id }
+}
+
+export default async function ToolboxAssignmentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  const sp = await searchParams
   const ctx = await requireRequestContext()
 
   const rows = await ctx.db(async (tx) => {
@@ -54,6 +122,32 @@ export default async function ToolboxAssignmentsPage() {
     }))
   })
 
+  // Drawer audience options
+  const [roleOptions, peopleOptions, siteOptions] = await ctx.db(async (tx) => {
+    const r = await tx
+      .select({ key: roles.key, name: roles.name })
+      .from(roles)
+      .orderBy(asc(roles.name))
+    const p = await tx
+      .select({
+        id: people.id,
+        firstName: people.firstName,
+        lastName: people.lastName,
+      })
+      .from(people)
+      .where(eq(people.status, 'active'))
+      .orderBy(asc(people.lastName), asc(people.firstName))
+      .limit(500)
+    const s = await tx
+      .select({ id: orgUnits.id, name: orgUnits.name })
+      .from(orgUnits)
+      .where(eq(orgUnits.level, 'site'))
+      .orderBy(asc(orgUnits.name))
+    return [r, p, s] as const
+  })
+
+  const openDrawer = pickString(sp.drawer) === 'new-assignment' ? 'new-assignment' : null
+
   return (
     <ListPageLayout
       header={
@@ -62,7 +156,7 @@ export default async function ToolboxAssignmentsPage() {
             title="Toolbox assignments"
             description="Recurring rules that require certain people, roles, or sites to log a toolbox talk on a cadence."
             actions={
-              <Link href="/toolbox/assignments/new">
+              <Link href="/toolbox/assignments?drawer=new-assignment" scroll={false}>
                 <Button>New assignment</Button>
               </Link>
             }
@@ -77,7 +171,7 @@ export default async function ToolboxAssignmentsPage() {
           title="No toolbox assignments yet"
           description="Create an assignment to require a foreman, role, or site to log a toolbox talk on a schedule."
           action={
-            <Link href="/toolbox/assignments/new">
+            <Link href="/toolbox/assignments?drawer=new-assignment" scroll={false}>
               <Button>Create your first assignment</Button>
             </Link>
           }
@@ -141,6 +235,14 @@ export default async function ToolboxAssignmentsPage() {
           </TableBody>
         </Table>
       )}
+      <ToolboxAssignmentsDrawers
+        openDrawer={openDrawer}
+        closeHref="/toolbox/assignments"
+        roleOptions={roleOptions}
+        peopleOptions={peopleOptions}
+        siteOptions={siteOptions}
+        createAssignmentAction={createAssignmentAction}
+      />
     </ListPageLayout>
   )
 }

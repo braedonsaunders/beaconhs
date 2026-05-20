@@ -41,7 +41,7 @@ export default async function HazardDetailPage({ params }: { params: Promise<{ i
               ) : null
             }
             actions={
-              <Link href={`/hazid/hazards/${id}/edit`}>
+              <Link href={`/hazid/hazards?drawer=edit-hazard&id=${id}`} scroll={false}>
                 <Button variant="outline">Edit</Button>
               </Link>
             }

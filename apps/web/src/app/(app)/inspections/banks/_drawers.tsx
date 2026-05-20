@@ -1,0 +1,175 @@
+'use client'
+
+// Sub-entity drawer for the inspection banks list page:
+//   • new-bank → create a new inspection criteria bank
+//
+// Opens via `?drawer=new-bank` so it survives refresh + is link-shareable.
+// The server action is passed in from the RSC list page.
+
+import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
+import { Loader2 } from 'lucide-react'
+import {
+  Button,
+  Input,
+  Label,
+  Select,
+  Textarea,
+  UrlDrawer,
+} from '@beaconhs/ui'
+
+const CATEGORIES = [
+  { value: 'site_inspection', label: 'Site inspection' },
+  { value: 'ppe_check', label: 'PPE check' },
+  { value: 'equipment_check', label: 'Equipment check' },
+  { value: 'vehicle_check', label: 'Vehicle check' },
+  { value: 'workplace_audit', label: 'Workplace audit' },
+  { value: 'other', label: 'Other' },
+]
+
+type CreateBankAction = (input: {
+  name: string
+  description: string | null
+  category: string | null
+  isPublished: boolean
+}) => Promise<{ ok: true; id: string } | { ok: false; error: string }>
+
+export function InspectionBanksDrawers({
+  openDrawer,
+  closeHref,
+  createBankAction,
+}: {
+  openDrawer: 'new-bank' | null
+  closeHref: string
+  createBankAction: CreateBankAction
+}) {
+  return (
+    <NewBankDrawer
+      open={openDrawer === 'new-bank'}
+      closeHref={closeHref}
+      action={createBankAction}
+    />
+  )
+}
+
+function NewBankDrawer({
+  open,
+  closeHref,
+  action,
+}: {
+  open: boolean
+  closeHref: string
+  action: CreateBankAction
+}) {
+  const router = useRouter()
+  const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
+  const [category, setCategory] = useState('site_inspection')
+  const [isPublished, setIsPublished] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [pending, startTransition] = useTransition()
+
+  function submit() {
+    setError(null)
+    const trimmed = name.trim()
+    if (!trimmed) {
+      setError('Name is required.')
+      return
+    }
+    startTransition(async () => {
+      const res = await action({
+        name: trimmed,
+        description: description.trim() || null,
+        category: category.trim() || null,
+        isPublished,
+      })
+      if (res.ok) {
+        router.push(`/inspections/banks/${res.id}?tab=criteria`)
+        router.refresh()
+      } else {
+        setError(res.error || 'Failed to create bank')
+      }
+    })
+  }
+
+  return (
+    <UrlDrawer
+      open={open}
+      closeHref={closeHref}
+      title="New inspection bank"
+      description="Reusable criteria template — drop one into a new inspection to skip rewriting the question list."
+      size="md"
+      footer={
+        <div className="flex justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => router.push(closeHref)}
+            disabled={pending}
+          >
+            Cancel
+          </Button>
+          <Button type="button" onClick={submit} disabled={pending}>
+            {pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
+            Create bank
+          </Button>
+        </div>
+      }
+    >
+      <div className="space-y-4">
+        <div className="space-y-1.5">
+          <Label htmlFor="ib-name">Name *</Label>
+          <Input
+            id="ib-name"
+            value={name}
+            onChange={(e) => setName(e.currentTarget.value)}
+            placeholder="e.g. Site Daily Walk-Through"
+            required
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="ib-description">Description</Label>
+          <Textarea
+            id="ib-description"
+            value={description}
+            onChange={(e) => setDescription(e.currentTarget.value)}
+            rows={3}
+            placeholder="When to use this bank, who it's for"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="ib-category">Category</Label>
+          <Select
+            id="ib-category"
+            value={category}
+            onChange={(e) => setCategory(e.currentTarget.value)}
+          >
+            {CATEGORIES.map((c) => (
+              <option key={c.value} value={c.value}>
+                {c.label}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            id="ib-published"
+            type="checkbox"
+            checked={isPublished}
+            onChange={(e) => setIsPublished(e.currentTarget.checked)}
+            className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+          />
+          <Label htmlFor="ib-published" className="!m-0 cursor-pointer">
+            Publish immediately (otherwise saved as draft)
+          </Label>
+        </div>
+
+        {error ? (
+          <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+            {error}
+          </p>
+        ) : null}
+      </div>
+    </UrlDrawer>
+  )
+}

@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { revalidatePath } from 'next/cache'
 import { Calendar } from 'lucide-react'
 import { and, asc, count, desc, eq, ilike, type SQL } from 'drizzle-orm'
 import {
@@ -17,8 +18,12 @@ import {
   inspectionAssignmentCompliance,
   inspectionAssignments,
   inspectionTypes,
+  orgUnits,
+  people,
+  roles,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { recordAudit } from '@/lib/audit'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
 import { SearchInput } from '@/components/search-input'
@@ -26,9 +31,82 @@ import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { InspectionsSubNav } from '../_sub-nav'
+import { InspectionAssignmentsDrawers } from './_drawers'
 
 export const metadata = { title: 'Inspection Assignments' }
 export const dynamic = 'force-dynamic'
+
+type Frequency = 'day' | 'week' | 'month' | 'quarter' | 'year'
+
+async function createAssignmentAction(input: {
+  typeId: string
+  frequency: Frequency
+  cron: string | null
+  dueOffsetMinutes: number | null
+  quantityPerPeriod: number
+  compliantPercentage: number
+  targetEverybody: boolean
+  targetRoleKeys: string[]
+  targetPersonIds: string[]
+  targetOrgUnitIds: string[]
+  notes: string | null
+}): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  'use server'
+  const ctx = await requireRequestContext()
+  if (!input.typeId) return { ok: false, error: 'Inspection type is required' }
+  if (
+    !input.targetEverybody &&
+    input.targetRoleKeys.length === 0 &&
+    input.targetPersonIds.length === 0 &&
+    input.targetOrgUnitIds.length === 0
+  ) {
+    return {
+      ok: false,
+      error: 'Pick at least one audience (everyone / role / person / site).',
+    }
+  }
+  const row = await ctx.db(async (tx) => {
+    const [r] = await tx
+      .insert(inspectionAssignments)
+      .values({
+        tenantId: ctx.tenantId,
+        typeId: input.typeId,
+        frequency: input.frequency,
+        cron: input.cron,
+        dueOffsetMinutes: input.dueOffsetMinutes,
+        quantityPerPeriod: input.quantityPerPeriod,
+        compliantPercentage: input.compliantPercentage,
+        targetEverybody: input.targetEverybody,
+        targetRoleKeys: input.targetRoleKeys,
+        targetPersonIds: input.targetPersonIds,
+        targetOrgUnitIds: input.targetOrgUnitIds,
+        notes: input.notes,
+        enabled: true,
+        createdBy: ctx.userId,
+      })
+      .returning()
+    return r
+  })
+  if (!row) return { ok: false, error: 'Failed to create assignment' }
+  await recordAudit(ctx, {
+    entityType: 'inspection_assignment',
+    entityId: row.id,
+    action: 'create',
+    summary: `Created assignment for inspection type ${input.typeId.slice(0, 8)} (${input.frequency})`,
+    after: {
+      typeId: input.typeId,
+      frequency: input.frequency,
+      quantityPerPeriod: input.quantityPerPeriod,
+      compliantPercentage: input.compliantPercentage,
+      targetEverybody: input.targetEverybody,
+      targetRoleKeys: input.targetRoleKeys,
+      targetPersonIds: input.targetPersonIds,
+      targetOrgUnitIds: input.targetOrgUnitIds,
+    },
+  })
+  revalidatePath('/inspections/assignments')
+  return { ok: true, id: row.id }
+}
 
 const SORTS = ['type', 'frequency', 'next_due'] as const
 
@@ -99,6 +177,41 @@ export default async function InspectionAssignmentsPage({
     return { rows: data, total: Number(tot?.c ?? 0) }
   })
 
+  // Drawer audience + type options
+  const [typeOptions, roleOptions, peopleOptions, siteOptions] = await ctx.db(async (tx) => {
+    const tt = await tx
+      .select({
+        id: inspectionTypes.id,
+        name: inspectionTypes.name,
+        defaultCadence: inspectionTypes.defaultCadence,
+      })
+      .from(inspectionTypes)
+      .where(eq(inspectionTypes.isPublished, true))
+      .orderBy(asc(inspectionTypes.name))
+    const rr = await tx
+      .select({ key: roles.key, name: roles.name })
+      .from(roles)
+      .orderBy(asc(roles.name))
+    const pp = await tx
+      .select({
+        id: people.id,
+        firstName: people.firstName,
+        lastName: people.lastName,
+      })
+      .from(people)
+      .where(eq(people.status, 'active'))
+      .orderBy(asc(people.lastName), asc(people.firstName))
+      .limit(500)
+    const ss = await tx
+      .select({ id: orgUnits.id, name: orgUnits.name })
+      .from(orgUnits)
+      .where(eq(orgUnits.level, 'site'))
+      .orderBy(asc(orgUnits.name))
+    return [tt, rr, pp, ss] as const
+  })
+
+  const openDrawer = pickString(sp.drawer) === 'new-assignment' ? 'new-assignment' : null
+
   // For each row compute compliance snapshot — single query, group in JS.
   const assignmentIds = rows.map((r) => r.assignment.id)
   const complianceByAssignment = new Map<string, { avg: number; assignees: number }>()
@@ -138,7 +251,7 @@ export default async function InspectionAssignmentsPage({
             title="Inspection Assignments"
             description="Recurring duties — pick a type, pick an audience, set a cadence. Compliance % is computed against recent records."
             actions={
-              <Link href="/inspections/assignments/new">
+              <Link href="/inspections/assignments?drawer=new-assignment" scroll={false}>
                 <Button>New assignment</Button>
               </Link>
             }
@@ -163,7 +276,7 @@ export default async function InspectionAssignmentsPage({
           title={params.q ? `No assignments match "${params.q}"` : 'No inspection assignments yet'}
           description="Set up a recurring assignment so the right people complete the right inspection on cadence."
           action={
-            <Link href="/inspections/assignments/new">
+            <Link href="/inspections/assignments?drawer=new-assignment" scroll={false}>
               <Button>New assignment</Button>
             </Link>
           }
@@ -257,6 +370,15 @@ export default async function InspectionAssignmentsPage({
           />
         </>
       )}
+      <InspectionAssignmentsDrawers
+        openDrawer={openDrawer}
+        closeHref="/inspections/assignments"
+        typeOptions={typeOptions}
+        roleOptions={roleOptions}
+        peopleOptions={peopleOptions}
+        siteOptions={siteOptions}
+        createAssignmentAction={createAssignmentAction}
+      />
     </ListPageLayout>
   )
 }

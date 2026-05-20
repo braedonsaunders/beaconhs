@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { revalidatePath } from 'next/cache'
 import { ClipboardList } from 'lucide-react'
 import { and, asc, count, desc, eq, ilike, sql, type SQL } from 'drizzle-orm'
 import {
@@ -15,6 +16,7 @@ import {
 } from '@beaconhs/ui'
 import { inspectionTypeBanks, inspectionTypes } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { recordAudit } from '@/lib/audit'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
 import { SearchInput } from '@/components/search-input'
@@ -22,9 +24,61 @@ import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { InspectionsSubNav } from '../_sub-nav'
+import { InspectionTypesDrawers } from './_drawers'
 
 export const metadata = { title: 'Inspection Types' }
 export const dynamic = 'force-dynamic'
+
+async function createTypeAction(input: {
+  name: string
+  description: string | null
+  requiresForeman: boolean
+  requiresCustomerSignature: boolean
+  enableCorrectiveActions: boolean
+  allowCompliantNotes: boolean
+  isPublished: boolean
+  defaultCadence: string | null
+}): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  'use server'
+  const ctx = await requireRequestContext()
+  const name = input.name.trim()
+  if (!name) return { ok: false, error: 'Name is required' }
+  const row = await ctx.db(async (tx) => {
+    const [r] = await tx
+      .insert(inspectionTypes)
+      .values({
+        tenantId: ctx.tenantId,
+        name,
+        description: input.description,
+        requiresForeman: input.requiresForeman,
+        requiresCustomerSignature: input.requiresCustomerSignature,
+        enableCorrectiveActions: input.enableCorrectiveActions,
+        allowCompliantNotes: input.allowCompliantNotes,
+        defaultCadence: input.defaultCadence,
+        isPublished: input.isPublished,
+        createdBy: ctx.userId,
+      })
+      .returning()
+    return r
+  })
+  if (!row) return { ok: false, error: 'Failed to create inspection type' }
+  await recordAudit(ctx, {
+    entityType: 'inspection_type',
+    entityId: row.id,
+    action: 'create',
+    summary: `Created inspection type "${name}"`,
+    after: {
+      name,
+      requiresForeman: input.requiresForeman,
+      requiresCustomerSignature: input.requiresCustomerSignature,
+      enableCorrectiveActions: input.enableCorrectiveActions,
+      defaultCadence: input.defaultCadence,
+      isPublished: input.isPublished,
+    },
+  })
+  revalidatePath('/inspections/types')
+  return { ok: true, id: row.id }
+}
 
 const SORTS = ['name', 'created_at', 'status'] as const
 
@@ -92,6 +146,7 @@ export default async function InspectionTypesPage({
   })
 
   const sortProps = { basePath: '/inspections/types', currentParams: sp, dir: params.dir }
+  const openDrawer = pickString(sp.drawer) === 'new-type' ? 'new-type' : null
 
   return (
     <ListPageLayout
@@ -101,7 +156,7 @@ export default async function InspectionTypesPage({
             title="Inspection Types"
             description="Admin-defined inspection templates. Each type bundles N criteria banks and toggles foreman / customer-signature requirements."
             actions={
-              <Link href="/inspections/types/new">
+              <Link href="/inspections/types?drawer=new-type" scroll={false}>
                 <Button>New type</Button>
               </Link>
             }
@@ -126,7 +181,7 @@ export default async function InspectionTypesPage({
           title={params.q ? `No types match "${params.q}"` : 'No inspection types yet'}
           description="Create a type, link a few criteria banks, and reuse it for every inspection of that kind."
           action={
-            <Link href="/inspections/types/new">
+            <Link href="/inspections/types?drawer=new-type" scroll={false}>
               <Button>New type</Button>
             </Link>
           }
@@ -200,6 +255,11 @@ export default async function InspectionTypesPage({
           />
         </>
       )}
+      <InspectionTypesDrawers
+        openDrawer={openDrawer}
+        closeHref="/inspections/types"
+        createTypeAction={createTypeAction}
+      />
     </ListPageLayout>
   )
 }

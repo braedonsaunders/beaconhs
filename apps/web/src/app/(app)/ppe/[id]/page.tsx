@@ -531,14 +531,21 @@ export default async function PpeDetailPage({
             </div>
           }
           actions={
-            <Link
-              href={`/ppe/${id}?send=1${active !== 'overview' ? `&tab=${active}` : ''}` as any}
-              scroll={false}
-            >
-              <Button variant="outline">
-                <Mail size={14} /> Send email
-              </Button>
-            </Link>
+            <>
+              <Link href={`${basePath}?tab=issues&drawer=report-issue` as any}>
+                <Button variant="outline">
+                  <AlertTriangle size={14} /> Report issue
+                </Button>
+              </Link>
+              <Link
+                href={`/ppe/${id}?send=1${active !== 'overview' ? `&tab=${active}` : ''}` as any}
+                scroll={false}
+              >
+                <Button variant="outline">
+                  <Mail size={14} /> Send email
+                </Button>
+              </Link>
+            </>
           }
         />
       }
