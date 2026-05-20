@@ -1,36 +1,10 @@
-import Link from 'next/link'
-import {
-  AlertTriangle,
-  BellRing,
-  BookOpen,
-  CheckCircle2,
-  CircleUser,
-  ClipboardCheck,
-  ClipboardList,
-  Construction,
-  FileText,
-  Gauge,
-  GraduationCap,
-  HardHat,
-  Layers,
-  ListChecks,
-  MapPin,
-  MessageSquare,
-  Radiation,
-  Settings,
-  ShieldAlert,
-  ShieldCheck,
-  Timer,
-  UserCircle2,
-  Users,
-  Wrench,
-  Wrench as ToolIcon,
-} from 'lucide-react'
+import { ShieldAlert, UserCircle2 } from 'lucide-react'
 import { Badge } from '@beaconhs/ui'
 import { SignOutButton } from './sign-out-button'
 import { TenantSwitcher } from './tenant-switcher'
 import { NotificationsBell } from './notifications-bell'
 import { GlobalSearch } from './global-search'
+import { SidebarNav, type SidebarNavGroup } from './sidebar-nav'
 
 type Ctx = {
   isSuperAdmin: boolean
@@ -39,61 +13,62 @@ type Ctx = {
   tenantName: string
 }
 
-type NavItem = { href: string; label: string; icon: typeof Gauge }
-
-const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
+// Icon refs live in sidebar-nav.tsx (a client component) — we pass string
+// keys here because React Server Components can't serialise function
+// references across the server/client boundary.
+const NAV_GROUPS: SidebarNavGroup[] = [
   {
     label: 'Overview',
     items: [
-      { href: '/dashboard', label: 'Dashboard', icon: Gauge },
-      { href: '/my', label: 'My', icon: CircleUser },
-      { href: '/notifications', label: 'Inbox', icon: BellRing },
+      { href: '/dashboard', label: 'Dashboard', iconKey: 'gauge' },
+      { href: '/my', label: 'My', iconKey: 'circle-user' },
+      { href: '/notifications', label: 'Inbox', iconKey: 'bell' },
     ],
   },
   {
     label: 'Frontline',
     items: [
-      { href: '/forms', label: 'Forms', icon: ClipboardCheck },
-      { href: '/inspections', label: 'Inspections', icon: ClipboardList },
-      { href: '/hazid', label: 'JSHA / HazID', icon: Radiation },
-      { href: '/toolbox', label: 'Toolbox talks', icon: MessageSquare },
-      { href: '/lift-plans', label: 'Lift plans', icon: Construction },
-      { href: '/incidents', label: 'Incidents', icon: AlertTriangle },
-      { href: '/corrective-actions', label: 'Corrective Actions', icon: ListChecks },
+      { href: '/forms', label: 'Forms', iconKey: 'clipboard-check' },
+      { href: '/inspections', label: 'Inspections', iconKey: 'clipboard' },
+      { href: '/hazid', label: 'JSHA / HazID', iconKey: 'radiation' },
+      { href: '/toolbox', label: 'Toolbox talks', iconKey: 'message' },
+      { href: '/lift-plans', label: 'Lift plans', iconKey: 'construction' },
+      { href: '/incidents', label: 'Incidents', iconKey: 'alert' },
+      { href: '/corrective-actions', label: 'Corrective Actions', iconKey: 'list-checks' },
     ],
   },
   {
     label: 'Programs',
     items: [
-      { href: '/training', label: 'Training', icon: GraduationCap },
-      { href: '/documents', label: 'Documents', icon: BookOpen },
-      { href: '/confined-space', label: 'Confined Space', icon: ShieldCheck },
-      { href: '/lone-worker', label: 'Lone Worker', icon: Timer },
+      { href: '/training', label: 'Training', iconKey: 'grad' },
+      { href: '/documents', label: 'Documents', iconKey: 'book' },
+      { href: '/confined-space', label: 'Confined Space', iconKey: 'shield' },
+      { href: '/lone-worker', label: 'Lone Worker', iconKey: 'timer' },
     ],
   },
   {
     label: 'Assets & people',
     items: [
-      { href: '/people', label: 'People', icon: Users },
-      { href: '/locations', label: 'Locations', icon: MapPin },
-      { href: '/equipment', label: 'Equipment', icon: Wrench },
-      { href: '/ppe', label: 'PPE', icon: HardHat },
+      { href: '/people', label: 'People', iconKey: 'users' },
+      { href: '/locations', label: 'Locations', iconKey: 'pin' },
+      { href: '/equipment', label: 'Equipment', iconKey: 'wrench' },
+      { href: '/ppe', label: 'PPE', iconKey: 'hard-hat' },
     ],
   },
   {
     label: 'Insight',
     items: [
-      { href: '/reports', label: 'Reports', icon: FileText },
-      { href: '/compliance', label: 'Compliance', icon: CheckCircle2 },
+      { href: '/reports', label: 'Reports', iconKey: 'file' },
+      { href: '/compliance', label: 'Compliance', iconKey: 'check' },
     ],
   },
   {
     label: 'Settings',
     items: [
-      { href: '/admin', label: 'Admin', icon: Settings },
-      { href: '/admin/library', label: 'Library & catalogues', icon: Layers },
-      { href: '/tools', label: 'Tools', icon: ToolIcon },
-      { href: '/utilities', label: 'Utilities', icon: Gauge },
+      { href: '/admin', label: 'Admin', iconKey: 'settings' },
+      { href: '/admin/library', label: 'Library & catalogues', iconKey: 'layers' },
+      { href: '/tools', label: 'Tools', iconKey: 'wrench' },
+      { href: '/utilities', label: 'Utilities', iconKey: 'gauge' },
     ],
   },
 ]
@@ -114,34 +89,18 @@ export function AppShell({
     <div className="flex h-screen overflow-hidden">
       <aside className="flex w-60 shrink-0 flex-col border-r border-slate-200 bg-white">
         <div className="flex h-14 items-center gap-2 border-b border-slate-200 px-4">
-          <div className="flex h-7 w-7 items-center justify-center rounded bg-teal-700 text-sm font-bold text-white">
+          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-teal-600 to-teal-800 text-sm font-bold text-white shadow-sm ring-1 ring-teal-900/10">
             B
           </div>
-          <span className="font-semibold tracking-tight">BeaconHS</span>
+          <span className="font-semibold tracking-tight text-slate-900">BeaconHS</span>
         </div>
-        <nav className="app-scroll flex-1 overflow-y-auto px-2 py-3">
-          {NAV_GROUPS.map((group) => (
-            <div key={group.label} className="mb-3">
-              <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                {group.label}
-              </div>
-              {group.items.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href as any}
-                  className="flex items-center gap-2.5 rounded-md px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-100 hover:text-slate-900"
-                >
-                  <item.icon size={15} className="text-slate-500" />
-                  <span>{item.label}</span>
-                </Link>
-              ))}
-            </div>
-          ))}
-        </nav>
+        <SidebarNav groups={NAV_GROUPS} />
         <div className="border-t border-slate-200 p-3 text-xs text-slate-500">
           <div className="flex items-center justify-between">
             <span>v0.1.0</span>
-            <Badge variant="secondary" className="font-mono text-[10px]">dev</Badge>
+            <Badge variant="secondary" className="font-mono text-[10px]">
+              dev
+            </Badge>
           </div>
         </div>
       </aside>
@@ -175,9 +134,7 @@ export function AppShell({
           </div>
         </header>
 
-        <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-50">
-          {children}
-        </main>
+        <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-50">{children}</main>
       </div>
     </div>
   )

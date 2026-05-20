@@ -12,6 +12,13 @@ export type TabDef = {
 /**
  * URL-driven tabs. The active tab is read from a search param (default 'tab').
  * Each tab is a link that preserves other query params.
+ *
+ * Visual touches:
+ *   • 2px teal underline for the active tab, springy on hover with a
+ *     transparent-to-slate fade for inactive tabs
+ *   • count pill picks up the teal palette when its tab is active
+ *   • tab body should be wrapped in `<TabContent>` (from @beaconhs/ui) so
+ *     content crossfades between selections.
  */
 export function TabNav({
   basePath,
@@ -29,7 +36,13 @@ export function TabNav({
   className?: string
 }) {
   return (
-    <nav className={cn('flex flex-wrap items-center gap-1 border-b border-slate-200', className)}>
+    <nav
+      className={cn(
+        'flex flex-wrap items-center gap-1 border-b border-slate-200',
+        className,
+      )}
+      role="tablist"
+    >
       {tabs
         .filter((t) => !t.hidden)
         .map((t) => {
@@ -39,8 +52,12 @@ export function TabNav({
             <Link
               key={t.key}
               href={href as any}
+              role="tab"
+              aria-selected={isActive}
               className={cn(
-                '-mb-px inline-flex items-center gap-2 border-b-2 px-3 py-2 text-sm transition-colors',
+                '-mb-px inline-flex items-center gap-2 border-b-2 px-3 py-2 text-sm',
+                'transition-[color,border-color,background-color] duration-150 ease-out',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/40 focus-visible:rounded-t-md',
                 isActive
                   ? 'border-teal-700 font-medium text-teal-700'
                   : 'border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-900',
@@ -50,8 +67,10 @@ export function TabNav({
               {typeof t.count === 'number' ? (
                 <span
                   className={cn(
-                    'rounded-full px-1.5 py-0.5 text-xs',
-                    isActive ? 'bg-teal-100 text-teal-900' : 'bg-slate-100 text-slate-600',
+                    'rounded-full px-1.5 py-0.5 text-xs leading-none transition-colors duration-150',
+                    isActive
+                      ? 'bg-teal-100 text-teal-900'
+                      : 'bg-slate-100 text-slate-600',
                   )}
                 >
                   {t.count}

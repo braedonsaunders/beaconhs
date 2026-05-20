@@ -1,14 +1,32 @@
 import * as React from 'react'
 import { cn } from './utils'
 
-export const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  ({ className, ...props }, ref) => (
-    <div
-      ref={ref}
-      className={cn('rounded-lg border border-slate-200 bg-white shadow-sm', className)}
-      {...props}
-    />
-  ),
+export type CardProps = React.HTMLAttributes<HTMLDivElement> & {
+  /**
+   * When true, the card gets a subtle hover lift + shadow bump. Use for
+   * cards that are wrapped in <Link> or have onClick.
+   */
+  interactive?: boolean
+}
+
+export const Card = React.forwardRef<HTMLDivElement, CardProps>(
+  ({ className, interactive, onClick, ...props }, ref) => {
+    // Auto-detect interactivity: explicit prop wins, but onClick implies it.
+    const isInteractive = interactive ?? typeof onClick === 'function'
+    return (
+      <div
+        ref={ref}
+        onClick={onClick}
+        className={cn(
+          'rounded-lg border border-slate-200 bg-white shadow-sm',
+          isInteractive &&
+            'cursor-pointer transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-md hover:border-slate-300 motion-reduce:transition-none motion-reduce:hover:translate-y-0',
+          className,
+        )}
+        {...props}
+      />
+    )
+  },
 )
 Card.displayName = 'Card'
 

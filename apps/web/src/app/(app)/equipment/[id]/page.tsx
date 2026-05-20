@@ -30,6 +30,7 @@ import {
   Input,
   Label,
   Select,
+  TabContent,
   Table,
   TableBody,
   TableCell,
@@ -657,6 +658,13 @@ export default async function EquipmentDetailPage({
                 { key: 'activity', label: 'Activity' },
               ]}
             />
+
+            {/*
+             * Tab body crossfade. The `key={active}` on TabContent means each
+             * server-rendered swap triggers an AnimatePresence cycle so the
+             * outgoing panel fades while the incoming one slides in.
+             */}
+            <TabContent tabKey={active}>
 
             {active === 'overview' ? (
               <Section title="General">
@@ -1371,6 +1379,7 @@ export default async function EquipmentDetailPage({
                 </CardContent>
               </Card>
             ) : null}
+            </TabContent>
           </div>
         </div>
       </div>

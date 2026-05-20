@@ -27,3 +27,48 @@
     color: rgb(var(--color-fg));
   }
 }
+
+/* --- Shared utility keyframes ------------------------------------------- */
+
+@keyframes bhs-shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Skeleton shimmer sweep. Looped, 1.5s, respects prefers-reduced-motion. */
+.bhs-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.55),
+    transparent
+  );
+  animation: bhs-shimmer 1.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bhs-shimmer::after {
+    animation: none;
+    display: none;
+  }
+}
+
+/* Soft tab-content crossfade fallback for when JS is disabled / SSR. */
+@keyframes bhs-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
