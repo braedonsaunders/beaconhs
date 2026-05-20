@@ -29,14 +29,21 @@ export default async function FillTemplatePage({ params }: { params: Promise<{ i
       .orderBy(desc(formTemplateVersions.version))
       .limit(1)
     if (!version) return null
-    const [sites, allPeople] = await Promise.all([
+    const [sites, allPeople, currentPerson] = await Promise.all([
       tx.select({ id: orgUnits.id, name: orgUnits.name }).from(orgUnits).where(eq(orgUnits.level, 'site')).orderBy(asc(orgUnits.name)),
       tx
         .select({ id: people.id, firstName: people.firstName, lastName: people.lastName })
         .from(people)
         .orderBy(asc(people.lastName), asc(people.firstName)),
+      // Look up the active user's person record (if any) — used for the
+      // `current_user_person_id` / `current_user_name` default-value resolvers.
+      tx
+        .select({ id: people.id, firstName: people.firstName, lastName: people.lastName })
+        .from(people)
+        .where(eq(people.userId, ctx.userId ?? ''))
+        .limit(1),
     ])
-    return { tmpl, version, sites, people: allPeople }
+    return { tmpl, version, sites, people: allPeople, currentPerson: currentPerson[0] ?? null }
   })
 
   if (!data) notFound()
@@ -48,6 +55,13 @@ export default async function FillTemplatePage({ params }: { params: Promise<{ i
       schema={data.version.schema}
       sites={data.sites}
       people={data.people}
+      currentUser={{
+        personId: data.currentPerson?.id ?? null,
+        name:
+          data.currentPerson
+            ? `${data.currentPerson.firstName} ${data.currentPerson.lastName}`
+            : ctx.membership?.displayName ?? null,
+      }}
     />
   )
 }

@@ -61,17 +61,18 @@ const PRE_LIFT_CHECKLIST_OPTIONS = [
  * The lift-plan form template schema. Stored verbatim into
  * form_template_versions.schema as v1.
  *
- * Sections (8):
- *   1. General info    — date, site, project, supervisor, description
- *   2. Crane data      — type, model, capacity, radius, boom, counterweight,
- *                        ground bearing PSI, tail swing
- *   3. Loads           — repeating: description, load weight, rigging weight
- *   4. Hazards & ctrls — repeating: hazard, control, residual risk
- *   5. PPE required    — multi_select picker
- *   6. Pre-lift chklst — checkbox_group with 8 default items
- *   7. Lift diagram    — file upload (single image)
- *   8. Signatures      — supervisor / operator / rigger / spotter (4 signature
- *                        fields, all required)
+ * Multi-step layout (3 pages):
+ *   1. "Plan"   — general info, crane data, loads (repeating), totals (formula)
+ *   2. "Risk"   — hazards & controls (repeating), PPE, pre-lift checklist, diagram
+ *   3. "Sign"   — supervisor / operator / rigger / spotter signatures
+ *
+ * Demonstrates the foundation features end-to-end:
+ *   - Repeating sections w/ row-label-template + min-rows
+ *   - Formula field (total_weight_lbs) cross-referencing repeating rows
+ *   - Conditional visibility (critical_control textarea shows only when
+ *     residual_risk = 'critical')
+ *   - Default value (today's date)
+ *   - Multi-step workflow w/ section bindings
  */
 export const LIFT_PLAN_TEMPLATE_SCHEMA: FormSchemaV1 = {
   schemaVersion: 1,
@@ -83,17 +84,31 @@ export const LIFT_PLAN_TEMPLATE_SCHEMA: FormSchemaV1 = {
     {
       id: 'general_info',
       title: { en: 'General info' },
+      step: 'plan',
       fields: [
-        { id: 'lift_date', type: 'date', label: { en: 'Lift date' }, required: true },
+        {
+          id: 'lift_date',
+          type: 'date',
+          label: { en: 'Lift date' },
+          required: true,
+          defaultValue: { kind: 'today' },
+        },
         { id: 'site', type: 'site_picker', label: { en: 'Site' }, required: true },
         { id: 'project', type: 'text', label: { en: 'Project' } },
-        { id: 'supervisor', type: 'person_picker', label: { en: 'Lift supervisor' }, required: true },
+        {
+          id: 'supervisor',
+          type: 'person_picker',
+          label: { en: 'Lift supervisor' },
+          required: true,
+          defaultValue: { kind: 'current_user_person_id' },
+        },
         { id: 'description', type: 'textarea', label: { en: 'Description / scope' } },
       ],
     },
     {
       id: 'crane_data',
       title: { en: 'Crane data' },
+      step: 'plan',
       fields: [
         { id: 'crane_type', type: 'text', label: { en: 'Crane type' }, required: true },
         { id: 'crane_model', type: 'text', label: { en: 'Crane model' } },
@@ -110,6 +125,9 @@ export const LIFT_PLAN_TEMPLATE_SCHEMA: FormSchemaV1 = {
       title: { en: 'Loads' },
       description: { en: 'One row per discrete item being lifted.' },
       repeating: true,
+      minRows: 1,
+      rowLabelTemplate: 'Load #{index+1} · {description}',
+      step: 'plan',
       fields: [
         { id: 'description', type: 'text', label: { en: 'Description' }, required: true },
         { id: 'load_weight_lbs', type: 'number', label: { en: 'Load weight (lbs)' }, required: true },
@@ -117,10 +135,32 @@ export const LIFT_PLAN_TEMPLATE_SCHEMA: FormSchemaV1 = {
       ],
     },
     {
+      id: 'totals',
+      title: { en: 'Totals' },
+      step: 'plan',
+      fields: [
+        {
+          id: 'total_weight_lbs',
+          type: 'formula',
+          label: { en: 'Total weight (lbs)' },
+          helpText: { en: 'Sum of all load weights + rigging weights across every Loads row.' },
+          formula: {
+            kind: 'sum',
+            of: [
+              { kind: 'sum_section', sectionKey: 'loads', rowFieldKey: 'load_weight_lbs' },
+              { kind: 'sum_section', sectionKey: 'loads', rowFieldKey: 'rigging_weight_lbs' },
+            ],
+          },
+        },
+      ],
+    },
+    {
       id: 'hazards_controls',
       title: { en: 'Hazards & controls' },
       description: { en: 'One row per hazard.' },
       repeating: true,
+      rowLabelTemplate: 'Hazard #{index+1}',
+      step: 'risk',
       fields: [
         { id: 'hazard', type: 'text', label: { en: 'Hazard' }, required: true },
         { id: 'control', type: 'text', label: { en: 'Control' }, required: true },
@@ -131,15 +171,26 @@ export const LIFT_PLAN_TEMPLATE_SCHEMA: FormSchemaV1 = {
           required: true,
           validation: { options: RISK_OPTIONS },
         },
+        {
+          // Only appears when residual risk is rated critical — proves the
+          // conditional-visibility runtime works against repeating rows.
+          id: 'critical_control',
+          type: 'textarea',
+          label: { en: 'Additional control for critical risk' },
+          helpText: { en: 'Required when residual risk is critical.' },
+          required: true,
+          showIf: { op: 'eq', field: 'residual_risk', value: 'critical' },
+        },
       ],
     },
     {
       id: 'ppe_required',
       title: { en: 'PPE required' },
+      step: 'risk',
       fields: [
         {
           id: 'ppe',
-          type: 'ppe_picker',
+          type: 'checkbox_group',
           label: { en: 'PPE required' },
           required: true,
           validation: { options: PPE_OPTIONS },
@@ -149,6 +200,7 @@ export const LIFT_PLAN_TEMPLATE_SCHEMA: FormSchemaV1 = {
     {
       id: 'pre_lift_checklist',
       title: { en: 'Pre-lift checklist' },
+      step: 'risk',
       fields: [
         {
           id: 'pre_lift_items',
@@ -162,6 +214,7 @@ export const LIFT_PLAN_TEMPLATE_SCHEMA: FormSchemaV1 = {
     {
       id: 'lift_diagram',
       title: { en: 'Lift diagram' },
+      step: 'risk',
       fields: [
         {
           id: 'diagram',
@@ -174,6 +227,7 @@ export const LIFT_PLAN_TEMPLATE_SCHEMA: FormSchemaV1 = {
     {
       id: 'signatures',
       title: { en: 'Signatures' },
+      step: 'sign',
       fields: [
         { id: 'supervisor_signature', type: 'signature', label: { en: 'Supervisor signature' }, required: true },
         { id: 'operator_signature', type: 'signature', label: { en: 'Operator signature' }, required: true },
@@ -185,9 +239,20 @@ export const LIFT_PLAN_TEMPLATE_SCHEMA: FormSchemaV1 = {
   workflow: {
     steps: [
       {
-        key: 'submit',
-        title: { en: 'Submit' },
+        key: 'plan',
+        title: { en: 'Plan' },
         assignee: { type: 'expression', expr: '$submitter' },
+      },
+      {
+        key: 'risk',
+        title: { en: 'Risk' },
+        assignee: { type: 'expression', expr: '$submitter' },
+      },
+      {
+        key: 'sign',
+        title: { en: 'Sign-off' },
+        assignee: { type: 'expression', expr: '$submitter' },
+        signatureRequired: true,
       },
     ],
   },

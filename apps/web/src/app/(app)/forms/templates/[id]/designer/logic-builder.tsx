@@ -166,7 +166,10 @@ export function describeRule(
   if ('rule' in rule) return `NOT (${describeRule(rule.rule, fieldLookup)})`
   if (rule.op === 'isSet') return `${fieldLookup[rule.field] ?? rule.field} has value`
   if (rule.op === 'isNotSet') return `${fieldLookup[rule.field] ?? rule.field} is empty`
-  return `${fieldLookup[rule.field] ?? rule.field} ${OPS.find((o) => o.value === rule.op)?.label ?? rule.op} ${String(rule.value ?? '')}`
+  // The remaining cases all carry a `value` (scalar or array). Cast to the
+  // value-bearing union so TS picks `value` off either variant.
+  const valued = rule as { field: string; op: string; value: unknown }
+  return `${fieldLookup[valued.field] ?? valued.field} ${OPS.find((o) => o.value === valued.op)?.label ?? valued.op} ${String(valued.value ?? '')}`
 }
 
 export type { LogicRule, FormField }

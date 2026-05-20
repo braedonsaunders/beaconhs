@@ -82,123 +82,30 @@ export const formTemplateVersions = pgTable(
   }),
 )
 
-// The form schema is stored as JSONB. The TypeScript shape is the source of truth;
-// runtime validation lives in @beaconhs/forms-core.
-export type FormSchemaV1 = {
-  schemaVersion: 1
-  title: I18nString
-  description?: I18nString
-  sections: FormSection[]
-  workflow: FormWorkflow
-  permissions?: { fieldVisibility?: Record<string, string[]> }
-  pdf?: { css?: string; header?: string; footer?: string; pageSize?: 'A4' | 'Letter' }
-  metadata?: { riskMatrixKey?: string }
-}
+// The form schema is stored as JSONB. The TypeScript shape lives in
+// @beaconhs/forms-core (source of truth + runtime validation); we re-export
+// the relevant types here so consumers can import them from the same module
+// they import Drizzle tables from.
+export type {
+  FormSchemaV1,
+  I18nString,
+  FormSection,
+  FormField,
+  FieldType,
+  FieldValidation,
+  LogicRule,
+  FormulaExpression,
+  DefaultValueExpression,
+  FormWorkflowStep,
+} from '@beaconhs/forms-core'
 
-export type I18nString = Record<string, string> // { en: '…', fr: '…' }
+import type { FormSchemaV1, FormWorkflowStep, I18nString } from '@beaconhs/forms-core'
 
-export type FormSection = {
-  id: string
-  title?: I18nString
-  description?: I18nString
-  showIf?: LogicRule
-  repeating?: boolean
-  step?: string // bind this section to a workflow step
-  fields: FormField[]
-}
-
-export type FormField = {
-  id: string
-  type: FieldType
-  label: I18nString
-  helpText?: I18nString
-  required?: boolean
-  showIf?: LogicRule
-  validation?: FieldValidation
-  permissions?: { visibleToRoles?: string[] }
-  config?: Record<string, unknown> // type-specific
-}
-
-export type FieldType =
-  // Standard inputs
-  | 'text'
-  | 'textarea'
-  | 'long_text' // alias of textarea
-  | 'number'
-  | 'date'
-  | 'datetime'
-  | 'time'
-  | 'email'
-  | 'phone'
-  | 'url'
-  // Choice
-  | 'radio'
-  | 'checkbox_group'
-  | 'select'
-  | 'multi_select'
-  // Compliance scoring
-  | 'pass_fail_na'
-  | 'rating'
-  | 'yes_no_comment'
-  | 'traffic_light'
-  // Domain pickers
-  | 'person_picker'
-  | 'multi_person_picker' // person_picker with multiple selection
-  | 'site_picker'
-  | 'equipment_picker'
-  | 'ppe_picker'
-  | 'document_picker'
-  | 'course_picker'
-  // Media
-  | 'photo'
-  | 'photo_upload' // alias of photo
-  | 'file'
-  | 'video'
-  | 'audio'
-  // Identity
-  | 'signature'
-  | 'typed_attestation'
-  // Computed
-  | 'formula'
-  | 'calc' // alias of formula
-  | 'risk_matrix'
-  // Display
-  | 'heading'
-  | 'paragraph'
-  | 'image'
-  | 'divider'
-
-export type FieldValidation = {
-  min?: number
-  max?: number
-  minLength?: number
-  maxLength?: number
-  pattern?: string
-  options?: { value: string; label: I18nString }[]
-  allowOther?: boolean
-}
-
-export type LogicRule =
-  | { op: 'and' | 'or'; rules: LogicRule[] }
-  | { op: 'not'; rule: LogicRule }
-  | { op: 'eq' | 'ne' | 'gt' | 'lt' | 'gte' | 'lte'; field: string; value: unknown }
-  | { op: 'in' | 'notIn'; field: string; value: unknown[] }
-  | { op: 'isSet' | 'isNotSet'; field: string }
-
+// FormWorkflow stays as a local alias: db schema talks about workflow as
+// `{ steps: FormWorkflowStep[] }` and forms-core exports the shape inline on
+// FormSchemaV1.workflow but not as a named type. Keep this here for callers.
 export type FormWorkflow = {
   steps: FormWorkflowStep[]
-}
-
-export type FormWorkflowStep = {
-  key: string
-  title: I18nString
-  assignee:
-    | { type: 'literal'; userId: string }
-    | { type: 'role'; role: string }
-    | { type: 'expression'; expr: string } // e.g. '$foreman_of_site', '$submitter'
-  signatureRequired?: boolean
-  visibleSections?: string[]
-  visibleFields?: string[]
 }
 
 // Per-step state inside a form_responses.workflow_state jsonb. Mirrors enough

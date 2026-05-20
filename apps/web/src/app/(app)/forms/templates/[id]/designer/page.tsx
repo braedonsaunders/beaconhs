@@ -25,7 +25,15 @@ function bootstrapSchema(name: string): FormSchemaV1 {
         ],
       },
     ],
-    workflow: { steps: [{ key: 'submit', label: { en: 'Submit' } }] },
+    workflow: {
+      steps: [
+        {
+          key: 'submit',
+          title: { en: 'Submit' },
+          assignee: { type: 'expression', expr: '$submitter' },
+        },
+      ],
+    },
   }
 }
 

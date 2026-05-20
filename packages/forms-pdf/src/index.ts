@@ -5,7 +5,13 @@
 // then print-to-PDF. CSS overrides per template are applied last so admins
 // can fully customise output.
 
-import type { FormSchemaV1 } from '@beaconhs/forms-core'
+import {
+  evaluateFormulaTree,
+  evaluateLogicRule,
+  type EvalContext,
+  type FormSchemaV1,
+  type FormulaExpression,
+} from '@beaconhs/forms-core'
 import { renderIncidentHtml, type IncidentRenderInput } from './templates/incident'
 import { renderCertificateHtml, type CertificateRenderInput } from './templates/certificate'
 import { renderWalletHtml, type WalletRenderInput } from './templates/wallet'
@@ -117,21 +123,105 @@ function buildHtml(input: RenderInput): string {
   const t = (k: { [lang: string]: string } | undefined, fallback = '') =>
     k ? k[locale] ?? k['en'] ?? Object.values(k)[0] ?? fallback : fallback
 
-  const sections = input.schema.sections
-    .map((sec) => {
-      const fields = sec.fields
-        .map((f) => {
-          const label = t(f.label)
-          const raw = input.values[f.id]
-          const display = renderValue(f.type, raw)
-          if (display === null) return ''
-          return `<div class="field"><div class="lbl">${escapeHtml(label)}</div><div class="val">${display}</div></div>`
+  // Build the shared eval context for showIf + formula evaluation.
+  // `input.values` carries the response payload — for repeating sections the
+  // value at `values[sectionId]` is the rows array, so we hoist it into the
+  // EvalContext's `rows` map at the same time.
+  const rows: Record<string, Array<Record<string, unknown>>> = {}
+  for (const sec of input.schema.sections) {
+    if (!sec.repeating) continue
+    const v = input.values[sec.id]
+    rows[sec.id] = Array.isArray(v) ? (v as Array<Record<string, unknown>>) : []
+  }
+  const evalCtx: EvalContext = {
+    values: input.values,
+    rows,
+  }
+
+  // Group sections by their workflow step so PDF rendering mirrors the
+  // multi-step filler layout — one heading per step, then sections inside.
+  const stepsList = input.schema.workflow.steps
+  const defaultStepKey = stepsList[0]?.key ?? 'submit'
+  const stepGroups = new Map<string, typeof input.schema.sections>()
+  for (const sec of input.schema.sections) {
+    const k = sec.step ?? defaultStepKey
+    const list = stepGroups.get(k) ?? []
+    list.push(sec)
+    stepGroups.set(k, list)
+  }
+
+  const stepsHtml = stepsList
+    .map((step) => {
+      const stepSections = stepGroups.get(step.key) ?? []
+      if (stepSections.length === 0) return ''
+
+      const sectionsHtml = stepSections
+        .map((sec) => {
+          // Section-level conditional visibility — skip if showIf is false.
+          if (sec.showIf && !evaluateLogicRule(sec.showIf, evalCtx)) return ''
+
+          // Repeating sections render each row as a numbered block carrying
+          // every field in the section.
+          if (sec.repeating) {
+            const sectionRows = rows[sec.id] ?? []
+            if (sectionRows.length === 0) {
+              return `<section><h2>${escapeHtml(t(sec.title))}</h2><p class="muted">(no rows)</p></section>`
+            }
+            const rowsHtml = sectionRows
+              .map((row, i) => {
+                const rowCtx: EvalContext = { ...evalCtx, values: { ...evalCtx.values, ...row } }
+                const fields = sec.fields
+                  .map((f) => {
+                    if (f.showIf && !evaluateLogicRule(f.showIf, rowCtx)) return ''
+                    const label = t(f.label)
+                    let raw: unknown = row[f.id]
+                    if ((f.type === 'formula' || f.type === 'calc') && f.formula) {
+                      raw = evaluateFormulaTree(f.formula as FormulaExpression, rowCtx)
+                    }
+                    const display = renderValue(f.type, raw)
+                    if (display === null) return ''
+                    return `<div class="field"><div class="lbl">${escapeHtml(label)}</div><div class="val">${display}</div></div>`
+                  })
+                  .filter(Boolean)
+                  .join('')
+                return `<div class="repeat-row"><div class="repeat-row-header">Row ${i + 1}</div>${fields}</div>`
+              })
+              .join('')
+            return `<section><h2>${escapeHtml(t(sec.title))}</h2>${rowsHtml}</section>`
+          }
+
+          const fields = sec.fields
+            .map((f) => {
+              if (f.showIf && !evaluateLogicRule(f.showIf, evalCtx)) return ''
+              const label = t(f.label)
+              let raw: unknown = input.values[f.id]
+              // Formula fields are recomputed on render — never stored — so
+              // the PDF always shows the freshest computed value.
+              if ((f.type === 'formula' || f.type === 'calc') && f.formula) {
+                raw = evaluateFormulaTree(f.formula as FormulaExpression, evalCtx)
+              }
+              const display = renderValue(f.type, raw)
+              if (display === null) return ''
+              return `<div class="field"><div class="lbl">${escapeHtml(label)}</div><div class="val">${display}</div></div>`
+            })
+            .filter(Boolean)
+            .join('')
+
+          return `<section><h2>${escapeHtml(t(sec.title))}</h2>${fields}</section>`
         })
         .filter(Boolean)
         .join('')
-      return `<section><h2>${escapeHtml(t(sec.title))}</h2>${fields}</section>`
+
+      if (!sectionsHtml) return ''
+      // A single-step form renders without the extra step heading wrapper
+      // to keep PDFs visually identical to the pre-multi-step output.
+      if (stepsList.length === 1) return sectionsHtml
+      return `<div class="pdf-step"><h2 class="pdf-step-h">${escapeHtml(t(step.title))}</h2>${sectionsHtml}</div>`
     })
+    .filter(Boolean)
     .join('')
+
+  const sections = stepsHtml
 
   const sigs = (input.signatures ?? [])
     .map(
@@ -169,6 +259,12 @@ function buildHtml(input: RenderInput): string {
   .sig-img img { max-height: 60px; max-width: 240px; }
   .sig-meta { font-size: 9.5pt; }
   .sig-when { color: #666; }
+  .muted { color: #999; font-style: italic; font-size: 10pt; }
+  .repeat-row { border: 1px solid #e5e5e5; border-radius: 4px; padding: 8px 12px; margin: 6px 0; page-break-inside: avoid; }
+  .repeat-row-header { font-size: 9pt; font-weight: 600; color: #555; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 4px; }
+  .pdf-step { margin: 22px 0 8px; }
+  .pdf-step-h { font-size: 11.5pt; color: #333; background: #f1f1f1; padding: 6px 10px; border-radius: 4px; border-left: 4px solid var(--primary); margin: 14px 0 6px; text-transform: uppercase; letter-spacing: 0.6px; }
+  .pdf-step > section h2 { font-size: 11pt; }
   ${input.customCss ?? ''}
 </style></head>
 <body>

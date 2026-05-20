@@ -1,6 +1,22 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+// Form filler runtime.
+//
+// Features:
+//   - Multi-step rendering grouped by `section.step` against `workflow.steps`
+//   - Progress strip with click-to-jump on completed steps
+//   - Per-field visibility via `evaluateLogicRule(field.showIf, ctx)`
+//   - Section visibility via `evaluateLogicRule(section.showIf, ctx)`
+//   - Repeating sections with min/max-rows bounds + row-label-template
+//   - Formula fields rendered read-only, recomputed via evaluateFormulaTree
+//   - Default values resolved via resolveDefaultValue once per first render
+//   - Validation runs on Next and Submit; inline errors per field
+//
+// Storage shape: `data` is `Record<string, unknown>` keyed by field id for
+// top-level fields, plus `data[sectionId]` = `Array<Record<fieldId, value>>`
+// for repeating sections. Same convention the response-viewer already reads.
+
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Check, ChevronLeft, ChevronRight, Plus, Trash2 } from 'lucide-react'
@@ -19,12 +35,30 @@ import {
   Select,
   Textarea,
 } from '@beaconhs/ui'
-import { evalLogicRule, validateResponse, type FormField, type FormSchemaV1 } from '@beaconhs/forms-core'
+import {
+  evaluateFormulaTree,
+  evaluateLogicRule,
+  resolveDefaultValue,
+  validateResponse,
+  type EvalContext,
+  type FormField,
+  type FormSchemaV1,
+  type FormSection,
+  type FormulaExpression,
+  type DefaultValueExpression,
+  type LogicRule,
+} from '@beaconhs/forms-core'
 import { submitFormResponse } from './actions'
 import { SignaturePad } from '@/components/signature-pad'
 import { FileUpload, dataUrlToFile, type AttachedFile } from '@/components/file-upload'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
 import { WizardLayout } from '@/components/page-layout'
+import { toast } from '@/lib/toast'
+
+type CurrentUser = {
+  personId: string | null
+  name: string | null
+}
 
 export function FormRenderer({
   templateId,
@@ -33,6 +67,7 @@ export function FormRenderer({
   schema,
   sites,
   people,
+  currentUser,
 }: {
   templateId: string
   templateName: string
@@ -40,24 +75,85 @@ export function FormRenderer({
   schema: FormSchemaV1
   sites: { id: string; name: string }[]
   people: { id: string; firstName: string; lastName: string }[]
+  currentUser: CurrentUser
 }) {
   const router = useRouter()
-  const [step, setStep] = useState(0)
+  // Per-step progress so users can click back into completed steps.
+  const [completedSteps, setCompletedSteps] = useState<Set<string>>(new Set())
+  const [stepIndex, setStepIndex] = useState(0)
   const [values, setValues] = useState<Record<string, unknown>>({})
+  const [rowsByStep, setRowsByStep] = useState<Record<string, Record<string, unknown>[]>>({})
   const [siteId, setSiteId] = useState<string | ''>('')
   const [errors, setErrors] = useState<Map<string, string>>(new Map())
   const [serverError, setServerError] = useState<string | null>(null)
   const [pending, start] = useTransition()
+  const appliedDefaults = useRef<Set<string>>(new Set())
 
-  const sections = schema.sections
-  const totalSteps = sections.length
-  const section = sections[step]!
+  // Group sections by their workflow step. Each step is a "page". Sections
+  // without an explicit `step` fall into the first workflow step.
+  const sectionsByStep = useMemo(() => {
+    const map = new Map<string, FormSection[]>()
+    const defaultStepKey = schema.workflow.steps[0]?.key ?? 'submit'
+    for (const sec of schema.sections) {
+      const k = sec.step ?? defaultStepKey
+      const list = map.get(k) ?? []
+      list.push(sec)
+      map.set(k, list)
+    }
+    return map
+  }, [schema])
 
-  // Filter sections + fields by their showIf rules
-  const visibleFields = useMemo(
-    () => section.fields.filter((f) => !f.showIf || evalLogicRule(f.showIf, values)),
-    [section, values],
-  )
+  // The list of *visible* steps, computed from the workflow steps that
+  // actually have sections bound to them. A workflow step with no sections
+  // is still rendered (so reviewers see the post-submit signature step), but
+  // its body becomes a single "ready to submit" pane.
+  const steps = schema.workflow.steps
+  const totalSteps = steps.length
+  const step = steps[stepIndex]!
+  const stepSections = sectionsByStep.get(step.key) ?? []
+
+  // Build the eval context used by visibility + formula evaluation. Includes
+  // every section's rows under its section id so cross-step sum_section works.
+  const evalCtx = useMemo<EvalContext>(() => {
+    return {
+      values,
+      rows: rowsByStep,
+      requestContext: {
+        now: new Date(),
+        currentUserPersonId: currentUser.personId,
+        currentUserName: currentUser.name,
+      },
+    }
+  }, [values, rowsByStep, currentUser])
+
+  // Apply default values on first render of a step. Tracked via a ref so we
+  // don't re-apply when the user clears the field intentionally.
+  useEffect(() => {
+    let mutated: Record<string, unknown> | null = null
+    for (const sec of stepSections) {
+      // Skip repeating sections — defaults are applied per row on row add.
+      if (sec.repeating) continue
+      for (const f of sec.fields) {
+        if (!f.defaultValue) continue
+        const key = `${step.key}:${f.id}`
+        if (appliedDefaults.current.has(key)) continue
+        if (values[f.id] !== undefined && values[f.id] !== '' && values[f.id] !== null) {
+          appliedDefaults.current.add(key)
+          continue
+        }
+        const v = resolveDefaultValue(f.defaultValue as DefaultValueExpression, evalCtx)
+        if (v !== undefined && v !== null) {
+          mutated = mutated ?? { ...values }
+          mutated[f.id] = v
+        }
+        appliedDefaults.current.add(key)
+      }
+    }
+    if (mutated) setValues(mutated)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stepIndex])
+
+  // --- Helpers ---------------------------------------------------------------
 
   function setValue(fieldId: string, v: unknown) {
     setValues((s) => ({ ...s, [fieldId]: v }))
@@ -68,57 +164,160 @@ export function FormRenderer({
     })
   }
 
-  function next() {
-    const errs = validateResponse(schema, values, 'draft').filter(
-      (e) => e.sectionId === section.id,
+  function setRows(sectionId: string, rows: Record<string, unknown>[]) {
+    setRowsByStep((s) => ({ ...s, [sectionId]: rows }))
+  }
+
+  function addRow(section: FormSection) {
+    const existing = rowsByStep[section.id] ?? []
+    if (section.maxRows !== undefined && existing.length >= section.maxRows) return
+    // Apply per-field defaults to the new row.
+    const row: Record<string, unknown> = {}
+    for (const f of section.fields) {
+      if (!f.defaultValue) continue
+      const v = resolveDefaultValue(f.defaultValue as DefaultValueExpression, evalCtx)
+      if (v !== undefined && v !== null) row[f.id] = v
+    }
+    setRows(section.id, [...existing, row])
+  }
+
+  function removeRow(section: FormSection, idx: number) {
+    const rows = rowsByStep[section.id] ?? []
+    setRows(section.id, rows.filter((_, i) => i !== idx))
+  }
+
+  function updateRow(section: FormSection, idx: number, patch: Record<string, unknown>) {
+    const rows = rowsByStep[section.id] ?? []
+    setRows(
+      section.id,
+      rows.map((r, i) => (i === idx ? { ...r, ...patch } : r)),
     )
-    if (errs.length > 0) {
-      setErrors(new Map(errs.map((e) => [e.fieldId, e.message])))
+  }
+
+  // The full payload sent to the server: top-level field values plus repeating
+  // section rows merged in under the section id.
+  function buildPayload(): Record<string, unknown> {
+    const data: Record<string, unknown> = { ...values }
+    for (const [secId, rows] of Object.entries(rowsByStep)) {
+      data[secId] = rows
+    }
+    return data
+  }
+
+  // Validate everything visible in the current step. Hidden fields skip
+  // validation. Repeating sections check minRows + every visible row.
+  function validateCurrentStep(): Map<string, string> {
+    const errs = new Map<string, string>()
+    for (const sec of stepSections) {
+      if (sec.showIf && !evaluateLogicRule(sec.showIf, evalCtx)) continue
+      if (sec.repeating) {
+        const rows = rowsByStep[sec.id] ?? []
+        if (sec.minRows !== undefined && rows.length < sec.minRows) {
+          errs.set(`__section_${sec.id}`, `Add at least ${sec.minRows} row${sec.minRows === 1 ? '' : 's'}`)
+        }
+        for (let i = 0; i < rows.length; i++) {
+          for (const f of sec.fields) {
+            // Per-row visibility is evaluated against the row's own values.
+            const rowCtx: EvalContext = { ...evalCtx, values: { ...evalCtx.values, ...rows[i] } }
+            if (f.showIf && !evaluateLogicRule(f.showIf, rowCtx)) continue
+            const error = validateOne(f, rows[i]![f.id])
+            if (error) errs.set(`${sec.id}.${i}.${f.id}`, error)
+          }
+        }
+      } else {
+        for (const f of sec.fields) {
+          if (f.showIf && !evaluateLogicRule(f.showIf, evalCtx)) continue
+          // Formula fields are auto-computed and never validated against the user.
+          if (f.type === 'formula' || f.type === 'calc') continue
+          const error = validateOne(f, values[f.id])
+          if (error) errs.set(f.id, error)
+        }
+      }
+    }
+    return errs
+  }
+
+  function next() {
+    const errs = validateCurrentStep()
+    if (errs.size > 0) {
+      setErrors(errs)
+      toast.error(`Fix ${errs.size} issue${errs.size === 1 ? '' : 's'} before continuing`)
       return
     }
-    setStep((s) => Math.min(totalSteps - 1, s + 1))
     setErrors(new Map())
+    setCompletedSteps((s) => new Set(s).add(step.key))
+    setStepIndex((i) => Math.min(totalSteps - 1, i + 1))
   }
 
   function back() {
-    setStep((s) => Math.max(0, s - 1))
+    setStepIndex((i) => Math.max(0, i - 1))
     setErrors(new Map())
+  }
+
+  function jumpTo(i: number) {
+    // Allow jumping to completed steps + the current step. Anything later is
+    // gated by per-step validation.
+    if (i === stepIndex) return
+    if (i < stepIndex || completedSteps.has(steps[i]!.key)) {
+      setStepIndex(i)
+      setErrors(new Map())
+    }
   }
 
   function submit() {
     setServerError(null)
-    const errs = validateResponse(schema, values, 'submit')
-    if (errs.length > 0) {
-      setErrors(new Map(errs.map((e) => [e.fieldId, e.message])))
-      // Move to the first section with an error
-      const first = errs[0]!.sectionId
-      const idx = sections.findIndex((s) => s.id === first)
-      if (idx >= 0) setStep(idx)
+    const stepErrs = validateCurrentStep()
+    if (stepErrs.size > 0) {
+      setErrors(stepErrs)
+      return
+    }
+    const payload = buildPayload()
+    // Full-form revalidation via the shared @beaconhs/forms-core validator
+    // against the *combined* payload (so the server sees the same shape).
+    const globalErrs = validateResponse(schema, payload, 'submit')
+    if (globalErrs.length > 0) {
+      const map = new Map<string, string>()
+      for (const e of globalErrs) map.set(e.fieldId, e.message)
+      setErrors(map)
+      // Walk back to the first step with an error.
+      const firstSection = globalErrs[0]!.sectionId
+      if (firstSection) {
+        const ownerSec = schema.sections.find((s) => s.id === firstSection)
+        if (ownerSec) {
+          const targetStepKey = ownerSec.step ?? steps[0]!.key
+          const idx = steps.findIndex((s) => s.key === targetStepKey)
+          if (idx >= 0) setStepIndex(idx)
+        }
+      }
       return
     }
     start(async () => {
       const res = await submitFormResponse({
         templateId,
-        data: values,
+        data: payload,
         siteOrgUnitId: siteId || null,
       })
       if (!res.ok) {
         if (res.errors) {
           setErrors(new Map(res.errors.map((e) => [e.fieldId, e.message])))
+          toast.error('Submit failed — see field errors')
         } else {
           setServerError('Submit failed')
+          toast.error('Submit failed')
         }
+      } else {
+        toast.success('Form submitted')
       }
-      // ok-path navigates via server redirect
+      // ok-path navigates via server redirect.
     })
   }
 
-  const completion = Math.round((step / Math.max(1, totalSteps - 1)) * 100)
+  const completion = Math.round(((stepIndex + 1) / Math.max(1, totalSteps)) * 100)
 
   return (
     <WizardLayout
       header={
-        <div className="space-y-2">
+        <div className="space-y-3">
           <Link
             href={`/forms/templates/${templateId}`}
             className="text-xs text-teal-700 hover:underline"
@@ -129,14 +328,48 @@ export function FormRenderer({
             <h1 className="text-xl font-semibold truncate">{templateName}</h1>
             <Badge variant="outline">v{version}</Badge>
           </div>
-          <div className="h-1.5 overflow-hidden rounded-full bg-slate-200">
+          {/* Progress strip — every workflow step as a clickable pill */}
+          <ol className="flex flex-wrap items-center gap-1 text-xs">
+            {steps.map((s, i) => {
+              const isCurrent = i === stepIndex
+              const isCompleted = completedSteps.has(s.key)
+              const isClickable = i <= stepIndex || isCompleted
+              return (
+                <li key={s.key}>
+                  <button
+                    type="button"
+                    disabled={!isClickable}
+                    onClick={() => jumpTo(i)}
+                    className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 ${
+                      isCurrent
+                        ? 'border-teal-600 bg-teal-600 text-white'
+                        : isCompleted
+                          ? 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+                          : 'border-slate-200 bg-white text-slate-600'
+                    } ${!isClickable ? 'cursor-not-allowed opacity-60' : ''}`}
+                  >
+                    <span
+                      className={`inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold ${
+                        isCurrent
+                          ? 'bg-white text-teal-700'
+                          : isCompleted
+                            ? 'bg-emerald-500 text-white'
+                            : 'bg-slate-200 text-slate-600'
+                      }`}
+                    >
+                      {isCompleted && !isCurrent ? <Check size={10} /> : i + 1}
+                    </span>
+                    <span className="truncate">{s.title?.en ?? s.key}</span>
+                  </button>
+                </li>
+              )
+            })}
+          </ol>
+          <div className="h-1 overflow-hidden rounded-full bg-slate-200">
             <div
               className="h-full rounded-full bg-teal-600 transition-all"
               style={{ width: `${Math.max(8, completion)}%` }}
             />
-          </div>
-          <div className="text-xs text-slate-500">
-            Step {step + 1} of {totalSteps} · {section.title?.en ?? section.id}
           </div>
         </div>
       }
@@ -149,11 +382,11 @@ export function FormRenderer({
             </Alert>
           ) : null}
           <div className="flex items-center justify-between gap-2">
-            <Button variant="outline" onClick={back} disabled={step === 0}>
+            <Button variant="outline" onClick={back} disabled={stepIndex === 0}>
               <ChevronLeft size={14} />
               Back
             </Button>
-            {step < totalSteps - 1 ? (
+            {stepIndex < totalSteps - 1 ? (
               <Button onClick={next}>
                 Next <ChevronRight size={14} />
               </Button>
@@ -167,12 +400,12 @@ export function FormRenderer({
         </div>
       }
     >
-      <Card>
-        <CardHeader>
-          <CardTitle>{section.title?.en ?? 'Section'}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {step === 0 ? (
+      {stepIndex === 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Site</CardTitle>
+          </CardHeader>
+          <CardContent>
             <div className="space-y-1">
               <Label>Site</Label>
               <Select value={siteId} onChange={(e) => setSiteId(e.target.value)}>
@@ -184,33 +417,191 @@ export function FormRenderer({
                 ))}
               </Select>
             </div>
-          ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
 
-          {section.repeating ? (
-            <RepeatingSection
-              field={section.fields}
-              values={(values[section.id] as Record<string, unknown>[] | undefined) ?? []}
-              setRows={(rows) => setValue(section.id, rows)}
-              people={people}
-              errors={errors}
-            />
-          ) : (
-            visibleFields.map((f) => (
-              <FieldRow
-                key={f.id}
-                field={f}
-                value={values[f.id]}
-                onChange={(v) => setValue(f.id, v)}
-                error={errors.get(f.id)}
-                people={people}
-              />
-            ))
-          )}
-        </CardContent>
-      </Card>
+      {stepSections.length === 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">{step.title?.en ?? step.key}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-slate-500">
+              No sections bound to this step. Click Submit to finalise.
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        stepSections.map((sec) => {
+          // Section-level visibility — completely hide the section if showIf
+          // is false against the current values.
+          if (sec.showIf && !evaluateLogicRule(sec.showIf, evalCtx)) return null
+          return (
+            <Card key={sec.id}>
+              <CardHeader>
+                <CardTitle className="text-base">
+                  {sec.title?.en ?? sec.id}
+                  {sec.repeating ? (
+                    <Badge variant="secondary" className="ml-2">
+                      repeating
+                    </Badge>
+                  ) : null}
+                </CardTitle>
+                {sec.description?.en ? (
+                  <p className="text-xs text-slate-500">{sec.description.en}</p>
+                ) : null}
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {sec.repeating ? (
+                  <RepeatingSection
+                    section={sec}
+                    rows={rowsByStep[sec.id] ?? []}
+                    onAdd={() => addRow(sec)}
+                    onRemove={(i) => removeRow(sec, i)}
+                    onUpdate={(i, patch) => updateRow(sec, i, patch)}
+                    people={people}
+                    evalCtx={evalCtx}
+                    errors={errors}
+                    sectionError={errors.get(`__section_${sec.id}`) ?? null}
+                  />
+                ) : (
+                  sec.fields.map((f) => {
+                    if (f.showIf && !evaluateLogicRule(f.showIf, evalCtx)) return null
+                    return (
+                      <FieldRow
+                        key={f.id}
+                        field={f}
+                        value={values[f.id]}
+                        onChange={(v) => setValue(f.id, v)}
+                        error={errors.get(f.id)}
+                        people={people}
+                        evalCtx={evalCtx}
+                      />
+                    )
+                  })
+                )}
+              </CardContent>
+            </Card>
+          )
+        })
+      )}
     </WizardLayout>
   )
 }
+
+// --- Repeating section -----------------------------------------------------
+
+function RepeatingSection({
+  section,
+  rows,
+  onAdd,
+  onRemove,
+  onUpdate,
+  people,
+  evalCtx,
+  errors,
+  sectionError,
+}: {
+  section: FormSection
+  rows: Record<string, unknown>[]
+  onAdd: () => void
+  onRemove: (i: number) => void
+  onUpdate: (i: number, patch: Record<string, unknown>) => void
+  people: { id: string; firstName: string; lastName: string }[]
+  evalCtx: EvalContext
+  errors: Map<string, string>
+  sectionError: string | null
+}) {
+  const max = section.maxRows
+  const min = section.minRows ?? 0
+
+  return (
+    <div className="space-y-3">
+      {sectionError ? (
+        <Alert variant="destructive">
+          <AlertDescription>{sectionError}</AlertDescription>
+        </Alert>
+      ) : null}
+      {rows.length === 0 ? (
+        <p className="text-sm text-slate-500">
+          No rows yet.
+          {min > 0 ? ` At least ${min} required.` : ''}
+        </p>
+      ) : (
+        rows.map((row, i) => {
+          // Per-row eval context merges the row's own values atop the global
+          // so showIf within the row can compare against its own fields.
+          const rowCtx: EvalContext = {
+            ...evalCtx,
+            values: { ...evalCtx.values, ...row },
+          }
+          return (
+            <div key={i} className="rounded-md border border-slate-200 bg-slate-50/50 p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {formatRowLabel(section, i, row)}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onRemove(i)}
+                  className="text-slate-400 hover:text-red-500"
+                  title="Remove row"
+                  disabled={rows.length <= min}
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+              <div className="space-y-3">
+                {section.fields.map((f) => {
+                  if (f.showIf && !evaluateLogicRule(f.showIf, rowCtx)) return null
+                  return (
+                    <FieldRow
+                      key={f.id}
+                      field={f}
+                      value={row[f.id]}
+                      onChange={(v) => onUpdate(i, { [f.id]: v })}
+                      error={errors.get(`${section.id}.${i}.${f.id}`)}
+                      people={people}
+                      evalCtx={rowCtx}
+                    />
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })
+      )}
+      <Button
+        variant="outline"
+        onClick={onAdd}
+        disabled={max !== undefined && rows.length >= max}
+      >
+        <Plus size={14} />
+        Add row
+      </Button>
+    </div>
+  )
+}
+
+// Format the section row header from the optional rowLabelTemplate.
+// Supports `{index}`, `{index+1}`, and `{<fieldKey>}` interpolation.
+function formatRowLabel(
+  section: FormSection,
+  index: number,
+  row: Record<string, unknown>,
+): string {
+  const tmpl = section.rowLabelTemplate ?? `Row {index+1}`
+  return tmpl
+    .replace(/\{index\+1\}/g, String(index + 1))
+    .replace(/\{index\}/g, String(index))
+    .replace(/\{(\w+)\}/g, (_, key: string) => {
+      const v = row[key]
+      return v === undefined || v === null ? '' : String(v)
+    })
+}
+
+// --- Field row + input -----------------------------------------------------
 
 function FieldRow({
   field,
@@ -218,23 +609,27 @@ function FieldRow({
   onChange,
   error,
   people,
+  evalCtx,
 }: {
   field: FormField
   value: unknown
   onChange: (v: unknown) => void
   error?: string
   people: { id: string; firstName: string; lastName: string }[]
+  evalCtx: EvalContext
 }) {
   return (
     <div className="space-y-1">
       <Label>
         {field.label?.en ?? field.id}
-        {field.required ? <span className="text-red-600"> *</span> : null}
+        {field.required || field.validation?.required ? (
+          <span className="text-red-600"> *</span>
+        ) : null}
       </Label>
       {field.helpText?.en ? (
         <p className="text-xs text-slate-500">{field.helpText.en}</p>
       ) : null}
-      <FieldInput field={field} value={value} onChange={onChange} people={people} />
+      <FieldInput field={field} value={value} onChange={onChange} people={people} evalCtx={evalCtx} />
       {error ? <p className="text-xs text-red-600">{error}</p> : null}
     </div>
   )
@@ -245,26 +640,57 @@ function FieldInput({
   value,
   onChange,
   people,
+  evalCtx,
 }: {
   field: FormField
   value: unknown
   onChange: (v: unknown) => void
   people: { id: string; firstName: string; lastName: string }[]
+  evalCtx: EvalContext
 }) {
+  // Formula fields are render-only: recompute the value on every render via
+  // the evaluator and pass through to the display input.
+  if ((field.type === 'formula' || field.type === 'calc') && field.formula) {
+    const computed = evaluateFormulaTree(field.formula as FormulaExpression, evalCtx)
+    const display = computed === null || computed === undefined ? '' : String(computed)
+    return (
+      <Input
+        value={display}
+        disabled
+        className="bg-slate-50 font-mono text-sm"
+        title="Computed value — recomputed automatically"
+      />
+    )
+  }
+
   switch (field.type) {
     case 'text':
     case 'email':
     case 'phone':
     case 'url':
-      return <Input value={(value as string) ?? ''} onChange={(e) => onChange(e.target.value)} type={field.type === 'email' ? 'email' : field.type === 'phone' ? 'tel' : field.type === 'url' ? 'url' : 'text'} />
+      return (
+        <Input
+          value={(value as string) ?? ''}
+          onChange={(e) => onChange(e.target.value)}
+          type={field.type === 'email' ? 'email' : field.type === 'phone' ? 'tel' : field.type === 'url' ? 'url' : 'text'}
+        />
+      )
     case 'textarea':
     case 'long_text':
       return <Textarea rows={3} value={(value as string) ?? ''} onChange={(e) => onChange(e.target.value)} />
     case 'number':
     case 'rating':
+      return (
+        <Input
+          type="number"
+          value={(value as number | string) ?? ''}
+          onChange={(e) => onChange(e.target.value === '' ? '' : Number(e.target.value))}
+        />
+      )
     case 'formula':
     case 'calc':
-      return <Input type="number" value={(value as number) ?? ''} onChange={(e) => onChange(e.target.value === '' ? '' : Number(e.target.value))} />
+      // No formula configured — fall back to a read-only blank.
+      return <Input disabled placeholder="(no formula)" />
     case 'date':
       return <Input type="date" value={(value as string) ?? ''} onChange={(e) => onChange(e.target.value)} />
     case 'datetime':
@@ -474,69 +900,58 @@ function FieldInput({
   }
 }
 
-function RepeatingSection({
-  field,
-  values,
-  setRows,
-  people,
-  errors,
-}: {
-  field: FormField[]
-  values: Record<string, unknown>[]
-  setRows: (rows: Record<string, unknown>[]) => void
-  people: { id: string; firstName: string; lastName: string }[]
-  errors: Map<string, string>
-}) {
-  return (
-    <div className="space-y-3">
-      {values.length === 0 ? (
-        <p className="text-sm text-slate-500">No rows yet.</p>
-      ) : (
-        values.map((row, i) => (
-          <div key={i} className="rounded-md border border-slate-200 bg-slate-50/50 p-3">
-            <div className="mb-2 flex items-center justify-between">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Row {i + 1}
-              </div>
-              <button
-                type="button"
-                onClick={() => setRows(values.filter((_, j) => j !== i))}
-                className="text-slate-400 hover:text-red-500"
-              >
-                <Trash2 size={14} />
-              </button>
-            </div>
-            <div className="space-y-3">
-              {field.map((f) => (
-                <FieldRow
-                  key={f.id}
-                  field={f}
-                  value={row[f.id]}
-                  onChange={(v) => {
-                    const next = [...values]
-                    next[i] = { ...row, [f.id]: v }
-                    setRows(next)
-                  }}
-                  error={errors.get(f.id)}
-                  people={people}
-                />
-              ))}
-            </div>
-          </div>
-        ))
-      )}
-      <Button variant="outline" onClick={() => setRows([...values, {}])}>
-        <Plus size={14} />
-        Add row
-      </Button>
-    </div>
-  )
+// --- Field-level validation helper -----------------------------------------
+//
+// Mirrors the per-field rules from @beaconhs/forms-core validator so we can
+// show inline errors on Next-button click without re-running the full
+// schema-wide validator.
+
+function validateOne(field: FormField, value: unknown): string | null {
+  const v = field.validation
+  const required = field.required || v?.required
+  const isEmpty =
+    value === undefined ||
+    value === null ||
+    value === '' ||
+    (Array.isArray(value) && value.length === 0)
+  if (required && isEmpty) return v?.message ?? 'Required'
+  if (isEmpty) return null
+
+  switch (field.type) {
+    case 'number':
+    case 'rating': {
+      const n = Number(value)
+      if (Number.isNaN(n)) return v?.message ?? 'Must be a number'
+      if (v?.min !== undefined && n < v.min) return v?.message ?? `Must be >= ${v.min}`
+      if (v?.max !== undefined && n > v.max) return v?.message ?? `Must be <= ${v.max}`
+      return null
+    }
+    case 'text':
+    case 'textarea':
+    case 'long_text':
+    case 'email':
+    case 'phone':
+    case 'url': {
+      const s = String(value)
+      if (v?.minLength && s.length < v.minLength) return v?.message ?? `Min ${v.minLength} chars`
+      if (v?.maxLength && s.length > v.maxLength) return v?.message ?? `Max ${v.maxLength} chars`
+      if (v?.pattern && !new RegExp(v.pattern).test(s)) return v?.message ?? 'Invalid format'
+      if (field.type === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s)) return v?.message ?? 'Invalid email'
+      if (field.type === 'url' && !/^https?:\/\/.+/.test(s)) return v?.message ?? 'Invalid URL'
+      return null
+    }
+    default:
+      return null
+  }
 }
 
-/**
- * Signature field — captures drawn ink as PNG, uploads to MinIO/R2 the moment
- * the user lifts the stylus, then stores the attachment id on the response.
- */
+// --- Signature -------------------------------------------------------------
+//
+// The signature pad lives in @beaconhs/ui and is being built by a parallel
+// agent; we render the existing component and stash an {attachmentId, url}
+// pair on the field value (the response viewer reads the url for display,
+// the PDF renderer reads the attachmentId for embed).
+
 function SignatureField({
   value,
   onChange,
@@ -544,8 +959,6 @@ function SignatureField({
   value: string | null
   onChange: (v: { attachmentId: string; url: string } | null) => void
 }) {
-  // We treat `value` as previously-stored attachment id+url payload, but the
-  // canvas works in data-URL space. Use a local state for the active draw.
   const stored = (value as unknown as { attachmentId: string; url: string } | null) ?? null
 
   async function persist(dataUrl: string | null) {
@@ -587,3 +1000,6 @@ function SignatureField({
     </div>
   )
 }
+
+// Re-export the type so the file is self-contained.
+export type { LogicRule }

@@ -30,6 +30,12 @@ import {
   user,
   type FormWorkflowStep,
 } from '@beaconhs/db/schema'
+import {
+  evaluateFormulaTree,
+  evaluateLogicRule,
+  type EvalContext,
+  type FormulaExpression,
+} from '@beaconhs/forms-core'
 import { requireRequestContext } from '@/lib/auth'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { ActivityFeed } from '@/components/activity-feed'
@@ -381,15 +387,33 @@ export default async function FormResponsePage({
               </Section>
             ) : null}
 
-            {version.schema.sections.map((sec) => (
-              <Section
-                key={sec.id}
-                title={sec.title?.en ?? sec.id}
-                subtitle={sec.repeating ? 'repeating section' : undefined}
-              >
-                {sec.repeating ? renderRepeating(sec, response.data) : renderFlat(sec, response.data)}
-              </Section>
-            ))}
+            {(() => {
+              // Build a shared eval context once for the entire response page.
+              // Repeating-section row arrays are hoisted out of `data` into
+              // `ctx.rows` so cross-section formulas (sum_section) resolve.
+              const rows: Record<string, Array<Record<string, unknown>>> = {}
+              for (const sec of version.schema.sections) {
+                if (!sec.repeating) continue
+                const v = response.data[sec.id]
+                rows[sec.id] = Array.isArray(v) ? (v as Array<Record<string, unknown>>) : []
+              }
+              const evalCtx: EvalContext = { values: response.data, rows }
+              return version.schema.sections.map((sec) => {
+                // Section-level conditional visibility — skip entirely if false.
+                if (sec.showIf && !evaluateLogicRule(sec.showIf, evalCtx)) return null
+                return (
+                  <Section
+                    key={sec.id}
+                    title={sec.title?.en ?? sec.id}
+                    subtitle={sec.repeating ? 'repeating section' : undefined}
+                  >
+                    {sec.repeating
+                      ? renderRepeating(sec, response.data, evalCtx)
+                      : renderFlat(sec, response.data, evalCtx)}
+                  </Section>
+                )
+              })
+            })()}
 
             <Section
               title={`Workflow steps (${workflowStepProps.length})`}
@@ -481,33 +505,56 @@ export default async function FormResponsePage({
   )
 }
 
-function renderFlat(sec: any, values: Record<string, unknown>) {
+function renderFlat(
+  sec: any,
+  values: Record<string, unknown>,
+  evalCtx: EvalContext,
+) {
   if (sec.fields.length === 0) return <p className="text-sm text-slate-500">No fields.</p>
+  const visible = sec.fields.filter((f: any) => !f.showIf || evaluateLogicRule(f.showIf, evalCtx))
+  if (visible.length === 0) {
+    return <p className="text-sm text-slate-500">All fields in this section are conditionally hidden.</p>
+  }
   return (
     <dl className="grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
-      {sec.fields.map((f: any) => (
-        <div key={f.id} className="flex flex-col">
-          <dt className="text-xs uppercase tracking-wide text-slate-500">
-            {f.label?.en ?? f.id}
-          </dt>
-          <dd className="text-slate-900">{renderValue(f.type, values[f.id])}</dd>
-        </div>
-      ))}
+      {visible.map((f: any) => {
+        // Formula fields show the recomputed value, not whatever was stored.
+        let raw: unknown = values[f.id]
+        if ((f.type === 'formula' || f.type === 'calc') && f.formula) {
+          raw = evaluateFormulaTree(f.formula as FormulaExpression, evalCtx)
+        }
+        return (
+          <div key={f.id} className="flex flex-col">
+            <dt className="text-xs uppercase tracking-wide text-slate-500">
+              {f.label?.en ?? f.id}
+            </dt>
+            <dd className="text-slate-900">{renderValue(f.type, raw)}</dd>
+          </div>
+        )
+      })}
     </dl>
   )
 }
 
-function renderRepeating(sec: any, values: Record<string, unknown>) {
+function renderRepeating(
+  sec: any,
+  values: Record<string, unknown>,
+  evalCtx: EvalContext,
+) {
   const rows = (values[sec.id] as Array<Record<string, unknown>> | undefined) ?? []
   if (rows.length === 0) return <p className="text-sm text-slate-500">No rows recorded.</p>
   return (
     <ul className="space-y-3">
-      {rows.map((row, i) => (
-        <li key={i} className="rounded-md border border-slate-200 p-3">
-          <div className="mb-2 text-xs uppercase tracking-wide text-slate-500">Row {i + 1}</div>
-          {renderFlat(sec, row)}
-        </li>
-      ))}
+      {rows.map((row, i) => {
+        // Per-row eval context so showIf inside the row can reference siblings.
+        const rowCtx: EvalContext = { ...evalCtx, values: { ...evalCtx.values, ...row } }
+        return (
+          <li key={i} className="rounded-md border border-slate-200 p-3">
+            <div className="mb-2 text-xs uppercase tracking-wide text-slate-500">Row {i + 1}</div>
+            {renderFlat(sec, row, rowCtx)}
+          </li>
+        )
+      })}
     </ul>
   )
 }

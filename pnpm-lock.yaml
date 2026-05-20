@@ -234,6 +234,9 @@ importers:
 
   packages/db:
     dependencies:
+      '@beaconhs/forms-core':
+        specifier: workspace:*
+        version: link:../forms-core
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@types/pg@8.20.0)(kysely@0.28.17)(pg@8.21.0)(postgres@3.4.9)
