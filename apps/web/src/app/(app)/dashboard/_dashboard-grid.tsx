@@ -165,12 +165,16 @@ export function DashboardGrid({
     }
   }, [router])
 
-  const handleLayoutChange = useCallback(
+  // Only commit layout changes triggered by user drag/resize — NOT every
+  // `onLayoutChange` event. If we commit on every event, opening the palette
+  // (which narrows the container, sometimes crossing a breakpoint) makes RGL
+  // reflow and emit "new" positions; we'd save those, and on close the grid
+  // would stay squished because our saved layout no longer matches the
+  // full-width geometry.
+  const commitLayout = useCallback(
     (next: Layout) => {
       if (mode !== 'edit') return
       setLayout((prev) => {
-        // Keep ids that aren't in `next` filtered out, but the RGL `next` should
-        // already contain every grid item we passed in.
         const map = new Map(prev.map((w) => [w.id, w]))
         const updated: LayoutWidget[] = []
         for (const item of next) {
@@ -224,7 +228,8 @@ export function DashboardGrid({
               enabled: mode === 'edit',
               handles: RESIZE_HANDLES,
             }}
-            onLayoutChange={handleLayoutChange}
+            onDragStop={(next: Layout) => commitLayout(next)}
+            onResizeStop={(next: Layout) => commitLayout(next)}
           >
             {layout.map((w) => {
               const node = nodes[w.id]
