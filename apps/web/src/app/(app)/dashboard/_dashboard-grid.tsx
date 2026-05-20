@@ -197,7 +197,13 @@ export function DashboardGrid({
         />
       ) : null}
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_280px]">
+      <div
+        className={
+          mode === 'edit' && paletteOpen
+            ? 'grid grid-cols-1 gap-4 lg:grid-cols-[1fr_280px]'
+            : 'w-full'
+        }
+      >
         <div ref={containerRef} className="min-w-0">
           <Responsive
             className="layout"
