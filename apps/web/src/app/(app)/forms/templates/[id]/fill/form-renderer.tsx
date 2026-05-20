@@ -76,6 +76,11 @@ export function FormRenderer({
   people,
   entitiesByField: initialEntitiesByField,
   currentUser,
+  initialResponseId = null,
+  initialValues = {},
+  initialRows = {},
+  initialStepIndex = 0,
+  isResumed = false,
 }: {
   templateId: string
   templateName: string
@@ -89,18 +94,67 @@ export function FormRenderer({
   // `fetchEntityAttrs` when a picker selection changes.
   entitiesByField: EntityAttrsByField
   currentUser: CurrentUser
+  // Autosave resume-path props. When non-null the renderer hydrates with the
+  // saved draft state and continues writing against the same response id.
+  initialResponseId?: string | null
+  initialValues?: Record<string, unknown>
+  initialRows?: Record<string, Array<Record<string, unknown>>>
+  initialStepIndex?: number
+  // True when we successfully resumed a saved draft — drives the "Welcome
+  // back, your draft was restored" toast on mount.
+  isResumed?: boolean
 }) {
   const router = useRouter()
   // Per-step progress so users can click back into completed steps.
   const [completedSteps, setCompletedSteps] = useState<Set<string>>(new Set())
-  const [stepIndex, setStepIndex] = useState(0)
-  const [values, setValues] = useState<Record<string, unknown>>({})
-  const [rowsByStep, setRowsByStep] = useState<Record<string, Record<string, unknown>[]>>({})
+  const [stepIndex, setStepIndex] = useState(initialStepIndex)
+  const [values, setValues] = useState<Record<string, unknown>>(initialValues)
+  const [rowsByStep, setRowsByStep] = useState<Record<string, Record<string, unknown>[]>>(initialRows)
   const [siteId, setSiteId] = useState<string | ''>('')
   const [errors, setErrors] = useState<Map<string, string>>(new Map())
   const [serverError, setServerError] = useState<string | null>(null)
   const [pending, start] = useTransition()
   const appliedDefaults = useRef<Set<string>>(new Set())
+
+  // --- Autosave state -------------------------------------------------------
+  //
+  // `responseId` is the row we're writing against on each draft save. It's
+  // null until the user makes a content change AND `createDraftResponse`
+  // returns — see the dirty-tracking effect below. Once non-null, every
+  // subsequent save updates the same row.
+  const [responseId, setResponseId] = useState<string | null>(initialResponseId)
+  // 'idle' before any change; 'pending' during in-flight save; 'saved' on
+  // success; 'error' on failure. Drives the indicator in the header.
+  const [saveStatus, setSaveStatus] = useState<
+    'idle' | 'pending' | 'saved' | 'error'
+  >('idle')
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  // Tick state so "Saved Xs ago" updates without us calling render every
+  // change. Bumped every 5s by an effect once a save has happened.
+  const [, setSavedTick] = useState(0)
+  // Tracks whether the user has actually interacted with the form. Stops us
+  // from creating empty draft rows on a page that's just been opened (a
+  // requirement: "Don't save if the user hasn't typed anything"). Initialized
+  // true on a resumed draft so the unload handler still writes one last
+  // save (the state may have shifted while loading).
+  const dirtyRef = useRef<boolean>(isResumed)
+  // Whether a draft-creation request is in flight. Guards against double
+  // inserts when changes arrive faster than the create round-trip.
+  const creatingRef = useRef<boolean>(false)
+  // The latest values + rows + stepIndex, captured in a ref so the
+  // beforeunload handler can read them synchronously without re-binding.
+  const latestRef = useRef<{
+    values: Record<string, unknown>
+    rows: Record<string, Array<Record<string, unknown>>>
+    stepIndex: number
+    responseId: string | null
+  }>({
+    values: initialValues,
+    rows: initialRows,
+    stepIndex: initialStepIndex,
+    responseId: initialResponseId,
+  })
   // Per-picker entity attribute maps, fed into the evaluator on every render
   // so `entity_attr` formula fields stay live. Refreshed via the
   // fetchEntityAttrs server action whenever a picker's value changes.
@@ -177,6 +231,139 @@ export function FormRenderer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stepIndex])
 
+  // --- Autosave -------------------------------------------------------------
+  //
+  // Keep the latest values/rows/step in a ref so the beforeunload handler can
+  // read them synchronously when the browser is tearing down.
+  useEffect(() => {
+    latestRef.current = {
+      values,
+      rows: rowsByStep,
+      stepIndex,
+      responseId,
+    }
+  }, [values, rowsByStep, stepIndex, responseId])
+
+  // Surface a one-shot toast when we resumed from a saved draft so the user
+  // understands they're not on a fresh form.
+  useEffect(() => {
+    if (isResumed) {
+      toast.success('Draft restored — pick up where you left off')
+    }
+    // Run once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Tick "Saved Xs ago" every 5s once a save has happened so the label
+  // stays current without re-saving.
+  useEffect(() => {
+    if (!lastSavedAt) return
+    const t = setInterval(() => setSavedTick((n) => n + 1), 5000)
+    return () => clearInterval(t)
+  }, [lastSavedAt])
+
+  // Core save helper. Centralised so the debounced effect, step navigation,
+  // and the retry-on-click path all share one implementation. Returns true
+  // on a successful save.
+  const persistDraft = useCallback(
+    async (
+      args: {
+        values: Record<string, unknown>
+        rows: Record<string, Array<Record<string, unknown>>>
+        stepIndex: number
+      },
+    ): Promise<boolean> => {
+      // Lazily create a draft row on the first save. If the create-call
+      // races with another save, just wait it out by skipping this round —
+      // the next debounce tick will hit the now-set responseId.
+      let id = latestRef.current.responseId
+      if (!id) {
+        if (creatingRef.current) return false
+        creatingRef.current = true
+        try {
+          const res = await createDraftResponse({ templateId })
+          if (!res.ok) {
+            setSaveStatus('error')
+            setSaveError(res.error)
+            return false
+          }
+          id = res.responseId
+          setResponseId(id)
+          latestRef.current.responseId = id
+        } finally {
+          creatingRef.current = false
+        }
+      }
+      setSaveStatus('pending')
+      setSaveError(null)
+      const res = await saveFormResponseDraft({
+        responseId: id,
+        values: args.values,
+        rows: args.rows,
+        stepIndex: args.stepIndex,
+      })
+      if (!res.ok) {
+        setSaveStatus('error')
+        setSaveError(res.error)
+        return false
+      }
+      setSaveStatus('saved')
+      setLastSavedAt(new Date(res.savedAt))
+      return true
+    },
+    [templateId],
+  )
+
+  // Debounced autosave on any values / rows / step change. The 1500ms delay
+  // is the spec; each new change cancels and reschedules. We also gate on
+  // dirtyRef so the very first render (just hydrated state) doesn't trigger
+  // a no-op save.
+  useEffect(() => {
+    if (!dirtyRef.current) return
+    const handle = setTimeout(() => {
+      void persistDraft({ values, rows: rowsByStep, stepIndex })
+    }, 1500)
+    return () => clearTimeout(handle)
+  }, [values, rowsByStep, stepIndex, persistDraft])
+
+  // Save-on-unload. Uses navigator.sendBeacon — only this API reliably
+  // delivers a POST as the document unloads. Best-effort: failure is
+  // silent (the in-app autosave will have run on the previous keystroke).
+  useEffect(() => {
+    function handleUnload() {
+      if (!dirtyRef.current) return
+      const { values: v, rows, stepIndex: si, responseId: rid } = latestRef.current
+      if (!rid) return // No draft row yet — nothing to persist to.
+      try {
+        const payload = JSON.stringify({
+          responseId: rid,
+          values: v,
+          rows,
+          stepIndex: si,
+        })
+        const blob = new Blob([payload], { type: 'application/json' })
+        navigator.sendBeacon?.('/api/forms/draft-save', blob)
+      } catch {
+        // Swallow — there's nothing we can do mid-unload.
+      }
+    }
+    window.addEventListener('beforeunload', handleUnload)
+    // visibilitychange catches the "switched apps on mobile" case where
+    // beforeunload doesn't fire reliably.
+    function handleVisibility() {
+      if (document.visibilityState === 'hidden') handleUnload()
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => {
+      window.removeEventListener('beforeunload', handleUnload)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
+  }, [])
+
+  function markDirty() {
+    if (!dirtyRef.current) dirtyRef.current = true
+  }
+
   // --- Helpers ---------------------------------------------------------------
 
   // Map of fieldId → picker field type so picker-change refreshes can resolve
@@ -193,6 +380,7 @@ export function FormRenderer({
   }, [schema])
 
   function setValue(fieldId: string, v: unknown) {
+    markDirty()
     setValues((s) => ({ ...s, [fieldId]: v }))
     setErrors((m) => {
       const next = new Map(m)
@@ -235,6 +423,7 @@ export function FormRenderer({
   }
 
   function setRows(sectionId: string, rows: Record<string, unknown>[]) {
+    markDirty()
     setRowsByStep((s) => ({ ...s, [sectionId]: rows }))
   }
 
@@ -307,6 +496,28 @@ export function FormRenderer({
     return errs
   }
 
+  // Save-before-navigation. Best-effort and time-boxed: the user shouldn't
+  // be blocked by a slow save when they want to switch steps. If the save
+  // hasn't returned in 500ms we proceed anyway — the next debounce tick
+  // will catch up on the new step.
+  async function saveBeforeNavigation(targetStepIndex: number) {
+    if (!dirtyRef.current || !responseId) return
+    const savePromise = persistDraft({
+      values,
+      rows: rowsByStep,
+      stepIndex: targetStepIndex,
+    })
+    const timeoutPromise = new Promise<'timeout'>((resolve) =>
+      setTimeout(() => resolve('timeout'), 500),
+    )
+    const result = await Promise.race([savePromise, timeoutPromise])
+    if (result === false) {
+      // persistDraft already set saveStatus/saveError; show a toast so the
+      // user knows their navigation succeeded but the save lagged.
+      toast.error('Could not save before navigation — will retry')
+    }
+  }
+
   function next() {
     const errs = validateCurrentStep()
     if (errs.size > 0) {
@@ -316,11 +527,15 @@ export function FormRenderer({
     }
     setErrors(new Map())
     setCompletedSteps((s) => new Set(s).add(step.key))
-    setStepIndex((i) => Math.min(totalSteps - 1, i + 1))
+    const target = Math.min(totalSteps - 1, stepIndex + 1)
+    void saveBeforeNavigation(target)
+    setStepIndex(target)
   }
 
   function back() {
-    setStepIndex((i) => Math.max(0, i - 1))
+    const target = Math.max(0, stepIndex - 1)
+    void saveBeforeNavigation(target)
+    setStepIndex(target)
     setErrors(new Map())
   }
 
@@ -329,6 +544,7 @@ export function FormRenderer({
     // gated by per-step validation.
     if (i === stepIndex) return
     if (i < stepIndex || completedSteps.has(steps[i]!.key)) {
+      void saveBeforeNavigation(i)
       setStepIndex(i)
       setErrors(new Map())
     }
