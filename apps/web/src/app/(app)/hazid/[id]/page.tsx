@@ -44,7 +44,6 @@ import { DetailPageLayout } from '@/components/page-layout'
 import { PhotoGallery } from '@/components/photo-gallery'
 import { Section } from '@/components/section'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
-import { HazidSubNav } from '../_subnav'
 import {
   addCSAtmospheric,
   addCSEntry,
@@ -365,9 +364,6 @@ export default async function HazidAssessmentDetailPage({
     <DetailPageLayout
       header={
         <>
-          <div className="mb-2">
-            <HazidSubNav pathname="/hazid" />
-          </div>
           <DetailHeader
             back={{ href: '/hazid', label: 'Back to assessments' }}
             title={type?.name ?? 'Hazard assessment'}

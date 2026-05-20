@@ -41,7 +41,6 @@ import { ActivityFeed } from '@/components/activity-feed'
 import { DetailGrid } from '@/components/detail-grid'
 import { DetailPageLayout } from '@/components/page-layout'
 import { Section } from '@/components/section'
-import { HazidSubNav } from '../../../_subnav'
 import {
   deleteSignedReport,
   resendSignedReportEmail,
@@ -127,7 +126,6 @@ export default async function SignedReportDetailPage({
       header={
         <>
           <div className="mb-2">
-            <HazidSubNav pathname="/hazid/reports/signed" />
           </div>
           <DetailHeader
             back={{ href: '/hazid/reports/signed', label: 'Back to signed-report bundles' }}

@@ -7,7 +7,6 @@ import { requireRequestContext } from '@/lib/auth'
 import { DetailGrid } from '@/components/detail-grid'
 import { DetailPageLayout } from '@/components/page-layout'
 import { Section } from '@/components/section'
-import { HazidSubNav } from '../../_subnav'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,7 +29,6 @@ export default async function HazardDetailPage({ params }: { params: Promise<{ i
       header={
         <>
           <div className="mb-2">
-            <HazidSubNav pathname="/hazid/hazards" />
           </div>
           <DetailHeader
             back={{ href: '/hazid/hazards', label: 'Back to hazards' }}

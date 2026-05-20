@@ -2,6 +2,7 @@
 
 import * as React from 'react'
 import { createPortal } from 'react-dom'
+import { AnimatePresence, motion } from 'framer-motion'
 import { cn } from './utils'
 
 /**
@@ -79,31 +80,39 @@ export function Popover({
   return (
     <>
       <div ref={triggerRef} className="contents">{trigger}</div>
-      {mounted && open && rect && typeof document !== 'undefined'
+      {mounted && rect && typeof document !== 'undefined'
         ? createPortal(
-            <div
-              ref={panelRef}
-              className={cn(
-                'fixed z-40 min-w-[12rem] rounded-md border border-slate-200 bg-white shadow-lg',
-                className,
-              )}
-              style={{
-                top: side === 'bottom' ? rect.top + rect.height + 4 : undefined,
-                bottom: side === 'top' ? window.innerHeight - rect.top + 4 : undefined,
-                left:
-                  align === 'start'
-                    ? rect.left
-                    : align === 'end'
-                      ? undefined
-                      : rect.left + rect.width / 2,
-                right:
-                  align === 'end' ? window.innerWidth - (rect.left + rect.width) : undefined,
-                transform: align === 'center' ? 'translateX(-50%)' : undefined,
-              }}
-              role="dialog"
-            >
-              {children}
-            </div>,
+            <AnimatePresence>
+              {open ? (
+                <motion.div
+                  ref={panelRef}
+                  initial={{ opacity: 0, y: side === 'bottom' ? -4 : 4, scale: 0.97 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: side === 'bottom' ? -4 : 4, scale: 0.97 }}
+                  transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
+                  className={cn(
+                    'fixed z-40 min-w-[12rem] origin-top rounded-md border border-slate-200 bg-white shadow-xl',
+                    className,
+                  )}
+                  style={{
+                    top: side === 'bottom' ? rect.top + rect.height + 4 : undefined,
+                    bottom: side === 'top' ? window.innerHeight - rect.top + 4 : undefined,
+                    left:
+                      align === 'start'
+                        ? rect.left
+                        : align === 'end'
+                          ? undefined
+                          : rect.left + rect.width / 2,
+                    right:
+                      align === 'end' ? window.innerWidth - (rect.left + rect.width) : undefined,
+                    transform: align === 'center' ? 'translateX(-50%)' : undefined,
+                  }}
+                  role="dialog"
+                >
+                  {children}
+                </motion.div>
+              ) : null}
+            </AnimatePresence>,
             document.body,
           )
         : null}

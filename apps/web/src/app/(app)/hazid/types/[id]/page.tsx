@@ -12,7 +12,6 @@ import { requireRequestContext } from '@/lib/auth'
 import { DetailGrid } from '@/components/detail-grid'
 import { DetailPageLayout } from '@/components/page-layout'
 import { Section } from '@/components/section'
-import { HazidSubNav } from '../../_subnav'
 import { addTypePPE, addTypeQuestion, deleteTypePPE, deleteTypeQuestion } from '../../_actions'
 
 export const dynamic = 'force-dynamic'
@@ -59,7 +58,6 @@ export default async function AssessmentTypeDetailPage({
       header={
         <>
           <div className="mb-2">
-            <HazidSubNav pathname="/hazid/types" />
           </div>
           <DetailHeader
             back={{ href: '/hazid/types', label: 'Back' }}

@@ -334,16 +334,12 @@ const wahRescueSchema: FormSchemaV1 = {
   workflow: SUBMIT_WORKFLOW,
 }
 
+// Note: JSHA is NOT a canonical template — there's a real first-class
+// module at /hazid with multi-section sign-off, hazard library, atmospheric
+// readings, etc. The form-template gallery would have been confusing
+// alongside the native module, so we skipped it. The `jshaSchema` constant
+// is kept above for reference; it isn't exported.
 export const CANONICAL_TEMPLATES: CanonicalTemplate[] = [
-  {
-    key: 'jsha_v1',
-    name: 'JSHA — Job Safety Hazard Analysis',
-    category: 'jsha',
-    moduleBinding: 'jsha',
-    description:
-      'Identify task steps, hazards, initial risk, controls, residual risk. Sign-off by supervisor + crew. Used to be a standalone module in the legacy app.',
-    schema: jshaSchema,
-  },
   {
     key: 'toolbox_v1',
     name: 'Toolbox Talk',
