@@ -506,23 +506,18 @@ function DaysSinceCard({
           maskImage: 'radial-gradient(ellipse at top right, black 0%, transparent 70%)',
         }}
       />
-      <div className="relative flex h-full flex-col">
+      <div className="relative flex h-full min-h-0 flex-col">
         <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/70">
           <ShieldCheck size={12} />
           Days since last recordable
         </div>
-        <div className="my-auto text-center">
+        <div className="my-auto flex min-h-0 flex-1 flex-col items-center justify-center text-center">
           {days === null ? (
-            <span className="text-5xl font-bold tabular-nums leading-none">—</span>
+            <FitText text="—" className="text-white" />
           ) : (
             <>
-              <div className="text-[68px] font-bold leading-none tabular-nums">
-                <AnimatedNumber
-                  value={value}
-                  format={(v) => Math.round(v).toLocaleString()}
-                />
-              </div>
-              <div className="mt-0.5 text-[11px] uppercase tracking-[0.14em] text-white/60">
+              <FitText text={display} className="text-white" />
+              <div className="mt-1 text-[11px] uppercase tracking-[0.14em] text-white/60">
                 days
               </div>
             </>
@@ -1052,6 +1047,45 @@ function EmptyRow({ children }: { children: React.ReactNode }) {
     <div className="flex h-full items-center justify-center px-3 py-8 text-center text-xs text-slate-500">
       {children}
     </div>
+  )
+}
+
+// =====================================================================
+// FitText — SVG-based auto-scaling text. Fills its container; viewBox
+// math makes the glyph grow/shrink with the available space, so a card
+// that gets resized on the grid keeps its big number perfectly fitted.
+// =====================================================================
+
+function FitText({ text, className = '' }: { text: string; className?: string }) {
+  // viewBox is sized to the typical aspect of a 1–4 character number.
+  // `preserveAspectRatio="xMidYMid meet"` keeps the text centered and
+  // scaled-to-fit regardless of card aspect ratio.
+  const len = Math.max(text.length, 1)
+  // Heuristic char width at fontSize 80: ~48px per char. Choose viewBox
+  // width so the text doesn't overflow horizontally at higher digit counts.
+  const vbWidth = Math.max(120, len * 56)
+  return (
+    <svg
+      role="img"
+      aria-label={text}
+      viewBox={`0 0 ${vbWidth} 100`}
+      preserveAspectRatio="xMidYMid meet"
+      className={`block h-full w-full ${className}`}
+    >
+      <text
+        x="50%"
+        y="50%"
+        textAnchor="middle"
+        dominantBaseline="central"
+        fontSize="80"
+        fontWeight="700"
+        fontFamily="ui-sans-serif, system-ui, -apple-system, Segoe UI, Helvetica, Arial"
+        fill="currentColor"
+        style={{ fontVariantNumeric: 'tabular-nums' }}
+      >
+        {text}
+      </text>
+    </svg>
   )
 }
 
