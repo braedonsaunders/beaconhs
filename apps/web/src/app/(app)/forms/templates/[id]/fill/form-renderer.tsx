@@ -18,8 +18,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { AlertCircle, Check, ChevronLeft, ChevronRight, Cloud, CloudOff, Plus, Trash2 } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, Cloud, CloudOff, Plus, Trash2 } from 'lucide-react'
 import {
   Alert,
   AlertDescription,
@@ -104,7 +103,6 @@ export function FormRenderer({
   // back, your draft was restored" toast on mount.
   isResumed?: boolean
 }) {
-  const router = useRouter()
   // Per-step progress so users can click back into completed steps.
   const [completedSteps, setCompletedSteps] = useState<Set<string>>(new Set())
   const [stepIndex, setStepIndex] = useState(initialStepIndex)
@@ -135,10 +133,10 @@ export function FormRenderer({
   const [, setSavedTick] = useState(0)
   // Tracks whether the user has actually interacted with the form. Stops us
   // from creating empty draft rows on a page that's just been opened (a
-  // requirement: "Don't save if the user hasn't typed anything"). Initialized
-  // true on a resumed draft so the unload handler still writes one last
-  // save (the state may have shifted while loading).
-  const dirtyRef = useRef<boolean>(isResumed)
+  // requirement: "Don't save if the user hasn't typed anything"). Always
+  // starts false — a resumed draft already has its state persisted, so no
+  // beacon-on-unload is needed until the user actually changes something.
+  const dirtyRef = useRef<boolean>(false)
   // Whether a draft-creation request is in flight. Guards against double
   // inserts when changes arrive faster than the create round-trip.
   const creatingRef = useRef<boolean>(false)
@@ -309,6 +307,9 @@ export function FormRenderer({
       }
       setSaveStatus('saved')
       setLastSavedAt(new Date(res.savedAt))
+      // Clear dirty so the unload handler doesn't beacon a no-op. The next
+      // user change calls markDirty() to flip it back on.
+      dirtyRef.current = false
       return true
     },
     [templateId],
@@ -582,6 +583,9 @@ export function FormRenderer({
         templateId,
         data: payload,
         siteOrgUnitId: siteId || null,
+        // Pass the in-flight draft id (if any) so the server finalizes that
+        // row in-place rather than inserting a duplicate.
+        responseId,
       })
       if (!res.ok) {
         if (res.errors) {
@@ -592,6 +596,9 @@ export function FormRenderer({
           toast.error('Submit failed')
         }
       } else {
+        // Clear dirty so the unload-handler doesn't try to overwrite our
+        // freshly-submitted row with a stale draft payload.
+        dirtyRef.current = false
         toast.success('Form submitted')
       }
       // ok-path navigates via server redirect.
@@ -612,7 +619,17 @@ export function FormRenderer({
           </Link>
           <div className="flex items-center justify-between gap-2">
             <h1 className="text-xl font-semibold truncate">{templateName}</h1>
-            <Badge variant="outline">v{version}</Badge>
+            <div className="flex items-center gap-2">
+              <SaveStatus
+                status={saveStatus}
+                lastSavedAt={lastSavedAt}
+                error={saveError}
+                onRetry={() => {
+                  void persistDraft({ values, rows: rowsByStep, stepIndex })
+                }}
+              />
+              <Badge variant="outline">v{version}</Badge>
+            </div>
           </div>
           {/* Progress strip — every workflow step as a clickable pill */}
           <ol className="flex flex-wrap items-center gap-1 text-xs">
@@ -1303,6 +1320,68 @@ function SignatureField({
       <SignaturePad value={stored?.url ?? null} onChange={persist} />
     </div>
   )
+}
+
+// --- Save status indicator -------------------------------------------------
+//
+// Small chip rendered in the top-right of the wizard header. Mirrors the
+// 'idle' | 'pending' | 'saved' | 'error' state machine driven by the
+// autosave hook. Clickable in the error state to manually retry the save.
+
+function SaveStatus({
+  status,
+  lastSavedAt,
+  error,
+  onRetry,
+}: {
+  status: 'idle' | 'pending' | 'saved' | 'error'
+  lastSavedAt: Date | null
+  error: string | null
+  onRetry: () => void
+}) {
+  if (status === 'idle') return null
+
+  if (status === 'pending') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+        <Cloud size={11} className="animate-pulse" />
+        Saving…
+      </span>
+    )
+  }
+
+  if (status === 'error') {
+    return (
+      <button
+        type="button"
+        onClick={onRetry}
+        title={error ?? 'Save failed'}
+        className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-700 ring-1 ring-rose-200 hover:bg-rose-100"
+      >
+        <CloudOff size={11} />
+        Save failed — retry
+      </button>
+    )
+  }
+
+  // 'saved'
+  const label = lastSavedAt ? formatSavedAgo(lastSavedAt) : 'Saved'
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 ring-1 ring-emerald-200">
+      <Check size={11} />
+      {label}
+    </span>
+  )
+}
+
+function formatSavedAgo(at: Date): string {
+  const seconds = Math.floor((Date.now() - at.getTime()) / 1000)
+  if (seconds < 5) return 'Saved just now'
+  if (seconds < 60) return `Saved ${seconds}s ago`
+  const mins = Math.floor(seconds / 60)
+  if (mins < 60) return `Saved ${mins}m ago`
+  const hours = Math.floor(mins / 60)
+  return `Saved ${hours}h ago`
 }
 
 // Re-export the type so the file is self-contained.
