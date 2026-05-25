@@ -8,6 +8,7 @@
 </p>
 
 <p align="center">
+  <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/License-AGPL--3.0-blue" /></a>
   <img alt="Next.js" src="https://img.shields.io/badge/Next.js-16-000?logo=next.js&logoColor=white" />
   <img alt="React" src="https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white" />
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white" />
@@ -201,9 +202,14 @@ actually work, that feedback is gold — open an issue.
 
 ## License
 
-BeaconHS is free and open source. _A `LICENSE` file will accompany the first
-public release_ — if you're adopting it before then, open an issue to confirm
-terms.
+BeaconHS is licensed under the
+**[GNU Affero General Public License v3.0](LICENSE)**.
+
+In plain terms: you're free to use, modify, and self-host it — but if you run a
+modified version as a network service, you must make your modified source
+available to its users. See [`LICENSE`](LICENSE) for the full terms.
+
+Copyright © 2026 the BeaconHS contributors.
 
 ---
 
