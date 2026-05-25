@@ -63,4 +63,4 @@ tab on the login form — the link will arrive in Mailpit at
 | First-party plugins (NetSuite, adminapp2-sync) | 🟡 — Phase 5 |
 | Migration ETL from beaconhs SQL Server | 🟡 — Phase 5 |
 
-See `REWRITE_PLAN.md` for the full phased plan.
+See [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) for the full phased plan.
