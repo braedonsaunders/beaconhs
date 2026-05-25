@@ -20,7 +20,7 @@ jobs:
           theme: auto
           accent: teal
           receipts: true
-          # Informational only — no health grade or score. `scale` keeps the
-          # file/function/LOC/language counts; `languages` adds the language
-          # breakdown. The `grade` panel (HEALTH) is intentionally omitted.
-          panels: scale,languages
+          # Informational only — no health grade/score, no language-ratio
+          # breakdown. `scale` keeps the file/function/LOC/language counts.
+          # `grade` (HEALTH) and `languages` are intentionally omitted.
+          panels: scale

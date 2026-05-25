@@ -1,0 +1,12 @@
+# Generated artifacts — kept out of GitHub's language statistics and
+# collapsed in diffs. These are machine-written, not hand-authored code.
+
+# Drizzle migration baseline + schema snapshots (written by drizzle-kit).
+packages/db/drizzle/meta/**   linguist-generated=true
+packages/db/drizzle/*.sql     linguist-generated=true
+
+# Lockfile.
+pnpm-lock.yaml                linguist-generated=true
+
+# CodeFlow card state.
+.github/codeflow-card.json    linguist-generated=true
