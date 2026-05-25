@@ -20,3 +20,4 @@ jobs:
           theme: auto
           accent: teal
           receipts: true
+          show-score: false
