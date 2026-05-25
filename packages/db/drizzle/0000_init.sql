@@ -644,18 +644,6 @@ CREATE TABLE "incidents" (
 	"deleted_at" timestamp with time zone
 );
 --> statement-breakpoint
-CREATE TABLE "training_assignments" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"tenant_id" uuid NOT NULL,
-	"course_id" uuid NOT NULL,
-	"trade_id" uuid,
-	"role_key" text,
-	"site_org_unit_id" uuid,
-	"due_within_days_of_hire" integer,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
-);
---> statement-breakpoint
 CREATE TABLE "training_certificates" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
@@ -736,30 +724,6 @@ CREATE TABLE "training_records" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"deleted_at" timestamp with time zone
-);
---> statement-breakpoint
-CREATE TABLE "training_skill_evaluations" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"tenant_id" uuid NOT NULL,
-	"skill_id" uuid NOT NULL,
-	"person_id" uuid NOT NULL,
-	"evaluator_tenant_user_id" uuid NOT NULL,
-	"evaluated_on" date NOT NULL,
-	"result" text NOT NULL,
-	"notes" text,
-	"signature_attachment_id" uuid,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
-);
---> statement-breakpoint
-CREATE TABLE "training_skills" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"tenant_id" uuid NOT NULL,
-	"name" text NOT NULL,
-	"description" text,
-	"course_id" uuid,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "equipment_categories" (
@@ -2617,10 +2581,6 @@ ALTER TABLE "incidents" ADD CONSTRAINT "incidents_supervisor_person_id_people_id
 ALTER TABLE "incidents" ADD CONSTRAINT "incidents_classification_id_incident_classifications_id_fk" FOREIGN KEY ("classification_id") REFERENCES "public"."incident_classifications"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "incidents" ADD CONSTRAINT "incidents_assigned_investigator_tenant_user_id_tenant_users_id_fk" FOREIGN KEY ("assigned_investigator_tenant_user_id") REFERENCES "public"."tenant_users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "incidents" ADD CONSTRAINT "incidents_closed_by_tenant_user_id_tenant_users_id_fk" FOREIGN KEY ("closed_by_tenant_user_id") REFERENCES "public"."tenant_users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "training_assignments" ADD CONSTRAINT "training_assignments_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "training_assignments" ADD CONSTRAINT "training_assignments_course_id_training_courses_id_fk" FOREIGN KEY ("course_id") REFERENCES "public"."training_courses"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "training_assignments" ADD CONSTRAINT "training_assignments_trade_id_trades_id_fk" FOREIGN KEY ("trade_id") REFERENCES "public"."trades"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "training_assignments" ADD CONSTRAINT "training_assignments_site_org_unit_id_org_units_id_fk" FOREIGN KEY ("site_org_unit_id") REFERENCES "public"."org_units"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "training_certificates" ADD CONSTRAINT "training_certificates_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "training_certificates" ADD CONSTRAINT "training_certificates_record_id_training_records_id_fk" FOREIGN KEY ("record_id") REFERENCES "public"."training_records"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "training_class_attendees" ADD CONSTRAINT "training_class_attendees_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -2637,12 +2597,6 @@ ALTER TABLE "training_records" ADD CONSTRAINT "training_records_course_id_traini
 ALTER TABLE "training_records" ADD CONSTRAINT "training_records_class_id_training_classes_id_fk" FOREIGN KEY ("class_id") REFERENCES "public"."training_classes"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "training_records" ADD CONSTRAINT "training_records_evaluator_person_id_people_id_fk" FOREIGN KEY ("evaluator_person_id") REFERENCES "public"."people"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "training_records" ADD CONSTRAINT "training_records_issued_by_tenant_user_id_tenant_users_id_fk" FOREIGN KEY ("issued_by_tenant_user_id") REFERENCES "public"."tenant_users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "training_skill_evaluations" ADD CONSTRAINT "training_skill_evaluations_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "training_skill_evaluations" ADD CONSTRAINT "training_skill_evaluations_skill_id_training_skills_id_fk" FOREIGN KEY ("skill_id") REFERENCES "public"."training_skills"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "training_skill_evaluations" ADD CONSTRAINT "training_skill_evaluations_person_id_people_id_fk" FOREIGN KEY ("person_id") REFERENCES "public"."people"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "training_skill_evaluations" ADD CONSTRAINT "training_skill_evaluations_evaluator_tenant_user_id_tenant_users_id_fk" FOREIGN KEY ("evaluator_tenant_user_id") REFERENCES "public"."tenant_users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "training_skills" ADD CONSTRAINT "training_skills_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "training_skills" ADD CONSTRAINT "training_skills_course_id_training_courses_id_fk" FOREIGN KEY ("course_id") REFERENCES "public"."training_courses"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "equipment_categories" ADD CONSTRAINT "equipment_categories_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "equipment_items" ADD CONSTRAINT "equipment_items_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "equipment_items" ADD CONSTRAINT "equipment_items_type_id_equipment_types_id_fk" FOREIGN KEY ("type_id") REFERENCES "public"."equipment_types"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -3055,8 +3009,6 @@ CREATE INDEX "incidents_reference_idx" ON "incidents" USING btree ("tenant_id","
 CREATE INDEX "incidents_status_idx" ON "incidents" USING btree ("tenant_id","status");--> statement-breakpoint
 CREATE INDEX "incidents_occurred_idx" ON "incidents" USING btree ("tenant_id","occurred_at");--> statement-breakpoint
 CREATE INDEX "incidents_site_idx" ON "incidents" USING btree ("tenant_id","site_org_unit_id");--> statement-breakpoint
-CREATE INDEX "training_assignments_tenant_idx" ON "training_assignments" USING btree ("tenant_id");--> statement-breakpoint
-CREATE INDEX "training_assignments_course_idx" ON "training_assignments" USING btree ("course_id");--> statement-breakpoint
 CREATE INDEX "training_certificates_record_idx" ON "training_certificates" USING btree ("record_id");--> statement-breakpoint
 CREATE INDEX "training_certificates_token_idx" ON "training_certificates" USING btree ("verify_token");--> statement-breakpoint
 CREATE INDEX "training_class_attendees_class_idx" ON "training_class_attendees" USING btree ("class_id");--> statement-breakpoint
@@ -3069,9 +3021,6 @@ CREATE INDEX "training_courses_tenant_code_idx" ON "training_courses" USING btre
 CREATE INDEX "training_records_tenant_idx" ON "training_records" USING btree ("tenant_id");--> statement-breakpoint
 CREATE INDEX "training_records_person_course_idx" ON "training_records" USING btree ("tenant_id","person_id","course_id");--> statement-breakpoint
 CREATE INDEX "training_records_expires_idx" ON "training_records" USING btree ("tenant_id","expires_on");--> statement-breakpoint
-CREATE INDEX "training_skill_evaluations_skill_idx" ON "training_skill_evaluations" USING btree ("skill_id");--> statement-breakpoint
-CREATE INDEX "training_skill_evaluations_person_idx" ON "training_skill_evaluations" USING btree ("tenant_id","person_id");--> statement-breakpoint
-CREATE INDEX "training_skills_tenant_idx" ON "training_skills" USING btree ("tenant_id");--> statement-breakpoint
 CREATE INDEX "equipment_categories_tenant_idx" ON "equipment_categories" USING btree ("tenant_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "equipment_categories_tenant_slug_ux" ON "equipment_categories" USING btree ("tenant_id","slug");--> statement-breakpoint
 CREATE UNIQUE INDEX "equipment_items_tenant_tag_ux" ON "equipment_items" USING btree ("tenant_id","asset_tag");--> statement-breakpoint

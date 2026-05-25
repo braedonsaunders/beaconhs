@@ -17,7 +17,7 @@ import {
 } from 'drizzle-orm/pg-core'
 import { id, softDelete, timestamps } from './_helpers'
 import { tenants, tenantUsers, users } from './core'
-import { orgUnits, people, trades } from './org'
+import { orgUnits, people } from './org'
 
 export const trainingDeliveryType = pgEnum('training_delivery_type', [
   'classroom',
@@ -128,29 +128,6 @@ export const trainingClassAttendees = pgTable(
   }),
 )
 
-// Required training per role/trade (optionally per site). Drives the matrix view.
-export const trainingAssignments = pgTable(
-  'training_assignments',
-  {
-    id: id(),
-    tenantId: uuid('tenant_id')
-      .notNull()
-      .references(() => tenants.id, { onDelete: 'cascade' }),
-    courseId: uuid('course_id')
-      .notNull()
-      .references(() => trainingCourses.id, { onDelete: 'cascade' }),
-    tradeId: uuid('trade_id').references(() => trades.id),
-    roleKey: text('role_key'), // optional: target a built-in or custom role
-    siteOrgUnitId: uuid('site_org_unit_id').references(() => orgUnits.id),
-    dueWithinDaysOfHire: integer('due_within_days_of_hire'),
-    ...timestamps,
-  },
-  (t) => ({
-    tenantIdx: index('training_assignments_tenant_idx').on(t.tenantId),
-    courseIdx: index('training_assignments_course_idx').on(t.courseId),
-  }),
-)
-
 // A person earned a course. Source can be a class, a self-paced completion, an evaluator, or an external upload.
 export const trainingRecordSource = pgEnum('training_record_source', [
   'class',
@@ -220,52 +197,6 @@ export const trainingCertificates = pgTable(
   (t) => ({
     recordIdx: index('training_certificates_record_idx').on(t.recordId),
     tokenIdx: index('training_certificates_token_idx').on(t.verifyToken),
-  }),
-)
-
-// Skill catalogue (on-the-job competencies signed off by an evaluator).
-export const trainingSkills = pgTable(
-  'training_skills',
-  {
-    id: id(),
-    tenantId: uuid('tenant_id')
-      .notNull()
-      .references(() => tenants.id, { onDelete: 'cascade' }),
-    name: text('name').notNull(),
-    description: text('description'),
-    courseId: uuid('course_id').references(() => trainingCourses.id),
-    ...timestamps,
-  },
-  (t) => ({
-    tenantIdx: index('training_skills_tenant_idx').on(t.tenantId),
-  }),
-)
-
-export const trainingSkillEvaluations = pgTable(
-  'training_skill_evaluations',
-  {
-    id: id(),
-    tenantId: uuid('tenant_id')
-      .notNull()
-      .references(() => tenants.id, { onDelete: 'cascade' }),
-    skillId: uuid('skill_id')
-      .notNull()
-      .references(() => trainingSkills.id, { onDelete: 'cascade' }),
-    personId: uuid('person_id')
-      .notNull()
-      .references(() => people.id, { onDelete: 'cascade' }),
-    evaluatorTenantUserId: uuid('evaluator_tenant_user_id')
-      .notNull()
-      .references(() => tenantUsers.id),
-    evaluatedOn: date('evaluated_on').notNull(),
-    result: text('result').notNull(), // 'competent' | 'needs_practice' | 'fail'
-    notes: text('notes'),
-    signatureAttachmentId: uuid('signature_attachment_id'),
-    ...timestamps,
-  },
-  (t) => ({
-    skillIdx: index('training_skill_evaluations_skill_idx').on(t.skillId),
-    personIdx: index('training_skill_evaluations_person_idx').on(t.tenantId, t.personId),
   }),
 )
 
