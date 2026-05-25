@@ -3,6 +3,10 @@
 </p>
 
 <p align="center">
+  <img src=".github/codeflow-card.svg" alt="CodeFlow card — codebase scale, structure, fragility, and hidden costs (auto-updated on every merge)" width="100%" />
+</p>
+
+<p align="center">
   <strong>Open-source Health, Safety &amp; Environment platform for industrial construction.</strong><br />
   Incidents, inspections, training, equipment, permits, and a form engine powerful enough to model your whole safety program.
 </p>
@@ -181,15 +185,6 @@ packages/
   storage/    S3/R2 client + presigned uploads
   plugin-sdk/ Plugin interface contracts
 ```
-
-## Codebase
-
-A live snapshot of scale, structure, and fragility — auto-updated on every
-merge to `main`.
-
-<p align="center">
-  <img src=".github/codeflow-card.svg" alt="CodeFlow card — codebase scale, structure, fragility, and hidden costs (auto-updated on every merge)" width="100%" />
-</p>
 
 ## Roadmap
 
