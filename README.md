@@ -182,6 +182,15 @@ packages/
   plugin-sdk/ Plugin interface contracts
 ```
 
+## Codebase
+
+A live snapshot of scale, structure, and fragility — auto-updated on every
+merge to `main`.
+
+<p align="center">
+  <img src=".github/codeflow-card.svg" alt="CodeFlow card — codebase scale, structure, fragility, and hidden costs (auto-updated on every merge)" width="100%" />
+</p>
+
 ## Roadmap
 
 BeaconHS is built; the focus now is hardening, depth, and migration tooling.
