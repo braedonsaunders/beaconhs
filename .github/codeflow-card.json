@@ -2958,6 +2958,108 @@
           "total": 645
         }
       ]
+    },
+    {
+      "at": "2026-05-25T03:46:00.659Z",
+      "sha": "70ebdced37d28dfdbfc7b279cd1c0579ee2baafd",
+      "pr": null,
+      "actor": "braedonsaunders",
+      "files": 684,
+      "functions": 1939,
+      "loc": 183801,
+      "languages": 16,
+      "topLanguages": [
+        {
+          "ext": "tsx",
+          "pct": 52,
+          "lines": 96403
+        },
+        {
+          "ext": "ts",
+          "pct": 25,
+          "lines": 45432
+        },
+        {
+          "ext": "json",
+          "pct": 16,
+          "lines": 29537
+        },
+        {
+          "ext": "yaml",
+          "pct": 4,
+          "lines": 6768
+        },
+        {
+          "ext": "sql",
+          "pct": 2,
+          "lines": 3342
+        }
+      ],
+      "dead": 37,
+      "deadPct": 1.9,
+      "circular": 1,
+      "godObjects": 1,
+      "avgCoupling": 5.2,
+      "securityIssues": 23,
+      "patterns": 7,
+      "duplicates": 58,
+      "layerViolations": 216,
+      "connections": 3546,
+      "avgFnLines": 15.6,
+      "longestFn": 16,
+      "testFiles": 3,
+      "testRatio": 0.4,
+      "topFolders": [
+        {
+          "name": "apps",
+          "count": 503
+        },
+        {
+          "name": "packages",
+          "count": 165
+        },
+        {
+          "name": "root",
+          "count": 12
+        },
+        {
+          "name": "docs",
+          "count": 2
+        },
+        {
+          "name": "docker",
+          "count": 1
+        }
+      ],
+      "folders": 5,
+      "grade": "D",
+      "score": 66,
+      "topBlast": {
+        "path": "apps/web/src/lib/auth.ts",
+        "direct": 309,
+        "transitive": 470,
+        "total": 779
+      },
+      "fragility": [
+        {
+          "path": "apps/web/src/lib/auth.ts",
+          "direct": 309,
+          "transitive": 470,
+          "total": 779
+        },
+        {
+          "path": "packages/ui/src/badge.tsx",
+          "direct": 168,
+          "transitive": 496,
+          "total": 664
+        },
+        {
+          "path": "apps/web/src/components/page-layout.tsx",
+          "direct": 236,
+          "transitive": 409,
+          "total": 645
+        }
+      ]
     }
   ]
 }
