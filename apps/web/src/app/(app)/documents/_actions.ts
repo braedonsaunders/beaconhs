@@ -12,14 +12,47 @@
 // per affected document plus a summary entry, sharing a batchId.
 
 import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import {
   documentBookItems,
   documentBooks,
+  documentDrafts,
   documents,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+
+// Creates a blank draft document and jumps straight to its manage page, where
+// all header info is filled in and the editor is launched. (No separate create
+// form — the manage page is the single hub.)
+export async function createBlankDocument(): Promise<void> {
+  const ctx = await requireRequestContext()
+  const key = `untitled-${Math.random().toString(36).slice(2, 8)}`
+  const id = await ctx.db(async (tx) => {
+    const [doc] = await tx
+      .insert(documents)
+      .values({ tenantId: ctx.tenantId, key, title: 'Untitled document', status: 'draft' })
+      .returning({ id: documents.id })
+    if (!doc) throw new Error('Failed to create document')
+    await tx.insert(documentDrafts).values({
+      tenantId: ctx.tenantId,
+      documentId: doc.id,
+      contentHtml: '',
+      contentJson: null,
+      updatedByTenantUserId: ctx.membership?.id ?? null,
+    })
+    return doc.id
+  })
+  await recordAudit(ctx, {
+    entityType: 'document',
+    entityId: id,
+    action: 'create',
+    summary: 'Created document',
+  })
+  revalidatePath('/documents')
+  redirect(`/documents/${id}`)
+}
 
 export type BulkActionResult =
   | { ok: true; updated: number; skipped: number }

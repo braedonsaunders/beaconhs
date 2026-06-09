@@ -9,7 +9,6 @@ import {
   BookOpen,
   ListChecks,
   Loader2,
-  MessageSquare,
   Radiation,
   Search,
   Users,
@@ -55,11 +54,6 @@ const ENTITY_META: Record<
     label: 'JSHA / HazID',
     icon: Radiation,
     viewAllHref: (q) => `/hazid?q=${encodeURIComponent(q)}`,
-  },
-  toolbox_journals: {
-    label: 'Toolbox talks',
-    icon: MessageSquare,
-    viewAllHref: (q) => `/toolbox?q=${encodeURIComponent(q)}`,
   },
 }
 

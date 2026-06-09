@@ -17,18 +17,10 @@
 // once. Multiple worker replicas could still race; we'd add an advisory lock
 // per assignment if/when that matters.
 
-import { and, asc, desc, eq, inArray, isNotNull, max, type SQL } from 'drizzle-orm'
+import { and, asc, desc, eq, isNotNull, max, type SQL } from 'drizzle-orm'
 import { db, withSuperAdmin } from '@beaconhs/db'
-import {
-  formAssignmentDispatches,
-  formAssignments,
-  formTemplates,
-  people,
-  peopleAssignments,
-  roleAssignments,
-  roles,
-  tenantUsers,
-} from '@beaconhs/db/schema'
+import { formAssignmentDispatches, formAssignments, formTemplates } from '@beaconhs/db/schema'
+import { resolveObligationAudience, type AudienceItem } from '@beaconhs/compliance'
 import { enqueueNotification } from '@beaconhs/jobs'
 
 export type CronFields = {
@@ -239,62 +231,19 @@ export async function scanFormAssignments(
 async function resolveAssigneeUserIds(
   assignment: typeof formAssignments.$inferSelect,
 ): Promise<string[]> {
-  const audience = new Set<string>()
-
-  await withSuperAdmin(db, async (tx) => {
-    // 1. Direct person ids → resolve to user ids
-    const personIds = assignment.targetPersonIds ?? []
-    if (personIds.length > 0) {
-      const rows = await tx
-        .select({ userId: people.userId })
-        .from(people)
-        .where(
-          and(
-            eq(people.tenantId, assignment.tenantId),
-            inArray(people.id, personIds),
-            isNotNull(people.userId),
-          ),
-        )
-      for (const r of rows) if (r.userId) audience.add(r.userId)
-    }
-
-    // 2. Org unit ids → people assigned to them with active windows → users
-    const orgUnitIds = assignment.targetOrgUnitIds ?? []
-    if (orgUnitIds.length > 0) {
-      const rows = await tx
-        .select({ userId: people.userId })
-        .from(peopleAssignments)
-        .innerJoin(people, eq(people.id, peopleAssignments.personId))
-        .where(
-          and(
-            eq(peopleAssignments.tenantId, assignment.tenantId),
-            inArray(peopleAssignments.orgUnitId, orgUnitIds),
-            isNotNull(people.userId),
-          ),
-        )
-      for (const r of rows) if (r.userId) audience.add(r.userId)
-    }
-
-    // 3. Role keys → tenant_users assigned that role
-    const roleKeys = assignment.targetRoleKeys ?? []
-    if (roleKeys.length > 0) {
-      const rows = await tx
-        .select({ userId: tenantUsers.userId })
-        .from(tenantUsers)
-        .innerJoin(roleAssignments, eq(roleAssignments.tenantUserId, tenantUsers.id))
-        .innerJoin(roles, eq(roles.id, roleAssignments.roleId))
-        .where(
-          and(
-            eq(tenantUsers.tenantId, assignment.tenantId),
-            eq(tenantUsers.status, 'active'),
-            inArray(roles.key, roleKeys),
-          ),
-        )
-      for (const r of rows) audience.add(r.userId)
-    }
-  })
-
-  return Array.from(audience)
+  // Delegates to the ONE canonical resolver (@beaconhs/compliance) — no
+  // duplicated audience logic. Maps the form_assignment JSONB target arrays to
+  // the unified AudienceItem shape, then collapses to notifiable user ids.
+  const items: AudienceItem[] = [
+    ...(assignment.targetPersonIds ?? []).map((id) => ({ kind: 'person' as const, entityKey: id })),
+    ...(assignment.targetRoleKeys ?? []).map((k) => ({ kind: 'role' as const, entityKey: k })),
+    ...(assignment.targetOrgUnitIds ?? []).map((id) => ({ kind: 'org_unit' as const, entityKey: id })),
+  ]
+  if (items.length === 0) return []
+  const members = await withSuperAdmin(db, (tx) =>
+    resolveObligationAudience(tx, assignment.tenantId, items),
+  )
+  return members.map((m) => m.userId).filter((u): u is string => Boolean(u))
 }
 
 // Re-export for potential tests / direct invocation.

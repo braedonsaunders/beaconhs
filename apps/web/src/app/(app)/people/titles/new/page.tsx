@@ -9,12 +9,14 @@ import {
   Textarea,
 } from '@beaconhs/ui'
 import { PageContainer } from '@/components/page-layout'
+import { requireModuleManage } from '@/lib/module-admin/guard'
 import { createTitle } from '../../_actions/titles'
 
 export const metadata = { title: 'New job title' }
 export const dynamic = 'force-dynamic'
 
-export default function NewTitlePage() {
+export default async function NewTitlePage() {
+  await requireModuleManage('people')
   return (
     <PageContainer>
       <div className="max-w-3xl space-y-5">

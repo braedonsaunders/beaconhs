@@ -1,0 +1,407 @@
+'use server'
+
+// Server actions for the Journals workspace: entry mutations, AI analysis,
+// photos, and thin data-fetch wrappers the client calls on interaction.
+// Every mutation runs inside ctx.db() (tenant + RLS), records an audit row, and
+// is scope-checked via scopedWhere() so a self-scoped user can't touch others'
+// entries even though RLS only bounds to the tenant.
+
+import { revalidatePath } from 'next/cache'
+import { and, eq, sql, type SQL } from 'drizzle-orm'
+import {
+  attachments,
+  journalEntries,
+  journalEntryPhotos,
+  journalEntryTags,
+} from '@beaconhs/db/schema'
+import { describePhoto, extractEntryMeta } from '@beaconhs/ai'
+import { presignGet } from '@beaconhs/storage'
+import type { RequestContext } from '@beaconhs/tenant'
+import { requireRequestContext } from '@/lib/auth'
+import { getTenantAiConfig } from '@/lib/ai-config'
+import { recordAudit } from '@/lib/audit'
+import { getAuthorPersonId, htmlToText, journalCanReadAll, journalScopeWhere } from './_lib'
+import {
+  buildTree,
+  getEntry,
+  getOrCreateEntryForDate,
+  getWorkspaceData,
+  listEntries,
+} from './_data'
+import { sendJournalEntryEmail } from './_send-email'
+import type {
+  EntryMetaResult,
+  EntryPatch,
+  GroupBy,
+  JournalEntryDetail,
+  JournalFilters,
+  JournalListItem,
+  TreeNode,
+  WorkspaceData,
+} from './_types'
+
+type ActionOk<T = {}> = { ok: true } & T
+type ActionErr = { ok: false; error: string }
+
+/** Visibility-scoped WHERE for a single entry (tenant + author/site/self). */
+async function scopedWhere(ctx: RequestContext, id: string): Promise<SQL> {
+  const authorPersonId = journalCanReadAll(ctx) ? null : await getAuthorPersonId(ctx)
+  const scope = journalScopeWhere(ctx, authorPersonId)
+  return scope ? and(eq(journalEntries.id, id), scope)! : eq(journalEntries.id, id)
+}
+
+// ---- create -----------------------------------------------------------------
+
+export async function createTodayEntry(): Promise<ActionOk<{ id: string }> | ActionErr> {
+  const ctx = await requireRequestContext()
+  const id = await getOrCreateEntryForDate(ctx)
+  if (!id) return { ok: false, error: 'Could not create today’s entry.' }
+  revalidatePath('/journals')
+  return { ok: true, id }
+}
+
+export async function createEntryForDate(
+  dateISO: string,
+): Promise<ActionOk<{ id: string }> | ActionErr> {
+  const ctx = await requireRequestContext()
+  const id = await getOrCreateEntryForDate(ctx, dateISO)
+  if (!id) return { ok: false, error: 'Could not create entry.' }
+  revalidatePath('/journals')
+  return { ok: true, id }
+}
+
+// ---- update (autosave) ------------------------------------------------------
+
+export async function updateEntry(input: {
+  id: string
+  patch: EntryPatch
+}): Promise<ActionOk<{ updatedAt: string }> | ActionErr> {
+  const ctx = await requireRequestContext()
+  const { id, patch } = input
+
+  const values: Record<string, unknown> = {}
+  if (patch.title !== undefined) values.title = patch.title?.slice(0, 300) ?? null
+  if (patch.bodyHtml !== undefined) {
+    values.bodyHtml = patch.bodyHtml
+    values.bodyText = htmlToText(patch.bodyHtml)
+  }
+  if (patch.definition !== undefined) values.definition = patch.definition
+  if (patch.siteOrgUnitId !== undefined) values.siteOrgUnitId = patch.siteOrgUnitId || null
+  if (patch.supervisorPersonId !== undefined)
+    values.supervisorPersonId = patch.supervisorPersonId || null
+  if (patch.entryDate !== undefined && patch.entryDate) values.entryDate = patch.entryDate
+  if (Object.keys(values).length === 0) return { ok: false, error: 'Nothing to update.' }
+
+  const where = await scopedWhere(ctx, id)
+  const [row] = await ctx.db((tx) =>
+    tx
+      .update(journalEntries)
+      .set(values)
+      .where(where)
+      .returning({ updatedAt: journalEntries.updatedAt }),
+  )
+  if (!row) return { ok: false, error: 'Entry not found.' }
+  // Autosave is high-frequency — the client owns optimistic state, so we skip
+  // revalidatePath here to avoid thrashing the route cache.
+  return { ok: true, updatedAt: row.updatedAt.toISOString() }
+}
+
+export async function submitEntry(id: string): Promise<ActionOk | ActionErr> {
+  const ctx = await requireRequestContext()
+  const where = await scopedWhere(ctx, id)
+  const [row] = await ctx.db((tx) =>
+    tx
+      .update(journalEntries)
+      .set({ status: 'submitted', submittedAt: new Date() })
+      .where(where)
+      .returning({ reference: journalEntries.reference }),
+  )
+  if (!row) return { ok: false, error: 'Entry not found.' }
+  await recordAudit(ctx, {
+    entityType: 'journal_entry',
+    entityId: id,
+    action: 'publish',
+    summary: `Submitted ${row.reference}`,
+  })
+  revalidatePath('/journals')
+  return { ok: true }
+}
+
+export async function deleteEntry(id: string): Promise<ActionOk | ActionErr> {
+  const ctx = await requireRequestContext()
+  const where = await scopedWhere(ctx, id)
+  const [row] = await ctx.db((tx) =>
+    tx
+      .update(journalEntries)
+      .set({ deletedAt: new Date() })
+      .where(where)
+      .returning({ reference: journalEntries.reference }),
+  )
+  if (!row) return { ok: false, error: 'Entry not found.' }
+  await recordAudit(ctx, {
+    entityType: 'journal_entry',
+    entityId: id,
+    action: 'delete',
+    summary: `Deleted ${row.reference}`,
+  })
+  revalidatePath('/journals')
+  return { ok: true }
+}
+
+// ---- tags -------------------------------------------------------------------
+
+export async function setEntryTags(input: {
+  id: string
+  tags: string[]
+}): Promise<ActionOk | ActionErr> {
+  const ctx = await requireRequestContext()
+  const where = await scopedWhere(ctx, input.id)
+  const clean = Array.from(
+    new Set(input.tags.map((t) => t.trim().toLowerCase()).filter(Boolean)),
+  ).slice(0, 20)
+
+  const done = await ctx.db(async (tx) => {
+    const [e] = await tx
+      .select({ id: journalEntries.id })
+      .from(journalEntries)
+      .where(where)
+      .limit(1)
+    if (!e) return false
+    await tx.delete(journalEntryTags).where(eq(journalEntryTags.entryId, input.id))
+    if (clean.length > 0) {
+      await tx.insert(journalEntryTags).values(
+        clean.map((tag) => ({
+          tenantId: ctx.tenantId,
+          entryId: input.id,
+          tag,
+          source: 'user' as const,
+        })),
+      )
+    }
+    await tx.update(journalEntries).set({ tagsCache: clean }).where(eq(journalEntries.id, input.id))
+    return true
+  })
+  if (!done) return { ok: false, error: 'Entry not found.' }
+  revalidatePath('/journals')
+  return { ok: true }
+}
+
+// ---- AI ---------------------------------------------------------------------
+
+export async function runEntryAI(
+  id: string,
+): Promise<ActionOk<{ meta: EntryMetaResult }> | ActionErr> {
+  const ctx = await requireRequestContext()
+  const aiConfig = await getTenantAiConfig(ctx)
+  if (!aiConfig) return { ok: false, error: 'AI is not configured. Set it up under Admin → AI.' }
+
+  const where = await scopedWhere(ctx, id)
+  const [entry] = await ctx.db((tx) =>
+    tx
+      .select({ bodyText: journalEntries.bodyText })
+      .from(journalEntries)
+      .where(where)
+      .limit(1),
+  )
+  if (!entry) return { ok: false, error: 'Entry not found.' }
+
+  const meta = await extractEntryMeta(aiConfig, entry.bodyText ?? '')
+  if (!meta) return { ok: false, error: 'Write a little more first, then run AI.' }
+
+  await ctx.db(async (tx) => {
+    await tx
+      .update(journalEntries)
+      .set({
+        summary: meta.summary,
+        aiMeta: { lastRunAt: new Date().toISOString(), tier: 'fast' },
+      })
+      .where(eq(journalEntries.id, id))
+    await tx
+      .delete(journalEntryTags)
+      .where(and(eq(journalEntryTags.entryId, id), eq(journalEntryTags.source, 'ai')))
+    if (meta.tags.length > 0) {
+      await tx
+        .insert(journalEntryTags)
+        .values(
+          meta.tags.map((tag) => ({
+            tenantId: ctx.tenantId,
+            entryId: id,
+            tag,
+            source: 'ai' as const,
+          })),
+        )
+        .onConflictDoNothing()
+    }
+    const all = await tx
+      .select({ tag: journalEntryTags.tag })
+      .from(journalEntryTags)
+      .where(eq(journalEntryTags.entryId, id))
+    await tx
+      .update(journalEntries)
+      .set({ tagsCache: Array.from(new Set(all.map((a) => a.tag))) })
+      .where(eq(journalEntries.id, id))
+  })
+
+  await recordAudit(ctx, {
+    entityType: 'journal_entry',
+    entityId: id,
+    action: 'update',
+    summary: 'AI analysed entry',
+    metadata: { tags: meta.tags.length },
+  })
+  revalidatePath('/journals')
+  return {
+    ok: true,
+    meta: { summary: meta.summary, tags: meta.tags },
+  }
+}
+
+// ---- photos -----------------------------------------------------------------
+
+export async function attachJournalPhotos(input: {
+  entryId: string
+  attachmentIds: string[]
+}): Promise<ActionOk<{ photoIds: string[] }> | ActionErr> {
+  const ctx = await requireRequestContext()
+  if (input.attachmentIds.length === 0) return { ok: true, photoIds: [] }
+  const where = await scopedWhere(ctx, input.entryId)
+
+  const ids = await ctx.db(async (tx) => {
+    const [e] = await tx
+      .select({ id: journalEntries.id })
+      .from(journalEntries)
+      .where(where)
+      .limit(1)
+    if (!e) return null
+    const [{ maxOrder } = { maxOrder: -1 }] = await tx
+      .select({ maxOrder: sql<number>`coalesce(max(${journalEntryPhotos.sortOrder}), -1)::int` })
+      .from(journalEntryPhotos)
+      .where(eq(journalEntryPhotos.entryId, input.entryId))
+    const base = Number(maxOrder) + 1
+    const inserted = await tx
+      .insert(journalEntryPhotos)
+      .values(
+        input.attachmentIds.map((attachmentId, i) => ({
+          tenantId: ctx.tenantId,
+          entryId: input.entryId,
+          attachmentId,
+          sortOrder: base + i,
+        })),
+      )
+      .returning({ id: journalEntryPhotos.id })
+    return inserted.map((r) => r.id)
+  })
+  if (!ids) return { ok: false, error: 'Entry not found.' }
+
+  await recordAudit(ctx, {
+    entityType: 'journal_entry',
+    entityId: input.entryId,
+    action: 'update',
+    summary: `Added ${ids.length} photo${ids.length === 1 ? '' : 's'}`,
+  })
+  revalidatePath('/journals')
+  return { ok: true, photoIds: ids }
+}
+
+export async function removeJournalPhoto(photoId: string): Promise<ActionOk | ActionErr> {
+  const ctx = await requireRequestContext()
+  const [row] = await ctx.db((tx) =>
+    tx.delete(journalEntryPhotos).where(eq(journalEntryPhotos.id, photoId)).returning({
+      entryId: journalEntryPhotos.entryId,
+    }),
+  )
+  if (!row) return { ok: false, error: 'Photo not found.' }
+  revalidatePath('/journals')
+  return { ok: true }
+}
+
+export async function describeJournalPhoto(
+  photoId: string,
+): Promise<ActionOk<{ caption: string }> | ActionErr> {
+  const ctx = await requireRequestContext()
+  const aiConfig = await getTenantAiConfig(ctx)
+  if (!aiConfig) return { ok: false, error: 'AI is not configured. Set it up under Admin → AI.' }
+
+  const photo = await ctx.db(async (tx) => {
+    const [p] = await tx
+      .select({
+        id: journalEntryPhotos.id,
+        entryId: journalEntryPhotos.entryId,
+        r2Key: attachments.r2Key,
+      })
+      .from(journalEntryPhotos)
+      .innerJoin(attachments, eq(attachments.id, journalEntryPhotos.attachmentId))
+      .where(eq(journalEntryPhotos.id, photoId))
+      .limit(1)
+    return p ?? null
+  })
+  if (!photo) return { ok: false, error: 'Photo not found.' }
+
+  // Fetch bytes server-side — the model provider can't reach a dev/localhost
+  // object store via URL, so we send the image data directly.
+  let insight
+  try {
+    const signed = await presignGet({ key: photo.r2Key })
+    const resp = await fetch(signed)
+    const bytes = new Uint8Array(await resp.arrayBuffer())
+    insight = await describePhoto(aiConfig, { image: bytes })
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Vision failed.' }
+  }
+  if (!insight) return { ok: false, error: 'No insight produced.' }
+
+  await ctx.db((tx) =>
+    tx
+      .update(journalEntryPhotos)
+      .set({ caption: insight.caption })
+      .where(eq(journalEntryPhotos.id, photoId)),
+  )
+  revalidatePath('/journals')
+  return { ok: true, caption: insight.caption }
+}
+
+// ---- data fetch wrappers (client refetch on interaction) --------------------
+
+export async function fetchWorkspace(input: {
+  groupBy: GroupBy
+  filters: JournalFilters
+}): Promise<WorkspaceData> {
+  const ctx = await requireRequestContext()
+  return getWorkspaceData(ctx, input.groupBy, input.filters)
+}
+
+export async function fetchTree(input: {
+  groupBy: GroupBy
+  filters: JournalFilters
+}): Promise<TreeNode[]> {
+  const ctx = await requireRequestContext()
+  return buildTree(ctx, input.groupBy, input.filters)
+}
+
+export async function fetchEntries(input: {
+  filters: JournalFilters
+  limit?: number
+  offset?: number
+}): Promise<JournalListItem[]> {
+  const ctx = await requireRequestContext()
+  return listEntries(ctx, input.filters, { limit: input.limit, offset: input.offset })
+}
+
+export async function fetchEntry(id: string): Promise<JournalEntryDetail | null> {
+  const ctx = await requireRequestContext()
+  return getEntry(ctx, id)
+}
+
+export async function emailEntry(
+  id: string,
+): Promise<ActionOk<{ sent: number }> | ActionErr> {
+  const ctx = await requireRequestContext()
+  const sent = await sendJournalEntryEmail(ctx, id)
+  if (sent === 0) {
+    return {
+      ok: false,
+      error: 'No recipients found. Add journal recipients in Admin → Notifications, or set a supervisor with an email.',
+    }
+  }
+  return { ok: true, sent }
+}

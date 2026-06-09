@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import type { ReactNode } from 'react'
 import { cn } from '@beaconhs/ui'
 import { mergeHref } from '@/lib/list-params'
 
@@ -7,6 +8,8 @@ export type TabDef = {
   label: string
   count?: number
   hidden?: boolean
+  /** Optional icon; shown instead of the label when the nav is `iconOnly`. */
+  icon?: ReactNode
 }
 
 /**
@@ -27,6 +30,7 @@ export function TabNav({
   active,
   paramKey = 'tab',
   className,
+  iconOnly = false,
 }: {
   basePath: string
   currentParams: Record<string, string | string[] | undefined>
@@ -34,6 +38,8 @@ export function TabNav({
   active: string
   paramKey?: string
   className?: string
+  /** Render the per-tab icon instead of its label (label becomes the tooltip). */
+  iconOnly?: boolean
 }) {
   return (
     <nav
@@ -54,8 +60,11 @@ export function TabNav({
               href={href as any}
               role="tab"
               aria-selected={isActive}
+              title={iconOnly && t.icon ? t.label : undefined}
+              aria-label={iconOnly && t.icon ? t.label : undefined}
               className={cn(
-                '-mb-px inline-flex items-center gap-2 border-b-2 px-3 py-2 text-sm',
+                '-mb-px inline-flex items-center gap-1.5 border-b-2 py-2 text-sm',
+                iconOnly && t.icon ? 'px-2.5' : 'px-3',
                 'transition-[color,border-color,background-color] duration-150 ease-out',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/40 focus-visible:rounded-t-md',
                 isActive
@@ -63,7 +72,7 @@ export function TabNav({
                   : 'border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-900',
               )}
             >
-              {t.label}
+              {iconOnly && t.icon ? t.icon : t.label}
               {typeof t.count === 'number' ? (
                 <span
                   className={cn(

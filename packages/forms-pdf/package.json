@@ -5,14 +5,18 @@
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
-  "exports": { ".": "./src/index.ts" },
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
     "@beaconhs/forms-core": "workspace:*",
-    "puppeteer-core": "^23.5.2"
+    "puppeteer-core": "^25.1.0"
   },
-  "devDependencies": { "typescript": "^5.6.3" }
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  }
 }

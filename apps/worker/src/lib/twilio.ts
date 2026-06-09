@@ -19,12 +19,15 @@ function getClient(): Twilio | null {
   const token = process.env.TWILIO_AUTH_TOKEN
   if (!sid || !token) return null
   try {
-    // Dynamic import (CJS interop). The package exports a default factory.
-    // We cast through unknown because the optional dep may not be installed
-    // in environments that don't ship SMS.
+    // Dynamic import (CJS interop). The package exposes a client factory; under
+    // twilio 6's ESM/CJS interop it may sit on `.default` rather than the module
+    // root, so resolve both. The optional dep may also be absent in deployments
+    // that don't ship SMS — hence the try/catch.
+    type TwilioFactory = (sid: string, token: string) => Twilio
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const twilio = require('twilio') as (sid: string, token: string) => Twilio
-    client = twilio(sid, token)
+    const mod = require('twilio') as TwilioFactory | { default: TwilioFactory }
+    const factory = typeof mod === 'function' ? mod : mod.default
+    client = factory(sid, token)
     return client
   } catch (err) {
     initFailed = true

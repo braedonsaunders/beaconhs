@@ -30,15 +30,31 @@ export async function withSuperAdmin<T>(
 
 // SQL to install on every tenant-scoped table after migrations.
 // Generate via drizzle-kit then append this.
+//
+// FORCE ROW LEVEL SECURITY is required because a table OWNER bypasses non-forced RLS — and the
+// runtime app may connect as the owner of its tables. Without FORCE, tenant isolation silently
+// does nothing for the owner role (critical once more than one tenant shares the database). The
+// postgres superuser (and any BYPASSRLS role, e.g. the ETL) still bypasses RLS regardless.
+//
+// DROP POLICY IF EXISTS makes this idempotent, so re-running migrate cleanly re-applies the policy
+// + FORCE flag instead of erroring on "policy already exists".
+//
+// nullif(current_setting('app.tenant_id', true), '')::uuid — a custom GUC reverts to '' (empty
+// string), not NULL, after a SET LOCAL ends on a pooled connection. Casting ''::uuid throws 22P02,
+// and because FORCE RLS makes the owner role evaluate this predicate, that crash surfaces on any
+// query whose connection previously ran a tenant-scoped tx (e.g. the super-admin resolution path).
+// nullif maps '' → NULL so the cast is safe; bypass_rls still grants super-admin access.
 export const RLS_POLICY_SQL = (table: string) => `
 ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ${table} FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation ON ${table};
 CREATE POLICY tenant_isolation ON ${table}
   USING (
-    tenant_id = current_setting('app.tenant_id', true)::uuid
+    tenant_id = nullif(current_setting('app.tenant_id', true), '')::uuid
     OR current_setting('app.bypass_rls', true) = 'on'
   )
   WITH CHECK (
-    tenant_id = current_setting('app.tenant_id', true)::uuid
+    tenant_id = nullif(current_setting('app.tenant_id', true), '')::uuid
     OR current_setting('app.bypass_rls', true) = 'on'
   );
 `
@@ -65,6 +81,8 @@ export const TENANT_SCOPED_TABLES = [
   'form_response_steps',
   'form_response_scores',
   'form_response_comments',
+  'form_automations',
+  'form_response_participants',
   'incidents',
   'incident_injuries',
   'incident_lost_time_events',
@@ -94,6 +112,8 @@ export const TENANT_SCOPED_TABLES = [
   'ppe_annual_records',
   'documents',
   'document_versions',
+  'document_drafts',
+  'document_comments',
   'document_acknowledgments',
   'document_reviews',
   'document_books',
@@ -169,12 +189,15 @@ export const TENANT_SCOPED_TABLES = [
   'hazid_assessment_cs_atmospheric',
   'hazid_assessment_cs_entries',
   'hazid_signed_reports',
-  // Toolbox Talks / Journals
-  'toolbox_journals',
-  'toolbox_journal_attendees',
-  'toolbox_journal_photos',
-  'toolbox_journal_assignments',
-  'toolbox_journal_assignment_dispatches',
+  // Daily Journals (individual field-safety log)
+  'journal_entries',
+  'journal_entry_photos',
+  'journal_entry_tags',
+  'journal_tags',
+  'journal_assignments',
+  'journal_assignment_dispatches',
+  // User-buildable Insights dashboards
+  'insight_dashboards',
   // Safe Distance tool — engineering calc + record-keeping for safe-distance
   // assessments (electrical / drone / overhead-crane proximity).
   'safe_distance_records',
@@ -213,4 +236,11 @@ export const TENANT_SCOPED_TABLES = [
   'email_log',
   // Per-user dashboard layout customisations
   'user_dashboard_layouts',
+  // Per-tenant sidebar navigation customisation (editable in /admin/navigation)
+  'tenant_nav_config',
+  // Unified compliance engine — obligations + audience + dispatch ledger + status
+  'compliance_obligations',
+  'compliance_audience',
+  'compliance_dispatches',
+  'compliance_status',
 ] as const

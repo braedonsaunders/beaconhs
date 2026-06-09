@@ -20,7 +20,7 @@ import {
   TableRow,
 } from '@beaconhs/ui'
 import { ppeTypeInspectionCriteria, ppeTypes } from '@beaconhs/db/schema'
-import { requireRequestContext } from '@/lib/auth'
+import { requireModuleManage } from '@/lib/module-admin/guard'
 import { ListPageLayout } from '@/components/page-layout'
 import { Section } from '@/components/section'
 import { PpeSubNav } from '@/components/ppe-sub-nav'
@@ -29,7 +29,7 @@ export const metadata = { title: 'PPE inspection criteria' }
 export const dynamic = 'force-dynamic'
 
 export default async function PpeInspectionCriteriaPage() {
-  const ctx = await requireRequestContext()
+  const ctx = await requireModuleManage('ppe')
 
   const { rows, typeCount, criterionCount, withPhotoCount, highSevCount } =
     await ctx.db(async (tx) => {

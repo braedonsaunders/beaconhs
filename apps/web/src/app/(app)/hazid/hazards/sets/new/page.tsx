@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { asc, eq, isNull } from 'drizzle-orm'
 import { Button, Card, CardContent, DetailHeader, Input, Label, Textarea } from '@beaconhs/ui'
 import { hazidHazardTypes, hazidHazards } from '@beaconhs/db/schema'
-import { requireRequestContext } from '@/lib/auth'
+import { requireModuleManage } from '@/lib/module-admin/guard'
 import { PageContainer } from '@/components/page-layout'
 import { createHazardSet } from '../../../_actions'
 import { MultiPicker } from '../../../_multipicker'
@@ -17,7 +17,7 @@ async function submit(formData: FormData) {
 }
 
 export default async function NewHazardSetPage() {
-  const ctx = await requireRequestContext()
+  const ctx = await requireModuleManage('hazid')
   const hazards = await ctx.db((tx) =>
     tx
       .select({ id: hazidHazards.id, name: hazidHazards.name, typeName: hazidHazardTypes.name })

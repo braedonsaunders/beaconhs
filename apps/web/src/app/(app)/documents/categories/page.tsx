@@ -23,6 +23,7 @@ import {
 } from '@beaconhs/ui'
 import { documentCategories, documents } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { requireModuleManage, assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 import { ListPageLayout } from '@/components/page-layout'
 import { DocumentsSubNav } from '../_components/documents-sub-nav'
@@ -33,6 +34,7 @@ export const dynamic = 'force-dynamic'
 async function createCategory(formData: FormData): Promise<void> {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'documents')
   const name = String(formData.get('name') ?? '').trim()
   const parentId = String(formData.get('parentId') ?? '').trim() || null
   const description = String(formData.get('description') ?? '').trim() || null
@@ -58,6 +60,7 @@ async function createCategory(formData: FormData): Promise<void> {
 async function updateCategory(formData: FormData): Promise<void> {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'documents')
   const id = String(formData.get('id') ?? '')
   const name = String(formData.get('name') ?? '').trim()
   const parentIdRaw = String(formData.get('parentId') ?? '').trim()
@@ -83,6 +86,7 @@ async function updateCategory(formData: FormData): Promise<void> {
 async function deleteCategory(formData: FormData): Promise<void> {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'documents')
   const id = String(formData.get('id') ?? '')
   if (!id) return
   await ctx.db((tx) =>
@@ -172,7 +176,7 @@ function renderTree(
 }
 
 export default async function DocumentCategoriesPage() {
-  const ctx = await requireRequestContext()
+  const ctx = await requireModuleManage('documents')
 
   const { rows, usageMap } = await ctx.db(async (tx) => {
     const data = await tx
@@ -186,10 +190,10 @@ export default async function DocumentCategoriesPage() {
       .where(sql`${documentCategories.deletedAt} is null`)
       .orderBy(asc(documentCategories.name))
     const usage = await tx
-      .select({ categoryId: documents.categoryId, c: count() })
+      .select({ categoryId: documents.category, c: count() })
       .from(documents)
-      .where(sql`${documents.categoryId} is not null`)
-      .groupBy(documents.categoryId)
+      .where(sql`${documents.category} is not null`)
+      .groupBy(documents.category)
     return {
       rows: data,
       usageMap: Object.fromEntries(usage.map((u) => [u.categoryId ?? '', Number(u.c)])),

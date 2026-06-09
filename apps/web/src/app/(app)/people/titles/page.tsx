@@ -18,7 +18,7 @@ import {
   personTitleAssignments,
   personTitles,
 } from '@beaconhs/db/schema'
-import { requireRequestContext } from '@/lib/auth'
+import { requireModuleManage } from '@/lib/module-admin/guard'
 import { ListPageLayout } from '@/components/page-layout'
 import { PeopleSubNav } from '../_components/people-sub-nav'
 
@@ -26,7 +26,7 @@ export const metadata = { title: 'People — Titles' }
 export const dynamic = 'force-dynamic'
 
 export default async function TitlesPage() {
-  const ctx = await requireRequestContext()
+  const ctx = await requireModuleManage('people')
   const rows = await ctx.db(async (tx) => {
     const all = await tx.select().from(personTitles).orderBy(asc(personTitles.name))
     const assignmentCounts = await tx

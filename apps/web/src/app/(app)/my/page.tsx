@@ -13,7 +13,6 @@ import {
   ClipboardList,
   GraduationCap,
   ListChecks,
-  MessageSquare,
   Settings,
   User,
 } from 'lucide-react'
@@ -34,8 +33,6 @@ import {
   incidents,
   inspectionRecords,
   people,
-  toolboxJournalAttendees,
-  toolboxJournals,
   trainingAudienceAssignmentRecords,
   trainingRecords,
 } from '@beaconhs/db/schema'
@@ -181,38 +178,6 @@ export default async function MyLandingPage() {
           .then((r) => Number(r[0]?.c ?? 0))
       : Promise.resolve(0)
 
-    // ---- toolbox: foreman OR attendee ------------------------------------
-    // Two cheap counts UNIONed. Anyone the user has touched as either role
-    // counts toward the My tile.
-    const toolboxPromise: Promise<number> = (async () => {
-      const filters: SQL<unknown>[] = []
-      if (membershipId) {
-        const cond = eq(toolboxJournals.foremanTenantUserId, membershipId)
-        filters.push(cond)
-      }
-      let foremanCount = 0
-      if (membershipId) {
-        const [r] = await tx
-          .select({ c: count() })
-          .from(toolboxJournals)
-          .where(
-            and(
-              eq(toolboxJournals.foremanTenantUserId, membershipId),
-              isNull(toolboxJournals.deletedAt),
-            ),
-          )
-        foremanCount = Number(r?.c ?? 0)
-      }
-      let attendeeCount = 0
-      if (personId) {
-        const [r] = await tx
-          .select({ c: count() })
-          .from(toolboxJournalAttendees)
-          .where(eq(toolboxJournalAttendees.personId, personId))
-        attendeeCount = Number(r?.c ?? 0)
-      }
-      return foremanCount + attendeeCount
-    })()
 
     // ---- documents acknowledged / outstanding ----------------------------
     // We surface "outstanding documents" rather than total — this is what
@@ -245,7 +210,6 @@ export default async function MyLandingPage() {
       trainingExpiring: await trainingExpiringPromise,
       trainingAssigned: await trainingAssignedPromise,
       inspections: await inspectionsPromise,
-      toolbox: await toolboxPromise,
       docsOutstanding,
     }
   })
@@ -287,13 +251,6 @@ export default async function MyLandingPage() {
       description: 'Inspection records you carried out.',
       icon: ClipboardList,
       count: counts.inspections,
-    },
-    {
-      href: '/my/toolbox',
-      label: 'My toolbox talks',
-      description: 'Talks where you were the foreman or an attendee.',
-      icon: MessageSquare,
-      count: counts.toolbox,
     },
     {
       href: '/my/acknowledgments',

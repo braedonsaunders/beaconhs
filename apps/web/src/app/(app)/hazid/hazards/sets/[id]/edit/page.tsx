@@ -2,7 +2,7 @@ import { notFound, redirect } from 'next/navigation'
 import { asc, eq, isNull } from 'drizzle-orm'
 import { Button, Card, CardContent, DetailHeader, Input, Label, Textarea } from '@beaconhs/ui'
 import { hazidHazardSets, hazidHazardTypes, hazidHazards } from '@beaconhs/db/schema'
-import { requireRequestContext } from '@/lib/auth'
+import { requireModuleManage } from '@/lib/module-admin/guard'
 import { PageContainer } from '@/components/page-layout'
 import { deleteHazardSet, updateHazardSet } from '../../../../_actions'
 import { MultiPicker } from '../../../../_multipicker'
@@ -24,7 +24,7 @@ async function remove(formData: FormData) {
 
 export default async function EditHazardSetPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const ctx = await requireRequestContext()
+  const ctx = await requireModuleManage('hazid')
   const data = await ctx.db(async (tx) => {
     const [row] = await tx
       .select()

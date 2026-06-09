@@ -19,7 +19,7 @@ import {
   trainingAssessments,
   trainingCourses,
 } from '@beaconhs/db/schema'
-import { requireRequestContext } from '@/lib/auth'
+import { requireModuleManage } from '@/lib/module-admin/guard'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
@@ -52,7 +52,7 @@ export default async function AssessmentTypesPage({
   })
   const statusFilter = pickString(sp.status)
   const courseLinkedFilter = pickString(sp.linked) // 'yes' | 'no'
-  const ctx = await requireRequestContext()
+  const ctx = await requireModuleManage('training')
 
   const { rows, total, statusCounts } = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = []

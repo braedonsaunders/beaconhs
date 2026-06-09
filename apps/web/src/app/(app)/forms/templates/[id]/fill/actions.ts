@@ -4,13 +4,16 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { and, desc, eq } from 'drizzle-orm'
 import { z } from 'zod'
-import { formResponses, formTemplateVersions } from '@beaconhs/db/schema'
+import { formResponses, formTemplateVersions, formTemplates } from '@beaconhs/db/schema'
 import { extractScores, validateResponse } from '@beaconhs/forms-core'
 import { formResponseScores } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { computeFormScore } from '@/app/(app)/forms/_lib/score-router'
 import { fetchSingleEntityAttrs } from '@/app/(app)/forms/_lib/entity-loader'
+import { repopulateParticipants } from '@/app/(app)/forms/_lib/participants'
+import { sendFormResponseRecapEmail } from '@/app/(app)/forms/_lib/recap-email'
+import { runOnSubmitAutomations } from '@/app/(app)/forms/_lib/run-automations'
 
 export async function submitFormResponse(args: {
   templateId: string
@@ -31,6 +34,13 @@ export async function submitFormResponse(args: {
       .orderBy(desc(formTemplateVersions.version))
       .limit(1)
     if (!version) return { ok: false as const, errors: [{ fieldId: '', message: 'No version' }] }
+
+    // Template category — denormalized onto participant rows below.
+    const [tmpl] = await tx
+      .select({ category: formTemplates.category })
+      .from(formTemplates)
+      .where(eq(formTemplates.id, args.templateId))
+      .limit(1)
 
     const errors = validateResponse(version.schema, args.data, 'submit')
     if (errors.length > 0) return { ok: false as const, errors }
@@ -131,6 +141,17 @@ export async function submitFormResponse(args: {
           })),
         )
       }
+      // Rebuild the participant index (attendees / person pickers) so it powers
+      // transcripts, the form compliance kind, and reports.
+      await repopulateParticipants(tx, {
+        tenantId: ctx.tenantId,
+        responseId: resp.id,
+        templateId: args.templateId,
+        category: tmpl?.category ?? null,
+        schema: version.schema,
+        data: args.data,
+        submittedAt: new Date(),
+      })
     }
 
     return {
@@ -155,6 +176,25 @@ export async function submitFormResponse(args: {
         failedFieldKeys: result.verdict.failedFieldKeys,
       },
     })
+    // Best-effort recap email — self-gates on the template's emailOnSubmit flag;
+    // never block or fail the submit on email errors.
+    try {
+      await sendFormResponseRecapEmail(ctx, result.responseId)
+    } catch {
+      // swallow — email is non-critical
+    }
+    // Best-effort: run the template's on-submit Flow. Never block/fail submit.
+    try {
+      await runOnSubmitAutomations(ctx, {
+        templateId: args.templateId,
+        responseId: result.responseId,
+        data: args.data,
+        score: result.verdict.score,
+        status: result.verdict.status,
+      })
+    } catch {
+      // swallow — automations are non-critical to the submit
+    }
     revalidatePath('/forms/responses')
     redirect(`/forms/responses/${result.responseId}`)
   }

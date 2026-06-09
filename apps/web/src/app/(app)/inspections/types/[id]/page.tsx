@@ -31,6 +31,7 @@ import {
   inspectionTypes,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { requireModuleManage, assertCanManageModule } from '@/lib/module-admin/guard'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { DetailPageLayout } from '@/components/page-layout'
 import { DetailGrid } from '@/components/detail-grid'
@@ -46,6 +47,7 @@ type Tab = (typeof TABS)[number]
 async function togglePublished(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'inspections')
   const id = String(formData.get('id') ?? '')
   const next = String(formData.get('next') ?? '') === 'true'
   await ctx.db((tx) =>
@@ -64,6 +66,7 @@ async function togglePublished(formData: FormData) {
 async function attachBank(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'inspections')
   const typeId = String(formData.get('typeId') ?? '')
   const bankId = String(formData.get('bankId') ?? '')
   if (!typeId || !bankId) return
@@ -109,6 +112,7 @@ async function attachBank(formData: FormData) {
 async function detachBank(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'inspections')
   const typeId = String(formData.get('typeId') ?? '')
   const linkId = String(formData.get('linkId') ?? '')
   await ctx.db((tx) => tx.delete(inspectionTypeBanks).where(eq(inspectionTypeBanks.id, linkId)))
@@ -124,6 +128,7 @@ async function detachBank(formData: FormData) {
 async function moveBank(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'inspections')
   const typeId = String(formData.get('typeId') ?? '')
   const linkId = String(formData.get('linkId') ?? '')
   const direction = String(formData.get('direction') ?? 'up') as 'up' | 'down'
@@ -179,7 +184,7 @@ export default async function InspectionTypeDetailPage({
   const { id } = await params
   const sp = await searchParams
   const active: Tab = pickActiveTab(sp, TABS, 'overview')
-  const ctx = await requireRequestContext()
+  const ctx = await requireModuleManage('inspections')
 
   const data = await ctx.db(async (tx) => {
     const [type] = await tx
@@ -329,7 +334,7 @@ export default async function InspectionTypeDetailPage({
                 using this type.
               </li>
               <li>
-                <Link href={`/inspections/assignments/new?typeId=${id}`} className="text-teal-700 hover:underline">
+                <Link href={`/compliance/obligations/new?kind=inspection`} className="text-teal-700 hover:underline">
                   Assign on a recurring cadence
                 </Link>{' '}
                 to make sure people don't skip it.

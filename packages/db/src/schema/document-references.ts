@@ -6,6 +6,7 @@ import { relations } from 'drizzle-orm'
 import { index, pgEnum, pgTable, text, uuid } from 'drizzle-orm/pg-core'
 import { id, softDelete, timestamps } from './_helpers'
 import { tenants } from './core'
+import { documentReferenceTypes } from './document-reference-types'
 
 export const documentReferenceKind = pgEnum('document_reference_kind', ['url', 'attachment'])
 
@@ -19,6 +20,7 @@ export const documentReferences = pgTable(
     title: text('title').notNull(),
     description: text('description'),
     category: text('category'), // 'sds' | 'manual' | 'external' | …
+    typeId: uuid('type_id').references(() => documentReferenceTypes.id),
     kind: documentReferenceKind('kind').notNull(),
     url: text('url'),
     attachmentId: uuid('attachment_id'),

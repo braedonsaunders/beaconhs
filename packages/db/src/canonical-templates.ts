@@ -268,16 +268,11 @@ const wahRescueSchema: FormSchemaV1 = {
 // template seeded by packages/db/src/seed/lift-plan-template.ts, surfaced at
 // /inspections?bound=lift_plan. The gallery is for "start from a template",
 // which doesn't make sense for a built-in that's already provisioned.
+// Note: Toolbox Talk is NOT a canonical/gallery template — like Lift Plan it's
+// now a per-tenant built-in seeded by packages/db/src/seed/toolbox-template.ts
+// (key 'toolbox-talk') and auto-pinned to the sidebar. The `toolboxSchema`
+// constant above is retained for reference only (mirrors the jshaSchema note).
 export const CANONICAL_TEMPLATES: CanonicalTemplate[] = [
-  {
-    key: 'toolbox_v1',
-    name: 'Toolbox Talk',
-    category: 'toolbox_talk',
-    moduleBinding: 'toolbox_talk',
-    description:
-      'Pre-shift safety discussion with topic, attendees, key points, action items, photos. Used daily on every active site.',
-    schema: toolboxSchema,
-  },
   {
     key: 'wah_rescue_v1',
     name: 'Working at Heights Rescue Plan',

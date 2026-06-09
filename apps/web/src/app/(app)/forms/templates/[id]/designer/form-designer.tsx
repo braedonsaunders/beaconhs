@@ -27,8 +27,8 @@ import {
   ChevronRight,
   ClipboardCheck,
   Eye,
-  EyeOff,
   FileText,
+  GripVertical,
   Hash,
   Image as ImageIcon,
   ListChecks,
@@ -47,14 +47,15 @@ import {
   Sliders,
   Star,
   ToggleLeft,
+  Table2,
   Trash2,
   Type,
   Upload,
   User,
   Users,
   Video,
-  X,
 } from 'lucide-react'
+import { Reorder, useDragControls } from 'framer-motion'
 import {
   Alert,
   AlertDescription,
@@ -65,6 +66,7 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  Drawer,
   Input,
   Label,
   Select,
@@ -73,6 +75,7 @@ import {
 import {
   FIELD_TYPES,
   entityKindForPicker,
+  type CanvasLayout,
   type DefaultValueExpression,
   type FieldType,
   type FormField,
@@ -80,11 +83,16 @@ import {
   type FormSection,
   type FormulaExpression,
   type FormWorkflowStep,
+  type TableColumn,
+  type TableConfig,
 } from '@beaconhs/forms-core'
 import { toast } from '@/lib/toast'
-import { publishNewVersion } from './actions'
+import { publishNewVersion, updateAppOverview, updateAppPermissions } from './actions'
 import { LogicBuilder } from './logic-builder'
 import { FormulaBuilder } from './formula-builder'
+import { CanvasEditor, defaultBox } from './_canvas-editor'
+import { FlowsCanvas, type FlowSummary } from '../flows/_flows-canvas'
+import { LayoutGrid, PanelLeft, Send, SlidersHorizontal, Workflow as WorkflowIcon } from 'lucide-react'
 
 // --- Palette ---------------------------------------------------------------
 
@@ -129,13 +137,14 @@ const FIELD_ICONS: Partial<Record<FieldType, React.ComponentType<{ size?: number
   paragraph: AlignLeft,
   image: ImageIcon,
   divider: Minus,
+  table: Table2,
 }
 
 // Categorized palette. The first group of each section gets prominent
 // placement at the top; rare ones live in "More" further down.
 type PaletteGroup = { label: string; types: FieldType[] }
 const PALETTE_PRIMARY: PaletteGroup[] = [
-  { label: 'Common', types: ['text', 'long_text', 'number', 'date', 'select', 'checkbox_group', 'pass_fail_na', 'signature', 'photo', 'file', 'person_picker', 'formula'] },
+  { label: 'Common', types: ['text', 'long_text', 'number', 'date', 'table', 'select', 'checkbox_group', 'pass_fail_na', 'signature', 'photo', 'file', 'person_picker', 'formula'] },
 ]
 const PALETTE_MORE: PaletteGroup[] = [
   { label: 'Standard', types: ['textarea', 'datetime', 'time', 'email', 'phone', 'url'] },
@@ -169,31 +178,86 @@ function emptyStep(): FormWorkflowStep {
   }
 }
 
+const KIND_META: Record<
+  'form' | 'wizard' | 'checklist' | 'register' | 'mini_app',
+  { label: string; cls: string }
+> = {
+  form: { label: 'Form', cls: 'bg-teal-50 text-teal-700' },
+  wizard: { label: 'Wizard', cls: 'bg-indigo-50 text-indigo-700' },
+  checklist: { label: 'Checklist', cls: 'bg-emerald-50 text-emerald-700' },
+  register: { label: 'Register', cls: 'bg-amber-50 text-amber-700' },
+  mini_app: { label: 'Mini-app', cls: 'bg-violet-50 text-violet-700' },
+}
+
+export type AppOverview = {
+  description: string | null
+  category: string | null
+  iconKey: string | null
+  emailOnSubmit: boolean
+}
+
+export type AppAssignmentRow = {
+  id: string
+  mode: string
+  cron: string | null
+  targetRoleKeys: string[] | null
+  enabled: boolean
+}
+
 export function FormDesigner({
   templateId,
   templateName,
+  templateKind = 'form',
   initialSchema,
   currentVersion,
+  initialSurface = 'build',
+  overview,
+  assignments = [],
+  allowedRoles = [],
+  roles = [],
+  flows = [],
+  canGenerate = false,
 }: {
   templateId: string
   templateName: string
+  templateKind?: 'form' | 'wizard' | 'checklist' | 'register' | 'mini_app'
   initialSchema: FormSchemaV1
   currentVersion: number
+  initialSurface?: 'build' | 'flows'
+  overview?: AppOverview
+  assignments?: AppAssignmentRow[]
+  allowedRoles?: string[]
+  roles?: { key: string; name: string }[]
+  flows?: FlowSummary[]
+  canGenerate?: boolean
 }) {
   const router = useRouter()
   const [schema, setSchema] = useState<FormSchemaV1>(initialSchema)
+  const [appName, setAppName] = useState(templateName)
+  // Unified editor: left rail tab + right surface.
+  const [leftTab, setLeftTab] = useState<'overview' | 'build' | 'assignments' | 'permissions'>('build')
+  const [surface, setSurface] = useState<'build' | 'flows'>(initialSurface)
   const [selection, setSelection] = useState<
     | { kind: 'form' }
     | { kind: 'section'; sectionId: string }
     | { kind: 'field'; sectionId: string; fieldId: string }
     | { kind: 'workflow' }
   >({ kind: 'form' })
-  const [showPreview, setShowPreview] = useState(true)
+  // Which right-hand flyout is open. Preview + properties used to be permanent
+  // columns (too cramped); now they slide in on demand.
+  const [rightPanel, setRightPanel] = useState<'none' | 'props' | 'preview'>('none')
   const [showMorePalette, setShowMorePalette] = useState(false)
   const [showPublish, setShowPublish] = useState(false)
   const [pending, start] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [changelog, setChangelog] = useState('')
+
+  // Live field ids power Flow conditions even before publishing.
+  const liveFieldIds = useMemo(() => {
+    const ids: string[] = []
+    for (const sec of schema.sections) for (const f of sec.fields) ids.push(f.id)
+    return ids
+  }, [schema])
 
   const selectedField = useMemo(() => {
     if (selection.kind !== 'field') return null
@@ -213,6 +277,25 @@ export function FormDesigner({
     setSchema((s) => fn(structuredClone(s)))
   }
 
+  // Selecting something opens the properties flyout; workflow is edited in the
+  // canvas so it just switches the canvas view.
+  function selectField(sectionId: string, fieldId: string) {
+    setSelection({ kind: 'field', sectionId, fieldId })
+    setRightPanel('props')
+  }
+  function selectSection(sectionId: string) {
+    setSelection({ kind: 'section', sectionId })
+    setRightPanel('props')
+  }
+  function openFormSettings() {
+    setSelection({ kind: 'form' })
+    setRightPanel('props')
+  }
+  function openWorkflow() {
+    setSelection({ kind: 'workflow' })
+    setRightPanel('none')
+  }
+
   function addSection() {
     const id = newId('sec')
     update((draft) => {
@@ -223,18 +306,17 @@ export function FormDesigner({
       })
       return draft
     })
-    setSelection({ kind: 'section', sectionId: id })
+    selectSection(id)
   }
 
   function addField(sectionId: string, type: FieldType) {
+    const f = emptyField(type)
     update((draft) => {
       const sec = draft.sections.find((s) => s.id === sectionId)
-      if (!sec) return draft
-      const f = emptyField(type)
-      sec.fields.push(f)
-      setSelection({ kind: 'field', sectionId, fieldId: f.id })
+      if (sec) sec.fields.push(f)
       return draft
     })
+    selectField(sectionId, f.id)
   }
 
   function deleteField(sectionId: string, fieldId: string) {
@@ -242,6 +324,8 @@ export function FormDesigner({
       const sec = draft.sections.find((s) => s.id === sectionId)
       if (!sec) return draft
       sec.fields = sec.fields.filter((f) => f.id !== fieldId)
+      // Keep the canvas layout in sync — drop the deleted field's box.
+      if (sec.canvas) sec.canvas = { ...sec.canvas, items: sec.canvas.items.filter((it) => it.i !== fieldId) }
       return draft
     })
     if (selection.kind === 'field' && selection.fieldId === fieldId) {
@@ -267,6 +351,16 @@ export function FormDesigner({
       ;[sec.fields[i], sec.fields[j]] = [sec.fields[j]!, sec.fields[i]!]
       return draft
     })
+  }
+
+  // Drag-to-reorder fields within a section (framer-motion Reorder). Replaces
+  // the schema's field order with the dragged order; the up/down arrows remain
+  // as a keyboard-accessible fallback.
+  function reorderFields(sectionId: string, fields: FormField[]) {
+    setSchema((s) => ({
+      ...s,
+      sections: s.sections.map((sec) => (sec.id === sectionId ? { ...sec, fields } : sec)),
+    }))
   }
 
   function moveSection(sectionId: string, delta: -1 | 1) {
@@ -299,6 +393,68 @@ export function FormDesigner({
     })
   }
 
+  // --- Canvas (free-form positioned layout) --------------------------------
+
+  function canvasBoxFor(type: FieldType): { w: number; h: number } {
+    return defaultBox(type)
+  }
+
+  // Turn a section into canvas mode, auto-placing its existing fields in a
+  // single column so nothing is lost.
+  function enableCanvas(sectionId: string) {
+    update((draft) => {
+      const sec = draft.sections.find((s) => s.id === sectionId)
+      if (!sec || sec.canvas) return draft
+      let y = 0
+      const items = sec.fields.map((f) => {
+        const box = canvasBoxFor(f.type)
+        const item = { i: f.id, x: 0, y, w: Math.min(box.w * 2, 12), h: box.h }
+        y += box.h
+        return item
+      })
+      sec.canvas = { cols: 12, rowHeight: 40, items }
+      return draft
+    })
+  }
+
+  function disableCanvas(sectionId: string) {
+    update((draft) => {
+      const sec = draft.sections.find((s) => s.id === sectionId)
+      if (!sec) return draft
+      delete sec.canvas
+      return draft
+    })
+  }
+
+  function setCanvasItems(sectionId: string, items: CanvasLayout['items']) {
+    update((draft) => {
+      const sec = draft.sections.find((s) => s.id === sectionId)
+      if (!sec || !sec.canvas) return draft
+      sec.canvas = { ...sec.canvas, items }
+      return draft
+    })
+  }
+
+  function addWidgetToCanvas(
+    sectionId: string,
+    type: FieldType,
+    box: { x: number; y: number; w: number; h: number },
+  ) {
+    const f = emptyField(type)
+    update((draft) => {
+      const sec = draft.sections.find((s) => s.id === sectionId)
+      if (!sec) return draft
+      sec.fields.push(f)
+      const canvas = sec.canvas ?? { cols: 12, rowHeight: 40, items: [] }
+      sec.canvas = {
+        ...canvas,
+        items: [...canvas.items, { i: f.id, x: box.x, y: box.y, w: box.w, h: box.h }],
+      }
+      return draft
+    })
+    selectField(sectionId, f.id)
+  }
+
   function publish() {
     setError(null)
     start(async () => {
@@ -325,21 +481,46 @@ export function FormDesigner({
   return (
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 py-2">
-        <div className="flex items-center gap-3">
-          <Link href={`/forms/templates/${templateId}`} className="text-sm text-teal-700 hover:underline">
-            ← Back
+        <div className="flex min-w-0 items-center gap-3">
+          <Link href="/forms" className="shrink-0 text-sm text-teal-700 hover:underline">
+            ← Builder
           </Link>
-          <div>
-            <div className="text-sm font-semibold">{templateName}</div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="truncate text-sm font-semibold">{appName}</span>
+              <span
+                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${KIND_META[templateKind].cls}`}
+              >
+                {KIND_META[templateKind].label}
+              </span>
+            </div>
             <div className="text-xs text-slate-500">
-              Editing draft · current published v{currentVersion} · {schema.sections.length} sections · {stepsCount} workflow steps
+              Draft · published v{currentVersion} · {schema.sections.length} section
+              {schema.sections.length === 1 ? '' : 's'}
             </div>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => setShowPreview((s) => !s)}>
-            {showPreview ? <EyeOff size={14} /> : <Eye size={14} />}
-            {showPreview ? 'Hide preview' : 'Show preview'}
+          <Link href={`/forms/templates/${templateId}/fill`}>
+            <Button variant="outline" size="sm">
+              <ClipboardCheck size={14} /> Fill
+            </Button>
+          </Link>
+          <Button
+            variant={selection.kind === 'form' && rightPanel === 'props' ? 'secondary' : 'outline'}
+            size="sm"
+            onClick={openFormSettings}
+          >
+            <Sliders size={14} />
+            Settings
+          </Button>
+          <Button
+            variant={rightPanel === 'preview' ? 'secondary' : 'outline'}
+            size="sm"
+            onClick={() => setRightPanel((p) => (p === 'preview' ? 'none' : 'preview'))}
+          >
+            <Eye size={14} />
+            Preview
           </Button>
           <Button onClick={() => setShowPublish(true)} disabled={pending}>
             <Save size={14} />
@@ -348,23 +529,27 @@ export function FormDesigner({
         </div>
       </header>
 
-      <div className="flex flex-1 overflow-hidden">
-        {/* Left: palette + structure */}
-        <aside className="app-scroll w-64 shrink-0 overflow-y-auto border-r border-slate-200 bg-white p-3">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        {/* LEFT 1/3 — Overview / Build / Assignments / Permissions */}
+        <aside className="flex w-1/3 min-w-[300px] max-w-md shrink-0 flex-col border-r border-slate-200 bg-white">
+          <div className="flex shrink-0 items-center gap-0.5 border-b border-slate-200 px-2 py-1.5">
+            <LeftTab active={leftTab === 'overview'} onClick={() => setLeftTab('overview')} icon={<SlidersHorizontal size={13} />} label="Overview" />
+            <LeftTab active={leftTab === 'build'} onClick={() => setLeftTab('build')} icon={<PanelLeft size={13} />} label="Build" />
+            <LeftTab active={leftTab === 'assignments'} onClick={() => setLeftTab('assignments')} icon={<Send size={13} />} label="Assign" />
+            <LeftTab active={leftTab === 'permissions'} onClick={() => setLeftTab('permissions')} icon={<ShieldCheck size={13} />} label="Access" />
+          </div>
+          <div className="app-scroll min-h-0 flex-1 overflow-y-auto p-3">
+            {leftTab === 'overview' ? (
+              <OverviewPanel templateId={templateId} name={appName} overview={overview} onSaved={setAppName} />
+            ) : leftTab === 'assignments' ? (
+              <AssignmentsPanel assignments={assignments} />
+            ) : leftTab === 'permissions' ? (
+              <PermissionsPanel templateId={templateId} roles={roles} initial={allowedRoles} />
+            ) : (
+              <>
           <button
             type="button"
-            onClick={() => setSelection({ kind: 'form' })}
-            className={`mb-2 block w-full rounded px-2 py-1 text-left text-xs font-semibold ${
-              selection.kind === 'form'
-                ? 'bg-teal-50 text-teal-900'
-                : 'text-slate-700 hover:bg-slate-50'
-            }`}
-          >
-            Form properties
-          </button>
-          <button
-            type="button"
-            onClick={() => setSelection({ kind: 'workflow' })}
+            onClick={openWorkflow}
             className={`mb-3 block w-full rounded px-2 py-1 text-left text-xs font-semibold ${
               selection.kind === 'workflow'
                 ? 'bg-teal-50 text-teal-900'
@@ -416,11 +601,36 @@ export function FormDesigner({
                 />
               ))
             : null}
+              </>
+            )}
+          </div>
         </aside>
 
-        {/* Middle: canvas (+ optional preview) */}
-        <div className="app-scroll flex-1 overflow-y-auto bg-slate-50 p-4">
-          <div className={`mx-auto grid gap-4 ${showPreview ? 'max-w-6xl grid-cols-2' : 'max-w-3xl grid-cols-1'}`}>
+        {/* RIGHT 2/3 — build surface ⟷ flows */}
+        <div className="flex min-w-0 flex-1 flex-col bg-slate-50">
+          <div className="flex shrink-0 items-center gap-1 border-b border-slate-200 bg-white px-3 py-1.5">
+            <SurfaceTab active={surface === 'build'} onClick={() => setSurface('build')} icon={<LayoutGrid size={13} />} label="Build surface" />
+            <SurfaceTab active={surface === 'flows'} onClick={() => setSurface('flows')} icon={<WorkflowIcon size={13} />} label="Flows" />
+            {surface === 'build' ? (
+              <span className="ml-auto hidden text-[11px] text-slate-400 sm:block">
+                Toggle “Canvas” on a section for free-form drag-and-drop layout
+              </span>
+            ) : null}
+          </div>
+          {surface === 'flows' ? (
+            <div className="min-h-0 flex-1">
+              <FlowsCanvas
+                templateId={templateId}
+                templateName={appName}
+                fieldIds={liveFieldIds}
+                flows={flows}
+                canEdit
+                canGenerate={canGenerate}
+              />
+            </div>
+          ) : (
+        <div className="app-scroll min-h-0 flex-1 overflow-y-auto p-4 lg:p-6">
+          <div className="mx-auto max-w-3xl">
             <div className="space-y-3">
               {selection.kind === 'workflow' ? (
                 <WorkflowEditor
@@ -441,7 +651,7 @@ export function FormDesigner({
                     <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
                       <button
                         type="button"
-                        onClick={() => setSelection({ kind: 'section', sectionId: sec.id })}
+                        onClick={() => selectSection(sec.id)}
                         className="flex-1 text-left"
                       >
                         <CardTitle className="text-base">
@@ -454,6 +664,18 @@ export function FormDesigner({
                         </CardTitle>
                       </button>
                       <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          title={sec.canvas ? 'Switch to stacked layout' : 'Switch to free-form canvas (drag & drop)'}
+                          onClick={() => (sec.canvas ? disableCanvas(sec.id) : enableCanvas(sec.id))}
+                          className={`flex items-center gap-1 rounded px-1.5 py-1 text-xs transition ${
+                            sec.canvas
+                              ? 'bg-violet-100 text-violet-700'
+                              : 'text-slate-500 hover:bg-slate-100'
+                          }`}
+                        >
+                          <LayoutGrid size={13} /> Canvas
+                        </button>
                         <IconButton title="Move up" onClick={() => moveSection(sec.id, -1)} disabled={i === 0}>
                           <ArrowUp size={14} />
                         </IconButton>
@@ -470,74 +692,42 @@ export function FormDesigner({
                       </div>
                     </CardHeader>
                     <CardContent className="pt-0">
-                      {sec.fields.length === 0 ? (
+                      {sec.canvas ? (
+                        <CanvasEditor
+                          section={sec}
+                          selectedFieldId={selection.kind === 'field' && selection.sectionId === sec.id ? selection.fieldId : null}
+                          onLayout={(items) => setCanvasItems(sec.id, items)}
+                          onAddWidget={(type, box) => addWidgetToCanvas(sec.id, type, box)}
+                          onSelect={(fieldId) => selectField(sec.id, fieldId)}
+                          onDelete={(fieldId) => deleteField(sec.id, fieldId)}
+                        />
+                      ) : sec.fields.length === 0 ? (
                         <div className="rounded-md border border-dashed border-slate-300 p-4 text-center text-xs text-slate-400">
-                          No fields. Click a field type in the palette to add one.
+                          No fields. Click a field type in the palette to add one — or switch on Canvas to drag &amp; drop.
                         </div>
                       ) : (
-                        <ul className="divide-y divide-slate-100">
-                          {sec.fields.map((f, j) => {
-                            const isSelected =
-                              selection.kind === 'field' && selection.fieldId === f.id
-                            const Icon = FIELD_ICONS[f.type] ?? Type
-                            return (
-                              <li
-                                key={f.id}
-                                className={`flex items-center justify-between gap-2 px-2 py-2 ${
-                                  isSelected ? 'bg-teal-50' : ''
-                                }`}
-                              >
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setSelection({ kind: 'field', sectionId: sec.id, fieldId: f.id })
-                                  }
-                                  className="flex flex-1 items-center gap-2 text-left"
-                                >
-                                  <Icon size={14} />
-                                  <span className="text-xs text-slate-400 w-24 truncate">
-                                    {FIELD_TYPES[f.type]?.label ?? f.type}
-                                  </span>
-                                  <span className="text-sm font-medium">
-                                    {f.label?.en ?? f.id}
-                                    {f.required || f.validation?.required ? (
-                                      <span className="text-red-600"> *</span>
-                                    ) : null}
-                                  </span>
-                                  {f.showIf ? (
-                                    <Badge variant="secondary" className="text-[10px]">
-                                      conditional
-                                    </Badge>
-                                  ) : null}
-                                  {f.formula ? (
-                                    <Badge variant="secondary" className="text-[10px]">
-                                      calc
-                                    </Badge>
-                                  ) : null}
-                                </button>
-                                <div className="flex items-center gap-1">
-                                  <IconButton
-                                    title="Move up"
-                                    onClick={() => moveField(sec.id, f.id, -1)}
-                                    disabled={j === 0}
-                                  >
-                                    <ArrowUp size={12} />
-                                  </IconButton>
-                                  <IconButton
-                                    title="Move down"
-                                    onClick={() => moveField(sec.id, f.id, 1)}
-                                    disabled={j === sec.fields.length - 1}
-                                  >
-                                    <ArrowDown size={12} />
-                                  </IconButton>
-                                  <IconButton title="Delete" onClick={() => deleteField(sec.id, f.id)}>
-                                    <Trash2 size={12} className="text-red-500" />
-                                  </IconButton>
-                                </div>
-                              </li>
-                            )
-                          })}
-                        </ul>
+                        <Reorder.Group
+                          axis="y"
+                          values={sec.fields}
+                          onReorder={(fields) => reorderFields(sec.id, fields as FormField[])}
+                          as="ul"
+                          className="divide-y divide-slate-100"
+                        >
+                          {sec.fields.map((f, j) => (
+                            <FieldRow
+                              key={f.id}
+                              field={f}
+                              isSelected={selection.kind === 'field' && selection.fieldId === f.id}
+                              typeLabel={FIELD_TYPES[f.type]?.label ?? f.type}
+                              onSelect={() => selectField(sec.id, f.id)}
+                              onMoveUp={() => moveField(sec.id, f.id, -1)}
+                              onMoveDown={() => moveField(sec.id, f.id, 1)}
+                              onDelete={() => deleteField(sec.id, f.id)}
+                              canUp={j > 0}
+                              canDown={j < sec.fields.length - 1}
+                            />
+                          ))}
+                        </Reorder.Group>
                       )}
                     </CardContent>
                   </Card>
@@ -548,96 +738,102 @@ export function FormDesigner({
                 Add section
               </Button>
             </div>
-            {showPreview ? (
-              <div className="sticky top-0 self-start">
-                <Preview schema={schema} />
-              </div>
-            ) : null}
           </div>
         </div>
-
-        {/* Right: properties */}
-        <aside className="app-scroll w-96 shrink-0 overflow-y-auto border-l border-slate-200 bg-white p-4">
-          {selection.kind === 'field' && selectedField ? (
-            <FieldProperties
-              key={selectedField.field.id}
-              sectionId={selectedField.section.id}
-              field={selectedField.field}
-              schema={schema}
-              onChange={(patch) =>
-                updateField(selectedField.section.id, selectedField.field.id, patch)
-              }
-            />
-          ) : selection.kind === 'section' && selectedSection ? (
-            <SectionProperties
-              key={selectedSection.id}
-              section={selectedSection}
-              schema={schema}
-              onChange={(patch) => updateSection(selectedSection.id, patch)}
-            />
-          ) : selection.kind === 'workflow' ? (
-            <div className="text-sm text-slate-600">
-              <h3 className="mb-2 text-sm font-semibold text-slate-700">Workflow steps</h3>
-              <p className="text-xs">
-                Use the editor in the canvas to add / rename / reorder workflow steps. Bind each
-                section (and via the section, each field) to a step from the Section properties tab.
-              </p>
-            </div>
-          ) : (
-            <FormProperties
-              schema={schema}
-              onChange={(patch) => setSchema((s) => ({ ...s, ...patch }))}
-            />
           )}
-        </aside>
+        </div>
       </div>
 
-      {showPublish ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <Card className="w-full max-w-md">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Publish v{currentVersion + 1}</CardTitle>
-                <button onClick={() => setShowPublish(false)} aria-label="Close">
-                  <X size={18} className="text-slate-400 hover:text-slate-700" />
-                </button>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Alert variant="info">
-                <AlertTitle>Immutable version</AlertTitle>
-                <AlertDescription>
-                  This snapshots the current schema as v{currentVersion + 1}. Existing responses
-                  still render against the version they were submitted under.
-                </AlertDescription>
-              </Alert>
-              <div className="space-y-1">
-                <Label>Changelog</Label>
-                <Textarea
-                  rows={3}
-                  value={changelog}
-                  placeholder="Short description of what changed"
-                  onChange={(e) => setChangelog(e.target.value)}
-                />
-              </div>
-              {error ? (
-                <Alert variant="destructive">
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              ) : null}
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setShowPublish(false)}>
-                  Cancel
-                </Button>
-                <Button onClick={publish} disabled={pending}>
-                  <Check size={14} />
-                  {pending ? 'Publishing…' : 'Publish'}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+      {/* Properties flyout — opens on selection / "Form settings". */}
+      <Drawer
+        open={rightPanel === 'props'}
+        onClose={() => setRightPanel('none')}
+        title={
+          selection.kind === 'field'
+            ? 'Field properties'
+            : selection.kind === 'section'
+              ? 'Section'
+              : 'Form settings'
+        }
+        size="sm"
+      >
+        {selection.kind === 'field' && selectedField ? (
+          <FieldProperties
+            key={selectedField.field.id}
+            sectionId={selectedField.section.id}
+            field={selectedField.field}
+            schema={schema}
+            onChange={(patch) =>
+              updateField(selectedField.section.id, selectedField.field.id, patch)
+            }
+          />
+        ) : selection.kind === 'section' && selectedSection ? (
+          <SectionProperties
+            key={selectedSection.id}
+            section={selectedSection}
+            schema={schema}
+            onChange={(patch) => updateSection(selectedSection.id, patch)}
+          />
+        ) : (
+          <FormProperties
+            schema={schema}
+            onChange={(patch) => setSchema((s) => ({ ...s, ...patch }))}
+          />
+        )}
+      </Drawer>
+
+      {/* Preview flyout — live render of the filler experience. */}
+      <Drawer
+        open={rightPanel === 'preview'}
+        onClose={() => setRightPanel('none')}
+        title="Preview"
+        description="How the filler will see this form."
+        size="lg"
+      >
+        <Preview schema={schema} />
+      </Drawer>
+
+      <Drawer
+        open={showPublish}
+        onClose={() => setShowPublish(false)}
+        title={`Publish v${currentVersion + 1}`}
+        description="Snapshot the current schema as a new immutable version."
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setShowPublish(false)}>
+              Cancel
+            </Button>
+            <Button onClick={publish} disabled={pending}>
+              <Check size={14} />
+              {pending ? 'Publishing…' : 'Publish'}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <Alert variant="info">
+            <AlertTitle>Immutable version</AlertTitle>
+            <AlertDescription>
+              This snapshots the current schema as v{currentVersion + 1}. Existing responses still
+              render against the version they were submitted under.
+            </AlertDescription>
+          </Alert>
+          <div className="space-y-1">
+            <Label>Changelog</Label>
+            <Textarea
+              rows={3}
+              value={changelog}
+              placeholder="Short description of what changed"
+              onChange={(e) => setChangelog(e.target.value)}
+            />
+          </div>
+          {error ? (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          ) : null}
         </div>
-      ) : null}
+      </Drawer>
     </div>
   )
 }
@@ -700,6 +896,85 @@ function IconButton({
     >
       {children}
     </button>
+  )
+}
+
+// One draggable field row in the designer canvas. Drag is handle-only (via
+// framer-motion dragControls) so clicking the row still selects the field; the
+// up/down arrows remain as a keyboard-accessible fallback.
+function FieldRow({
+  field,
+  isSelected,
+  typeLabel,
+  onSelect,
+  onMoveUp,
+  onMoveDown,
+  onDelete,
+  canUp,
+  canDown,
+}: {
+  field: FormField
+  isSelected: boolean
+  typeLabel: string
+  onSelect: () => void
+  onMoveUp: () => void
+  onMoveDown: () => void
+  onDelete: () => void
+  canUp: boolean
+  canDown: boolean
+}) {
+  const controls = useDragControls()
+  const Icon = FIELD_ICONS[field.type] ?? Type
+  return (
+    <Reorder.Item
+      value={field}
+      dragListener={false}
+      dragControls={controls}
+      as="li"
+      className={`flex items-center justify-between gap-2 rounded px-1 py-2 ${
+        isSelected ? 'bg-teal-50' : 'bg-white'
+      }`}
+    >
+      <button
+        type="button"
+        aria-label="Drag to reorder"
+        onPointerDown={(e) => controls.start(e)}
+        className="cursor-grab touch-none rounded p-0.5 text-slate-300 hover:text-slate-500 active:cursor-grabbing"
+      >
+        <GripVertical size={14} />
+      </button>
+      <button type="button" onClick={onSelect} className="flex flex-1 items-center gap-2 text-left">
+        <Icon size={14} />
+        <span className="w-24 truncate text-xs text-slate-400">{typeLabel}</span>
+        <span className="text-sm font-medium">
+          {field.label?.en ?? field.id}
+          {field.required || field.validation?.required ? (
+            <span className="text-red-600"> *</span>
+          ) : null}
+        </span>
+        {field.showIf ? (
+          <Badge variant="secondary" className="text-[10px]">
+            conditional
+          </Badge>
+        ) : null}
+        {field.formula ? (
+          <Badge variant="secondary" className="text-[10px]">
+            calc
+          </Badge>
+        ) : null}
+      </button>
+      <div className="flex items-center gap-1">
+        <IconButton title="Move up" onClick={onMoveUp} disabled={!canUp}>
+          <ArrowUp size={12} />
+        </IconButton>
+        <IconButton title="Move down" onClick={onMoveDown} disabled={!canDown}>
+          <ArrowDown size={12} />
+        </IconButton>
+        <IconButton title="Delete" onClick={onDelete}>
+          <Trash2 size={12} className="text-red-500" />
+        </IconButton>
+      </div>
+    </Reorder.Item>
   )
 }
 
@@ -1043,11 +1318,31 @@ function FieldBasicTab({
         />
         Required
       </label>
+      <div className="space-y-1">
+        <Label className="text-xs">Width (columns)</Label>
+        <Select
+          className="h-8 text-xs"
+          value={String(field.colSpan ?? '')}
+          onChange={(e) =>
+            onChange({ colSpan: e.target.value ? Number(e.target.value) : undefined })
+          }
+        >
+          <option value="">Full width</option>
+          <option value="1">1 column</option>
+          <option value="2">2 columns</option>
+          <option value="3">3 columns</option>
+          <option value="4">4 columns</option>
+        </Select>
+        <p className="text-[10px] text-slate-500">Applies when the section has multiple columns.</p>
+      </div>
       {field.type === 'select' ||
       field.type === 'radio' ||
       field.type === 'multi_select' ||
       field.type === 'checkbox_group' ? (
         <ChoiceOptionsEditor field={field} onChange={onChange} />
+      ) : null}
+      {field.type === 'table' ? (
+        <TableConfigEditor field={field} onChange={onChange} />
       ) : null}
     </div>
   )
@@ -1263,6 +1558,246 @@ function ChoiceOptionsEditor({
   )
 }
 
+// --- Table config (column + row editor for `table` fields) ------------------
+
+function TableConfigEditor({
+  field,
+  onChange,
+}: {
+  field: FormField
+  onChange: (patch: Partial<FormField>) => void
+}) {
+  const config = (field.config ?? {}) as Partial<TableConfig>
+  const columns = (config.columns ?? []) as TableColumn[]
+  const rowMode = config.rowMode === 'fixed' ? 'fixed' : 'addable'
+  const fixedRows = config.rows ?? []
+
+  function setConfig(patch: Partial<TableConfig>) {
+    onChange({ config: { ...(config as Record<string, unknown>), ...patch } })
+  }
+  const setColumns = (next: TableColumn[]) => setConfig({ columns: next })
+  const setRows = (next: { label: string }[]) => setConfig({ rows: next })
+
+  return (
+    <div className="space-y-3 rounded-md border border-slate-200 bg-slate-50/50 p-2">
+      <div className="text-xs font-semibold text-slate-600">Table setup</div>
+
+      <div className="space-y-1">
+        <Label className="text-xs">Rows</Label>
+        <Select
+          className="h-8 text-xs"
+          value={rowMode}
+          onChange={(e) => setConfig({ rowMode: e.target.value as 'addable' | 'fixed' })}
+        >
+          <option value="addable">Addable — user adds / removes rows</option>
+          <option value="fixed">Predefined — fixed list of rows</option>
+        </Select>
+      </div>
+
+      {rowMode === 'addable' ? (
+        <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-1">
+            <Label className="text-xs">Min rows</Label>
+            <Input
+              type="number"
+              className="h-8 text-xs"
+              value={config.minRows ?? ''}
+              onChange={(e) =>
+                setConfig({ minRows: e.target.value === '' ? undefined : Number(e.target.value) })
+              }
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Max rows</Label>
+            <Input
+              type="number"
+              className="h-8 text-xs"
+              value={config.maxRows ?? ''}
+              onChange={(e) =>
+                setConfig({ maxRows: e.target.value === '' ? undefined : Number(e.target.value) })
+              }
+            />
+          </div>
+        </div>
+      ) : null}
+
+      <div className="space-y-2">
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Columns</div>
+        {columns.length === 0 ? (
+          <p className="text-xs text-slate-500">No columns yet.</p>
+        ) : (
+          <ul className="space-y-2">
+            {columns.map((c, i) => (
+              <li key={i} className="space-y-1 rounded border border-slate-200 bg-white p-2">
+                <div className="flex items-center gap-1">
+                  <Input
+                    className="h-7 flex-1 text-xs"
+                    value={c.label}
+                    placeholder="Column label"
+                    onChange={(e) =>
+                      setColumns(columns.map((x, idx) => (idx === i ? { ...x, label: e.target.value } : x)))
+                    }
+                  />
+                  <Select
+                    className="h-7 w-24 text-xs"
+                    value={c.type}
+                    onChange={(e) =>
+                      setColumns(
+                        columns.map((x, idx) =>
+                          idx === i ? { ...x, type: e.target.value as TableColumn['type'] } : x,
+                        ),
+                      )
+                    }
+                  >
+                    <option value="text">Text</option>
+                    <option value="number">Number</option>
+                    <option value="select">Dropdown</option>
+                    <option value="checkbox">Checkbox</option>
+                    <option value="date">Date</option>
+                  </Select>
+                  <button
+                    type="button"
+                    onClick={() => setColumns(columns.filter((_, idx) => idx !== i))}
+                    className="rounded p-1 text-slate-400 hover:text-red-500"
+                    title="Remove column"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+                <Input
+                  className="h-7 font-mono text-[11px]"
+                  value={c.key}
+                  placeholder="key"
+                  onChange={(e) =>
+                    setColumns(
+                      columns.map((x, idx) =>
+                        idx === i ? { ...x, key: e.target.value.replace(/\s+/g, '_') } : x,
+                      ),
+                    )
+                  }
+                />
+                {c.type === 'select' ? (
+                  <TableColumnOptions
+                    options={c.options ?? []}
+                    onChange={(opts) =>
+                      setColumns(columns.map((x, idx) => (idx === i ? { ...x, options: opts } : x)))
+                    }
+                  />
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            const n = columns.length + 1
+            setColumns([...columns, { key: `col_${n}`, label: `Column ${n}`, type: 'text' }])
+          }}
+        >
+          <Plus size={12} /> Add column
+        </Button>
+      </div>
+
+      {rowMode === 'fixed' ? (
+        <div className="space-y-2">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+            Predefined rows
+          </div>
+          {fixedRows.length === 0 ? (
+            <p className="text-xs text-slate-500">No rows yet.</p>
+          ) : (
+            <ul className="space-y-1">
+              {fixedRows.map((r, i) => (
+                <li key={i} className="flex items-center gap-1">
+                  <Input
+                    className="h-7 flex-1 text-xs"
+                    value={r.label}
+                    placeholder="Row label"
+                    onChange={(e) =>
+                      setRows(fixedRows.map((x, idx) => (idx === i ? { label: e.target.value } : x)))
+                    }
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setRows(fixedRows.filter((_, idx) => idx !== i))}
+                    className="rounded p-1 text-slate-400 hover:text-red-500"
+                    title="Remove row"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setRows([...fixedRows, { label: `Row ${fixedRows.length + 1}` }])}
+          >
+            <Plus size={12} /> Add row
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function TableColumnOptions({
+  options,
+  onChange,
+}: {
+  options: { value: string; label: string }[]
+  onChange: (opts: { value: string; label: string }[]) => void
+}) {
+  return (
+    <div className="space-y-1 rounded border border-slate-100 bg-slate-50 p-1.5">
+      <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Options</div>
+      {options.map((o, i) => (
+        <div key={i} className="flex items-center gap-1">
+          <Input
+            className="h-6 flex-1 text-[11px]"
+            value={o.label}
+            placeholder="Option label"
+            onChange={(e) =>
+              onChange(
+                options.map((x, idx) =>
+                  idx === i
+                    ? {
+                        value: x.value || e.target.value.toLowerCase().replace(/\s+/g, '_'),
+                        label: e.target.value,
+                      }
+                    : x,
+                ),
+              )
+            }
+          />
+          <button
+            type="button"
+            onClick={() => onChange(options.filter((_, idx) => idx !== i))}
+            className="rounded p-0.5 text-slate-400 hover:text-red-500"
+          >
+            <Trash2 size={11} />
+          </button>
+        </div>
+      ))}
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() =>
+          onChange([
+            ...options,
+            { value: `opt_${options.length + 1}`, label: `Option ${options.length + 1}` },
+          ])
+        }
+      >
+        <Plus size={11} /> Option
+      </Button>
+    </div>
+  )
+}
+
 // --- Section properties ----------------------------------------------------
 
 function SectionProperties({
@@ -1317,6 +1852,25 @@ function SectionProperties({
             </option>
           ))}
         </Select>
+      </div>
+      <div className="space-y-1">
+        <Label className="text-xs">Columns (layout)</Label>
+        <Select
+          className="h-8 text-xs"
+          value={String(section.layout?.columns ?? 1)}
+          onChange={(e) => {
+            const n = Number(e.target.value)
+            onChange({ layout: n > 1 ? { columns: n, gap: section.layout?.gap } : undefined })
+          }}
+        >
+          <option value="1">1 column</option>
+          <option value="2">2 columns</option>
+          <option value="3">3 columns</option>
+          <option value="4">4 columns</option>
+        </Select>
+        <p className="text-[10px] text-slate-500">
+          Fields flow left→right; set each field's width in its Basic tab.
+        </p>
       </div>
       <label className="flex items-center gap-2">
         <input
@@ -1521,4 +2075,247 @@ function PreviewField({ type }: { type: FieldType }) {
     default:
       return <Input disabled placeholder="Preview" />
   }
+}
+
+// --- Unified editor: rail tabs + left-pane panels ---------------------------
+
+function LabeledField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs">{label}</Label>
+      {children}
+    </div>
+  )
+}
+
+function LeftTab({
+  active,
+  onClick,
+  icon,
+  label,
+}: {
+  active: boolean
+  onClick: () => void
+  icon: React.ReactNode
+  label: string
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex flex-1 items-center justify-center gap-1 rounded-md px-1.5 py-1.5 text-xs font-medium transition ${
+        active ? 'bg-teal-50 text-teal-700' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
+      }`}
+    >
+      {icon} {label}
+    </button>
+  )
+}
+
+function SurfaceTab({
+  active,
+  onClick,
+  icon,
+  label,
+}: {
+  active: boolean
+  onClick: () => void
+  icon: React.ReactNode
+  label: string
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition ${
+        active ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
+      }`}
+    >
+      {icon} {label}
+    </button>
+  )
+}
+
+function OverviewPanel({
+  templateId,
+  name,
+  overview,
+  onSaved,
+}: {
+  templateId: string
+  name: string
+  overview?: AppOverview
+  onSaved: (name: string) => void
+}) {
+  const [n, setN] = useState(name)
+  const [description, setDescription] = useState(overview?.description ?? '')
+  const [category, setCategory] = useState(overview?.category ?? '')
+  const [emailOnSubmit, setEmailOnSubmit] = useState(!!overview?.emailOnSubmit)
+  const [pending, start] = useTransition()
+  const save = () => {
+    if (n.trim().length < 2) {
+      toast.error('Give your app a name')
+      return
+    }
+    start(async () => {
+      const res = await updateAppOverview({
+        templateId,
+        name: n.trim(),
+        description,
+        category: category || null,
+        emailOnSubmit,
+      })
+      if (!res.ok) {
+        toast.error(res.error ?? 'Could not save')
+        return
+      }
+      onSaved(n.trim())
+      toast.success('Overview saved')
+    })
+  }
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-slate-500">
+        The basics shown across the app — its name, what it&apos;s for, and how it behaves.
+      </p>
+      <LabeledField label="App name">
+        <Input value={n} onChange={(e) => setN(e.target.value)} />
+      </LabeledField>
+      <LabeledField label="Description">
+        <Textarea
+          rows={3}
+          value={description}
+          placeholder="What is this app for? Who fills it out?"
+          onChange={(e) => setDescription(e.target.value)}
+        />
+      </LabeledField>
+      <LabeledField label="Category">
+        <Select value={category} onChange={(e) => setCategory(e.target.value)}>
+          <option value="">— None —</option>
+          {['inspection', 'jsha', 'toolbox_talk', 'lift_plan', 'wah', 'incident_investigation', 'audit', 'checklist', 'custom'].map(
+            (c) => (
+              <option key={c} value={c}>
+                {c.replace(/_/g, ' ')}
+              </option>
+            ),
+          )}
+        </Select>
+      </LabeledField>
+      <label className="flex items-center gap-2 text-sm text-slate-700">
+        <input
+          type="checkbox"
+          checked={emailOnSubmit}
+          onChange={(e) => setEmailOnSubmit(e.target.checked)}
+        />
+        Email a recap to recipients on submit
+      </label>
+      <Button onClick={save} disabled={pending} className="w-full">
+        {pending ? 'Saving…' : 'Save overview'}
+      </Button>
+    </div>
+  )
+}
+
+function AssignmentsPanel({ assignments }: { assignments: AppAssignmentRow[] }) {
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-slate-500">
+        Assignments decide who&apos;s asked to fill this app and when — on a schedule, by role, or on
+        an event. People can always open it directly from the gallery too.
+      </p>
+      {assignments.length === 0 ? (
+        <div className="rounded-md border border-dashed border-slate-300 p-4 text-center text-xs text-slate-400">
+          No assignments yet.
+        </div>
+      ) : (
+        <ul className="space-y-2">
+          {assignments.map((a) => (
+            <li key={a.id} className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="font-medium capitalize">{a.mode.replace(/_/g, ' ')}</span>
+                <span
+                  className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                    a.enabled ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'
+                  }`}
+                >
+                  {a.enabled ? 'enabled' : 'disabled'}
+                </span>
+              </div>
+              {(a.mode === 'scheduled' && a.cron) || a.targetRoleKeys?.length ? (
+                <div className="mt-0.5 text-xs text-slate-500">
+                  {a.mode === 'scheduled' && a.cron ? `Schedule: ${a.cron}` : ''}
+                  {a.targetRoleKeys?.length ? ` Roles: ${a.targetRoleKeys.join(', ')}` : ''}
+                </div>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+function PermissionsPanel({
+  templateId,
+  roles,
+  initial,
+}: {
+  templateId: string
+  roles: { key: string; name: string }[]
+  initial: string[]
+}) {
+  const [sel, setSel] = useState<Set<string>>(new Set(initial))
+  const [pending, start] = useTransition()
+  const toggle = (key: string) =>
+    setSel((s) => {
+      const n = new Set(s)
+      if (n.has(key)) n.delete(key)
+      else n.add(key)
+      return n
+    })
+  const save = () =>
+    start(async () => {
+      const res = await updateAppPermissions({ templateId, allowedRoles: Array.from(sel) })
+      if (!res.ok) {
+        toast.error(res.error ?? 'Could not save')
+        return
+      }
+      toast.success('Access saved')
+    })
+  const restricted = sel.size > 0
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-slate-500">
+        Choose which roles can see and fill this app. Leave all unchecked to allow everyone. Admins
+        always have access.
+      </p>
+      <div
+        className={`rounded-md border px-3 py-2 text-xs ${
+          restricted
+            ? 'border-amber-200 bg-amber-50 text-amber-800'
+            : 'border-emerald-200 bg-emerald-50 text-emerald-800'
+        }`}
+      >
+        {restricted ? `Restricted to ${sel.size} role${sel.size === 1 ? '' : 's'}` : 'Visible to everyone'}
+      </div>
+      {roles.length === 0 ? (
+        <p className="text-xs text-slate-400">No roles defined for this tenant.</p>
+      ) : (
+        <ul className="space-y-1">
+          {roles.map((r) => (
+            <li key={r.key}>
+              <label className="flex cursor-pointer items-center gap-2 rounded-md border border-slate-200 px-3 py-1.5 text-sm hover:bg-slate-50">
+                <input type="checkbox" checked={sel.has(r.key)} onChange={() => toggle(r.key)} />
+                <span className="flex-1">{r.name}</span>
+                <span className="text-[10px] text-slate-400">{r.key}</span>
+              </label>
+            </li>
+          ))}
+        </ul>
+      )}
+      <Button onClick={save} disabled={pending} className="w-full">
+        {pending ? 'Saving…' : 'Save access'}
+      </Button>
+    </div>
+  )
 }

@@ -60,9 +60,6 @@ import {
   ppeTypes,
   tenants,
   tenantUsers,
-  toolboxJournalAttendees,
-  toolboxJournalPhotos,
-  toolboxJournals,
   trainingCertificates,
   trainingCourses,
   trainingRecords,
@@ -79,7 +76,6 @@ import {
   renderHazidSignedReportPdf,
   renderIncidentPdf,
   renderPpeIssuePdf,
-  renderToolboxPdf,
   type HazidRenderInput,
 } from '@beaconhs/forms-pdf'
 import { enqueueEmail, type PdfJobData } from '@beaconhs/jobs'
@@ -98,8 +94,6 @@ export async function processPdf(job: Job<PdfJobData>): Promise<void> {
         return await renderCertificate(data.tenantId, data.certificateId)
       case 'hazid':
         return await renderHazid(data.tenantId, data.assessmentId)
-      case 'toolbox':
-        return await renderToolbox(data.tenantId, data.journalId)
       case 'ca':
         return await renderCa(data.tenantId, data.caId)
       case 'document':
@@ -1170,98 +1164,6 @@ function escapeHtml(s: string | null | undefined): string {
     .replace(/'/g, '&#39;')
 }
 
-// --- toolbox ---------------------------------------------------------------
-
-async function renderToolbox(tenantId: string, journalId: string): Promise<void> {
-  const data = await withTenant(db, tenantId, async (tx) => {
-    const [row] = await tx
-      .select({
-        j: toolboxJournals,
-        site: orgUnits,
-        foremanMember: tenantUsers,
-        foremanUser: user,
-        tenant: tenants,
-      })
-      .from(toolboxJournals)
-      .leftJoin(orgUnits, eq(orgUnits.id, toolboxJournals.siteOrgUnitId))
-      .leftJoin(tenantUsers, eq(tenantUsers.id, toolboxJournals.foremanTenantUserId))
-      .leftJoin(user, eq(user.id, tenantUsers.userId))
-      .innerJoin(tenants, eq(tenants.id, toolboxJournals.tenantId))
-      .where(eq(toolboxJournals.id, journalId))
-      .limit(1)
-    if (!row) return null
-
-    const attendees = await tx
-      .select({ row: toolboxJournalAttendees, person: people })
-      .from(toolboxJournalAttendees)
-      .innerJoin(people, eq(people.id, toolboxJournalAttendees.personId))
-      .where(eq(toolboxJournalAttendees.journalId, journalId))
-      .orderBy(asc(people.lastName), asc(people.firstName))
-
-    const photos = await tx
-      .select({ link: toolboxJournalPhotos, att: attachments })
-      .from(toolboxJournalPhotos)
-      .innerJoin(attachments, eq(attachments.id, toolboxJournalPhotos.attachmentId))
-      .where(eq(toolboxJournalPhotos.journalId, journalId))
-
-    return { ...row, attendees, photos }
-  })
-
-  if (!data) {
-    console.warn(`[pdf] toolbox ${journalId} not found`)
-    return
-  }
-
-  const j = data.j
-  const t = data.tenant
-
-  const pdf = await renderToolboxPdf({
-    tenantName: t.name,
-    tenantLogoUrl: t.branding.logoUrl,
-    primaryColor: t.branding.primaryColor,
-    journal: {
-      reference: j.reference,
-      title: j.title,
-      topic: j.topic,
-      occurredOn: j.occurredOn,
-      status: j.status,
-      locked: j.locked,
-      siteName: data.site?.name ?? null,
-      foremanName: memberDisplayName({
-        member: data.foremanMember,
-        user: data.foremanUser,
-      }),
-      discussionNotes: j.discussionNotes,
-      questionsRaised: j.questionsRaised,
-      actionItems: j.actionItems,
-    },
-    attendees: data.attendees.map((a) => ({
-      name: `${a.person.lastName}, ${a.person.firstName}`,
-      jobTitle: a.person.jobTitle ?? null,
-      signatureDataUrl: a.row.signatureDataUrl,
-      signedAt: a.row.signedAt,
-    })),
-    photos: data.photos.map((p) => ({
-      url: publicUrl(p.att.r2Key),
-      caption: p.link.caption,
-    })),
-    generatedAt: new Date(),
-  })
-
-  const stamp = Date.now()
-  await storePdfArtifact({
-    tenantId,
-    pdf,
-    filename: `toolbox-${j.reference || journalId.slice(0, 8)}-${stamp}.pdf`,
-    r2Key: `pdfs/toolbox/${journalId}-${stamp}.pdf`,
-    entityType: 'toolbox_journal',
-    entityId: journalId,
-    summary: 'Rendered toolbox journal PDF',
-  })
-
-  console.log(`[pdf] toolbox ${journalId} rendered (${pdf.length} bytes)`)
-}
-
 // --- ca --------------------------------------------------------------------
 
 async function renderCa(tenantId: string, caId: string): Promise<void> {
@@ -1452,6 +1354,9 @@ async function renderDocument(tenantId: string, documentId: string): Promise<voi
       status: d.status,
       printHeader: d.printHeader,
       printFooter: d.printFooter,
+      pageSize: d.pageSize === 'A4' ? 'A4' : 'Letter',
+      headerText: d.headerText,
+      footerText: d.footerText,
       nextReviewOn: d.nextReviewOn,
       ownerName: memberDisplayName({
         member: data.ownerMember,

@@ -14,7 +14,6 @@ import {
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { gradeAnswer, type QuestionKind } from '../_lib/grading'
-import { recomputeComplianceForRecord } from '../_lib/audience'
 
 /**
  * Begin a new assessment attempt. Creates the parent row + one
@@ -177,19 +176,8 @@ export async function submitAssessmentAttempt(attemptId: string, formData: FormD
       })
       .where(eq(trainingAssessments.id, attemptId))
 
-    // Knock-on compliance update
-    if (attempt.typeId) {
-      await recomputeComplianceForRecord(tx, tenantId, {
-        personId: attempt.personId,
-        assessmentTypeId: attempt.typeId,
-      })
-    }
-    if (passed && attempt.courseId) {
-      await recomputeComplianceForRecord(tx, tenantId, {
-        personId: attempt.personId,
-        courseId: attempt.courseId,
-      })
-    }
+    // Compliance is computed by the unified engine (the training adapter reads
+    // training_records / training_assessments directly); no legacy recompute.
     return { score, passed, pointsAwarded, pointsPossible, trainingRecordId }
   })
 

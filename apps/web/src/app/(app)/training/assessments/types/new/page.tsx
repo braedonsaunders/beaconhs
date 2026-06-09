@@ -10,14 +10,14 @@ import {
   Textarea,
 } from '@beaconhs/ui'
 import { trainingCourses } from '@beaconhs/db/schema'
-import { requireRequestContext } from '@/lib/auth'
+import { requireModuleManage } from '@/lib/module-admin/guard'
 import { PageContainer } from '@/components/page-layout'
 import { createAssessmentType } from '../../../_actions/assessment-types'
 
 export const metadata = { title: 'New assessment type' }
 
 export default async function NewAssessmentTypePage() {
-  const ctx = await requireRequestContext()
+  const ctx = await requireModuleManage('training')
   const courses = await ctx.db(async (tx) =>
     tx.select().from(trainingCourses).orderBy(asc(trainingCourses.name)),
   )

@@ -23,6 +23,7 @@ import {
   equipmentTypes,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { requireModuleManage, assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 import { PageContainer } from '@/components/page-layout'
 import { Section } from '@/components/section'
@@ -51,6 +52,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 async function updateTemplate(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'equipment')
   const id = String(formData.get('id') ?? '').trim()
   const name = String(formData.get('name') ?? '').trim()
   const description = String(formData.get('description') ?? '').trim() || null
@@ -86,6 +88,7 @@ async function updateTemplate(formData: FormData) {
 async function addCriterion(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'equipment')
   const inspectionTypeId = String(formData.get('inspectionTypeId') ?? '').trim()
   const question = String(formData.get('question') ?? '').trim()
   const description = String(formData.get('description') ?? '').trim() || null
@@ -147,6 +150,7 @@ async function addCriterion(formData: FormData) {
 async function updateCriterion(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'equipment')
   const id = String(formData.get('id') ?? '').trim()
   const inspectionTypeId = String(formData.get('inspectionTypeId') ?? '').trim()
   const question = String(formData.get('question') ?? '').trim()
@@ -187,6 +191,7 @@ async function updateCriterion(formData: FormData) {
 async function moveCriterion(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'equipment')
   const id = String(formData.get('id') ?? '').trim()
   const dir = String(formData.get('dir') ?? '').trim() // 'up' | 'down'
   if (!id || !dir) return
@@ -223,6 +228,7 @@ async function moveCriterion(formData: FormData) {
 async function deleteCriterion(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'equipment')
   const id = String(formData.get('id') ?? '').trim()
   const inspectionTypeId = String(formData.get('inspectionTypeId') ?? '').trim()
   if (!id) return
@@ -244,7 +250,7 @@ export default async function InspectionTypeDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const ctx = await requireRequestContext()
+  const ctx = await requireModuleManage('equipment')
   const data = await ctx.db(async (tx) => {
     const [row] = await tx
       .select({

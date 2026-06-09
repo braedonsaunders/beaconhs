@@ -63,12 +63,18 @@ export function Drawer({
     }
   }, [open, onClose])
 
-  if (!mounted || typeof document === 'undefined') return null
+  if (typeof document === 'undefined') return null
 
+  // The child must go absent → present for AnimatePresence to play the enter
+  // animation. We mount the portal (empty) on the first client render, then add
+  // the panel once `mounted` flips — otherwise a drawer that's open on initial
+  // page load (e.g. deep-linked `?drawer=…`) renders at its `initial` x:100%
+  // and never slides on-screen, leaving the panel + close button off the right
+  // edge. See the off-screen-drawer bug.
   return createPortal(
     <AnimatePresence>
-      {open ? (
-        <div className="fixed inset-0 z-50">
+      {mounted && open ? (
+        <div key="drawer" className="fixed inset-0 z-50">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -128,8 +134,19 @@ export function Drawer({
 }
 
 /**
- * URL-state drawer wrapper for server-rendered pages.
- * Closing navigates to closeHref via history.pushState (no full reload).
+ * Client-side navigate fn supplied by the host app (Next.js) so `UrlDrawer` can
+ * close by changing the URL — which re-runs the server component that owns the
+ * drawer's `open` state. The old implementation used a raw `history.pushState`,
+ * which updates the URL but does NOT re-run the server, so the drawer never
+ * closed (the X / backdrop / Esc appeared dead). The app wires this to
+ * `router.push`; we fall back to a hard navigation if no provider is mounted.
+ */
+export const DrawerNavigateContext = React.createContext<((href: string) => void) | null>(null)
+
+/**
+ * URL-state drawer wrapper for server-rendered pages. `open` is derived from a
+ * `?drawer=…` search param on the server, so closing needs a real navigation
+ * (provided via DrawerNavigateContext) — not a shallow history update.
  */
 export function UrlDrawer({
   open,
@@ -148,10 +165,11 @@ export function UrlDrawer({
   children: React.ReactNode
   footer?: React.ReactNode
 }) {
+  const navigate = React.useContext(DrawerNavigateContext)
   function close() {
     if (typeof window === 'undefined') return
-    window.history.pushState({}, '', closeHref)
-    window.dispatchEvent(new PopStateEvent('popstate'))
+    if (navigate) navigate(closeHref)
+    else window.location.assign(closeHref)
   }
   return (
     <Drawer

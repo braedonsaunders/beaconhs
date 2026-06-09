@@ -189,7 +189,7 @@ async function copyIncident(formData: FormData) {
 
   // Build a deterministic new reference: same year prefix, next sequence.
   const year = new Date().getFullYear()
-  const [{ c }] = await ctx.db((tx) =>
+  const [{ c } = { c: 0 }] = await ctx.db((tx) =>
     tx
       .select({ c: count() })
       .from(incidents)

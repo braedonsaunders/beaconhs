@@ -18,6 +18,7 @@ import {
 } from '@beaconhs/ui'
 import { equipmentCategories, equipmentTypes } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { requireModuleManage, assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 import { ListPageLayout } from '@/components/page-layout'
 import { Section } from '@/components/section'
@@ -37,6 +38,7 @@ function slugify(s: string): string {
 async function createCategory(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'equipment')
   const name = String(formData.get('name') ?? '').trim()
   const description = String(formData.get('description') ?? '').trim() || null
   const sortOrder = Number(String(formData.get('sortOrder') ?? '0')) || 0
@@ -68,6 +70,7 @@ async function createCategory(formData: FormData) {
 async function updateCategory(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'equipment')
   const id = String(formData.get('id') ?? '').trim()
   const name = String(formData.get('name') ?? '').trim()
   const description = String(formData.get('description') ?? '').trim() || null
@@ -89,6 +92,7 @@ async function updateCategory(formData: FormData) {
 async function deleteCategory(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'equipment')
   const id = String(formData.get('id') ?? '').trim()
   if (!id) return
   await ctx.db((tx) => tx.delete(equipmentCategories).where(eq(equipmentCategories.id, id)))
@@ -102,7 +106,7 @@ async function deleteCategory(formData: FormData) {
 }
 
 export default async function EquipmentCategoriesPage() {
-  const ctx = await requireRequestContext()
+  const ctx = await requireModuleManage('equipment')
   const { categories, typeCounts } = await ctx.db(async (tx) => {
     const c = await tx
       .select()

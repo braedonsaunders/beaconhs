@@ -24,6 +24,7 @@ import {
   equipmentTypes,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { requireModuleManage, assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 import { ListPageLayout } from '@/components/page-layout'
 import { Section } from '@/components/section'
@@ -35,6 +36,7 @@ export const dynamic = 'force-dynamic'
 async function createType(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'equipment')
   const name = String(formData.get('name') ?? '').trim()
   const description = String(formData.get('description') ?? '').trim() || null
   const categoryId = String(formData.get('categoryId') ?? '').trim() || null
@@ -79,6 +81,7 @@ async function createType(formData: FormData) {
 async function updateType(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'equipment')
   const id = String(formData.get('id') ?? '').trim()
   const name = String(formData.get('name') ?? '').trim()
   const description = String(formData.get('description') ?? '').trim() || null
@@ -120,6 +123,7 @@ async function updateType(formData: FormData) {
 async function deleteType(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'equipment')
   const id = String(formData.get('id') ?? '').trim()
   if (!id) return
   await ctx.db((tx) => tx.delete(equipmentTypes).where(eq(equipmentTypes.id, id)))
@@ -133,7 +137,7 @@ async function deleteType(formData: FormData) {
 }
 
 export default async function EquipmentTypesPage() {
-  const ctx = await requireRequestContext()
+  const ctx = await requireModuleManage('equipment')
   const { types, categories, counts } = await ctx.db(async (tx) => {
     const t = await tx
       .select({

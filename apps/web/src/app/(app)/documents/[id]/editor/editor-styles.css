@@ -1,0 +1,159 @@
+/* Compact native selects in the editor chrome — drop native control chrome
+   (which clips text) and show a custom chevron. Unlayered so it overrides the
+   Tailwind px-* utilities' right padding to leave room for the chevron. */
+.doc-select {
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='%2364748b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.35rem center;
+  background-size: 0.7rem;
+  padding-right: 1.4rem;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+}
+
+/* Document editor (ProseMirror) presentation. Scoped under .pm-doc.
+   The .ProseMirror IS the paper page column; page geometry comes from CSS vars
+   set by the canvas. Typography comes from the shared documentBodyCss (.doc-body). */
+.pm-doc .ProseMirror {
+  outline: none;
+  width: var(--page-w, 816px);
+  min-height: var(--page-h, 1056px);
+  padding: var(--page-margin, 96px);
+  margin: 0 auto;
+  background: #fff;
+  box-shadow: 0 1px 10px rgba(15, 23, 42, 0.12);
+}
+
+/* Pagination spacers — the gray gap that visually separates paper pages. */
+.pm-doc .ProseMirror .pm-page-spacer {
+  margin-left: calc(-1 * var(--page-margin, 96px));
+  margin-right: calc(-1 * var(--page-margin, 96px));
+  background: rgb(203 213 225 / 0.6);
+  box-shadow:
+    inset 0 2px 3px -2px rgba(15, 23, 42, 0.25),
+    inset 0 -2px 3px -2px rgba(15, 23, 42, 0.25);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Tables */
+.pm-doc .ProseMirror table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.6em 0;
+  table-layout: fixed;
+  overflow: hidden;
+}
+.pm-doc .ProseMirror td,
+.pm-doc .ProseMirror th {
+  border: 1px solid #cbd5e1;
+  padding: 4px 8px;
+  vertical-align: top;
+  position: relative;
+  min-width: 2em;
+}
+.pm-doc .ProseMirror th {
+  background: #f1f5f9;
+  font-weight: 600;
+  text-align: left;
+}
+.pm-doc .ProseMirror .selectedCell:after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(13, 148, 136, 0.12);
+  pointer-events: none;
+}
+.pm-doc .ProseMirror .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: #14b8a6;
+  cursor: col-resize;
+}
+
+/* Task list */
+.pm-doc .ProseMirror ul[data-type='taskList'] {
+  list-style: none;
+  padding-left: 0;
+}
+.pm-doc .ProseMirror ul[data-type='taskList'] li {
+  display: flex;
+  gap: 0.5em;
+  align-items: flex-start;
+}
+.pm-doc .ProseMirror ul[data-type='taskList'] li > label {
+  margin-top: 0.2em;
+  user-select: none;
+}
+.pm-doc .ProseMirror ul[data-type='taskList'] li > div {
+  flex: 1 1 auto;
+}
+
+/* Manual page break */
+.pm-doc .ProseMirror .pm-page-break {
+  margin: 1.25em 0;
+  border-top: 2px dashed #94a3b8;
+  height: 0;
+  text-align: center;
+  position: relative;
+}
+.pm-doc .ProseMirror .pm-page-break span {
+  position: relative;
+  top: -0.7em;
+  background: #fff;
+  padding: 0 0.5em;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #94a3b8;
+}
+
+/* Placeholder */
+.pm-doc .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: #94a3b8;
+  pointer-events: none;
+  height: 0;
+}
+
+/* Comment mark */
+.pm-doc .ProseMirror .comment-mark {
+  background: rgba(250, 204, 21, 0.32);
+  border-bottom: 2px solid #eab308;
+  cursor: pointer;
+}
+.pm-doc .ProseMirror .comment-mark.comment-active {
+  background: rgba(250, 204, 21, 0.6);
+}
+.pm-doc .ProseMirror .comment-mark.comment-resolved {
+  background: transparent;
+  border-bottom: none;
+}
+
+/* Suggestions (track changes) */
+.pm-doc .ProseMirror .suggestion-insert {
+  color: #047857;
+  text-decoration: underline;
+  text-decoration-color: #34d399;
+}
+.pm-doc .ProseMirror .suggestion-delete {
+  color: #b91c1c;
+  text-decoration: line-through;
+  text-decoration-color: #f87171;
+}
+
+/* Find & replace */
+.pm-doc .ProseMirror .search-match {
+  background: rgba(250, 204, 21, 0.4);
+  border-radius: 2px;
+}
+.pm-doc .ProseMirror .search-match-active {
+  background: #fb923c;
+  color: #fff;
+}

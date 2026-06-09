@@ -24,8 +24,6 @@ import {
   orgUnits,
   people,
   ppeItems,
-  toolboxJournalAttendees,
-  toolboxJournals,
   trainingAudienceAssignmentRecords,
   trainingAudienceAssignments,
   trainingCourses,
@@ -57,8 +55,6 @@ export async function runSharedReportQuery(input: {
       return queryOverdueRollup(tenantId, filters)
     case 'lone_worker_summary':
       return queryLoneWorkerSummary(tenantId, filters, range)
-    case 'toolbox_journals_summary':
-      return queryToolboxJournalsSummary(tenantId, filters, range)
     case 'training_compliance_snapshot':
       return queryTrainingComplianceSnapshot(tenantId, filters)
     case 'document_compliance_snapshot':
@@ -556,96 +552,6 @@ async function queryLoneWorkerSummary(
   })
 }
 
-// --- Toolbox journals summary --------------------------------------------
-
-async function queryToolboxJournalsSummary(
-  tenantId: string,
-  _filters: Record<string, unknown>,
-  range: Range,
-): Promise<RunResult> {
-  const fromIso = isoDate(range.from)
-  const toIso = isoDate(range.to)
-  return await withTenant(db, tenantId, async (tx) => {
-    const rows = await tx
-      .select({
-        id: toolboxJournals.id,
-        title: toolboxJournals.title,
-        topic: toolboxJournals.topic,
-        status: toolboxJournals.status,
-        occurredOn: toolboxJournals.occurredOn,
-        siteName: orgUnits.name,
-      })
-      .from(toolboxJournals)
-      .leftJoin(orgUnits, eq(orgUnits.id, toolboxJournals.siteOrgUnitId))
-      .where(and(gte(toolboxJournals.occurredOn, fromIso), lte(toolboxJournals.occurredOn, toIso)))
-      .orderBy(desc(toolboxJournals.occurredOn))
-
-    // Attendee counts per journal
-    const attendeeCounts = rows.length
-      ? await tx
-          .select({
-            journalId: toolboxJournalAttendees.journalId,
-            c: count(),
-          })
-          .from(toolboxJournalAttendees)
-          .where(
-            inArray(
-              toolboxJournalAttendees.journalId,
-              rows.map((r) => r.id),
-            ),
-          )
-          .groupBy(toolboxJournalAttendees.journalId)
-      : []
-    const countMap = new Map<string, number>()
-    for (const r of attendeeCounts) countMap.set(r.journalId, Number(r.c))
-
-    const byTopic = new Map<string, typeof rows>()
-    for (const r of rows) {
-      const k = r.topic ?? 'uncategorised'
-      const list = byTopic.get(k) ?? []
-      list.push(r)
-      byTopic.set(k, list)
-    }
-
-    const groups: ReportGroup[] = []
-    if (rows.length === 0) {
-      groups.push({
-        title: 'Toolbox journals',
-        columns: ['Occurred', 'Title', 'Topic', 'Site', 'Attendees'],
-        rows: [],
-        isEmpty: true,
-      })
-    } else {
-      for (const [topic, list] of [...byTopic.entries()].sort()) {
-        groups.push({
-          title: `Topic: ${formatLabel(topic)}`,
-          subtitle: `${list.length} journal(s)`,
-          columns: ['Occurred', 'Title', 'Status', 'Site', 'Attendees'],
-          rows: list.map((r) => [
-            r.occurredOn,
-            r.title,
-            formatLabel(r.status),
-            r.siteName ?? null,
-            countMap.get(r.id) ?? 0,
-          ]),
-        })
-      }
-    }
-
-    return {
-      groups,
-      summary: [
-        { label: 'Total journals', value: rows.length },
-        {
-          label: 'Total attendees',
-          value: [...countMap.values()].reduce((a, b) => a + b, 0),
-        },
-      ],
-      rowCount: rows.length,
-    }
-  })
-}
-
 // --- Training compliance snapshot ----------------------------------------
 
 async function queryTrainingComplianceSnapshot(
@@ -936,12 +842,19 @@ const CUSTOM_COLUMN_WHITELIST: Record<string, Record<string, string>> = {
     expected_end_at: 'expected_end_at',
     interval_minutes: 'interval_minutes',
   },
-  toolbox_journals: {
-    title: 'title',
-    topic: 'topic',
+  form_responses: {
+    template_id: 'template_id',
     status: 'status',
-    occurred_on: 'occurred_on',
+    compliance_status: 'compliance_status',
+    submitted_at: 'submitted_at',
     site_org_unit_id: 'site_org_unit_id',
+  },
+  form_participants: {
+    person_id: 'person_id',
+    template_id: 'template_id',
+    category: 'category',
+    signed: 'signed',
+    occurred_on: 'occurred_on',
   },
 }
 
@@ -954,7 +867,8 @@ const CUSTOM_ENTITY_TABLE: Record<string, string> = {
   equipment: 'equipment_items',
   ppe: 'ppe_items',
   lone_worker: 'lw_sessions',
-  toolbox_journals: 'toolbox_journals',
+  form_responses: 'form_responses',
+  form_participants: 'form_response_participants',
 }
 
 async function runCustomQuery(

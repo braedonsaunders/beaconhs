@@ -10,6 +10,7 @@ import {
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { loadEntitiesForPickers } from '@/app/(app)/forms/_lib/entity-loader'
+import { appVisibleTo, getUserRoleKeys } from '@/app/(app)/forms/_lib/access'
 import { FormRenderer } from './form-renderer'
 
 export const dynamic = 'force-dynamic'
@@ -105,6 +106,10 @@ export default async function FillTemplatePage({
   })
 
   if (!data) notFound()
+
+  // App-level role gating — a viewer whose roles aren't allowed can't fill it.
+  const userRoleKeys = await getUserRoleKeys(ctx)
+  if (!appVisibleTo(ctx, data.tmpl.allowedRoles, userRoleKeys)) notFound()
 
   // Resume-path: if we found a draft response AND it's still in a pre-submit
   // state, pull the persisted values + rows back into the renderer.

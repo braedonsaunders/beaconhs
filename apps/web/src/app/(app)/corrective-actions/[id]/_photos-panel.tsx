@@ -58,7 +58,6 @@ export function PhotosPanel({
       {!locked ? (
         <PhotoUploaderSection
           attachAction={async (ids) => {
-            'use server'
             await attachCaPhotos(caId, ids)
           }}
         />

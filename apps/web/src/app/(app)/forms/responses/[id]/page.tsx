@@ -47,8 +47,12 @@ import {
   evaluateLogicRule,
   type EvalContext,
   type FormulaExpression,
+  type TableColumn,
+  type TableConfig,
 } from '@beaconhs/forms-core'
-import { loadEntitiesForPickers } from '@/app/(app)/forms/_lib/entity-loader'
+import { loadEntitiesForPickers, type EntitiesByField } from '@/app/(app)/forms/_lib/entity-loader'
+import { canvasCss, columnsCss, gridClass, resolveCanvas } from '@/app/(app)/forms/_lib/canvas'
+import type { AttachedFile } from '@/components/file-upload'
 import { requireRequestContext } from '@/lib/auth'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { ActivityFeed } from '@/components/activity-feed'
@@ -59,6 +63,8 @@ import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { computeFormScore } from '@/app/(app)/forms/_lib/score-router'
 import { pickString } from '@/lib/list-params'
 import { WorkflowPanel, type WorkflowStepProp } from './_workflow-panel'
+import { FlowApprovalsPanel } from './_flow-approvals'
+import { getPendingFlowGates } from './_flow-gate-actions'
 import {
   createCorrectiveActionFromResponse,
   createIncidentFromResponse,
@@ -222,6 +228,7 @@ export default async function FormResponsePage({
   })
 
   if (!data) notFound()
+  const pendingFlowGates = await getPendingFlowGates(id)
   const {
     response,
     template,
@@ -619,6 +626,8 @@ export default async function FormResponsePage({
               })
             })()}
 
+            {pendingFlowGates.length > 0 ? <FlowApprovalsPanel gates={pendingFlowGates} /> : null}
+
             <Section
               title={`Workflow steps (${workflowStepProps.length})`}
               defaultOpen={workflowStepProps.length > 0}
@@ -775,23 +784,69 @@ function renderFlat(
   if (visible.length === 0) {
     return <p className="text-sm text-slate-500">All fields in this section are conditionally hidden.</p>
   }
+
+  // A single field's label/value cell — reused across all layout modes.
+  const cell = (f: any) => {
+    let raw: unknown = values[f.id]
+    if ((f.type === 'formula' || f.type === 'calc') && f.formula) {
+      raw = evaluateFormulaTree(f.formula as FormulaExpression, evalCtx)
+    }
+    return (
+      <div className="flex min-w-0 flex-col">
+        <dt className="text-xs uppercase tracking-wide text-slate-500">{f.label?.en ?? f.id}</dt>
+        <dd className="text-slate-900">{renderValue(f, raw, evalCtx.entities)}</dd>
+      </div>
+    )
+  }
+
+  // Free-form canvas (mobile-first: stacks on phones, positioned grid on ≥640px).
+  if (sec.canvas) {
+    const cls = gridClass(sec.id)
+    const { order, byId } = resolveCanvas(
+      visible.map((f: any) => f.id),
+      sec.canvas.items,
+      sec.canvas.cols,
+    )
+    const byField = new Map(visible.map((f: any) => [f.id, f]))
+    return (
+      <dl className={cls}>
+        <style>{canvasCss(cls, sec.canvas.cols, sec.canvas.rowHeight, byId)}</style>
+        {order.map((id) => (
+          <div key={id} data-ci={id}>
+            {cell(byField.get(id))}
+          </div>
+        ))}
+      </dl>
+    )
+  }
+
+  // Column layout (mobile-first: single column on phones, N columns on ≥640px).
+  if (sec.layout?.columns && sec.layout.columns > 1) {
+    const cls = gridClass(sec.id)
+    const cols = sec.layout.columns
+    const css = columnsCss(
+      cls,
+      cols,
+      visible.map((f: any) => ({ id: f.id, span: f.colSpan ?? cols })),
+    )
+    return (
+      <dl className={cls}>
+        <style>{css}</style>
+        {visible.map((f: any) => (
+          <div key={f.id} data-cs={f.id}>
+            {cell(f)}
+          </div>
+        ))}
+      </dl>
+    )
+  }
+
+  // Default: responsive 2-column grid.
   return (
     <dl className="grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
-      {visible.map((f: any) => {
-        // Formula fields show the recomputed value, not whatever was stored.
-        let raw: unknown = values[f.id]
-        if ((f.type === 'formula' || f.type === 'calc') && f.formula) {
-          raw = evaluateFormulaTree(f.formula as FormulaExpression, evalCtx)
-        }
-        return (
-          <div key={f.id} className="flex flex-col">
-            <dt className="text-xs uppercase tracking-wide text-slate-500">
-              {f.label?.en ?? f.id}
-            </dt>
-            <dd className="text-slate-900">{renderValue(f.type, raw)}</dd>
-          </div>
-        )
-      })}
+      {visible.map((f: any) => (
+        <div key={f.id}>{cell(f)}</div>
+      ))}
     </dl>
   )
 }
@@ -819,7 +874,23 @@ function renderRepeating(
   )
 }
 
-function renderValue(type: string, raw: unknown) {
+// Pick a human label out of an entity-attr map (the key varies by entity kind:
+// person → displayName, site/equipment/course → name, document → title, …).
+function entityDisplayName(attrs: Record<string, unknown> | null | undefined): string | null {
+  if (!attrs) return null
+  for (const k of ['displayName', 'name', 'title', 'serialNumber', 'assetTag', 'code']) {
+    const v = attrs[k]
+    if (typeof v === 'string' && v.trim()) return v
+  }
+  return null
+}
+
+function renderValue(
+  field: { id: string; type: string; config?: Record<string, unknown> },
+  raw: unknown,
+  entities?: EntitiesByField,
+) {
+  const type = field.type
   if (raw === undefined || raw === null || raw === '') {
     return <span className="text-slate-400">—</span>
   }
@@ -833,26 +904,138 @@ function renderValue(type: string, raw: unknown) {
         </span>
       )
     }
-    case 'checkbox_group':
-    case 'multi_select':
+    case 'signature': {
+      const sig = raw as { url?: string } | string
+      const url = typeof sig === 'object' && sig ? sig.url : undefined
+      return url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={url}
+          alt="Signature"
+          className="h-16 w-auto rounded border border-slate-200 bg-white"
+        />
+      ) : (
+        <span className="text-slate-500">[signature captured]</span>
+      )
+    }
+    case 'photo':
+    case 'photo_upload': {
+      const files = Array.isArray(raw) ? (raw as AttachedFile[]) : []
+      if (files.length === 0) return <span className="text-slate-400">—</span>
+      return (
+        <div className="flex flex-wrap gap-2">
+          {files.map((f, i) => (
+            <a
+              key={f.attachmentId ?? i}
+              href={f.url}
+              target="_blank"
+              rel="noreferrer"
+              title={f.filename}
+              className="block h-20 w-20 overflow-hidden rounded-md border border-slate-200 bg-slate-50"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={f.url} alt={f.filename ?? 'photo'} className="h-full w-full object-cover" />
+            </a>
+          ))}
+        </div>
+      )
+    }
+    case 'file':
+    case 'video':
+    case 'audio': {
+      const files = Array.isArray(raw) ? (raw as AttachedFile[]) : []
+      if (files.length === 0) return <span className="text-slate-400">—</span>
+      return (
+        <ul className="space-y-1">
+          {files.map((f, i) => (
+            <li key={f.attachmentId ?? i}>
+              <a href={f.url} target="_blank" rel="noreferrer" className="text-teal-700 hover:underline">
+                {f.filename ?? 'attachment'}
+              </a>
+            </li>
+          ))}
+        </ul>
+      )
+    }
     case 'person_picker':
+    case 'site_picker':
+    case 'equipment_picker':
+    case 'ppe_picker':
+    case 'document_picker':
+    case 'course_picker': {
+      const name = entityDisplayName(entities?.[field.id])
+      if (name) return name
+      return typeof raw === 'string' ? raw.slice(0, 8) : String(raw)
+    }
     case 'multi_person_picker':
       return Array.isArray(raw)
         ? raw.map((v) => String(v).slice(0, 8)).join(', ')
         : String(raw).slice(0, 8)
-    case 'signature':
-      return <span className="text-slate-500">[signature captured]</span>
-    case 'photo':
-    case 'photo_upload':
-    case 'file':
-    case 'video':
-    case 'audio':
-      return (
-        <span className="text-slate-500">
-          [{Array.isArray(raw) ? raw.length : 1} attachment]
-        </span>
-      )
+    case 'table':
+      return renderTableValue(field.config, raw)
+    case 'checkbox_group':
+    case 'multi_select':
+      return Array.isArray(raw) ? raw.map((v) => String(v)).join(', ') : String(raw)
     default:
       return String(raw)
   }
+}
+
+function renderTableValue(rawConfig: Record<string, unknown> | undefined, raw: unknown) {
+  const cfg = (rawConfig ?? {}) as Partial<TableConfig>
+  const columns = (cfg.columns ?? []) as TableColumn[]
+  const fixedRows = cfg.rows ?? []
+  const rowMode = cfg.rowMode === 'fixed' ? 'fixed' : 'addable'
+  const stored = Array.isArray(raw) ? (raw as Record<string, unknown>[]) : []
+  const rows = rowMode === 'fixed' ? fixedRows.map((_, i) => stored[i] ?? {}) : stored
+  if (columns.length === 0 || rows.length === 0) {
+    return <span className="text-slate-400">—</span>
+  }
+  return (
+    <div className="overflow-x-auto rounded-md border border-slate-200">
+      <table className="w-full border-collapse text-sm">
+        <thead>
+          <tr className="bg-slate-50">
+            {rowMode === 'fixed' ? (
+              <th className="border-b border-slate-200 px-2 py-1 text-left text-xs font-semibold text-slate-600" />
+            ) : null}
+            {columns.map((c) => (
+              <th
+                key={c.key}
+                className="border-b border-slate-200 px-2 py-1 text-left text-xs font-semibold text-slate-600"
+              >
+                {c.label || c.key}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => (
+            <tr key={i} className="border-b border-slate-100 last:border-b-0">
+              {rowMode === 'fixed' ? (
+                <td className="whitespace-nowrap px-2 py-1 text-xs font-medium text-slate-700">
+                  {fixedRows[i]?.label ?? `Row ${i + 1}`}
+                </td>
+              ) : null}
+              {columns.map((c) => (
+                <td key={c.key} className="px-2 py-1 text-slate-800">
+                  {formatTableCellValue(c, row[c.key])}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function formatTableCellValue(column: TableColumn, value: unknown): string {
+  if (value === null || value === undefined || value === '') return '—'
+  if (column.type === 'checkbox') return value ? '✓' : '—'
+  if (column.type === 'select') {
+    const opt = (column.options ?? []).find((o) => o.value === value)
+    return opt?.label ?? String(value)
+  }
+  return String(value)
 }

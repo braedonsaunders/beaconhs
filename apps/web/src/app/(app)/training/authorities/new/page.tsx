@@ -11,6 +11,7 @@ import {
 } from '@beaconhs/ui'
 import { trainingSkillAuthorities } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { assertCanManageModule, requireModuleManage } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 import { PageContainer } from '@/components/page-layout'
 
@@ -19,6 +20,7 @@ export const metadata = { title: 'New skill authority' }
 async function createAuthority(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'training')
   const name = String(formData.get('name') ?? '').trim()
   if (!name) throw new Error('Name is required')
   const code = String(formData.get('code') ?? '').trim() || null
@@ -47,7 +49,7 @@ async function createAuthority(formData: FormData) {
 }
 
 export default async function NewTrainingAuthorityPage() {
-  await requireRequestContext()
+  await requireModuleManage('training')
   return (
     <PageContainer>
       <div className="max-w-3xl space-y-6">

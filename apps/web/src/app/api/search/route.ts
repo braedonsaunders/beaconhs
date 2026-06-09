@@ -14,7 +14,6 @@ import {
   hazidAssessments,
   incidents,
   people,
-  toolboxJournals,
 } from '@beaconhs/db/schema'
 import { getRequestContext } from '@/lib/auth'
 
@@ -35,7 +34,6 @@ export type SearchGroup = {
     | 'equipment'
     | 'documents'
     | 'hazid_assessments'
-    | 'toolbox_journals'
   total: number
   items: SearchResultItem[]
 }
@@ -88,8 +86,6 @@ export async function GET(req: Request): Promise<NextResponse> {
       documentTotal,
       hazidRows,
       hazidTotal,
-      toolboxRows,
-      toolboxTotal,
     ] = await Promise.all([
       // ---- incidents (reference / title / description, last 1 year) ------
       (() => {
@@ -279,39 +275,6 @@ export async function GET(req: Request): Promise<NextResponse> {
         return tx.select({ c: count() }).from(hazidAssessments).where(and(...where))
       })(),
 
-      // ---- toolbox_journals (reference + topic) ------------------------
-      (() => {
-        const where: SQL<unknown>[] = [isNull(toolboxJournals.deletedAt)]
-        const match = or(
-          ilike(toolboxJournals.reference, term),
-          ilike(toolboxJournals.topic, term),
-          ilike(toolboxJournals.title, term),
-        )
-        if (match) where.push(match)
-        return tx
-          .select({
-            id: toolboxJournals.id,
-            reference: toolboxJournals.reference,
-            title: toolboxJournals.title,
-            topic: toolboxJournals.topic,
-            occurredOn: toolboxJournals.occurredOn,
-          })
-          .from(toolboxJournals)
-          .where(and(...where))
-          .orderBy(desc(toolboxJournals.occurredOn))
-          .limit(PER_GROUP_LIMIT)
-      })(),
-      (() => {
-        const where: SQL<unknown>[] = [isNull(toolboxJournals.deletedAt)]
-        const match = or(
-          ilike(toolboxJournals.reference, term),
-          ilike(toolboxJournals.topic, term),
-          ilike(toolboxJournals.title, term),
-        )
-        if (match) where.push(match)
-        return tx.select({ c: count() }).from(toolboxJournals).where(and(...where))
-      })(),
-
     ])
 
     return {
@@ -327,8 +290,6 @@ export async function GET(req: Request): Promise<NextResponse> {
       documentTotal: Number(documentTotal[0]?.c ?? 0),
       hazidRows,
       hazidTotal: Number(hazidTotal[0]?.c ?? 0),
-      toolboxRows,
-      toolboxTotal: Number(toolboxTotal[0]?.c ?? 0),
     }
   })
 
@@ -408,18 +369,5 @@ export async function GET(req: Request): Promise<NextResponse> {
       })),
     })
   }
-  if (data.toolboxTotal > 0) {
-    groups.push({
-      type: 'toolbox_journals',
-      total: data.toolboxTotal,
-      items: data.toolboxRows.map((r) => ({
-        id: r.id,
-        label: `${r.reference} — ${r.title}`,
-        sublabel: r.topic ?? (r.occurredOn ?? undefined),
-        href: `/toolbox/${r.id}`,
-      })),
-    })
-  }
-
   return NextResponse.json<SearchResponse>({ q: rawQ, groups })
 }

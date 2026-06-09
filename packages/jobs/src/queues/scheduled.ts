@@ -13,7 +13,9 @@ export type ScheduledTick =
   | { kind: 'report_schedule_scan' }
   | { kind: 'report_run'; tenantId: string; scheduleId: string }
   | { kind: 'ca_overdue_scan' }
+  | { kind: 'compliance_scan' }
   | { kind: 'plugin_cron'; cadence: 'hourly' | 'daily' | 'weekly' }
+  | { kind: 'etl_mssql_sync' }
 
 export const scheduledQueue = new Queue<ScheduledTick>('scheduled', {
   connection,
@@ -64,6 +66,13 @@ export async function registerSchedules() {
     { kind: 'document_review_scan' } as ScheduledTick,
     { repeat: { pattern: '15 7 * * *' }, jobId: 'tick:doc_review' },
   )
+  // Daily 06:00: re-materialise every obligation's compliance_status + reminders.
+  // (Create/update materialise instantly on the write path; this is the refresh.)
+  await scheduledQueue.add(
+    'tick:compliance_scan',
+    { kind: 'compliance_scan' } as ScheduledTick,
+    { repeat: { pattern: '0 6 * * *' }, jobId: 'tick:compliance_scan' },
+  )
   await scheduledQueue.add(
     'tick:plugin_hourly',
     { kind: 'plugin_cron', cadence: 'hourly' } as ScheduledTick,
@@ -78,5 +87,12 @@ export async function registerSchedules() {
     'tick:plugin_weekly',
     { kind: 'plugin_cron', cadence: 'weekly' } as ScheduledTick,
     { repeat: { pattern: '30 7 * * 1' }, jobId: 'tick:plugin_weekly' },
+  )
+  // Nightly 02:00: legacy MSSQL → BeaconHS incremental ETL sync (reads the rassaun landing delta).
+  // Override the cron with ETL_SYNC_CRON if needed.
+  await scheduledQueue.add(
+    'tick:etl_mssql_sync',
+    { kind: 'etl_mssql_sync' } as ScheduledTick,
+    { repeat: { pattern: process.env.ETL_SYNC_CRON ?? '0 2 * * *' }, jobId: 'tick:etl_mssql_sync' },
   )
 }

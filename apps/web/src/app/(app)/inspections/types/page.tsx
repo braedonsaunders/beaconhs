@@ -16,6 +16,7 @@ import {
 } from '@beaconhs/ui'
 import { inspectionTypeBanks, inspectionTypes } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { requireModuleManage, assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
@@ -41,6 +42,7 @@ async function createTypeAction(input: {
 }): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'inspections')
   const name = input.name.trim()
   if (!name) return { ok: false, error: 'Name is required' }
   const row = await ctx.db(async (tx) => {
@@ -100,7 +102,7 @@ export default async function InspectionTypesPage({
     allowedSorts: SORTS,
   })
   const statusFilter = pickString(sp.status)
-  const ctx = await requireRequestContext()
+  const ctx = await requireModuleManage('inspections')
 
   const { rows, total, statusCounts } = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = []

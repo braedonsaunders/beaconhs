@@ -33,6 +33,7 @@ export const FIELD_TYPES: Record<FieldType, FieldTypeMeta> = {
   email: { type: 'email', category: 'standard', label: 'Email', description: 'Email address with validation', scoring: false, valueKind: 'string' },
   phone: { type: 'phone', category: 'standard', label: 'Phone', description: 'Phone number', scoring: false, valueKind: 'string' },
   url: { type: 'url', category: 'standard', label: 'URL', description: 'Web link', scoring: false, valueKind: 'string' },
+  table: { type: 'table', category: 'standard', label: 'Table', description: 'Grid of cells — addable or predefined rows', scoring: false, valueKind: 'compound' },
 
   // choice
   radio: { type: 'radio', category: 'choice', label: 'Single choice', description: 'Pick one option', scoring: false, valueKind: 'string' },

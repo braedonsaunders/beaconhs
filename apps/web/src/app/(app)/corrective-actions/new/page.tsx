@@ -42,7 +42,7 @@ async function createCA(formData: FormData) {
 
   const [row] = await ctx.db(async (tx) => {
     const year = new Date().getFullYear()
-    const [{ c }] = await tx
+    const [{ c } = { c: 0 }] = await tx
       .select({ c: count() })
       .from(correctiveActions)
       .where(sql`extract(year from coalesce(${correctiveActions.assignedOn}, current_date)) = ${year}`)

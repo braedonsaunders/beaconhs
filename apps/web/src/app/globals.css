@@ -1,8 +1,17 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@config "../../tailwind.config.ts";
 
 @layer base {
+  /* Tailwind v4 compat: restore v3 default border color (gray-200) so bare
+     `border` utilities don't fall back to currentColor across the app. */
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentColor);
+  }
+
   :root {
     --color-bg: 255 255 255;
     --color-fg: 17 24 39;
@@ -51,4 +60,23 @@
   .app-scroll::-webkit-scrollbar-track {
     background: transparent;
   }
+}
+
+/* Published rich-text rendering (RichContent): hide editing artifacts — comment
+   highlights and tracked deletions — and show insertions as plain accepted text,
+   matching the PDF output. */
+.rich-content .comment-mark {
+  background: transparent;
+  border-bottom: none;
+}
+.rich-content .suggestion-insert {
+  color: inherit;
+  text-decoration: none;
+}
+.rich-content .suggestion-delete {
+  display: none;
+}
+.rich-content [data-page-break] {
+  break-before: page;
+  page-break-before: always;
 }

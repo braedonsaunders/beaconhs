@@ -22,6 +22,7 @@ import {
 } from '@beaconhs/ui'
 import { documentReferenceTypes, documentReferences } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { requireModuleManage, assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 import { ListPageLayout } from '@/components/page-layout'
 import { DocumentsSubNav } from '../../_components/documents-sub-nav'
@@ -42,6 +43,7 @@ function slugify(s: string): string {
 async function createType(formData: FormData): Promise<void> {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'documents')
   const name = String(formData.get('name') ?? '').trim()
   const keyInput = String(formData.get('key') ?? '').trim()
   const description = String(formData.get('description') ?? '').trim() || null
@@ -73,6 +75,7 @@ async function createType(formData: FormData): Promise<void> {
 async function updateType(formData: FormData): Promise<void> {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'documents')
   const id = String(formData.get('id') ?? '')
   const name = String(formData.get('name') ?? '').trim()
   const description = String(formData.get('description') ?? '').trim() || null
@@ -96,6 +99,7 @@ async function updateType(formData: FormData): Promise<void> {
 async function deleteType(formData: FormData): Promise<void> {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'documents')
   const id = String(formData.get('id') ?? '')
   if (!id) return
   await ctx.db((tx) =>
@@ -114,7 +118,7 @@ async function deleteType(formData: FormData): Promise<void> {
 }
 
 export default async function ReferenceTypesPage() {
-  const ctx = await requireRequestContext()
+  const ctx = await requireModuleManage('documents')
   const { rows, usageMap } = await ctx.db(async (tx) => {
     const data = await tx
       .select()

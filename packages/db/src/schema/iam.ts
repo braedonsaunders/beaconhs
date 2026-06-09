@@ -82,6 +82,8 @@ export const PERMISSION_CATALOGUE = [
   'forms.template.create',
   'forms.template.publish',
   'forms.template.delete',
+  // Prompt the AI to generate an App (form schema) or Flow (automation graph).
+  'forms.ai.generate',
   'forms.response.read.all',
   'forms.response.read.site',
   'forms.response.read.self',
@@ -120,6 +122,14 @@ export const PERMISSION_CATALOGUE = [
   'documents.manage',
   'documents.acknowledge',
   'documents.review',
+  // Journals
+  'journals.read.all',
+  'journals.read.site',
+  'journals.read.self',
+  'journals.create',
+  'journals.update.own',
+  'journals.submit',
+  'journals.assign',
   // Corrective actions
   'ca.read.all',
   'ca.read.site',
@@ -127,6 +137,12 @@ export const PERMISSION_CATALOGUE = [
   'ca.create',
   'ca.update',
   'ca.verify',
+  // Compliance — the unified obligations hub + cross-module rollups (/compliance).
+  // `read` = view the hub; `manage` = enable/disable/delete obligations + hub config;
+  // `assign` = create obligations + edit audience/schedule (supersedes journals.assign).
+  'compliance.read',
+  'compliance.manage',
+  'compliance.assign',
   // Confined space
   'cs.permit.open',
   'cs.permit.close',
@@ -149,6 +165,8 @@ export const PERMISSION_CATALOGUE = [
   'admin.api-keys.manage',
   'admin.settings.manage',
   'admin.audit.read',
+  // Edit the per-tenant sidebar navigation (/admin/navigation).
+  'admin.nav.manage',
 ] as const
 
 export type CataloguePermission = (typeof PERMISSION_CATALOGUE)[number]
@@ -171,6 +189,10 @@ export const BUILTIN_ROLES: Record<
       'documents.read',
       'documents.acknowledge',
       'ca.read.self',
+      'journals.read.self',
+      'journals.create',
+      'journals.update.own',
+      'journals.submit',
       'loneworker.start',
     ],
   },
@@ -193,6 +215,12 @@ export const BUILTIN_ROLES: Record<
       'ca.read.site',
       'ca.create',
       'ca.update',
+      'journals.read.site',
+      'journals.create',
+      'journals.submit',
+      'journals.assign',
+      'compliance.read',
+      'compliance.assign',
       'cs.permit.open',
       'cs.permit.close',
       'cs.atmospheric.record',
@@ -208,6 +236,7 @@ export const BUILTIN_ROLES: Record<
       'forms.template.read',
       'forms.template.create',
       'forms.template.publish',
+      'forms.ai.generate',
       'forms.response.read.all',
       'forms.response.create',
       'incidents.read.all',
@@ -236,6 +265,13 @@ export const BUILTIN_ROLES: Record<
       'ca.create',
       'ca.update',
       'ca.verify',
+      'journals.read.all',
+      'journals.create',
+      'journals.submit',
+      'journals.assign',
+      'compliance.read',
+      'compliance.manage',
+      'compliance.assign',
       'cs.permit.open',
       'cs.permit.close',
       'cs.atmospheric.record',

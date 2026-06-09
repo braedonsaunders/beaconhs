@@ -5,7 +5,7 @@
 // the pages that use it. Anything cross-module-worthy can be promoted to
 // /lib/ later.
 
-import { and, count, eq, inArray, isNull, or, sql } from 'drizzle-orm'
+import { and, count, eq, or, sql } from 'drizzle-orm'
 import type { RequestContext } from '@beaconhs/tenant'
 import {
   correctiveActions,
@@ -14,11 +14,6 @@ import {
   inspectionRecords,
   inspectionTypeBanks,
   inspectionTypes,
-  people,
-  peopleAssignments,
-  roleAssignments,
-  roles,
-  tenantUsers,
 } from '@beaconhs/db/schema'
 import { recordAudit } from '@/lib/audit'
 
@@ -251,95 +246,6 @@ export async function syncCorrectiveActionForCriterion(
   })
 }
 
-/**
- * Expand an inspection_assignment's audience pickers into a flat list of
- * person ids. Used by both the compliance computation and the new-record
- * picker.
- */
-export async function expandAssignmentAudience(
-  ctx: RequestContext,
-  audience: {
-    targetRoleKeys?: string[] | null
-    targetPersonIds?: string[] | null
-    targetOrgUnitIds?: string[] | null
-    targetEverybody?: boolean
-  },
-): Promise<{ id: string; name: string }[]> {
-  return ctx.db(async (tx) => {
-    const collected = new Map<string, string>()
-
-    if (audience.targetEverybody) {
-      const rows = await tx
-        .select({
-          id: people.id,
-          first: people.firstName,
-          last: people.lastName,
-        })
-        .from(people)
-        .where(eq(people.status, 'active'))
-      for (const r of rows) collected.set(r.id, `${r.first} ${r.last}`)
-    }
-
-    const personIds = audience.targetPersonIds ?? []
-    if (personIds.length > 0) {
-      const rows = await tx
-        .select({
-          id: people.id,
-          first: people.firstName,
-          last: people.lastName,
-        })
-        .from(people)
-        .where(inArray(people.id, personIds))
-      for (const r of rows) collected.set(r.id, `${r.first} ${r.last}`)
-    }
-
-    const orgUnitIds = audience.targetOrgUnitIds ?? []
-    if (orgUnitIds.length > 0) {
-      const rows = await tx
-        .select({
-          id: people.id,
-          first: people.firstName,
-          last: people.lastName,
-        })
-        .from(people)
-        .innerJoin(peopleAssignments, eq(peopleAssignments.personId, people.id))
-        .where(
-          and(
-            inArray(peopleAssignments.orgUnitId, orgUnitIds),
-            or(isNull(peopleAssignments.validTo), sql`${peopleAssignments.validTo} >= current_date`),
-          ),
-        )
-      for (const r of rows) collected.set(r.id, `${r.first} ${r.last}`)
-    }
-
-    const roleKeys = audience.targetRoleKeys ?? []
-    if (roleKeys.length > 0) {
-      // Roles target tenant_users — bridge through people.userId if present.
-      const userRows = await tx
-        .select({ tenantUserId: tenantUsers.id, userId: tenantUsers.userId })
-        .from(roleAssignments)
-        .innerJoin(roles, eq(roles.id, roleAssignments.roleId))
-        .innerJoin(tenantUsers, eq(tenantUsers.id, roleAssignments.tenantUserId))
-        .where(inArray(roles.key, roleKeys))
-      const userIds = userRows.map((r) => r.userId).filter((v): v is string => Boolean(v))
-      if (userIds.length > 0) {
-        const peopleRows = await tx
-          .select({
-            id: people.id,
-            first: people.firstName,
-            last: people.lastName,
-          })
-          .from(people)
-          .where(inArray(people.userId, userIds))
-        for (const r of peopleRows) collected.set(r.id, `${r.first} ${r.last}`)
-      }
-    }
-
-    return Array.from(collected.entries())
-      .map(([id, name]) => ({ id, name }))
-      .sort((a, b) => a.name.localeCompare(b.name))
-  })
-}
 
 /**
  * Walk a record's criteria + return human-readable list of unanswered /

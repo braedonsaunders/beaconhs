@@ -7,7 +7,7 @@
 //
 // The narrower "what's explicitly assigned to me" view would require resolving
 // document_assignment_audience entries against the user's role + trade +
-// department; that lives behind the regular /documents/assignments listing.
+// department; that lives behind the unified /compliance/obligations hub.
 // Here we lean on the everyone-reads-published-docs default so the page is
 // useful even before assignments are wired up.
 

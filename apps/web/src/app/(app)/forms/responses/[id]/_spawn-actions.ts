@@ -75,7 +75,7 @@ export async function createCorrectiveActionFromResponse(
 
   const row = await ctx.db(async (tx) => {
     const year = new Date().getFullYear()
-    const [{ c }] = await tx
+    const [{ c } = { c: 0 }] = await tx
       .select({ c: count() })
       .from(correctiveActions)
       .where(
@@ -176,7 +176,7 @@ export async function createIncidentFromResponse(
 
   const row = await ctx.db(async (tx) => {
     const year = occurredAt.getFullYear()
-    const [{ c }] = await tx
+    const [{ c } = { c: 0 }] = await tx
       .select({ c: count() })
       .from(incidents)
       .where(sql`extract(year from ${incidents.occurredAt}) = ${year}`)

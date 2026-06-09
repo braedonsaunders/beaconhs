@@ -14,7 +14,7 @@ import {
   TableRow,
 } from '@beaconhs/ui'
 import { hazidAssessmentTypes } from '@beaconhs/db/schema'
-import { requireRequestContext } from '@/lib/auth'
+import { requireModuleManage } from '@/lib/module-admin/guard'
 import { ListPageLayout } from '@/components/page-layout'
 import { HazidSubNav } from '../_subnav'
 
@@ -22,7 +22,7 @@ export const metadata = { title: 'Assessment types' }
 export const dynamic = 'force-dynamic'
 
 export default async function AssessmentTypesPage() {
-  const ctx = await requireRequestContext()
+  const ctx = await requireModuleManage('hazid')
   const rows = await ctx.db((tx) =>
     tx
       .select()

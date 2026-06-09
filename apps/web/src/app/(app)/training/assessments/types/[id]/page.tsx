@@ -20,7 +20,7 @@ import {
   trainingAssessmentTypes,
   trainingCourses,
 } from '@beaconhs/db/schema'
-import { requireRequestContext } from '@/lib/auth'
+import { requireModuleManage } from '@/lib/module-admin/guard'
 import { PageContainer } from '@/components/page-layout'
 import { DetailGrid } from '@/components/detail-grid'
 import {
@@ -48,7 +48,7 @@ export default async function AssessmentTypeDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const ctx = await requireRequestContext()
+  const ctx = await requireModuleManage('training')
 
   const data = await ctx.db(async (tx) => {
     const [type] = await tx

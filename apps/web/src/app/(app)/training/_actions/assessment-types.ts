@@ -8,6 +8,7 @@ import {
   trainingAssessmentTypes,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 
 /**
@@ -16,6 +17,7 @@ import { recordAudit } from '@/lib/audit'
  */
 export async function createAssessmentType(formData: FormData) {
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'training')
   if (!ctx.tenantId) throw new Error('No active tenant')
   const tenantId: string = ctx.tenantId
 
@@ -65,6 +67,7 @@ export async function createAssessmentType(formData: FormData) {
 
 export async function updateAssessmentType(typeId: string, formData: FormData) {
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'training')
   if (!ctx.tenantId) throw new Error('No active tenant')
 
   const name = String(formData.get('name') ?? '').trim()
@@ -118,6 +121,7 @@ export async function updateAssessmentType(typeId: string, formData: FormData) {
 
 export async function deleteAssessmentType(typeId: string) {
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'training')
   if (!ctx.tenantId) throw new Error('No active tenant')
   await ctx.db(async (tx) => {
     await tx
@@ -177,6 +181,7 @@ function parseOptions(raw: string | null): { value: string; label: string }[] | 
 
 export async function createAssessmentQuestion(typeId: string, formData: FormData) {
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'training')
   if (!ctx.tenantId) throw new Error('No active tenant')
   const tenantId: string = ctx.tenantId
 
@@ -234,6 +239,7 @@ export async function updateAssessmentQuestion(
   formData: FormData,
 ) {
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'training')
   if (!ctx.tenantId) throw new Error('No active tenant')
 
   const prompt = String(formData.get('prompt') ?? '').trim()
@@ -279,6 +285,7 @@ export async function updateAssessmentQuestion(
 
 export async function deleteAssessmentQuestion(typeId: string, questionId: string) {
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'training')
   if (!ctx.tenantId) throw new Error('No active tenant')
   await ctx.db(async (tx) => {
     await tx
@@ -305,6 +312,7 @@ export async function reorderAssessmentQuestion(
   direction: 'up' | 'down',
 ) {
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'training')
   if (!ctx.tenantId) throw new Error('No active tenant')
   await ctx.db(async (tx) => {
     const all = await tx

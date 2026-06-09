@@ -1,0 +1,92 @@
+'use client'
+
+// Mobile hamburger for the main app menu. On <lg the app nav rail is hidden;
+// this button opens it as an animated slide-in drawer (portal to body, spring,
+// backdrop fade, Esc + click-out + scroll-lock — matches the @beaconhs/ui Drawer).
+
+import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { AnimatePresence, motion } from 'framer-motion'
+import { Menu, X } from 'lucide-react'
+import { SidebarNav, type SidebarNavGroup } from './sidebar-nav'
+
+export function MobileNavToggle({ groups }: { groups: SidebarNavGroup[] }) {
+  const [open, setOpen] = useState(false)
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('keydown', onKey)
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prev
+    }
+  }, [open])
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-label="Open menu"
+        className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-600 transition-colors hover:bg-slate-50 lg:hidden"
+      >
+        <Menu size={18} />
+      </button>
+
+      {mounted
+        ? createPortal(
+            <AnimatePresence>
+              {open ? (
+                <div className="fixed inset-0 z-50 lg:hidden">
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]"
+                    onClick={() => setOpen(false)}
+                  />
+                  <motion.aside
+                    initial={{ x: '-100%' }}
+                    animate={{ x: 0 }}
+                    exit={{ x: '-100%' }}
+                    transition={{ type: 'spring', damping: 32, stiffness: 320, mass: 0.8 }}
+                    className="absolute left-0 top-0 flex h-full w-72 max-w-[86%] flex-col border-r border-slate-200 bg-white shadow-2xl"
+                    onClickCapture={(e) => {
+                      if ((e.target as HTMLElement).closest('a')) setOpen(false)
+                    }}
+                  >
+                    <div className="flex h-14 items-center justify-between border-b border-slate-200 px-4">
+                      <div className="flex items-center gap-2">
+                        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-teal-600 to-teal-800 text-sm font-bold text-white">
+                          B
+                        </div>
+                        <span className="font-semibold tracking-tight text-slate-900">BeaconHS</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setOpen(false)}
+                        aria-label="Close"
+                        className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100"
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
+                    <SidebarNav groups={groups} />
+                  </motion.aside>
+                </div>
+              ) : null}
+            </AnimatePresence>,
+            document.body,
+          )
+        : null}
+    </>
+  )
+}

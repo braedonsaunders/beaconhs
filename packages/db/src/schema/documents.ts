@@ -12,11 +12,13 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core'
 import { id, softDelete, timestamps } from './_helpers'
 import { tenants, tenantUsers, users } from './core'
 import { people, trades } from './org'
+import { documentTypes } from './document-types'
 
 export const documentStatus = pgEnum('document_status', [
   'draft',
@@ -36,6 +38,7 @@ export const documents = pgTable(
     title: text('title').notNull(),
     description: text('description'),
     category: text('category'), // 'sds' | 'policy' | 'procedure' | 'form' | …
+    typeId: uuid('type_id').references(() => documentTypes.id),
     status: documentStatus('status').default('draft').notNull(),
     ownerTenantUserId: uuid('owner_tenant_user_id').references(() => tenantUsers.id),
     reviewFrequencyMonths: integer('review_frequency_months'),
@@ -44,6 +47,10 @@ export const documents = pgTable(
     requiredForTradeIds: jsonb('required_for_trade_ids').$type<string[]>().default([]).notNull(),
     printHeader: boolean('print_header').default(true).notNull(),
     printFooter: boolean('print_footer').default(true).notNull(),
+    // Page setup for the in-app editor + PDF. pageSize maps to Puppeteer `format`.
+    pageSize: text('page_size').default('Letter').notNull(), // 'Letter' | 'A4'
+    headerText: text('header_text'), // running header text (PDF); falls back to tenant·title
+    footerText: text('footer_text'), // running footer text (PDF); falls back to tenant·key
     ...timestamps,
     ...softDelete,
   },
@@ -67,7 +74,8 @@ export const documentVersions = pgTable(
       .references(() => documents.id, { onDelete: 'cascade' }),
     version: integer('version').notNull(),
     contentAttachmentId: uuid('content_attachment_id'),
-    contentMarkdown: text('content_markdown'), // for in-app authored docs
+    contentMarkdown: text('content_markdown'), // in-app authored docs — stores HTML (legacy name)
+    contentJson: jsonb('content_json').$type<Record<string, unknown> | null>(), // ProseMirror JSON (fidelity / marks)
     publishedAt: timestamp('published_at', { withTimezone: true }),
     publishedBy: text('published_by').references(() => users.id),
     changelog: text('changelog'),
@@ -76,6 +84,61 @@ export const documentVersions = pgTable(
   (t) => ({
     documentIdx: index('document_versions_document_idx').on(t.documentId, t.version),
     tenantIdx: index('document_versions_tenant_idx').on(t.tenantId),
+  }),
+)
+
+// One editable working draft per document. Autosaves while a user edits;
+// `publishDraft` snapshots it into an immutable document_versions row and
+// re-seeds the draft from the just-published content (never a blank page).
+export const documentDrafts = pgTable(
+  'document_drafts',
+  {
+    id: id(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    documentId: uuid('document_id')
+      .notNull()
+      .references(() => documents.id, { onDelete: 'cascade' }),
+    contentJson: jsonb('content_json').$type<Record<string, unknown> | null>(), // ProseMirror JSON (source of truth)
+    contentHtml: text('content_html'), // sanitized HTML (render / PDF / export)
+    baseVersionId: uuid('base_version_id').references(() => documentVersions.id), // version this draft forked from
+    updatedByTenantUserId: uuid('updated_by_tenant_user_id').references(() => tenantUsers.id),
+    ...timestamps,
+  },
+  (t) => ({
+    documentUx: uniqueIndex('document_drafts_document_ux').on(t.documentId),
+    tenantIdx: index('document_drafts_tenant_idx').on(t.tenantId),
+  }),
+)
+
+// Threaded comments anchored to ranges via a `comment` mark whose commentId
+// equals `anchorId`. Replies set `threadId` to the root comment's id.
+export const documentComments = pgTable(
+  'document_comments',
+  {
+    id: id(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    documentId: uuid('document_id')
+      .notNull()
+      .references(() => documents.id, { onDelete: 'cascade' }),
+    anchorId: text('anchor_id'), // matches the comment mark's id; null once the anchored text is gone
+    quotedText: text('quoted_text'), // snapshot of the marked text for detached/orphaned threads
+    body: text('body').notNull(),
+    authorTenantUserId: uuid('author_tenant_user_id')
+      .notNull()
+      .references(() => tenantUsers.id),
+    threadId: uuid('thread_id'), // null on a root comment; root id on replies (soft self-reference)
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+    resolvedByTenantUserId: uuid('resolved_by_tenant_user_id').references(() => tenantUsers.id),
+    ...timestamps,
+  },
+  (t) => ({
+    docIdx: index('document_comments_doc_idx').on(t.documentId),
+    threadIdx: index('document_comments_thread_idx').on(t.threadId),
+    tenantIdx: index('document_comments_tenant_idx').on(t.tenantId),
   }),
 )
 

@@ -32,6 +32,17 @@ export const formTemplateStatus = pgEnum('form_template_status', [
   'archived',
 ])
 
+// What KIND of artifact this template is — reuses the same field builder but
+// changes the builder panels + runtime shell. Additive; existing rows default
+// to 'form' (today's behavior).
+export const formTemplateKind = pgEnum('form_template_kind', [
+  'form', // flat field set, single submit
+  'wizard', // multi-step pages
+  'checklist', // repeating items + scoring + auto-CAPA
+  'register', // append-and-browse tabular log
+  'mini_app', // composed surface (future free-form canvas)
+])
+
 export const formTemplates = pgTable(
   'form_templates',
   {
@@ -44,10 +55,18 @@ export const formTemplates = pgTable(
     category: text('category'), // e.g. 'inspection', 'jsha', 'toolbox_talk', 'custom'
     description: text('description'),
     status: formTemplateStatus('status').default('draft').notNull(),
+    kind: formTemplateKind('kind').default('form').notNull(),
     iconKey: text('icon_key'),
+    // App-level role gating. Empty / null ⇒ visible & usable by everyone (today's
+    // behavior). Non-empty ⇒ only these role keys (plus admins / super-admins)
+    // may see the app in the gallery and fill it out. Enforced in /forms + /fill.
+    allowedRoles: jsonb('allowed_roles').$type<string[]>(),
     // Which built-in module this template powers, if any. Lets us hide certain
     // templates from the generic forms list when they're owned by a specialty UI.
     moduleBinding: text('module_binding'), // 'inspections' | 'jsha' | 'toolbox_talk' | 'incident_investigation' | …
+    // When true, submitting a response auto-emails a recap to the configured
+    // notification recipients (generic version of the old toolbox email recap).
+    emailOnSubmit: boolean('email_on_submit').default(false).notNull(),
     createdBy: text('created_by').references(() => users.id),
     ...timestamps,
     ...softDelete,
@@ -98,9 +117,15 @@ export type {
   FormulaExpression,
   DefaultValueExpression,
   FormWorkflowStep,
+  AutomationGraph,
 } from '@beaconhs/forms-core'
 
-import type { FormSchemaV1, FormWorkflowStep, I18nString } from '@beaconhs/forms-core'
+import type {
+  AutomationGraph,
+  FormSchemaV1,
+  FormWorkflowStep,
+  I18nString,
+} from '@beaconhs/forms-core'
 
 // FormWorkflow stays as a local alias: db schema talks about workflow as
 // `{ steps: FormWorkflowStep[] }` and forms-core exports the shape inline on
@@ -375,6 +400,33 @@ export const formResponseScores = pgTable(
   (t) => ({
     responseIdx: index('form_response_scores_response_idx').on(t.responseId),
     tenantIdx: index('form_response_scores_tenant_idx').on(t.tenantId),
+  }),
+)
+
+// --- Flows (automation graphs) ---------------------------------------------
+
+// One unified automation graph per template (system actions + human gates).
+// Edited in place — intentionally NOT pinned to an immutable version snapshot,
+// so a broken recipient/rule can be fixed without republishing the schema.
+export const formAutomations = pgTable(
+  'form_automations',
+  {
+    id: id(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    templateId: uuid('template_id')
+      .notNull()
+      .references(() => formTemplates.id, { onDelete: 'cascade' }),
+    name: text('name').default('Flow').notNull(),
+    enabled: boolean('enabled').default(true).notNull(),
+    graph: jsonb('graph').$type<AutomationGraph>().notNull(),
+    ...timestamps,
+  },
+  (t) => ({
+    // Many flows per template (each independently enable/disable-able).
+    templateIdx: index('form_automations_template_idx').on(t.templateId),
+    tenantIdx: index('form_automations_tenant_idx').on(t.tenantId),
   }),
 )
 

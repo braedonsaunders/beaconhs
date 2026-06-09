@@ -4,6 +4,8 @@
 // version's content_markdown. A document book is the same with multiple
 // document bodies concatenated, preceded by a cover page + table of contents.
 
+import { documentBodyCss, sanitizeDocumentHtml } from '@beaconhs/forms-core'
+
 export type DocumentRenderInput = {
   tenantName: string
   tenantLogoUrl?: string | null
@@ -16,6 +18,9 @@ export type DocumentRenderInput = {
     status: string
     printHeader: boolean
     printFooter: boolean
+    pageSize?: 'Letter' | 'A4' | null
+    headerText?: string | null
+    footerText?: string | null
     nextReviewOn?: string | Date | null
     ownerName?: string | null
   }
@@ -59,22 +64,13 @@ export function renderDocumentHtml(input: DocumentRenderInput): string {
   const d = input.document
   const primary = input.primaryColor ?? '#0f766e'
   const generated = fmtDateTime(input.generatedAt ?? new Date())
-  const body =
-    input.version?.contentMarkdown
-      ? markdownToHtml(input.version.contentMarkdown)
-      : '<p class="empty">No published content for this document.</p>'
+  const body = bodyHtml(input.version?.contentMarkdown)
 
   return `
   <style>
     ${baseStyles(primary)}
-    .doc-body h1 { font-size: 18pt; border-bottom: 2px solid var(--primary); padding-bottom: 4px; margin: 18px 0 10px; color: var(--primary); }
-    .doc-body h2 { font-size: 14pt; margin: 14px 0 6px; color: #222; }
-    .doc-body h3 { font-size: 12pt; margin: 10px 0 4px; color: #333; }
-    .doc-body p { margin: 6px 0; line-height: 1.5; }
-    .doc-body ul, .doc-body ol { margin: 6px 0; padding-left: 22px; }
-    .doc-body li { margin: 3px 0; }
-    .doc-body strong { font-weight: 700; }
-    .doc-body em { font-style: italic; }
+    ${documentBodyCss('.doc-body')}
+    ${docBodyExtraCss()}
     .doc-meta { font-size: 9pt; color: #666; margin-bottom: 14px; padding-bottom: 6px; border-bottom: 1px solid #eee; }
     .changelog { background: #fffbeb; border-left: 3px solid #b58500; padding: 8px 10px; margin: 8px 0 14px; font-size: 9.5pt; color: #5a4400; }
     .empty { color: #888; font-style: italic; }
@@ -118,9 +114,7 @@ export function renderDocumentBookHtml(input: DocumentBookRenderInput): string {
 
   const bodiesHtml = input.items
     .map((it) => {
-      const body = it.version?.contentMarkdown
-        ? markdownToHtml(it.version.contentMarkdown)
-        : '<p class="empty">No published content for this document.</p>'
+      const body = bodyHtml(it.version?.contentMarkdown)
       return `<section class="doc page-break">
         <h1>${esc(it.document.title)}</h1>
         <div class="doc-meta">
@@ -145,14 +139,8 @@ export function renderDocumentBookHtml(input: DocumentBookRenderInput): string {
     .toc li { padding: 5px 0; border-bottom: 1px dotted #cbd5e1; font-size: 11pt; }
     .toc .toc-num { display: inline-block; min-width: 30px; color: #888; }
     .toc .toc-cat { color: #888; font-size: 9.5pt; }
-    .doc-body h1 { font-size: 18pt; border-bottom: 2px solid var(--primary); padding-bottom: 4px; margin: 18px 0 10px; color: var(--primary); }
-    .doc-body h2 { font-size: 14pt; margin: 14px 0 6px; color: #222; }
-    .doc-body h3 { font-size: 12pt; margin: 10px 0 4px; color: #333; }
-    .doc-body p { margin: 6px 0; line-height: 1.5; }
-    .doc-body ul, .doc-body ol { margin: 6px 0; padding-left: 22px; }
-    .doc-body li { margin: 3px 0; }
-    .doc-body strong { font-weight: 700; }
-    .doc-body em { font-style: italic; }
+    ${documentBodyCss('.doc-body')}
+    ${docBodyExtraCss()}
     .doc-meta { font-size: 9pt; color: #666; margin-bottom: 14px; padding-bottom: 6px; border-bottom: 1px solid #eee; }
     .empty { color: #888; font-style: italic; }
     section.doc { page-break-before: always; }
@@ -213,6 +201,42 @@ function letterhead(args: {
       ${esc(args.reference)}
     </div>
   </div>`
+}
+
+// Renders stored version content. Editor output is HTML (sanitized for the PDF);
+// legacy rows may still be plain markdown, handled by the converter below.
+function bodyHtml(content: string | null | undefined): string {
+  if (!content) return '<p class="empty">No published content for this document.</p>'
+  return /<[a-z][\s\S]*>/i.test(content) ? sanitizeDocumentHtml(content) : markdownToHtml(content)
+}
+
+// Presentation for rich HTML bodies — tables, images, marks, page breaks.
+// Comment marks render invisibly and suggestion (track-change) marks render as
+// their accepted state, so published PDFs show clean content.
+function docBodyExtraCss(): string {
+  return `
+    .doc-body table { border-collapse: collapse; width: 100%; margin: 8px 0; table-layout: fixed; }
+    .doc-body th, .doc-body td { border: 1px solid #cbd5e1; padding: 4px 8px; vertical-align: top; }
+    .doc-body th { background: #f1f5f9; font-weight: 600; text-align: left; }
+    .doc-body img { max-width: 100%; height: auto; }
+    .doc-body img[data-align="center"] { display: block; margin-left: auto; margin-right: auto; }
+    .doc-body img[data-align="right"] { display: block; margin-left: auto; }
+    .doc-body [data-page-break] { page-break-before: always; }
+    .doc-body mark { background: #fef08a; padding: 0 2px; }
+    .doc-body u { text-decoration: underline; }
+    .doc-body s, .doc-body del { text-decoration: line-through; }
+    .doc-body sub { vertical-align: sub; font-size: 80%; }
+    .doc-body sup { vertical-align: super; font-size: 80%; }
+    .doc-body a { color: var(--primary); text-decoration: underline; }
+    .doc-body blockquote { border-left: 3px solid #cbd5e1; margin: 8px 0; padding: 2px 12px; color: #475569; }
+    .doc-body pre { background: #0f172a; color: #e2e8f0; padding: 10px; border-radius: 6px; overflow: auto; font-size: 9pt; }
+    .doc-body code { background: #f1f5f9; padding: 1px 4px; border-radius: 3px; font-size: 9.5pt; }
+    .doc-body ul[data-type="taskList"] { list-style: none; padding-left: 0; }
+    .doc-body ul[data-type="taskList"] li { display: flex; gap: 6px; align-items: flex-start; }
+    .doc-body .comment-mark { background: transparent; border: none; }
+    .doc-body .suggestion-insert { color: inherit; text-decoration: none; }
+    .doc-body .suggestion-delete { display: none; }
+  `
 }
 
 // Minimal markdown → HTML converter. Supports headings (#, ##, ###), bold (**),

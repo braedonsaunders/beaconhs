@@ -66,6 +66,15 @@ export async function presignGet(args: {
   return getSignedUrl(client, cmd, { expiresIn: args.expiresInSeconds ?? 600 })
 }
 
+/** Server-side direct download. Returns the object's bytes as a Buffer. */
+export async function getObject(args: { key: string }): Promise<Buffer> {
+  const res = await client.send(new GetObjectCommand({ Bucket: bucket, Key: args.key }))
+  const body = res.Body
+  if (!body) throw new Error(`Object not found: ${args.key}`)
+  const bytes = await body.transformToByteArray()
+  return Buffer.from(bytes)
+}
+
 export function publicUrl(key: string): string {
   return `${publicBaseUrl}/${key}`
 }

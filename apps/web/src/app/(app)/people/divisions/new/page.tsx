@@ -11,8 +11,8 @@ import {
   Textarea,
 } from '@beaconhs/ui'
 import { personDivisions } from '@beaconhs/db/schema'
-import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
+import { requireModuleManage } from '@/lib/module-admin/guard'
 import { createDivision } from '../../_actions/divisions'
 
 export const metadata = { title: 'New division' }
@@ -25,7 +25,7 @@ export default async function NewDivisionPage({
 }) {
   const sp = await searchParams
   const parentId = typeof sp.parent === 'string' ? sp.parent : null
-  const ctx = await requireRequestContext()
+  const ctx = await requireModuleManage('people')
   const parents = await ctx.db((tx) =>
     tx.select().from(personDivisions).orderBy(asc(personDivisions.name)),
   )

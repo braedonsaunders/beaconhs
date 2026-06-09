@@ -16,7 +16,7 @@ import {
   trainingSkillAuthorities,
   trainingSkillTypes,
 } from '@beaconhs/db/schema'
-import { requireRequestContext } from '@/lib/auth'
+import { requireModuleManage } from '@/lib/module-admin/guard'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
 import { SearchInput } from '@/components/search-input'
@@ -42,7 +42,7 @@ export default async function TrainingSkillsPage({
     allowedSorts: SORTS,
   })
   const authorityFilter = pickString(sp.authority)
-  const ctx = await requireRequestContext()
+  const ctx = await requireModuleManage('training')
 
   const { rows, total, authorities } = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = []

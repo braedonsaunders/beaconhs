@@ -26,6 +26,7 @@ import {
 } from '@beaconhs/emails'
 import { enqueueEmail, enqueueNotification } from '@beaconhs/jobs'
 import {
+  complianceObligations,
   correctiveActions,
   csPermits,
   documents,
@@ -85,6 +86,7 @@ const DEFAULT_ROLES_BY_CATEGORY: Record<string, string[]> = {
   document: ['safety_manager', 'tenant_admin'],
   cs_permit: ['safety_manager', 'tenant_admin'],
   lone_worker: ['safety_manager', 'tenant_admin'],
+  compliance: ['safety_manager', 'tenant_admin'],
 }
 
 /**
@@ -873,5 +875,62 @@ export async function emitCsPermitExpiring(
     }
   } catch (err) {
     logFailure('emitCsPermitExpiring', err)
+  }
+}
+
+// --- Compliance -----------------------------------------------------------
+
+/** Generic obligation-overdue reminder, emitted by the compliance_scan worker. */
+export async function emitComplianceObligationOverdue(
+  tenantId: string,
+  obligationId: string,
+  overdueCount: number,
+): Promise<void> {
+  const ctx = workerEventCtx(tenantId)
+  try {
+    const ob = await ctx.db(async (tx) => {
+      const [o] = await tx
+        .select()
+        .from(complianceObligations)
+        .where(eq(complianceObligations.id, obligationId))
+        .limit(1)
+      return o ?? null
+    })
+    if (!ob) return
+
+    const tenant = await getTenant(ctx, tenantId)
+    if (!tenant) return
+
+    const audience = await resolveAudience(ctx, tenantId, 'compliance', [])
+    if (audience.length === 0) return
+
+    const linkPath = `/compliance/obligations/${ob.id}`
+    const url = appUrl(linkPath)
+    const title = `Compliance overdue: ${ob.title}`
+    const body = `${overdueCount} subject${overdueCount === 1 ? '' : 's'} overdue or expiring.`
+
+    await enqueueNotification({
+      tenantId,
+      userIds: audience,
+      category: 'compliance',
+      type: 'compliance.obligation_overdue',
+      title,
+      body,
+      linkPath,
+      data: { obligationId: ob.id, overdueCount },
+    })
+
+    const recipients = await emailsForUserIds(ctx, audience)
+    if (recipients.length > 0) {
+      await enqueueEmail({
+        to: recipients,
+        subject: title,
+        html: `<p>${body}</p><p><a href="${url}">View obligation</a></p>`,
+        text: `${body}\n${url}`,
+        meta: { tenantId, category: 'compliance' },
+      })
+    }
+  } catch (err) {
+    logFailure('emitComplianceObligationOverdue', err)
   }
 }

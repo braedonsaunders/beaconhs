@@ -9,6 +9,7 @@ import { and, eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { trainingExtraFields } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 
 type OwnerType = 'skill' | 'skill_type' | 'authority'
@@ -32,6 +33,7 @@ export async function addExtraField(input: {
   fieldValue: string | null
 }): Promise<{ ok: boolean; error?: string }> {
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'training')
   const { ownerType, ownerId, fieldKey, fieldValue } = input
   const trimmedKey = fieldKey.trim().slice(0, 120)
   if (!trimmedKey) return { ok: false, error: 'Field name is required' }
@@ -67,6 +69,7 @@ export async function deleteExtraField(input: {
   ownerId: string
 }): Promise<{ ok: boolean; error?: string }> {
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'training')
   const { id, ownerType, ownerId } = input
   if (!id || !ownerId) return { ok: false, error: 'Missing identifiers' }
 

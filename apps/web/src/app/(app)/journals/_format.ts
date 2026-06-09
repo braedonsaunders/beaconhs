@@ -1,0 +1,59 @@
+// Client-safe formatting helpers for the Journals UI.
+
+import type { JournalStatus } from './_types'
+
+const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+function parse(iso: string): Date {
+  return new Date(`${iso}T00:00:00`)
+}
+
+/** "Fri · Jun 5" */
+export function formatDate(iso: string): string {
+  const d = parse(iso)
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+}
+
+/** "Friday, June 5, 2026" */
+export function formatLongDate(iso: string): string {
+  const d = parse(iso)
+  return d.toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  })
+}
+
+export function weekdayShort(iso: string): string {
+  return WD[parse(iso).getDay()] ?? ''
+}
+
+export function isToday(iso: string): boolean {
+  return iso === new Date().toISOString().slice(0, 10)
+}
+
+/** "just now", "5m", "2h", "3d", else date. */
+export function relativeTime(isoTs: string): string {
+  const then = new Date(isoTs).getTime()
+  const diff = Date.now() - then
+  const m = Math.floor(diff / 60000)
+  if (m < 1) return 'just now'
+  if (m < 60) return `${m}m ago`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h ago`
+  const d = Math.floor(h / 24)
+  if (d < 7) return `${d}d ago`
+  return new Date(isoTs).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+export function statusMeta(status: JournalStatus): { label: string; className: string } {
+  switch (status) {
+    case 'submitted':
+      return { label: 'Submitted', className: 'bg-teal-100 text-teal-800 ring-teal-600/20' }
+    case 'archived':
+      return { label: 'Archived', className: 'bg-slate-100 text-slate-600 ring-slate-500/20' }
+    default:
+      return { label: 'Draft', className: 'bg-amber-100 text-amber-800 ring-amber-600/20' }
+  }
+}

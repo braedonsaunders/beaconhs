@@ -13,10 +13,12 @@ import {
   personGroups,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 
 export async function createGroup(formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'people')
   const name = String(formData.get('name') ?? '').trim()
   const description = String(formData.get('description') ?? '').trim() || null
   const color = String(formData.get('color') ?? '').trim() || null
@@ -42,6 +44,7 @@ export async function createGroup(formData: FormData): Promise<void> {
 
 export async function updateGroup(formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'people')
   const id = String(formData.get('id') ?? '')
   if (!id) return
   const name = String(formData.get('name') ?? '').trim()
@@ -69,6 +72,7 @@ export async function updateGroup(formData: FormData): Promise<void> {
 
 export async function deleteGroup(formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'people')
   const id = String(formData.get('id') ?? '')
   if (!id) return
   const before = await ctx.db(async (tx) => {
@@ -99,6 +103,7 @@ export async function deleteGroup(formData: FormData): Promise<void> {
 
 export async function setGroupMembership(formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'people')
   const groupId = String(formData.get('groupId') ?? '')
   if (!groupId) return
   const rawIds = formData.getAll('personIds').map((v) => String(v))

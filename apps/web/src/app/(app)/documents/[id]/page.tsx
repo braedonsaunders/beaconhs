@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { asc, desc, eq } from 'drizzle-orm'
-import { Check, FileText, Mail, Plus } from 'lucide-react'
+import { Activity, BadgeCheck, Check, ClipboardCheck, FileText, History, Info, Mail } from 'lucide-react'
 import {
   Alert,
   AlertDescription,
@@ -13,12 +13,12 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-  DetailHeader,
   EmptyState,
 } from '@beaconhs/ui'
 import { DocumentDrawers } from './_drawers'
 import {
   documentAcknowledgments,
+  documentDrafts,
   documentReviews,
   documentVersions,
   documents,
@@ -30,12 +30,13 @@ import { requireRequestContext } from '@/lib/auth'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { pickString } from '@/lib/list-params'
 import { ActivityFeed } from '@/components/activity-feed'
-import { DetailGrid } from '@/components/detail-grid'
-import { Section } from '@/components/section'
+import { DocumentOverview } from './_overview'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
-import { DetailPageLayout } from '@/components/page-layout'
 import { GenericSendEmailDialog } from '@/components/send-email-dialog'
 import { sendDocumentEmail } from './_send-email'
+import { listDocumentComments, publishDraft } from './_actions'
+import { DocumentPdfButton } from './_pdf-viewer'
+import { DocumentPane } from './_document-pane'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,33 +52,12 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
 async function publish(formData: FormData) {
   'use server'
-  const ctx = await requireRequestContext()
   const id = String(formData.get('id') ?? '')
   if (!id) return
-  await ctx.db(async (tx) => {
-    await tx.update(documents).set({ status: 'published' }).where(eq(documents.id, id))
-    // Mark the latest version as published if not yet
-    const [latest] = await tx
-      .select()
-      .from(documentVersions)
-      .where(eq(documentVersions.documentId, id))
-      .orderBy(desc(documentVersions.version))
-      .limit(1)
-    if (latest && !latest.publishedAt) {
-      await tx
-        .update(documentVersions)
-        .set({ publishedAt: new Date(), publishedBy: ctx.userId })
-        .where(eq(documentVersions.id, latest.id))
-    }
-  })
-  await recordAudit(ctx, {
-    entityType: 'document',
-    entityId: id,
-    action: 'publish',
-    summary: 'Document published',
-  })
-  revalidatePath(`/documents/${id}`)
-  revalidatePath('/documents')
+  // Snapshots the live draft into an immutable version (or publishes the latest
+  // existing version for legacy / uploaded-file documents). Handles audit +
+  // revalidate + PDF re-render internally.
+  await publishDraft({ documentId: id })
 }
 
 async function unpublish(formData: FormData) {
@@ -203,51 +183,6 @@ async function recordReviewAction(input: {
   return { ok: true }
 }
 
-async function newVersionAction(input: {
-  documentId: string
-  changelog: string | null
-  contentHtml: string | null
-  contentAttachmentId: string | null
-}): Promise<{ ok: boolean; error?: string }> {
-  'use server'
-  const ctx = await requireRequestContext()
-  const { documentId, changelog, contentHtml, contentAttachmentId } = input
-  if (!documentId) return { ok: false, error: 'Missing document id' }
-
-  await ctx.db(async (tx) => {
-    const [latest] = await tx
-      .select({ version: documentVersions.version })
-      .from(documentVersions)
-      .where(eq(documentVersions.documentId, documentId))
-      .orderBy(desc(documentVersions.version))
-      .limit(1)
-    const nextNumber = (latest?.version ?? 0) + 1
-    await tx.insert(documentVersions).values({
-      tenantId: ctx.tenantId,
-      documentId,
-      version: nextNumber,
-      changelog,
-      contentMarkdown: contentHtml,
-      contentAttachmentId,
-      // publishedAt left null = draft
-    })
-    // Move the document back to draft status until the new version is published
-    await tx
-      .update(documents)
-      .set({ status: 'draft' })
-      .where(eq(documents.id, documentId))
-  })
-  await recordAudit(ctx, {
-    entityType: 'document',
-    entityId: documentId,
-    action: 'create',
-    summary: 'New draft version created',
-    after: { changelog, hasAttachment: !!contentAttachmentId },
-  })
-  revalidatePath(`/documents/${documentId}`)
-  return { ok: true }
-}
-
 // Inline server action for the Send-email dialog. Reads the dialog form
 // fields, delegates to `sendDocumentEmail` which composes the email +
 // writes the audit row, then revalidates the detail page.
@@ -291,7 +226,7 @@ export default async function DocumentDetailPage({
   const data = await ctx.db(async (tx) => {
     const [doc] = await tx.select().from(documents).where(eq(documents.id, id)).limit(1)
     if (!doc) return null
-    const [versions, acks, reviews, currentPerson] = await Promise.all([
+    const [versions, acks, reviews, currentPerson, draft] = await Promise.all([
       tx
         .select()
         .from(documentVersions)
@@ -311,15 +246,38 @@ export default async function DocumentDetailPage({
         .where(eq(documentReviews.documentId, id))
         .orderBy(desc(documentReviews.reviewedAt)),
       tx.select().from(people).where(eq(people.userId, ctx.userId)).limit(1),
+      tx.select().from(documentDrafts).where(eq(documentDrafts.documentId, id)).limit(1),
     ])
-    return { doc, versions, acks, reviews, currentPerson: currentPerson[0] ?? null }
+    return {
+      doc,
+      versions,
+      acks,
+      reviews,
+      currentPerson: currentPerson[0] ?? null,
+      draft: draft[0] ?? null,
+    }
   })
 
   if (!data) notFound()
-  const { doc, versions, acks, reviews, currentPerson } = data
+  const { doc, versions, acks, reviews, currentPerson, draft } = data
   const currentVersion = versions[0]
   const publishedVersion = versions.find((v) => v.publishedAt) ?? null
   const basePath = `/documents/${id}`
+
+  // Right pane: the live editor for in-app docs, or the PDF for uploaded-file docs.
+  const isFileDoc = !draft && !!currentVersion?.contentAttachmentId
+  const initialJson = (draft?.contentJson ?? publishedVersion?.contentJson ?? null) as
+    | Record<string, unknown>
+    | null
+  const initialHtml = draft?.contentHtml ?? publishedVersion?.contentMarkdown ?? ''
+  const initialLayout = {
+    pageSize: (doc.pageSize === 'A4' ? 'A4' : 'Letter') as 'Letter' | 'A4',
+    headerText: doc.headerText ?? '',
+    footerText: doc.footerText ?? '',
+    printHeader: doc.printHeader,
+    printFooter: doc.printFooter,
+  }
+  const comments = isFileDoc ? [] : await listDocumentComments(id)
 
   const myAck = currentPerson
     ? acks.find(
@@ -336,124 +294,107 @@ export default async function DocumentDetailPage({
   const isOverdue = doc.nextReviewOn ? doc.nextReviewOn < todayIso : false
 
   return (
-    <DetailPageLayout
-      header={
-        <DetailHeader
-          back={{ href: '/documents', label: 'Back to documents' }}
-          title={doc.title}
-          subtitle={`${doc.category ?? 'document'} · ${doc.key}`}
-          badge={
-            <div className="flex items-center gap-2">
-              <Badge variant={doc.status === 'published' ? 'success' : 'secondary'}>
-                {doc.status}
-              </Badge>
-              {currentVersion ? <Badge variant="outline">v{currentVersion.version}</Badge> : null}
-              {isOverdue ? <Badge variant="destructive">Review overdue</Badge> : null}
-            </div>
-          }
-          actions={
-            <>
-              <Link href={`/documents/${id}/pdf` as any} target="_blank">
-                <Button variant="outline">
-                  <FileText size={14} /> PDF
-                </Button>
-              </Link>
-              <Link
-                href={`/documents/${id}?send=1${active !== 'overview' ? `&tab=${active}` : ''}` as any}
-                scroll={false}
-              >
-                <Button variant="outline">
-                  <Mail size={14} /> Send email
-                </Button>
-              </Link>
-              {doc.status === 'published' ? (
-                <form action={unpublish} className="inline">
-                  <input type="hidden" name="id" value={id} />
-                  <Button type="submit" variant="outline">
-                    Unpublish
-                  </Button>
-                </form>
-              ) : (
-                <form action={publish} className="inline">
-                  <input type="hidden" name="id" value={id} />
-                  <Button type="submit">
-                    <Check size={14} /> Publish
-                  </Button>
-                </form>
-              )}
-            </>
-          }
-        />
-      }
-      alerts={
-        isOverdue ? (
-          <Alert variant="warning">
-            <AlertTitle>Periodic review overdue</AlertTitle>
-            <AlertDescription>
-              This document was due for review on {doc.nextReviewOn}.{' '}
-              <Link
-                href={`${basePath}?tab=reviews&drawer=record-review`}
-                className="font-medium underline-offset-2 hover:underline"
-              >
-                Record a review →
-              </Link>
-            </AlertDescription>
-          </Alert>
-        ) : null
-      }
-      subtabs={
-        <TabNav
-          basePath={basePath}
-          currentParams={sp}
-          active={active}
-          tabs={[
-            { key: 'overview', label: 'Overview' },
-            { key: 'versions', label: 'Versions', count: versions.length },
-            { key: 'acknowledgments', label: 'Acknowledgments', count: acks.length },
-            { key: 'reviews', label: 'Reviews', count: reviews.length },
-            { key: 'activity', label: 'Activity' },
-          ]}
-        />
-      }
-    >
-      <div className="space-y-5">
-        {active === 'overview' ? (
-          <>
-            <Section title="General">
-              <DetailGrid
-                rows={[
-                  { label: 'Title', value: doc.title },
-                  { label: 'Key', value: <span className="font-mono">{doc.key}</span> },
-                  { label: 'Category', value: doc.category ?? '—' },
-                  { label: 'Status', value: doc.status },
-                  {
-                    label: 'Review every',
-                    value: doc.reviewFrequencyMonths ? `${doc.reviewFrequencyMonths} months` : '—',
-                  },
-                  {
-                    label: 'Next review on',
-                    value: doc.nextReviewOn ? (
-                      <span className={isOverdue ? 'font-medium text-red-700' : ''}>
-                        {doc.nextReviewOn}
-                      </span>
-                    ) : (
-                      '—'
-                    ),
-                  },
-                  { label: 'Print header', value: doc.printHeader ? 'Yes' : 'No' },
-                  { label: 'Print footer', value: doc.printFooter ? 'Yes' : 'No' },
-                ]}
-              />
-            </Section>
-            {currentVersion?.contentMarkdown ? (
-              <Section title={`Content (v${currentVersion.version})`}>
-                <pre className="whitespace-pre-wrap rounded-md border border-slate-200 bg-slate-50/50 p-4 text-sm text-slate-800">
-                  {currentVersion.contentMarkdown}
-                </pre>
-              </Section>
+    <div className="flex h-full min-h-0 flex-col">
+      {/* Top bar */}
+      <div className="flex shrink-0 items-center gap-3 border-b border-slate-200 bg-white px-4 py-2">
+        <Link
+          href="/documents"
+          className="shrink-0 text-xs font-medium text-slate-500 hover:text-slate-800"
+        >
+          ← Documents
+        </Link>
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="truncate text-sm font-semibold text-slate-900">{doc.title}</span>
+            <Badge variant={doc.status === 'published' ? 'success' : 'secondary'}>{doc.status}</Badge>
+            {currentVersion ? <Badge variant="outline">v{currentVersion.version}</Badge> : null}
+            {isOverdue ? <Badge variant="destructive">Review overdue</Badge> : null}
+          </div>
+          <div className="truncate text-xs text-slate-500">
+            {doc.category ?? 'document'} · <span className="font-mono">{doc.key}</span>
+          </div>
+        </div>
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          <DocumentPdfButton documentId={id} />
+          <Link
+            href={`/documents/${id}?send=1${active !== 'overview' ? `&tab=${active}` : ''}` as any}
+            scroll={false}
+          >
+            <Button variant="outline">
+              <Mail size={14} /> Send email
+            </Button>
+          </Link>
+          {doc.status === 'published' ? (
+            <form action={unpublish} className="inline">
+              <input type="hidden" name="id" value={id} />
+              <Button type="submit" variant="outline">
+                Unpublish
+              </Button>
+            </form>
+          ) : (
+            <form action={publish} className="inline">
+              <input type="hidden" name="id" value={id} />
+              <Button type="submit">
+                <Check size={14} /> Publish
+              </Button>
+            </form>
+          )}
+        </div>
+      </div>
+
+      {/* Split body: left 1/3 subtabs · right 2/3 the document */}
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <aside className="flex min-h-0 w-1/3 min-w-[300px] max-w-md flex-col border-r border-slate-200 bg-white">
+          <div className="border-b border-slate-200 px-3 pt-2">
+            <TabNav
+              basePath={basePath}
+              currentParams={sp}
+              active={active}
+              iconOnly
+              tabs={[
+                { key: 'overview', label: 'Overview', icon: <Info size={16} /> },
+                { key: 'versions', label: 'Versions', count: versions.length, icon: <History size={16} /> },
+                { key: 'acknowledgments', label: 'Acknowledgments', count: acks.length, icon: <BadgeCheck size={16} /> },
+                { key: 'reviews', label: 'Reviews', count: reviews.length, icon: <ClipboardCheck size={16} /> },
+                { key: 'activity', label: 'Activity', icon: <Activity size={16} /> },
+              ]}
+            />
+          </div>
+          <div className="app-scroll min-h-0 flex-1 overflow-y-auto p-4">
+            {isOverdue ? (
+              <Alert variant="warning" className="mb-4">
+                <AlertTitle>Periodic review overdue</AlertTitle>
+                <AlertDescription>
+                  Due on {doc.nextReviewOn}.{' '}
+                  <Link
+                    href={`${basePath}?tab=reviews&drawer=record-review`}
+                    className="font-medium underline-offset-2 hover:underline"
+                  >
+                    Record a review →
+                  </Link>
+                </AlertDescription>
+              </Alert>
             ) : null}
-          </>
-        ) : null}
+
+            {active === 'overview' ? (
+              <DocumentOverview
+                documentId={id}
+                initialMeta={{
+                  title: doc.title,
+                  key: doc.key,
+                  category: doc.category ?? '',
+                  description: doc.description ?? '',
+                  reviewFrequencyMonths:
+                    doc.reviewFrequencyMonths != null ? String(doc.reviewFrequencyMonths) : '',
+                  nextReviewOn: doc.nextReviewOn ?? '',
+                  pageSize: doc.pageSize === 'A4' ? 'A4' : 'Letter',
+                  printHeader: doc.printHeader,
+                  printFooter: doc.printFooter,
+                  headerText: doc.headerText ?? '',
+                  footerText: doc.footerText ?? '',
+                }}
+              />
+            ) : null}
 
         {active === 'versions' ? (
           <div className="space-y-4">
@@ -497,11 +438,12 @@ export default async function DocumentDetailPage({
               </CardContent>
             </Card>
             <div className="flex justify-end">
-              <Link href={`${basePath}?tab=versions&drawer=new-version`}>
-                <Button type="button">
-                  <Plus size={14} /> New draft version
+              <form action={publish}>
+                <input type="hidden" name="id" value={id} />
+                <Button type="submit">
+                  <Check size={14} /> Publish new version
                 </Button>
-              </Link>
+              </form>
             </div>
           </div>
         ) : null}
@@ -634,6 +576,21 @@ export default async function DocumentDetailPage({
             </CardContent>
           </Card>
         ) : null}
+          </div>
+        </aside>
+
+        {/* Right pane: the live editor, or the PDF for uploaded-file documents */}
+        <div className="min-h-0 flex-1">
+          <DocumentPane
+            documentId={id}
+            defaultMode={isFileDoc ? 'pdf' : 'write'}
+            initialTitle={doc.title}
+            initialHtml={initialHtml}
+            initialJson={initialJson}
+            initialLayout={initialLayout}
+            initialComments={comments}
+          />
+        </div>
       </div>
 
       <GenericSendEmailDialog
@@ -650,18 +607,11 @@ export default async function DocumentDetailPage({
       />
       <DocumentDrawers
         documentId={id}
-        openDrawer={
-          pickString(sp.drawer) === 'record-review'
-            ? 'record-review'
-            : pickString(sp.drawer) === 'new-version'
-              ? 'new-version'
-              : null
-        }
+        openDrawer={pickString(sp.drawer) === 'record-review' ? 'record-review' : null}
         closeHref={`${basePath}${active === 'overview' ? '' : `?tab=${active}`}`}
         defaultNextReviewOn={doc.nextReviewOn ?? null}
         recordReviewAction={recordReviewAction}
-        newVersionAction={newVersionAction}
       />
-    </DetailPageLayout>
+    </div>
   )
 }

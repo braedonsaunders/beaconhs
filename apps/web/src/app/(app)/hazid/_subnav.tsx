@@ -1,38 +1,21 @@
-import Link from 'next/link'
-import { cn } from '@beaconhs/ui'
+// HazID / JSHA sub-nav — a thin delegate to the shared, registry-driven
+// <ModuleNav>. Call sites pass the current pathname (server components have no
+// usePathname); we map it to the registry tab key here. Operational tabs
+// (Assessments / Hazards / Tasks / Signed reports) + a Manage pill; the admin
+// taxonomies (hazard types/sets, assessment types) live in /hazid/manage.
 
-// Horizontal pill nav strip shown at the top of every /hazid/* page.
-// Mirrors the legacy "Hazard ID" mega-menu (Assessments | Hazards | Tasks | Types | Signed Reports).
-const ITEMS: { href: string; label: string; pattern: RegExp }[] = [
-  { href: '/hazid', label: 'Assessments', pattern: /^\/hazid(?!\/(?:hazards|tasks|types|reports))/ },
-  { href: '/hazid/hazards', label: 'Hazards', pattern: /^\/hazid\/hazards(?!\/(?:types|sets))/ },
-  { href: '/hazid/hazards/types', label: 'Hazard types', pattern: /^\/hazid\/hazards\/types/ },
-  { href: '/hazid/hazards/sets', label: 'Hazard sets', pattern: /^\/hazid\/hazards\/sets/ },
-  { href: '/hazid/tasks', label: 'Tasks', pattern: /^\/hazid\/tasks/ },
-  { href: '/hazid/types', label: 'Assessment types', pattern: /^\/hazid\/types/ },
-  { href: '/hazid/reports/signed', label: 'Signed reports', pattern: /^\/hazid\/reports\/signed/ },
-]
+import { ModuleNav } from '@/components/module-admin/module-nav'
+
+function activeFor(pathname: string): string {
+  if (/^\/hazid\/hazards\/types/.test(pathname)) return 'hazard-types'
+  if (/^\/hazid\/hazards\/sets/.test(pathname)) return 'hazard-sets'
+  if (/^\/hazid\/hazards/.test(pathname)) return 'hazards'
+  if (/^\/hazid\/tasks/.test(pathname)) return 'tasks'
+  if (/^\/hazid\/types/.test(pathname)) return 'assessment-types'
+  if (/^\/hazid\/reports\/signed/.test(pathname)) return 'signed'
+  return 'assessments'
+}
 
 export function HazidSubNav({ pathname }: { pathname: string }) {
-  return (
-    <nav className="flex flex-wrap items-center gap-1">
-      {ITEMS.map((item) => {
-        const isActive = item.pattern.test(pathname)
-        return (
-          <Link
-            key={item.href}
-            href={item.href as any}
-            className={cn(
-              'rounded-full border px-3 py-1 text-xs transition-colors',
-              isActive
-                ? 'border-teal-600 bg-teal-50 text-teal-800'
-                : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900',
-            )}
-          >
-            {item.label}
-          </Link>
-        )
-      })}
-    </nav>
-  )
+  return <ModuleNav moduleKey="hazid" active={activeFor(pathname)} />
 }

@@ -1583,7 +1583,7 @@ function CriterionEditForm({
             <p className="text-[11px] text-slate-500">
               Synced to corrective action{' '}
               <Link
-                href={`/corrective-actions/`}
+                href="/corrective-actions"
                 className="text-teal-700 hover:underline"
               >
                 {row.ca.reference}

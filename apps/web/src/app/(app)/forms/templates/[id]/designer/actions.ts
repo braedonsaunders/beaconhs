@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { desc, eq } from 'drizzle-orm'
+import { assertCan } from '@beaconhs/tenant'
 import { formTemplateVersions, formTemplates } from '@beaconhs/db/schema'
 import { validateFormSchema, type FormSchemaV1 } from '@beaconhs/forms-core'
 import { requireRequestContext } from '@/lib/auth'
@@ -52,4 +53,68 @@ export async function publishNewVersion(args: {
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : 'Failed to save' }
   }
+}
+
+// Update an App's "overview" metadata (name / description / category / icon /
+// email-on-submit). Distinct from publishing a new schema version.
+export async function updateAppOverview(args: {
+  templateId: string
+  name: string
+  description?: string | null
+  category?: string | null
+  iconKey?: string | null
+  emailOnSubmit?: boolean
+}): Promise<{ ok: boolean; error?: string }> {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'forms.template.create')
+  const name = (args.name ?? '').trim()
+  if (!name) return { ok: false, error: 'Name is required' }
+  await ctx.db((tx) =>
+    tx
+      .update(formTemplates)
+      .set({
+        name,
+        description: args.description?.trim() || null,
+        category: (args.category?.trim() || null) as never,
+        iconKey: args.iconKey?.trim() || null,
+        ...(args.emailOnSubmit === undefined ? {} : { emailOnSubmit: args.emailOnSubmit }),
+        updatedAt: new Date(),
+      })
+      .where(eq(formTemplates.id, args.templateId)),
+  )
+  await recordAudit(ctx, {
+    entityType: 'form_template',
+    entityId: args.templateId,
+    action: 'update',
+    summary: 'Updated app overview',
+  })
+  revalidatePath(`/forms/templates/${args.templateId}`)
+  revalidatePath('/forms')
+  return { ok: true }
+}
+
+// Restrict (or open up) which roles may see + fill an App. Empty array ⇒
+// visible to everyone.
+export async function updateAppPermissions(args: {
+  templateId: string
+  allowedRoles: string[]
+}): Promise<{ ok: boolean; error?: string }> {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'forms.template.create')
+  const roles = Array.from(new Set((args.allowedRoles ?? []).map((r) => r.trim()).filter(Boolean)))
+  await ctx.db((tx) =>
+    tx
+      .update(formTemplates)
+      .set({ allowedRoles: roles.length ? roles : null, updatedAt: new Date() })
+      .where(eq(formTemplates.id, args.templateId)),
+  )
+  await recordAudit(ctx, {
+    entityType: 'form_template',
+    entityId: args.templateId,
+    action: 'update',
+    summary: roles.length ? `Restricted to roles: ${roles.join(', ')}` : 'Opened to all roles',
+  })
+  revalidatePath(`/forms/templates/${args.templateId}`)
+  revalidatePath('/forms')
+  return { ok: true }
 }

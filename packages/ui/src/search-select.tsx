@@ -1,0 +1,264 @@
+'use client'
+
+// SearchSelect — a slick, mobile-first searchable select / typeahead.
+//   • Desktop: anchored dropdown with a search box + keyboard nav.
+//   • Mobile (<lg): an iOS/Android-style bottom sheet that slides up, with a
+//     big search field and large tap targets + safe-area padding.
+// Animated (framer-motion), portal'd sheet, Esc + click-out + scroll-lock.
+
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { AnimatePresence, motion } from 'framer-motion'
+import { Check, ChevronDown, Search, X } from 'lucide-react'
+import { cn } from './utils'
+
+export type SelectOption = { value: string; label: string; hint?: string }
+
+export function SearchSelect({
+  value,
+  onChange,
+  options,
+  placeholder = 'Select…',
+  searchPlaceholder = 'Search…',
+  disabled = false,
+  clearable = false,
+  emptyLabel,
+  sheetTitle,
+  ariaLabel,
+  className,
+}: {
+  value: string
+  onChange: (value: string) => void
+  options: SelectOption[]
+  placeholder?: string
+  searchPlaceholder?: string
+  disabled?: boolean
+  /** Adds a first option for the empty value (e.g. "No site"). */
+  clearable?: boolean
+  emptyLabel?: string
+  /** Title shown at the top of the mobile bottom sheet. */
+  sheetTitle?: string
+  ariaLabel?: string
+  className?: string
+}) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const [highlight, setHighlight] = useState(0)
+  const [isDesktop, setIsDesktop] = useState(true)
+  const [mounted, setMounted] = useState(false)
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    setMounted(true)
+    const mq = window.matchMedia('(min-width: 1024px)')
+    const update = () => setIsDesktop(mq.matches)
+    update()
+    mq.addEventListener('change', update)
+    return () => mq.removeEventListener('change', update)
+  }, [])
+
+  const allOptions = useMemo(
+    () => (clearable ? [{ value: '', label: emptyLabel ?? 'None' }, ...options] : options),
+    [clearable, emptyLabel, options],
+  )
+  const selected = options.find((o) => o.value === value)
+  const showEmpty = clearable && value === '' && !!emptyLabel
+  const display = selected?.label ?? (showEmpty ? emptyLabel : placeholder)
+  const isPlaceholder = !selected && !showEmpty
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return allOptions
+    return allOptions.filter((o) => o.label.toLowerCase().includes(q))
+  }, [query, allOptions])
+
+  function openMenu() {
+    if (disabled) return
+    setQuery('')
+    setHighlight(Math.max(0, filtered.findIndex((o) => o.value === value)))
+    setOpen(true)
+    setTimeout(() => searchRef.current?.focus(), 60)
+  }
+  function choose(v: string) {
+    onChange(v)
+    setOpen(false)
+  }
+
+  // Click-outside (desktop).
+  useEffect(() => {
+    if (!open || !isDesktop) return
+    function onDoc(e: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [open, isDesktop])
+
+  // Keyboard nav + scroll-lock on the mobile sheet.
+  useEffect(() => {
+    if (!open) return
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false)
+      else if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setHighlight((h) => Math.min(h + 1, filtered.length - 1))
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setHighlight((h) => Math.max(h - 1, 0))
+      } else if (e.key === 'Enter') {
+        e.preventDefault()
+        const o = filtered[highlight]
+        if (o) choose(o.value)
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    let restore: (() => void) | undefined
+    if (!isDesktop) {
+      const prev = document.body.style.overflow
+      document.body.style.overflow = 'hidden'
+      restore = () => {
+        document.body.style.overflow = prev
+      }
+    }
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      restore?.()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, isDesktop, filtered, highlight])
+
+  const optionList = (
+    <ul role="listbox" className="py-1">
+      {filtered.length === 0 ? (
+        <li className="px-3 py-8 text-center text-sm text-slate-400">No matches</li>
+      ) : null}
+      {filtered.map((o, i) => {
+        const active = o.value === value
+        return (
+          <li key={o.value || '__empty'}>
+            <button
+              type="button"
+              role="option"
+              aria-selected={active}
+              onMouseEnter={() => setHighlight(i)}
+              onClick={() => choose(o.value)}
+              className={cn(
+                'flex h-12 w-full items-center gap-2.5 px-4 text-left text-[15px] transition-colors lg:h-9 lg:px-3 lg:text-sm',
+                i === highlight ? 'bg-teal-50' : 'active:bg-slate-100',
+                active ? 'font-medium text-teal-900' : 'text-slate-700',
+              )}
+            >
+              <span className="min-w-0 flex-1 truncate">
+                {o.label}
+                {o.hint ? <span className="ml-1.5 text-xs text-slate-400">{o.hint}</span> : null}
+              </span>
+              {active ? <Check size={17} className="shrink-0 text-teal-600" /> : null}
+            </button>
+          </li>
+        )
+      })}
+    </ul>
+  )
+
+  const searchBox = (largeText: boolean) => (
+    <div className="relative px-3 pt-3">
+      <Search size={16} className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" />
+      <input
+        ref={searchRef}
+        value={query}
+        onChange={(e) => {
+          setQuery(e.target.value)
+          setHighlight(0)
+        }}
+        placeholder={searchPlaceholder}
+        className={cn(
+          'w-full rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-3 outline-none transition focus:border-teal-500 focus:bg-white focus:ring-2 focus:ring-teal-500/20',
+          largeText ? 'h-11 text-[15px]' : 'h-9 text-sm',
+        )}
+      />
+    </div>
+  )
+
+  return (
+    <div ref={wrapRef} className={cn('relative', className)}>
+      <button
+        type="button"
+        onClick={() => (open ? setOpen(false) : openMenu())}
+        disabled={disabled}
+        aria-label={ariaLabel}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className={cn(
+          'flex h-10 w-full items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-left text-sm shadow-sm transition',
+          'focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/25',
+          disabled && 'cursor-not-allowed bg-slate-50 opacity-70',
+          open && 'border-teal-500 ring-2 ring-teal-500/25',
+        )}
+      >
+        <span className={cn('min-w-0 flex-1 truncate', isPlaceholder ? 'text-slate-400' : 'text-slate-800')}>
+          {display}
+        </span>
+        <ChevronDown
+          size={16}
+          className={cn('shrink-0 text-slate-400 transition-transform', open && 'rotate-180')}
+        />
+      </button>
+
+      {/* Desktop dropdown */}
+      {open && isDesktop ? (
+        <div className="absolute left-0 top-full z-50 mt-1.5 w-full min-w-[12rem] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
+          {searchBox(false)}
+          <div className="mt-1 max-h-64 overflow-y-auto">{optionList}</div>
+        </div>
+      ) : null}
+
+      {/* Mobile bottom sheet */}
+      {mounted && !isDesktop
+        ? createPortal(
+            <AnimatePresence>
+              {open ? (
+                <div className="fixed inset-0 z-[60]">
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]"
+                    onClick={() => setOpen(false)}
+                  />
+                  <motion.div
+                    initial={{ y: '100%' }}
+                    animate={{ y: 0 }}
+                    exit={{ y: '100%' }}
+                    transition={{ type: 'spring', damping: 34, stiffness: 340, mass: 0.8 }}
+                    className="absolute inset-x-0 bottom-0 flex max-h-[82vh] flex-col rounded-t-2xl border-t border-slate-200 bg-white shadow-2xl"
+                  >
+                    <div className="flex items-center justify-center pt-2.5">
+                      <span className="h-1.5 w-10 rounded-full bg-slate-300" />
+                    </div>
+                    <div className="flex items-center justify-between px-4 pb-1 pt-2">
+                      <span className="text-base font-semibold text-slate-900">{sheetTitle ?? 'Select'}</span>
+                      <button
+                        type="button"
+                        onClick={() => setOpen(false)}
+                        aria-label="Close"
+                        className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100"
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
+                    {searchBox(true)}
+                    <div className="mt-1 min-h-0 flex-1 overflow-y-auto pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+                      {optionList}
+                    </div>
+                  </motion.div>
+                </div>
+              ) : null}
+            </AnimatePresence>,
+            document.body,
+          )
+        : null}
+    </div>
+  )
+}

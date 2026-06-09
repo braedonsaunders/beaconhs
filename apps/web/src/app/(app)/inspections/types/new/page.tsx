@@ -15,6 +15,7 @@ import {
 } from '@beaconhs/ui'
 import { inspectionTypes } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { requireModuleManage, assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 import { PageContainer } from '@/components/page-layout'
 
@@ -32,6 +33,7 @@ const CADENCES = [
 async function createType(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'inspections')
   const name = String(formData.get('name') ?? '').trim()
   if (!name) throw new Error('Name is required')
   const description = String(formData.get('description') ?? '').trim() || null
@@ -83,7 +85,7 @@ async function createType(formData: FormData) {
 }
 
 export default async function NewInspectionTypePage() {
-  await requireRequestContext()
+  await requireModuleManage('inspections')
   return (
     <PageContainer>
       <div className="max-w-3xl space-y-6">

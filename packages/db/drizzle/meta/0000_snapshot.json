@@ -1,5 +1,5 @@
 {
-  "id": "b94a7d76-5121-4b4a-ab1d-08b8c56c9b34",
+  "id": "1580906b-76ba-4a59-8f06-7b42490883a1",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -2694,6 +2694,130 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.form_automations": {
+      "name": "form_automations",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "template_id": {
+          "name": "template_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'Flow'"
+        },
+        "enabled": {
+          "name": "enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "graph": {
+          "name": "graph",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "form_automations_template_idx": {
+          "name": "form_automations_template_idx",
+          "columns": [
+            {
+              "expression": "template_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "form_automations_tenant_idx": {
+          "name": "form_automations_tenant_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "form_automations_tenant_id_tenants_id_fk": {
+          "name": "form_automations_tenant_id_tenants_id_fk",
+          "tableFrom": "form_automations",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "form_automations_template_id_form_templates_id_fk": {
+          "name": "form_automations_template_id_form_templates_id_fk",
+          "tableFrom": "form_automations",
+          "tableTo": "form_templates",
+          "columnsFrom": [
+            "template_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.form_response_comments": {
       "name": "form_response_comments",
       "schema": "",
@@ -3804,9 +3928,23 @@
           "notNull": true,
           "default": "'draft'"
         },
+        "kind": {
+          "name": "kind",
+          "type": "form_template_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'form'"
+        },
         "icon_key": {
           "name": "icon_key",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "allowed_roles": {
+          "name": "allowed_roles",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },
@@ -3815,6 +3953,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "email_on_submit": {
+          "name": "email_on_submit",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "created_by": {
           "name": "created_by",
@@ -3927,6 +4072,233 @@
             "id"
           ],
           "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.form_response_participants": {
+      "name": "form_response_participants",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "response_id": {
+          "name": "response_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "template_id": {
+          "name": "template_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "category": {
+          "name": "category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "person_id": {
+          "name": "person_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "signed": {
+          "name": "signed",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "signed_at": {
+          "name": "signed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "occurred_on": {
+          "name": "occurred_on",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "field_id": {
+          "name": "field_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "section_id": {
+          "name": "section_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "form_response_participants_tenant_idx": {
+          "name": "form_response_participants_tenant_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "form_response_participants_person_idx": {
+          "name": "form_response_participants_person_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "person_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "form_response_participants_response_idx": {
+          "name": "form_response_participants_response_idx",
+          "columns": [
+            {
+              "expression": "response_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "form_response_participants_template_idx": {
+          "name": "form_response_participants_template_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "template_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "form_response_participants_tenant_id_tenants_id_fk": {
+          "name": "form_response_participants_tenant_id_tenants_id_fk",
+          "tableFrom": "form_response_participants",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "form_response_participants_response_id_form_responses_id_fk": {
+          "name": "form_response_participants_response_id_form_responses_id_fk",
+          "tableFrom": "form_response_participants",
+          "tableTo": "form_responses",
+          "columnsFrom": [
+            "response_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "form_response_participants_template_id_form_templates_id_fk": {
+          "name": "form_response_participants_template_id_form_templates_id_fk",
+          "tableFrom": "form_response_participants",
+          "tableTo": "form_templates",
+          "columnsFrom": [
+            "template_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "form_response_participants_person_id_people_id_fk": {
+          "name": "form_response_participants_person_id_people_id_fk",
+          "tableFrom": "form_response_participants",
+          "tableTo": "people",
+          "columnsFrom": [
+            "person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
@@ -11429,6 +11801,347 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.document_comments": {
+      "name": "document_comments",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "document_id": {
+          "name": "document_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "anchor_id": {
+          "name": "anchor_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "quoted_text": {
+          "name": "quoted_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "body": {
+          "name": "body",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "author_tenant_user_id": {
+          "name": "author_tenant_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "thread_id": {
+          "name": "thread_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "resolved_at": {
+          "name": "resolved_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "resolved_by_tenant_user_id": {
+          "name": "resolved_by_tenant_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "document_comments_doc_idx": {
+          "name": "document_comments_doc_idx",
+          "columns": [
+            {
+              "expression": "document_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "document_comments_thread_idx": {
+          "name": "document_comments_thread_idx",
+          "columns": [
+            {
+              "expression": "thread_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "document_comments_tenant_idx": {
+          "name": "document_comments_tenant_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "document_comments_tenant_id_tenants_id_fk": {
+          "name": "document_comments_tenant_id_tenants_id_fk",
+          "tableFrom": "document_comments",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "document_comments_document_id_documents_id_fk": {
+          "name": "document_comments_document_id_documents_id_fk",
+          "tableFrom": "document_comments",
+          "tableTo": "documents",
+          "columnsFrom": [
+            "document_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "document_comments_author_tenant_user_id_tenant_users_id_fk": {
+          "name": "document_comments_author_tenant_user_id_tenant_users_id_fk",
+          "tableFrom": "document_comments",
+          "tableTo": "tenant_users",
+          "columnsFrom": [
+            "author_tenant_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "document_comments_resolved_by_tenant_user_id_tenant_users_id_fk": {
+          "name": "document_comments_resolved_by_tenant_user_id_tenant_users_id_fk",
+          "tableFrom": "document_comments",
+          "tableTo": "tenant_users",
+          "columnsFrom": [
+            "resolved_by_tenant_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.document_drafts": {
+      "name": "document_drafts",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "document_id": {
+          "name": "document_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content_json": {
+          "name": "content_json",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "content_html": {
+          "name": "content_html",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "base_version_id": {
+          "name": "base_version_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "updated_by_tenant_user_id": {
+          "name": "updated_by_tenant_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "document_drafts_document_ux": {
+          "name": "document_drafts_document_ux",
+          "columns": [
+            {
+              "expression": "document_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "document_drafts_tenant_idx": {
+          "name": "document_drafts_tenant_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "document_drafts_tenant_id_tenants_id_fk": {
+          "name": "document_drafts_tenant_id_tenants_id_fk",
+          "tableFrom": "document_drafts",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "document_drafts_document_id_documents_id_fk": {
+          "name": "document_drafts_document_id_documents_id_fk",
+          "tableFrom": "document_drafts",
+          "tableTo": "documents",
+          "columnsFrom": [
+            "document_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "document_drafts_base_version_id_document_versions_id_fk": {
+          "name": "document_drafts_base_version_id_document_versions_id_fk",
+          "tableFrom": "document_drafts",
+          "tableTo": "document_versions",
+          "columnsFrom": [
+            "base_version_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "document_drafts_updated_by_tenant_user_id_tenant_users_id_fk": {
+          "name": "document_drafts_updated_by_tenant_user_id_tenant_users_id_fk",
+          "tableFrom": "document_drafts",
+          "tableTo": "tenant_users",
+          "columnsFrom": [
+            "updated_by_tenant_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.document_reviews": {
       "name": "document_reviews",
       "schema": "",
@@ -11625,6 +12338,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "content_json": {
+          "name": "content_json",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
         "published_at": {
           "name": "published_at",
           "type": "timestamp with time zone",
@@ -11784,6 +12503,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "type_id": {
+          "name": "type_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "status": {
           "name": "status",
           "type": "document_status",
@@ -11837,6 +12562,25 @@
           "primaryKey": false,
           "notNull": true,
           "default": true
+        },
+        "page_size": {
+          "name": "page_size",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'Letter'"
+        },
+        "header_text": {
+          "name": "header_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "footer_text": {
+          "name": "footer_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",
@@ -11951,6 +12695,19 @@
             "id"
           ],
           "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "documents_type_id_document_types_id_fk": {
+          "name": "documents_type_id_document_types_id_fk",
+          "tableFrom": "documents",
+          "tableTo": "document_types",
+          "columnsFrom": [
+            "type_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
           "onUpdate": "no action"
         },
         "documents_owner_tenant_user_id_tenant_users_id_fk": {
@@ -20653,6 +21410,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "type_id": {
+          "name": "type_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "kind": {
           "name": "kind",
           "type": "document_reference_kind",
@@ -20743,6 +21506,19 @@
             "id"
           ],
           "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "document_references_type_id_document_reference_types_id_fk": {
+          "name": "document_references_type_id_document_reference_types_id_fk",
+          "tableFrom": "document_references",
+          "tableTo": "document_reference_types",
+          "columnsFrom": [
+            "type_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
           "onUpdate": "no action"
         }
       },
@@ -25072,8 +25848,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.toolbox_journal_assignment_dispatches": {
-      "name": "toolbox_journal_assignment_dispatches",
+    "public.journal_assignment_dispatches": {
+      "name": "journal_assignment_dispatches",
       "schema": "",
       "columns": {
         "id": {
@@ -25130,8 +25906,8 @@
         }
       },
       "indexes": {
-        "toolbox_journal_assignment_dispatches_tenant_idx": {
-          "name": "toolbox_journal_assignment_dispatches_tenant_idx",
+        "journal_assignment_dispatches_tenant_idx": {
+          "name": "journal_assignment_dispatches_tenant_idx",
           "columns": [
             {
               "expression": "tenant_id",
@@ -25145,8 +25921,8 @@
           "method": "btree",
           "with": {}
         },
-        "toolbox_journal_assignment_dispatches_assignment_idx": {
-          "name": "toolbox_journal_assignment_dispatches_assignment_idx",
+        "journal_assignment_dispatches_assignment_idx": {
+          "name": "journal_assignment_dispatches_assignment_idx",
           "columns": [
             {
               "expression": "assignment_id",
@@ -25160,8 +25936,8 @@
           "method": "btree",
           "with": {}
         },
-        "toolbox_journal_assignment_dispatches_occurred_idx": {
-          "name": "toolbox_journal_assignment_dispatches_occurred_idx",
+        "journal_assignment_dispatches_occurred_idx": {
+          "name": "journal_assignment_dispatches_occurred_idx",
           "columns": [
             {
               "expression": "tenant_id",
@@ -25183,9 +25959,9 @@
         }
       },
       "foreignKeys": {
-        "toolbox_journal_assignment_dispatches_tenant_id_tenants_id_fk": {
-          "name": "toolbox_journal_assignment_dispatches_tenant_id_tenants_id_fk",
-          "tableFrom": "toolbox_journal_assignment_dispatches",
+        "journal_assignment_dispatches_tenant_id_tenants_id_fk": {
+          "name": "journal_assignment_dispatches_tenant_id_tenants_id_fk",
+          "tableFrom": "journal_assignment_dispatches",
           "tableTo": "tenants",
           "columnsFrom": [
             "tenant_id"
@@ -25196,10 +25972,10 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "toolbox_journal_assignment_dispatches_assignment_id_toolbox_journal_assignments_id_fk": {
-          "name": "toolbox_journal_assignment_dispatches_assignment_id_toolbox_journal_assignments_id_fk",
-          "tableFrom": "toolbox_journal_assignment_dispatches",
-          "tableTo": "toolbox_journal_assignments",
+        "journal_assignment_dispatches_assignment_id_journal_assignments_id_fk": {
+          "name": "journal_assignment_dispatches_assignment_id_journal_assignments_id_fk",
+          "tableFrom": "journal_assignment_dispatches",
+          "tableTo": "journal_assignments",
           "columnsFrom": [
             "assignment_id"
           ],
@@ -25216,8 +25992,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.toolbox_journal_assignments": {
-      "name": "toolbox_journal_assignments",
+    "public.journal_assignments": {
+      "name": "journal_assignments",
       "schema": "",
       "columns": {
         "id": {
@@ -25252,11 +26028,20 @@
           "notNull": true,
           "default": "'{}'::jsonb"
         },
-        "cron": {
-          "name": "cron",
-          "type": "text",
+        "frequency": {
+          "name": "frequency",
+          "type": "journal_assignment_frequency",
+          "typeSchema": "public",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "default": "'week'"
+        },
+        "quantity": {
+          "name": "quantity",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
         },
         "due_offset_days": {
           "name": "due_offset_days",
@@ -25277,7 +26062,20 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "default": 80
+          "default": 100
+        },
+        "send_to_additional": {
+          "name": "send_to_additional",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "cron": {
+          "name": "cron",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_by_tenant_user_id": {
           "name": "created_by_tenant_user_id",
@@ -25307,8 +26105,8 @@
         }
       },
       "indexes": {
-        "toolbox_journal_assignments_tenant_idx": {
-          "name": "toolbox_journal_assignments_tenant_idx",
+        "journal_assignments_tenant_idx": {
+          "name": "journal_assignments_tenant_idx",
           "columns": [
             {
               "expression": "tenant_id",
@@ -25322,8 +26120,8 @@
           "method": "btree",
           "with": {}
         },
-        "toolbox_journal_assignments_active_idx": {
-          "name": "toolbox_journal_assignments_active_idx",
+        "journal_assignments_active_idx": {
+          "name": "journal_assignments_active_idx",
           "columns": [
             {
               "expression": "tenant_id",
@@ -25345,9 +26143,9 @@
         }
       },
       "foreignKeys": {
-        "toolbox_journal_assignments_tenant_id_tenants_id_fk": {
-          "name": "toolbox_journal_assignments_tenant_id_tenants_id_fk",
-          "tableFrom": "toolbox_journal_assignments",
+        "journal_assignments_tenant_id_tenants_id_fk": {
+          "name": "journal_assignments_tenant_id_tenants_id_fk",
+          "tableFrom": "journal_assignments",
           "tableTo": "tenants",
           "columnsFrom": [
             "tenant_id"
@@ -25358,9 +26156,9 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "toolbox_journal_assignments_created_by_tenant_user_id_tenant_users_id_fk": {
-          "name": "toolbox_journal_assignments_created_by_tenant_user_id_tenant_users_id_fk",
-          "tableFrom": "toolbox_journal_assignments",
+        "journal_assignments_created_by_tenant_user_id_tenant_users_id_fk": {
+          "name": "journal_assignments_created_by_tenant_user_id_tenant_users_id_fk",
+          "tableFrom": "journal_assignments",
           "tableTo": "tenant_users",
           "columnsFrom": [
             "created_by_tenant_user_id"
@@ -25378,301 +26176,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.toolbox_journal_attendees": {
-      "name": "toolbox_journal_attendees",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "journal_id": {
-          "name": "journal_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "person_id": {
-          "name": "person_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "signature_data_url": {
-          "name": "signature_data_url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "signed_at": {
-          "name": "signed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "toolbox_journal_attendees_tenant_idx": {
-          "name": "toolbox_journal_attendees_tenant_idx",
-          "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "toolbox_journal_attendees_journal_idx": {
-          "name": "toolbox_journal_attendees_journal_idx",
-          "columns": [
-            {
-              "expression": "journal_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "toolbox_journal_attendees_person_idx": {
-          "name": "toolbox_journal_attendees_person_idx",
-          "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "person_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "toolbox_journal_attendees_journal_person_ux": {
-          "name": "toolbox_journal_attendees_journal_person_ux",
-          "columns": [
-            {
-              "expression": "journal_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "person_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "toolbox_journal_attendees_tenant_id_tenants_id_fk": {
-          "name": "toolbox_journal_attendees_tenant_id_tenants_id_fk",
-          "tableFrom": "toolbox_journal_attendees",
-          "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "toolbox_journal_attendees_journal_id_toolbox_journals_id_fk": {
-          "name": "toolbox_journal_attendees_journal_id_toolbox_journals_id_fk",
-          "tableFrom": "toolbox_journal_attendees",
-          "tableTo": "toolbox_journals",
-          "columnsFrom": [
-            "journal_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "toolbox_journal_attendees_person_id_people_id_fk": {
-          "name": "toolbox_journal_attendees_person_id_people_id_fk",
-          "tableFrom": "toolbox_journal_attendees",
-          "tableTo": "people",
-          "columnsFrom": [
-            "person_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.toolbox_journal_photos": {
-      "name": "toolbox_journal_photos",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "journal_id": {
-          "name": "journal_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "attachment_id": {
-          "name": "attachment_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "caption": {
-          "name": "caption",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "toolbox_journal_photos_tenant_idx": {
-          "name": "toolbox_journal_photos_tenant_idx",
-          "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "toolbox_journal_photos_journal_idx": {
-          "name": "toolbox_journal_photos_journal_idx",
-          "columns": [
-            {
-              "expression": "journal_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "toolbox_journal_photos_tenant_id_tenants_id_fk": {
-          "name": "toolbox_journal_photos_tenant_id_tenants_id_fk",
-          "tableFrom": "toolbox_journal_photos",
-          "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "toolbox_journal_photos_journal_id_toolbox_journals_id_fk": {
-          "name": "toolbox_journal_photos_journal_id_toolbox_journals_id_fk",
-          "tableFrom": "toolbox_journal_photos",
-          "tableTo": "toolbox_journals",
-          "columnsFrom": [
-            "journal_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.toolbox_journals": {
-      "name": "toolbox_journals",
+    "public.journal_entries": {
+      "name": "journal_entries",
       "schema": "",
       "columns": {
         "id": {
@@ -25694,20 +26199,26 @@
           "primaryKey": false,
           "notNull": true
         },
-        "title": {
-          "name": "title",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "topic": {
-          "name": "topic",
-          "type": "text",
+        "person_id": {
+          "name": "person_id",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
-        "occurred_on": {
-          "name": "occurred_on",
+        "supervisor_person_id": {
+          "name": "supervisor_person_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_by_tenant_user_id": {
+          "name": "created_by_tenant_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "entry_date": {
+          "name": "entry_date",
           "type": "date",
           "primaryKey": false,
           "notNull": true
@@ -25718,50 +26229,71 @@
           "primaryKey": false,
           "notNull": false
         },
-        "foreman_tenant_user_id": {
-          "name": "foreman_tenant_user_id",
-          "type": "uuid",
+        "definition": {
+          "name": "definition",
+          "type": "journal_definition",
+          "typeSchema": "public",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true,
+          "default": "'worker'"
         },
-        "discussion_notes": {
-          "name": "discussion_notes",
+        "title": {
+          "name": "title",
           "type": "text",
           "primaryKey": false,
           "notNull": false
         },
-        "questions_raised": {
-          "name": "questions_raised",
+        "body_html": {
+          "name": "body_html",
           "type": "text",
           "primaryKey": false,
           "notNull": false
         },
-        "action_items": {
-          "name": "action_items",
+        "body_text": {
+          "name": "body_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "summary": {
+          "name": "summary",
           "type": "text",
           "primaryKey": false,
           "notNull": false
         },
         "status": {
           "name": "status",
-          "type": "toolbox_journal_status",
+          "type": "journal_entry_status",
           "typeSchema": "public",
           "primaryKey": false,
           "notNull": true,
           "default": "'draft'"
         },
-        "locked": {
-          "name": "locked",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "locked_at": {
-          "name": "locked_at",
-          "type": "timestamp with time zone",
+        "weather": {
+          "name": "weather",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
+        },
+        "geo": {
+          "name": "geo",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tags_cache": {
+          "name": "tags_cache",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "ai_meta": {
+          "name": "ai_meta",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
         },
         "metadata": {
           "name": "metadata",
@@ -25769,6 +26301,28 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'{}'::jsonb"
+        },
+        "search_vector": {
+          "name": "search_vector",
+          "type": "tsvector",
+          "primaryKey": false,
+          "notNull": false,
+          "generated": {
+            "as": "to_tsvector('english', coalesce(title, '') || ' ' || coalesce(body_text, '') || ' ' || coalesce(summary, ''))",
+            "type": "stored"
+          }
+        },
+        "submitted_at": {
+          "name": "submitted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "locked_at": {
+          "name": "locked_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",
@@ -25792,8 +26346,8 @@
         }
       },
       "indexes": {
-        "toolbox_journals_tenant_idx": {
-          "name": "toolbox_journals_tenant_idx",
+        "journal_entries_tenant_idx": {
+          "name": "journal_entries_tenant_idx",
           "columns": [
             {
               "expression": "tenant_id",
@@ -25807,8 +26361,8 @@
           "method": "btree",
           "with": {}
         },
-        "toolbox_journals_tenant_ref_ux": {
-          "name": "toolbox_journals_tenant_ref_ux",
+        "journal_entries_tenant_ref_ux": {
+          "name": "journal_entries_tenant_ref_ux",
           "columns": [
             {
               "expression": "tenant_id",
@@ -25828,8 +26382,8 @@
           "method": "btree",
           "with": {}
         },
-        "toolbox_journals_status_idx": {
-          "name": "toolbox_journals_status_idx",
+        "journal_entries_date_idx": {
+          "name": "journal_entries_date_idx",
           "columns": [
             {
               "expression": "tenant_id",
@@ -25838,7 +26392,7 @@
               "nulls": "last"
             },
             {
-              "expression": "status",
+              "expression": "entry_date",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -25849,8 +26403,8 @@
           "method": "btree",
           "with": {}
         },
-        "toolbox_journals_occurred_idx": {
-          "name": "toolbox_journals_occurred_idx",
+        "journal_entries_person_date_idx": {
+          "name": "journal_entries_person_date_idx",
           "columns": [
             {
               "expression": "tenant_id",
@@ -25859,7 +26413,13 @@
               "nulls": "last"
             },
             {
-              "expression": "occurred_on",
+              "expression": "person_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "entry_date",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -25870,8 +26430,8 @@
           "method": "btree",
           "with": {}
         },
-        "toolbox_journals_site_idx": {
-          "name": "toolbox_journals_site_idx",
+        "journal_entries_site_idx": {
+          "name": "journal_entries_site_idx",
           "columns": [
             {
               "expression": "tenant_id",
@@ -25891,8 +26451,8 @@
           "method": "btree",
           "with": {}
         },
-        "toolbox_journals_foreman_idx": {
-          "name": "toolbox_journals_foreman_idx",
+        "journal_entries_status_idx": {
+          "name": "journal_entries_status_idx",
           "columns": [
             {
               "expression": "tenant_id",
@@ -25901,7 +26461,184 @@
               "nulls": "last"
             },
             {
-              "expression": "foreman_tenant_user_id",
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "journal_entries_search_idx": {
+          "name": "journal_entries_search_idx",
+          "columns": [
+            {
+              "expression": "search_vector",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "journal_entries_tenant_id_tenants_id_fk": {
+          "name": "journal_entries_tenant_id_tenants_id_fk",
+          "tableFrom": "journal_entries",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "journal_entries_person_id_people_id_fk": {
+          "name": "journal_entries_person_id_people_id_fk",
+          "tableFrom": "journal_entries",
+          "tableTo": "people",
+          "columnsFrom": [
+            "person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "journal_entries_supervisor_person_id_people_id_fk": {
+          "name": "journal_entries_supervisor_person_id_people_id_fk",
+          "tableFrom": "journal_entries",
+          "tableTo": "people",
+          "columnsFrom": [
+            "supervisor_person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "journal_entries_created_by_tenant_user_id_tenant_users_id_fk": {
+          "name": "journal_entries_created_by_tenant_user_id_tenant_users_id_fk",
+          "tableFrom": "journal_entries",
+          "tableTo": "tenant_users",
+          "columnsFrom": [
+            "created_by_tenant_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "journal_entries_site_org_unit_id_org_units_id_fk": {
+          "name": "journal_entries_site_org_unit_id_org_units_id_fk",
+          "tableFrom": "journal_entries",
+          "tableTo": "org_units",
+          "columnsFrom": [
+            "site_org_unit_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.journal_entry_photos": {
+      "name": "journal_entry_photos",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "entry_id": {
+          "name": "entry_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "attachment_id": {
+          "name": "attachment_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "caption": {
+          "name": "caption",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "journal_entry_photos_tenant_idx": {
+          "name": "journal_entry_photos_tenant_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "journal_entry_photos_entry_idx": {
+          "name": "journal_entry_photos_entry_idx",
+          "columns": [
+            {
+              "expression": "entry_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -25914,9 +26651,9 @@
         }
       },
       "foreignKeys": {
-        "toolbox_journals_tenant_id_tenants_id_fk": {
-          "name": "toolbox_journals_tenant_id_tenants_id_fk",
-          "tableFrom": "toolbox_journals",
+        "journal_entry_photos_tenant_id_tenants_id_fk": {
+          "name": "journal_entry_photos_tenant_id_tenants_id_fk",
+          "tableFrom": "journal_entry_photos",
           "tableTo": "tenants",
           "columnsFrom": [
             "tenant_id"
@@ -25927,25 +26664,285 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "toolbox_journals_site_org_unit_id_org_units_id_fk": {
-          "name": "toolbox_journals_site_org_unit_id_org_units_id_fk",
-          "tableFrom": "toolbox_journals",
-          "tableTo": "org_units",
+        "journal_entry_photos_entry_id_journal_entries_id_fk": {
+          "name": "journal_entry_photos_entry_id_journal_entries_id_fk",
+          "tableFrom": "journal_entry_photos",
+          "tableTo": "journal_entries",
           "columnsFrom": [
-            "site_org_unit_id"
+            "entry_id"
           ],
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.journal_entry_tags": {
+      "name": "journal_entry_tags",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "entry_id": {
+          "name": "entry_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tag": {
+          "name": "tag",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source": {
+          "name": "source",
+          "type": "journal_tag_source",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'ai'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "journal_entry_tags_tenant_tag_idx": {
+          "name": "journal_entry_tags_tenant_tag_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "tag",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "journal_entry_tags_entry_idx": {
+          "name": "journal_entry_tags_entry_idx",
+          "columns": [
+            {
+              "expression": "entry_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "journal_entry_tags_entry_tag_ux": {
+          "name": "journal_entry_tags_entry_tag_ux",
+          "columns": [
+            {
+              "expression": "entry_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "tag",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "journal_entry_tags_tenant_id_tenants_id_fk": {
+          "name": "journal_entry_tags_tenant_id_tenants_id_fk",
+          "tableFrom": "journal_entry_tags",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "toolbox_journals_foreman_tenant_user_id_tenant_users_id_fk": {
-          "name": "toolbox_journals_foreman_tenant_user_id_tenant_users_id_fk",
-          "tableFrom": "toolbox_journals",
+        "journal_entry_tags_entry_id_journal_entries_id_fk": {
+          "name": "journal_entry_tags_entry_id_journal_entries_id_fk",
+          "tableFrom": "journal_entry_tags",
+          "tableTo": "journal_entries",
+          "columnsFrom": [
+            "entry_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.journal_tags": {
+      "name": "journal_tags",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "color": {
+          "name": "color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_by_tenant_user_id": {
+          "name": "created_by_tenant_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "journal_tags_tenant_idx": {
+          "name": "journal_tags_tenant_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "journal_tags_tenant_name_ux": {
+          "name": "journal_tags_tenant_name_ux",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "name",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "journal_tags_tenant_id_tenants_id_fk": {
+          "name": "journal_tags_tenant_id_tenants_id_fk",
+          "tableFrom": "journal_tags",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "journal_tags_created_by_tenant_user_id_tenant_users_id_fk": {
+          "name": "journal_tags_created_by_tenant_user_id_tenant_users_id_fk",
+          "tableFrom": "journal_tags",
           "tableTo": "tenant_users",
           "columnsFrom": [
-            "foreman_tenant_user_id"
+            "created_by_tenant_user_id"
           ],
           "columnsTo": [
             "id"
@@ -28081,6 +29078,1013 @@
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
+    },
+    "public.tenant_nav_config": {
+      "name": "tenant_nav_config",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "config": {
+          "name": "config",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "tenant_nav_config_tenant_ux": {
+          "name": "tenant_nav_config_tenant_ux",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "tenant_nav_config_tenant_idx": {
+          "name": "tenant_nav_config_tenant_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "tenant_nav_config_tenant_id_tenants_id_fk": {
+          "name": "tenant_nav_config_tenant_id_tenants_id_fk",
+          "tableFrom": "tenant_nav_config",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.insight_dashboards": {
+      "name": "insight_dashboards",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "layout": {
+          "name": "layout",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{\"widgets\":[]}'::jsonb"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "insight_dashboards_tenant_user_idx": {
+          "name": "insight_dashboards_tenant_user_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "insight_dashboards_tenant_id_tenants_id_fk": {
+          "name": "insight_dashboards_tenant_id_tenants_id_fk",
+          "tableFrom": "insight_dashboards",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "insight_dashboards_user_id_user_id_fk": {
+          "name": "insight_dashboards_user_id_user_id_fk",
+          "tableFrom": "insight_dashboards",
+          "tableTo": "user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.compliance_audience": {
+      "name": "compliance_audience",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "obligation_id": {
+          "name": "obligation_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "compliance_audience_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "entity_key": {
+          "name": "entity_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "compliance_audience_tenant_idx": {
+          "name": "compliance_audience_tenant_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "compliance_audience_obligation_idx": {
+          "name": "compliance_audience_obligation_idx",
+          "columns": [
+            {
+              "expression": "obligation_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "compliance_audience_unique_ux": {
+          "name": "compliance_audience_unique_ux",
+          "columns": [
+            {
+              "expression": "obligation_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "kind",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "entity_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "compliance_audience_tenant_id_tenants_id_fk": {
+          "name": "compliance_audience_tenant_id_tenants_id_fk",
+          "tableFrom": "compliance_audience",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "compliance_audience_obligation_id_compliance_obligations_id_fk": {
+          "name": "compliance_audience_obligation_id_compliance_obligations_id_fk",
+          "tableFrom": "compliance_audience",
+          "tableTo": "compliance_obligations",
+          "columnsFrom": [
+            "obligation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.compliance_dispatches": {
+      "name": "compliance_dispatches",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "obligation_id": {
+          "name": "obligation_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "due_on": {
+          "name": "due_on",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "period_start": {
+          "name": "period_start",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "period_end": {
+          "name": "period_end",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "compliance_dispatch_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'scheduled'"
+        },
+        "audience_snapshot": {
+          "name": "audience_snapshot",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "error": {
+          "name": "error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "compliance_dispatches_tenant_idx": {
+          "name": "compliance_dispatches_tenant_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "compliance_dispatches_obligation_idx": {
+          "name": "compliance_dispatches_obligation_idx",
+          "columns": [
+            {
+              "expression": "obligation_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "occurred_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "compliance_dispatches_tenant_id_tenants_id_fk": {
+          "name": "compliance_dispatches_tenant_id_tenants_id_fk",
+          "tableFrom": "compliance_dispatches",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "compliance_dispatches_obligation_id_compliance_obligations_id_fk": {
+          "name": "compliance_dispatches_obligation_id_compliance_obligations_id_fk",
+          "tableFrom": "compliance_dispatches",
+          "tableTo": "compliance_obligations",
+          "columnsFrom": [
+            "obligation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.compliance_obligations": {
+      "name": "compliance_obligations",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_module": {
+          "name": "source_module",
+          "type": "compliance_source_module",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "subject_kind": {
+          "name": "subject_kind",
+          "type": "compliance_subject_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "compliance_obligation_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "target_ref": {
+          "name": "target_ref",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "recurrence": {
+          "name": "recurrence",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "recurrence_kind": {
+          "name": "recurrence_kind",
+          "type": "compliance_recurrence_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_scanned_at": {
+          "name": "last_scanned_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "next_due_at": {
+          "name": "next_due_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "legacy_table": {
+          "name": "legacy_table",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "legacy_id": {
+          "name": "legacy_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_by_tenant_user_id": {
+          "name": "created_by_tenant_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "compliance_obligations_tenant_idx": {
+          "name": "compliance_obligations_tenant_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "compliance_obligations_module_idx": {
+          "name": "compliance_obligations_module_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "source_module",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "compliance_obligations_scan_idx": {
+          "name": "compliance_obligations_scan_idx",
+          "columns": [
+            {
+              "expression": "recurrence_kind",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "compliance_obligations_legacy_ux": {
+          "name": "compliance_obligations_legacy_ux",
+          "columns": [
+            {
+              "expression": "legacy_table",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "legacy_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "compliance_obligations_tenant_id_tenants_id_fk": {
+          "name": "compliance_obligations_tenant_id_tenants_id_fk",
+          "tableFrom": "compliance_obligations",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "compliance_obligations_created_by_tenant_user_id_tenant_users_id_fk": {
+          "name": "compliance_obligations_created_by_tenant_user_id_tenant_users_id_fk",
+          "tableFrom": "compliance_obligations",
+          "tableTo": "tenant_users",
+          "columnsFrom": [
+            "created_by_tenant_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.compliance_status": {
+      "name": "compliance_status",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "obligation_id": {
+          "name": "obligation_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "person_id": {
+          "name": "person_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "subject_ref": {
+          "name": "subject_ref",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "subject_key": {
+          "name": "subject_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "period_start": {
+          "name": "period_start",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "period_end": {
+          "name": "period_end",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "due_on": {
+          "name": "due_on",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "compliance_status_value",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "completed_on": {
+          "name": "completed_on",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "count": {
+          "name": "count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "expected": {
+          "name": "expected",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "percent": {
+          "name": "percent",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "source_ref": {
+          "name": "source_ref",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "computed_at": {
+          "name": "computed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "compliance_status_tenant_idx": {
+          "name": "compliance_status_tenant_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "compliance_status_obligation_idx": {
+          "name": "compliance_status_obligation_idx",
+          "columns": [
+            {
+              "expression": "obligation_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "compliance_status_person_idx": {
+          "name": "compliance_status_person_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "person_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "compliance_status_status_idx": {
+          "name": "compliance_status_status_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "compliance_status_unique_ux": {
+          "name": "compliance_status_unique_ux",
+          "columns": [
+            {
+              "expression": "obligation_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "subject_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "compliance_status_tenant_id_tenants_id_fk": {
+          "name": "compliance_status_tenant_id_tenants_id_fk",
+          "tableFrom": "compliance_status",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "compliance_status_obligation_id_compliance_obligations_id_fk": {
+          "name": "compliance_status_obligation_id_compliance_obligations_id_fk",
+          "tableFrom": "compliance_status",
+          "tableTo": "compliance_obligations",
+          "columnsFrom": [
+            "obligation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "compliance_status_person_id_people_id_fk": {
+          "name": "compliance_status_person_id_people_id_fk",
+          "tableFrom": "compliance_status",
+          "tableTo": "people",
+          "columnsFrom": [
+            "person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
     }
   },
   "enums": {
@@ -28163,6 +30167,17 @@
         "closed",
         "rejected",
         "non_compliant"
+      ]
+    },
+    "public.form_template_kind": {
+      "name": "form_template_kind",
+      "schema": "public",
+      "values": [
+        "form",
+        "wizard",
+        "checklist",
+        "register",
+        "mini_app"
       ]
     },
     "public.form_template_status": {
@@ -28795,13 +30810,40 @@
         "failed"
       ]
     },
-    "public.toolbox_journal_status": {
-      "name": "toolbox_journal_status",
+    "public.journal_assignment_frequency": {
+      "name": "journal_assignment_frequency",
+      "schema": "public",
+      "values": [
+        "day",
+        "week",
+        "month",
+        "quarter",
+        "year"
+      ]
+    },
+    "public.journal_definition": {
+      "name": "journal_definition",
+      "schema": "public",
+      "values": [
+        "worker",
+        "supervisor"
+      ]
+    },
+    "public.journal_entry_status": {
+      "name": "journal_entry_status",
       "schema": "public",
       "values": [
         "draft",
         "submitted",
-        "closed"
+        "archived"
+      ]
+    },
+    "public.journal_tag_source": {
+      "name": "journal_tag_source",
+      "schema": "public",
+      "values": [
+        "ai",
+        "user"
       ]
     },
     "public.safe_distance_type": {
@@ -28824,6 +30866,88 @@
         "failed",
         "bounced",
         "opened"
+      ]
+    },
+    "public.compliance_audience_kind": {
+      "name": "compliance_audience_kind",
+      "schema": "public",
+      "values": [
+        "everyone",
+        "person",
+        "role",
+        "trade",
+        "department",
+        "org_unit"
+      ]
+    },
+    "public.compliance_dispatch_status": {
+      "name": "compliance_dispatch_status",
+      "schema": "public",
+      "values": [
+        "scheduled",
+        "skipped",
+        "failed"
+      ]
+    },
+    "public.compliance_obligation_status": {
+      "name": "compliance_obligation_status",
+      "schema": "public",
+      "values": [
+        "active",
+        "paused",
+        "archived"
+      ]
+    },
+    "public.compliance_recurrence_kind": {
+      "name": "compliance_recurrence_kind",
+      "schema": "public",
+      "values": [
+        "one_time",
+        "frequency",
+        "cron",
+        "expiry",
+        "event"
+      ]
+    },
+    "public.compliance_source_module": {
+      "name": "compliance_source_module",
+      "schema": "public",
+      "values": [
+        "inspection",
+        "document",
+        "training",
+        "form",
+        "journal",
+        "cert_requirement",
+        "equipment_inspection",
+        "ppe_inspection",
+        "job_title_signoff",
+        "corrective_action",
+        "permit",
+        "lone_worker",
+        "custom"
+      ]
+    },
+    "public.compliance_status_value": {
+      "name": "compliance_status_value",
+      "schema": "public",
+      "values": [
+        "pending",
+        "in_progress",
+        "completed",
+        "overdue",
+        "expiring",
+        "waived",
+        "not_applicable"
+      ]
+    },
+    "public.compliance_subject_kind": {
+      "name": "compliance_subject_kind",
+      "schema": "public",
+      "values": [
+        "per_person",
+        "per_record",
+        "per_task"
       ]
     }
   },

@@ -11,7 +11,6 @@ import {
   incidents,
   people,
   safeDistanceRecords,
-  toolboxJournals,
 } from '@beaconhs/db/schema'
 
 export type Finding = {
@@ -175,38 +174,6 @@ export async function runAnalyzer(ctx: RequestContext): Promise<Finding[]> {
       samples: incidentMissing.slice(0, 10).map((i) => ({
         id: i.id,
         label: `${i.reference ?? '(no-ref)'} — ${i.title ?? '(no title)'}`,
-      })),
-    })
-
-    // ---- Toolbox journals with no foreman/site ----
-    const tbxOrphans = await tx
-      .select({
-        id: toolboxJournals.id,
-        reference: toolboxJournals.reference,
-        title: toolboxJournals.title,
-      })
-      .from(toolboxJournals)
-      .where(
-        and(
-          isNull(toolboxJournals.deletedAt),
-          or(
-            isNull(toolboxJournals.foremanTenantUserId),
-            isNull(toolboxJournals.siteOrgUnitId),
-          ) as SQL<unknown>,
-        ),
-      )
-      .limit(2000)
-    findings.push({
-      key: 'toolbox-orphans',
-      title: 'Toolbox journals missing foreman or site',
-      description:
-        'Compliance rollups group by foreman and site. Journals without either drop out of those breakdowns.',
-      severity: 'low',
-      count: tbxOrphans.length,
-      sampleHref: '/toolbox',
-      samples: tbxOrphans.slice(0, 10).map((t) => ({
-        id: t.id,
-        label: `${t.reference} — ${t.title}`,
       })),
     })
 

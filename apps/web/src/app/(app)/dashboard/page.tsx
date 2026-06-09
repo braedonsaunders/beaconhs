@@ -38,7 +38,7 @@ export default async function DashboardPage() {
   const nodes: Record<string, React.ReactNode> = {}
   for (const w of layout.widgets) {
     if (!(w.id in WIDGETS)) continue
-    nodes[w.id] = <WidgetCard widgetId={w.id} data={data} todayIso={todayIso} />
+    nodes[w.id] = <WidgetCard key={w.id} widgetId={w.id} data={data} todayIso={todayIso} />
   }
 
   const greeting = buildGreeting(today, ctx.membership?.displayName ?? null)

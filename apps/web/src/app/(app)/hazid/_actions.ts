@@ -32,6 +32,7 @@ import {
   hazidTasks,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 
 // All HazID server actions assume a tenant is active. requireRequestContext
@@ -1633,6 +1634,7 @@ function escapeHtml(s: string | null | undefined): string {
 
 export async function createHazardType(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCanManageModule(ctx, 'hazid')
   const name = String(formData.get('name') ?? '').trim()
   if (!name) throw new Error('Name is required')
   const color = String(formData.get('color') ?? '#64748b').trim() || '#64748b'
@@ -1655,6 +1657,7 @@ export async function createHazardType(formData: FormData) {
 
 export async function updateHazardType(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCanManageModule(ctx, 'hazid')
   const id = String(formData.get('id') ?? '')
   const updates = {
     name: String(formData.get('name') ?? '').trim() || undefined,
@@ -1674,6 +1677,7 @@ export async function updateHazardType(formData: FormData) {
 
 export async function deleteHazardType(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCanManageModule(ctx, 'hazid')
   const id = String(formData.get('id') ?? '')
   await ctx.db((tx) => tx.delete(hazidHazardTypes).where(eq(hazidHazardTypes.id, id)))
   await recordAudit(ctx, {
@@ -1746,6 +1750,7 @@ export async function deleteHazardLibrary(formData: FormData) {
 
 export async function createHazardSet(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCanManageModule(ctx, 'hazid')
   const name = String(formData.get('name') ?? '').trim()
   if (!name) throw new Error('Name is required')
   const description = nullable(formData.get('description'))
@@ -1770,6 +1775,7 @@ export async function createHazardSet(formData: FormData) {
 
 export async function updateHazardSet(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCanManageModule(ctx, 'hazid')
   const id = String(formData.get('id') ?? '')
   const hazardIds = String(formData.get('hazardIds') ?? '')
     .split(',')
@@ -1792,6 +1798,7 @@ export async function updateHazardSet(formData: FormData) {
 
 export async function deleteHazardSet(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCanManageModule(ctx, 'hazid')
   const id = String(formData.get('id') ?? '')
   await ctx.db((tx) => tx.delete(hazidHazardSets).where(eq(hazidHazardSets.id, id)))
   await recordAudit(ctx, {
@@ -1869,6 +1876,7 @@ export async function deleteTaskLibrary(formData: FormData) {
 
 export async function createAssessmentType(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCanManageModule(ctx, 'hazid')
   const name = String(formData.get('name') ?? '').trim()
   if (!name) throw new Error('Name is required')
   const style = String(formData.get('style') ?? 'task_based') as 'task_based' | 'hazard_based'
@@ -1903,6 +1911,7 @@ export async function createAssessmentType(formData: FormData) {
 
 export async function updateAssessmentType(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCanManageModule(ctx, 'hazid')
   const id = String(formData.get('id') ?? '')
   const flag = (k: string) => formData.get(k) === 'on' || formData.get(k) === 'true'
   const updates: Record<string, unknown> = {
@@ -1931,6 +1940,7 @@ export async function updateAssessmentType(formData: FormData) {
 
 export async function deleteAssessmentType(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCanManageModule(ctx, 'hazid')
   const id = String(formData.get('id') ?? '')
   await ctx.db((tx) =>
     tx.update(hazidAssessmentTypes).set({ deletedAt: new Date() }).where(eq(hazidAssessmentTypes.id, id)),
@@ -1947,6 +1957,7 @@ export async function deleteAssessmentType(formData: FormData) {
 // Type-default PPE rows
 export async function addTypePPE(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCanManageModule(ctx, 'hazid')
   const typeId = String(formData.get('typeId') ?? '')
   const name = String(formData.get('name') ?? '').trim()
   if (!typeId || !name) throw new Error('Missing fields')
@@ -1969,6 +1980,7 @@ export async function addTypePPE(formData: FormData) {
 
 export async function deleteTypePPE(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCanManageModule(ctx, 'hazid')
   const id = String(formData.get('id') ?? '')
   const typeId = String(formData.get('typeId') ?? '')
   await ctx.db((tx) => tx.delete(hazidAssessmentTypePPE).where(eq(hazidAssessmentTypePPE.id, id)))
@@ -1978,6 +1990,7 @@ export async function deleteTypePPE(formData: FormData) {
 // Type-default questions
 export async function addTypeQuestion(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCanManageModule(ctx, 'hazid')
   const typeId = String(formData.get('typeId') ?? '')
   const question = String(formData.get('question') ?? '').trim()
   if (!typeId || !question) throw new Error('Missing fields')
@@ -2010,6 +2023,7 @@ export async function addTypeQuestion(formData: FormData) {
 
 export async function deleteTypeQuestion(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCanManageModule(ctx, 'hazid')
   const id = String(formData.get('id') ?? '')
   const typeId = String(formData.get('typeId') ?? '')
   await ctx.db((tx) =>

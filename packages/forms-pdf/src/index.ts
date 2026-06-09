@@ -18,7 +18,6 @@ import { renderCertificateHtml, type CertificateRenderInput } from './templates/
 import { renderWalletHtml, type WalletRenderInput } from './templates/wallet'
 import { renderReportHtml, type ReportRenderInput, type ReportGroup } from './templates/report'
 import { renderHazidHtml, type HazidRenderInput } from './templates/hazid'
-import { renderToolboxHtml, type ToolboxRenderInput } from './templates/toolbox'
 import { renderCaHtml, type CaRenderInput } from './templates/ca'
 import {
   renderDocumentHtml,
@@ -40,7 +39,6 @@ export type {
   ReportRenderInput,
   ReportGroup,
   HazidRenderInput,
-  ToolboxRenderInput,
   CaRenderInput,
   DocumentRenderInput,
   DocumentBookRenderInput,
@@ -55,7 +53,6 @@ export {
   renderWalletHtml,
   renderReportHtml,
   renderHazidHtml,
-  renderToolboxHtml,
   renderCaHtml,
   renderDocumentHtml,
   renderDocumentBookHtml,
@@ -95,7 +92,7 @@ export async function renderFormPdf(input: RenderInput): Promise<Buffer> {
   const b = await browser()
   const page = await b.newPage()
   try {
-    await page.setContent(html, { waitUntil: 'networkidle0', timeout: 30_000 })
+    await page.setContent(html, { waitUntil: 'load', timeout: 30_000 })
     const pdf = await page.pdf({
       format: input.pageSize ?? 'Letter',
       printBackground: true,
@@ -185,7 +182,7 @@ function buildHtml(input: RenderInput): string {
                     if ((f.type === 'formula' || f.type === 'calc') && f.formula) {
                       raw = evaluateFormulaTree(f.formula as FormulaExpression, rowCtx)
                     }
-                    const display = renderValue(f.type, raw)
+                    const display = renderValue(f.type, raw, (f as { config?: Record<string, unknown> }).config)
                     if (display === null) return ''
                     return `<div class="field"><div class="lbl">${escapeHtml(label)}</div><div class="val">${display}</div></div>`
                   })
@@ -197,7 +194,19 @@ function buildHtml(input: RenderInput): string {
             return `<section><h2>${escapeHtml(t(sec.title))}</h2>${rowsHtml}</section>`
           }
 
-          const fields = sec.fields
+          // Honor the authored column layout (section.layout.columns +
+          // field.colSpan); fall back to a single stacked column otherwise.
+          const cols = !sec.canvas && sec.layout && sec.layout.columns > 1 ? sec.layout.columns : 0
+          // Canvas sections print in (y,x) reading order (linear — robust for
+          // print; on-screen render keeps the positioned grid).
+          const orderedFields = sec.canvas
+            ? [...sec.fields].sort((a, b) => {
+                const A = sec.canvas!.items.find((it) => it.i === a.id)
+                const B = sec.canvas!.items.find((it) => it.i === b.id)
+                return (A?.y ?? 0) - (B?.y ?? 0) || (A?.x ?? 0) - (B?.x ?? 0)
+              })
+            : sec.fields
+          const fields = orderedFields
             .map((f) => {
               if (f.showIf && !evaluateLogicRule(f.showIf, evalCtx)) return ''
               const label = t(f.label)
@@ -207,14 +216,20 @@ function buildHtml(input: RenderInput): string {
               if ((f.type === 'formula' || f.type === 'calc') && f.formula) {
                 raw = evaluateFormulaTree(f.formula as FormulaExpression, evalCtx)
               }
-              const display = renderValue(f.type, raw)
+              const display = renderValue(f.type, raw, (f as { config?: Record<string, unknown> }).config)
               if (display === null) return ''
-              return `<div class="field"><div class="lbl">${escapeHtml(label)}</div><div class="val">${display}</div></div>`
+              const spanStyle = cols
+                ? ` style="grid-column:span ${Math.min(f.colSpan ?? cols, cols)}"`
+                : ''
+              return `<div class="field"${spanStyle}><div class="lbl">${escapeHtml(label)}</div><div class="val">${display}</div></div>`
             })
             .filter(Boolean)
             .join('')
 
-          return `<section><h2>${escapeHtml(t(sec.title))}</h2>${fields}</section>`
+          const body = cols
+            ? `<div class="field-grid" style="grid-template-columns:repeat(${cols},minmax(0,1fr))">${fields}</div>`
+            : fields
+          return `<section><h2>${escapeHtml(t(sec.title))}</h2>${body}</section>`
         })
         .filter(Boolean)
         .join('')
@@ -259,6 +274,10 @@ function buildHtml(input: RenderInput): string {
   section { page-break-inside: avoid; margin: 16px 0; }
   section h2 { font-size: 12.5pt; color: var(--primary); margin: 18px 0 8px; border-bottom: 1px solid #ddd; padding-bottom: 4px; }
   .field { display: grid; grid-template-columns: 200px 1fr; gap: 8px; padding: 6px 0; border-bottom: 1px dotted #e5e5e5; }
+  /* Multi-column section layout: stack label above value so narrow cells read well. */
+  .field-grid { display: grid; column-gap: 16px; }
+  .field-grid .field { grid-template-columns: 1fr; gap: 2px; }
+  .field-grid .field .lbl { font-size: 9pt; text-transform: uppercase; letter-spacing: .03em; }
   .field .lbl { font-weight: 600; color: #555; }
   .field .val { color: #111; word-break: break-word; }
   .field .val img { max-width: 220px; max-height: 220px; border: 1px solid #eee; margin: 4px 4px 0 0; }
@@ -292,7 +311,11 @@ function buildHtml(input: RenderInput): string {
 </body></html>`
 }
 
-function renderValue(type: string, raw: unknown): string | null {
+function renderValue(
+  type: string,
+  raw: unknown,
+  config?: Record<string, unknown>,
+): string | null {
   if (raw === undefined || raw === null || raw === '') {
     if (['heading', 'paragraph', 'image', 'divider'].includes(type)) return null
     return '<em style="color:#999">—</em>'
@@ -320,6 +343,42 @@ function renderValue(type: string, raw: unknown): string | null {
       const v = raw as { severity?: string; likelihood?: string; score?: number; label?: string }
       return `${escapeHtml(v.severity ?? '')} × ${escapeHtml(v.likelihood ?? '')} = <strong>${escapeHtml(v.label ?? String(v.score ?? ''))}</strong>`
     }
+    case 'table': {
+      const cfg = (config ?? {}) as {
+        columns?: { key: string; label?: string; type?: string; options?: { value: string; label: string }[] }[]
+        rows?: { label: string }[]
+        rowMode?: string
+      }
+      const columns = cfg.columns ?? []
+      const fixedRows = cfg.rows ?? []
+      const fixed = cfg.rowMode === 'fixed'
+      const stored = Array.isArray(raw) ? (raw as Record<string, unknown>[]) : []
+      const rows = fixed ? fixedRows.map((_, i) => stored[i] ?? {}) : stored
+      if (columns.length === 0 || rows.length === 0) return '<em style="color:#999">—</em>'
+      const cell = 'style="border:1px solid #ddd;padding:3px 5px;text-align:left"'
+      const head = 'style="border:1px solid #ddd;padding:3px 5px;text-align:left;background:#f8fafc"'
+      const ths = `${fixed ? `<th ${head}></th>` : ''}${columns.map((c) => `<th ${head}>${escapeHtml(c.label || c.key)}</th>`).join('')}`
+      const trs = rows
+        .map((row, i) => {
+          const lead = fixed
+            ? `<td ${cell}><strong>${escapeHtml(fixedRows[i]?.label ?? `Row ${i + 1}`)}</strong></td>`
+            : ''
+          const tds = columns
+            .map((c) => {
+              const v = (row as Record<string, unknown>)[c.key]
+              let s = ''
+              if (v === null || v === undefined || v === '') s = ''
+              else if (c.type === 'checkbox') s = v ? '✓' : ''
+              else if (c.type === 'select') s = (c.options ?? []).find((o) => o.value === v)?.label ?? String(v)
+              else s = String(v)
+              return `<td ${cell}>${escapeHtml(s)}</td>`
+            })
+            .join('')
+          return `<tr>${lead}${tds}</tr>`
+        })
+        .join('')
+      return `<table style="border-collapse:collapse;width:100%;font-size:11px;margin-top:2px"><thead><tr>${ths}</tr></thead><tbody>${trs}</tbody></table>`
+    }
     default:
       return escapeHtml(String(raw))
   }
@@ -333,7 +392,7 @@ export async function renderIncidentPdf(input: IncidentRenderInput): Promise<Buf
   const b = await browser()
   const page = await b.newPage()
   try {
-    await page.setContent(html, { waitUntil: 'networkidle0', timeout: 30_000 })
+    await page.setContent(html, { waitUntil: 'load', timeout: 30_000 })
     const pdf = await page.pdf({
       format: 'Letter',
       printBackground: true,
@@ -369,7 +428,7 @@ async function renderCertificateOnly(input: CertificateRenderInput): Promise<Buf
   const b = await browser()
   const page = await b.newPage()
   try {
-    await page.setContent(html, { waitUntil: 'networkidle0', timeout: 30_000 })
+    await page.setContent(html, { waitUntil: 'load', timeout: 30_000 })
     const pdf = await page.pdf({
       format: 'Letter',
       printBackground: true,
@@ -388,7 +447,7 @@ async function renderWalletOnly(input: WalletRenderInput): Promise<Buffer> {
   const b = await browser()
   const page = await b.newPage()
   try {
-    await page.setContent(html, { waitUntil: 'networkidle0', timeout: 30_000 })
+    await page.setContent(html, { waitUntil: 'load', timeout: 30_000 })
     const pdf = await page.pdf({
       width: '3.5in',
       height: '2in',
@@ -435,7 +494,7 @@ export async function renderReportPdf(input: ReportRenderInput): Promise<Buffer>
   const b = await browser()
   const page = await b.newPage()
   try {
-    await page.setContent(html, { waitUntil: 'networkidle0', timeout: 30_000 })
+    await page.setContent(html, { waitUntil: 'load', timeout: 30_000 })
     const pdf = await page.pdf({
       printBackground: true,
       preferCSSPageSize: true,
@@ -465,22 +524,29 @@ async function printLetterheadPdf(args: {
   title: string
   footerLeft: string
   footerRight?: string
+  pageSize?: 'Letter' | 'A4'
+  headerHtml?: string
+  showFooter?: boolean
+  margin?: { top: string; bottom: string; left: string; right: string }
 }): Promise<Buffer> {
   const html = wrapDocument(args.body, args.title)
   const b = await browser()
   const page = await b.newPage()
   try {
-    await page.setContent(html, { waitUntil: 'networkidle0', timeout: 30_000 })
+    await page.setContent(html, { waitUntil: 'load', timeout: 30_000 })
+    const showFooter = args.showFooter !== false
     const pdf = await page.pdf({
-      format: 'Letter',
+      format: args.pageSize ?? 'Letter',
       printBackground: true,
-      margin: { top: '15mm', bottom: '15mm', left: '12mm', right: '12mm' },
+      margin: args.margin ?? { top: '15mm', bottom: '15mm', left: '12mm', right: '12mm' },
       displayHeaderFooter: true,
-      headerTemplate: `<div></div>`,
-      footerTemplate: `<div style="font-size:8px;width:100%;padding:0 12mm;display:flex;justify-content:space-between;color:#666;">
+      headerTemplate: args.headerHtml ?? `<div></div>`,
+      footerTemplate: showFooter
+        ? `<div style="font-size:8px;width:100%;padding:0 12mm;display:flex;justify-content:space-between;color:#666;">
         <span>${escapeHtml(args.footerLeft)}</span>
         <span>${args.footerRight ? escapeHtml(args.footerRight) + ' · ' : ''}<span class="pageNumber"></span> / <span class="totalPages"></span></span>
-      </div>`,
+      </div>`
+        : `<div></div>`,
     })
     return Buffer.from(pdf)
   } finally {
@@ -552,7 +618,7 @@ export async function renderHazidSignedReportPdf(
   const b = await browser()
   const page = await b.newPage()
   try {
-    await page.setContent(html, { waitUntil: 'networkidle0', timeout: 60_000 })
+    await page.setContent(html, { waitUntil: 'load', timeout: 60_000 })
     const pdf = await page.pdf({
       format: 'Letter',
       printBackground: true,
@@ -675,17 +741,6 @@ function formatBundleDateTime(d: string | Date): string {
   return date.toISOString().slice(0, 19).replace('T', ' ')
 }
 
-// --- Toolbox Journal PDF --------------------------------------------------
-
-export async function renderToolboxPdf(input: ToolboxRenderInput): Promise<Buffer> {
-  return printLetterheadPdf({
-    body: renderToolboxHtml(input),
-    title: 'Toolbox Talk',
-    footerLeft: input.tenantName,
-    footerRight: `Toolbox ${input.journal.reference}`,
-  })
-}
-
 // --- Corrective Action PDF ------------------------------------------------
 
 export async function renderCaPdf(input: CaRenderInput): Promise<Buffer> {
@@ -700,11 +755,19 @@ export async function renderCaPdf(input: CaRenderInput): Promise<Buffer> {
 // --- Document PDF ---------------------------------------------------------
 
 export async function renderDocumentPdf(input: DocumentRenderInput): Promise<Buffer> {
+  const headerText = input.document.headerText?.trim()
   return printLetterheadPdf({
     body: renderDocumentHtml(input),
     title: input.document.title,
-    footerLeft: input.tenantName,
+    footerLeft: input.document.footerText?.trim() || input.tenantName,
     footerRight: input.document.key,
+    margin: { top: '1in', bottom: '1in', left: '1in', right: '1in' },
+    pageSize: input.document.pageSize === 'A4' ? 'A4' : 'Letter',
+    showFooter: input.document.printFooter !== false,
+    headerHtml:
+      input.document.printHeader && headerText
+        ? `<div style="font-size:8px;width:100%;padding:0 12mm;text-align:center;color:#888;">${escapeHtml(headerText)}</div>`
+        : `<div></div>`,
   })
 }
 

@@ -141,6 +141,7 @@ export const fieldTypeSchema = z.enum([
   'email',
   'phone',
   'url',
+  'table', // grid of cells — addable or predefined rows
   // choice
   'radio',
   'checkbox_group',
@@ -181,6 +182,34 @@ export const fieldTypeSchema = z.enum([
 
 export type FieldType = z.infer<typeof fieldTypeSchema>
 
+// --- Table field config -----------------------------------------------------
+//
+// A `table` field stores its column + row definitions in FormField.config (the
+// freeform bag). The runtime value in form_responses.data[fieldId] is an array
+// of row objects keyed by column key: [{ <colKey>: value, … }, …].
+export type TableColumnType = 'text' | 'number' | 'select' | 'checkbox' | 'date'
+
+export const tableColumnSchema = z.object({
+  key: z.string().min(1),
+  label: z.string(),
+  type: z.enum(['text', 'number', 'select', 'checkbox', 'date']),
+  // Options for `select` columns.
+  options: z.array(z.object({ value: z.string(), label: z.string() })).optional(),
+})
+export type TableColumn = z.infer<typeof tableColumnSchema>
+
+export const tableConfigSchema = z.object({
+  columns: z.array(tableColumnSchema),
+  // 'addable' → the filler adds/removes rows (bounded by min/max). 'fixed' →
+  // predefined rows the filler fills in; each `rows[i].label` shows in a
+  // read-only lead column.
+  rowMode: z.enum(['addable', 'fixed']).default('addable'),
+  minRows: z.number().int().nonnegative().optional(),
+  maxRows: z.number().int().positive().optional(),
+  rows: z.array(z.object({ label: z.string() })).optional(),
+})
+export type TableConfig = z.infer<typeof tableConfigSchema>
+
 export const fieldValidationSchema = z
   .object({
     // Optional `required` on the validation block mirrors FormField.required.
@@ -219,9 +248,35 @@ export const formFieldSchema = z.object({
   // Default value applied to first render of a step when the response value is
   // empty. Resolved against request context (user, now) by `resolveDefaultValue`.
   defaultValue: defaultValueExpressionSchema.optional(),
+  // Width within the section's column grid (1 = one cell). Absent ⇒ full row.
+  // Capped to the section's column count at render. Back-compatible.
+  colSpan: z.number().int().min(1).max(12).optional(),
 })
 
 export type FormField = z.infer<typeof formFieldSchema>
+
+// --- Free-form canvas layout ------------------------------------------------
+//
+// When a section has a `canvas`, its fields are positioned on a 12-ish column
+// grid (Appsmith / WordPress-style). Each item references a field by id and
+// carries its grid box {x,y,w,h} in grid units. The DESIGNER edits this with
+// react-grid-layout; the END PRODUCT renders it mobile-first: a single stacked
+// column on phones (in y,x reading order) and the positioned grid on ≥640px.
+export const canvasItemSchema = z.object({
+  i: z.string().min(1), // field id
+  x: z.number().int().min(0),
+  y: z.number().int().min(0),
+  w: z.number().int().min(1),
+  h: z.number().int().min(1),
+})
+export type CanvasItem = z.infer<typeof canvasItemSchema>
+
+export const canvasLayoutSchema = z.object({
+  cols: z.number().int().min(1).max(24).default(12),
+  rowHeight: z.number().int().min(8).max(400).default(40),
+  items: z.array(canvasItemSchema),
+})
+export type CanvasLayout = z.infer<typeof canvasLayoutSchema>
 
 export const formSectionSchema = z.object({
   id: z.string().min(1),
@@ -237,6 +292,16 @@ export const formSectionSchema = z.object({
   // `{index}`, `{index+1}`, and `{<fieldKey>}` interpolation from the row's
   // own values.
   rowLabelTemplate: z.string().optional(),
+  // Section grid layout. Absent ⇒ single-column stack (today's behavior).
+  layout: z
+    .object({
+      columns: z.number().int().min(1).max(4),
+      gap: z.enum(['sm', 'md', 'lg']).optional(),
+    })
+    .optional(),
+  // Free-form positioned layout. Absent ⇒ stacked / column layout (above).
+  // Takes precedence over `layout` when present.
+  canvas: canvasLayoutSchema.optional(),
   step: z.string().optional(),
   fields: z.array(formFieldSchema),
 })

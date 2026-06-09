@@ -1,9 +1,17 @@
 import { notFound } from 'next/navigation'
-import { desc, eq } from 'drizzle-orm'
-import { formTemplateVersions, formTemplates } from '@beaconhs/db/schema'
+import { asc, desc, eq } from 'drizzle-orm'
+import { can } from '@beaconhs/tenant'
+import {
+  formAssignments,
+  formAutomations,
+  formTemplateVersions,
+  formTemplates,
+  roles as rolesTable,
+} from '@beaconhs/db/schema'
 import type { FormSchemaV1 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { FormDesigner } from './form-designer'
+import type { FlowSummary } from '../flows/_flows-canvas'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,18 +45,44 @@ function bootstrapSchema(name: string): FormSchemaV1 {
   }
 }
 
-export default async function FormDesignerPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function FormDesignerPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
   const { id } = await params
+  const sp = await searchParams
+  const initialSurface = sp.surface === 'flows' ? 'flows' : 'build'
   const ctx = await requireRequestContext()
   const data = await ctx.db(async (tx) => {
     const [tmpl] = await tx.select().from(formTemplates).where(eq(formTemplates.id, id)).limit(1)
     if (!tmpl) return null
-    const versions = await tx
-      .select()
-      .from(formTemplateVersions)
-      .where(eq(formTemplateVersions.templateId, id))
-      .orderBy(desc(formTemplateVersions.version))
-    return { tmpl, latestVersion: versions[0] ?? null }
+    const [versions, assignments, flows, tenantRoles] = await Promise.all([
+      tx
+        .select()
+        .from(formTemplateVersions)
+        .where(eq(formTemplateVersions.templateId, id))
+        .orderBy(desc(formTemplateVersions.version)),
+      tx.select().from(formAssignments).where(eq(formAssignments.templateId, id)),
+      tx
+        .select({
+          id: formAutomations.id,
+          name: formAutomations.name,
+          enabled: formAutomations.enabled,
+          graph: formAutomations.graph,
+        })
+        .from(formAutomations)
+        .where(eq(formAutomations.templateId, id))
+        .orderBy(asc(formAutomations.createdAt)),
+      tx
+        .select({ key: rolesTable.key, name: rolesTable.name })
+        .from(rolesTable)
+        .where(eq(rolesTable.tenantId, ctx.tenantId))
+        .orderBy(asc(rolesTable.name)),
+    ])
+    return { tmpl, latestVersion: versions[0] ?? null, assignments, flows, tenantRoles }
   })
 
   if (!data) notFound()
@@ -75,8 +109,27 @@ export default async function FormDesignerPage({ params }: { params: Promise<{ i
     <FormDesigner
       templateId={id}
       templateName={data.tmpl.name}
+      templateKind={data.tmpl.kind}
       initialSchema={latestSchema}
       currentVersion={currentVersion}
+      initialSurface={initialSurface}
+      overview={{
+        description: data.tmpl.description,
+        category: data.tmpl.category,
+        iconKey: data.tmpl.iconKey,
+        emailOnSubmit: data.tmpl.emailOnSubmit,
+      }}
+      assignments={data.assignments.map((a) => ({
+        id: a.id,
+        mode: a.mode,
+        cron: a.cron,
+        targetRoleKeys: a.targetRoleKeys ?? null,
+        enabled: a.enabled,
+      }))}
+      allowedRoles={data.tmpl.allowedRoles ?? []}
+      roles={data.tenantRoles}
+      flows={data.flows as FlowSummary[]}
+      canGenerate={can(ctx, 'forms.ai.generate')}
     />
   )
 }

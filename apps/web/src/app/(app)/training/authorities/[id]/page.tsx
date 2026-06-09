@@ -29,6 +29,7 @@ import {
   trainingSkillTypes,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { assertCanManageModule, requireModuleManage } from '@/lib/module-admin/guard'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { pickString } from '@/lib/list-params'
 import { DetailPageLayout } from '@/components/page-layout'
@@ -46,6 +47,7 @@ type Tab = (typeof TABS)[number]
 async function addSkillType(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'training')
   const authorityId = String(formData.get('authorityId') ?? '')
   const name = String(formData.get('name') ?? '').trim()
   if (!name) return
@@ -90,7 +92,7 @@ export default async function AuthorityDetailPage({
   const sp = await searchParams
   const active: Tab = pickActiveTab(sp, TABS, 'overview')
 
-  const ctx = await requireRequestContext()
+  const ctx = await requireModuleManage('training')
   const data = await ctx.db(async (tx) => {
     const [authority] = await tx
       .select()

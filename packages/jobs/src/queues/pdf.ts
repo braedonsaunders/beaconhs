@@ -6,7 +6,6 @@ export type PdfJobData =
   | { kind: 'incident'; tenantId: string; incidentId: string }
   | { kind: 'certificate'; tenantId: string; certificateId: string }
   | { kind: 'hazid'; tenantId: string; assessmentId: string }
-  | { kind: 'toolbox'; tenantId: string; journalId: string }
   | { kind: 'ca'; tenantId: string; caId: string }
   | { kind: 'document'; tenantId: string; documentId: string }
   | { kind: 'document_book'; tenantId: string; bookId: string }

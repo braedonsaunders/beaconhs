@@ -19,7 +19,7 @@ import {
   TableRow,
 } from '@beaconhs/ui'
 import { hazidAssessmentTypes, hazidHazardSets, hazidHazards } from '@beaconhs/db/schema'
-import { requireRequestContext } from '@/lib/auth'
+import { requireModuleManage } from '@/lib/module-admin/guard'
 import { parseListParams } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
 import { SearchInput } from '@/components/search-input'
@@ -46,7 +46,7 @@ export default async function HazardSetsPage({
     allowedSorts: SORTS,
   })
   const sizeFilter = pickStringParam(sp.size) // 'empty' | 'small' | 'large'
-  const ctx = await requireRequestContext()
+  const ctx = await requireModuleManage('hazid')
 
   const { rows, total, hazardNamesById, usageBySet } = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = []

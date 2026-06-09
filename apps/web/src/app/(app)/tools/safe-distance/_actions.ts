@@ -343,6 +343,3 @@ export async function updateSafeDistanceRecordForm(formData: FormData): Promise<
   const id = String(formData.get('id') ?? '')
   if (id) redirect(`/tools/safe-distance/${id}`)
 }
-
-// Re-export the type list so pages can read it without re-declaring.
-export const SAFE_DISTANCE_TYPES = TYPES

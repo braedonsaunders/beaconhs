@@ -15,12 +15,14 @@ import {
   personTitles,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 
 // ---------- title CRUD --------------------------------------------------
 
 export async function createTitle(formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'people')
   const name = String(formData.get('name') ?? '').trim()
   const description = String(formData.get('description') ?? '').trim() || null
   const responsibilities = String(formData.get('responsibilities') ?? '').trim() || null
@@ -55,6 +57,7 @@ export async function createTitle(formData: FormData): Promise<void> {
 
 export async function updateTitle(formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'people')
   const id = String(formData.get('id') ?? '')
   if (!id) return
   const name = String(formData.get('name') ?? '').trim()
@@ -87,6 +90,7 @@ export async function updateTitle(formData: FormData): Promise<void> {
 
 export async function deleteTitle(formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'people')
   const id = String(formData.get('id') ?? '')
   if (!id) return
   const before = await ctx.db(async (tx) => {
@@ -208,6 +212,7 @@ export async function setPrimaryTitle(formData: FormData): Promise<void> {
 
 export async function addTitleTask(formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'people')
   const titleId = String(formData.get('titleId') ?? '')
   const task = String(formData.get('task') ?? '').trim()
   const description = String(formData.get('description') ?? '').trim() || null
@@ -247,6 +252,7 @@ export async function addTitleTask(formData: FormData): Promise<void> {
 
 export async function updateTitleTask(formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'people')
   const id = String(formData.get('id') ?? '')
   if (!id) return
   const task = String(formData.get('task') ?? '').trim()
@@ -275,6 +281,7 @@ export async function updateTitleTask(formData: FormData): Promise<void> {
 
 export async function deleteTitleTask(formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'people')
   const id = String(formData.get('id') ?? '')
   if (!id) return
   const before = await ctx.db(async (tx) => {
@@ -297,6 +304,7 @@ export async function deleteTitleTask(formData: FormData): Promise<void> {
 
 export async function reorderTitleTask(formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'people')
   const id = String(formData.get('id') ?? '')
   const direction = String(formData.get('direction') ?? '') as 'up' | 'down'
   if (!id || (direction !== 'up' && direction !== 'down')) return

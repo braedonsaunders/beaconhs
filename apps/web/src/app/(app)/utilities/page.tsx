@@ -22,7 +22,7 @@ const UTILITIES = [
     icon: Download,
     title: 'Data export',
     description:
-      'Bulk export of records (incidents, corrective actions, equipment, people, safe-distance, toolbox) to CSV or JSON. Every export writes an audit entry.',
+      'Bulk export of records (incidents, corrective actions, equipment, people, safe-distance, forms) to CSV or JSON. Every export writes an audit entry.',
   },
   {
     href: '/utilities/analyze',

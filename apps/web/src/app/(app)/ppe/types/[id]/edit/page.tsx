@@ -11,6 +11,7 @@ import { eq } from 'drizzle-orm'
 import { Button, Input, Label, PageHeader, Select } from '@beaconhs/ui'
 import { ppeTypes } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { assertCanManageModule, requireModuleManage } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 import { PageContainer } from '@/components/page-layout'
 
@@ -33,6 +34,7 @@ const CATEGORY_OPTIONS = [
 async function updateType(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'ppe')
   const id = String(formData.get('id') ?? '').trim()
   const name = String(formData.get('name') ?? '').trim()
   const category = String(formData.get('category') ?? '').trim() || null
@@ -69,7 +71,7 @@ export default async function EditPpeTypePage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const ctx = await requireRequestContext()
+  const ctx = await requireModuleManage('ppe')
   const [type] = await ctx.db((tx) =>
     tx.select().from(ppeTypes).where(eq(ppeTypes.id, id)).limit(1),
   )

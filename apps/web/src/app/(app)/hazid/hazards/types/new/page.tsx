@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { Button, Card, CardContent, DetailHeader, Input, Label, Textarea } from '@beaconhs/ui'
+import { requireModuleManage } from '@/lib/module-admin/guard'
 import { PageContainer } from '@/components/page-layout'
 import { createHazardType } from '../../../_actions'
 
@@ -11,7 +12,8 @@ async function submit(formData: FormData) {
   redirect('/hazid/hazards/types')
 }
 
-export default function NewHazardTypePage() {
+export default async function NewHazardTypePage() {
+  await requireModuleManage('hazid')
   return (
     <PageContainer>
       <div className="max-w-xl space-y-6">

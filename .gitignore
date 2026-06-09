@@ -43,6 +43,10 @@ coverage/
 # Drizzle
 drizzle/.snapshot/
 
+# Legacy-migration data dumps — large schema/mapping JSON reproducible from the
+# legacy MSSQL DB; kept local, not committed. (The .md docs beside them ARE kept.)
+docs/migration/*.json
+
 # Local storage
 .r2-local/
 uploads/

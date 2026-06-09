@@ -27,6 +27,7 @@ import {
 } from '@beaconhs/ui'
 import { incidentInjuries, incidentInjuryTypes } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { requireModuleManage, assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 import { ListPageLayout } from '@/components/page-layout'
 import { IncidentsSubNav } from '../_sub-nav'
@@ -37,6 +38,7 @@ export const dynamic = 'force-dynamic'
 async function createInjuryType(formData: FormData): Promise<void> {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'incidents')
   const name = String(formData.get('name') ?? '').trim()
   if (!name) return
   const description = String(formData.get('description') ?? '').trim() || null
@@ -69,6 +71,7 @@ async function createInjuryType(formData: FormData): Promise<void> {
 async function updateInjuryType(formData: FormData): Promise<void> {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'incidents')
   const id = String(formData.get('id') ?? '')
   if (!id) return
   const name = String(formData.get('name') ?? '').trim()
@@ -106,6 +109,7 @@ async function updateInjuryType(formData: FormData): Promise<void> {
 async function toggleArchive(formData: FormData): Promise<void> {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'incidents')
   const id = String(formData.get('id') ?? '')
   const next = formData.get('isActive') === 'true' ? 1 : 0
   if (!id) return
@@ -125,9 +129,10 @@ async function toggleArchive(formData: FormData): Promise<void> {
 async function deleteInjuryType(formData: FormData): Promise<void> {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'incidents')
   const id = String(formData.get('id') ?? '')
   if (!id) return
-  const [{ usage }] = await ctx.db((tx) =>
+  const [{ usage } = { usage: 0 }] = await ctx.db((tx) =>
     tx
       .select({ usage: count() })
       .from(incidentInjuries)
@@ -168,7 +173,7 @@ export default async function InjuryTypesPage({
   const sp = await searchParams
   const editingId =
     typeof sp.edit === 'string' ? sp.edit : Array.isArray(sp.edit) ? sp.edit[0] : undefined
-  const ctx = await requireRequestContext()
+  const ctx = await requireModuleManage('incidents')
 
   const { rows, usageById } = await ctx.db(async (tx) => {
     const all = await tx

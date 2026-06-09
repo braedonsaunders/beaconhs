@@ -27,6 +27,7 @@ import {
 import { incidentClassifications, incidents } from '@beaconhs/db/schema'
 import { count, sql } from 'drizzle-orm'
 import { requireRequestContext } from '@/lib/auth'
+import { requireModuleManage, assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 import { ListPageLayout } from '@/components/page-layout'
 import { IncidentsSubNav } from '../_sub-nav'
@@ -48,6 +49,7 @@ type ClassificationRow = {
 async function createClassification(formData: FormData): Promise<void> {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'incidents')
   const name = String(formData.get('name') ?? '').trim()
   if (!name) return
   const parentId = String(formData.get('parentId') ?? '').trim() || null
@@ -98,6 +100,7 @@ async function createClassification(formData: FormData): Promise<void> {
 async function updateClassification(formData: FormData): Promise<void> {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'incidents')
   const id = String(formData.get('id') ?? '')
   if (!id) return
   const name = String(formData.get('name') ?? '').trim()
@@ -141,6 +144,7 @@ async function updateClassification(formData: FormData): Promise<void> {
 async function toggleArchive(formData: FormData): Promise<void> {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'incidents')
   const id = String(formData.get('id') ?? '')
   const next = formData.get('isActive') === 'true' ? 1 : 0
   if (!id) return
@@ -163,11 +167,12 @@ async function toggleArchive(formData: FormData): Promise<void> {
 async function deleteClassification(formData: FormData): Promise<void> {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'incidents')
   const id = String(formData.get('id') ?? '')
   if (!id) return
   // Refuse if any incidents reference this classification — admin must
   // re-tag them first.  Cheaper than a soft delete + tombstone migration.
-  const [{ usage }] = await ctx.db((tx) =>
+  const [{ usage } = { usage: 0 }] = await ctx.db((tx) =>
     tx
       .select({ usage: count() })
       .from(incidents)
@@ -215,7 +220,7 @@ export default async function ClassificationsPage({
       : Array.isArray(sp.childOf)
         ? sp.childOf[0]
         : undefined
-  const ctx = await requireRequestContext()
+  const ctx = await requireModuleManage('incidents')
 
   const { rows, usageById } = await ctx.db(async (tx) => {
     const all = await tx

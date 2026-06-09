@@ -52,7 +52,8 @@ export const REPORT_CUSTOM_ENTITIES = [
   'equipment',
   'ppe',
   'lone_worker',
-  'toolbox_journals',
+  'form_responses',
+  'form_participants',
 ] as const
 export type ReportCustomEntity = (typeof REPORT_CUSTOM_ENTITIES)[number]
 

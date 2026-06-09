@@ -25,13 +25,13 @@
   "dependencies": {
     "@beaconhs/forms-core": "workspace:*",
     "drizzle-orm": "^0.45.2",
-    "postgres": "^3.4.5"
+    "postgres": "^3.4.9"
   },
   "devDependencies": {
-    "@types/node": "^22.7.0",
-    "dotenv": "^16.4.5",
+    "@types/node": "^25.9.2",
+    "dotenv": "^17.4.2",
     "drizzle-kit": "^0.31.10",
-    "tsx": "^4.19.2",
-    "typescript": "^5.6.3"
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3"
   }
 }

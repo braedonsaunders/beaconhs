@@ -58,9 +58,6 @@ import {
   tenants,
   tenantUsers,
   safeDistanceRecords,
-  toolboxJournalAssignments,
-  toolboxJournalAttendees,
-  toolboxJournals,
   trades,
   trainingCourses,
   trainingRecords,
@@ -92,6 +89,8 @@ import {
 } from './schema'
 import type { FormSchemaV1 } from './schema'
 import { CANONICAL_TEMPLATES } from './canonical-templates'
+import { seedLiftPlanTemplate } from './seed/lift-plan-template'
+import { seedToolboxTemplate } from './seed/toolbox-template'
 
 async function main() {
   const { db, sql: pg } = createClient()
@@ -185,15 +184,6 @@ async function main() {
             'Lone-worker sessions started in the configured window, grouped by status — useful for spotting missed/escalated patterns.',
           category: 'lone_worker',
           queryKind: 'lone_worker_summary',
-        },
-        {
-          slug: 'toolbox_journals_weekly',
-          kind: 'built_in',
-          name: 'Toolbox Journals Completed (weekly)',
-          description:
-            'Toolbox journals (talks) completed in the configured window, grouped by category, with attendee counts.',
-          category: 'toolbox',
-          queryKind: 'toolbox_journals_summary',
         },
         {
           slug: 'training_compliance_snapshot',
@@ -1261,11 +1251,14 @@ async function main() {
       })
     }
 
-    // --- Toolbox journals (5 sample talks across last 30 days) ----------
-    await seedToolboxJournals(tx, tenant.id)
 
     // --- Inspection types (3 sample types reusing the seeded banks) -----
     await seedInspectionTypes(tx, tenant.id)
+
+    // --- Lift Plan + Toolbox Talk form templates (built-in; surfaced as
+    //     pinned forms in the sidebar rather than native modules) ---------
+    await seedLiftPlanTemplate(tx, tenant.id)
+    await seedToolboxTemplate(tx, tenant.id)
 
     // --- Inspection records (5 sample records against the seeded types) -
     await seedInspectionRecords(tx, tenant.id)
@@ -1523,195 +1516,6 @@ async function seedCanonicalTemplates(db: ReturnType<typeof createClient>['db'])
   })
 }
 
-/**
- * Idempotently seed 5 sample toolbox talks (one every ~6 days going back 30
- * days) with 3–5 attendees each. Safe to re-run: skips if any reference in
- * the canonical set already exists for the tenant.
- *
- * Naming convention: TBX-SEED-1..5 — the leading SEED segment makes them
- * trivially distinguishable from real user-created journals (which use the
- * year prefix TBX-YYYY-NNNN) so we never collide and we never re-seed twice.
- */
-export async function seedToolboxJournals(tx: any, tenantId: string): Promise<void> {
-  // Idempotency guard
-  const existing = await tx
-    .select({ reference: toolboxJournals.reference })
-    .from(toolboxJournals)
-    .where(sql`${toolboxJournals.tenantId} = ${tenantId} AND ${toolboxJournals.reference} LIKE 'TBX-SEED-%'`)
-  if (existing.length > 0) {
-    console.log(`  · toolbox journals: ${existing.length} sample already present, skipping`)
-    return
-  }
-
-  // Pull dependencies — we need the tenant's first site, first foreman
-  // (membership), and at least 5 active people.
-  const peopleRows = await tx
-    .select({
-      id: people.id,
-      firstName: people.firstName,
-      lastName: people.lastName,
-    })
-    .from(people)
-    .where(sql`${people.tenantId} = ${tenantId} AND ${people.status} = 'active'`)
-    .limit(20)
-  if (peopleRows.length < 3) {
-    console.log('  · toolbox journals: not enough people in tenant, skipping')
-    return
-  }
-
-  const siteRow = await tx
-    .select({ id: orgUnits.id, name: orgUnits.name })
-    .from(orgUnits)
-    .where(sql`${orgUnits.tenantId} = ${tenantId} AND ${orgUnits.level} = 'site'`)
-    .limit(1)
-  const siteId = siteRow[0]?.id ?? null
-
-  const foremanRow = await tx
-    .select({ id: tenantUsers.id })
-    .from(tenantUsers)
-    .where(sql`${tenantUsers.tenantId} = ${tenantId} AND ${tenantUsers.status} = 'active'`)
-    .limit(1)
-  const foremanId = foremanRow[0]?.id ?? null
-
-  const today = new Date()
-  const dayMs = 24 * 60 * 60 * 1000
-  const samples = [
-    {
-      offset: 2,
-      title: 'Hot work permit refresher',
-      topic: 'Fire watch responsibilities and gas testing prior to hot work.',
-      discussion:
-        'Reviewed the requirements of a hot work permit:\n- Combustibles cleared within 35 ft\n- Fire watch posted for at least 30 mins after work stops\n- Continuous LEL monitoring inside the permitted area',
-      questions: 'When does the fire watch period extend to 60 mins? — confined or partially-enclosed spaces.',
-      actions: '- Sarah to confirm fire watch coverage on Tuesday lift\n- Marcus to top up the extinguishers at the south skid',
-      attendees: 5,
-      status: 'closed' as const,
-      locked: true,
-    },
-    {
-      offset: 8,
-      title: 'Pinch-point awareness',
-      topic: 'Hand placement during rigging and load handling.',
-      discussion:
-        'Talked through last week\'s near miss: hand placed on the load while a tag-line was used to position. Tag-lines should be the only contact.',
-      questions: 'Is there a 1-handed alternative if the tag-line whips? — Always two-hand, but step away if whip starts.',
-      actions: '- Replace the frayed yellow tag-line at lay-down yard\n- Print the 1-page hand zone diagram in muster trailer',
-      attendees: 4,
-      status: 'closed' as const,
-      locked: true,
-    },
-    {
-      offset: 15,
-      title: 'Slips, trips & falls',
-      topic: 'Housekeeping standards during turnaround.',
-      discussion:
-        'Reviewed the 4 most common trip hazards we see weekly:\n1. Hoses and cords across walkways\n2. Mud and water on stair treads\n3. Materials staged in lay-down lanes\n4. Spare parts left on the deck',
-      questions: 'Who owns the deck cleanup at end of shift? — Crew lead before walk-down.',
-      actions: '- Add a 5-minute end-of-shift housekeeping sweep to the JSA\n- Foster to install a new boot scraper at the south landing',
-      attendees: 5,
-      status: 'submitted' as const,
-      locked: false,
-    },
-    {
-      offset: 22,
-      title: 'Confined space attendant duties',
-      topic: 'Attendant role expectations and emergency response.',
-      discussion:
-        'Quick review of attendant must-dos:\n- Maintain continuous visual + verbal contact\n- Log entrants in/out\n- Do NOT enter to rescue — call for retrieval team\n- Monitor atmosphere readings on the screen, not memory',
-      questions: 'What if the atmosphere alarm sounds while entrants are inside? — Evacuate, do not re-enter until cleared.',
-      actions: '- Tom to schedule a CSE refresher for the apprentices',
-      attendees: 3,
-      status: 'submitted' as const,
-      locked: false,
-    },
-    {
-      offset: 28,
-      title: 'PPE inspection cadence',
-      topic: 'Pre-use checks for harness, gloves, and respirators.',
-      discussion:
-        'Each shift, before donning:\n- Harness: webbing, hardware, labels intact\n- Gloves: no cuts, no contamination\n- Respirator: seal check, cartridges in date',
-      questions: 'Where do we report a failed pre-use check? — Tag, set aside, log in PPE module.',
-      actions: '- Linda to add a "tag-out" pen and red tags to each muster trailer',
-      attendees: 4,
-      status: 'draft' as const,
-      locked: false,
-    },
-  ]
-
-  let inserted = 0
-  for (let i = 0; i < samples.length; i++) {
-    const s = samples[i]!
-    const occurredOn = new Date(today.getTime() - s.offset * dayMs).toISOString().slice(0, 10)
-    const reference = `TBX-SEED-${i + 1}`
-    const [row] = await tx
-      .insert(toolboxJournals)
-      .values({
-        tenantId,
-        reference,
-        title: s.title,
-        topic: s.topic,
-        occurredOn,
-        siteOrgUnitId: siteId,
-        foremanTenantUserId: foremanId,
-        discussionNotes: s.discussion,
-        questionsRaised: s.questions,
-        actionItems: s.actions,
-        status: s.status,
-        locked: s.locked,
-        lockedAt: s.locked ? new Date() : null,
-      })
-      .returning()
-    if (!row) continue
-    // Pick 3-5 attendees, rotate through people list for variety
-    const picks: typeof peopleRows = []
-    for (let j = 0; j < s.attendees && peopleRows[(i + j) % peopleRows.length]; j++) {
-      picks.push(peopleRows[(i + j) % peopleRows.length]!)
-    }
-    if (picks.length > 0) {
-      await tx.insert(toolboxJournalAttendees).values(
-        picks.map((p, idx) => ({
-          tenantId,
-          journalId: row.id,
-          personId: p.id,
-          // Sign roughly 60% of attendees for closed/submitted talks
-          signatureDataUrl:
-            (s.status === 'closed' || (s.status === 'submitted' && idx % 2 === 0))
-              ? 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=='
-              : null,
-          signedAt:
-            (s.status === 'closed' || (s.status === 'submitted' && idx % 2 === 0))
-              ? new Date(today.getTime() - s.offset * dayMs + 3600 * 1000)
-              : null,
-        })),
-      )
-    }
-    inserted += 1
-  }
-
-  // Seed one example recurring assignment so the assignments page isn't empty.
-  if (foremanId) {
-    const existingA = await tx
-      .select({ id: toolboxJournalAssignments.id })
-      .from(toolboxJournalAssignments)
-      .where(sql`${toolboxJournalAssignments.tenantId} = ${tenantId} AND ${toolboxJournalAssignments.name} = 'Weekly Toolbox — All foremen'`)
-      .limit(1)
-    if (existingA.length === 0) {
-      await tx.insert(toolboxJournalAssignments).values({
-        tenantId,
-        name: 'Weekly Toolbox — All foremen',
-        description: 'Every foreman must log at least one toolbox talk per week.',
-        cron: '0 7 * * 1',
-        dueOffsetDays: 2,
-        active: true,
-        compliantPercentage: 80,
-        audience: { roleKeys: ['foreman'] },
-        createdByTenantUserId: foremanId,
-      })
-    }
-  }
-
-  console.log(`  · toolbox journals: ${inserted} seeded`)
-}
 
 async function insertOrgUnit(
   tx: any,
@@ -1957,6 +1761,7 @@ async function seedEquipmentRatesAndExpenses(tx: any, tenantId: string): Promise
   for (let i = 0; i < Math.min(items.length, expenseDefs.length); i++) {
     const item = items[i]
     const def = expenseDefs[i]
+    if (!item || !def) continue
     // Pre-check to keep idempotent (vendor + amount + item is unique enough
     // for the seed corpus).
     const [existing] = await tx

@@ -14,24 +14,26 @@
   },
   "dependencies": {
     "@beaconhs/audit": "workspace:*",
+    "@beaconhs/compliance": "workspace:*",
     "@beaconhs/db": "workspace:*",
     "@beaconhs/emails": "workspace:*",
+    "@beaconhs/etl": "workspace:*",
     "@beaconhs/events": "workspace:*",
     "@beaconhs/forms-core": "workspace:*",
     "@beaconhs/forms-pdf": "workspace:*",
     "@beaconhs/jobs": "workspace:*",
     "@beaconhs/plugin-sdk": "workspace:*",
     "@beaconhs/storage": "workspace:*",
-    "bullmq": "^5.76.10",
+    "bullmq": "^5.78.0",
     "drizzle-orm": "^0.45.2",
-    "ioredis": "^5.4.1",
-    "twilio": "^5.3.5",
+    "ioredis": "^5.11.1",
+    "twilio": "^6.0.2",
     "web-push": "^3.6.7"
   },
   "devDependencies": {
-    "@types/node": "^22.7.0",
+    "@types/node": "^25.9.2",
     "@types/web-push": "^3.6.4",
-    "tsx": "^4.19.2",
-    "typescript": "^5.6.3"
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3"
   }
 }

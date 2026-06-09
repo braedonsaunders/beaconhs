@@ -24,7 +24,7 @@ import {
   trainingSkillAuthorities,
   trainingSkillTypes,
 } from '@beaconhs/db/schema'
-import { requireRequestContext } from '@/lib/auth'
+import { requireModuleManage } from '@/lib/module-admin/guard'
 import { pickString } from '@/lib/list-params'
 import { DetailPageLayout } from '@/components/page-layout'
 import { DetailGrid } from '@/components/detail-grid'
@@ -53,7 +53,7 @@ export default async function SkillTypeDetailPage({
   const sp = await searchParams
   const active: Tab = pickActiveTab(sp, TABS, 'overview')
 
-  const ctx = await requireRequestContext()
+  const ctx = await requireModuleManage('training')
   const data = await ctx.db(async (tx) => {
     const [row] = await tx
       .select({ type: trainingSkillTypes, authority: trainingSkillAuthorities })

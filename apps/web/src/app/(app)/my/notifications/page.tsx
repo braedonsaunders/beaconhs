@@ -77,11 +77,6 @@ const CATEGORIES: { key: string; label: string; description: string }[] = [
     description: 'Assessments needing sign-off and locked-record events.',
   },
   {
-    key: 'toolbox',
-    label: 'Toolbox talks',
-    description: 'New talks logged on sites you supervise + recurring assignments.',
-  },
-  {
     key: 'lift_plan',
     label: 'Lift plans',
     description: 'Plans needing approval, signature, or scheduling updates.',

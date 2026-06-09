@@ -24,6 +24,7 @@ import {
 } from '@beaconhs/ui'
 import { inspectionBankCriteria, inspectionBanks } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { requireModuleManage, assertCanManageModule } from '@/lib/module-admin/guard'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { DetailPageLayout } from '@/components/page-layout'
 import { DetailGrid } from '@/components/detail-grid'
@@ -44,6 +45,7 @@ const RESPONSE_TYPES = [
 async function togglePublished(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'inspections')
   const id = String(formData.get('id') ?? '')
   const next = String(formData.get('next') ?? '') === 'true'
   await ctx.db((tx) =>
@@ -62,6 +64,7 @@ async function togglePublished(formData: FormData) {
 async function addCriteria(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'inspections')
   const bankId = String(formData.get('bankId') ?? '')
   const text = String(formData.get('text') ?? '').trim()
   if (!text) return
@@ -100,6 +103,7 @@ async function addCriteria(formData: FormData) {
 async function moveCriteria(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'inspections')
   const bankId = String(formData.get('bankId') ?? '')
   const criterionId = String(formData.get('criterionId') ?? '')
   const direction = String(formData.get('direction') ?? 'up') as 'up' | 'down'
@@ -143,6 +147,7 @@ async function moveCriteria(formData: FormData) {
 async function deleteCriteria(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'inspections')
   const bankId = String(formData.get('bankId') ?? '')
   const criterionId = String(formData.get('criterionId') ?? '')
   await ctx.db((tx) =>
@@ -173,7 +178,7 @@ export default async function InspectionBankDetailPage({
   const sp = await searchParams
   const active: Tab = pickActiveTab(sp, TABS, 'overview')
 
-  const ctx = await requireRequestContext()
+  const ctx = await requireModuleManage('inspections')
   const data = await ctx.db(async (tx) => {
     const [bank] = await tx
       .select()

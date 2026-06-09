@@ -1,0 +1,19 @@
+// /people/manage — the People administration hub. Tiles for groups, divisions
+// and job titles, driven by the module-admin registry. Gated to people who can
+// manage the org; everyone else lands on the directory.
+
+import { redirect } from 'next/navigation'
+import { can } from '@beaconhs/tenant'
+import { requireRequestContext } from '@/lib/auth'
+import { moduleAdminByKey } from '@/lib/module-admin/registry'
+import { ModuleManageHub } from '@/components/module-admin/module-manage-hub'
+
+export const dynamic = 'force-dynamic'
+export const metadata = { title: 'People administration' }
+
+export default async function PeopleManagePage() {
+  const ctx = await requireRequestContext()
+  const mod = moduleAdminByKey('people')!
+  if (!ctx.isSuperAdmin && !can(ctx, mod.permission)) redirect(mod.href)
+  return <ModuleManageHub module={mod} />
+}

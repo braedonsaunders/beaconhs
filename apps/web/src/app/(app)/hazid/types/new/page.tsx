@@ -11,7 +11,7 @@ import {
   Textarea,
 } from '@beaconhs/ui'
 import { hazidHazardSets } from '@beaconhs/db/schema'
-import { requireRequestContext } from '@/lib/auth'
+import { requireModuleManage } from '@/lib/module-admin/guard'
 import { PageContainer } from '@/components/page-layout'
 import { createAssessmentType } from '../../_actions'
 
@@ -25,7 +25,7 @@ async function submit(formData: FormData) {
 }
 
 export default async function NewAssessmentTypePage() {
-  const ctx = await requireRequestContext()
+  const ctx = await requireModuleManage('hazid')
   const sets = await ctx.db((tx) =>
     tx
       .select({ id: hazidHazardSets.id, name: hazidHazardSets.name })

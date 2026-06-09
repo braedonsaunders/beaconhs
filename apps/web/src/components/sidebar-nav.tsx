@@ -16,12 +16,19 @@ import {
   GraduationCap,
   HardHat,
   Layers,
+  LibraryBig,
+  Link2,
   ListChecks,
   MapPin,
   MessageSquare,
+  NotebookPen,
+  PanelLeft,
   Radiation,
+  Rss,
   Settings,
   ShieldCheck,
+  Star,
+  Tag,
   Timer,
   Users,
   Wrench,
@@ -45,12 +52,19 @@ const ICONS: Record<string, LucideIcon> = {
   grad: GraduationCap,
   'hard-hat': HardHat,
   layers: Layers,
+  library: LibraryBig,
+  link: Link2,
   'list-checks': ListChecks,
   pin: MapPin,
   message: MessageSquare,
+  journal: NotebookPen,
+  'panel-left': PanelLeft,
   radiation: Radiation,
+  rss: Rss,
   settings: Settings,
   shield: ShieldCheck,
+  star: Star,
+  tag: Tag,
   timer: Timer,
   users: Users,
   wrench: Wrench,
@@ -127,4 +141,23 @@ function isActive(pathname: string, href: string): boolean {
   if (pathname === href) return true
   if (href === '/') return false
   return pathname.startsWith(href + '/')
+}
+
+// --- Shared icon helpers (consumed by the /admin/navigation editor) -------
+
+/** Stable, sorted list of icon keys offered by the nav editor's icon picker. */
+export const ICON_KEYS = Object.keys(ICONS).sort()
+
+/** Render a nav icon by its string key (falls back to a neutral gauge). */
+export function NavIcon({
+  iconKey,
+  size = 15,
+  className,
+}: {
+  iconKey: string
+  size?: number
+  className?: string
+}) {
+  const Icon = ICONS[iconKey] ?? Gauge
+  return <Icon size={size} className={className} />
 }

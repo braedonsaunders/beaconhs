@@ -1,6 +1,6 @@
 import { config } from 'dotenv'
 import { resolve } from 'node:path'
-config({ path: resolve(import.meta.dirname ?? __dirname, '../../.env') })
+config({ path: resolve(import.meta.dirname ?? __dirname, '../../.env'), quiet: true })
 
 import type { Config } from 'drizzle-kit'
 

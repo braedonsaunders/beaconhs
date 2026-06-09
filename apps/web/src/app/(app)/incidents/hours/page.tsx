@@ -29,6 +29,7 @@ import {
 } from '@beaconhs/ui'
 import { incidentHoursPeriods, orgUnits } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { requireModuleManage, assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 import { ListPageLayout } from '@/components/page-layout'
 import { IncidentsSubNav } from '../_sub-nav'
@@ -39,6 +40,7 @@ export const dynamic = 'force-dynamic'
 async function createPeriod(formData: FormData): Promise<void> {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'incidents')
   const periodStart = String(formData.get('periodStart') ?? '').trim()
   const periodEnd = String(formData.get('periodEnd') ?? '').trim()
   const totalHoursRaw = String(formData.get('totalHours') ?? '').trim()
@@ -85,6 +87,7 @@ async function createPeriod(formData: FormData): Promise<void> {
 async function deletePeriod(formData: FormData): Promise<void> {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'incidents')
   const id = String(formData.get('id') ?? '')
   if (!id) return
   const before = await ctx.db(async (tx) => {
@@ -114,7 +117,7 @@ async function deletePeriod(formData: FormData): Promise<void> {
 }
 
 export default async function HoursPage() {
-  const ctx = await requireRequestContext()
+  const ctx = await requireModuleManage('incidents')
   const { rows, sites } = await ctx.db(async (tx) => {
     const all = await tx
       .select({

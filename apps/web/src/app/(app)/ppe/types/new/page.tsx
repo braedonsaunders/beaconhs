@@ -10,6 +10,7 @@ import { revalidatePath } from 'next/cache'
 import { Button, Input, Label, PageHeader, Select, Textarea } from '@beaconhs/ui'
 import { ppeTypes } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { assertCanManageModule, requireModuleManage } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 import { PageContainer } from '@/components/page-layout'
 
@@ -32,6 +33,7 @@ const CATEGORY_OPTIONS = [
 async function createType(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'ppe')
   const name = String(formData.get('name') ?? '').trim()
   const category = String(formData.get('category') ?? '').trim() || null
   const isInspectable = formData.get('isInspectable') === 'on'
@@ -78,6 +80,7 @@ async function createType(formData: FormData) {
 }
 
 export default async function NewPpeTypePage() {
+  await requireModuleManage('ppe')
   return (
     <PageContainer>
       <div className="mx-auto max-w-2xl">

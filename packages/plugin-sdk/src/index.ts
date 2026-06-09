@@ -76,7 +76,7 @@ export type PluginContext = {
       }) => Promise<{ id: string }>
     }
     incidents: { list: (filter?: { status?: string }) => Promise<Array<{ id: string }>> }
-    httpFetch: (input: RequestInfo, init?: RequestInit) => Promise<Response>
+    httpFetch: (input: string | URL | Request, init?: RequestInit) => Promise<Response>
   }
 }
 

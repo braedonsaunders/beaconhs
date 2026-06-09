@@ -19,7 +19,9 @@ import {
 import { type ScheduledTick } from '@beaconhs/jobs'
 import { scanReportSchedules } from '../lib/report-scheduler'
 import { scanFormAssignments } from '../lib/form-assignment-scanner'
+import { scanCompliance } from '../lib/compliance-scanner'
 import { runPluginCron } from '../lib/plugin-cron'
+import { runImport, RASSAUN_LOADERS } from '@beaconhs/etl'
 
 export async function processScheduledTick(job: Job<ScheduledTick>): Promise<void> {
   switch (job.data.kind) {
@@ -33,6 +35,13 @@ export async function processScheduledTick(job: Job<ScheduledTick>): Promise<voi
       return scanDocumentReview()
     case 'ca_overdue_scan':
       return scanCorrectiveActionOverdue()
+    case 'compliance_scan': {
+      const r = await scanCompliance()
+      console.log(
+        `[scheduled] compliance_scan: ${r.obligations} obligations across ${r.tenants} tenants / ${r.reminders} reminders / ${r.errors} errors`,
+      )
+      return
+    }
     case 'report_schedule_scan':
       return scanReportSchedules()
     case 'form_assignment_scan': {
@@ -53,6 +62,16 @@ export async function processScheduledTick(job: Job<ScheduledTick>): Promise<voi
     case 'report_run':
       console.log('[scheduled] report_run tick is a no-op (per-run dispatch handled by reports queue)')
       return
+    case 'etl_mssql_sync': {
+      if (!process.env.ETL_SOURCE_URL) {
+        console.log('[scheduled] etl_mssql_sync skipped: ETL_SOURCE_URL not configured')
+        return
+      }
+      const stats = await runImport(RASSAUN_LOADERS, { mode: 'sync' })
+      const total = stats.reduce((a, s) => a + s.upserted, 0)
+      console.log(`[scheduled] etl_mssql_sync: ${total} rows upserted across ${stats.length} entities`)
+      return
+    }
   }
 }
 

@@ -13,7 +13,7 @@ import { SearchInput } from '@/components/search-input'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
-import { listDocumentBooksForBulk } from './_actions'
+import { createBlankDocument, listDocumentBooksForBulk } from './_actions'
 import { DocumentsRecordsTable, type DocumentsTableRow } from './_records-table'
 
 export const metadata = { title: 'Documents' }
@@ -97,9 +97,9 @@ export default async function DocumentsPage({
                 <Link href={buildExportHref('/documents/export.csv', sp)}>
                   <Button variant="outline">Export CSV</Button>
                 </Link>
-                <Link href="/documents/new">
-                  <Button>New document</Button>
-                </Link>
+                <form action={createBlankDocument}>
+                  <Button type="submit">New document</Button>
+                </form>
               </div>
             }
           />
@@ -142,9 +142,9 @@ export default async function DocumentsPage({
           title={params.q || statusFilter ? 'No documents match these filters' : 'No documents yet'}
           description="Add policies, procedures, SDS sheets, manuals, and have workers acknowledge them."
           action={
-            <Link href="/documents/new">
-              <Button>Create your first document</Button>
-            </Link>
+            <form action={createBlankDocument}>
+              <Button type="submit">Create your first document</Button>
+            </form>
           }
         />
       ) : (

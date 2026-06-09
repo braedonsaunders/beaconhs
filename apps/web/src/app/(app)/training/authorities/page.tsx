@@ -13,7 +13,7 @@ import {
   TableRow,
 } from '@beaconhs/ui'
 import { trainingSkillAuthorities, trainingSkillTypes } from '@beaconhs/db/schema'
-import { requireRequestContext } from '@/lib/auth'
+import { requireModuleManage } from '@/lib/module-admin/guard'
 import { parseListParams } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
 import { SearchInput } from '@/components/search-input'
@@ -37,7 +37,7 @@ export default async function TrainingAuthoritiesPage({
     perPage: 25,
     allowedSorts: SORTS,
   })
-  const ctx = await requireRequestContext()
+  const ctx = await requireModuleManage('training')
 
   const { rows, total } = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = []

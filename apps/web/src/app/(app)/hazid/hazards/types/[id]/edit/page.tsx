@@ -2,7 +2,7 @@ import { notFound, redirect } from 'next/navigation'
 import { eq } from 'drizzle-orm'
 import { Button, Card, CardContent, DetailHeader, Input, Label, Textarea } from '@beaconhs/ui'
 import { hazidHazardTypes } from '@beaconhs/db/schema'
-import { requireRequestContext } from '@/lib/auth'
+import { requireModuleManage } from '@/lib/module-admin/guard'
 import { PageContainer } from '@/components/page-layout'
 import { deleteHazardType, updateHazardType } from '../../../../_actions'
 
@@ -23,7 +23,7 @@ async function remove(formData: FormData) {
 
 export default async function EditHazardTypePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const ctx = await requireRequestContext()
+  const ctx = await requireModuleManage('hazid')
   const [row] = await ctx.db((tx) =>
     tx.select().from(hazidHazardTypes).where(eq(hazidHazardTypes.id, id)).limit(1),
   )

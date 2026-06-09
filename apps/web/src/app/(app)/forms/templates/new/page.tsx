@@ -29,8 +29,9 @@ import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { PageContainer } from '@/components/page-layout'
 import { eq } from 'drizzle-orm'
+import { AppTypePicker } from './_app-type-picker'
 
-export const metadata = { title: 'New form template' }
+export const metadata = { title: 'New app' }
 
 const CATEGORIES = [
   { value: 'inspection', label: 'Inspection' },
@@ -289,12 +290,23 @@ export default function NewTemplatePage() {
     <PageContainer>
       <div className="mx-auto max-w-4xl space-y-8">
         <PageHeader
-          title="New form template"
-          description="Start from a canonical template — or build one from scratch. Canonical templates clone a known-good schema into your tenant; you can edit any field afterward."
-          back={{ href: '/forms', label: 'Back to forms' }}
+          title="New app"
+          description="Pick an app type to start — each opens the designer already shaped for that type. Or clone a canonical template / build from scratch below."
+          back={{ href: '/forms', label: 'Back to Builder' }}
         />
 
-        {/* Start-from-canonical gallery (primary) */}
+        {/* App-type picker (primary) */}
+        <section className="space-y-3">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">Choose an app type</h2>
+            <p className="text-sm text-slate-600">
+              Form, multi-step Wizard, Checklist, tabular Register, or a composed Mini-app.
+            </p>
+          </div>
+          <AppTypePicker />
+        </section>
+
+        {/* Start-from-canonical gallery */}
         <section className="space-y-3">
           <div className="flex items-end justify-between gap-2">
             <div>

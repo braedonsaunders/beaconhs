@@ -28,6 +28,10 @@ import {
   ppeTypes,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import {
+  assertCanManageModule,
+  requireModuleManage,
+} from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 import { ListPageLayout } from '@/components/page-layout'
 import { PpeSubNav } from '@/components/ppe-sub-nav'
@@ -38,6 +42,7 @@ export const dynamic = 'force-dynamic'
 async function deleteType(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'ppe')
   const id = String(formData.get('id') ?? '').trim()
   if (!id) return
   await ctx.db((tx) => tx.delete(ppeTypes).where(eq(ppeTypes.id, id)))
@@ -51,7 +56,7 @@ async function deleteType(formData: FormData) {
 }
 
 export default async function PpeTypesPage() {
-  const ctx = await requireRequestContext()
+  const ctx = await requireModuleManage('ppe')
   const { types, itemCounts, criteriaCounts } = await ctx.db(async (tx) => {
     const t = await tx.select().from(ppeTypes).orderBy(asc(ppeTypes.name))
     const itemTally = await tx

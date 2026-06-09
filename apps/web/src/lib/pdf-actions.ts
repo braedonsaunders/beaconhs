@@ -70,19 +70,6 @@ export async function requestHazidPdf(assessmentId: string): Promise<RequestPdfR
   return { ok: true }
 }
 
-export async function requestToolboxPdf(journalId: string): Promise<RequestPdfResult> {
-  const ctx = await requireRequestContext()
-  if (!ctx.tenantId) return { ok: false, error: 'No active tenant' }
-  await enqueuePdf({ kind: 'toolbox', tenantId: ctx.tenantId, journalId })
-  await recordAudit(ctx, {
-    entityType: 'toolbox_journal',
-    entityId: journalId,
-    action: 'export',
-    summary: 'Requested toolbox journal PDF render',
-  })
-  return { ok: true }
-}
-
 export async function requestCaPdf(caId: string): Promise<RequestPdfResult> {
   const ctx = await requireRequestContext()
   if (!ctx.tenantId) return { ok: false, error: 'No active tenant' }

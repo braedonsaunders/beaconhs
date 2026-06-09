@@ -36,6 +36,7 @@ import {
   ppeTypes,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { assertCanManageModule, requireModuleManage } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 import { DetailGrid } from '@/components/detail-grid'
 import { Section } from '@/components/section'
@@ -57,6 +58,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 async function addCriterion(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'ppe')
   const ppeTypeId = String(formData.get('ppeTypeId') ?? '').trim()
   const question = String(formData.get('question') ?? '').trim()
   const description = String(formData.get('description') ?? '').trim() || null
@@ -112,6 +114,7 @@ async function addCriterion(formData: FormData) {
 async function updateCriterion(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'ppe')
   const id = String(formData.get('id') ?? '').trim()
   const ppeTypeId = String(formData.get('ppeTypeId') ?? '').trim()
   const question = String(formData.get('question') ?? '').trim()
@@ -142,6 +145,7 @@ async function updateCriterion(formData: FormData) {
 async function deleteCriterion(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'ppe')
   const id = String(formData.get('id') ?? '').trim()
   const ppeTypeId = String(formData.get('ppeTypeId') ?? '').trim()
   if (!id) return
@@ -160,6 +164,7 @@ async function deleteCriterion(formData: FormData) {
 async function moveCriterion(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'ppe')
   const id = String(formData.get('id') ?? '').trim()
   const direction = String(formData.get('direction') ?? '') as 'up' | 'down'
   const ppeTypeId = String(formData.get('ppeTypeId') ?? '').trim()
@@ -202,6 +207,7 @@ async function moveCriterion(formData: FormData) {
 async function updateSizing(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'ppe')
   const ppeTypeId = String(formData.get('ppeTypeId') ?? '').trim()
   const raw = String(formData.get('sizingScheme') ?? '').trim()
   if (!ppeTypeId) return
@@ -239,7 +245,7 @@ export default async function PpeTypeDetailPage({
   const { id } = await params
   const sp = await searchParams
   const active: Tab = pickActiveTab(sp, TABS, 'general')
-  const ctx = await requireRequestContext()
+  const ctx = await requireModuleManage('ppe')
 
   const data = await ctx.db(async (tx) => {
     const [t] = await tx

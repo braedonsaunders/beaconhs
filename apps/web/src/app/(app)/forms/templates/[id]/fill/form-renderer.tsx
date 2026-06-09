@@ -48,6 +48,8 @@ import {
   type FormulaExpression,
   type DefaultValueExpression,
   type LogicRule,
+  type TableColumn,
+  type TableConfig,
 } from '@beaconhs/forms-core'
 import {
   createDraftResponse,
@@ -60,6 +62,7 @@ import { FileUpload, dataUrlToFile, type AttachedFile } from '@/components/file-
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
 import { WizardLayout } from '@/components/page-layout'
 import { toast } from '@/lib/toast'
+import { canvasCss, columnsCss, gridClass, resolveCanvas } from '@/app/(app)/forms/_lib/canvas'
 
 type CurrentUser = {
   personId: string | null
@@ -768,6 +771,72 @@ export function FormRenderer({
                     errors={errors}
                     sectionError={errors.get(`__section_${sec.id}`) ?? null}
                   />
+                ) : sec.canvas ? (
+                  (() => {
+                    const cls = gridClass(sec.id)
+                    const canvas = sec.canvas
+                    const visible = sec.fields.filter(
+                      (f) => !f.showIf || evaluateLogicRule(f.showIf, evalCtx),
+                    )
+                    const { order, byId } = resolveCanvas(
+                      visible.map((f) => f.id),
+                      canvas.items,
+                      canvas.cols,
+                    )
+                    const byField = new Map(visible.map((f) => [f.id, f]))
+                    return (
+                      <div className={cls}>
+                        <style>{canvasCss(cls, canvas.cols, canvas.rowHeight, byId)}</style>
+                        {order.map((id) => {
+                          const f = byField.get(id)!
+                          return (
+                            <div key={id} data-ci={id}>
+                              <FieldRow
+                                field={f}
+                                value={values[f.id]}
+                                onChange={(v) => setValue(f.id, v)}
+                                error={errors.get(f.id)}
+                                people={people}
+                                evalCtx={evalCtx}
+                                loading={pickerLoading.has(f.id)}
+                              />
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )
+                  })()
+                ) : sec.layout && sec.layout.columns > 1 ? (
+                  (() => {
+                    const cls = gridClass(sec.id)
+                    const cols = sec.layout.columns
+                    const visible = sec.fields.filter(
+                      (f) => !f.showIf || evaluateLogicRule(f.showIf, evalCtx),
+                    )
+                    const css = columnsCss(
+                      cls,
+                      cols,
+                      visible.map((f) => ({ id: f.id, span: f.colSpan ?? cols })),
+                    )
+                    return (
+                      <div className={cls}>
+                        <style>{css}</style>
+                        {visible.map((f) => (
+                          <div key={f.id} data-cs={f.id}>
+                            <FieldRow
+                              field={f}
+                              value={values[f.id]}
+                              onChange={(v) => setValue(f.id, v)}
+                              error={errors.get(f.id)}
+                              people={people}
+                              evalCtx={evalCtx}
+                              loading={pickerLoading.has(f.id)}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  })()
                 ) : (
                   sec.fields.map((f) => {
                     if (f.showIf && !evaluateLogicRule(f.showIf, evalCtx)) return null
@@ -1216,9 +1285,247 @@ function FieldInput({
       return <p className="text-sm text-slate-600">{field.helpText?.en ?? field.label?.en}</p>
     case 'divider':
       return <hr className="border-slate-200" />
+    case 'image':
+      return <ImageDisplay field={field} />
+    case 'typed_attestation':
+      return <TypedAttestationField field={field} value={value} onChange={onChange} />
+    case 'table':
+      return <TableField field={field} value={value} onChange={onChange} />
     default:
       return <Input value={(value as string) ?? ''} onChange={(e) => onChange(e.target.value)} />
   }
+}
+
+// --- Table field ------------------------------------------------------------
+
+function TableField({
+  field,
+  value,
+  onChange,
+}: {
+  field: FormField
+  value: unknown
+  onChange: (v: unknown) => void
+}) {
+  const config = (field.config ?? {}) as Partial<TableConfig>
+  const columns = (config.columns ?? []) as TableColumn[]
+  const rowMode = config.rowMode === 'fixed' ? 'fixed' : 'addable'
+  const fixedRows = config.rows ?? []
+  const minRows = config.minRows ?? 0
+  const maxRows = config.maxRows
+
+  const stored = Array.isArray(value) ? (value as Record<string, unknown>[]) : []
+  // In fixed mode the row set is defined by the template; pad stored values so
+  // every predefined row renders.
+  const rows = rowMode === 'fixed' ? fixedRows.map((_, i) => stored[i] ?? {}) : stored
+
+  function setCell(i: number, key: string, v: unknown) {
+    onChange(rows.map((r, idx) => (idx === i ? { ...r, [key]: v } : r)))
+  }
+  function addRow() {
+    if (maxRows != null && rows.length >= maxRows) return
+    onChange([...rows, {}])
+  }
+  function removeRow(i: number) {
+    if (rows.length <= minRows) return
+    onChange(rows.filter((_, idx) => idx !== i))
+  }
+
+  if (columns.length === 0) {
+    return (
+      <p className="rounded-md border border-dashed border-slate-300 px-3 py-2 text-xs text-slate-400">
+        This table has no columns configured yet.
+      </p>
+    )
+  }
+
+  return (
+    <div className="overflow-x-auto rounded-md border border-slate-200">
+      <table className="w-full border-collapse text-sm">
+        <thead>
+          <tr className="bg-slate-50">
+            {rowMode === 'fixed' ? (
+              <th className="border-b border-slate-200 px-2 py-1.5 text-left text-xs font-semibold text-slate-600" />
+            ) : null}
+            {columns.map((c) => (
+              <th
+                key={c.key}
+                className="border-b border-slate-200 px-2 py-1.5 text-left text-xs font-semibold text-slate-600"
+              >
+                {c.label || c.key}
+              </th>
+            ))}
+            {rowMode === 'addable' ? <th className="w-8 border-b border-slate-200" /> : null}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 ? (
+            <tr>
+              <td colSpan={columns.length + 1} className="px-2 py-3 text-center text-xs text-slate-400">
+                No rows yet — add one below.
+              </td>
+            </tr>
+          ) : (
+            rows.map((row, i) => (
+              <tr key={i} className="border-b border-slate-100 last:border-b-0">
+                {rowMode === 'fixed' ? (
+                  <td className="whitespace-nowrap px-2 py-1 text-xs font-medium text-slate-700">
+                    {fixedRows[i]?.label ?? `Row ${i + 1}`}
+                  </td>
+                ) : null}
+                {columns.map((c) => (
+                  <td key={c.key} className="px-1.5 py-1 align-top">
+                    <TableCell column={c} value={row[c.key]} onChange={(v) => setCell(i, c.key, v)} />
+                  </td>
+                ))}
+                {rowMode === 'addable' ? (
+                  <td className="px-1 py-1 text-center align-middle">
+                    <button
+                      type="button"
+                      onClick={() => removeRow(i)}
+                      disabled={rows.length <= minRows}
+                      title="Remove row"
+                      className="rounded p-1 text-slate-400 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-30"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </td>
+                ) : null}
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+      {rowMode === 'addable' ? (
+        <div className="border-t border-slate-200 p-1.5">
+          <button
+            type="button"
+            onClick={addRow}
+            disabled={maxRows != null && rows.length >= maxRows}
+            className="flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-teal-700 hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Plus size={13} /> Add row
+          </button>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function TableCell({
+  column,
+  value,
+  onChange,
+}: {
+  column: TableColumn
+  value: unknown
+  onChange: (v: unknown) => void
+}) {
+  switch (column.type) {
+    case 'number':
+      return (
+        <Input
+          type="number"
+          className="h-8 text-sm"
+          value={(value as number | string | null) ?? ''}
+          onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))}
+        />
+      )
+    case 'date':
+      return (
+        <Input
+          type="date"
+          className="h-8 text-sm"
+          value={(value as string) ?? ''}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      )
+    case 'checkbox':
+      return (
+        <div className="flex h-8 items-center justify-center">
+          <input
+            type="checkbox"
+            checked={!!value}
+            onChange={(e) => onChange(e.target.checked)}
+            className="h-4 w-4"
+          />
+        </div>
+      )
+    case 'select':
+      return (
+        <Select
+          className="h-8 text-sm"
+          value={(value as string) ?? ''}
+          onChange={(e) => onChange(e.target.value)}
+        >
+          <option value="">—</option>
+          {(column.options ?? []).map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label || o.value}
+            </option>
+          ))}
+        </Select>
+      )
+    default:
+      return (
+        <Input
+          className="h-8 text-sm"
+          value={(value as string) ?? ''}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      )
+  }
+}
+
+// --- Typed attestation + display image (previously fell back to a text box) --
+
+function TypedAttestationField({
+  field,
+  value,
+  onChange,
+}: {
+  field: FormField
+  value: unknown
+  onChange: (v: unknown) => void
+}) {
+  const v = (value ?? {}) as { name?: string; agreed?: boolean }
+  const statement =
+    (field.config?.statement as string | undefined) ??
+    field.helpText?.en ??
+    'I attest that the information above is true and accurate.'
+  return (
+    <div className="space-y-2">
+      <Input
+        placeholder="Type your full name"
+        value={v.name ?? ''}
+        onChange={(e) => onChange({ ...v, name: e.target.value })}
+      />
+      <label className="flex items-start gap-2 text-sm text-slate-700">
+        <input
+          type="checkbox"
+          className="mt-0.5"
+          checked={!!v.agreed}
+          onChange={(e) => onChange({ ...v, agreed: e.target.checked })}
+        />
+        <span>{statement}</span>
+      </label>
+    </div>
+  )
+}
+
+function ImageDisplay({ field }: { field: FormField }) {
+  const url = (field.config?.url ?? field.config?.src) as string | undefined
+  if (!url) {
+    return <p className="text-xs text-slate-400">No image configured for this field.</p>
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={url}
+      alt={field.label?.en ?? 'Image'}
+      className="max-h-64 w-auto rounded border border-slate-200"
+    />
+  )
 }
 
 // --- Field-level validation helper -----------------------------------------

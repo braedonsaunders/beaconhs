@@ -30,8 +30,8 @@ import {
   personTitleAssignments,
   personTitles,
 } from '@beaconhs/db/schema'
-import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
+import { requireModuleManage } from '@/lib/module-admin/guard'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import {
   acknowledgeTitleTask,
@@ -63,7 +63,7 @@ export default async function TitleTasksPage({
   const active = pickActiveTab(sp, TABS, 'manage')
   const editTaskId = typeof sp.edit === 'string' ? sp.edit : null
 
-  const ctx = await requireRequestContext()
+  const ctx = await requireModuleManage('people')
   const data = await ctx.db(async (tx) => {
     const [row] = await tx.select().from(personTitles).where(eq(personTitles.id, id)).limit(1)
     if (!row) return null

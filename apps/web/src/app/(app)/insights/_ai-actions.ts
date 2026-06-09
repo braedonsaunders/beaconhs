@@ -1,0 +1,84 @@
+'use server'
+
+// On-demand bulk AI analysis of recent journals for the Insights "AI journal
+// analysis" widget: sentiment, surfaced issues and recommended corrective
+// actions. Scoped exactly like the journal reads (self / site / all).
+
+import { and, desc, eq, gte, isNull } from 'drizzle-orm'
+import { alias } from 'drizzle-orm/pg-core'
+import { analyseJournals, type JournalAnalysis } from '@beaconhs/ai'
+import { journalEntries, orgUnits, people } from '@beaconhs/db/schema'
+import { can } from '@beaconhs/tenant'
+import { requireRequestContext } from '@/lib/auth'
+import { getTenantAiConfig } from '@/lib/ai-config'
+import { recordAudit } from '@/lib/audit'
+import { getAuthorPersonId, journalScopeWhere } from '../journals/_lib'
+
+const analysisAuthor = alias(people, 'analysis_author')
+
+export type JournalAnalysisResult =
+  | { ok: true; analysis: JournalAnalysis; entryCount: number; days: number }
+  | { ok: false; error: string }
+
+export async function runJournalAnalysis(days = 30): Promise<JournalAnalysisResult> {
+  const ctx = await requireRequestContext()
+  if (!ctx.isSuperAdmin && !can(ctx, 'reports.read')) {
+    return { ok: false, error: 'You do not have access to insights.' }
+  }
+  const aiConfig = await getTenantAiConfig(ctx)
+  if (!aiConfig) return { ok: false, error: 'AI is not configured. Set it up under Admin → AI.' }
+
+  const safeDays = Math.min(370, Math.max(1, Math.floor(days)))
+  const since = new Date(Date.now() - safeDays * 86_400_000).toISOString().slice(0, 10)
+  const authorPersonId = await getAuthorPersonId(ctx)
+  const scope = journalScopeWhere(ctx, authorPersonId)
+
+  const rows = await ctx.db((tx) =>
+    tx
+      .select({
+        date: journalEntries.entryDate,
+        text: journalEntries.bodyText,
+        site: orgUnits.name,
+        first: analysisAuthor.firstName,
+        last: analysisAuthor.lastName,
+      })
+      .from(journalEntries)
+      .leftJoin(orgUnits, eq(orgUnits.id, journalEntries.siteOrgUnitId))
+      .leftJoin(analysisAuthor, eq(analysisAuthor.id, journalEntries.personId))
+      .where(
+        and(
+          isNull(journalEntries.deletedAt),
+          gte(journalEntries.entryDate, since),
+          ...(scope ? [scope] : []),
+        ),
+      )
+      .orderBy(desc(journalEntries.entryDate))
+      .limit(200),
+  )
+
+  const entries = rows
+    .filter((r) => (r.text ?? '').trim().length > 0)
+    .map((r) => ({
+      date: r.date,
+      site: r.site,
+      author: r.first ? `${r.first} ${r.last ?? ''}`.trim() : null,
+      text: (r.text ?? '').slice(0, 800),
+    }))
+  if (entries.length === 0) {
+    return { ok: false, error: 'No journal entries in this period to analyse.' }
+  }
+
+  const analysis = await analyseJournals(aiConfig, {
+    scope: safeDays <= 7 ? 'past week' : safeDays <= 31 ? 'past 30 days' : 'period',
+    entries,
+  })
+  if (!analysis) return { ok: false, error: 'Could not analyse the journals.' }
+
+  await recordAudit(ctx, {
+    entityType: 'journal_entry',
+    action: 'export',
+    summary: `AI-analysed ${entries.length} journal entries`,
+    metadata: { days: safeDays },
+  })
+  return { ok: true, analysis, entryCount: entries.length, days: safeDays }
+}

@@ -13,6 +13,7 @@ import {
   users,
 } from '@beaconhs/db/schema'
 import { publicUrl } from '@beaconhs/storage'
+import { sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import type { RequestContext } from '@beaconhs/tenant'
 import { recordAudit } from '@/lib/audit'
 
@@ -117,7 +118,7 @@ export async function sendDocumentEmail(
         ? `<div style="font-size:13px;white-space:pre-wrap;margin-bottom:12px;">${escapeHtml(data.doc.description)}</div>`
         : ''}
       ${data.publishedVersion?.v.contentMarkdown
-        ? `<div style="font-size:13px;white-space:pre-wrap;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px;margin-bottom:12px;">${escapeHtml(data.publishedVersion.v.contentMarkdown)}</div>`
+        ? `<div style="font-size:13px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px;margin-bottom:12px;">${sanitizeDocumentHtml(data.publishedVersion.v.contentMarkdown)}</div>`
         : ''}
       <p style="margin:18px 0 4px;font-size:13px;">
         <a href="${escapeHtml(docUrl)}" style="background:#0f766e;color:#fff;padding:8px 14px;border-radius:6px;text-decoration:none;font-weight:600">Open in app</a>

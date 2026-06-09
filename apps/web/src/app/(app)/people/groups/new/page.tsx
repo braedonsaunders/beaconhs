@@ -9,6 +9,7 @@ import {
   Textarea,
 } from '@beaconhs/ui'
 import { PageContainer } from '@/components/page-layout'
+import { requireModuleManage } from '@/lib/module-admin/guard'
 import { createGroup } from '../../_actions/groups'
 
 export const metadata = { title: 'New group' }
@@ -24,7 +25,8 @@ const COLOR_PRESETS = [
   '#475569', // slate
 ] as const
 
-export default function NewGroupPage() {
+export default async function NewGroupPage() {
+  await requireModuleManage('people')
   return (
     <PageContainer>
       <div className="max-w-2xl space-y-5">

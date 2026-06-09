@@ -1,0 +1,125 @@
+// Canonical registry of built-in app modules.
+//
+// This is the single source of truth for the left-hand navigation. The
+// resolver (./resolve.ts) merges this with a tenant's saved overrides
+// (tenant_nav_config) to produce the rendered sidebar; the in-UI editor
+// (/admin/navigation) lists these as the modules an admin can show / hide /
+// reorder / re-label.
+//
+// Pure data + helpers only — no server imports — so the client editor can
+// import it too. `TenantNavConfig` is a type-only import (erased at build).
+
+import type { TenantNavConfig } from '@beaconhs/db/schema'
+
+export type NavModule = {
+  /** Stable id, referenced by NavItemConfig.moduleKey. Never change once shipped. */
+  key: string
+  href: string
+  label: string
+  /** Key into the ICONS map in components/sidebar-nav.tsx. */
+  iconKey: string
+  /**
+   * Permission required to see this module. Checked with `can(ctx, perm)`
+   * (wildcard-aware). Undefined = always visible. Map only to permissions the
+   * built-in roles already hold so the default roles don't lose core tools.
+   */
+  requiredPermission?: string
+  /** Default group label — must be one of NAV_GROUP_ORDER. */
+  group: (typeof NAV_GROUP_ORDER)[number]
+}
+
+// Group order top-to-bottom.
+export const NAV_GROUP_ORDER = [
+  'Overview',
+  'Frontline',
+  'Programs',
+  'Assets & people',
+  'Compliance',
+  'Insight',
+  'Settings',
+] as const
+
+export type NavGroupLabel = (typeof NAV_GROUP_ORDER)[number]
+
+// Stable, url-ish ids for the default groups (used as React keys / reorder ids).
+export function defaultGroupId(label: string): string {
+  return label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+}
+
+// Every built-in module. Extracted from the previous static NAV_GROUPS in
+// app-shell.tsx. Note: the old hardcoded "Lift plans" and "Toolbox talks"
+// entries are intentionally gone — both are form templates now, surfaced as
+// pinned forms by the resolver (auto-pinned by key in resolve.ts).
+export const NAV_MODULES: NavModule[] = [
+  // Overview
+  { key: 'dashboard', href: '/dashboard', label: 'Dashboard', iconKey: 'gauge', group: 'Overview' },
+  { key: 'feed', href: '/feed', label: 'Feed', iconKey: 'rss', group: 'Overview' },
+  { key: 'my', href: '/my', label: 'My', iconKey: 'circle-user', group: 'Overview' },
+  { key: 'notifications', href: '/notifications', label: 'Inbox', iconKey: 'bell', group: 'Overview' },
+
+  // Frontline
+  { key: 'inspections', href: '/inspections', label: 'Inspections', iconKey: 'clipboard', group: 'Frontline' },
+  { key: 'hazid', href: '/hazid', label: 'JSHA / HazID', iconKey: 'radiation', group: 'Frontline' },
+  { key: 'journals', href: '/journals', label: 'Journals', iconKey: 'journal', group: 'Frontline' },
+  { key: 'incidents', href: '/incidents', label: 'Incidents', iconKey: 'alert', group: 'Frontline' },
+  { key: 'corrective-actions', href: '/corrective-actions', label: 'Corrective Actions', iconKey: 'list-checks', group: 'Frontline' },
+  // Field tools (safe-distance calc, etc.) sit with the crew workflows by default.
+  { key: 'tools', href: '/tools', label: 'Tools', iconKey: 'wrench', group: 'Frontline' },
+
+  // Programs
+  { key: 'training', href: '/training', label: 'Training', iconKey: 'grad', group: 'Programs' },
+  { key: 'documents', href: '/documents', label: 'Documents', iconKey: 'book', group: 'Programs' },
+  { key: 'confined-space', href: '/confined-space', label: 'Confined Space', iconKey: 'shield', requiredPermission: 'cs.permit.open', group: 'Programs' },
+  { key: 'lone-worker', href: '/lone-worker', label: 'Lone Worker', iconKey: 'timer', group: 'Programs' },
+
+  // Assets & people
+  { key: 'people', href: '/people', label: 'People', iconKey: 'users', group: 'Assets & people' },
+  { key: 'locations', href: '/locations', label: 'Locations', iconKey: 'pin', group: 'Assets & people' },
+  { key: 'equipment', href: '/equipment', label: 'Equipment', iconKey: 'wrench', group: 'Assets & people' },
+  { key: 'ppe', href: '/ppe', label: 'PPE', iconKey: 'hard-hat', group: 'Assets & people' },
+
+  // Compliance — the unified obligations hub (viewing + management). Its own group
+  // and its own gate: it owns writes now, so it must not inherit the read-only
+  // reports.read audience.
+  { key: 'compliance', href: '/compliance', label: 'Compliance', iconKey: 'check', requiredPermission: 'compliance.read', group: 'Compliance' },
+
+  // Insight
+  { key: 'insights', href: '/insights', label: 'Insights', iconKey: 'gauge', requiredPermission: 'reports.read', group: 'Insight' },
+  { key: 'reports', href: '/reports', label: 'Reports', iconKey: 'file', requiredPermission: 'reports.read', group: 'Insight' },
+
+  // Settings
+  // Library & catalogues and Navigation are intentionally NOT sidebar modules —
+  // they're surfaced as tiles on the /admin landing page to keep the sidebar lean.
+  { key: 'admin', href: '/admin', label: 'Admin', iconKey: 'settings', requiredPermission: 'admin.settings.manage', group: 'Settings' },
+  // Forms = the template library + designer; a build/admin task, so it lives in
+  // Settings. Crews don't need the library — they fill forms via assignments,
+  // the module pages (inspections/JSHA/…), and pinned forms.
+  { key: 'forms', href: '/forms', label: 'Builder', iconKey: 'clipboard-check', requiredPermission: 'forms.template.read', group: 'Settings' },
+  { key: 'utilities', href: '/utilities', label: 'Utilities', iconKey: 'gauge', group: 'Settings' },
+]
+
+const MODULE_BY_KEY = new Map(NAV_MODULES.map((m) => [m.key, m]))
+
+export function moduleByKey(key: string): NavModule | undefined {
+  return MODULE_BY_KEY.get(key)
+}
+
+// Default config when a tenant has no saved row: every module in registry order,
+// grouped by its `group`. Pure (no DB) — the resolver layers the lift-plan form
+// pin on top of this. Also used by the editor's "reset to defaults".
+export function buildDefaultNavConfig(): TenantNavConfig {
+  return {
+    version: 1,
+    groups: NAV_GROUP_ORDER.map((label) => ({
+      id: defaultGroupId(label),
+      label,
+      items: NAV_MODULES.filter((m) => m.group === label).map((m) => ({
+        kind: 'module' as const,
+        moduleKey: m.key,
+      })),
+    })).filter((g) => g.items.length > 0),
+  }
+}
+
+// Default icon for a pinned form when neither the pin nor the template sets one.
+export const PINNED_FORM_DEFAULT_ICON = 'clipboard-check'

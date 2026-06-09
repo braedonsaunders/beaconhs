@@ -33,7 +33,7 @@ type Action = {
 const ACTIONS: Action[] = [
   { href: '/incidents/new', label: 'Report incident', icon: AlertTriangle, tone: 'rose' },
   { href: '/hazid/new', label: 'Start JSHA', icon: HardHat, tone: 'amber' },
-  { href: '/toolbox/new', label: 'Log toolbox talk', icon: ClipboardList, tone: 'sky' },
+  { href: '/forms/by-key/toolbox-talk/fill', label: 'Log toolbox talk', icon: ClipboardList, tone: 'sky' },
   { href: '/corrective-actions/new', label: 'New CA', icon: ListChecks, tone: 'teal' },
   { href: '/equipment/check-out', label: 'Check out equipment', icon: ClipboardCheck, tone: 'violet' },
   { href: '/reports', label: 'Run report', icon: FileText, tone: 'slate' },

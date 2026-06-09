@@ -13,6 +13,7 @@ import {
 } from '@beaconhs/ui'
 import { inspectionTypes } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { requireModuleManage, assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 import { PageContainer } from '@/components/page-layout'
 
@@ -30,6 +31,7 @@ const CADENCES = [
 async function updateType(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'inspections')
   const id = String(formData.get('id') ?? '')
   const name = String(formData.get('name') ?? '').trim()
   if (!name) throw new Error('Name is required')
@@ -80,7 +82,7 @@ export default async function EditInspectionTypePage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const ctx = await requireRequestContext()
+  const ctx = await requireModuleManage('inspections')
   const type = await ctx.db(async (tx) => {
     const [row] = await tx.select().from(inspectionTypes).where(eq(inspectionTypes.id, id)).limit(1)
     return row ?? null

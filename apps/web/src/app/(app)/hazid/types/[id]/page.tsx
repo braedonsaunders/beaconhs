@@ -8,7 +8,7 @@ import {
   hazidAssessmentTypes,
   hazidHazardSets,
 } from '@beaconhs/db/schema'
-import { requireRequestContext } from '@/lib/auth'
+import { requireModuleManage } from '@/lib/module-admin/guard'
 import { DetailGrid } from '@/components/detail-grid'
 import { DetailPageLayout } from '@/components/page-layout'
 import { Section } from '@/components/section'
@@ -22,7 +22,7 @@ export default async function AssessmentTypeDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const ctx = await requireRequestContext()
+  const ctx = await requireModuleManage('hazid')
   const data = await ctx.db(async (tx) => {
     const [type] = await tx
       .select()

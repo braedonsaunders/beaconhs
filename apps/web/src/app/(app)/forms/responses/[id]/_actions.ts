@@ -31,6 +31,7 @@ import {
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { runStatusChangeAutomations } from '@/app/(app)/forms/_lib/run-automations'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -43,6 +44,27 @@ function nowIso(): string {
 function revalidateResponse(id: string) {
   revalidatePath(`/forms/responses/${id}`)
   revalidatePath(`/forms/responses`)
+}
+
+// Fire status_change flows for a response transition. Best-effort: a flow must
+// never break the workflow action, so failures are swallowed.
+async function fireStatusChange(
+  ctx: Awaited<ReturnType<typeof requireRequestContext>>,
+  response: typeof formResponses.$inferSelect,
+  toStatus: string,
+): Promise<void> {
+  try {
+    await runStatusChangeAutomations(ctx, {
+      templateId: response.templateId,
+      responseId: response.id,
+      data: (response.data ?? {}) as Record<string, unknown>,
+      score: response.complianceScore != null ? Number(response.complianceScore) : null,
+      status: response.complianceStatus ?? null,
+      toStatus,
+    })
+  } catch {
+    // ignore — flows are best-effort
+  }
 }
 
 // Resolve a response + its template's workflow schema in one round-trip.
@@ -392,6 +414,7 @@ export async function advanceWorkflowStep(args: {
       summary: `Advanced workflow: "${currentStepKey}" → "${next.key}"`,
       metadata: { from: currentStepKey, to: next.key },
     })
+    await fireStatusChange(ctx, response, 'in_progress')
     revalidateResponse(responseId)
     return { ok: true, nextStepKey: next.key, closed: false }
   }
@@ -419,6 +442,7 @@ export async function advanceWorkflowStep(args: {
     summary: `Advanced workflow: closed after "${currentStepKey}"`,
     metadata: { from: currentStepKey, closed: true },
   })
+  await fireStatusChange(ctx, response, 'closed')
   revalidateResponse(responseId)
   return { ok: true, nextStepKey: null, closed: true }
 }
@@ -502,6 +526,7 @@ export async function rejectWorkflowStep(args: {
     metadata: { stepKey: currentStepKey, reason: trimmed, newStatus },
   })
 
+  await fireStatusChange(ctx, response, newStatus)
   revalidateResponse(responseId)
   return { ok: true }
 }
