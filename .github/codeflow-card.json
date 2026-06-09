@@ -2,108 +2,6 @@
   "version": 1,
   "runs": [
     {
-      "at": "2026-05-19T04:57:20.930Z",
-      "sha": "a78ea79300a15b57f62a113d4f8ac6b29d70aa3c",
-      "pr": null,
-      "actor": "braedonsaunders",
-      "files": 577,
-      "functions": 1497,
-      "loc": 248596,
-      "languages": 15,
-      "topLanguages": [
-        {
-          "ext": "json",
-          "pct": 53,
-          "lines": 131273
-        },
-        {
-          "ext": "tsx",
-          "pct": 29,
-          "lines": 72032
-        },
-        {
-          "ext": "ts",
-          "pct": 14,
-          "lines": 33625
-        },
-        {
-          "ext": "yaml",
-          "pct": 2,
-          "lines": 6104
-        },
-        {
-          "ext": "sql",
-          "pct": 2,
-          "lines": 4374
-        }
-      ],
-      "dead": 33,
-      "deadPct": 2.2,
-      "circular": 1,
-      "godObjects": 1,
-      "avgCoupling": 4.9,
-      "securityIssues": 17,
-      "patterns": 7,
-      "duplicates": 43,
-      "layerViolations": 134,
-      "connections": 2816,
-      "avgFnLines": 15.5,
-      "longestFn": 16,
-      "testFiles": 1,
-      "testRatio": 0.2,
-      "topFolders": [
-        {
-          "name": "apps",
-          "count": 411
-        },
-        {
-          "name": "packages",
-          "count": 153
-        },
-        {
-          "name": "root",
-          "count": 11
-        },
-        {
-          "name": "docker",
-          "count": 1
-        },
-        {
-          "name": "docs",
-          "count": 1
-        }
-      ],
-      "folders": 5,
-      "grade": "D",
-      "score": 66,
-      "topBlast": {
-        "path": "apps/web/src/lib/auth.ts",
-        "direct": 275,
-        "transitive": 363,
-        "total": 638
-      },
-      "fragility": [
-        {
-          "path": "apps/web/src/lib/auth.ts",
-          "direct": 275,
-          "transitive": 363,
-          "total": 638
-        },
-        {
-          "path": "apps/web/src/components/page-layout.tsx",
-          "direct": 215,
-          "transitive": 288,
-          "total": 503
-        },
-        {
-          "path": "apps/web/src/app/(app)/lift-plans/_actions.ts",
-          "direct": 141,
-          "transitive": 359,
-          "total": 500
-        }
-      ]
-    },
-    {
       "at": "2026-05-19T14:23:26.784Z",
       "sha": "53b6503e790bb866aa0cf307e5688a607a6ae66e",
       "pr": null,
@@ -3058,6 +2956,108 @@
           "direct": 236,
           "transitive": 409,
           "total": 645
+        }
+      ]
+    },
+    {
+      "at": "2026-06-09T21:02:22.172Z",
+      "sha": "02c9c4d8cce04c7df1adf29cd96c5214e6aaa5e8",
+      "pr": null,
+      "actor": "braedonsaunders",
+      "files": 853,
+      "functions": 2521,
+      "loc": 213435,
+      "languages": 16,
+      "topLanguages": [
+        {
+          "ext": "tsx",
+          "pct": 50,
+          "lines": 106418
+        },
+        {
+          "ext": "ts",
+          "pct": 27,
+          "lines": 58268
+        },
+        {
+          "ext": "json",
+          "pct": 16,
+          "lines": 33434
+        },
+        {
+          "ext": "yaml",
+          "pct": 4,
+          "lines": 7957
+        },
+        {
+          "ext": "sql",
+          "pct": 2,
+          "lines": 3823
+        }
+      ],
+      "dead": 32,
+      "deadPct": 1.3,
+      "circular": 1,
+      "godObjects": 1,
+      "avgCoupling": 5.7,
+      "securityIssues": 35,
+      "patterns": 9,
+      "duplicates": 54,
+      "layerViolations": 352,
+      "connections": 4863,
+      "avgFnLines": 15.5,
+      "longestFn": 16,
+      "testFiles": 3,
+      "testRatio": 0.4,
+      "topFolders": [
+        {
+          "name": "apps",
+          "count": 620
+        },
+        {
+          "name": "packages",
+          "count": 210
+        },
+        {
+          "name": "root",
+          "count": 12
+        },
+        {
+          "name": "docs",
+          "count": 6
+        },
+        {
+          "name": "scripts",
+          "count": 3
+        }
+      ],
+      "folders": 5,
+      "grade": "D",
+      "score": 65,
+      "topBlast": {
+        "path": "apps/web/src/lib/auth.ts",
+        "direct": 314,
+        "transitive": 577,
+        "total": 891
+      },
+      "fragility": [
+        {
+          "path": "apps/web/src/lib/auth.ts",
+          "direct": 314,
+          "transitive": 577,
+          "total": 891
+        },
+        {
+          "path": "apps/web/src/app/(app)/forms/_lib/recap-email.ts",
+          "direct": 157,
+          "transitive": 630,
+          "total": 787
+        },
+        {
+          "path": "apps/web/src/app/(app)/forms/templates/[id]/designer/form-designer.tsx",
+          "direct": 184,
+          "transitive": 589,
+          "total": 773
         }
       ]
     }
