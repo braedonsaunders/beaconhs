@@ -19,6 +19,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
+import { TableToolbar } from '@/components/table-toolbar'
 import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
@@ -289,10 +290,8 @@ export default async function SensorsPage({
               Atmospheric sensors
             </Link>
           </nav>
-          <div className="flex items-center gap-3">
+          <TableToolbar>
             <SearchInput placeholder="Search by identifier, make, model, or serial #" />
-          </div>
-          <div className="flex flex-wrap gap-3">
             <FilterChips
               basePath="/confined-space/sensors"
               currentParams={sp}
@@ -307,7 +306,7 @@ export default async function SensorsPage({
               label="Calibration"
               options={DUE_OPTIONS}
             />
-          </div>
+          </TableToolbar>
         </>
       }
     >
@@ -381,9 +380,7 @@ export default async function SensorsPage({
                       <div className="flex items-center gap-2">
                         <span className="text-slate-600">{s.nextCalibrationDue ?? '—'}</span>
                         {overdue ? (
-                          <Badge variant="destructive">
-                            Overdue {Math.abs(daysToDue!)}d
-                          </Badge>
+                          <Badge variant="destructive">Overdue {Math.abs(daysToDue!)}d</Badge>
                         ) : soon ? (
                           <Badge variant="warning">{daysToDue}d</Badge>
                         ) : null}
@@ -428,11 +425,7 @@ export default async function SensorsPage({
       )}
       <SensorDrawers
         openDrawer={
-          drawer === 'new-sensor'
-            ? 'new-sensor'
-            : drawer === 'edit-sensor'
-              ? 'edit-sensor'
-              : null
+          drawer === 'new-sensor' ? 'new-sensor' : drawer === 'edit-sensor' ? 'edit-sensor' : null
         }
         closeHref="/confined-space/sensors"
         createAction={createSensorAction}

@@ -1,11 +1,7 @@
 import Link from 'next/link'
 import { ListChecks } from 'lucide-react'
 import { and, asc, count, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
-import {
-  Button,
-  EmptyState,
-  PageHeader,
-} from '@beaconhs/ui'
+import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
 import { correctiveActions, orgUnits, tenantUsers, user } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
@@ -13,6 +9,7 @@ import { SearchInput } from '@/components/search-input'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
+import { TableToolbar } from '@/components/table-toolbar'
 import { CorrectiveActionsSubNav } from '@/components/corrective-actions-sub-nav'
 import { listTenantOwners } from './_actions'
 import { RecordsTable, type RecordsTableRow } from './_records-table'
@@ -69,16 +66,36 @@ export default async function CorrectiveActionsPage({
 
     const orderBy =
       params.sort === 'reference'
-        ? [params.dir === 'asc' ? asc(correctiveActions.reference) : desc(correctiveActions.reference)]
+        ? [
+            params.dir === 'asc'
+              ? asc(correctiveActions.reference)
+              : desc(correctiveActions.reference),
+          ]
         : params.sort === 'title'
           ? [params.dir === 'asc' ? asc(correctiveActions.title) : desc(correctiveActions.title)]
           : params.sort === 'severity'
-            ? [params.dir === 'asc' ? asc(correctiveActions.severity) : desc(correctiveActions.severity)]
+            ? [
+                params.dir === 'asc'
+                  ? asc(correctiveActions.severity)
+                  : desc(correctiveActions.severity),
+              ]
             : params.sort === 'status'
-              ? [params.dir === 'asc' ? asc(correctiveActions.status) : desc(correctiveActions.status)]
+              ? [
+                  params.dir === 'asc'
+                    ? asc(correctiveActions.status)
+                    : desc(correctiveActions.status),
+                ]
               : params.sort === 'assigned_on'
-                ? [params.dir === 'asc' ? asc(correctiveActions.assignedOn) : desc(correctiveActions.assignedOn)]
-                : [params.dir === 'asc' ? asc(correctiveActions.dueOn) : desc(correctiveActions.dueOn)]
+                ? [
+                    params.dir === 'asc'
+                      ? asc(correctiveActions.assignedOn)
+                      : desc(correctiveActions.assignedOn),
+                  ]
+                : [
+                    params.dir === 'asc'
+                      ? asc(correctiveActions.dueOn)
+                      : desc(correctiveActions.dueOn),
+                  ]
 
     const [tot] = await tx.select({ c: count() }).from(correctiveActions).where(whereClause)
     const data = await tx
@@ -147,10 +164,8 @@ export default async function CorrectiveActionsPage({
               </div>
             }
           />
-          <div className="flex items-center gap-3">
+          <TableToolbar>
             <SearchInput placeholder="Search reference, title, description…" />
-          </div>
-          <div className="space-y-2">
             <FilterChips
               basePath="/corrective-actions"
               currentParams={sp}
@@ -165,7 +180,7 @@ export default async function CorrectiveActionsPage({
               label="Severity"
               options={SEVERITY_OPTIONS.map((o) => ({ ...o, count: sevCounts[o.value] }))}
             />
-          </div>
+          </TableToolbar>
         </>
       }
     >

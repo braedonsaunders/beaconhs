@@ -2,12 +2,15 @@
 // more loaders are appended here as each entity's mapping is finalised (see docs/migration/mapping.md).
 import { eq } from 'drizzle-orm'
 import { withSuperAdmin, schema } from '@beaconhs/db'
+import { ensureBucket, newAttachmentKey, putObject } from '@beaconhs/storage'
 import { H, internals, rowHash, type Loader, type Env } from './orchestrator'
 import { source } from './source/landing'
 
 const {
   personDivisions, trades, personTitles, people, orgUnits, incidents, journalEntries, correctiveActions,
   equipmentCategories, equipmentTypes, equipmentItems,
+  documents, documentVersions, documentTypes, documentCategories,
+  documentReferences, documentReferenceTypes, documentReferenceCategories, attachments,
 } = schema
 
 const oneOf = (v: unknown, allowed: string[], fallback: string): string => {
@@ -279,19 +282,18 @@ export const RASSAUN_LOADERS: Loader[] = [
           .where(eq(equipmentTypes.tenantId, tenantId))
         for (const r of rows) if (r.name) typeMap.set(String(r.name).toLowerCase(), r.id)
       })
-      const dup: any[] = await source().unsafe(
-        `select coalesce(nullif("AssetNumber",''), nullif("TagNumber",'')) tag from toolcrib."EQUIPMENT"
-         where coalesce(nullif("AssetNumber",''), nullif("TagNumber",'')) is not null group by 1 having count(*) > 1`,
-      )
-      return { typeMap, dupTags: new Set(dup.map((d) => String(d.tag))) }
+      return { typeMap, seen: new Set<string>() }
     },
     map: (r, ctx) => {
-      const p = ctx.prepared as { typeMap: Map<string, string>; dupTags: Set<string> }
-      const realTag = H.str(r.AssetNumber) ?? H.str(r.TagNumber)
+      const p = ctx.prepared as { typeMap: Map<string, string>; seen: Set<string> }
+      // new schema enforces unique (tenant_id, asset_tag); legacy allows dupes → suffix the legacy id
+      // on any repeat (deterministic, since rows stream in pk order). See gaps.md.
+      let assetTag = H.str(r.AssetNumber) ?? H.str(r.TagNumber) ?? `EQ-${r.id}`
+      if (p.seen.has(assetTag)) assetTag = `${assetTag} (#${r.id})`
+      p.seen.add(assetTag)
       return {
       typeId: p.typeMap.get(String(r.Type ?? '').toLowerCase()) ?? null,
-      // unique asset tag: keep the real one, but suffix legacy id for the duplicated ones
-      assetTag: realTag ? (p.dupTags.has(realTag) ? `${realTag} (#${r.id})` : realTag) : `EQ-${r.id}`,
+      assetTag,
       qrToken: `bhs-eq-${r.id}`,
       serialNumber: H.str(r.SerialNumber),
       name: H.str(r.Name) ?? `Equipment ${r.id}`,
@@ -337,6 +339,151 @@ export const RASSAUN_LOADERS: Loader[] = [
         sensorIds: [r.Sensor1ID, r.Sensor2ID, r.Sensor3ID, r.Sensor4ID].filter((x) => x),
       },
       }
+    },
+  },
+
+  // ---- documents (legacy HTML → editor docs) ----
+  {
+    entity: 'document_category',
+    srcSchema: 'beaconhs',
+    srcTable: 'DOCUMENTATIONCATEGORY',
+    tenant: 'rassaun',
+    target: documentCategories,
+    map: (r) => ({ name: H.str(r.Name) ?? `Category ${r.id}`, description: H.str(r.Description) }),
+  },
+  {
+    entity: 'document_type',
+    srcSchema: 'beaconhs',
+    srcTable: 'DOCUMENTATIONTYPE',
+    tenant: 'rassaun',
+    target: documentTypes,
+    map: (r) => ({ key: slugify(r.Name, `dtype-${r.id}`), name: H.str(r.Name) ?? `Type ${r.id}`, description: H.str(r.Description) }),
+  },
+  {
+    entity: 'document',
+    srcSchema: 'beaconhs',
+    srcTable: 'DOCUMENTATION',
+    tenant: 'rassaun',
+    target: documents,
+    // documents.category is plain text → resolve the legacy CategoryID to a name
+    prepare: async () => {
+      const m = new Map<number, string>()
+      const rows: any[] = await source().unsafe('select id, "Name" from beaconhs."DOCUMENTATIONCATEGORY"')
+      for (const r of rows) m.set(Number(r.id), String(r.Name ?? ''))
+      return m
+    },
+    map: async (r, ctx) => ({
+      key: `doc-${r.id}`,
+      title: H.str(r.Name) ?? `Document ${r.id}`,
+      description: H.str(r.Description),
+      category: (ctx.prepared as Map<number, string>)?.get(Number(r.CategoryID)) || null,
+      typeId: await ctx.lookup('beaconhs', 'DOCUMENTATIONTYPE', r.TypeID),
+      status: H.bool(r.IsPublished) ? 'published' : 'draft',
+      printHeader: H.bool(r.PrintHeader),
+      printFooter: H.bool(r.PrintFooter),
+    }),
+  },
+  {
+    entity: 'document_version',
+    srcSchema: 'beaconhs',
+    srcTable: 'DOCUMENTATIONDATA',
+    tenant: 'rassaun',
+    target: documentVersions,
+    map: async (r, ctx) => {
+      const documentId = await ctx.lookup('beaconhs', 'DOCUMENTATION', r.DocumentationID)
+      if (!documentId) return null // orphan version
+      return {
+        documentId,
+        version: H.int(r.Version) ?? 1,
+        contentMarkdown: H.str(r.Data), // legacy rich HTML — see gaps.md M7
+        changelog: H.str(r.Changelog),
+        publishedAt: H.ts(r.created_at),
+      }
+    },
+  },
+  {
+    entity: 'document_reference_category',
+    srcSchema: 'beaconhs',
+    srcTable: 'DOCUMENTATIONREFERENCECATEGORY',
+    tenant: 'rassaun',
+    target: documentReferenceCategories,
+    map: (r) => ({ name: H.str(r.Name) ?? `Category ${r.id}`, description: H.str(r.Description) }),
+  },
+  {
+    entity: 'document_reference_type',
+    srcSchema: 'beaconhs',
+    srcTable: 'DOCUMENTATIONREFERENCETYPE',
+    tenant: 'rassaun',
+    target: documentReferenceTypes,
+    map: (r) => ({ key: slugify(r.Name, `rtype-${r.id}`), name: H.str(r.Name) ?? `Type ${r.id}`, description: H.str(r.Description) }),
+  },
+  // The physical PDFs: download from Azure Blob → put to R2/MinIO → attachments + document_references.
+  {
+    entity: 'document_reference',
+    srcSchema: 'beaconhs',
+    srcTable: 'DOCUMENTATIONREFERENCE',
+    tenant: 'rassaun',
+    target: documentReferences,
+    map: () => null,
+    custom: async (env: Env, tenantId: string) => {
+      await ensureBucket()
+      const rows: any[] = await source().unsafe('select * from beaconhs."DOCUMENTATIONREFERENCE" order by id')
+      let upserted = 0
+      let files = 0
+      let failed = 0
+      const CONC = 6
+      for (let i = 0; i < rows.length; i += CONC) {
+        await Promise.all(
+          rows.slice(i, i + CONC).map(async (r) => {
+            const url = H.str(r.URL)
+            const filename = H.str(r.Filename) ?? `ref-${r.id}.pdf`
+            let attachmentId: string | null = null
+            let kind = 'url'
+            if (url && /^https?:/i.test(url)) {
+              try {
+                const res = await fetch(url)
+                if (res.ok) {
+                  const buf = Buffer.from(await res.arrayBuffer())
+                  const ct = res.headers.get('content-type') ?? 'application/pdf'
+                  const key = newAttachmentKey({ tenantId, kind: 'document', filename })
+                  await putObject({ key, body: buf, contentType: ct })
+                  await withSuperAdmin(env.db, async (tx: any) => {
+                    attachmentId = await internals.reserve(env, tx, 'beaconhs', 'DOCUMENTATIONREFERENCE_FILE', r.id, 'attachment', tenantId, rowHash(r))
+                    await tx
+                      .insert(attachments)
+                      .values({ id: attachmentId, tenantId, kind: 'document', r2Key: key, contentType: ct, sizeBytes: buf.length, filename })
+                      .onConflictDoUpdate({ target: attachments.id, set: { r2Key: key, sizeBytes: buf.length, filename } })
+                  })
+                  kind = 'attachment'
+                  files++
+                } else failed++
+              } catch {
+                failed++
+              }
+            }
+            await withSuperAdmin(env.db, async (tx: any) => {
+              const lookup = internals.makeLookup(env, tx)
+              const refId = await internals.reserve(env, tx, 'beaconhs', 'DOCUMENTATIONREFERENCE', r.id, 'document_reference', tenantId, rowHash(r))
+              await tx
+                .insert(documentReferences)
+                .values({
+                  id: refId,
+                  tenantId,
+                  title: H.str(r.Name) ?? `Reference ${r.id}`,
+                  description: H.str(r.Description),
+                  kind,
+                  attachmentId,
+                  url: kind === 'url' ? url : null,
+                  typeId: await lookup('beaconhs', 'DOCUMENTATIONREFERENCETYPE', r.TypeID),
+                })
+                .onConflictDoUpdate({ target: documentReferences.id, set: { kind, attachmentId, url: kind === 'url' ? url : null } })
+            })
+            upserted++
+          }),
+        )
+      }
+      console.log(`[files: ${files} uploaded, ${failed} failed] `)
+      return { source: rows.length, upserted }
     },
   },
 ]

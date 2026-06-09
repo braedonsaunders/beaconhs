@@ -20,6 +20,7 @@ import { FilterChips } from '@/components/filter-bar'
 import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { ListPageLayout } from '@/components/page-layout'
+import { TableToolbar } from '@/components/table-toolbar'
 import { DayPicker } from './day-picker'
 
 export const metadata = { title: 'Kiosk history' }
@@ -119,17 +120,17 @@ export default async function KioskHistoryPage({
             title="Kiosk history"
             description="Sign-in / sign-out events captured at jobsite kiosk tablets."
           />
-          <div className="flex flex-wrap items-center gap-3">
+          <TableToolbar>
             <SearchInput placeholder="Search by name" />
             <DayPicker value={dayFilter} />
-          </div>
-          <FilterChips
-            basePath="/kiosk-history"
-            currentParams={sp}
-            paramKey="kind"
-            label="Kind"
-            options={KIND_OPTIONS.map((o) => ({ ...o, count: kindCounts[o.value] }))}
-          />
+            <FilterChips
+              basePath="/kiosk-history"
+              currentParams={sp}
+              paramKey="kind"
+              label="Kind"
+              options={KIND_OPTIONS.map((o) => ({ ...o, count: kindCounts[o.value] }))}
+            />
+          </TableToolbar>
         </>
       }
     >

@@ -23,16 +23,16 @@ export function Pagination({
   const nextHref = mergeHref(basePath, currentParams, { page: Math.min(pageCount, page + 1) })
 
   return (
-    <div className="flex items-center justify-between gap-2 px-3 py-2 text-sm text-slate-600">
+    <div className="flex items-center justify-between gap-2 px-3 py-2 text-sm text-slate-600 dark:text-slate-300">
       <span>
         {total === 0 ? (
           <>No results</>
         ) : (
           <>
-            Showing <strong className="font-medium text-slate-900">{from.toLocaleString()}</strong>
+            Showing <strong className="font-medium text-slate-900 dark:text-slate-100">{from.toLocaleString()}</strong>
             {'–'}
-            <strong className="font-medium text-slate-900">{to.toLocaleString()}</strong> of{' '}
-            <strong className="font-medium text-slate-900">{total.toLocaleString()}</strong>
+            <strong className="font-medium text-slate-900 dark:text-slate-100">{to.toLocaleString()}</strong> of{' '}
+            <strong className="font-medium text-slate-900 dark:text-slate-100">{total.toLocaleString()}</strong>
           </>
         )}
       </span>
@@ -42,7 +42,7 @@ export function Pagination({
             <ChevronLeft size={14} />
             Prev
           </PageButton>
-          <span className="px-2 text-slate-500">
+          <span className="px-2 text-slate-500 dark:text-slate-400">
             Page {page} of {pageCount}
           </span>
           <PageButton href={nextHref} disabled={page >= pageCount} aria-label="Next page">
@@ -64,7 +64,7 @@ function PageButton({
   if (disabled) {
     return (
       <span
-        className="inline-flex cursor-not-allowed items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-400"
+        className="inline-flex cursor-not-allowed items-center gap-1 rounded-md border border-slate-200 dark:border-slate-800 px-2 py-1 text-xs text-slate-400 dark:text-slate-500"
         {...(rest as object)}
       >
         {children}
@@ -74,7 +74,7 @@ function PageButton({
   return (
     <Link
       href={href as any}
-      className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50"
+      className="inline-flex items-center gap-1 rounded-md border border-slate-200 dark:border-slate-800 px-2 py-1 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/60"
       {...(rest as object)}
     >
       {children}

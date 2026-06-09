@@ -27,6 +27,7 @@ import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
+import { TableToolbar } from '@/components/table-toolbar'
 
 export const metadata = { title: 'My tasks' }
 export const dynamic = 'force-dynamic'
@@ -135,14 +136,30 @@ export default async function MyTasksPage({
 
     const orderBy =
       params.sort === 'reference'
-        ? [params.dir === 'asc' ? asc(correctiveActions.reference) : desc(correctiveActions.reference)]
+        ? [
+            params.dir === 'asc'
+              ? asc(correctiveActions.reference)
+              : desc(correctiveActions.reference),
+          ]
         : params.sort === 'title'
           ? [params.dir === 'asc' ? asc(correctiveActions.title) : desc(correctiveActions.title)]
           : params.sort === 'severity'
-            ? [params.dir === 'asc' ? asc(correctiveActions.severity) : desc(correctiveActions.severity)]
+            ? [
+                params.dir === 'asc'
+                  ? asc(correctiveActions.severity)
+                  : desc(correctiveActions.severity),
+              ]
             : params.sort === 'status'
-              ? [params.dir === 'asc' ? asc(correctiveActions.status) : desc(correctiveActions.status)]
-              : [params.dir === 'asc' ? asc(correctiveActions.dueOn) : desc(correctiveActions.dueOn)]
+              ? [
+                  params.dir === 'asc'
+                    ? asc(correctiveActions.status)
+                    : desc(correctiveActions.status),
+                ]
+              : [
+                  params.dir === 'asc'
+                    ? asc(correctiveActions.dueOn)
+                    : desc(correctiveActions.dueOn),
+                ]
 
     const [tot] = await tx.select({ c: count() }).from(correctiveActions).where(whereClause)
     const data = await tx
@@ -173,14 +190,8 @@ export default async function MyTasksPage({
     return {
       rows: data,
       total: Number(tot?.c ?? 0),
-      statusCounts: Object.fromEntries(ss.map((x) => [x.s, Number(x.c)])) as Record<
-        string,
-        number
-      >,
-      sevCounts: Object.fromEntries(sv.map((x) => [x.s, Number(x.c)])) as Record<
-        string,
-        number
-      >,
+      statusCounts: Object.fromEntries(ss.map((x) => [x.s, Number(x.c)])) as Record<string, number>,
+      sevCounts: Object.fromEntries(sv.map((x) => [x.s, Number(x.c)])) as Record<string, number>,
     }
   })
 
@@ -207,7 +218,7 @@ export default async function MyTasksPage({
               </div>
             }
           />
-          <div className="flex flex-wrap items-center gap-3">
+          <TableToolbar>
             <SearchInput placeholder="Search your tasks…" />
             <Link
               href={
@@ -223,8 +234,6 @@ export default async function MyTasksPage({
             >
               {overdueOnly ? 'Showing overdue only' : 'Show overdue only'}
             </Link>
-          </div>
-          <div className="space-y-2">
             <FilterChips
               basePath="/my/tasks"
               currentParams={sp}
@@ -242,7 +251,7 @@ export default async function MyTasksPage({
               label="Severity"
               options={SEVERITY_OPTIONS.map((o) => ({ ...o, count: sevCounts[o.value] }))}
             />
-          </div>
+          </TableToolbar>
         </>
       }
     >
@@ -316,9 +325,7 @@ export default async function MyTasksPage({
             <TableBody>
               {rows.map(({ ca, site }) => {
                 const overdue =
-                  ca.dueOn &&
-                  ca.dueOn < todayStr &&
-                  !['closed', 'cancelled'].includes(ca.status)
+                  ca.dueOn && ca.dueOn < todayStr && !['closed', 'cancelled'].includes(ca.status)
                 return (
                   <TableRow key={ca.id}>
                     <TableCell className="font-mono text-xs">

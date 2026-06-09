@@ -2,7 +2,6 @@ import { notFound } from 'next/navigation'
 import { asc, desc, eq } from 'drizzle-orm'
 import { can } from '@beaconhs/tenant'
 import {
-  formAssignments,
   formAutomations,
   formTemplateVersions,
   formTemplates,
@@ -59,13 +58,12 @@ export default async function FormDesignerPage({
   const data = await ctx.db(async (tx) => {
     const [tmpl] = await tx.select().from(formTemplates).where(eq(formTemplates.id, id)).limit(1)
     if (!tmpl) return null
-    const [versions, assignments, flows, tenantRoles] = await Promise.all([
+    const [versions, flows, tenantRoles] = await Promise.all([
       tx
         .select()
         .from(formTemplateVersions)
         .where(eq(formTemplateVersions.templateId, id))
         .orderBy(desc(formTemplateVersions.version)),
-      tx.select().from(formAssignments).where(eq(formAssignments.templateId, id)),
       tx
         .select({
           id: formAutomations.id,
@@ -82,7 +80,7 @@ export default async function FormDesignerPage({
         .where(eq(rolesTable.tenantId, ctx.tenantId))
         .orderBy(asc(rolesTable.name)),
     ])
-    return { tmpl, latestVersion: versions[0] ?? null, assignments, flows, tenantRoles }
+    return { tmpl, latestVersion: versions[0] ?? null, flows, tenantRoles }
   })
 
   if (!data) notFound()
@@ -119,13 +117,6 @@ export default async function FormDesignerPage({
         iconKey: data.tmpl.iconKey,
         emailOnSubmit: data.tmpl.emailOnSubmit,
       }}
-      assignments={data.assignments.map((a) => ({
-        id: a.id,
-        mode: a.mode,
-        cron: a.cron,
-        targetRoleKeys: a.targetRoleKeys ?? null,
-        enabled: a.enabled,
-      }))}
       allowedRoles={data.tmpl.allowedRoles ?? []}
       roles={data.tenantRoles}
       flows={data.flows as FlowSummary[]}

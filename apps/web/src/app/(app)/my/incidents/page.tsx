@@ -27,6 +27,7 @@ import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
+import { TableToolbar } from '@/components/table-toolbar'
 
 export const metadata = { title: 'My incidents' }
 export const dynamic = 'force-dynamic'
@@ -180,10 +181,8 @@ export default async function MyIncidentsPage({
               </div>
             }
           />
-          <div className="flex flex-wrap items-center gap-3">
+          <TableToolbar>
             <SearchInput placeholder="Search your reports…" />
-          </div>
-          <div className="space-y-2">
             <FilterChips
               basePath="/my/incidents"
               currentParams={sp}
@@ -198,7 +197,7 @@ export default async function MyIncidentsPage({
               label="Status"
               options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
             />
-          </div>
+          </TableToolbar>
         </>
       }
     >
@@ -222,11 +221,25 @@ export default async function MyIncidentsPage({
           <Table>
             <TableHeader>
               <TableRow>
-                <SortableTh {...sortProps} column="reference" active={params.sort === 'reference'}>Ref</SortableTh>
-                <SortableTh {...sortProps} column="occurred_at" active={params.sort === 'occurred_at'}>Occurred</SortableTh>
-                <SortableTh {...sortProps} column="type" active={params.sort === 'type'}>Type</SortableTh>
-                <SortableTh {...sortProps} column="severity" active={params.sort === 'severity'}>Severity</SortableTh>
-                <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>Status</SortableTh>
+                <SortableTh {...sortProps} column="reference" active={params.sort === 'reference'}>
+                  Ref
+                </SortableTh>
+                <SortableTh
+                  {...sortProps}
+                  column="occurred_at"
+                  active={params.sort === 'occurred_at'}
+                >
+                  Occurred
+                </SortableTh>
+                <SortableTh {...sortProps} column="type" active={params.sort === 'type'}>
+                  Type
+                </SortableTh>
+                <SortableTh {...sortProps} column="severity" active={params.sort === 'severity'}>
+                  Severity
+                </SortableTh>
+                <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>
+                  Status
+                </SortableTh>
                 <TableHead>Title</TableHead>
                 <TableHead>Site</TableHead>
               </TableRow>
@@ -242,7 +255,9 @@ export default async function MyIncidentsPage({
                   <TableCell className="text-slate-600">
                     {new Date(incident.occurredAt).toLocaleDateString()}
                   </TableCell>
-                  <TableCell className="text-slate-600">{incident.type.replace('_', ' ')}</TableCell>
+                  <TableCell className="text-slate-600">
+                    {incident.type.replace('_', ' ')}
+                  </TableCell>
                   <TableCell>
                     <SeverityBadge severity={incident.severity} />
                   </TableCell>
@@ -250,7 +265,10 @@ export default async function MyIncidentsPage({
                     <StatusBadge status={incident.status} />
                   </TableCell>
                   <TableCell>
-                    <Link href={`/incidents/${incident.id}`} className="font-medium text-slate-900 hover:underline">
+                    <Link
+                      href={`/incidents/${incident.id}`}
+                      className="font-medium text-slate-900 hover:underline"
+                    >
                       {incident.title}
                     </Link>
                   </TableCell>

@@ -131,7 +131,7 @@ export function SearchSelect({
   const optionList = (
     <ul role="listbox" className="py-1">
       {filtered.length === 0 ? (
-        <li className="px-3 py-8 text-center text-sm text-slate-400">No matches</li>
+        <li className="px-3 py-8 text-center text-sm text-slate-400 dark:text-slate-500">No matches</li>
       ) : null}
       {filtered.map((o, i) => {
         const active = o.value === value
@@ -145,13 +145,13 @@ export function SearchSelect({
               onClick={() => choose(o.value)}
               className={cn(
                 'flex h-12 w-full items-center gap-2.5 px-4 text-left text-[15px] transition-colors lg:h-9 lg:px-3 lg:text-sm',
-                i === highlight ? 'bg-teal-50' : 'active:bg-slate-100',
-                active ? 'font-medium text-teal-900' : 'text-slate-700',
+                i === highlight ? 'bg-teal-50 dark:bg-teal-950/50' : 'active:bg-slate-100 dark:active:bg-slate-700',
+                active ? 'font-medium text-teal-900 dark:text-teal-300' : 'text-slate-700 dark:text-slate-200',
               )}
             >
               <span className="min-w-0 flex-1 truncate">
                 {o.label}
-                {o.hint ? <span className="ml-1.5 text-xs text-slate-400">{o.hint}</span> : null}
+                {o.hint ? <span className="ml-1.5 text-xs text-slate-400 dark:text-slate-500">{o.hint}</span> : null}
               </span>
               {active ? <Check size={17} className="shrink-0 text-teal-600" /> : null}
             </button>
@@ -163,7 +163,7 @@ export function SearchSelect({
 
   const searchBox = (largeText: boolean) => (
     <div className="relative px-3 pt-3">
-      <Search size={16} className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" />
+      <Search size={16} className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
       <input
         ref={searchRef}
         value={query}
@@ -173,7 +173,7 @@ export function SearchSelect({
         }}
         placeholder={searchPlaceholder}
         className={cn(
-          'w-full rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-3 outline-none transition focus:border-teal-500 focus:bg-white focus:ring-2 focus:ring-teal-500/20',
+          'w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 pl-9 pr-3 outline-none transition focus:border-teal-500 focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-teal-500/20',
           largeText ? 'h-11 text-[15px]' : 'h-9 text-sm',
         )}
       />
@@ -190,24 +190,24 @@ export function SearchSelect({
         aria-haspopup="listbox"
         aria-expanded={open}
         className={cn(
-          'flex h-10 w-full items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-left text-sm shadow-sm transition',
+          'flex h-10 w-full items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 text-left text-sm shadow-sm transition',
           'focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/25',
-          disabled && 'cursor-not-allowed bg-slate-50 opacity-70',
+          disabled && 'cursor-not-allowed bg-slate-50 dark:bg-slate-800 opacity-70',
           open && 'border-teal-500 ring-2 ring-teal-500/25',
         )}
       >
-        <span className={cn('min-w-0 flex-1 truncate', isPlaceholder ? 'text-slate-400' : 'text-slate-800')}>
+        <span className={cn('min-w-0 flex-1 truncate', isPlaceholder ? 'text-slate-400 dark:text-slate-500' : 'text-slate-800 dark:text-slate-100')}>
           {display}
         </span>
         <ChevronDown
           size={16}
-          className={cn('shrink-0 text-slate-400 transition-transform', open && 'rotate-180')}
+          className={cn('shrink-0 text-slate-400 dark:text-slate-500 transition-transform', open && 'rotate-180')}
         />
       </button>
 
       {/* Desktop dropdown */}
       {open && isDesktop ? (
-        <div className="absolute left-0 top-full z-50 mt-1.5 w-full min-w-[12rem] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
+        <div className="absolute left-0 top-full z-50 mt-1.5 w-full min-w-[12rem] overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xl">
           {searchBox(false)}
           <div className="mt-1 max-h-64 overflow-y-auto">{optionList}</div>
         </div>
@@ -232,18 +232,18 @@ export function SearchSelect({
                     animate={{ y: 0 }}
                     exit={{ y: '100%' }}
                     transition={{ type: 'spring', damping: 34, stiffness: 340, mass: 0.8 }}
-                    className="absolute inset-x-0 bottom-0 flex max-h-[82vh] flex-col rounded-t-2xl border-t border-slate-200 bg-white shadow-2xl"
+                    className="absolute inset-x-0 bottom-0 flex max-h-[82vh] flex-col rounded-t-2xl border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl"
                   >
                     <div className="flex items-center justify-center pt-2.5">
                       <span className="h-1.5 w-10 rounded-full bg-slate-300" />
                     </div>
                     <div className="flex items-center justify-between px-4 pb-1 pt-2">
-                      <span className="text-base font-semibold text-slate-900">{sheetTitle ?? 'Select'}</span>
+                      <span className="text-base font-semibold text-slate-900 dark:text-slate-100">{sheetTitle ?? 'Select'}</span>
                       <button
                         type="button"
                         onClick={() => setOpen(false)}
                         aria-label="Close"
-                        className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100"
+                        className="rounded-md p-1.5 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
                       >
                         <X size={18} />
                       </button>

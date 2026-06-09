@@ -21,7 +21,7 @@ export function SeverityRating({
 }) {
   return (
     <div>
-      <div className="text-xs uppercase tracking-wide text-slate-500">{label}</div>
+      <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</div>
       <div className="mt-1 flex items-center gap-1">
         {[1, 2, 3, 4, 5].map((n) => {
           const active = value === n
@@ -32,7 +32,7 @@ export function SeverityRating({
               title={`${n} — ${meta.label}`}
               className={cn(
                 'flex h-7 w-7 items-center justify-center rounded border text-xs font-semibold',
-                active ? meta.tone : 'border-slate-200 bg-slate-50 text-slate-400',
+                active ? meta.tone : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-400 dark:text-slate-500',
               )}
             >
               {n}
@@ -40,9 +40,9 @@ export function SeverityRating({
           )
         })}
         {value ? (
-          <span className="ml-2 text-xs text-slate-600">{LABELS[value]?.label}</span>
+          <span className="ml-2 text-xs text-slate-600 dark:text-slate-300">{LABELS[value]?.label}</span>
         ) : (
-          <span className="ml-2 text-xs text-slate-400">not rated</span>
+          <span className="ml-2 text-xs text-slate-400 dark:text-slate-500">not rated</span>
         )}
       </div>
     </div>

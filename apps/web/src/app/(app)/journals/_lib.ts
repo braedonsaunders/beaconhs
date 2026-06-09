@@ -41,6 +41,26 @@ export function journalScopeWhere(
   return conds.length === 1 ? conds[0] : or(...conds)
 }
 
+/**
+ * Self-ONLY visibility — the caller's own entries (authored as, or created by,
+ * them), regardless of read.all / read.site. The compose workspace (/journals)
+ * is always personal; cross-user browsing lives in /journals/records (gated by
+ * journalCanBrowseAll). Uses authorTenantUserId so the super-admin sentinel is
+ * never compared as a uuid; a context with no person and no membership resolves
+ * to `false` (an empty personal workspace), never the whole tenant.
+ */
+export function journalSelfScopeWhere(
+  ctx: RequestContext,
+  authorPersonId: string | null,
+): SQL {
+  const conds: SQL[] = []
+  if (authorPersonId) conds.push(eq(journalEntries.personId, authorPersonId))
+  const tenantUserId = authorTenantUserId(ctx)
+  if (tenantUserId) conds.push(eq(journalEntries.createdByTenantUserId, tenantUserId))
+  if (conds.length === 0) return sql`false`
+  return conds.length === 1 ? conds[0]! : or(...conds)!
+}
+
 /** The tenant_users id to attribute authorship to (null for super-admin view). */
 export function authorTenantUserId(ctx: RequestContext): string | null {
   const id = ctx.membership?.id

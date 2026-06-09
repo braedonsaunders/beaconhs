@@ -48,9 +48,13 @@ export type FormulaExpression =
   | { kind: 'divide'; left: FormulaExpression; right: FormulaExpression }
   | { kind: 'min'; of: FormulaExpression[] }
   | { kind: 'max'; of: FormulaExpression[] }
-  // sum / count fields across all rows of a repeating section.
+  // sum / count / avg / min / max a field across all rows of a repeating
+  // section ("rollups").
   | { kind: 'sum_section'; sectionKey: string; rowFieldKey: string }
   | { kind: 'count_section'; sectionKey: string }
+  | { kind: 'avg_section'; sectionKey: string; rowFieldKey: string }
+  | { kind: 'min_section'; sectionKey: string; rowFieldKey: string }
+  | { kind: 'max_section'; sectionKey: string; rowFieldKey: string }
   | { kind: 'concat'; of: FormulaExpression[]; separator?: string }
   | { kind: 'if'; condition: LogicRule; then: FormulaExpression; else: FormulaExpression }
   // Read an allowlisted attribute off the entity selected by a picker field.
@@ -86,6 +90,9 @@ export const formulaExpressionSchema: z.ZodType<FormulaExpression> = z.lazy(() =
       rowFieldKey: z.string(),
     }),
     z.object({ kind: z.literal('count_section'), sectionKey: z.string() }),
+    z.object({ kind: z.literal('avg_section'), sectionKey: z.string(), rowFieldKey: z.string() }),
+    z.object({ kind: z.literal('min_section'), sectionKey: z.string(), rowFieldKey: z.string() }),
+    z.object({ kind: z.literal('max_section'), sectionKey: z.string(), rowFieldKey: z.string() }),
     z.object({
       kind: z.literal('concat'),
       of: z.array(formulaExpressionSchema),
@@ -135,23 +142,30 @@ export const fieldTypeSchema = z.enum([
   'textarea',
   'long_text', // alias of textarea — preferred name for multi-line in canonical templates
   'number',
+  'slider', // numeric value picked on a min–max range slider
   'date',
   'datetime',
   'time',
+  'gps', // captures the device's location (lat/lng/accuracy)
   'email',
   'phone',
   'url',
+  'rich_text', // formatted text (sanitized HTML)
+  'address', // structured postal address + optional geocode (autocomplete)
+  'qr_scanner', // scan a QR / barcode via the device camera → decoded string
   'table', // grid of cells — addable or predefined rows
   // choice
   'radio',
   'checkbox_group',
   'select',
   'multi_select',
+  'ranking', // drag a set of options into a ranked order
   // scoring
   'pass_fail_na',
   'rating',
   'yes_no_comment',
   'traffic_light',
+  'matrix', // Likert grid — rate each row on a shared scale
   // pickers
   'person_picker',
   'multi_person_picker', // person_picker with multiple selection
@@ -163,6 +177,8 @@ export const fieldTypeSchema = z.enum([
   // media
   'photo',
   'photo_upload', // alias of photo — preferred name for camera-first capture
+  'photo_ai', // photo capture + AI safety analysis (missing PPE / hazards)
+  'photo_annotated', // photo + tap-to-drop numbered hazard markers
   'file',
   'video',
   'audio',
@@ -173,6 +189,10 @@ export const fieldTypeSchema = z.enum([
   'formula',
   'calc', // alias of formula — preferred name for computed cells
   'risk_matrix',
+  // data-bound (read a tenant DATA SOURCE via field.binding)
+  'lookup', // data-bound dropdown — pick a row, optionally auto-fill other fields
+  'data_table', // show / select rows from a data source
+  'metric', // KPI / chart — an aggregate over a data source
   // display
   'heading',
   'paragraph',
@@ -231,6 +251,59 @@ export const fieldValidationSchema = z
 
 export type FieldValidation = z.infer<typeof fieldValidationSchema>
 
+// --- Data binding (data-bound elements) -------------------------------------
+//
+// Attached to `FormField.binding` on data-bound elements (`lookup`,
+// `data_table`, `metric`). Names a tenant DATA SOURCE (data_sources.key) plus
+// how to read it. The query/aggregate layer (apps/web forms/_lib/data-sources)
+// resolves these server-side, RLS-bound; the browser only AUTHORS them — it
+// never queries across tenants.
+export const dataAggregateFnSchema = z.enum(['count', 'sum', 'avg', 'min', 'max'])
+export type DataAggregateFn = z.infer<typeof dataAggregateFnSchema>
+
+// How a `metric` element renders its aggregate result.
+export const dataDisplaySchema = z.enum(['number', 'bar', 'line', 'pie', 'table'])
+export type DataDisplay = z.infer<typeof dataDisplaySchema>
+
+export const dataBindingSchema = z.object({
+  // data_sources.key of the bound source.
+  sourceKey: z.string().min(1),
+  // lookup/select: which source column is the STORED value (default = row id)
+  // and which is the visible label.
+  valueColumn: z.string().optional(),
+  labelColumn: z.string().optional(),
+  // Cascading: narrow this list by another FIELD's current value.
+  // `filterByField` is the parent field id; `filterColumn` is the column IN THIS
+  // source matched against the parent field's selected value.
+  filterByField: z.string().optional(),
+  filterColumn: z.string().optional(),
+  // Lookup auto-fill: when a row is selected, copy these source columns into the
+  // named target fields of the same response.
+  autofill: z
+    .array(z.object({ column: z.string(), targetFieldId: z.string() }))
+    .optional(),
+  // Static equality filters applied to every query (column === value).
+  where: z.array(z.object({ column: z.string(), value: z.unknown() })).optional(),
+  // data_table: which columns to show (default = all source columns) + whether
+  // rows are selectable (selection stores row ids in the response value).
+  columns: z.array(z.string()).optional(),
+  selectable: z.enum(['none', 'single', 'multi']).optional(),
+  // metric (KPI/chart): the aggregate + how to display it.
+  aggregate: z
+    .object({
+      fn: dataAggregateFnSchema,
+      // Required for sum/avg/min/max; ignored for count.
+      column: z.string().optional(),
+      // Group rows by this column to produce a series (for charts / breakdowns).
+      groupBy: z.string().optional(),
+    })
+    .optional(),
+  display: dataDisplaySchema.optional(),
+  // Hard cap on rows fetched (safety bound; also limits data_table length).
+  limit: z.number().int().positive().max(1000).optional(),
+})
+export type DataBinding = z.infer<typeof dataBindingSchema>
+
 export const formFieldSchema = z.object({
   id: z.string().min(1),
   type: fieldTypeSchema,
@@ -241,6 +314,8 @@ export const formFieldSchema = z.object({
   validation: fieldValidationSchema.optional(),
   permissions: z.object({ visibleToRoles: z.array(z.string()).optional() }).optional(),
   config: z.record(z.string(), z.unknown()).optional(),
+  // Data-source binding for data-bound elements (lookup / data_table / metric).
+  binding: dataBindingSchema.optional(),
   // Typed JSON formula tree. When present, the field is computed and read-only
   // in the filler. Independent of the legacy `field.config.expr` string-based
   // formula — both are supported.
@@ -303,6 +378,9 @@ export const formSectionSchema = z.object({
   // Takes precedence over `layout` when present.
   canvas: canvasLayoutSchema.optional(),
   step: z.string().optional(),
+  // Presentational TAB this section belongs to (see FormSchemaV1.tabs). Absent ⇒
+  // the first tab. Independent of `step` (the sign-off/wizard page).
+  tabId: z.string().optional(),
   fields: z.array(formFieldSchema),
 })
 
@@ -360,6 +438,12 @@ export const formSchemaV1 = z.object({
   title: i18nStringSchema,
   description: i18nStringSchema.optional(),
   sections: z.array(formSectionSchema).min(1),
+  // Presentational tabs for the FILL experience (purely navigation — NOT
+  // sign-off, unlike workflow.steps). When ≥2 tabs exist on a single-step app,
+  // the filler shows a tab bar and each section appears under section.tabId.
+  tabs: z
+    .array(z.object({ id: z.string().min(1), title: i18nStringSchema }))
+    .optional(),
   workflow: z.object({
     steps: z.array(formWorkflowStepSchema).min(1),
     scoreRouting: scoreRoutingSchema.optional(),

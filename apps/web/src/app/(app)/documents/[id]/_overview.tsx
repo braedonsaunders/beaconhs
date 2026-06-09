@@ -10,20 +10,11 @@ import { Check, CloudUpload } from 'lucide-react'
 import { Input, Label, Select, Textarea, cn } from '@beaconhs/ui'
 import { updateDocumentMeta } from './_actions'
 
-const CATEGORIES = [
-  { value: 'policy', label: 'Policy' },
-  { value: 'procedure', label: 'Procedure / SOP' },
-  { value: 'sds', label: 'Safety data sheet (SDS / MSDS)' },
-  { value: 'form', label: 'Form / template' },
-  { value: 'manual', label: 'Manual / handbook' },
-  { value: 'training', label: 'Training material' },
-  { value: 'other', label: 'Other' },
-]
-
 export type OverviewMeta = {
   title: string
   key: string
-  category: string
+  categoryId: string
+  typeId: string
   description: string
   reviewFrequencyMonths: string
   nextReviewOn: string
@@ -39,9 +30,13 @@ type SaveState = 'idle' | 'saving' | 'saved'
 export function DocumentOverview({
   documentId,
   initialMeta,
+  categories,
+  types,
 }: {
   documentId: string
   initialMeta: OverviewMeta
+  categories: { id: string; name: string }[]
+  types: { id: string; name: string }[]
 }) {
   const router = useRouter()
   const [m, setM] = useState<OverviewMeta>(initialMeta)
@@ -55,7 +50,8 @@ export function DocumentOverview({
         documentId,
         title: next.title,
         key: next.key,
-        category: next.category || null,
+        categoryId: next.categoryId || null,
+        typeId: next.typeId || null,
         description: next.description || null,
         reviewFrequencyMonths: next.reviewFrequencyMonths.trim()
           ? Number(next.reviewFrequencyMonths)
@@ -89,9 +85,9 @@ export function DocumentOverview({
   }
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white">
-      <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5">
-        <h3 className="text-sm font-semibold text-slate-800">Document details</h3>
+    <div className="rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+      <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-4 py-2.5">
+        <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Document details</h3>
         <SaveBadge state={saveState} />
       </div>
       <div className="space-y-4 p-4">
@@ -99,17 +95,35 @@ export function DocumentOverview({
           <Label htmlFor="o-title">Title</Label>
           <Input id="o-title" value={m.title} onChange={(e) => field('title', e.currentTarget.value)} />
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="o-category">Category</Label>
-          <Select id="o-category" value={m.category} onChange={(e) => field('category', e.currentTarget.value)}>
-            <option value="">—</option>
-            {CATEGORIES.map((c) => (
-              <option key={c.value} value={c.value}>
-                {c.label}
-              </option>
-            ))}
-          </Select>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="o-category">Category</Label>
+            <Select id="o-category" value={m.categoryId} onChange={(e) => field('categoryId', e.currentTarget.value)}>
+              <option value="">—</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="o-type">Type</Label>
+            <Select id="o-type" value={m.typeId} onChange={(e) => field('typeId', e.currentTarget.value)}>
+              <option value="">—</option>
+              {types.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </Select>
+          </div>
         </div>
+        {categories.length === 0 && types.length === 0 ? (
+          <p className="text-[11px] text-slate-400 dark:text-slate-500">
+            Create categories &amp; types on the Documents → Categories / Types tabs.
+          </p>
+        ) : null}
         <div className="space-y-1.5">
           <Label htmlFor="o-key">Key</Label>
           <Input id="o-key" className="font-mono" value={m.key} onChange={(e) => field('key', e.currentTarget.value)} />
@@ -135,16 +149,16 @@ export function DocumentOverview({
             <option value="A4">A4</option>
           </Select>
         </div>
-        <div className="space-y-2 rounded-md border border-slate-100 bg-slate-50/60 p-3">
-          <p className="text-xs font-medium text-slate-500">PDF header &amp; footer</p>
-          <label className="flex items-center gap-2 text-sm text-slate-700">
+        <div className="space-y-2 rounded-md border border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900 p-3">
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">PDF header &amp; footer</p>
+          <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
             <input type="checkbox" checked={m.printHeader} onChange={(e) => field('printHeader', e.currentTarget.checked)} />
             Print header
           </label>
           {m.printHeader ? (
             <Input value={m.headerText} onChange={(e) => field('headerText', e.currentTarget.value)} placeholder="Header text (optional)" />
           ) : null}
-          <label className="flex items-center gap-2 text-sm text-slate-700">
+          <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
             <input type="checkbox" checked={m.printFooter} onChange={(e) => field('printFooter', e.currentTarget.checked)} />
             Print footer + page number
           </label>
@@ -165,7 +179,7 @@ function SaveBadge({ state }: { state: SaveState }) {
       </span>
     )
   return (
-    <span className={cn('inline-flex items-center gap-1 text-xs', state === 'saved' ? 'text-teal-600' : 'text-slate-400')}>
+    <span className={cn('inline-flex items-center gap-1 text-xs', state === 'saved' ? 'text-teal-600' : 'text-slate-400 dark:text-slate-500')}>
       <Check size={12} /> Saved
     </span>
   )

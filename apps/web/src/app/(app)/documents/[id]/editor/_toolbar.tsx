@@ -49,7 +49,7 @@ export function FormattingToolbar({
 }) {
   const inTable = editor.isActive('table')
   return (
-    <div className="flex flex-wrap items-center gap-0.5 border-b border-slate-200 bg-white px-2 py-1">
+    <div className="flex flex-wrap items-center gap-0.5 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-2 py-1">
       <Btn label="Undo" disabled={!editor.can().undo()} onClick={() => editor.chain().focus().undo().run()}>
         <Undo2 size={15} />
       </Btn>
@@ -213,7 +213,7 @@ function LineSpacingMenu({ editor }: { editor: Editor }) {
                 editor.chain().focus().setLineHeight(s.value).run()
                 close()
               }}
-              className="block w-full px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50"
+              className="block w-full px-3 py-1.5 text-left text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/60"
             >
               {s.label}
             </button>
@@ -243,7 +243,7 @@ function ToolbarSelect({
       value={value}
       onChange={(e) => onChange(e.currentTarget.value)}
       className={cn(
-        'doc-select h-7 rounded border border-slate-200 bg-white px-1.5 text-xs text-slate-700 outline-none hover:border-slate-300 focus:border-teal-400',
+        'doc-select h-8 rounded border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-1.5 text-xs text-slate-700 dark:text-slate-200 outline-none hover:border-slate-300 dark:hover:border-slate-700 focus:border-teal-400',
         widthClass,
       )}
     >
@@ -279,7 +279,7 @@ function ColorMenu({ editor, mode }: { editor: Editor; mode: 'text' | 'highlight
                   else editor.chain().focus().setHighlight({ color: c }).run()
                   close()
                 }}
-                className="h-6 w-6 rounded border border-slate-200"
+                className="h-6 w-6 rounded border border-slate-200 dark:border-slate-700"
                 style={{ backgroundColor: c }}
               />
             ))}
@@ -291,7 +291,7 @@ function ColorMenu({ editor, mode }: { editor: Editor; mode: 'text' | 'highlight
               else editor.chain().focus().unsetHighlight().run()
               close()
             }}
-            className="mt-2 w-full rounded px-2 py-1 text-left text-xs text-slate-600 hover:bg-slate-50"
+            className="mt-2 w-full rounded px-2 py-1 text-left text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60"
           >
             Clear {mode === 'text' ? 'color' : 'highlight'}
           </button>
@@ -330,7 +330,7 @@ function TableMenu({ editor, inTable }: { editor: Editor; inTable: boolean }) {
   return (
     <Dropdown trigger={<TableIcon size={15} />} title="Table" widthClass="w-48">
       {(close) => (
-        <div className="py-1 text-sm text-slate-700">
+        <div className="py-1 text-sm text-slate-700 dark:text-slate-200">
           <MenuItem
             onClick={() => {
               editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
@@ -341,13 +341,13 @@ function TableMenu({ editor, inTable }: { editor: Editor; inTable: boolean }) {
           </MenuItem>
           {inTable ? (
             <>
-              <div className="my-1 border-t border-slate-100" />
+              <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
               <MenuItem onClick={() => editor.chain().focus().addRowAfter().run()}>Add row below</MenuItem>
               <MenuItem onClick={() => editor.chain().focus().addColumnAfter().run()}>Add column right</MenuItem>
               <MenuItem onClick={() => editor.chain().focus().deleteRow().run()}>Delete row</MenuItem>
               <MenuItem onClick={() => editor.chain().focus().deleteColumn().run()}>Delete column</MenuItem>
               <MenuItem onClick={() => editor.chain().focus().toggleHeaderRow().run()}>Toggle header row</MenuItem>
-              <div className="my-1 border-t border-slate-100" />
+              <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
               <MenuItem
                 danger
                 onClick={() => {
@@ -379,8 +379,8 @@ function MenuItem({
       type="button"
       onClick={onClick}
       className={cn(
-        'block w-full px-3 py-1.5 text-left hover:bg-slate-50',
-        danger ? 'text-rose-600 hover:bg-rose-50' : 'text-slate-700',
+        'block w-full px-3 py-1.5 text-left hover:bg-slate-50 dark:hover:bg-slate-800/60',
+        danger ? 'text-rose-600 hover:bg-rose-50' : 'text-slate-700 dark:text-slate-200',
       )}
     >
       {children}
@@ -422,8 +422,8 @@ function Btn({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        'inline-flex h-7 min-w-[28px] items-center justify-center rounded px-1.5 text-slate-600 transition-colors',
-        active ? 'bg-teal-100 text-teal-900' : 'hover:bg-slate-100 hover:text-slate-900',
+        'inline-flex h-7 min-w-[28px] items-center justify-center rounded px-1.5 text-slate-600 dark:text-slate-300 transition-colors',
+        active ? 'bg-teal-100 dark:bg-teal-950/50 text-teal-900 dark:text-teal-300' : 'hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100',
         disabled && 'cursor-not-allowed opacity-30 hover:bg-transparent',
       )}
     >
@@ -433,7 +433,7 @@ function Btn({
 }
 
 function Sep() {
-  return <div className="mx-1 h-5 w-px bg-slate-200" />
+  return <div className="mx-1 h-5 w-px bg-slate-200 dark:bg-slate-700" />
 }
 
 function Dropdown({
@@ -472,8 +472,8 @@ function Dropdown({
         aria-label={title}
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          'inline-flex h-7 items-center gap-0.5 rounded px-1.5 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900',
-          open && 'bg-slate-100 text-slate-900',
+          'inline-flex h-7 items-center gap-0.5 rounded px-1.5 text-slate-600 dark:text-slate-300 transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100',
+          open && 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100',
         )}
       >
         {trigger}
@@ -482,7 +482,7 @@ function Dropdown({
       {open ? (
         <div
           className={cn(
-            'absolute left-0 top-9 z-40 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg',
+            'absolute left-0 top-9 z-40 overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-lg',
             widthClass,
           )}
         >

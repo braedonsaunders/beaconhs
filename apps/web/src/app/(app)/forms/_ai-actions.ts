@@ -9,10 +9,12 @@ import { desc, eq } from 'drizzle-orm'
 import { assertCan } from '@beaconhs/tenant'
 import { formAutomations, formTemplateVersions, formTemplates } from '@beaconhs/db/schema'
 import { validateFormSchema } from '@beaconhs/forms-core'
+import type { FormSchemaV1 } from '@beaconhs/forms-core'
 import { requireRequestContext } from '@/lib/auth'
 import { getTenantAiConfig } from '@/lib/ai-config'
 import { recordAudit } from '@/lib/audit'
-import { generateAppFromPrompt, generateFlowFromPrompt } from './_lib/ai-generate'
+import { appendMessage, createConversation } from '@/lib/ai-conversations'
+import { generateAppEdit, generateAppFromPrompt, generateFlowFromPrompt } from './_lib/ai-generate'
 
 function slugify(s: string): string {
   return (
@@ -22,6 +24,67 @@ function slugify(s: string): string {
       .replace(/^_|_$/g, '')
       .slice(0, 48) || 'app'
   )
+}
+
+// One conversational turn of the App builder assistant. The AI can BUILD a new
+// app or EDIT the current one (it always receives the live schema). Persists the
+// exchange to the global ai_conversations history (scope 'builder.app'). Returns
+// the proposed schema for the editor to Apply — never auto-publishes.
+export async function runAppBuilderChat(args: {
+  conversationId: string | null
+  templateId: string
+  currentSchema: FormSchemaV1
+  prompt: string
+}): Promise<{
+  ok: boolean
+  error?: string
+  conversationId?: string
+  reply?: string
+  schema?: FormSchemaV1
+  warnings?: string[]
+}> {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'forms.ai.generate')
+  const prompt = (args.prompt ?? '').trim()
+  if (prompt.length < 2) return { ok: false, error: 'Tell the assistant what to build or change.' }
+
+  const aiConfig = await getTenantAiConfig(ctx)
+  if (!aiConfig) {
+    return { ok: false, error: 'AI is not configured. Set a provider + key under Admin → AI.' }
+  }
+
+  // Ensure a conversation, then record the user's message.
+  let conversationId = args.conversationId
+  if (!conversationId) {
+    conversationId = await createConversation({
+      scope: 'builder.app',
+      scopeRefId: args.templateId,
+      title: prompt.slice(0, 60),
+    })
+  }
+  await appendMessage({ conversationId, role: 'user', content: prompt })
+
+  const gen = await generateAppEdit(aiConfig, prompt, args.currentSchema)
+  if (!gen.ok) {
+    await appendMessage({ conversationId, role: 'assistant', content: `Sorry — ${gen.error}` })
+    return { ok: false, error: gen.error, conversationId }
+  }
+
+  const fieldCount = gen.value.sections.reduce((n, s) => n + s.fields.length, 0)
+  const reply = `Done. The app now has ${gen.value.sections.length} section${
+    gen.value.sections.length === 1 ? '' : 's'
+  } and ${fieldCount} field${fieldCount === 1 ? '' : 's'}. Review it and hit Apply to load it into the builder.`
+  await appendMessage({ conversationId, role: 'assistant', content: reply, data: { schema: gen.value } })
+
+  await recordAudit(ctx, {
+    entityType: 'form_template',
+    entityId: args.templateId,
+    action: 'update',
+    summary: 'AI builder chat turn',
+    after: { mode: 'ai-chat', prompt: prompt.slice(0, 200) },
+  })
+
+  return { ok: true, conversationId, reply, schema: gen.value, warnings: gen.warnings }
 }
 
 export async function generateAppDraft(

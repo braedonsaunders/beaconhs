@@ -1,3 +1,4 @@
+import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { and, count, eq, isNull, sql } from 'drizzle-orm'
 import { Toaster } from 'sonner'
@@ -6,6 +7,7 @@ import { notifications, tenants } from '@beaconhs/db/schema'
 import { getRequestContext, listAccessibleTenants } from '@/lib/auth'
 import { AppShell } from '@/components/app-shell'
 import { NavigationProvider } from '@/components/navigation-provider'
+import { ThemeProvider } from '@/components/theme-provider'
 import { resolveNavGroups } from '@/lib/nav/resolve'
 
 // Every page in the authenticated app shell requires the per-request context
@@ -17,6 +19,8 @@ export const dynamic = 'force-dynamic'
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const ctx = await getRequestContext()
   if (!ctx) redirect('/login')
+
+  const defaultCollapsed = (await cookies()).get('sidebar_collapsed')?.value === '1'
 
   const [tenant, available, unread, navGroups] = await Promise.all([
     db.transaction(async (tx) => {
@@ -43,21 +47,24 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (!tenant) redirect('/login')
 
   return (
-    <NavigationProvider>
-      <AppShell
-        ctx={{
-          isSuperAdmin: ctx.isSuperAdmin,
-          membership: ctx.membership,
-          tenantId: tenant.id,
-          tenantName: tenant.name,
-        }}
-        groups={navGroups}
-        availableTenants={available}
-        unreadCount={unread}
-      >
-        {children}
-        <Toaster richColors position="top-right" />
-      </AppShell>
-    </NavigationProvider>
+    <ThemeProvider>
+      <NavigationProvider>
+        <AppShell
+          ctx={{
+            isSuperAdmin: ctx.isSuperAdmin,
+            membership: ctx.membership,
+            tenantId: tenant.id,
+            tenantName: tenant.name,
+          }}
+          groups={navGroups}
+          availableTenants={available}
+          unreadCount={unread}
+          defaultCollapsed={defaultCollapsed}
+        >
+          {children}
+          <Toaster richColors position="top-right" />
+        </AppShell>
+      </NavigationProvider>
+    </ThemeProvider>
   )
 }

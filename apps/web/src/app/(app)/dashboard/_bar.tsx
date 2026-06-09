@@ -26,7 +26,7 @@ export function AnimatedBar({
         : 'from-rose-600 to-rose-400'
   const clamped = Math.max(2, Math.min(100, pct))
   return (
-    <div className="relative h-2 w-full overflow-hidden rounded-full bg-slate-100">
+    <div className="relative h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
       <motion.div
         initial={{ width: 0 }}
         animate={{ width: `${clamped}%` }}

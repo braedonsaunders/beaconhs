@@ -35,7 +35,7 @@ export function MobileNavToggle({ groups }: { groups: SidebarNavGroup[] }) {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Open menu"
-        className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-600 transition-colors hover:bg-slate-50 lg:hidden"
+        className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-600 transition-colors hover:bg-slate-50 lg:hidden dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
       >
         <Menu size={18} />
       </button>
@@ -58,23 +58,25 @@ export function MobileNavToggle({ groups }: { groups: SidebarNavGroup[] }) {
                     animate={{ x: 0 }}
                     exit={{ x: '-100%' }}
                     transition={{ type: 'spring', damping: 32, stiffness: 320, mass: 0.8 }}
-                    className="absolute left-0 top-0 flex h-full w-72 max-w-[86%] flex-col border-r border-slate-200 bg-white shadow-2xl"
+                    className="absolute left-0 top-0 flex h-full w-72 max-w-[86%] flex-col border-r border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900"
                     onClickCapture={(e) => {
                       if ((e.target as HTMLElement).closest('a')) setOpen(false)
                     }}
                   >
-                    <div className="flex h-14 items-center justify-between border-b border-slate-200 px-4">
+                    <div className="flex h-14 items-center justify-between border-b border-slate-200 px-4 dark:border-slate-800">
                       <div className="flex items-center gap-2">
                         <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-teal-600 to-teal-800 text-sm font-bold text-white">
                           B
                         </div>
-                        <span className="font-semibold tracking-tight text-slate-900">BeaconHS</span>
+                        <span className="font-semibold tracking-tight text-slate-900 dark:text-slate-100">
+                          BeaconHS
+                        </span>
                       </div>
                       <button
                         type="button"
                         onClick={() => setOpen(false)}
                         aria-label="Close"
-                        className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100"
+                        className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
                       >
                         <X size={18} />
                       </button>

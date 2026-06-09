@@ -11,12 +11,12 @@ export function CheckIndicator({ checked, label, className }: { checked: boolean
       <span
         className={cn(
           'inline-flex h-4 w-4 items-center justify-center rounded border',
-          checked ? 'border-teal-700 bg-teal-700 text-white' : 'border-slate-300 bg-white',
+          checked ? 'border-teal-700 bg-teal-700 text-white' : 'border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900',
         )}
       >
         {checked ? <Check size={12} strokeWidth={3} /> : null}
       </span>
-      <span className={checked ? 'text-slate-900' : 'text-slate-500'}>{label}</span>
+      <span className={checked ? 'text-slate-900 dark:text-slate-100' : 'text-slate-500 dark:text-slate-400'}>{label}</span>
     </div>
   )
 }

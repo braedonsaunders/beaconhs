@@ -40,7 +40,7 @@ export function TenantSwitcher({
   // Don't show the picker if a regular user only has one membership.
   if (!isSuperAdmin && available.length <= 1) {
     return (
-      <span className="flex items-center gap-2 rounded-md px-2 py-1 text-sm text-slate-700">
+      <span className="flex items-center gap-2 rounded-md px-2 py-1 text-sm text-slate-700 dark:text-slate-200">
         <Building2 size={14} />
         {current.name}
       </span>
@@ -58,15 +58,15 @@ export function TenantSwitcher({
           type="button"
           onClick={() => setOpen((v) => !v)}
           disabled={pending}
-          className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          className="flex items-center gap-2 rounded-md border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-2.5 py-1 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/60"
         >
           <Building2 size={14} />
           {pending ? 'Switching…' : current.name}
-          <ChevronDown size={14} className="text-slate-400" />
+          <ChevronDown size={14} className="text-slate-400 dark:text-slate-500" />
         </button>
       }
     >
-      <div className="border-b border-slate-100 px-3 py-2 text-xs uppercase tracking-wide text-slate-500">
+      <div className="border-b border-slate-100 dark:border-slate-800 px-3 py-2 text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
         {isSuperAdmin ? `All tenants (${available.length})` : 'Your tenants'}
       </div>
       <ul className="max-h-72 overflow-y-auto py-1">
@@ -75,13 +75,13 @@ export function TenantSwitcher({
             <button
               type="button"
               onClick={() => pick(t.id)}
-              className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-slate-50"
+              className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800/60"
             >
               <span className="flex flex-col">
-                <span className="font-medium text-slate-900">{t.name}</span>
-                <span className="text-xs text-slate-500">{t.slug}</span>
+                <span className="font-medium text-slate-900 dark:text-slate-100">{t.name}</span>
+                <span className="text-xs text-slate-500 dark:text-slate-400">{t.slug}</span>
               </span>
-              {t.id === current.id ? <Check size={14} className="text-teal-700" /> : null}
+              {t.id === current.id ? <Check size={14} className="text-teal-700 dark:text-teal-300" /> : null}
             </button>
           </li>
         ))}

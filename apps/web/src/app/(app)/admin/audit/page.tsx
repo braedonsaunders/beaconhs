@@ -17,6 +17,7 @@ import { SearchInput } from '@/components/search-input'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { PageContainer } from '@/components/page-layout'
+import { TableToolbar } from '@/components/table-toolbar'
 
 export const metadata = { title: 'Audit log' }
 export const dynamic = 'force-dynamic'
@@ -37,7 +38,12 @@ export default async function AuditLogPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const sp = await searchParams
-  const params = parseListParams(sp, { sort: 'occurred_at', dir: 'desc', perPage: 50, allowedSorts: SORTS })
+  const params = parseListParams(sp, {
+    sort: 'occurred_at',
+    dir: 'desc',
+    perPage: 50,
+    allowedSorts: SORTS,
+  })
   const actionFilter = pickString(sp.action)
   const entityFilter = pickString(sp.entityType)
   const ctx = await requireRequestContext()
@@ -63,7 +69,10 @@ export default async function AuditLogPage({
       .offset((params.page - 1) * params.perPage)
     const [c] = await tx.select({ c: auditLog.id }).from(auditLog).where(whereClause).limit(1)
     // crude total estimator: just return rows length for now if pagination would be misleading
-    return { rows: data, total: data.length + (data.length === params.perPage ? params.perPage : 0) }
+    return {
+      rows: data,
+      total: data.length + (data.length === params.perPage ? params.perPage : 0),
+    }
   })
 
   return (
@@ -74,16 +83,16 @@ export default async function AuditLogPage({
           title="Audit log"
           subtitle="Every write to a tenant-scoped record"
         />
-        <div className="flex items-center gap-3">
+        <TableToolbar>
           <SearchInput placeholder="Search entity type or summary" />
-        </div>
-        <FilterChips
-          basePath="/admin/audit"
-          currentParams={sp}
-          paramKey="action"
-          label="Action"
-          options={ACTION_OPTIONS}
-        />
+          <FilterChips
+            basePath="/admin/audit"
+            currentParams={sp}
+            paramKey="action"
+            label="Action"
+            options={ACTION_OPTIONS}
+          />
+        </TableToolbar>
         {rows.length === 0 ? (
           <EmptyState title="No audit entries yet" />
         ) : (

@@ -42,6 +42,24 @@ import {
   createCorrectiveActionFromResponse,
   createIncidentFromResponse,
 } from '@/app/(app)/forms/responses/[id]/_spawn-actions'
+import { analyzePhotoAttachments } from '@/app/(app)/forms/_lib/analyze-photos'
+
+// Pull attachment ids out of a photo / photo_upload (AttachedFile[]) or photo_ai
+// ({ attachments: AttachedFile[] }) field value.
+function attachmentIdsFromValue(raw: unknown): string[] {
+  const pick = (arr: unknown[]) =>
+    arr
+      .map((x) => (x && typeof x === 'object' ? (x as { attachmentId?: string }).attachmentId : null))
+      .filter((x): x is string => !!x)
+  if (Array.isArray(raw)) return pick(raw)
+  if (raw && typeof raw === 'object') {
+    const atts = (raw as { attachments?: unknown }).attachments
+    if (Array.isArray(atts)) return pick(atts)
+  }
+  return []
+}
+
+const SEVERITY_ORDER: Record<string, number> = { low: 1, medium: 2, high: 3 }
 
 // {{field_id}} token interpolation against the response values.
 function interpolate(tpl: string, values: Record<string, unknown>): string {
@@ -305,6 +323,50 @@ export async function executeFlowPlan(
             }),
           )
           ran.push('create_response')
+          break
+        }
+        case 'analyze_photos': {
+          const attIds = attachmentIdsFromValue(values[action.fieldId])
+          if (attIds.length === 0) {
+            failed.push('analyze_photos (no photos)')
+            break
+          }
+          const analysis = await analyzePhotoAttachments(ctx, attIds)
+          if (!analysis) {
+            failed.push('analyze_photos (AI unconfigured / unreadable)')
+            break
+          }
+          const badPpe = analysis.ppe.filter((p) => p.status !== 'present')
+          // Optionally write a plain-text summary onto a field of the response.
+          if (action.storeInField) {
+            const lines: string[] = [analysis.summary]
+            if (analysis.hazards.length)
+              lines.push(`Hazards: ${analysis.hazards.map((h) => `${h.type} (${h.severity})`).join('; ')}`)
+            if (badPpe.length) lines.push(`PPE: ${badPpe.map((p) => p.item).join(', ')}`)
+            const summary = lines.filter(Boolean).join('\n')
+            fieldPatch[action.storeInField] = summary
+            values[action.storeInField] = summary
+          }
+          // Optionally spawn a CAPA when hazards at/above the threshold are found.
+          if (action.createCapaOnHazard) {
+            const min = SEVERITY_ORDER[action.minSeverity ?? 'medium'] ?? 2
+            const bad = analysis.hazards.filter((h) => (SEVERITY_ORDER[h.severity] ?? 0) >= min)
+            const top = bad[0]
+            if (top) {
+              const sev = bad.some((h) => h.severity === 'high') ? 'high' : 'medium'
+              const res = await createCorrectiveActionFromResponse({
+                responseId,
+                title: `Photo hazard: ${top.type}`.slice(0, 120),
+                description:
+                  analysis.summary +
+                  '\n\n' +
+                  bad.map((h) => `• ${h.type} (${h.severity}) — ${h.detail}`).join('\n'),
+                severity: sev as 'low' | 'medium' | 'high' | 'critical',
+              })
+              ran.push(res.ok ? 'analyze_photos→capa' : 'analyze_photos→capa (failed)')
+            }
+          }
+          ran.push(`analyze_photos (${analysis.hazards.length}h/${badPpe.length}ppe)`)
           break
         }
       }

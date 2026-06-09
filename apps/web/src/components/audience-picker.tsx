@@ -117,7 +117,7 @@ export function AudiencePicker({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-slate-500 dark:text-slate-400">
           Add one or more audience targets. The resolved people set is the union of every row;
           duplicates are de-duped.
         </p>
@@ -142,7 +142,7 @@ export function AudiencePicker({
           <div className="space-y-1.5">
             <Label htmlFor="aud-value">Pick</Label>
             {pendingType === 'everyone' ? (
-              <Input id="aud-value" value="All active people" disabled className="bg-slate-50" />
+              <Input id="aud-value" value="All active people" disabled className="bg-slate-50 dark:bg-slate-900" />
             ) : (
               <Select
                 id="aud-value"
@@ -164,7 +164,7 @@ export function AudiencePicker({
         </div>
 
         {value.length === 0 ? (
-          <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 p-4 text-center text-sm text-slate-500">
+          <div className="rounded-md border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 p-4 text-center text-sm text-slate-500 dark:text-slate-400">
             No audience yet — add at least one above.
           </div>
         ) : (
@@ -172,11 +172,11 @@ export function AudiencePicker({
             {value.map((a, idx) => (
               <li
                 key={`${a.type}-${a.entityKey}-${idx}`}
-                className="flex items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-2"
+                className="flex items-center justify-between rounded-md border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2"
               >
                 <span className="flex items-center gap-2">
                   <Badge variant="secondary">{TYPE_LABEL[a.type]}</Badge>
-                  <span className="text-slate-900">{audienceLabel(a, options)}</span>
+                  <span className="text-slate-900 dark:text-slate-100">{audienceLabel(a, options)}</span>
                 </span>
                 <Button
                   type="button"

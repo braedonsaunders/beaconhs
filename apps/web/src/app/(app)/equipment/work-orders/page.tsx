@@ -27,11 +27,21 @@ import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
+import { TableToolbar } from '@/components/table-toolbar'
 import { EquipmentSubNav } from '@/components/equipment-sub-nav'
 
 export const metadata = { title: 'Work orders' }
 
-const SORTS = ['reference', 'summary', 'status', 'priority', 'opened_at', 'closed_at', 'cost', 'aging'] as const
+const SORTS = [
+  'reference',
+  'summary',
+  'status',
+  'priority',
+  'opened_at',
+  'closed_at',
+  'cost',
+  'aging',
+] as const
 
 const STATUS_OPTIONS = [
   { value: 'open', label: 'Open' },
@@ -81,128 +91,153 @@ export default async function WorkOrdersPage({
   const openedToRaw = pickString(sp.openedTo)
   const ctx = await requireRequestContext()
 
-  const { rows, total, statusCounts, priorityCounts, assigneeOptions, typeOptions } = await ctx.db(async (tx) => {
-    const filters: SQL<unknown>[] = []
-    if (params.q) {
-      const term = `%${params.q}%`
-      const cond = or(
-        ilike(equipmentWorkOrders.reference, term),
-        ilike(equipmentWorkOrders.summary, term),
-        ilike(equipmentWorkOrders.description, term),
-        ilike(equipmentItems.assetTag, term),
-        ilike(equipmentItems.name, term),
-      )
-      if (cond) filters.push(cond)
-    }
-    if (statusFilter) filters.push(eq(equipmentWorkOrders.status, statusFilter as any))
-    if (priorityFilter) filters.push(eq(equipmentWorkOrders.priority, priorityFilter as any))
-    if (assigneeFilter) filters.push(eq(equipmentWorkOrders.assignedToTenantUserId, assigneeFilter))
-    if (typeFilter) filters.push(eq(equipmentItems.typeId, typeFilter))
-    if (openedFromRaw) filters.push(gte(equipmentWorkOrders.openedAt, new Date(openedFromRaw)))
-    if (openedToRaw) filters.push(lte(equipmentWorkOrders.openedAt, new Date(openedToRaw)))
-    if (ageBucketFilter === 'open7') {
-      filters.push(isNull(equipmentWorkOrders.closedAt))
-      filters.push(
-        sql`${equipmentWorkOrders.openedAt} < (now() - interval '7 days')`,
-      )
-    } else if (ageBucketFilter === 'open30') {
-      filters.push(isNull(equipmentWorkOrders.closedAt))
-      filters.push(
-        sql`${equipmentWorkOrders.openedAt} < (now() - interval '30 days')`,
-      )
-    } else if (ageBucketFilter === 'overdue30') {
-      filters.push(isNull(equipmentWorkOrders.closedAt))
-      filters.push(eq(equipmentWorkOrders.priority, 'high'))
-      filters.push(
-        sql`${equipmentWorkOrders.openedAt} < (now() - interval '7 days')`,
-      )
-    }
-    const whereClause = filters.length > 0 ? and(...filters) : undefined
+  const { rows, total, statusCounts, priorityCounts, assigneeOptions, typeOptions } = await ctx.db(
+    async (tx) => {
+      const filters: SQL<unknown>[] = []
+      if (params.q) {
+        const term = `%${params.q}%`
+        const cond = or(
+          ilike(equipmentWorkOrders.reference, term),
+          ilike(equipmentWorkOrders.summary, term),
+          ilike(equipmentWorkOrders.description, term),
+          ilike(equipmentItems.assetTag, term),
+          ilike(equipmentItems.name, term),
+        )
+        if (cond) filters.push(cond)
+      }
+      if (statusFilter) filters.push(eq(equipmentWorkOrders.status, statusFilter as any))
+      if (priorityFilter) filters.push(eq(equipmentWorkOrders.priority, priorityFilter as any))
+      if (assigneeFilter)
+        filters.push(eq(equipmentWorkOrders.assignedToTenantUserId, assigneeFilter))
+      if (typeFilter) filters.push(eq(equipmentItems.typeId, typeFilter))
+      if (openedFromRaw) filters.push(gte(equipmentWorkOrders.openedAt, new Date(openedFromRaw)))
+      if (openedToRaw) filters.push(lte(equipmentWorkOrders.openedAt, new Date(openedToRaw)))
+      if (ageBucketFilter === 'open7') {
+        filters.push(isNull(equipmentWorkOrders.closedAt))
+        filters.push(sql`${equipmentWorkOrders.openedAt} < (now() - interval '7 days')`)
+      } else if (ageBucketFilter === 'open30') {
+        filters.push(isNull(equipmentWorkOrders.closedAt))
+        filters.push(sql`${equipmentWorkOrders.openedAt} < (now() - interval '30 days')`)
+      } else if (ageBucketFilter === 'overdue30') {
+        filters.push(isNull(equipmentWorkOrders.closedAt))
+        filters.push(eq(equipmentWorkOrders.priority, 'high'))
+        filters.push(sql`${equipmentWorkOrders.openedAt} < (now() - interval '7 days')`)
+      }
+      const whereClause = filters.length > 0 ? and(...filters) : undefined
 
-    const orderBy =
-      params.sort === 'reference'
-        ? [params.dir === 'asc' ? asc(equipmentWorkOrders.reference) : desc(equipmentWorkOrders.reference)]
-        : params.sort === 'summary'
-          ? [params.dir === 'asc' ? asc(equipmentWorkOrders.summary) : desc(equipmentWorkOrders.summary)]
-          : params.sort === 'status'
-            ? [params.dir === 'asc' ? asc(equipmentWorkOrders.status) : desc(equipmentWorkOrders.status)]
-            : params.sort === 'priority'
-              ? [params.dir === 'asc' ? asc(equipmentWorkOrders.priority) : desc(equipmentWorkOrders.priority)]
-              : params.sort === 'closed_at'
-                ? [params.dir === 'asc' ? asc(equipmentWorkOrders.closedAt) : desc(equipmentWorkOrders.closedAt)]
-                : params.sort === 'cost'
-                  ? [params.dir === 'asc' ? asc(equipmentWorkOrders.cost) : desc(equipmentWorkOrders.cost)]
-                  : params.sort === 'aging'
+      const orderBy =
+        params.sort === 'reference'
+          ? [
+              params.dir === 'asc'
+                ? asc(equipmentWorkOrders.reference)
+                : desc(equipmentWorkOrders.reference),
+            ]
+          : params.sort === 'summary'
+            ? [
+                params.dir === 'asc'
+                  ? asc(equipmentWorkOrders.summary)
+                  : desc(equipmentWorkOrders.summary),
+              ]
+            : params.sort === 'status'
+              ? [
+                  params.dir === 'asc'
+                    ? asc(equipmentWorkOrders.status)
+                    : desc(equipmentWorkOrders.status),
+                ]
+              : params.sort === 'priority'
+                ? [
+                    params.dir === 'asc'
+                      ? asc(equipmentWorkOrders.priority)
+                      : desc(equipmentWorkOrders.priority),
+                  ]
+                : params.sort === 'closed_at'
+                  ? [
+                      params.dir === 'asc'
+                        ? asc(equipmentWorkOrders.closedAt)
+                        : desc(equipmentWorkOrders.closedAt),
+                    ]
+                  : params.sort === 'cost'
                     ? [
                         params.dir === 'asc'
-                          ? asc(equipmentWorkOrders.openedAt)
-                          : desc(equipmentWorkOrders.openedAt),
+                          ? asc(equipmentWorkOrders.cost)
+                          : desc(equipmentWorkOrders.cost),
                       ]
-                    : [params.dir === 'asc' ? asc(equipmentWorkOrders.openedAt) : desc(equipmentWorkOrders.openedAt)]
+                    : params.sort === 'aging'
+                      ? [
+                          params.dir === 'asc'
+                            ? asc(equipmentWorkOrders.openedAt)
+                            : desc(equipmentWorkOrders.openedAt),
+                        ]
+                      : [
+                          params.dir === 'asc'
+                            ? asc(equipmentWorkOrders.openedAt)
+                            : desc(equipmentWorkOrders.openedAt),
+                        ]
 
-    const [tot] = await tx
-      .select({ c: count() })
-      .from(equipmentWorkOrders)
-      .leftJoin(equipmentItems, eq(equipmentItems.id, equipmentWorkOrders.itemId))
-      .where(whereClause)
+      const [tot] = await tx
+        .select({ c: count() })
+        .from(equipmentWorkOrders)
+        .leftJoin(equipmentItems, eq(equipmentItems.id, equipmentWorkOrders.itemId))
+        .where(whereClause)
 
-    const data = await tx
-      .select({
-        wo: equipmentWorkOrders,
-        item: equipmentItems,
-        type: equipmentTypes,
-        assignee: tenantUsers,
-        assigneeUser: user,
-      })
-      .from(equipmentWorkOrders)
-      .leftJoin(equipmentItems, eq(equipmentItems.id, equipmentWorkOrders.itemId))
-      .leftJoin(equipmentTypes, eq(equipmentTypes.id, equipmentItems.typeId))
-      .leftJoin(tenantUsers, eq(tenantUsers.id, equipmentWorkOrders.assignedToTenantUserId))
-      .leftJoin(user, eq(user.id, tenantUsers.userId))
-      .where(whereClause)
-      .orderBy(...orderBy)
-      .limit(params.perPage)
-      .offset((params.page - 1) * params.perPage)
+      const data = await tx
+        .select({
+          wo: equipmentWorkOrders,
+          item: equipmentItems,
+          type: equipmentTypes,
+          assignee: tenantUsers,
+          assigneeUser: user,
+        })
+        .from(equipmentWorkOrders)
+        .leftJoin(equipmentItems, eq(equipmentItems.id, equipmentWorkOrders.itemId))
+        .leftJoin(equipmentTypes, eq(equipmentTypes.id, equipmentItems.typeId))
+        .leftJoin(tenantUsers, eq(tenantUsers.id, equipmentWorkOrders.assignedToTenantUserId))
+        .leftJoin(user, eq(user.id, tenantUsers.userId))
+        .where(whereClause)
+        .orderBy(...orderBy)
+        .limit(params.perPage)
+        .offset((params.page - 1) * params.perPage)
 
-    const ss = await tx
-      .select({ s: equipmentWorkOrders.status, c: count() })
-      .from(equipmentWorkOrders)
-      .groupBy(equipmentWorkOrders.status)
-    const ps = await tx
-      .select({ p: equipmentWorkOrders.priority, c: count() })
-      .from(equipmentWorkOrders)
-      .groupBy(equipmentWorkOrders.priority)
+      const ss = await tx
+        .select({ s: equipmentWorkOrders.status, c: count() })
+        .from(equipmentWorkOrders)
+        .groupBy(equipmentWorkOrders.status)
+      const ps = await tx
+        .select({ p: equipmentWorkOrders.priority, c: count() })
+        .from(equipmentWorkOrders)
+        .groupBy(equipmentWorkOrders.priority)
 
-    const aOpts = await tx
-      .select({
-        id: tenantUsers.id,
-        displayName: tenantUsers.displayName,
-        c: count(),
-      })
-      .from(tenantUsers)
-      .innerJoin(
-        equipmentWorkOrders,
-        eq(equipmentWorkOrders.assignedToTenantUserId, tenantUsers.id),
-      )
-      .groupBy(tenantUsers.id, tenantUsers.displayName)
-      .orderBy(desc(count()))
-      .limit(20)
+      const aOpts = await tx
+        .select({
+          id: tenantUsers.id,
+          displayName: tenantUsers.displayName,
+          c: count(),
+        })
+        .from(tenantUsers)
+        .innerJoin(
+          equipmentWorkOrders,
+          eq(equipmentWorkOrders.assignedToTenantUserId, tenantUsers.id),
+        )
+        .groupBy(tenantUsers.id, tenantUsers.displayName)
+        .orderBy(desc(count()))
+        .limit(20)
 
-    const tOpts = await tx
-      .select({ id: equipmentTypes.id, name: equipmentTypes.name })
-      .from(equipmentTypes)
-      .orderBy(asc(equipmentTypes.name))
-      .limit(50)
+      const tOpts = await tx
+        .select({ id: equipmentTypes.id, name: equipmentTypes.name })
+        .from(equipmentTypes)
+        .orderBy(asc(equipmentTypes.name))
+        .limit(50)
 
-    return {
-      rows: data,
-      total: Number(tot?.c ?? 0),
-      statusCounts: Object.fromEntries(ss.map((x) => [x.s, Number(x.c)])),
-      priorityCounts: Object.fromEntries(ps.map((x) => [x.p, Number(x.c)])),
-      assigneeOptions: aOpts,
-      typeOptions: tOpts,
-    }
-  })
+      return {
+        rows: data,
+        total: Number(tot?.c ?? 0),
+        statusCounts: Object.fromEntries(ss.map((x) => [x.s, Number(x.c)])),
+        priorityCounts: Object.fromEntries(ps.map((x) => [x.p, Number(x.c)])),
+        assigneeOptions: aOpts,
+        typeOptions: tOpts,
+      }
+    },
+  )
 
   const sortProps = { basePath: '/equipment/work-orders', currentParams: sp, dir: params.dir }
 
@@ -222,7 +257,7 @@ export default async function WorkOrdersPage({
               </div>
             }
           />
-          <div className="flex flex-wrap items-center gap-3">
+          <TableToolbar>
             <SearchInput placeholder="Search reference, summary, asset tag…" />
             <form className="flex items-center gap-1 text-xs">
               <label className="flex items-center gap-1 text-slate-500">
@@ -231,7 +266,7 @@ export default async function WorkOrdersPage({
                   type="date"
                   name="openedFrom"
                   defaultValue={openedFromRaw ?? ''}
-                  className="rounded-md border border-slate-300 px-2 py-1 text-xs"
+                  className="h-8 rounded-md border border-slate-300 px-2 text-xs"
                 />
               </label>
               <span className="text-slate-400">to</span>
@@ -239,17 +274,15 @@ export default async function WorkOrdersPage({
                 type="date"
                 name="openedTo"
                 defaultValue={openedToRaw ?? ''}
-                className="rounded-md border border-slate-300 px-2 py-1 text-xs"
+                className="h-8 rounded-md border border-slate-300 px-2 text-xs"
               />
               <button
                 type="submit"
-                className="rounded-md border border-slate-200 px-2 py-1 text-xs hover:bg-slate-50"
+                className="h-8 rounded-md border border-slate-200 px-2 text-xs hover:bg-slate-50"
               >
                 Apply
               </button>
             </form>
-          </div>
-          <div className="space-y-2">
             <FilterChips
               basePath="/equipment/work-orders"
               currentParams={sp}
@@ -300,7 +333,7 @@ export default async function WorkOrdersPage({
                 }))}
               />
             ) : null}
-          </div>
+          </TableToolbar>
         </>
       }
     >
@@ -358,14 +391,13 @@ export default async function WorkOrdersPage({
                 const openedMs = new Date(wo.openedAt).getTime()
                 const closedMs = wo.closedAt ? new Date(wo.closedAt).getTime() : Date.now()
                 const ageDays = Math.max(0, Math.round((closedMs - openedMs) / 86_400_000))
-                const ageVariant: 'success' | 'warning' | 'destructive' | 'secondary' =
-                  wo.closedAt
-                    ? 'secondary'
-                    : ageDays > 30
-                      ? 'destructive'
-                      : ageDays > 7
-                        ? 'warning'
-                        : 'success'
+                const ageVariant: 'success' | 'warning' | 'destructive' | 'secondary' = wo.closedAt
+                  ? 'secondary'
+                  : ageDays > 30
+                    ? 'destructive'
+                    : ageDays > 7
+                      ? 'warning'
+                      : 'success'
                 return (
                   <TableRow key={wo.id}>
                     <TableCell className="font-mono text-xs">
@@ -394,9 +426,7 @@ export default async function WorkOrdersPage({
                         '—'
                       )}
                     </TableCell>
-                    <TableCell className="text-slate-600 text-xs">
-                      {type?.name ?? '—'}
-                    </TableCell>
+                    <TableCell className="text-xs text-slate-600">{type?.name ?? '—'}</TableCell>
                     <TableCell>
                       <Badge variant={priorityBadgeVariant(wo.priority)}>{wo.priority}</Badge>
                     </TableCell>
@@ -408,10 +438,10 @@ export default async function WorkOrdersPage({
                     <TableCell className="text-slate-600">
                       {assigneeUser?.name ?? assignee?.displayName ?? '—'}
                     </TableCell>
-                    <TableCell className="text-slate-600 text-xs tabular-nums">
+                    <TableCell className="text-xs text-slate-600 tabular-nums">
                       {new Date(wo.openedAt).toLocaleDateString()}
                     </TableCell>
-                    <TableCell className="text-slate-600 text-xs tabular-nums">
+                    <TableCell className="text-xs text-slate-600 tabular-nums">
                       {wo.closedAt ? (
                         new Date(wo.closedAt).toLocaleDateString()
                       ) : (
@@ -421,7 +451,7 @@ export default async function WorkOrdersPage({
                     <TableCell className="tabular-nums">
                       <Badge variant={ageVariant}>{ageDays}d</Badge>
                     </TableCell>
-                    <TableCell className="text-slate-600 text-xs tabular-nums">
+                    <TableCell className="text-xs text-slate-600 tabular-nums">
                       {wo.cost ? `$${Number(wo.cost).toLocaleString()}` : '—'}
                     </TableCell>
                   </TableRow>

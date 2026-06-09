@@ -190,10 +190,10 @@ export default async function DocumentCategoriesPage() {
       .where(sql`${documentCategories.deletedAt} is null`)
       .orderBy(asc(documentCategories.name))
     const usage = await tx
-      .select({ categoryId: documents.category, c: count() })
+      .select({ categoryId: documents.categoryId, c: count() })
       .from(documents)
-      .where(sql`${documents.category} is not null`)
-      .groupBy(documents.category)
+      .where(sql`${documents.categoryId} is not null`)
+      .groupBy(documents.categoryId)
     return {
       rows: data,
       usageMap: Object.fromEntries(usage.map((u) => [u.categoryId ?? '', Number(u.c)])),

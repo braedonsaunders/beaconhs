@@ -99,3 +99,23 @@ Legend: 🟥 **hard gap** (new table/module needed) · 🟧 **soft gap** (extend
   catalog rows) — replaced by Better-Auth + code-defined IAM.
 
 See [`legacy-inventory.md`](./legacy-inventory.md) for the per-table disposition of all 228 in-scope tables.
+
+---
+
+## Import-time data-shape mismatches (running log)
+
+Concrete "old data doesn't fit" cases found while building & running the loaders. Each notes how the
+ETL currently copes and what (if anything) you may want to change in the app/schema.
+
+| # | Module | Mismatch | ETL workaround | Suggested app change |
+|---|---|---|---|---|
+| M1 | Equipment | `equipment_items` enforces **unique `(tenant_id, asset_tag)`**, but legacy `EQUIPMENT` has **duplicate** AssetNumber/TagNumber values (116 rows) — incl. blanks and tags like "DELET"×6. | Suffix the legacy id on any repeat → `"DELET (#1234)"` (deterministic, pk-ordered). Blank tags → `EQ-<id>`. | Either accept suffixed tags, drop the unique constraint, or clean the source asset numbers. |
+| M2 | Equipment | `EQUIPMENT.Type`/`Category` are **free-text** (not FKs); 10 items have a Type that matches no `equipment_types` row. | Resolve `type_id` by name; unmatched → `type_id` null (name kept in `metadata.type`). | Optional: reconcile the ~10 stray type names. |
+| M3 | Equipment | ~30 legacy columns (NDT dates, dims, weight, odometer, atmospheric sensor ids, condition, year, current hours) have **no first-class column**. | Stored in `equipment_items.metadata` (jsonb) — *not lost*. | Promote any you want to query/report on (e.g. NDT due dates) to real columns. |
+| M4 | Incidents / Journals / CAs | Person & tenant-user FKs (`reported_by`, `created_by`, `assigned_by`, `owner`) reference `tenant_users`, but the **users loader isn't built yet**. | Currently left **null**; legacy names preserved in `metadata`. | None — pending the `beaconhs.users → user + tenant_users` loader (then these backfill on re-import). |
+| M5 | Org units | `org_units` are created only for customer/site ids **referenced by the fact tables loaded so far**; CA `Jobsite` (and future modules) reference customers not yet created → some null `site_org_unit_id` (incidents 544/549, CAs 6661/7030). | Acceptable; resolves as more fact loaders run. | None — the org loader will scan all site-referencing tables in a later pass. |
+| M6 | Incidents | Legacy `INCIDENTLOG` has no clean `type` (injury/near-miss/etc.); only an injury-classification id. | Defaulted `type='injury'`; severity derived from LostTime/FirstAid/Medical flags. | Optional: map `InjuryClassificationID` → the new `incident_classifications` / `type` properly. |
+
+_(Resolved since the initial analysis: `equipment_items` **does** have a `metadata` jsonb + oil-change/purchase
+columns — so the earlier "equipment extras" soft-gap (🟧 #5) is largely covered; only M3's promote-to-column
+question remains.)_

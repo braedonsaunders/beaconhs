@@ -8,6 +8,7 @@ CREATE TYPE "public"."form_response_compliance_status" AS ENUM('compliant', 'non
 CREATE TYPE "public"."form_response_status" AS ENUM('draft', 'in_progress', 'submitted', 'in_review', 'closed', 'rejected', 'non_compliant');--> statement-breakpoint
 CREATE TYPE "public"."form_template_kind" AS ENUM('form', 'wizard', 'checklist', 'register', 'mini_app');--> statement-breakpoint
 CREATE TYPE "public"."form_template_status" AS ENUM('draft', 'published', 'archived');--> statement-breakpoint
+CREATE TYPE "public"."ai_message_role" AS ENUM('user', 'assistant', 'system');--> statement-breakpoint
 CREATE TYPE "public"."incident_factor_category" AS ENUM('equipment', 'procedure', 'training', 'environment', 'human', 'other');--> statement-breakpoint
 CREATE TYPE "public"."incident_preventative_step_status" AS ENUM('planned', 'in_progress', 'completed');--> statement-breakpoint
 CREATE TYPE "public"."incident_severity" AS ENUM('first_aid_only', 'medical_aid', 'lost_time', 'fatality', 'no_injury');--> statement-breakpoint
@@ -58,6 +59,11 @@ CREATE TYPE "public"."training_audience_assignment_record_status" AS ENUM('pendi
 CREATE TYPE "public"."training_audience_assignment_status" AS ENUM('active', 'archived');--> statement-breakpoint
 CREATE TYPE "public"."training_audience_assignment_target_kind" AS ENUM('person', 'trade', 'role', 'everyone');--> statement-breakpoint
 CREATE TYPE "public"."training_extra_field_owner_type" AS ENUM('skill', 'skill_type', 'authority');--> statement-breakpoint
+CREATE TYPE "public"."training_enrollment_source" AS ENUM('self', 'assigned', 'compliance');--> statement-breakpoint
+CREATE TYPE "public"."training_enrollment_status" AS ENUM('not_started', 'in_progress', 'completed', 'expired', 'withdrawn');--> statement-breakpoint
+CREATE TYPE "public"."training_lesson_completion_rule" AS ENUM('view', 'pass', 'acknowledge', 'min_time');--> statement-breakpoint
+CREATE TYPE "public"."training_lesson_kind" AS ENUM('rich', 'video', 'file', 'embed', 'quiz', 'session');--> statement-breakpoint
+CREATE TYPE "public"."training_progress_status" AS ENUM('not_started', 'in_progress', 'completed');--> statement-breakpoint
 CREATE TYPE "public"."report_cadence" AS ENUM('daily', 'weekly', 'monthly');--> statement-breakpoint
 CREATE TYPE "public"."report_definition_kind" AS ENUM('built_in', 'custom');--> statement-breakpoint
 CREATE TYPE "public"."report_run_status" AS ENUM('queued', 'running', 'succeeded', 'failed');--> statement-breakpoint
@@ -84,6 +90,7 @@ CREATE TYPE "public"."compliance_recurrence_kind" AS ENUM('one_time', 'frequency
 CREATE TYPE "public"."compliance_source_module" AS ENUM('inspection', 'document', 'training', 'form', 'journal', 'cert_requirement', 'equipment_inspection', 'ppe_inspection', 'job_title_signoff', 'corrective_action', 'permit', 'lone_worker', 'custom');--> statement-breakpoint
 CREATE TYPE "public"."compliance_status_value" AS ENUM('pending', 'in_progress', 'completed', 'overdue', 'expiring', 'waived', 'not_applicable');--> statement-breakpoint
 CREATE TYPE "public"."compliance_subject_kind" AS ENUM('per_person', 'per_record', 'per_task');--> statement-breakpoint
+CREATE TYPE "public"."data_source_kind" AS ENUM('reference', 'responses');--> statement-breakpoint
 CREATE TABLE "account" (
 	"id" text PRIMARY KEY NOT NULL,
 	"userId" text NOT NULL,
@@ -471,6 +478,28 @@ CREATE TABLE "form_response_participants" (
 	"field_id" text,
 	"section_id" text,
 	"role" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "ai_conversations" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"tenant_id" uuid NOT NULL,
+	"user_id" text,
+	"scope" text NOT NULL,
+	"scope_ref_id" text,
+	"title" text DEFAULT 'New chat' NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "ai_messages" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"tenant_id" uuid NOT NULL,
+	"conversation_id" uuid NOT NULL,
+	"role" "ai_message_role" NOT NULL,
+	"content" text NOT NULL,
+	"data" jsonb,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
@@ -1117,6 +1146,10 @@ CREATE TABLE "document_books" (
 	"name" text DEFAULT '' NOT NULL,
 	"description" text,
 	"category" text,
+	"type_id" uuid,
+	"category_id" uuid,
+	"review_frequency_months" integer,
+	"next_review_on" date,
 	"status" "document_book_status" DEFAULT 'draft' NOT NULL,
 	"published_at" timestamp with time zone,
 	"published_by_user_id" text,
@@ -1188,6 +1221,7 @@ CREATE TABLE "documents" (
 	"description" text,
 	"category" text,
 	"type_id" uuid,
+	"category_id" uuid,
 	"status" "document_status" DEFAULT 'draft' NOT NULL,
 	"owner_tenant_user_id" uuid,
 	"review_frequency_months" integer,
@@ -1828,6 +1862,78 @@ CREATE TABLE "training_extra_fields" (
 	"sort_order" integer DEFAULT 0 NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "training_course_modules" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"tenant_id" uuid NOT NULL,
+	"course_id" uuid NOT NULL,
+	"title" text NOT NULL,
+	"description" text,
+	"sort_order" integer DEFAULT 0 NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"deleted_at" timestamp with time zone
+);
+--> statement-breakpoint
+CREATE TABLE "training_enrollments" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"tenant_id" uuid NOT NULL,
+	"course_id" uuid NOT NULL,
+	"person_id" uuid NOT NULL,
+	"status" "training_enrollment_status" DEFAULT 'not_started' NOT NULL,
+	"source" "training_enrollment_source" DEFAULT 'self' NOT NULL,
+	"assigned_by_tenant_user_id" uuid,
+	"progress_percent" integer DEFAULT 0 NOT NULL,
+	"current_lesson_id" uuid,
+	"started_at" timestamp with time zone,
+	"completed_at" timestamp with time zone,
+	"due_on" date,
+	"expires_on" date,
+	"record_id" uuid,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"deleted_at" timestamp with time zone
+);
+--> statement-breakpoint
+CREATE TABLE "training_lesson_progress" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"tenant_id" uuid NOT NULL,
+	"enrollment_id" uuid NOT NULL,
+	"lesson_id" uuid NOT NULL,
+	"person_id" uuid NOT NULL,
+	"status" "training_progress_status" DEFAULT 'not_started' NOT NULL,
+	"started_at" timestamp with time zone,
+	"completed_at" timestamp with time zone,
+	"time_spent_seconds" integer DEFAULT 0 NOT NULL,
+	"score" integer,
+	"attempts" integer DEFAULT 0 NOT NULL,
+	"last_position" jsonb,
+	"assessment_id" uuid,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "training_lessons" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"tenant_id" uuid NOT NULL,
+	"course_id" uuid NOT NULL,
+	"module_id" uuid NOT NULL,
+	"title" text NOT NULL,
+	"kind" "training_lesson_kind" DEFAULT 'rich' NOT NULL,
+	"sort_order" integer DEFAULT 0 NOT NULL,
+	"content_blocks" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"assessment_type_id" uuid,
+	"class_id" uuid,
+	"attachment_id" uuid,
+	"embed_url" text,
+	"duration_minutes" integer,
+	"is_required" boolean DEFAULT true NOT NULL,
+	"completion_rule" "training_lesson_completion_rule" DEFAULT 'view' NOT NULL,
+	"min_time_seconds" integer,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"deleted_at" timestamp with time zone
 );
 --> statement-breakpoint
 CREATE TABLE "report_dashboards" (
@@ -2671,6 +2777,32 @@ CREATE TABLE "compliance_status" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE "data_source_rows" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"tenant_id" uuid NOT NULL,
+	"data_source_id" uuid NOT NULL,
+	"data" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"position" integer DEFAULT 0 NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"deleted_at" timestamp with time zone
+);
+--> statement-breakpoint
+CREATE TABLE "data_sources" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"tenant_id" uuid NOT NULL,
+	"key" text NOT NULL,
+	"name" text NOT NULL,
+	"description" text,
+	"kind" "data_source_kind" DEFAULT 'reference' NOT NULL,
+	"columns" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"config" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"created_by_tenant_user_id" uuid,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"deleted_at" timestamp with time zone
+);
+--> statement-breakpoint
 ALTER TABLE "account" ADD CONSTRAINT "account_userId_user_id_fk" FOREIGN KEY ("userId") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "session" ADD CONSTRAINT "session_userId_user_id_fk" FOREIGN KEY ("userId") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "tenant_users" ADD CONSTRAINT "tenant_users_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -2732,6 +2864,10 @@ ALTER TABLE "form_response_participants" ADD CONSTRAINT "form_response_participa
 ALTER TABLE "form_response_participants" ADD CONSTRAINT "form_response_participants_response_id_form_responses_id_fk" FOREIGN KEY ("response_id") REFERENCES "public"."form_responses"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "form_response_participants" ADD CONSTRAINT "form_response_participants_template_id_form_templates_id_fk" FOREIGN KEY ("template_id") REFERENCES "public"."form_templates"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "form_response_participants" ADD CONSTRAINT "form_response_participants_person_id_people_id_fk" FOREIGN KEY ("person_id") REFERENCES "public"."people"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "ai_conversations" ADD CONSTRAINT "ai_conversations_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "ai_conversations" ADD CONSTRAINT "ai_conversations_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "ai_messages" ADD CONSTRAINT "ai_messages_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "ai_messages" ADD CONSTRAINT "ai_messages_conversation_id_ai_conversations_id_fk" FOREIGN KEY ("conversation_id") REFERENCES "public"."ai_conversations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "incident_classifications" ADD CONSTRAINT "incident_classifications_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "incident_classifications" ADD CONSTRAINT "incident_classifications_created_by_tenant_user_id_tenant_users_id_fk" FOREIGN KEY ("created_by_tenant_user_id") REFERENCES "public"."tenant_users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "incident_hours_periods" ADD CONSTRAINT "incident_hours_periods_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -2858,6 +2994,8 @@ ALTER TABLE "document_acknowledgments" ADD CONSTRAINT "document_acknowledgments_
 ALTER TABLE "document_acknowledgments" ADD CONSTRAINT "document_acknowledgments_version_id_document_versions_id_fk" FOREIGN KEY ("version_id") REFERENCES "public"."document_versions"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "document_acknowledgments" ADD CONSTRAINT "document_acknowledgments_person_id_people_id_fk" FOREIGN KEY ("person_id") REFERENCES "public"."people"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "document_books" ADD CONSTRAINT "document_books_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "document_books" ADD CONSTRAINT "document_books_type_id_document_types_id_fk" FOREIGN KEY ("type_id") REFERENCES "public"."document_types"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "document_books" ADD CONSTRAINT "document_books_category_id_document_categories_id_fk" FOREIGN KEY ("category_id") REFERENCES "public"."document_categories"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "document_books" ADD CONSTRAINT "document_books_published_by_user_id_user_id_fk" FOREIGN KEY ("published_by_user_id") REFERENCES "public"."user"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "document_comments" ADD CONSTRAINT "document_comments_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "document_comments" ADD CONSTRAINT "document_comments_document_id_documents_id_fk" FOREIGN KEY ("document_id") REFERENCES "public"."documents"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -2875,6 +3013,7 @@ ALTER TABLE "document_versions" ADD CONSTRAINT "document_versions_document_id_do
 ALTER TABLE "document_versions" ADD CONSTRAINT "document_versions_published_by_user_id_fk" FOREIGN KEY ("published_by") REFERENCES "public"."user"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "documents" ADD CONSTRAINT "documents_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "documents" ADD CONSTRAINT "documents_type_id_document_types_id_fk" FOREIGN KEY ("type_id") REFERENCES "public"."document_types"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "documents" ADD CONSTRAINT "documents_category_id_document_categories_id_fk" FOREIGN KEY ("category_id") REFERENCES "public"."document_categories"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "documents" ADD CONSTRAINT "documents_owner_tenant_user_id_tenant_users_id_fk" FOREIGN KEY ("owner_tenant_user_id") REFERENCES "public"."tenant_users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "ca_complete_steps" ADD CONSTRAINT "ca_complete_steps_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "ca_complete_steps" ADD CONSTRAINT "ca_complete_steps_ca_id_corrective_actions_id_fk" FOREIGN KEY ("ca_id") REFERENCES "public"."corrective_actions"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -2992,6 +3131,23 @@ ALTER TABLE "training_course_files" ADD CONSTRAINT "training_course_files_tenant
 ALTER TABLE "training_course_files" ADD CONSTRAINT "training_course_files_course_id_training_courses_id_fk" FOREIGN KEY ("course_id") REFERENCES "public"."training_courses"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "training_course_files" ADD CONSTRAINT "training_course_files_attachment_id_attachments_id_fk" FOREIGN KEY ("attachment_id") REFERENCES "public"."attachments"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "training_extra_fields" ADD CONSTRAINT "training_extra_fields_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "training_course_modules" ADD CONSTRAINT "training_course_modules_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "training_course_modules" ADD CONSTRAINT "training_course_modules_course_id_training_courses_id_fk" FOREIGN KEY ("course_id") REFERENCES "public"."training_courses"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "training_enrollments" ADD CONSTRAINT "training_enrollments_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "training_enrollments" ADD CONSTRAINT "training_enrollments_course_id_training_courses_id_fk" FOREIGN KEY ("course_id") REFERENCES "public"."training_courses"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "training_enrollments" ADD CONSTRAINT "training_enrollments_person_id_people_id_fk" FOREIGN KEY ("person_id") REFERENCES "public"."people"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "training_enrollments" ADD CONSTRAINT "training_enrollments_assigned_by_tenant_user_id_tenant_users_id_fk" FOREIGN KEY ("assigned_by_tenant_user_id") REFERENCES "public"."tenant_users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "training_enrollments" ADD CONSTRAINT "training_enrollments_record_id_training_records_id_fk" FOREIGN KEY ("record_id") REFERENCES "public"."training_records"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "training_lesson_progress" ADD CONSTRAINT "training_lesson_progress_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "training_lesson_progress" ADD CONSTRAINT "training_lesson_progress_enrollment_id_training_enrollments_id_fk" FOREIGN KEY ("enrollment_id") REFERENCES "public"."training_enrollments"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "training_lesson_progress" ADD CONSTRAINT "training_lesson_progress_lesson_id_training_lessons_id_fk" FOREIGN KEY ("lesson_id") REFERENCES "public"."training_lessons"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "training_lesson_progress" ADD CONSTRAINT "training_lesson_progress_person_id_people_id_fk" FOREIGN KEY ("person_id") REFERENCES "public"."people"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "training_lesson_progress" ADD CONSTRAINT "training_lesson_progress_assessment_id_training_assessments_id_fk" FOREIGN KEY ("assessment_id") REFERENCES "public"."training_assessments"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "training_lessons" ADD CONSTRAINT "training_lessons_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "training_lessons" ADD CONSTRAINT "training_lessons_course_id_training_courses_id_fk" FOREIGN KEY ("course_id") REFERENCES "public"."training_courses"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "training_lessons" ADD CONSTRAINT "training_lessons_module_id_training_course_modules_id_fk" FOREIGN KEY ("module_id") REFERENCES "public"."training_course_modules"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "training_lessons" ADD CONSTRAINT "training_lessons_assessment_type_id_training_assessment_types_id_fk" FOREIGN KEY ("assessment_type_id") REFERENCES "public"."training_assessment_types"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "training_lessons" ADD CONSTRAINT "training_lessons_class_id_training_classes_id_fk" FOREIGN KEY ("class_id") REFERENCES "public"."training_classes"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "report_dashboards" ADD CONSTRAINT "report_dashboards_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "report_definitions" ADD CONSTRAINT "report_definitions_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "report_runs" ADD CONSTRAINT "report_runs_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -3133,6 +3289,10 @@ ALTER TABLE "compliance_obligations" ADD CONSTRAINT "compliance_obligations_crea
 ALTER TABLE "compliance_status" ADD CONSTRAINT "compliance_status_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "compliance_status" ADD CONSTRAINT "compliance_status_obligation_id_compliance_obligations_id_fk" FOREIGN KEY ("obligation_id") REFERENCES "public"."compliance_obligations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "compliance_status" ADD CONSTRAINT "compliance_status_person_id_people_id_fk" FOREIGN KEY ("person_id") REFERENCES "public"."people"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "data_source_rows" ADD CONSTRAINT "data_source_rows_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "data_source_rows" ADD CONSTRAINT "data_source_rows_data_source_id_data_sources_id_fk" FOREIGN KEY ("data_source_id") REFERENCES "public"."data_sources"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "data_sources" ADD CONSTRAINT "data_sources_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "data_sources" ADD CONSTRAINT "data_sources_created_by_tenant_user_id_tenant_users_id_fk" FOREIGN KEY ("created_by_tenant_user_id") REFERENCES "public"."tenant_users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "account_user_idx" ON "account" USING btree ("userId");--> statement-breakpoint
 CREATE INDEX "account_provider_idx" ON "account" USING btree ("providerId","accountId");--> statement-breakpoint
 CREATE UNIQUE INDEX "session_token_ux" ON "session" USING btree ("token");--> statement-breakpoint
@@ -3196,6 +3356,10 @@ CREATE INDEX "form_response_participants_tenant_idx" ON "form_response_participa
 CREATE INDEX "form_response_participants_person_idx" ON "form_response_participants" USING btree ("tenant_id","person_id");--> statement-breakpoint
 CREATE INDEX "form_response_participants_response_idx" ON "form_response_participants" USING btree ("response_id");--> statement-breakpoint
 CREATE INDEX "form_response_participants_template_idx" ON "form_response_participants" USING btree ("tenant_id","template_id");--> statement-breakpoint
+CREATE INDEX "ai_conversations_scope_idx" ON "ai_conversations" USING btree ("tenant_id","scope","scope_ref_id");--> statement-breakpoint
+CREATE INDEX "ai_conversations_user_idx" ON "ai_conversations" USING btree ("tenant_id","user_id");--> statement-breakpoint
+CREATE INDEX "ai_messages_conversation_idx" ON "ai_messages" USING btree ("conversation_id","created_at");--> statement-breakpoint
+CREATE INDEX "ai_messages_tenant_idx" ON "ai_messages" USING btree ("tenant_id");--> statement-breakpoint
 CREATE INDEX "incident_classifications_tenant_idx" ON "incident_classifications" USING btree ("tenant_id");--> statement-breakpoint
 CREATE INDEX "incident_classifications_parent_idx" ON "incident_classifications" USING btree ("parent_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "incident_classifications_tenant_parent_name_ux" ON "incident_classifications" USING btree ("tenant_id","parent_id","name");--> statement-breakpoint
@@ -3421,6 +3585,19 @@ CREATE INDEX "training_course_files_tenant_idx" ON "training_course_files" USING
 CREATE INDEX "training_course_files_course_idx" ON "training_course_files" USING btree ("course_id");--> statement-breakpoint
 CREATE INDEX "training_extra_fields_tenant_idx" ON "training_extra_fields" USING btree ("tenant_id");--> statement-breakpoint
 CREATE INDEX "training_extra_fields_owner_idx" ON "training_extra_fields" USING btree ("owner_type","owner_id");--> statement-breakpoint
+CREATE INDEX "training_course_modules_tenant_idx" ON "training_course_modules" USING btree ("tenant_id");--> statement-breakpoint
+CREATE INDEX "training_course_modules_course_idx" ON "training_course_modules" USING btree ("course_id","sort_order");--> statement-breakpoint
+CREATE INDEX "training_enrollments_tenant_idx" ON "training_enrollments" USING btree ("tenant_id");--> statement-breakpoint
+CREATE INDEX "training_enrollments_person_idx" ON "training_enrollments" USING btree ("tenant_id","person_id");--> statement-breakpoint
+CREATE INDEX "training_enrollments_course_idx" ON "training_enrollments" USING btree ("tenant_id","course_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "training_enrollments_person_course_ux" ON "training_enrollments" USING btree ("course_id","person_id");--> statement-breakpoint
+CREATE INDEX "training_lesson_progress_tenant_idx" ON "training_lesson_progress" USING btree ("tenant_id");--> statement-breakpoint
+CREATE INDEX "training_lesson_progress_enrollment_idx" ON "training_lesson_progress" USING btree ("enrollment_id");--> statement-breakpoint
+CREATE INDEX "training_lesson_progress_person_idx" ON "training_lesson_progress" USING btree ("tenant_id","person_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "training_lesson_progress_lesson_ux" ON "training_lesson_progress" USING btree ("enrollment_id","lesson_id");--> statement-breakpoint
+CREATE INDEX "training_lessons_tenant_idx" ON "training_lessons" USING btree ("tenant_id");--> statement-breakpoint
+CREATE INDEX "training_lessons_course_idx" ON "training_lessons" USING btree ("course_id");--> statement-breakpoint
+CREATE INDEX "training_lessons_module_idx" ON "training_lessons" USING btree ("module_id","sort_order");--> statement-breakpoint
 CREATE INDEX "report_dashboards_tenant_idx" ON "report_dashboards" USING btree ("tenant_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "report_dashboards_tenant_name_ux" ON "report_dashboards" USING btree ("tenant_id","name");--> statement-breakpoint
 CREATE UNIQUE INDEX "report_definitions_slug_ux" ON "report_definitions" USING btree ("slug");--> statement-breakpoint
@@ -3582,4 +3759,8 @@ CREATE INDEX "compliance_status_tenant_idx" ON "compliance_status" USING btree (
 CREATE INDEX "compliance_status_obligation_idx" ON "compliance_status" USING btree ("obligation_id");--> statement-breakpoint
 CREATE INDEX "compliance_status_person_idx" ON "compliance_status" USING btree ("tenant_id","person_id");--> statement-breakpoint
 CREATE INDEX "compliance_status_status_idx" ON "compliance_status" USING btree ("tenant_id","status");--> statement-breakpoint
-CREATE UNIQUE INDEX "compliance_status_unique_ux" ON "compliance_status" USING btree ("obligation_id","subject_key");
+CREATE UNIQUE INDEX "compliance_status_unique_ux" ON "compliance_status" USING btree ("obligation_id","subject_key");--> statement-breakpoint
+CREATE INDEX "data_source_rows_source_idx" ON "data_source_rows" USING btree ("data_source_id","position");--> statement-breakpoint
+CREATE INDEX "data_source_rows_tenant_idx" ON "data_source_rows" USING btree ("tenant_id");--> statement-breakpoint
+CREATE INDEX "data_sources_tenant_idx" ON "data_sources" USING btree ("tenant_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "data_sources_tenant_key_ux" ON "data_sources" USING btree ("tenant_id","key");

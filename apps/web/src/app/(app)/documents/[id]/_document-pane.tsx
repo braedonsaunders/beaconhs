@@ -19,6 +19,7 @@ export function DocumentPane({
   initialJson,
   initialLayout,
   initialComments,
+  aiEnabled = false,
 }: {
   documentId: string
   defaultMode: DocumentMode
@@ -27,6 +28,7 @@ export function DocumentPane({
   initialJson: Record<string, unknown> | null
   initialLayout: LayoutState
   initialComments: EditorComment[]
+  aiEnabled?: boolean
 }) {
   const [mode, setMode] = useState<DocumentMode>(defaultMode)
 
@@ -44,6 +46,7 @@ export function DocumentPane({
       initialJson={initialJson}
       initialLayout={initialLayout}
       initialComments={initialComments}
+      aiEnabled={aiEnabled}
     />
   )
 }

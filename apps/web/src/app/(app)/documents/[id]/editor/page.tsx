@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import { and, desc, eq, isNotNull } from 'drizzle-orm'
 import { documentDrafts, documentVersions, documents } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { getTenantAiSettings } from '@/lib/ai-config'
 import { listDocumentComments } from '../_actions'
 import { DocumentEditor } from './_document-editor'
 import type { LayoutState } from './_appbar'
@@ -53,6 +54,8 @@ export default async function DocumentEditorPage({
   if (!data) notFound()
   const { doc, initialJson, initialHtml } = data
 
+  const aiSettings = await getTenantAiSettings(ctx)
+  const aiEnabled = aiSettings.enabled && aiSettings.hasKey
   const comments = await listDocumentComments(id)
 
   const initialLayout: LayoutState = {
@@ -71,6 +74,7 @@ export default async function DocumentEditorPage({
       initialJson={initialJson}
       initialLayout={initialLayout}
       initialComments={comments}
+      aiEnabled={aiEnabled}
     />
   )
 }

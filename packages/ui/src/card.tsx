@@ -18,9 +18,9 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(
         ref={ref}
         onClick={onClick}
         className={cn(
-          'rounded-lg border border-slate-200 bg-white shadow-sm',
+          'rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm',
           isInteractive &&
-            'cursor-pointer transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-md hover:border-slate-300 motion-reduce:transition-none motion-reduce:hover:translate-y-0',
+            'cursor-pointer transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-md hover:border-slate-300 dark:hover:border-slate-600 motion-reduce:transition-none motion-reduce:hover:translate-y-0',
           className,
         )}
         {...props}
@@ -39,14 +39,14 @@ CardHeader.displayName = 'CardHeader'
 
 export const CardTitle = React.forwardRef<HTMLHeadingElement, React.HTMLAttributes<HTMLHeadingElement>>(
   ({ className, ...props }, ref) => (
-    <h3 ref={ref} className={cn('text-lg font-semibold text-slate-900', className)} {...props} />
+    <h3 ref={ref} className={cn('text-lg font-semibold text-slate-900 dark:text-slate-100', className)} {...props} />
   ),
 )
 CardTitle.displayName = 'CardTitle'
 
 export const CardDescription = React.forwardRef<HTMLParagraphElement, React.HTMLAttributes<HTMLParagraphElement>>(
   ({ className, ...props }, ref) => (
-    <p ref={ref} className={cn('text-sm text-slate-500', className)} {...props} />
+    <p ref={ref} className={cn('text-sm text-slate-500 dark:text-slate-400', className)} {...props} />
   ),
 )
 CardDescription.displayName = 'CardDescription'

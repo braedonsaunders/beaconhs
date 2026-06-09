@@ -20,6 +20,7 @@ import { requireModuleManage, assertCanManageModule } from '@/lib/module-admin/g
 import { recordAudit } from '@/lib/audit'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
+import { TableToolbar } from '@/components/table-toolbar'
 import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
@@ -119,7 +120,11 @@ export default async function InspectionTypesPage({
       params.sort === 'created_at'
         ? [params.dir === 'asc' ? asc(inspectionTypes.createdAt) : desc(inspectionTypes.createdAt)]
         : params.sort === 'status'
-          ? [params.dir === 'asc' ? asc(inspectionTypes.isPublished) : desc(inspectionTypes.isPublished)]
+          ? [
+              params.dir === 'asc'
+                ? asc(inspectionTypes.isPublished)
+                : desc(inspectionTypes.isPublished),
+            ]
           : [params.dir === 'asc' ? asc(inspectionTypes.name) : desc(inspectionTypes.name)]
 
     const [tot] = await tx.select({ c: count() }).from(inspectionTypes).where(whereClause)
@@ -164,16 +169,16 @@ export default async function InspectionTypesPage({
             }
           />
           <InspectionsSubNav active="types" />
-          <div className="flex items-center gap-3">
+          <TableToolbar>
             <SearchInput placeholder="Search by type name" />
-          </div>
-          <FilterChips
-            basePath="/inspections/types"
-            currentParams={sp}
-            paramKey="status"
-            label="Status"
-            options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
-          />
+            <FilterChips
+              basePath="/inspections/types"
+              currentParams={sp}
+              paramKey="status"
+              label="Status"
+              options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
+            />
+          </TableToolbar>
         </>
       }
     >
@@ -201,7 +206,11 @@ export default async function InspectionTypesPage({
                 <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>
                   Status
                 </SortableTh>
-                <SortableTh {...sortProps} column="created_at" active={params.sort === 'created_at'}>
+                <SortableTh
+                  {...sortProps}
+                  column="created_at"
+                  active={params.sort === 'created_at'}
+                >
                   Created
                 </SortableTh>
               </TableRow>
@@ -217,7 +226,7 @@ export default async function InspectionTypesPage({
                       {type.name}
                     </Link>
                     {type.description ? (
-                      <div className="mt-0.5 text-xs text-slate-500 line-clamp-1">
+                      <div className="mt-0.5 line-clamp-1 text-xs text-slate-500">
                         {type.description}
                       </div>
                     ) : null}
@@ -225,9 +234,7 @@ export default async function InspectionTypesPage({
                   <TableCell className="text-slate-600 tabular-nums">{bankCount}</TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
-                      {type.requiresForeman ? (
-                        <Badge variant="secondary">Foreman</Badge>
-                      ) : null}
+                      {type.requiresForeman ? <Badge variant="secondary">Foreman</Badge> : null}
                       {type.requiresCustomerSignature ? (
                         <Badge variant="secondary">Customer sig</Badge>
                       ) : null}

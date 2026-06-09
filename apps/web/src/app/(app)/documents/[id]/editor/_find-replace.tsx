@@ -24,7 +24,7 @@ export function FindReplaceBar({ editor, onClose }: { editor: Editor; onClose: (
   const active = count > 0 ? (fs?.activeIndex ?? 0) + 1 : 0
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200 bg-slate-50 px-3 py-1.5">
+    <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 px-3 py-1.5">
       <input
         ref={inputRef}
         value={find}
@@ -42,9 +42,9 @@ export function FindReplaceBar({ editor, onClose }: { editor: Editor; onClose: (
           }
         }}
         placeholder="Find"
-        className="h-7 w-44 rounded border border-slate-200 px-2 text-sm outline-none focus:border-teal-400"
+        className="h-7 w-44 rounded border border-slate-200 dark:border-slate-800 px-2 text-sm outline-none focus:border-teal-400"
       />
-      <span className="w-14 text-center text-xs tabular-nums text-slate-500">
+      <span className="w-14 text-center text-xs tabular-nums text-slate-500 dark:text-slate-400">
         {count ? `${active}/${count}` : '0/0'}
       </span>
       <BarBtn title="Previous (Shift+Enter)" onClick={() => editor.commands.findPrev()}>
@@ -65,25 +65,25 @@ export function FindReplaceBar({ editor, onClose }: { editor: Editor; onClose: (
         <CaseSensitive size={14} />
       </BarBtn>
 
-      <span className="mx-1 h-4 w-px bg-slate-200" />
+      <span className="mx-1 h-4 w-px bg-slate-200 dark:bg-slate-700" />
 
       <input
         value={replace}
         onChange={(e) => setReplace(e.target.value)}
         placeholder="Replace with"
-        className="h-7 w-44 rounded border border-slate-200 px-2 text-sm outline-none focus:border-teal-400"
+        className="h-7 w-44 rounded border border-slate-200 dark:border-slate-800 px-2 text-sm outline-none focus:border-teal-400"
       />
       <button
         type="button"
         onClick={() => editor.commands.replaceCurrent(replace)}
-        className="h-7 rounded border border-slate-200 bg-white px-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+        className="h-7 rounded border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-2 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/60"
       >
         Replace
       </button>
       <button
         type="button"
         onClick={() => editor.commands.replaceAll(replace)}
-        className="h-7 rounded border border-slate-200 bg-white px-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+        className="h-7 rounded border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-2 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/60"
       >
         All
       </button>
@@ -91,7 +91,7 @@ export function FindReplaceBar({ editor, onClose }: { editor: Editor; onClose: (
       <button
         type="button"
         onClick={onClose}
-        className="ml-auto grid h-7 w-7 place-items-center rounded text-slate-500 hover:bg-slate-200"
+        className="ml-auto grid h-7 w-7 place-items-center rounded text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
         aria-label="Close find"
       >
         <X size={14} />
@@ -117,8 +117,8 @@ function BarBtn({
       title={title}
       onClick={onClick}
       className={cn(
-        'grid h-7 w-7 place-items-center rounded text-slate-600 hover:bg-slate-200',
-        active && 'bg-teal-100 text-teal-800',
+        'grid h-7 w-7 place-items-center rounded text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700',
+        active && 'bg-teal-100 dark:bg-teal-950/50 text-teal-800 dark:text-teal-300',
       )}
     >
       {children}

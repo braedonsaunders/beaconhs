@@ -40,7 +40,7 @@ export function RecipientFilter() {
       <Input
         id="recipient"
         type="text"
-        className="w-56"
+        className="h-8 w-56"
         value={value}
         onChange={(e) => setValue(e.target.value)}
         placeholder="user@example.com"
@@ -81,7 +81,7 @@ export function DateRangeFilter() {
         <Input
           id="from"
           type="date"
-          className="w-44"
+          className="h-8 w-44"
           value={from}
           onChange={(e) => {
             const v = e.target.value
@@ -97,7 +97,7 @@ export function DateRangeFilter() {
         <Input
           id="to"
           type="date"
-          className="w-44"
+          className="h-8 w-44"
           value={to}
           onChange={(e) => {
             const v = e.target.value

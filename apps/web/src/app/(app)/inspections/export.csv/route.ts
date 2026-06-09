@@ -1,6 +1,26 @@
 import type { NextRequest } from 'next/server'
-import { and, asc, desc, eq, ilike, type SQL } from 'drizzle-orm'
-import { formResponses, formTemplates, orgUnits } from '@beaconhs/db/schema'
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gte,
+  ilike,
+  isNotNull,
+  isNull,
+  lte,
+  or,
+  sql,
+  type SQL,
+} from 'drizzle-orm'
+import {
+  inspectionRecordCriteria,
+  inspectionRecords,
+  inspectionTypes,
+  orgUnits,
+  tenantUsers,
+  user,
+} from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { csvFilename, csvResponse } from '@/lib/csv'
@@ -8,63 +28,116 @@ import { parseListParams, pickString } from '@/lib/list-params'
 
 export const dynamic = 'force-dynamic'
 
-const SORTS = ['submitted_at', 'template', 'status'] as const
+// Mirrors the filters/sort of the native records list (/inspections/records)
+// so "Export CSV" honours whatever the user is currently looking at.
+const SORTS = ['occurred_at', 'reference', 'type', 'status'] as const
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url)
   const sp = Object.fromEntries(url.searchParams.entries())
   const params = parseListParams(sp, {
-    sort: 'submitted_at',
+    sort: 'occurred_at',
     dir: 'desc',
     perPage: 25,
     allowedSorts: SORTS,
   })
   const statusFilter = pickString(sp.status)
+  const typeFilter = pickString(sp.type)
+  const siteFilter = pickString(sp.site)
+  const inspectorFilter = pickString(sp.inspector)
+  const signedFilter = pickString(sp.signed) // 'yes' | 'no'
+  const dateFromRaw = pickString(sp.dateFrom)
+  const dateToRaw = pickString(sp.dateTo)
   const ctx = await requireRequestContext()
 
   const rows = await ctx.db(async (tx) => {
-    const filters: SQL<unknown>[] = [eq(formTemplates.category, 'inspection')]
+    const filters: SQL<unknown>[] = []
     if (params.q) {
       const term = `%${params.q}%`
-      const cond = ilike(formTemplates.name, term)
-      if (cond) filters.push(cond)
+      const c = or(
+        ilike(inspectionRecords.reference, term),
+        ilike(inspectionTypes.name, term),
+        ilike(inspectionRecords.foremanText, term),
+      )
+      if (c) filters.push(c)
     }
-    if (statusFilter) filters.push(eq(formResponses.status, statusFilter as any))
-    const whereClause = and(...filters)
+    if (statusFilter) filters.push(eq(inspectionRecords.status, statusFilter as any))
+    if (typeFilter) filters.push(eq(inspectionRecords.typeId, typeFilter))
+    if (siteFilter) filters.push(eq(inspectionRecords.siteOrgUnitId, siteFilter))
+    if (inspectorFilter) filters.push(eq(inspectionRecords.inspectorTenantUserId, inspectorFilter))
+    if (signedFilter === 'yes') filters.push(isNotNull(inspectionRecords.customerSignedAt))
+    if (signedFilter === 'no') filters.push(isNull(inspectionRecords.customerSignedAt))
+    if (dateFromRaw) filters.push(gte(inspectionRecords.occurredAt, new Date(dateFromRaw)))
+    if (dateToRaw) filters.push(lte(inspectionRecords.occurredAt, new Date(dateToRaw)))
+    const whereClause = filters.length > 0 ? and(...filters) : undefined
 
     const orderBy =
-      params.sort === 'template'
-        ? [params.dir === 'asc' ? asc(formTemplates.name) : desc(formTemplates.name)]
-        : params.sort === 'status'
-          ? [params.dir === 'asc' ? asc(formResponses.status) : desc(formResponses.status)]
-          : [params.dir === 'asc' ? asc(formResponses.submittedAt) : desc(formResponses.submittedAt)]
+      params.sort === 'reference'
+        ? [params.dir === 'asc' ? asc(inspectionRecords.reference) : desc(inspectionRecords.reference)]
+        : params.sort === 'type'
+          ? [params.dir === 'asc' ? asc(inspectionTypes.name) : desc(inspectionTypes.name)]
+          : params.sort === 'status'
+            ? [params.dir === 'asc' ? asc(inspectionRecords.status) : desc(inspectionRecords.status)]
+            : [
+                params.dir === 'asc'
+                  ? asc(inspectionRecords.occurredAt)
+                  : desc(inspectionRecords.occurredAt),
+              ]
 
     return tx
-      .select({ response: formResponses, template: formTemplates, site: orgUnits })
-      .from(formResponses)
-      .innerJoin(formTemplates, eq(formTemplates.id, formResponses.templateId))
-      .leftJoin(orgUnits, eq(orgUnits.id, formResponses.siteOrgUnitId))
+      .select({
+        record: inspectionRecords,
+        type: inspectionTypes,
+        site: orgUnits,
+        inspectorName: user.name,
+        passCount: sql<number>`coalesce(sum(case when ${inspectionRecordCriteria.answer} = 'pass' then 1 else 0 end), 0)`.mapWith(Number),
+        failCount: sql<number>`coalesce(sum(case when ${inspectionRecordCriteria.answer} = 'fail' then 1 else 0 end), 0)`.mapWith(Number),
+        naCount: sql<number>`coalesce(sum(case when ${inspectionRecordCriteria.answer} = 'n_a' then 1 else 0 end), 0)`.mapWith(Number),
+      })
+      .from(inspectionRecords)
+      .innerJoin(inspectionTypes, eq(inspectionTypes.id, inspectionRecords.typeId))
+      .leftJoin(orgUnits, eq(orgUnits.id, inspectionRecords.siteOrgUnitId))
+      .leftJoin(tenantUsers, eq(tenantUsers.id, inspectionRecords.inspectorTenantUserId))
+      .leftJoin(user, eq(user.id, tenantUsers.userId))
+      .leftJoin(inspectionRecordCriteria, eq(inspectionRecordCriteria.recordId, inspectionRecords.id))
       .where(whereClause)
+      .groupBy(inspectionRecords.id, inspectionTypes.id, orgUnits.id, user.id)
       .orderBy(...orderBy)
       .limit(10_000)
   })
 
   await recordAudit(ctx, {
-    entityType: 'inspection_response',
+    entityType: 'inspection_record',
     action: 'export',
-    summary: `Exported ${rows.length} inspection responses to CSV`,
+    summary: `Exported ${rows.length} inspection records to CSV`,
     metadata: { format: 'csv', filters: { q: params.q ?? null, status: statusFilter ?? null } },
   })
 
   return csvResponse({
     filename: csvFilename('inspections'),
-    headers: ['Response ID', 'Template', 'Status', 'Submitted', 'Site'],
-    rows: rows.map(({ response, template, site }) => [
-      response.id,
-      template.name,
-      response.status,
-      response.submittedAt ? new Date(response.submittedAt).toISOString() : '',
-      site?.name ?? '',
+    headers: [
+      'Reference',
+      'Type',
+      'Status',
+      'Occurred',
+      'Site',
+      'Inspector',
+      'Pass',
+      'Fail',
+      'N/A',
+      'Signed',
+    ],
+    rows: rows.map((r) => [
+      r.record.reference,
+      r.type.name,
+      r.record.status,
+      new Date(r.record.occurredAt).toISOString(),
+      r.site?.name ?? '',
+      r.inspectorName ?? '',
+      String(r.passCount ?? 0),
+      String(r.failCount ?? 0),
+      String(r.naCount ?? 0),
+      r.record.customerSignedAt ? 'Signed' : 'Unsigned',
     ]),
   })
 }

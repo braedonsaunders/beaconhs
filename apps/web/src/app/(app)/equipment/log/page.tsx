@@ -18,12 +18,7 @@ import {
   TableRow,
   Textarea,
 } from '@beaconhs/ui'
-import {
-  equipmentItems,
-  equipmentLogEntries,
-  equipmentTypes,
-  people,
-} from '@beaconhs/db/schema'
+import { equipmentItems, equipmentLogEntries, equipmentTypes, people } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { parseListParams, pickString } from '@/lib/list-params'
@@ -31,6 +26,7 @@ import { SearchInput } from '@/components/search-input'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
+import { TableToolbar } from '@/components/table-toolbar'
 import { Section } from '@/components/section'
 import { EquipmentSubNav } from '@/components/equipment-sub-nav'
 
@@ -197,16 +193,16 @@ export default async function EquipmentLogPage({
             title="Equipment log"
             description="Free-form notes log across the fleet — separate from work-order tracking. Use for shop journal entries, observations, and field notes."
           />
-          <div className="flex items-center gap-3">
+          <TableToolbar>
             <SearchInput placeholder="Search title or details…" />
-          </div>
-          <FilterChips
-            basePath="/equipment/log"
-            currentParams={sp}
-            paramKey="kind"
-            label="Kind"
-            options={KIND_OPTIONS.map((o) => ({ ...o, count: kindCounts[o.value] }))}
-          />
+            <FilterChips
+              basePath="/equipment/log"
+              currentParams={sp}
+              paramKey="kind"
+              label="Kind"
+              options={KIND_OPTIONS.map((o) => ({ ...o, count: kindCounts[o.value] }))}
+            />
+          </TableToolbar>
           <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
             <Badge variant="secondary">{total} entries</Badge>
           </div>
@@ -244,10 +240,7 @@ export default async function EquipmentLogPage({
                       <TableCell className="font-mono text-xs">{log.entryDate}</TableCell>
                       <TableCell>
                         {item ? (
-                          <Link
-                            href={`/equipment/${item.id}?tab=log`}
-                            className="hover:underline"
-                          >
+                          <Link href={`/equipment/${item.id}?tab=log`} className="hover:underline">
                             <div className="font-mono text-xs text-slate-500">{item.assetTag}</div>
                             <div className="text-sm font-medium">{item.name}</div>
                             {type ? (
@@ -262,10 +255,8 @@ export default async function EquipmentLogPage({
                         <Badge variant="secondary">{log.kind}</Badge>
                       </TableCell>
                       <TableCell>
-                        {log.title ? (
-                          <div className="font-medium">{log.title}</div>
-                        ) : null}
-                        <div className="max-w-xl text-xs text-slate-600 whitespace-pre-wrap">
+                        {log.title ? <div className="font-medium">{log.title}</div> : null}
+                        <div className="max-w-xl text-xs whitespace-pre-wrap text-slate-600">
                           {log.details}
                         </div>
                       </TableCell>
@@ -346,7 +337,7 @@ export default async function EquipmentLogPage({
               <Label>Details *</Label>
               <Textarea name="details" rows={3} required placeholder="What did you observe?" />
             </div>
-            <div className="sm:col-span-3 flex justify-end">
+            <div className="flex justify-end sm:col-span-3">
               <Button type="submit">Add entry</Button>
             </div>
           </form>

@@ -23,6 +23,7 @@ import {
   journalCanBrowseAll,
   journalCanReadAll,
   journalScopeWhere,
+  journalSelfScopeWhere,
   nextJournalReference,
   snippetOf,
   todayISO,
@@ -60,14 +61,21 @@ function treeSnippet(body: string | null | undefined): string {
   return s.length > 46 ? `${s.slice(0, 45)}…` : s
 }
 
-/** Combine scope + filters into the WHERE clause for journal_entries. */
+/**
+ * Combine scope + filters into the WHERE clause for journal_entries.
+ * `selfOnly` forces the caller's own entries regardless of read.all/site — used
+ * by the personal compose workspace; the Records browser leaves it false.
+ */
 function entryWhere(
   ctx: RequestContext,
   filters: JournalFilters,
   authorPersonId: string | null,
+  selfOnly = false,
 ): SQL | undefined {
   const conds: SQL[] = []
-  const scope = journalScopeWhere(ctx, authorPersonId)
+  const scope = selfOnly
+    ? journalSelfScopeWhere(ctx, authorPersonId)
+    : journalScopeWhere(ctx, authorPersonId)
   if (scope) conds.push(scope)
 
   if (filters.q) {
@@ -155,18 +163,19 @@ export async function listTagSuggestions(
   })
 }
 
-/** Cards for list / export views. */
+/** Cards for list / export views. `selfOnly` restricts to the caller's own entries. */
 export async function listEntries(
   ctx: RequestContext,
   filters: JournalFilters,
   paging: { limit?: number; offset?: number } = {},
+  selfOnly = false,
 ): Promise<JournalListItem[]> {
   const authorPersonId = await getAuthorPersonId(ctx)
   const limit = Math.min(paging.limit ?? 50, 5000)
   const offset = paging.offset ?? 0
 
   return ctx.db(async (tx) => {
-    const where = entryWhere(ctx, filters, authorPersonId)
+    const where = entryWhere(ctx, filters, authorPersonId, selfOnly)
     const rows = await tx
       .select({
         e: journalEntries,
@@ -332,9 +341,10 @@ export async function buildTree(
   ctx: RequestContext,
   groupBy: GroupBy,
   filters: JournalFilters,
+  selfOnly = false,
 ): Promise<TreeNode[]> {
   const authorPersonId = await getAuthorPersonId(ctx)
-  const where = entryWhere(ctx, filters, authorPersonId)
+  const where = entryWhere(ctx, filters, authorPersonId, selfOnly)
 
   const rows: TreeRow[] = await ctx.db(async (tx) => {
     const base = await tx
@@ -365,7 +375,6 @@ export async function buildTree(
 
   if (groupBy === 'topic') return treeByTopic(ctx, where)
   if (groupBy === 'site') return treeByKey(rows, (r) => r.siteName ?? 'No site')
-  if (groupBy === 'person') return treeByKey(rows, (r) => r.authorName ?? 'Unassigned')
   return treeByDate(rows)
 }
 
@@ -532,12 +541,14 @@ export async function getWorkspaceData(
   groupBy: GroupBy,
   filters: JournalFilters,
 ): Promise<WorkspaceData> {
+  // The compose workspace is ALWAYS personal — only the caller's own journals,
+  // regardless of read.all/site. Cross-user browsing lives in /journals/records.
   const authorPersonId = await getAuthorPersonId(ctx)
-  const where = entryWhere(ctx, filters, authorPersonId)
-  const scopeOnly = journalScopeWhere(ctx, authorPersonId)
+  const where = entryWhere(ctx, filters, authorPersonId, true)
+  const scopeOnly = journalSelfScopeWhere(ctx, authorPersonId)
 
   const [tree, hm, otd, options, tagSuggestions, counts] = await Promise.all([
-    buildTree(ctx, groupBy, filters),
+    buildTree(ctx, groupBy, filters, true),
     heatmap(ctx, scopeOnly),
     onThisDay(ctx, scopeOnly),
     listMetaOptions(ctx),

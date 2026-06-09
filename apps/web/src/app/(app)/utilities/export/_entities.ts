@@ -28,7 +28,7 @@ export const EXPORTABLE_ENTITIES: ExportEntity[] = [
   {
     key: 'inspections',
     label: 'Inspections',
-    description: 'Inspection records with template, status, occurrence date.',
+    description: 'Inspection records with reference, type, status, occurrence date, and pass/fail/N-A tallies.',
     csvHref: '/inspections/export.csv',
     groupLabel: 'Frontline',
   },

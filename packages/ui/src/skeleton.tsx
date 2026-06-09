@@ -10,7 +10,7 @@ export function Skeleton({ className, ...props }: React.HTMLAttributes<HTMLDivEl
   return (
     <div
       className={cn(
-        'bhs-shimmer relative overflow-hidden rounded-md bg-slate-200/70',
+        'bhs-shimmer relative overflow-hidden rounded-md bg-slate-200/70 dark:bg-slate-700/50',
         className,
       )}
       {...props}

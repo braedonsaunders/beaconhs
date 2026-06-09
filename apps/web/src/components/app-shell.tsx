@@ -1,10 +1,10 @@
 import { ShieldAlert, UserCircle2 } from 'lucide-react'
-import { Badge } from '@beaconhs/ui'
 import { SignOutButton } from './sign-out-button'
 import { TenantSwitcher } from './tenant-switcher'
 import { NotificationsBell } from './notifications-bell'
 import { GlobalSearch } from './global-search'
-import { SidebarNav, type SidebarNavGroup } from './sidebar-nav'
+import { type SidebarNavGroup } from './sidebar-nav'
+import { AppSidebar } from './app-sidebar'
 import { MobileNavToggle } from './mobile-nav-toggle'
 
 type Ctx = {
@@ -19,6 +19,7 @@ export function AppShell({
   groups,
   availableTenants,
   unreadCount,
+  defaultCollapsed = false,
   children,
 }: {
   ctx: Ctx
@@ -28,32 +29,18 @@ export function AppShell({
   groups: SidebarNavGroup[]
   availableTenants: { id: string; name: string; slug: string }[]
   unreadCount: number
+  /** Persisted sidebar-collapsed preference (from the `sidebar_collapsed` cookie). */
+  defaultCollapsed?: boolean
   children: React.ReactNode
 }) {
   const display = ctx.membership?.displayName ?? 'Account'
   return (
     <div className="flex h-screen overflow-hidden">
-      <aside className="hidden w-60 shrink-0 flex-col border-r border-slate-200 bg-white lg:flex">
-        <div className="flex h-14 items-center gap-2 border-b border-slate-200 px-4">
-          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-teal-600 to-teal-800 text-sm font-bold text-white shadow-sm ring-1 ring-teal-900/10">
-            B
-          </div>
-          <span className="font-semibold tracking-tight text-slate-900">BeaconHS</span>
-        </div>
-        <SidebarNav groups={groups} />
-        <div className="border-t border-slate-200 p-3 text-xs text-slate-500">
-          <div className="flex items-center justify-between">
-            <span>v0.1.0</span>
-            <Badge variant="secondary" className="font-mono text-[10px]">
-              dev
-            </Badge>
-          </div>
-        </div>
-      </aside>
+      <AppSidebar groups={groups} defaultCollapsed={defaultCollapsed} />
 
       <div className="flex flex-1 flex-col overflow-hidden">
         {ctx.isSuperAdmin ? (
-          <div className="flex shrink-0 items-center gap-2 border-b border-amber-300 bg-amber-50 px-6 py-1 text-xs text-amber-900">
+          <div className="flex shrink-0 items-center gap-2 border-b border-amber-300 bg-amber-50 px-6 py-1 text-xs text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-200">
             <ShieldAlert size={14} />
             <span>
               Super-admin · scoped to <strong>{ctx.tenantName}</strong>
@@ -61,7 +48,7 @@ export function AppShell({
           </div>
         ) : null}
 
-        <header className="flex h-14 shrink-0 items-center gap-3 border-b border-slate-200 bg-white px-4 sm:gap-4 sm:px-6">
+        <header className="flex h-14 shrink-0 items-center gap-3 border-b border-slate-200 bg-white px-4 sm:gap-4 sm:px-6 dark:border-slate-800 dark:bg-slate-900">
           <MobileNavToggle groups={groups} />
           <TenantSwitcher
             current={{ id: ctx.tenantId, name: ctx.tenantName }}
@@ -74,14 +61,16 @@ export function AppShell({
           <div className="flex items-center gap-3 text-sm">
             <NotificationsBell unread={unreadCount} />
             <div className="hidden items-center gap-2 sm:flex">
-              <UserCircle2 size={18} className="text-slate-500" />
-              <span>{display}</span>
+              <UserCircle2 size={18} className="text-slate-500 dark:text-slate-400" />
+              <span className="text-slate-700 dark:text-slate-200">{display}</span>
             </div>
             <SignOutButton />
           </div>
         </header>
 
-        <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-50">{children}</main>
+        <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-50 dark:bg-slate-950">
+          {children}
+        </main>
       </div>
     </div>
   )

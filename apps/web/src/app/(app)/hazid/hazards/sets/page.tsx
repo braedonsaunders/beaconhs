@@ -22,6 +22,7 @@ import { hazidAssessmentTypes, hazidHazardSets, hazidHazards } from '@beaconhs/d
 import { requireModuleManage } from '@/lib/module-admin/guard'
 import { parseListParams } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
+import { TableToolbar } from '@/components/table-toolbar'
 import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
@@ -52,10 +53,7 @@ export default async function HazardSetsPage({
     const filters: SQL<unknown>[] = []
     if (params.q) {
       const term = `%${params.q}%`
-      const cond = or(
-        ilike(hazidHazardSets.name, term),
-        ilike(hazidHazardSets.description, term),
-      )
+      const cond = or(ilike(hazidHazardSets.name, term), ilike(hazidHazardSets.description, term))
       if (cond) filters.push(cond)
     }
     if (sizeFilter === 'empty') {
@@ -82,10 +80,7 @@ export default async function HazardSetsPage({
             ]
           : [params.dir === 'asc' ? asc(hazidHazardSets.name) : desc(hazidHazardSets.name)]
 
-    const [tot] = await tx
-      .select({ c: count() })
-      .from(hazidHazardSets)
-      .where(whereClause)
+    const [tot] = await tx.select({ c: count() }).from(hazidHazardSets).where(whereClause)
 
     const data = await tx
       .select()
@@ -146,20 +141,20 @@ export default async function HazardSetsPage({
               </Link>
             }
           />
-          <div className="flex items-center gap-3">
+          <TableToolbar>
             <SearchInput placeholder="Search hazard sets…" />
-          </div>
-          <FilterChips
-            basePath="/hazid/hazards/sets"
-            currentParams={sp}
-            paramKey="size"
-            label="Size"
-            options={[
-              { value: 'empty', label: 'Empty' },
-              { value: 'small', label: '1–5 hazards' },
-              { value: 'large', label: '6+ hazards' },
-            ]}
-          />
+            <FilterChips
+              basePath="/hazid/hazards/sets"
+              currentParams={sp}
+              paramKey="size"
+              label="Size"
+              options={[
+                { value: 'empty', label: 'Empty' },
+                { value: 'small', label: '1–5 hazards' },
+                { value: 'large', label: '6+ hazards' },
+              ]}
+            />
+          </TableToolbar>
         </>
       }
     >
@@ -220,28 +215,23 @@ export default async function HazardSetsPage({
                         <>
                           {previewNames.join(', ')}
                           {r.hazardIds.length > 3 ? (
-                            <span className="text-slate-400">
-                              {' '}
-                              +{r.hazardIds.length - 3} more
-                            </span>
+                            <span className="text-slate-400"> +{r.hazardIds.length - 3} more</span>
                           ) : null}
                         </>
                       )}
                     </TableCell>
-                    <TableCell className="max-w-md text-slate-600 text-xs line-clamp-2">
+                    <TableCell className="line-clamp-2 max-w-md text-xs text-slate-600">
                       {r.description ?? '—'}
                     </TableCell>
                     <TableCell>
                       {usage > 0 ? (
                         <Badge variant="success">{usage}</Badge>
                       ) : (
-                        <span className="text-slate-400 text-xs">—</span>
+                        <span className="text-xs text-slate-400">—</span>
                       )}
                     </TableCell>
                     <TableCell className="text-xs text-slate-500 tabular-nums">
-                      {r.updatedAt
-                        ? new Date(r.updatedAt).toLocaleDateString()
-                        : '—'}
+                      {r.updatedAt ? new Date(r.updatedAt).toLocaleDateString() : '—'}
                     </TableCell>
                   </TableRow>
                 )

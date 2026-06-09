@@ -26,7 +26,7 @@ export function NotificationsBell({ unread }: { unread: number }) {
           aria-label="Notifications"
           aria-expanded={open}
           aria-haspopup="menu"
-          className="relative inline-flex h-9 w-9 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+          className="relative inline-flex h-9 w-9 items-center justify-center rounded-md text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100"
         >
           <Bell size={16} />
           {unread > 0 ? (
@@ -38,30 +38,30 @@ export function NotificationsBell({ unread }: { unread: number }) {
       }
     >
       <div role="menu">
-        <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-3 py-2">
           <div className="text-sm font-medium">Notifications</div>
           {unread > 0 ? (
-            <span className="text-xs text-slate-500">{unread > 99 ? '99+' : unread} unread</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">{unread > 99 ? '99+' : unread} unread</span>
           ) : (
-            <span className="text-xs text-slate-400">All read</span>
+            <span className="text-xs text-slate-400 dark:text-slate-500">All read</span>
           )}
         </div>
         <Link
           href="/notifications"
           onClick={() => setOpen(false)}
           role="menuitem"
-          className="flex items-center gap-2 px-3 py-2 text-sm text-slate-800 hover:bg-slate-50"
+          className="flex items-center gap-2 px-3 py-2 text-sm text-slate-800 dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-800/60"
         >
-          <ExternalLink size={14} className="text-slate-500" />
+          <ExternalLink size={14} className="text-slate-500 dark:text-slate-400" />
           <span>View inbox</span>
         </Link>
         <Link
           href="/my/notifications"
           onClick={() => setOpen(false)}
           role="menuitem"
-          className="flex items-center gap-2 px-3 py-2 text-sm text-slate-800 hover:bg-slate-50"
+          className="flex items-center gap-2 px-3 py-2 text-sm text-slate-800 dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-800/60"
         >
-          <Settings size={14} className="text-slate-500" />
+          <Settings size={14} className="text-slate-500 dark:text-slate-400" />
           <span>Preferences</span>
         </Link>
       </div>

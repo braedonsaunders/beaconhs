@@ -117,7 +117,7 @@ export function FileUpload({
         type="button"
         onClick={() => inputRef.current?.click()}
         disabled={pending}
-        className="flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-6 text-sm text-slate-600 hover:border-teal-500 hover:bg-teal-50 disabled:opacity-50"
+        className="flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-3 py-6 text-sm text-slate-600 dark:text-slate-300 hover:border-teal-500 hover:bg-teal-50 dark:hover:bg-teal-950/40 disabled:opacity-50"
       >
         {pending ? (
           <Loader2 size={16} className="animate-spin" />
@@ -144,7 +144,7 @@ export function FileUpload({
           {value.map((f) => (
             <li
               key={f.attachmentId}
-              className="flex items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs"
+              className="flex items-center justify-between gap-2 rounded-md border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-2 py-1.5 text-xs"
             >
               <div className="flex min-w-0 items-center gap-2">
                 {f.contentType.startsWith('image/') ? (
@@ -154,7 +154,7 @@ export function FileUpload({
                     className="h-10 w-10 shrink-0 rounded object-cover"
                   />
                 ) : (
-                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded bg-slate-100 text-slate-400">
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500">
                     <FileUp size={14} />
                   </span>
                 )}

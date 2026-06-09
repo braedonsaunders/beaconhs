@@ -45,6 +45,7 @@ import {
 import {
   evaluateFormulaTree,
   evaluateLogicRule,
+  sanitizeDocumentHtml,
   type EvalContext,
   type FormulaExpression,
   type TableColumn,
@@ -886,11 +887,18 @@ function entityDisplayName(attrs: Record<string, unknown> | null | undefined): s
 }
 
 function renderValue(
-  field: { id: string; type: string; config?: Record<string, unknown> },
+  field: {
+    id: string
+    type: string
+    config?: Record<string, unknown>
+    validation?: { options?: { value: string; label?: { en?: string } }[] }
+  },
   raw: unknown,
   entities?: EntitiesByField,
 ) {
   const type = field.type
+  // Metric blocks are display-only (live aggregates) — nothing is stored.
+  if (type === 'metric') return <span className="italic text-slate-400">live metric</span>
   if (raw === undefined || raw === null || raw === '') {
     return <span className="text-slate-400">—</span>
   }
@@ -902,6 +910,190 @@ function renderValue(
           <strong>{v.answer ?? '—'}</strong>
           {v.comment ? <span className="ml-2 text-slate-500">— {v.comment}</span> : null}
         </span>
+      )
+    }
+    case 'gps': {
+      const v = raw as { lat?: number; lng?: number; accuracy?: number }
+      if (typeof v.lat !== 'number' || typeof v.lng !== 'number') return <span className="text-slate-400">—</span>
+      return (
+        <a
+          href={`https://www.google.com/maps?q=${v.lat},${v.lng}`}
+          target="_blank"
+          rel="noreferrer"
+          className="font-mono text-xs text-teal-700 hover:underline"
+        >
+          {v.lat.toFixed(5)}, {v.lng.toFixed(5)}
+          {v.accuracy ? ` (±${Math.round(v.accuracy)}m)` : ''}
+        </a>
+      )
+    }
+    case 'matrix': {
+      const v = raw as Record<string, string>
+      const rows = (field.config?.rows as { key: string; label: string }[] | undefined) ?? []
+      const scale = (field.config?.scale as { value: string; label: string }[] | undefined) ?? []
+      const scaleLabel = (val: string) => scale.find((s) => s.value === val)?.label ?? val
+      const entries = rows.length
+        ? rows.filter((r) => v[r.key]).map((r) => [r.label, v[r.key]!] as const)
+        : Object.entries(v)
+      if (entries.length === 0) return <span className="text-slate-400">—</span>
+      return (
+        <ul className="space-y-0.5 text-sm">
+          {entries.map(([label, val]) => (
+            <li key={label}>
+              <span className="text-slate-500">{label}:</span>{' '}
+              <strong>{scaleLabel(val)}</strong>
+            </li>
+          ))}
+        </ul>
+      )
+    }
+    case 'lookup':
+      // Stored value is the bound source's value column (a label or stable id).
+      return <span className="text-slate-900">{String(raw)}</span>
+    case 'data_table': {
+      const ids = Array.isArray(raw) ? (raw as string[]) : []
+      if (ids.length === 0) return <span className="text-slate-400">—</span>
+      return (
+        <span className="text-slate-700">
+          {ids.length} record{ids.length === 1 ? '' : 's'} selected
+        </span>
+      )
+    }
+    case 'photo_ai': {
+      const val = raw as {
+        attachments?: { url?: string; filename?: string }[]
+        analysis?: {
+          summary?: string
+          overallRisk?: string
+          ppe?: { item: string; status: string }[]
+          hazards?: { type: string; severity: string; detail: string }[]
+        }
+      }
+      const a = val.analysis
+      const n = val.attachments?.length ?? 0
+      const badPpe = (a?.ppe ?? []).filter((p) => p.status !== 'present')
+      return (
+        <div className="space-y-1 text-sm">
+          <div className="text-xs text-slate-500">
+            {n} photo{n === 1 ? '' : 's'}
+            {a ? <> · risk <strong className="text-slate-700">{a.overallRisk}</strong></> : null}
+          </div>
+          {a?.summary ? <p className="text-slate-600">{a.summary}</p> : null}
+          {a?.hazards?.length ? (
+            <p className="text-slate-700">
+              <span className="text-slate-500">Hazards:</span>{' '}
+              {a.hazards.map((h) => `${h.type} (${h.severity})`).join(', ')}
+            </p>
+          ) : null}
+          {badPpe.length ? (
+            <p className="text-slate-700">
+              <span className="text-slate-500">Missing/incorrect PPE:</span>{' '}
+              {badPpe.map((p) => p.item).join(', ')}
+            </p>
+          ) : null}
+          {!a ? <span className="text-slate-400">not analysed</span> : null}
+        </div>
+      )
+    }
+    case 'qr_scanner':
+      return <span className="font-mono text-sm text-slate-800">{String(raw)}</span>
+    case 'ranking': {
+      const order = Array.isArray(raw) ? (raw as string[]) : []
+      if (order.length === 0) return <span className="text-slate-400">—</span>
+      const opts = field.validation?.options ?? []
+      const labelOf = (v: string) => opts.find((o) => o.value === v)?.label?.en ?? v
+      return (
+        <ol className="space-y-0.5 text-sm">
+          {order.map((v, i) => (
+            <li key={v}>
+              <span className="text-slate-400">{i + 1}.</span>{' '}
+              <span className="text-slate-700">{labelOf(v)}</span>
+            </li>
+          ))}
+        </ol>
+      )
+    }
+    case 'rich_text':
+      return (
+        <div
+          className="prose prose-sm max-w-none text-slate-700"
+          dangerouslySetInnerHTML={{ __html: sanitizeDocumentHtml(String(raw)) }}
+        />
+      )
+    case 'address': {
+      const a = raw as {
+        line1?: string
+        city?: string
+        region?: string
+        postal?: string
+        country?: string
+        lat?: number
+        lng?: number
+        query?: string
+      }
+      const lines = [
+        a.line1,
+        [a.city, a.region, a.postal].filter(Boolean).join(', '),
+        a.country,
+      ].filter(Boolean)
+      if (lines.length === 0 && !a.query) return <span className="text-slate-400">—</span>
+      return (
+        <div className="text-sm text-slate-700">
+          {lines.length ? lines.map((l, i) => <div key={i}>{l}</div>) : <div>{a.query}</div>}
+          {typeof a.lat === 'number' && typeof a.lng === 'number' ? (
+            <a
+              href={`https://www.google.com/maps?q=${a.lat},${a.lng}`}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs text-teal-700 hover:underline"
+            >
+              View on map
+            </a>
+          ) : null}
+        </div>
+      )
+    }
+    case 'photo_annotated': {
+      const val = raw as {
+        attachments?: { url?: string }[]
+        markers?: { x: number; y: number; label: string }[]
+      }
+      const url = val.attachments?.[0]?.url
+      const markers = Array.isArray(val.markers) ? val.markers : []
+      return (
+        <div className="space-y-1.5 text-sm">
+          {url ? (
+            <div className="relative inline-block max-w-xs">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={url}
+                alt="Annotated hazards"
+                className="max-h-64 max-w-full rounded border border-slate-200"
+              />
+              {markers.map((m, i) => (
+                <span
+                  key={i}
+                  className="absolute flex h-5 w-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-rose-600 text-[10px] font-bold text-white ring-2 ring-white"
+                  style={{ left: `${m.x * 100}%`, top: `${m.y * 100}%` }}
+                >
+                  {i + 1}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <span className="text-slate-400">{val.attachments?.length ?? 0} photo(s)</span>
+          )}
+          {markers.length > 0 ? (
+            <ol className="space-y-0.5">
+              {markers.map((m, i) => (
+                <li key={i} className="text-slate-700">
+                  <span className="font-semibold text-rose-600">{i + 1}.</span>{' '}
+                  {m.label || <span className="text-slate-400">(no note)</span>}
+                </li>
+              ))}
+            </ol>
+          ) : null}
+        </div>
       )
     }
     case 'signature': {

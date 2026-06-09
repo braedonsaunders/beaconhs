@@ -158,6 +158,20 @@ export default async function CoursePage({
           title={course.name}
           subtitle={course.code}
           badge={<Badge variant="secondary">{course.deliveryType.replace('_', ' ')}</Badge>}
+          actions={
+            <div className="flex items-center gap-2">
+              <Link href={`/training/learn/${id}`}>
+                <Button variant="outline">
+                  <GraduationCap size={14} /> Preview
+                </Button>
+              </Link>
+              <Link href={`${basePath}/studio`}>
+                <Button>
+                  <Plus size={14} /> Build content
+                </Button>
+              </Link>
+            </div>
+          }
         />
       }
       subtabs={

@@ -110,11 +110,10 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
     href: '/inspections',
     managePath: '/inspections/manage',
     iconKey: 'clipboard',
+    // TODO: native module still gated on a forms permission — no inspections.*
+    // permission exists yet. Define one and switch this when RBAC is extended.
     permission: 'forms.template.read',
-    tabs: [
-      { key: 'form-driven', label: 'Form-driven', href: '/inspections' },
-      { key: 'records', label: 'Records', href: '/inspections/records' },
-    ],
+    tabs: [{ key: 'records', label: 'Inspections', href: '/inspections/records' }],
     sections: [
       {
         key: 'types',
@@ -250,7 +249,6 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
     tabs: [
       { key: 'documents', label: 'Documents', href: '/documents' },
       { key: 'books', label: 'Books', href: '/documents/books' },
-      { key: 'reference', label: 'Reference', href: '/documents/reference' },
       { key: 'management-reviews', label: 'Management reviews', href: '/documents/management-reviews' },
     ],
     sections: [
@@ -267,20 +265,6 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
         href: '/documents/categories',
         iconKey: 'library',
         desc: 'Top-level groupings for the document library.',
-      },
-      {
-        key: 'reference-types',
-        label: 'Reference types',
-        href: '/documents/reference/types',
-        iconKey: 'layers',
-        desc: 'Taxonomy for the external reference / standards library.',
-      },
-      {
-        key: 'reference-categories',
-        label: 'Reference categories',
-        href: '/documents/reference/categories',
-        iconKey: 'library',
-        desc: 'Groupings for the external reference / standards library.',
       },
     ],
   },

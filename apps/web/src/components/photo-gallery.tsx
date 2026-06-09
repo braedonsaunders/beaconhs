@@ -13,7 +13,7 @@ export type GalleryPhoto = {
 export function PhotoGallery({ photos }: { photos: GalleryPhoto[] }) {
   const [lightbox, setLightbox] = useState<GalleryPhoto | null>(null)
   if (photos.length === 0) {
-    return <p className="text-sm text-slate-500">No photos attached.</p>
+    return <p className="text-sm text-slate-500 dark:text-slate-400">No photos attached.</p>
   }
   return (
     <>
@@ -23,7 +23,7 @@ export function PhotoGallery({ photos }: { photos: GalleryPhoto[] }) {
             key={p.id}
             type="button"
             onClick={() => setLightbox(p)}
-            className="group relative aspect-square overflow-hidden rounded-md border border-slate-200 bg-slate-100"
+            className="group relative aspect-square overflow-hidden rounded-md border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800"
           >
             <img
               src={p.url}

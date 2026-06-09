@@ -26,6 +26,7 @@ import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
+import { TableToolbar } from '@/components/table-toolbar'
 import { TrainingSubNav } from '../../_components/training-sub-nav'
 
 export const metadata = { title: 'Assessment types' }
@@ -59,7 +60,8 @@ export default async function AssessmentTypesPage({
     filters.push(sql`${trainingAssessmentTypes.deletedAt} IS NULL`)
     if (statusFilter === 'active') filters.push(eq(trainingAssessmentTypes.active, true))
     if (statusFilter === 'inactive') filters.push(eq(trainingAssessmentTypes.active, false))
-    if (courseLinkedFilter === 'yes') filters.push(sql`${trainingAssessmentTypes.courseId} IS NOT NULL`)
+    if (courseLinkedFilter === 'yes')
+      filters.push(sql`${trainingAssessmentTypes.courseId} IS NOT NULL`)
     if (courseLinkedFilter === 'no') filters.push(sql`${trainingAssessmentTypes.courseId} IS NULL`)
     if (params.q) {
       const term = `%${params.q}%`
@@ -108,10 +110,7 @@ export default async function AssessmentTypesPage({
                       : desc(trainingAssessmentTypes.name),
                   ]
 
-    const [tot] = await tx
-      .select({ c: count() })
-      .from(trainingAssessmentTypes)
-      .where(whereClause)
+    const [tot] = await tx.select({ c: count() }).from(trainingAssessmentTypes).where(whereClause)
 
     const data = await tx
       .select({
@@ -121,9 +120,10 @@ export default async function AssessmentTypesPage({
           Number,
         ),
         attemptCount: sql<number>`count(distinct ${trainingAssessments.id})`.mapWith(Number),
-        passCount: sql<number>`count(distinct case when ${trainingAssessments.passed} = true then ${trainingAssessments.id} end)`.mapWith(
-          Number,
-        ),
+        passCount:
+          sql<number>`count(distinct case when ${trainingAssessments.passed} = true then ${trainingAssessments.id} end)`.mapWith(
+            Number,
+          ),
       })
       .from(trainingAssessmentTypes)
       .leftJoin(trainingCourses, eq(trainingCourses.id, trainingAssessmentTypes.courseId))
@@ -180,10 +180,8 @@ export default async function AssessmentTypesPage({
             }
           />
           <TrainingSubNav active="assessment-types" />
-          <div className="flex items-center gap-3">
+          <TableToolbar>
             <SearchInput placeholder="Search assessment types" />
-          </div>
-          <div className="space-y-2">
             <FilterChips
               basePath="/training/assessments/types"
               currentParams={sp}
@@ -204,7 +202,7 @@ export default async function AssessmentTypesPage({
                 { value: 'no', label: 'Standalone' },
               ]}
             />
-          </div>
+          </TableToolbar>
         </>
       }
     >
@@ -231,18 +229,10 @@ export default async function AssessmentTypesPage({
                 <SortableTh {...sortProps} column="passing" active={params.sort === 'passing'}>
                   Passing
                 </SortableTh>
-                <SortableTh
-                  {...sortProps}
-                  column="questions"
-                  active={params.sort === 'questions'}
-                >
+                <SortableTh {...sortProps} column="questions" active={params.sort === 'questions'}>
                   Questions
                 </SortableTh>
-                <SortableTh
-                  {...sortProps}
-                  column="attempts"
-                  active={params.sort === 'attempts'}
-                >
+                <SortableTh {...sortProps} column="attempts" active={params.sort === 'attempts'}>
                   Attempts
                 </SortableTh>
                 <TableHead>Pass rate</TableHead>
@@ -268,15 +258,14 @@ export default async function AssessmentTypesPage({
                         {type.name}
                       </Link>
                       {type.description ? (
-                        <div className="text-xs text-slate-500 line-clamp-1">{type.description}</div>
+                        <div className="line-clamp-1 text-xs text-slate-500">
+                          {type.description}
+                        </div>
                       ) : null}
                     </TableCell>
                     <TableCell className="text-slate-600">
                       {course ? (
-                        <Link
-                          href={`/training/courses/${course.id}`}
-                          className="hover:underline"
-                        >
+                        <Link href={`/training/courses/${course.id}`} className="hover:underline">
                           <span className="font-mono text-xs">{course.code}</span>
                           {course.code ? ' · ' : ''}
                           {course.name}
@@ -298,14 +287,18 @@ export default async function AssessmentTypesPage({
                           {passPct}%
                         </Badge>
                       ) : (
-                        <span className="text-slate-400 text-xs">—</span>
+                        <span className="text-xs text-slate-400">—</span>
                       )}
                     </TableCell>
                     <TableCell>
                       {type.graded ? (
-                        <Badge variant="outline" className="text-xs">Graded</Badge>
+                        <Badge variant="outline" className="text-xs">
+                          Graded
+                        </Badge>
                       ) : (
-                        <Badge variant="secondary" className="text-xs">Pass-only</Badge>
+                        <Badge variant="secondary" className="text-xs">
+                          Pass-only
+                        </Badge>
                       )}
                     </TableCell>
                     <TableCell>
@@ -316,9 +309,7 @@ export default async function AssessmentTypesPage({
                       )}
                     </TableCell>
                     <TableCell className="text-xs text-slate-500 tabular-nums">
-                      {type.updatedAt
-                        ? new Date(type.updatedAt).toLocaleDateString()
-                        : '—'}
+                      {type.updatedAt ? new Date(type.updatedAt).toLocaleDateString() : '—'}
                     </TableCell>
                   </TableRow>
                 )

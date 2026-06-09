@@ -29,6 +29,7 @@ import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
+import { TableToolbar } from '@/components/table-toolbar'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 
 export const metadata = { title: 'Form responses' }
@@ -94,7 +95,11 @@ export default async function FormResponsesPage({
         ? [params.dir === 'asc' ? asc(formResponses.status) : desc(formResponses.status)]
         : params.sort === 'created_at'
           ? [params.dir === 'asc' ? asc(formResponses.createdAt) : desc(formResponses.createdAt)]
-          : [params.dir === 'asc' ? asc(formResponses.submittedAt) : desc(formResponses.submittedAt)]
+          : [
+              params.dir === 'asc'
+                ? asc(formResponses.submittedAt)
+                : desc(formResponses.submittedAt),
+            ]
 
     const [tot] = await tx
       .select({ c: count() })
@@ -170,16 +175,16 @@ export default async function FormResponsesPage({
             active={activeTab}
             paramKey="tab"
           />
-          <div className="flex items-center gap-3">
+          <TableToolbar>
             <SearchInput placeholder="Search template name…" />
-          </div>
-          <FilterChips
-            basePath="/forms/responses"
-            currentParams={sp}
-            paramKey="status"
-            label="Status"
-            options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
-          />
+            <FilterChips
+              basePath="/forms/responses"
+              currentParams={sp}
+              paramKey="status"
+              label="Status"
+              options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
+            />
+          </TableToolbar>
         </>
       }
     >
@@ -213,89 +218,119 @@ export default async function FormResponsesPage({
                 <TableHead>Subject</TableHead>
                 <TableHead>Site</TableHead>
                 <TableHead>Step</TableHead>
-                <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>Status</SortableTh>
-                <SortableTh {...sortProps} column="created_at" active={params.sort === 'created_at'}>Started</SortableTh>
-                <SortableTh {...sortProps} column="submitted_at" active={params.sort === 'submitted_at'}>Submitted</SortableTh>
+                <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>
+                  Status
+                </SortableTh>
+                <SortableTh
+                  {...sortProps}
+                  column="created_at"
+                  active={params.sort === 'created_at'}
+                >
+                  Started
+                </SortableTh>
+                <SortableTh
+                  {...sortProps}
+                  column="submitted_at"
+                  active={params.sort === 'submitted_at'}
+                >
+                  Submitted
+                </SortableTh>
                 <TableHead>By</TableHead>
                 <TableHead>Closed</TableHead>
                 <TableHead className="w-16">PDF</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map(({ response, template, site, version, submittedByName, subjectFirst, subjectLast }) => {
-                const subject =
-                  subjectFirst || subjectLast
-                    ? `${subjectLast ?? ''}${subjectLast ? ', ' : ''}${subjectFirst ?? ''}`.trim()
-                    : null
-                return (
-                  <TableRow key={response.id}>
-                    <TableCell className="font-mono text-xs">
-                      <Link href={`/forms/responses/${response.id}`} className="hover:underline">
-                        {response.id.slice(0, 8)}
-                      </Link>
-                    </TableCell>
-                    <TableCell>
-                      <Link
-                        href={`/forms/responses/${response.id}`}
-                        className="font-medium text-slate-900 hover:underline"
-                      >
-                        {template.name}
-                      </Link>
-                      {template.category ? (
-                        <div className="text-xs text-slate-500">
-                          {template.category.replace(/_/g, ' ')}
-                        </div>
-                      ) : null}
-                    </TableCell>
-                    <TableCell className="text-xs text-slate-500 tabular-nums">
-                      {version ? `v${version.version}` : '—'}
-                    </TableCell>
-                    <TableCell className="text-slate-600 text-xs">
-                      {subject || <span className="text-slate-400">—</span>}
-                    </TableCell>
-                    <TableCell className="text-slate-600 text-xs">{site?.name ?? '—'}</TableCell>
-                    <TableCell className="text-xs text-slate-600">
-                      {response.currentStep ? (
-                        <Badge variant="outline" className="text-[10px]">
-                          {response.currentStep}
+              {rows.map(
+                ({
+                  response,
+                  template,
+                  site,
+                  version,
+                  submittedByName,
+                  subjectFirst,
+                  subjectLast,
+                }) => {
+                  const subject =
+                    subjectFirst || subjectLast
+                      ? `${subjectLast ?? ''}${subjectLast ? ', ' : ''}${subjectFirst ?? ''}`.trim()
+                      : null
+                  return (
+                    <TableRow key={response.id}>
+                      <TableCell className="font-mono text-xs">
+                        <Link href={`/forms/responses/${response.id}`} className="hover:underline">
+                          {response.id.slice(0, 8)}
+                        </Link>
+                      </TableCell>
+                      <TableCell>
+                        <Link
+                          href={`/forms/responses/${response.id}`}
+                          className="font-medium text-slate-900 hover:underline"
+                        >
+                          {template.name}
+                        </Link>
+                        {template.category ? (
+                          <div className="text-xs text-slate-500">
+                            {template.category.replace(/_/g, ' ')}
+                          </div>
+                        ) : null}
+                      </TableCell>
+                      <TableCell className="text-xs text-slate-500 tabular-nums">
+                        {version ? `v${version.version}` : '—'}
+                      </TableCell>
+                      <TableCell className="text-xs text-slate-600">
+                        {subject || <span className="text-slate-400">—</span>}
+                      </TableCell>
+                      <TableCell className="text-xs text-slate-600">{site?.name ?? '—'}</TableCell>
+                      <TableCell className="text-xs text-slate-600">
+                        {response.currentStep ? (
+                          <Badge variant="outline" className="text-[10px]">
+                            {response.currentStep}
+                          </Badge>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            response.status === 'closed' || response.status === 'submitted'
+                              ? 'success'
+                              : 'warning'
+                          }
+                        >
+                          {response.status.replace('_', ' ')}
                         </Badge>
-                      ) : (
-                        <span className="text-slate-400">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={response.status === 'closed' || response.status === 'submitted' ? 'success' : 'warning'}>
-                        {response.status.replace('_', ' ')}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-slate-600 text-xs tabular-nums">
-                      {response.createdAt
-                        ? new Date(response.createdAt).toLocaleDateString()
-                        : '—'}
-                    </TableCell>
-                    <TableCell className="text-slate-600 text-xs tabular-nums">
-                      {response.submittedAt
-                        ? new Date(response.submittedAt).toLocaleDateString()
-                        : '—'}
-                    </TableCell>
-                    <TableCell className="text-slate-600 text-xs">
-                      {submittedByName ?? <span className="text-slate-400">—</span>}
-                    </TableCell>
-                    <TableCell className="text-slate-600 text-xs tabular-nums">
-                      {response.closedAt
-                        ? new Date(response.closedAt).toLocaleDateString()
-                        : '—'}
-                    </TableCell>
-                    <TableCell>
-                      {response.pdfAttachmentId ? (
-                        <Badge variant="success" className="text-[10px]">PDF</Badge>
-                      ) : (
-                        <span className="text-slate-400 text-xs">—</span>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
+                      </TableCell>
+                      <TableCell className="text-xs text-slate-600 tabular-nums">
+                        {response.createdAt
+                          ? new Date(response.createdAt).toLocaleDateString()
+                          : '—'}
+                      </TableCell>
+                      <TableCell className="text-xs text-slate-600 tabular-nums">
+                        {response.submittedAt
+                          ? new Date(response.submittedAt).toLocaleDateString()
+                          : '—'}
+                      </TableCell>
+                      <TableCell className="text-xs text-slate-600">
+                        {submittedByName ?? <span className="text-slate-400">—</span>}
+                      </TableCell>
+                      <TableCell className="text-xs text-slate-600 tabular-nums">
+                        {response.closedAt ? new Date(response.closedAt).toLocaleDateString() : '—'}
+                      </TableCell>
+                      <TableCell>
+                        {response.pdfAttachmentId ? (
+                          <Badge variant="success" className="text-[10px]">
+                            PDF
+                          </Badge>
+                        ) : (
+                          <span className="text-xs text-slate-400">—</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  )
+                },
+              )}
             </TableBody>
           </Table>
           <Pagination

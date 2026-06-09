@@ -207,13 +207,13 @@ export function FileUploader({
           'flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed text-center transition-colors',
           compact ? 'px-3 py-3' : 'px-4 py-6',
           dragOver
-            ? 'border-teal-400 bg-teal-50 text-teal-900'
-            : 'border-slate-300 bg-slate-50 text-slate-600 hover:border-teal-300 hover:bg-teal-50/40',
+            ? 'border-teal-400 bg-teal-50 dark:bg-teal-950/50 text-teal-900 dark:text-teal-300'
+            : 'border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:border-teal-300 hover:bg-teal-50/40 dark:hover:bg-teal-950/40',
         )}
       >
         <span className={cn('font-medium', compact ? 'text-xs' : 'text-sm')}>{label}</span>
         {!compact && hint ? (
-          <span className="mt-1 text-[11px] text-slate-500">{hint}</span>
+          <span className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">{hint}</span>
         ) : null}
         <input
           ref={inputRef}
@@ -230,16 +230,16 @@ export function FileUploader({
           {items.map((item) => (
             <li
               key={item.id}
-              className="flex items-center justify-between gap-3 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs"
+              className="flex items-center justify-between gap-3 rounded-md border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs"
             >
               <div className="min-w-0 flex-1">
-                <div className="truncate font-medium text-slate-800">{item.file.name}</div>
+                <div className="truncate font-medium text-slate-800 dark:text-slate-100">{item.file.name}</div>
                 {item.status === 'error' ? (
                   <div className="text-[11px] text-rose-600">{item.error}</div>
                 ) : item.status === 'done' ? (
                   <div className="text-[11px] text-emerald-700">Uploaded</div>
                 ) : (
-                  <div className="text-[11px] text-slate-500">
+                  <div className="text-[11px] text-slate-500 dark:text-slate-400">
                     {item.status === 'uploading'
                       ? `Uploading… ${item.progress ?? 0}%`
                       : item.status === 'finalising'
@@ -248,7 +248,7 @@ export function FileUploader({
                   </div>
                 )}
                 {(item.status === 'uploading' || item.status === 'finalising') && (
-                  <div className="mt-1 h-1 overflow-hidden rounded-full bg-slate-100">
+                  <div className="mt-1 h-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
                     <div
                       className="h-full rounded-full bg-teal-500 transition-[width] duration-200"
                       style={{ width: `${item.progress ?? 0}%` }}

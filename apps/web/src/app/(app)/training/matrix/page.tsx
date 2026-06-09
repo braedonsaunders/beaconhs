@@ -37,10 +37,7 @@ function computeCells(
   todayIso: string,
 ): Map<string, CellState> {
   const today = new Date(todayIso)
-  const latest = new Map<
-    string,
-    { completedOn: string; expiresOn: string | null }
-  >()
+  const latest = new Map<string, { completedOn: string; expiresOn: string | null }>()
   for (const r of recs) {
     const key = `${r.personId}:${r.courseId}`
     const cur = latest.get(key)
@@ -80,10 +77,7 @@ export default async function TrainingMatrixPage({
 
   const { peopleRows, coursesRows, recs, deptsRows, tradesRows, crewsRows } = await ctx.db(
     async (tx) => {
-      const peopleFilters = [
-        eq(people.status, 'active'),
-        isNull(people.deletedAt),
-      ] as const
+      const peopleFilters = [eq(people.status, 'active'), isNull(people.deletedAt)] as const
       const peopleQuery = await tx
         .select()
         .from(people)
@@ -113,9 +107,7 @@ export default async function TrainingMatrixPage({
               expiresOn: trainingRecords.expiresOn,
             })
             .from(trainingRecords)
-            .where(
-              and(inArray(trainingRecords.personId, ids), isNull(trainingRecords.deletedAt)),
-            )
+            .where(and(inArray(trainingRecords.personId, ids), isNull(trainingRecords.deletedAt)))
         : []
 
       const ds = await tx.select().from(departments).orderBy(asc(departments.name))
@@ -140,7 +132,8 @@ export default async function TrainingMatrixPage({
     string,
     { valid: number; expiring: number; expired: number; never: number }
   >()
-  for (const c of coursesRows) courseStats.set(c.id, { valid: 0, expiring: 0, expired: 0, never: 0 })
+  for (const c of coursesRows)
+    courseStats.set(c.id, { valid: 0, expiring: 0, expired: 0, never: 0 })
   for (const p of peopleRows) {
     for (const c of coursesRows) {
       const cell = cells.get(`${p.id}:${c.id}`)
@@ -184,33 +177,35 @@ export default async function TrainingMatrixPage({
             }
           />
           <TrainingSubNav active="matrix" />
-          {deptsRows.length > 0 ? (
-            <FilterChips
-              basePath="/training/matrix"
-              currentParams={sp}
-              paramKey="department"
-              label="Department"
-              options={deptsRows.map((d) => ({ value: d.id, label: d.name }))}
-            />
-          ) : null}
-          {tradesRows.length > 0 ? (
-            <FilterChips
-              basePath="/training/matrix"
-              currentParams={sp}
-              paramKey="trade"
-              label="Trade"
-              options={tradesRows.map((t) => ({ value: t.id, label: t.name }))}
-            />
-          ) : null}
-          {crewsRows.length > 0 ? (
-            <FilterChips
-              basePath="/training/matrix"
-              currentParams={sp}
-              paramKey="crew"
-              label="Crew"
-              options={crewsRows.map((c) => ({ value: c.id, label: c.name }))}
-            />
-          ) : null}
+          <div className="flex flex-wrap items-center gap-2">
+            {deptsRows.length > 0 ? (
+              <FilterChips
+                basePath="/training/matrix"
+                currentParams={sp}
+                paramKey="department"
+                label="Department"
+                options={deptsRows.map((d) => ({ value: d.id, label: d.name }))}
+              />
+            ) : null}
+            {tradesRows.length > 0 ? (
+              <FilterChips
+                basePath="/training/matrix"
+                currentParams={sp}
+                paramKey="trade"
+                label="Trade"
+                options={tradesRows.map((t) => ({ value: t.id, label: t.name }))}
+              />
+            ) : null}
+            {crewsRows.length > 0 ? (
+              <FilterChips
+                basePath="/training/matrix"
+                currentParams={sp}
+                paramKey="crew"
+                label="Crew"
+                options={crewsRows.map((c) => ({ value: c.id, label: c.name }))}
+              />
+            ) : null}
+          </div>
           <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
             <span className="inline-flex items-center gap-1.5">
               <span className="inline-block h-3 w-3 rounded-sm bg-green-200" /> Valid
@@ -257,7 +252,7 @@ export default async function TrainingMatrixPage({
                 ))}
               </tr>
               <tr className="bg-slate-50">
-                <th className="sticky left-0 z-10 border-b border-slate-200 bg-slate-50 px-3 py-1 text-left text-[10px] font-medium uppercase tracking-wide text-slate-500">
+                <th className="sticky left-0 z-10 border-b border-slate-200 bg-slate-50 px-3 py-1 text-left text-[10px] font-medium tracking-wide text-slate-500 uppercase">
                   {peopleRows.length} people
                 </th>
                 {coursesRows.map((c) => {
@@ -282,10 +277,7 @@ export default async function TrainingMatrixPage({
                     scope="row"
                     className="sticky left-0 z-10 border-b border-slate-100 bg-white px-3 py-1.5 text-left font-normal text-slate-800 hover:bg-slate-50"
                   >
-                    <Link
-                      href={`/training/transcripts/${p.id}`}
-                      className="hover:underline"
-                    >
+                    <Link href={`/training/transcripts/${p.id}`} className="hover:underline">
                       {p.lastName}, {p.firstName}
                     </Link>
                   </th>

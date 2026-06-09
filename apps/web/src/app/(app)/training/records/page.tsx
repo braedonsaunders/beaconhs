@@ -33,11 +33,9 @@ import { SearchInput } from '@/components/search-input'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
+import { TableToolbar } from '@/components/table-toolbar'
 import { TrainingSubNav } from '../_components/training-sub-nav'
-import {
-  TrainingRecordsTable,
-  type TrainingRecordsTableRow,
-} from './_records-table'
+import { TrainingRecordsTable, type TrainingRecordsTableRow } from './_records-table'
 
 export const metadata = { title: 'Training Records' }
 export const dynamic = 'force-dynamic'
@@ -93,10 +91,7 @@ export default async function TrainingRecordsPage({
       filters.push(lte(trainingRecords.expiresOn, today))
     } else if (expiryFilter === 'current') {
       // "Current" = either no expiry at all, or expiry > today.
-      const c = or(
-        isNull(trainingRecords.expiresOn),
-        gt(trainingRecords.expiresOn, today),
-      )
+      const c = or(isNull(trainingRecords.expiresOn), gt(trainingRecords.expiresOn, today))
       if (c) filters.push(c)
     }
 
@@ -104,27 +99,15 @@ export default async function TrainingRecordsPage({
 
     const orderBy =
       params.sort === 'expires_on'
-        ? [
-            params.dir === 'asc'
-              ? asc(trainingRecords.expiresOn)
-              : desc(trainingRecords.expiresOn),
-          ]
+        ? [params.dir === 'asc' ? asc(trainingRecords.expiresOn) : desc(trainingRecords.expiresOn)]
         : params.sort === 'source'
-          ? [
-              params.dir === 'asc'
-                ? asc(trainingRecords.source)
-                : desc(trainingRecords.source),
-            ]
+          ? [params.dir === 'asc' ? asc(trainingRecords.source) : desc(trainingRecords.source)]
           : params.sort === 'employee'
             ? params.dir === 'asc'
               ? [asc(people.lastName), asc(people.firstName)]
               : [desc(people.lastName), desc(people.firstName)]
             : params.sort === 'course'
-              ? [
-                  params.dir === 'asc'
-                    ? asc(trainingCourses.code)
-                    : desc(trainingCourses.code),
-                ]
+              ? [params.dir === 'asc' ? asc(trainingCourses.code) : desc(trainingCourses.code)]
               : [
                   params.dir === 'asc'
                     ? asc(trainingRecords.completedOn)
@@ -173,10 +156,7 @@ export default async function TrainingRecordsPage({
       .where(
         and(
           isNull(trainingRecords.deletedAt),
-          or(
-            isNull(trainingRecords.expiresOn),
-            gt(trainingRecords.expiresOn, today),
-          ),
+          or(isNull(trainingRecords.expiresOn), gt(trainingRecords.expiresOn, today)),
         ),
       )
 
@@ -233,10 +213,8 @@ export default async function TrainingRecordsPage({
             }
           />
           <TrainingSubNav active="records" />
-          <div className="flex flex-wrap items-center gap-3">
+          <TableToolbar>
             <SearchInput placeholder="Search employee, employee #, course…" />
-          </div>
-          <div className="space-y-2">
             <FilterChips
               basePath="/training/records"
               currentParams={sp}
@@ -257,7 +235,7 @@ export default async function TrainingRecordsPage({
                 count: expiryCounts[o.value],
               }))}
             />
-          </div>
+          </TableToolbar>
         </>
       }
     >

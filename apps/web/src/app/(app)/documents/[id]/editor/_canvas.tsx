@@ -29,7 +29,7 @@ export function PageCanvas({
   } as CSSProperties
 
   return (
-    <div className="app-scroll relative min-h-0 flex-1 overflow-auto bg-slate-200/70">
+    <div className="app-scroll relative min-h-0 flex-1 overflow-auto bg-slate-200/70 dark:bg-slate-950">
       <div className="flex flex-col items-center px-6 py-8" style={vars}>
         {children}
       </div>

@@ -1,6 +1,20 @@
 import Link from 'next/link'
 import { ClipboardList } from 'lucide-react'
-import { and, asc, count, desc, eq, gte, ilike, isNotNull, isNull, lte, or, sql, type SQL } from 'drizzle-orm'
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gte,
+  ilike,
+  isNotNull,
+  isNull,
+  lte,
+  or,
+  sql,
+  type SQL,
+} from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -22,15 +36,16 @@ import {
   user,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
-import { parseListParams, pickString } from '@/lib/list-params'
+import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
+import { TableToolbar } from '@/components/table-toolbar'
 import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { InspectionsSubNav } from '../_sub-nav'
 
-export const metadata = { title: 'Inspection Records' }
+export const metadata = { title: 'Inspections' }
 export const dynamic = 'force-dynamic'
 
 const SORTS = ['occurred_at', 'reference', 'type', 'status'] as const
@@ -86,11 +101,19 @@ export default async function InspectionRecordsPage({
 
     const orderBy =
       params.sort === 'reference'
-        ? [params.dir === 'asc' ? asc(inspectionRecords.reference) : desc(inspectionRecords.reference)]
+        ? [
+            params.dir === 'asc'
+              ? asc(inspectionRecords.reference)
+              : desc(inspectionRecords.reference),
+          ]
         : params.sort === 'type'
           ? [params.dir === 'asc' ? asc(inspectionTypes.name) : desc(inspectionTypes.name)]
           : params.sort === 'status'
-            ? [params.dir === 'asc' ? asc(inspectionRecords.status) : desc(inspectionRecords.status)]
+            ? [
+                params.dir === 'asc'
+                  ? asc(inspectionRecords.status)
+                  : desc(inspectionRecords.status),
+              ]
             : [
                 params.dir === 'asc'
                   ? asc(inspectionRecords.occurredAt)
@@ -109,9 +132,18 @@ export default async function InspectionRecordsPage({
         type: inspectionTypes,
         site: orgUnits,
         inspectorName: user.name,
-        passCount: sql<number>`coalesce(sum(case when ${inspectionRecordCriteria.answer} = 'pass' then 1 else 0 end), 0)`.mapWith(Number),
-        failCount: sql<number>`coalesce(sum(case when ${inspectionRecordCriteria.answer} = 'fail' then 1 else 0 end), 0)`.mapWith(Number),
-        naCount: sql<number>`coalesce(sum(case when ${inspectionRecordCriteria.answer} = 'n_a' then 1 else 0 end), 0)`.mapWith(Number),
+        passCount:
+          sql<number>`coalesce(sum(case when ${inspectionRecordCriteria.answer} = 'pass' then 1 else 0 end), 0)`.mapWith(
+            Number,
+          ),
+        failCount:
+          sql<number>`coalesce(sum(case when ${inspectionRecordCriteria.answer} = 'fail' then 1 else 0 end), 0)`.mapWith(
+            Number,
+          ),
+        naCount:
+          sql<number>`coalesce(sum(case when ${inspectionRecordCriteria.answer} = 'n_a' then 1 else 0 end), 0)`.mapWith(
+            Number,
+          ),
         totalCount: sql<number>`count(${inspectionRecordCriteria.id})`.mapWith(Number),
       })
       .from(inspectionRecords)
@@ -179,10 +211,13 @@ export default async function InspectionRecordsPage({
       header={
         <>
           <PageHeader
-            title="Inspection Records"
-            description="Pass / fail / N-A criterion inspections — the legacy detail view, ported. Each record carries per-question photos, severity, and auto-spawned corrective actions."
+            title="Inspections"
+            description="Pass / fail / N-A criterion inspections recorded against an inspection type. Each record carries per-question photos, severity, customer signature, and auto-spawned corrective actions."
             actions={
               <div className="flex items-center gap-2">
+                <Link href={buildExportHref('/inspections/export.csv', sp)}>
+                  <Button variant="outline">Export CSV</Button>
+                </Link>
                 <Link href="/inspections/records/new">
                   <Button>New inspection</Button>
                 </Link>
@@ -190,7 +225,7 @@ export default async function InspectionRecordsPage({
             }
           />
           <InspectionsSubNav active="records" />
-          <div className="flex flex-wrap items-center gap-3">
+          <TableToolbar>
             <SearchInput placeholder="Search by reference / type / foreman" />
             <form className="flex items-center gap-1 text-xs">
               <label className="flex items-center gap-1 text-slate-500">
@@ -199,7 +234,7 @@ export default async function InspectionRecordsPage({
                   type="date"
                   name="dateFrom"
                   defaultValue={dateFromRaw ?? ''}
-                  className="rounded-md border border-slate-300 px-2 py-1 text-xs"
+                  className="h-8 rounded-md border border-slate-300 px-2 text-xs"
                 />
               </label>
               <label className="flex items-center gap-1 text-slate-500">
@@ -208,18 +243,16 @@ export default async function InspectionRecordsPage({
                   type="date"
                   name="dateTo"
                   defaultValue={dateToRaw ?? ''}
-                  className="rounded-md border border-slate-300 px-2 py-1 text-xs"
+                  className="h-8 rounded-md border border-slate-300 px-2 text-xs"
                 />
               </label>
               <button
                 type="submit"
-                className="rounded-md border border-slate-200 px-2 py-1 text-xs hover:bg-slate-50"
+                className="h-8 rounded-md border border-slate-200 px-2 text-xs hover:bg-slate-50"
               >
                 Apply
               </button>
             </form>
-          </div>
-          <div className="space-y-2">
             <FilterChips
               basePath="/inspections/records"
               currentParams={sp}
@@ -268,7 +301,7 @@ export default async function InspectionRecordsPage({
                 { value: 'no', label: 'Unsigned' },
               ]}
             />
-          </div>
+          </TableToolbar>
         </>
       }
     >
@@ -336,12 +369,12 @@ export default async function InspectionRecordsPage({
                         {r.type.name}
                       </Link>
                     </TableCell>
-                    <TableCell className="text-slate-600 text-xs tabular-nums">
+                    <TableCell className="text-xs text-slate-600 tabular-nums">
                       {new Date(r.record.occurredAt).toLocaleDateString()}
                     </TableCell>
                     <TableCell className="text-slate-600">{r.site?.name ?? '—'}</TableCell>
                     <TableCell className="text-slate-600">{r.inspectorName ?? '—'}</TableCell>
-                    <TableCell className="text-slate-600 text-xs">
+                    <TableCell className="text-xs text-slate-600">
                       {r.record.foremanText ? (
                         <span>{r.record.foremanText}</span>
                       ) : r.record.foremanPersonIds.length > 0 ? (
@@ -382,9 +415,13 @@ export default async function InspectionRecordsPage({
                     </TableCell>
                     <TableCell>
                       {r.record.customerSignedAt ? (
-                        <Badge variant="success" className="text-[10px]">Signed</Badge>
+                        <Badge variant="success" className="text-[10px]">
+                          Signed
+                        </Badge>
                       ) : (
-                        <Badge variant="outline" className="text-[10px]">Unsigned</Badge>
+                        <Badge variant="outline" className="text-[10px]">
+                          Unsigned
+                        </Badge>
                       )}
                     </TableCell>
                     <TableCell>

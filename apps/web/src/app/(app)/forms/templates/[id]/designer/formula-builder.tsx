@@ -49,6 +49,9 @@ const OPS: OpDef[] = [
   // Section
   { kind: 'sum_section', label: 'Sum field across rows', group: 'section', description: 'Sum a field across every row of a repeating section' },
   { kind: 'count_section', label: 'Count rows in section', group: 'section', description: 'How many rows in a repeating section' },
+  { kind: 'avg_section', label: 'Average field across rows', group: 'section', description: 'Average a field across every row of a repeating section' },
+  { kind: 'min_section', label: 'Minimum field across rows', group: 'section', description: 'Smallest value of a field across the rows' },
+  { kind: 'max_section', label: 'Maximum field across rows', group: 'section', description: 'Largest value of a field across the rows' },
   // String
   { kind: 'concat', label: 'Concatenate text', group: 'string', description: 'Join strings together' },
   // Conditional
@@ -400,7 +403,10 @@ function NodeBody({
         </div>
       )
 
-    case 'sum_section': {
+    case 'sum_section':
+    case 'avg_section':
+    case 'min_section':
+    case 'max_section': {
       const sec = repeatingSections.find((s) => s.id === value.sectionKey)
       return (
         <div className="space-y-1">
@@ -612,7 +618,10 @@ function makeDefault(kind: FormulaExpression['kind']): FormulaExpression {
         right: { kind: 'literal', value: 1 },
       }
     case 'sum_section':
-      return { kind: 'sum_section', sectionKey: '', rowFieldKey: '' }
+    case 'avg_section':
+    case 'min_section':
+    case 'max_section':
+      return { kind, sectionKey: '', rowFieldKey: '' }
     case 'count_section':
       return { kind: 'count_section', sectionKey: '' }
     case 'concat':

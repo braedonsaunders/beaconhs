@@ -13,7 +13,8 @@ export default async function JournalsPage() {
 
   const [data, recent] = await Promise.all([
     getWorkspaceData(ctx, groupBy, {}),
-    listEntries(ctx, {}, { limit: 1 }),
+    // Open the user's OWN most-recent entry (the workspace is personal).
+    listEntries(ctx, {}, { limit: 1 }, true),
   ])
   const initialEntry = recent[0] ? await getEntry(ctx, recent[0].id) : null
   const canManage = ctx.isSuperAdmin || can(ctx, 'journals.assign')

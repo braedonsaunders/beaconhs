@@ -120,7 +120,7 @@ function RecordReviewDrawer({
             <option value="updated">Updated</option>
             <option value="retired">Retired</option>
           </Select>
-          <p className="text-[11px] text-slate-500">
+          <p className="text-[11px] text-slate-500 dark:text-slate-400">
             "Retired" archives the document. "Updated" leaves it as-is; edit the document and publish a
             new version separately if the content changes.
           </p>
@@ -133,7 +133,7 @@ function RecordReviewDrawer({
             value={nextReviewOn}
             onChange={(e) => setNextReviewOn(e.currentTarget.value)}
           />
-          <p className="text-[11px] text-slate-500">
+          <p className="text-[11px] text-slate-500 dark:text-slate-400">
             Leave blank to auto-compute from the document's review cadence.
           </p>
         </div>

@@ -328,26 +328,26 @@ function CountTile({
       ? 'text-rose-700'
       : tone === 'warning'
         ? 'text-amber-700'
-        : 'text-slate-900'
+        : 'text-slate-900 dark:text-slate-100'
   const iconRingClass =
     tone === 'danger'
-      ? 'bg-rose-50 text-rose-600 ring-rose-100'
+      ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-600 ring-rose-100'
       : tone === 'warning'
-        ? 'bg-amber-50 text-amber-600 ring-amber-100'
-        : 'bg-slate-100 text-slate-600 ring-slate-100'
+        ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 ring-amber-100'
+        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 ring-slate-100'
   const captionClass =
     tone === 'danger'
       ? 'text-rose-700'
       : tone === 'warning'
         ? 'text-amber-700'
-        : 'text-slate-500'
+        : 'text-slate-500 dark:text-slate-400'
   return (
     <Link
       href={href as any}
-      className="group relative flex h-full flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-teal-200 hover:shadow-md"
+      className="group relative flex h-full flex-col rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm transition-all hover:border-teal-200 dark:hover:border-teal-800/60 hover:shadow-md"
     >
       <div className="flex items-start justify-between">
-        <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
           {label}
         </span>
         <span
@@ -412,10 +412,10 @@ function RateTile({
     dir === 'flat' ? null : invertedDelta ? dir === 'down' : dir === 'up'
   const deltaTone =
     good === null
-      ? 'text-slate-500 bg-slate-100 border-slate-200'
+      ? 'text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-800'
       : good
-        ? 'text-emerald-700 bg-emerald-50 border-emerald-100'
-        : 'text-rose-700 bg-rose-50 border-rose-100'
+        ? 'text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-100'
+        : 'text-rose-700 bg-rose-50 dark:bg-rose-950/40 border-rose-100'
   const DeltaIcon = dir === 'up' ? ArrowUpRight : dir === 'down' ? ArrowDownRight : Minus
   const sparkStroke = good === false ? '#f43f5e' : good === true ? '#0d9488' : '#94a3b8'
 
@@ -423,13 +423,13 @@ function RateTile({
     <Link
       href={href as any}
       title={tooltip}
-      className="group relative flex h-full flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-teal-200 hover:shadow-md"
+      className="group relative flex h-full flex-col rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm transition-all hover:border-teal-200 dark:hover:border-teal-800/60 hover:shadow-md"
     >
       <div className="flex items-start justify-between">
-        <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
           {label}
         </span>
-        <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-100">
+        <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 ring-1 ring-inset ring-slate-100">
           <Icon size={14} />
         </span>
       </div>
@@ -439,14 +439,14 @@ function RateTile({
             <AnimatedNumber
               value={value!}
               format={formatFn}
-              className="text-4xl font-semibold leading-none tabular-nums text-slate-900"
+              className="text-4xl font-semibold leading-none tabular-nums text-slate-900 dark:text-slate-100"
             />
             {suffix ? (
-              <span className="text-xl font-semibold text-slate-500">{suffix}</span>
+              <span className="text-xl font-semibold text-slate-500 dark:text-slate-400">{suffix}</span>
             ) : null}
           </>
         ) : (
-          <span className="text-4xl font-semibold leading-none tabular-nums text-slate-400">
+          <span className="text-4xl font-semibold leading-none tabular-nums text-slate-400 dark:text-slate-500">
             —
           </span>
         )}
@@ -469,7 +469,7 @@ function RateTile({
           />
         </div>
       </div>
-      <p className="mt-1.5 truncate text-[11px] text-slate-500">{caption}</p>
+      <p className="mt-1.5 truncate text-[11px] text-slate-500 dark:text-slate-400">{caption}</p>
     </Link>
   )
 }
@@ -566,8 +566,8 @@ function SeverityPyramid({ dist }: { dist: DashboardMetrics['severityDistributio
               transition={{ delay: 0.06 + idx * 0.05, duration: 0.32 }}
               className="grid grid-cols-[110px_1fr_44px] items-center gap-3 text-xs"
             >
-              <span className="truncate text-slate-700">{r.label}</span>
-              <div className="relative h-5 overflow-hidden rounded-md bg-slate-100">
+              <span className="truncate text-slate-700 dark:text-slate-200">{r.label}</span>
+              <div className="relative h-5 overflow-hidden rounded-md bg-slate-100 dark:bg-slate-800">
                 <motion.div
                   initial={{ width: 0 }}
                   animate={{ width: `${Math.max(pct, r.count > 0 ? 6 : 0)}%` }}
@@ -575,7 +575,7 @@ function SeverityPyramid({ dist }: { dist: DashboardMetrics['severityDistributio
                   className={`h-full rounded-md ${r.tone}`}
                 />
               </div>
-              <span className="text-right text-xs font-semibold tabular-nums text-slate-700">
+              <span className="text-right text-xs font-semibold tabular-nums text-slate-700 dark:text-slate-200">
                 {r.count}
               </span>
             </motion.li>
@@ -617,11 +617,11 @@ function CapaAgingChart({
               animate={{ opacity: 1 }}
               transition={{ delay: 0.06 + idx * 0.05, duration: 0.3 }}
             >
-              <div className="flex items-center justify-between gap-2 text-[11px] text-slate-600">
+              <div className="flex items-center justify-between gap-2 text-[11px] text-slate-600 dark:text-slate-300">
                 <span>{r.label}</span>
-                <span className="tabular-nums font-semibold text-slate-700">{r.count}</span>
+                <span className="tabular-nums font-semibold text-slate-700 dark:text-slate-200">{r.count}</span>
               </div>
-              <div className="relative mt-1 h-2.5 overflow-hidden rounded-full bg-slate-100">
+              <div className="relative mt-1 h-2.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
                 <motion.div
                   initial={{ width: 0 }}
                   animate={{ width: `${Math.max(pct, r.count > 0 ? 6 : 0)}%` }}
@@ -666,12 +666,12 @@ function TopSitesChart({
               >
                 <div className="flex items-center justify-between gap-3 text-xs">
                   <div className="flex min-w-0 items-center gap-2">
-                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 text-[10px] font-bold tabular-nums text-slate-700">
+                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 text-[10px] font-bold tabular-nums text-slate-700 dark:text-slate-200">
                       {idx + 1}
                     </span>
-                    <span className="truncate font-medium text-slate-800">{s.siteName}</span>
+                    <span className="truncate font-medium text-slate-800 dark:text-slate-100">{s.siteName}</span>
                   </div>
-                  <span className="shrink-0 rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-rose-700">
+                  <span className="shrink-0 rounded-full bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-rose-700">
                     {s.incidents}
                   </span>
                 </div>
@@ -724,15 +724,15 @@ function RecentIncidentsList({ items }: { items: DashboardMetrics['recentInciden
               >
                 <Link
                   href={`/incidents/${i.id}` as any}
-                  className="group flex items-center justify-between gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-slate-50"
+                  className="group flex items-center justify-between gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60"
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="truncate text-sm font-medium text-slate-900 group-hover:text-teal-700">
+                      <span className="truncate text-sm font-medium text-slate-900 dark:text-slate-100 group-hover:text-teal-700 dark:group-hover:text-teal-300">
                         {i.title}
                       </span>
                     </div>
-                    <div className="mt-0.5 truncate text-[11px] text-slate-500">
+                    <div className="mt-0.5 truncate text-[11px] text-slate-500 dark:text-slate-400">
                       <span className="font-mono">{i.reference}</span>
                       <span className="mx-1.5 text-slate-300">·</span>
                       <span>{relativeTime(i.occurredAt)}</span>
@@ -783,7 +783,7 @@ function DueCAsList({
               >
                 <Link
                   href={`/corrective-actions/${c.id}` as any}
-                  className="group flex items-center justify-between gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-slate-50"
+                  className="group flex items-center justify-between gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60"
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
@@ -791,12 +791,12 @@ function DueCAsList({
                         className={`inline-block h-2 w-2 shrink-0 rounded-full ${aging.dotColor}`}
                         aria-hidden
                       />
-                      <span className="truncate text-sm font-medium text-slate-900 group-hover:text-teal-700">
+                      <span className="truncate text-sm font-medium text-slate-900 dark:text-slate-100 group-hover:text-teal-700 dark:group-hover:text-teal-300">
                         {c.reference}
                       </span>
-                      <span className="truncate text-sm text-slate-600">— {c.title}</span>
+                      <span className="truncate text-sm text-slate-600 dark:text-slate-300">— {c.title}</span>
                     </div>
-                    <div className="mt-0.5 text-[11px] text-slate-500">
+                    <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
                       Due {c.dueOn ?? '—'} · severity {c.severity}
                     </div>
                   </div>
@@ -844,14 +844,14 @@ function OverdueCAsList({
             >
               <Link
                 href={`/corrective-actions/${c.id}` as any}
-                className="group flex items-center justify-between gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-slate-50"
+                className="group flex items-center justify-between gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60"
               >
                 <div className="min-w-0 flex-1">
-                  <span className="truncate text-sm font-medium text-slate-900 group-hover:text-teal-700">
-                    <span className="font-mono text-slate-500">{c.reference}</span>{' '}
+                  <span className="truncate text-sm font-medium text-slate-900 dark:text-slate-100 group-hover:text-teal-700 dark:group-hover:text-teal-300">
+                    <span className="font-mono text-slate-500 dark:text-slate-400">{c.reference}</span>{' '}
                     <span>— {c.title}</span>
                   </span>
-                  <div className="mt-0.5 text-[11px] text-slate-500">
+                  <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
                     Was due {c.dueOn ?? '—'}
                   </div>
                 </div>
@@ -898,16 +898,16 @@ function ExpiringTrainingList({
               >
                 <Link
                   href={`/people/${row.personId}` as any}
-                  className="group flex items-center justify-between gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-slate-50"
+                  className="group flex items-center justify-between gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60"
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <Calendar size={11} className="shrink-0 text-slate-400" />
-                      <span className="truncate text-sm font-medium text-slate-900 group-hover:text-teal-700">
+                      <Calendar size={11} className="shrink-0 text-slate-400 dark:text-slate-500" />
+                      <span className="truncate text-sm font-medium text-slate-900 dark:text-slate-100 group-hover:text-teal-700 dark:group-hover:text-teal-300">
                         {row.personName}
                       </span>
                     </div>
-                    <div className="mt-0.5 truncate text-[11px] text-slate-500">
+                    <div className="mt-0.5 truncate text-[11px] text-slate-500 dark:text-slate-400">
                       {row.courseName} · expires {row.expiresOn}
                     </div>
                   </div>
@@ -944,19 +944,19 @@ function InboxList({ items }: { items: DashboardMetrics['myInbox'] }) {
         <ul className="space-y-0.5 px-2 pb-2">
           {items.map((n, idx) => {
             const Inner = (
-              <div className="group flex items-center justify-between gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-slate-50">
+              <div className="group flex items-center justify-between gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-teal-500" />
-                    <span className="truncate text-sm font-medium text-slate-900 group-hover:text-teal-700">
+                    <span className="truncate text-sm font-medium text-slate-900 dark:text-slate-100 group-hover:text-teal-700 dark:group-hover:text-teal-300">
                       {n.title}
                     </span>
                   </div>
-                  <div className="mt-0.5 truncate text-[11px] text-slate-500">
+                  <div className="mt-0.5 truncate text-[11px] text-slate-500 dark:text-slate-400">
                     {n.body ?? n.category}
                   </div>
                 </div>
-                <span className="shrink-0 text-[11px] text-slate-400">
+                <span className="shrink-0 text-[11px] text-slate-400 dark:text-slate-500">
                   {relativeTime(n.occurredAt)}
                 </span>
               </div>
@@ -1001,17 +1001,17 @@ function CardShell({
 }) {
   const iconAccent =
     accent === 'rose'
-      ? 'bg-rose-50 text-rose-600 ring-rose-100'
+      ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-600 ring-rose-100'
       : accent === 'amber'
-        ? 'bg-amber-50 text-amber-600 ring-amber-100'
+        ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 ring-amber-100'
         : accent === 'teal'
-          ? 'bg-teal-50 text-teal-700 ring-teal-100'
+          ? 'bg-teal-50 dark:bg-teal-950/50 text-teal-700 dark:text-teal-300 ring-teal-100'
           : accent === 'sky'
-            ? 'bg-sky-50 text-sky-700 ring-sky-100'
-            : 'bg-slate-100 text-slate-600 ring-slate-200'
+            ? 'bg-sky-50 dark:bg-sky-950/40 text-sky-700 ring-sky-100'
+            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 ring-slate-200'
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-      <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
+    <div className="flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+      <div className="flex items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 px-4 py-3">
         <div className="flex items-center gap-2.5">
           {Icon ? (
             <span
@@ -1021,16 +1021,16 @@ function CardShell({
             </span>
           ) : null}
           <div className="min-w-0">
-            <h3 className="truncate text-sm font-semibold text-slate-900">{title}</h3>
+            <h3 className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
             {caption ? (
-              <p className="truncate text-[11px] text-slate-500">{caption}</p>
+              <p className="truncate text-[11px] text-slate-500 dark:text-slate-400">{caption}</p>
             ) : null}
           </div>
         </div>
         {href ? (
           <Link
             href={href as any}
-            className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-50 hover:text-teal-700"
+            className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-slate-500 dark:text-slate-400 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-teal-700 dark:hover:text-teal-300"
           >
             {hrefLabel}
             <ArrowRight size={11} />
@@ -1044,7 +1044,7 @@ function CardShell({
 
 function EmptyRow({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex h-full items-center justify-center px-3 py-8 text-center text-xs text-slate-500">
+    <div className="flex h-full items-center justify-center px-3 py-8 text-center text-xs text-slate-500 dark:text-slate-400">
       {children}
     </div>
   )

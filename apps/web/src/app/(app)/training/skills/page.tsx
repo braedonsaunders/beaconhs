@@ -19,6 +19,7 @@ import {
 import { requireModuleManage } from '@/lib/module-admin/guard'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
+import { TableToolbar } from '@/components/table-toolbar'
 import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
@@ -48,10 +49,7 @@ export default async function TrainingSkillsPage({
     const filters: SQL<unknown>[] = []
     if (params.q) {
       const term = `%${params.q}%`
-      const cond = or(
-        ilike(trainingSkillTypes.name, term),
-        ilike(trainingSkillTypes.code, term),
-      )
+      const cond = or(ilike(trainingSkillTypes.name, term), ilike(trainingSkillTypes.code, term))
       if (cond) filters.push(cond)
     }
     if (authorityFilter) filters.push(eq(trainingSkillTypes.authorityId, authorityFilter))
@@ -65,22 +63,14 @@ export default async function TrainingSkillsPage({
               : desc(trainingSkillAuthorities.name),
           ]
         : params.sort === 'code'
-          ? [
-              params.dir === 'asc'
-                ? asc(trainingSkillTypes.code)
-                : desc(trainingSkillTypes.code),
-            ]
+          ? [params.dir === 'asc' ? asc(trainingSkillTypes.code) : desc(trainingSkillTypes.code)]
           : params.sort === 'holders'
             ? [
                 params.dir === 'asc'
                   ? asc(sql`count(${trainingSkillAssignments.id})`)
                   : desc(sql`count(${trainingSkillAssignments.id})`),
               ]
-            : [
-                params.dir === 'asc'
-                  ? asc(trainingSkillTypes.name)
-                  : desc(trainingSkillTypes.name),
-              ]
+            : [params.dir === 'asc' ? asc(trainingSkillTypes.name) : desc(trainingSkillTypes.name)]
 
     const [tot] = await tx.select({ c: count() }).from(trainingSkillTypes).where(whereClause)
 
@@ -123,27 +113,24 @@ export default async function TrainingSkillsPage({
             title="Skills"
             description="Externally-issued competencies tracked per worker. Manage skill types under their authority."
             actions={
-              <Link
-                href="/training/authorities"
-                className="text-sm text-teal-700 hover:underline"
-              >
+              <Link href="/training/authorities" className="text-sm text-teal-700 hover:underline">
                 Manage authorities →
               </Link>
             }
           />
           <TrainingSubNav active="skills" />
-          <div className="flex items-center gap-3">
+          <TableToolbar>
             <SearchInput placeholder="Search by skill name or code" />
-          </div>
-          {authorities.length > 0 ? (
-            <FilterChips
-              basePath="/training/skills"
-              currentParams={sp}
-              paramKey="authority"
-              label="Authority"
-              options={authorities.map((a) => ({ value: a.id, label: a.name }))}
-            />
-          ) : null}
+            {authorities.length > 0 ? (
+              <FilterChips
+                basePath="/training/skills"
+                currentParams={sp}
+                paramKey="authority"
+                label="Authority"
+                options={authorities.map((a) => ({ value: a.id, label: a.name }))}
+              />
+            ) : null}
+          </TableToolbar>
         </>
       }
     >

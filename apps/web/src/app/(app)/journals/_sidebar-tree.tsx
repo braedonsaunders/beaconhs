@@ -94,7 +94,9 @@ export function SidebarTree({
     })
   }
 
-  const activeQuick = filters.mine ? 'mine' : filters.status === 'draft' ? 'drafts' : 'all'
+  // The workspace is self-scoped, so "All" already means all of the user's own
+  // journals — a separate "Mine" chip would be redundant.
+  const activeQuick = filters.status === 'draft' ? 'drafts' : 'all'
 
   return (
     <div className="flex h-full w-full min-h-0 min-w-0 flex-col bg-white">
@@ -131,9 +133,6 @@ export function SidebarTree({
         <div className="flex flex-wrap gap-1">
           <Chip active={activeQuick === 'all'} onClick={() => onFiltersChange({ mine: undefined, status: undefined })}>
             All {data.counts.total ? <Count>{data.counts.total}</Count> : null}
-          </Chip>
-          <Chip active={activeQuick === 'mine'} onClick={() => onFiltersChange({ mine: true, status: undefined })}>
-            Mine {data.counts.mine ? <Count>{data.counts.mine}</Count> : null}
           </Chip>
           <Chip active={activeQuick === 'drafts'} onClick={() => onFiltersChange({ status: 'draft', mine: undefined })}>
             Drafts {data.counts.drafts ? <Count>{data.counts.drafts}</Count> : null}

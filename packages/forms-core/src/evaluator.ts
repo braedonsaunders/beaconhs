@@ -233,6 +233,23 @@ export function evaluateFormulaTree(
     case 'count_section':
       return (ctx.rows[expr.sectionKey] ?? []).length
 
+    case 'avg_section': {
+      const rows = ctx.rows[expr.sectionKey] ?? []
+      if (rows.length === 0) return null
+      const sum = rows.reduce<number>((acc, row) => acc + coerceNumber(row[expr.rowFieldKey]), 0)
+      return sum / rows.length
+    }
+
+    case 'min_section': {
+      const nums = (ctx.rows[expr.sectionKey] ?? []).map((row) => coerceNumber(row[expr.rowFieldKey]))
+      return nums.length === 0 ? null : Math.min(...nums)
+    }
+
+    case 'max_section': {
+      const nums = (ctx.rows[expr.sectionKey] ?? []).map((row) => coerceNumber(row[expr.rowFieldKey]))
+      return nums.length === 0 ? null : Math.max(...nums)
+    }
+
     case 'concat': {
       const sep = expr.separator ?? ''
       return expr.of

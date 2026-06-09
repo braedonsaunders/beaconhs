@@ -1,7 +1,13 @@
 // S3-compatible storage (Cloudflare R2 in prod, MinIO in dev).
 // Same code path either way — only the endpoint changes.
 
-import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import {
+  CreateBucketCommand,
+  GetObjectCommand,
+  HeadBucketCommand,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
 const accountId = process.env.R2_ACCOUNT_ID ?? 'local'
@@ -25,6 +31,15 @@ const client = new S3Client({
 })
 
 export const BUCKET = bucket
+
+/** Idempotently ensure the bucket exists (used in dev/MinIO + by the migration). */
+export async function ensureBucket(): Promise<void> {
+  try {
+    await client.send(new HeadBucketCommand({ Bucket: bucket }))
+  } catch {
+    await client.send(new CreateBucketCommand({ Bucket: bucket })).catch(() => {})
+  }
+}
 
 export async function presignPut(args: {
   key: string

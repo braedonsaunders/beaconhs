@@ -110,10 +110,7 @@ export default async function AssessmentsPage({
                   : desc(trainingAssessments.completedAt),
               ]
 
-    const [tot] = await tx
-      .select({ c: count() })
-      .from(trainingAssessments)
-      .where(whereClause)
+    const [tot] = await tx.select({ c: count() }).from(trainingAssessments).where(whereClause)
     const data = await tx
       .select({
         attempt: trainingAssessments,
@@ -173,10 +170,8 @@ export default async function AssessmentsPage({
     }
     for (const c of counts) {
       sc.all = (sc.all ?? 0) + Number(c.c)
-      if (c.status === 'in_progress')
-        sc.in_progress = (sc.in_progress ?? 0) + Number(c.c)
-      else if (c.status === 'cancelled')
-        sc.cancelled = (sc.cancelled ?? 0) + Number(c.c)
+      if (c.status === 'in_progress') sc.in_progress = (sc.in_progress ?? 0) + Number(c.c)
+      else if (c.status === 'cancelled') sc.cancelled = (sc.cancelled ?? 0) + Number(c.c)
       else if (c.status === 'submitted') {
         if (c.passed) sc.pass = (sc.pass ?? 0) + Number(c.c)
         else sc.fail = (sc.fail ?? 0) + Number(c.c)
@@ -225,7 +220,7 @@ export default async function AssessmentsPage({
                   type="date"
                   name="dateFrom"
                   defaultValue={dateFromRaw ?? ''}
-                  className="rounded-md border border-slate-300 px-2 py-1 text-xs"
+                  className="h-8 rounded-md border border-slate-300 px-2 text-xs"
                 />
               </label>
               <label className="flex items-center gap-1 text-slate-500">
@@ -234,12 +229,12 @@ export default async function AssessmentsPage({
                   type="date"
                   name="dateTo"
                   defaultValue={dateToRaw ?? ''}
-                  className="rounded-md border border-slate-300 px-2 py-1 text-xs"
+                  className="h-8 rounded-md border border-slate-300 px-2 text-xs"
                 />
               </label>
               <button
                 type="submit"
-                className="rounded-md border border-slate-200 px-2 py-1 text-xs hover:bg-slate-50"
+                className="h-8 rounded-md border border-slate-200 px-2 text-xs hover:bg-slate-50"
               >
                 Apply
               </button>
@@ -254,37 +249,37 @@ export default async function AssessmentsPage({
                 count: statusCounts[o.value],
               }))}
             />
+            {peopleList.length > 0 ? (
+              <FilterChips
+                basePath="/training/assessments"
+                currentParams={sp}
+                paramKey="person"
+                label="Person"
+                options={peopleList.slice(0, 12).map((p) => ({
+                  value: p.id,
+                  label: `${p.firstName} ${p.lastName}`,
+                }))}
+              />
+            ) : null}
+            {types.length > 0 ? (
+              <FilterChips
+                basePath="/training/assessments"
+                currentParams={sp}
+                paramKey="type"
+                label="Assessment type"
+                options={types.slice(0, 12).map((t) => ({ value: t.id, label: t.name }))}
+              />
+            ) : null}
+            {coursesList.length > 0 ? (
+              <FilterChips
+                basePath="/training/assessments"
+                currentParams={sp}
+                paramKey="course"
+                label="Course"
+                options={coursesList.slice(0, 12).map((c) => ({ value: c.id, label: c.code }))}
+              />
+            ) : null}
           </div>
-          {peopleList.length > 0 ? (
-            <FilterChips
-              basePath="/training/assessments"
-              currentParams={sp}
-              paramKey="person"
-              label="Person"
-              options={peopleList.slice(0, 12).map((p) => ({
-                value: p.id,
-                label: `${p.firstName} ${p.lastName}`,
-              }))}
-            />
-          ) : null}
-          {types.length > 0 ? (
-            <FilterChips
-              basePath="/training/assessments"
-              currentParams={sp}
-              paramKey="type"
-              label="Assessment type"
-              options={types.slice(0, 12).map((t) => ({ value: t.id, label: t.name }))}
-            />
-          ) : null}
-          {coursesList.length > 0 ? (
-            <FilterChips
-              basePath="/training/assessments"
-              currentParams={sp}
-              paramKey="course"
-              label="Course"
-              options={coursesList.slice(0, 12).map((c) => ({ value: c.id, label: c.code }))}
-            />
-          ) : null}
         </>
       }
     >
@@ -336,7 +331,7 @@ export default async function AssessmentsPage({
                     : null
                 return (
                   <TableRow key={attempt.id}>
-                    <TableCell className="text-slate-600 text-xs tabular-nums">
+                    <TableCell className="text-xs text-slate-600 tabular-nums">
                       {when ? new Date(when).toLocaleString() : '—'}
                     </TableCell>
                     <TableCell>
@@ -360,20 +355,15 @@ export default async function AssessmentsPage({
                     </TableCell>
                     <TableCell className="text-slate-600">
                       {course ? (
-                        <Link
-                          href={`/training/courses/${course.id}`}
-                          className="hover:underline"
-                        >
+                        <Link href={`/training/courses/${course.id}`} className="hover:underline">
                           <span className="font-mono text-xs">{course.code}</span>
                         </Link>
                       ) : (
                         '—'
                       )}
                     </TableCell>
-                    <TableCell className="text-slate-600 text-xs tabular-nums">
-                      {attempt.startedAt
-                        ? new Date(attempt.startedAt).toLocaleDateString()
-                        : '—'}
+                    <TableCell className="text-xs text-slate-600 tabular-nums">
+                      {attempt.startedAt ? new Date(attempt.startedAt).toLocaleDateString() : '—'}
                     </TableCell>
                     <TableCell className="text-xs tabular-nums">
                       {duration != null ? `${duration} min` : '—'}
@@ -384,8 +374,8 @@ export default async function AssessmentsPage({
                           className={
                             attempt.status === 'submitted'
                               ? attempt.passed
-                                ? 'text-emerald-700 font-medium'
-                                : 'text-red-700 font-medium'
+                                ? 'font-medium text-emerald-700'
+                                : 'font-medium text-red-700'
                               : 'text-slate-700'
                           }
                         >

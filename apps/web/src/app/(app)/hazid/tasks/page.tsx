@@ -6,19 +6,7 @@
 
 import Link from 'next/link'
 import { ClipboardList, FileText } from 'lucide-react'
-import {
-  and,
-  asc,
-  count,
-  desc,
-  eq,
-  ilike,
-  inArray,
-  isNull,
-  or,
-  sql,
-  type SQL,
-} from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, inArray, isNull, or, sql, type SQL } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -40,6 +28,7 @@ import {
 import { requireRequestContext } from '@/lib/auth'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
+import { TableToolbar } from '@/components/table-toolbar'
 import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
@@ -116,10 +105,7 @@ export default async function TaskLibraryPage({
               ]
             : [params.dir === 'asc' ? asc(hazidTasks.name) : desc(hazidTasks.name)]
 
-    const [tot] = await tx
-      .select({ c: count() })
-      .from(hazidTasks)
-      .where(whereClause)
+    const [tot] = await tx.select({ c: count() }).from(hazidTasks).where(whereClause)
 
     const data = await tx
       .select({
@@ -178,10 +164,8 @@ export default async function TaskLibraryPage({
               </Link>
             }
           />
-          <div className="flex items-center gap-3">
+          <TableToolbar>
             <SearchInput placeholder="Search tasks, controls…" />
-          </div>
-          <div className="space-y-2">
             <FilterChips
               basePath="/hazid/tasks"
               currentParams={sp}
@@ -205,7 +189,7 @@ export default async function TaskLibraryPage({
                 { value: 'neither', label: 'No docs' },
               ]}
             />
-          </div>
+          </TableToolbar>
         </>
       }
     >
@@ -213,7 +197,9 @@ export default async function TaskLibraryPage({
         <EmptyState
           icon={<ClipboardList size={32} />}
           title={
-            params.q || docFilter || hazardSizeFilter ? 'No tasks match these filters' : 'No tasks yet'
+            params.q || docFilter || hazardSizeFilter
+              ? 'No tasks match these filters'
+              : 'No tasks yet'
           }
           description="Build out common job steps so crews can pull them into an assessment."
           action={
@@ -261,7 +247,7 @@ export default async function TaskLibraryPage({
                         {task.name}
                       </Link>
                       {task.description ? (
-                        <div className="text-xs text-slate-500 line-clamp-1">
+                        <div className="line-clamp-1 text-xs text-slate-500">
                           {task.description}
                         </div>
                       ) : null}
@@ -269,22 +255,19 @@ export default async function TaskLibraryPage({
                     <TableCell>
                       <Badge variant="secondary">{task.hazardIds.length}</Badge>
                     </TableCell>
-                    <TableCell className="text-xs text-slate-600 max-w-xs">
+                    <TableCell className="max-w-xs text-xs text-slate-600">
                       {preview.length === 0 ? (
                         <span className="text-slate-400">—</span>
                       ) : (
                         <>
                           {preview.join(', ')}
                           {task.hazardIds.length > 3 ? (
-                            <span className="text-slate-400">
-                              {' '}
-                              +{task.hazardIds.length - 3}
-                            </span>
+                            <span className="text-slate-400"> +{task.hazardIds.length - 3}</span>
                           ) : null}
                         </>
                       )}
                     </TableCell>
-                    <TableCell className="max-w-md text-slate-600 text-xs line-clamp-2">
+                    <TableCell className="line-clamp-2 max-w-md text-xs text-slate-600">
                       {task.controls ?? '—'}
                     </TableCell>
                     <TableCell>
@@ -300,22 +283,18 @@ export default async function TaskLibraryPage({
                           </Badge>
                         ) : null}
                         {!task.swpDocumentId && !task.sjpDocumentId ? (
-                          <span className="text-slate-400 text-xs">—</span>
+                          <span className="text-xs text-slate-400">—</span>
                         ) : null}
                       </div>
                     </TableCell>
                     <TableCell className="tabular-nums">
-                      <Badge variant="secondary">
-                        {locationCountByTask.get(task.id) ?? 0}
-                      </Badge>
+                      <Badge variant="secondary">{locationCountByTask.get(task.id) ?? 0}</Badge>
                     </TableCell>
                     <TableCell className="tabular-nums">
                       <Badge variant="secondary">{Number(usageCount ?? 0)}</Badge>
                     </TableCell>
                     <TableCell className="text-xs text-slate-500 tabular-nums">
-                      {task.updatedAt
-                        ? new Date(task.updatedAt).toLocaleDateString()
-                        : '—'}
+                      {task.updatedAt ? new Date(task.updatedAt).toLocaleDateString() : '—'}
                     </TableCell>
                   </TableRow>
                 )

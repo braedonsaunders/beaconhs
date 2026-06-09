@@ -91,7 +91,7 @@ export function Popover({
                   exit={{ opacity: 0, y: side === 'bottom' ? -4 : 4, scale: 0.97 }}
                   transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
                   className={cn(
-                    'fixed z-40 min-w-[12rem] origin-top rounded-md border border-slate-200 bg-white shadow-xl',
+                    'fixed z-40 min-w-[12rem] origin-top rounded-md border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xl',
                     className,
                   )}
                   style={{

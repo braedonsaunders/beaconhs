@@ -4,13 +4,14 @@
 export type JournalStatus = 'draft' | 'submitted' | 'archived'
 export type JournalDefinition = 'worker' | 'supervisor'
 export type JournalAssignmentFrequency = 'day' | 'week' | 'month' | 'quarter' | 'year'
-export type GroupBy = 'date' | 'site' | 'topic' | 'person'
+// The compose workspace is self-scoped (one author), so there is no "Person"
+// grouping — cross-person browsing lives in /journals/records.
+export type GroupBy = 'date' | 'site' | 'topic'
 
 export const GROUP_BY_OPTIONS: { value: GroupBy; label: string }[] = [
   { value: 'date', label: 'Date' },
   { value: 'site', label: 'Site' },
   { value: 'topic', label: 'Topic' },
-  { value: 'person', label: 'Person' },
 ]
 
 // A node in the auto-generated sidebar tree. Branch nodes have children;

@@ -24,7 +24,7 @@ import {
   type NodeProps,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { ArrowLeft, GitBranch, Mail, Pencil, Plus, Save, ShieldCheck, Sparkles, Trash2, Workflow, Zap } from 'lucide-react'
+import { ArrowLeft, GitBranch, Mail, Pencil, Plus, Rocket, Save, ShieldCheck, Sparkles, Trash2, Workflow, Zap } from 'lucide-react'
 import { Button, Drawer, Input, Label, Select, Textarea } from '@beaconhs/ui'
 import type {
   ActionData,
@@ -101,6 +101,7 @@ const ACTION_LABEL: Record<ActionData['action'], string> = {
   flag_non_compliant: 'Flag non-compliant',
   webhook: 'Webhook',
   create_response: 'Start another form',
+  analyze_photos: 'Analyze photos (AI)',
 }
 
 const CARD = 'rounded-lg border bg-white px-3 py-2 text-xs shadow-sm w-48'
@@ -216,6 +217,82 @@ function MiniToggle({
   )
 }
 
+// Quick-start flows for common automations. Each builds a ready-to-tweak graph;
+// the user fills in blanks (role/url) and hits Save.
+type FlowTemplate = { key: string; label: string; description: string; build: () => AutomationGraph }
+
+const FLOW_TEMPLATES: FlowTemplate[] = [
+  {
+    key: 'email_submitter',
+    label: 'Email the submitter',
+    description: 'On submit, send a confirmation email to whoever filled it out.',
+    build: () => ({
+      schemaVersion: 1,
+      nodes: [
+        { id: 'trg', position: { x: 60, y: 140 }, data: { kind: 'trigger', trigger: { trigger: 'on_submit' } } },
+        { id: 'act', position: { x: 380, y: 140 }, data: { kind: 'action', action: { action: 'send_email', to: [{ type: 'submitter' }], subject: 'Submission received', bodyTemplate: 'Thanks — your submission has been received.' } } },
+      ],
+      edges: [{ id: 'e1', source: 'trg', target: 'act', sourceHandle: 'next' }],
+    }),
+  },
+  {
+    key: 'notify_role',
+    label: 'Notify a team',
+    description: 'On submit, send an in-app notification to a role you choose.',
+    build: () => ({
+      schemaVersion: 1,
+      nodes: [
+        { id: 'trg', position: { x: 60, y: 140 }, data: { kind: 'trigger', trigger: { trigger: 'on_submit' } } },
+        { id: 'act', position: { x: 380, y: 140 }, data: { kind: 'action', action: { action: 'notify_role', role: '', message: 'A new submission needs review.' } } },
+      ],
+      edges: [{ id: 'e1', source: 'trg', target: 'act', sourceHandle: 'next' }],
+    }),
+  },
+  {
+    key: 'capa_noncompliant',
+    label: 'CAPA when non-compliant',
+    description: 'If the compliance score is below 80, open a corrective action.',
+    build: () => ({
+      schemaVersion: 1,
+      nodes: [
+        { id: 'trg', position: { x: 40, y: 160 }, data: { kind: 'trigger', trigger: { trigger: 'on_submit' } } },
+        { id: 'cnd', position: { x: 320, y: 160 }, data: { kind: 'condition', rule: { op: 'lt', field: 'compliance_score', value: 80 }, label: 'Score below 80' } },
+        { id: 'act', position: { x: 620, y: 100 }, data: { kind: 'action', action: { action: 'create_capa', titleTemplate: 'Follow-up corrective action', severity: 'high' } } },
+      ],
+      edges: [
+        { id: 'e1', source: 'trg', target: 'cnd', sourceHandle: 'next' },
+        { id: 'e2', source: 'cnd', target: 'act', sourceHandle: 'then' },
+      ],
+    }),
+  },
+  {
+    key: 'approval',
+    label: 'Require approval',
+    description: 'On submit, pause for a supervisor to approve or reject.',
+    build: () => ({
+      schemaVersion: 1,
+      nodes: [
+        { id: 'trg', position: { x: 60, y: 140 }, data: { kind: 'trigger', trigger: { trigger: 'on_submit' } } },
+        { id: 'gat', position: { x: 380, y: 140 }, data: { kind: 'gate', gate: { title: 'Supervisor approval', assignee: { type: 'role', role: '' } } } },
+      ],
+      edges: [{ id: 'e1', source: 'trg', target: 'gat', sourceHandle: 'next' }],
+    }),
+  },
+  {
+    key: 'webhook',
+    label: 'Send to a webhook',
+    description: 'On submit, POST the response to an external URL (Zapier, Make, your API).',
+    build: () => ({
+      schemaVersion: 1,
+      nodes: [
+        { id: 'trg', position: { x: 60, y: 140 }, data: { kind: 'trigger', trigger: { trigger: 'on_submit' } } },
+        { id: 'act', position: { x: 380, y: 140 }, data: { kind: 'action', action: { action: 'webhook', url: '', method: 'POST' } } },
+      ],
+      edges: [{ id: 'e1', source: 'trg', target: 'act', sourceHandle: 'next' }],
+    }),
+  },
+]
+
 export function FlowsCanvas({
   templateId,
   templateName,
@@ -223,6 +300,7 @@ export function FlowsCanvas({
   flows,
   canEdit,
   canGenerate,
+  embedded = false,
 }: {
   templateId: string
   templateName: string
@@ -230,6 +308,9 @@ export function FlowsCanvas({
   flows: FlowSummary[]
   canEdit: boolean
   canGenerate: boolean
+  // When rendered inside the unified App editor, hide the standalone back link
+  // + the redundant "templateName ·" prefix (the editor header already has it).
+  embedded?: boolean
 }) {
   // Working graphs live in a ref keyed by flow id; switching flows captures the
   // current canvas into the ref and loads the target's graph. Save persists the
@@ -250,6 +331,7 @@ export function FlowsCanvas({
   const [pending, start] = useTransition()
   const [showAi, setShowAi] = useState(false)
   const [aiPrompt, setAiPrompt] = useState('')
+  const [showTemplates, setShowTemplates] = useState(false)
 
   const nodeTypes = useMemo(
     () => ({ trigger: TriggerNode, condition: ConditionNode, gate: GateNode, action: ActionNode }),
@@ -386,6 +468,21 @@ export function FlowsCanvas({
     })
   }
 
+  const applyTemplate = (t: FlowTemplate) => {
+    if (!selectedFlowId) {
+      toast.error('Create or select a flow first')
+      return
+    }
+    const graph = t.build()
+    graphs.current.set(selectedFlowId, graph)
+    const f = toFlow(graph)
+    setNodes(f.nodes)
+    setEdges(f.edges)
+    setSelectedNodeId(null)
+    setShowTemplates(false)
+    toast.success('Template loaded — fill in the blanks, then Save')
+  }
+
   return (
     <div className="flex h-full min-h-0">
       {/* Left rail — flows list */}
@@ -492,18 +589,25 @@ export function FlowsCanvas({
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <header className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-white px-4 py-2">
           <div className="flex min-w-0 items-center gap-2 text-sm">
-            <Link
-              href={`/forms/templates/${templateId}`}
-              title="Back to app"
-              className="flex items-center gap-1 rounded-md px-2 py-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-            >
-              <ArrowLeft size={15} />
-              <span className="hidden sm:inline">Back</span>
-            </Link>
-            <span className="h-4 w-px bg-slate-200" />
+            {embedded ? null : (
+              <>
+                <Link
+                  href={`/forms/templates/${templateId}`}
+                  title="Back to app"
+                  className="flex items-center gap-1 rounded-md px-2 py-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                >
+                  <ArrowLeft size={15} />
+                  <span className="hidden sm:inline">Back</span>
+                </Link>
+                <span className="h-4 w-px bg-slate-200" />
+              </>
+            )}
             <span className="min-w-0 truncate">
-              <span className="font-semibold">{templateName}</span>{' '}
-              <span className="text-slate-400">· {selectedFlow ? selectedFlow.name : 'Flows'}</span>
+              {embedded ? null : <span className="font-semibold">{templateName}</span>}{' '}
+              <span className={embedded ? 'font-semibold text-slate-700' : 'text-slate-400'}>
+                {embedded ? '' : '· '}
+                {selectedFlow ? selectedFlow.name : 'Flows'}
+              </span>
             </span>
             {selectedFlow && !selectedFlow.enabled ? (
               <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
@@ -527,6 +631,11 @@ export function FlowsCanvas({
                   <Plus size={13} /> Action
                 </Button>
               </>
+            ) : null}
+            {canEdit && selectedFlowId ? (
+              <Button variant="outline" size="sm" onClick={() => setShowTemplates(true)}>
+                <Rocket size={13} /> Templates
+              </Button>
             ) : null}
             {canGenerate && selectedFlowId ? (
               <Button variant="outline" size="sm" onClick={() => setShowAi(true)} disabled={pending}>
@@ -572,13 +681,27 @@ export function FlowsCanvas({
           )}
 
           {selectedFlowId && nodes.length === 0 ? (
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-              <div className="pointer-events-auto rounded-xl border border-dashed border-slate-300 bg-white/90 p-6 text-center">
-                <p className="text-sm font-medium text-slate-700">Empty flow</p>
-                <p className="mt-1 max-w-xs text-xs text-slate-500">
-                  Add a Trigger, then wire it to Conditions, Approvals and Actions — or generate one
-                  with AI.
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-4">
+              <div className="pointer-events-auto w-full max-w-lg rounded-xl border border-dashed border-slate-300 bg-white/95 p-5 text-center shadow-sm">
+                <p className="text-sm font-semibold text-slate-700">Start with a template</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Pick a common automation, or build from scratch with the toolbar / AI.
                 </p>
+                {canEdit ? (
+                  <div className="mt-3 grid grid-cols-1 gap-2 text-left sm:grid-cols-2">
+                    {FLOW_TEMPLATES.map((t) => (
+                      <button
+                        key={t.key}
+                        type="button"
+                        onClick={() => applyTemplate(t)}
+                        className="rounded-lg border border-slate-200 bg-white p-2.5 transition hover:border-teal-400 hover:bg-teal-50/40"
+                      >
+                        <div className="text-xs font-semibold text-slate-800">{t.label}</div>
+                        <div className="mt-0.5 text-[11px] leading-snug text-slate-500">{t.description}</div>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             </div>
           ) : null}
@@ -607,6 +730,31 @@ export function FlowsCanvas({
             onChange={(d) => patchData(selectedNode.id, d)}
           />
         ) : null}
+      </Drawer>
+
+      <Drawer
+        open={showTemplates}
+        onClose={() => setShowTemplates(false)}
+        title="Quick-start templates"
+        description="Load a common automation into this flow, then fill in the blanks."
+        size="sm"
+      >
+        <div className="space-y-2">
+          {FLOW_TEMPLATES.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => applyTemplate(t)}
+              className="block w-full rounded-lg border border-slate-200 bg-white p-3 text-left transition hover:border-teal-400 hover:bg-teal-50/40"
+            >
+              <div className="text-sm font-semibold text-slate-800">{t.label}</div>
+              <div className="mt-0.5 text-xs leading-snug text-slate-500">{t.description}</div>
+            </button>
+          ))}
+          <p className="pt-1 text-[11px] text-slate-400">
+            Loading a template replaces the current flow&apos;s nodes.
+          </p>
+        </div>
       </Drawer>
 
       <Drawer
@@ -938,6 +1086,57 @@ function ActionInspector({
           </Field>
         </>
       ) : null}
+
+      {a.action === 'analyze_photos' ? (
+        <>
+          <Field label="Photo field">
+            <Select value={a.fieldId} disabled={readOnly} onChange={(e) => set({ ...a, fieldId: e.target.value })}>
+              <option value="">— pick a field —</option>
+              {fieldIds.map((f) => (
+                <option key={f} value={f}>
+                  {f}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Write summary to (optional)">
+            <Select
+              value={a.storeInField ?? ''}
+              disabled={readOnly}
+              onChange={(e) => set({ ...a, storeInField: e.target.value || undefined })}
+            >
+              <option value="">— none —</option>
+              {fieldIds.map((f) => (
+                <option key={f} value={f}>
+                  {f}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <label className="flex items-center gap-2 text-xs">
+            <input
+              type="checkbox"
+              checked={!!a.createCapaOnHazard}
+              disabled={readOnly}
+              onChange={(e) => set({ ...a, createCapaOnHazard: e.target.checked })}
+            />
+            Create a CAPA when hazards are found
+          </label>
+          {a.createCapaOnHazard ? (
+            <Field label="Minimum severity">
+              <Select
+                value={a.minSeverity ?? 'medium'}
+                disabled={readOnly}
+                onChange={(e) => set({ ...a, minSeverity: e.target.value as 'low' | 'medium' | 'high' })}
+              >
+                <option value="low">Low and above</option>
+                <option value="medium">Medium and above</option>
+                <option value="high">High only</option>
+              </Select>
+            </Field>
+          ) : null}
+        </>
+      ) : null}
     </div>
   )
 }
@@ -960,6 +1159,8 @@ function defaultAction(kind: ActionData['action'], fieldIds: string[]): ActionDa
       return { action: 'webhook', url: '', method: 'POST' }
     case 'create_response':
       return { action: 'create_response', templateId: '' }
+    case 'analyze_photos':
+      return { action: 'analyze_photos', fieldId: fieldIds[0] ?? '' }
   }
 }
 

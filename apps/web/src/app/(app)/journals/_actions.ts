@@ -375,7 +375,8 @@ export async function fetchTree(input: {
   filters: JournalFilters
 }): Promise<TreeNode[]> {
   const ctx = await requireRequestContext()
-  return buildTree(ctx, input.groupBy, input.filters)
+  // Workspace tree is always personal — self-scoped.
+  return buildTree(ctx, input.groupBy, input.filters, true)
 }
 
 export async function fetchEntries(input: {

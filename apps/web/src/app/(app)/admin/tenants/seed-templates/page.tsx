@@ -113,13 +113,13 @@ export default async function SeedTemplatesPage() {
         <Alert variant="info">
           <AlertTitle>{LIFT_PLAN_TEMPLATE_NAME}</AlertTitle>
           <AlertDescription>
-            Per-tenant form template with category <code>lift_plan</code>. Picked up by
-            the bound-modules view at{' '}
+            Per-tenant form template with category <code>lift_plan</code>. Surfaces in
+            the form gallery at{' '}
             <Link
-              href="/inspections?bound=lift_plan"
+              href="/forms?category=lift_plan"
               className="font-medium text-teal-700 hover:underline"
             >
-              /inspections?bound=lift_plan
+              /forms?category=lift_plan
             </Link>
             .
           </AlertDescription>

@@ -7,11 +7,11 @@ import { collectSuggestionRuns } from './_ext/suggestion'
 export function SuggestionBar({ editor }: { editor: Editor }) {
   const runs = collectSuggestionRuns(editor.state)
   return (
-    <div className="flex flex-wrap items-center gap-1.5 border-b border-amber-200 bg-amber-50 px-3 py-1.5 text-xs">
-      <span className="font-medium text-amber-800">
+    <div className="flex flex-wrap items-center gap-1.5 border-b border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/40 px-3 py-1.5 text-xs">
+      <span className="font-medium text-amber-800 dark:text-amber-300">
         Suggesting · {runs.length} change{runs.length === 1 ? '' : 's'}
       </span>
-      <span className="mx-1 h-4 w-px bg-amber-200" />
+      <span className="mx-1 h-4 w-px bg-amber-200 dark:bg-amber-800/60" />
       <BarBtn title="Previous change" onClick={() => editor.commands.gotoPrevSuggestion()}>
         <ChevronUp size={14} />
       </BarBtn>
@@ -32,7 +32,7 @@ export function SuggestionBar({ editor }: { editor: Editor }) {
       >
         <X size={13} /> Reject
       </button>
-      <span className="mx-1 h-4 w-px bg-amber-200" />
+      <span className="mx-1 h-4 w-px bg-amber-200 dark:bg-amber-800/60" />
       <button
         type="button"
         onClick={() => editor.commands.acceptAllSuggestions()}

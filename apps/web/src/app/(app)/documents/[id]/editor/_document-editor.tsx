@@ -15,6 +15,7 @@ import { EditorAppbar, type LayoutState } from './_appbar'
 import { FormattingToolbar } from './_toolbar'
 import { FindReplaceBar } from './_find-replace'
 import { CommentsPanel } from './_comments-panel'
+import { AiPanel } from './_ai-panel'
 import { SuggestionBar } from './_suggestion-bar'
 import { PageCanvas } from './_canvas'
 import {
@@ -34,6 +35,7 @@ export function DocumentEditor({
   initialJson,
   initialLayout,
   initialComments,
+  aiEnabled = false,
   embedded = false,
   mode,
   onModeChange,
@@ -44,6 +46,7 @@ export function DocumentEditor({
   initialJson: Record<string, unknown> | null
   initialLayout: LayoutState
   initialComments: EditorComment[]
+  aiEnabled?: boolean
   /** Embedded in the manage page's right pane (fills its container) vs full-screen overlay. */
   embedded?: boolean
   mode?: DocumentMode
@@ -55,6 +58,7 @@ export function DocumentEditor({
   const [zoom, setZoom] = useState(1)
   const [suggesting, setSuggesting] = useState(false)
   const [commentsOpen, setCommentsOpen] = useState(false)
+  const [aiOpen, setAiOpen] = useState(false)
   const [findOpen, setFindOpen] = useState(false)
   const [publishing, startPublish] = useTransition()
 
@@ -141,7 +145,7 @@ export function DocumentEditor({
   if (!editor) {
     return (
       <div
-        className={`${embedded ? 'h-full' : 'fixed inset-0 z-50'} grid place-items-center bg-slate-100 text-sm text-slate-500`}
+        className={`${embedded ? 'h-full' : 'fixed inset-0 z-50'} grid place-items-center bg-slate-100 dark:bg-slate-950 text-sm text-slate-500 dark:text-slate-400`}
       >
         Loading editor…
       </div>
@@ -154,8 +158,8 @@ export function DocumentEditor({
     <div
       className={
         embedded
-          ? 'pm-doc relative flex h-full min-h-0 flex-col bg-slate-100'
-          : 'pm-doc fixed inset-0 z-50 flex flex-col bg-slate-100'
+          ? 'pm-doc relative flex h-full min-h-0 flex-col bg-slate-100 dark:bg-slate-950'
+          : 'pm-doc fixed inset-0 z-50 flex flex-col bg-slate-100 dark:bg-slate-950'
       }
     >
       <style dangerouslySetInnerHTML={{ __html: documentBodyCss('.doc-body') }} />
@@ -175,8 +179,16 @@ export function DocumentEditor({
         suggesting={suggesting}
         onToggleSuggesting={() => setSuggesting((v) => !v)}
         commentsOpen={commentsOpen}
-        onToggleComments={() => setCommentsOpen((v) => !v)}
+        onToggleComments={() => {
+          setCommentsOpen((v) => !v)
+          setAiOpen(false)
+        }}
         commentCount={comments.length}
+        aiOpen={aiOpen}
+        onToggleAi={() => {
+          setAiOpen((v) => !v)
+          setCommentsOpen(false)
+        }}
         onPublish={onPublish}
         publishing={publishing}
       />
@@ -191,7 +203,7 @@ export function DocumentEditor({
         />
       ) : null}
       {suggesting ? <SuggestionBar editor={editor} /> : null}
-      <div className="flex min-h-0 flex-1">
+      <div className="relative flex min-h-0 flex-1">
         <PageCanvas pageSize={layout.pageSize} zoom={zoom}>
           <EditorContent editor={editor} />
         </PageCanvas>
@@ -205,6 +217,13 @@ export function DocumentEditor({
           />
         ) : null}
       </div>
+      <AiPanel
+        editor={editor}
+        documentId={documentId}
+        aiEnabled={aiEnabled}
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+      />
     </div>
   )
 }

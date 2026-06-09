@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { asc, desc, eq } from 'drizzle-orm'
+import { asc, desc, eq, isNull } from 'drizzle-orm'
 import { Activity, BadgeCheck, Check, ClipboardCheck, FileText, History, Info, Mail } from 'lucide-react'
 import {
   Alert,
@@ -18,8 +18,10 @@ import {
 import { DocumentDrawers } from './_drawers'
 import {
   documentAcknowledgments,
+  documentCategories,
   documentDrafts,
   documentReviews,
+  documentTypes,
   documentVersions,
   documents,
   people,
@@ -27,6 +29,7 @@ import {
   user,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { getTenantAiSettings } from '@/lib/ai-config'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { pickString } from '@/lib/list-params'
 import { ActivityFeed } from '@/components/activity-feed'
@@ -248,6 +251,16 @@ export default async function DocumentDetailPage({
       tx.select().from(people).where(eq(people.userId, ctx.userId)).limit(1),
       tx.select().from(documentDrafts).where(eq(documentDrafts.documentId, id)).limit(1),
     ])
+    const categories = await tx
+      .select({ id: documentCategories.id, name: documentCategories.name })
+      .from(documentCategories)
+      .where(isNull(documentCategories.deletedAt))
+      .orderBy(asc(documentCategories.name))
+    const types = await tx
+      .select({ id: documentTypes.id, name: documentTypes.name })
+      .from(documentTypes)
+      .where(isNull(documentTypes.deletedAt))
+      .orderBy(asc(documentTypes.name))
     return {
       doc,
       versions,
@@ -255,11 +268,13 @@ export default async function DocumentDetailPage({
       reviews,
       currentPerson: currentPerson[0] ?? null,
       draft: draft[0] ?? null,
+      categories,
+      types,
     }
   })
 
   if (!data) notFound()
-  const { doc, versions, acks, reviews, currentPerson, draft } = data
+  const { doc, versions, acks, reviews, currentPerson, draft, categories, types } = data
   const currentVersion = versions[0]
   const publishedVersion = versions.find((v) => v.publishedAt) ?? null
   const basePath = `/documents/${id}`
@@ -278,6 +293,8 @@ export default async function DocumentDetailPage({
     printFooter: doc.printFooter,
   }
   const comments = isFileDoc ? [] : await listDocumentComments(id)
+  const aiSettings = await getTenantAiSettings(ctx)
+  const aiEnabled = aiSettings.enabled && aiSettings.hasKey
 
   const myAck = currentPerson
     ? acks.find(
@@ -296,21 +313,21 @@ export default async function DocumentDetailPage({
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* Top bar */}
-      <div className="flex shrink-0 items-center gap-3 border-b border-slate-200 bg-white px-4 py-2">
+      <div className="flex shrink-0 items-center gap-3 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-2">
         <Link
           href="/documents"
-          className="shrink-0 text-xs font-medium text-slate-500 hover:text-slate-800"
+          className="shrink-0 text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
         >
           ← Documents
         </Link>
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="truncate text-sm font-semibold text-slate-900">{doc.title}</span>
+            <span className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{doc.title}</span>
             <Badge variant={doc.status === 'published' ? 'success' : 'secondary'}>{doc.status}</Badge>
             {currentVersion ? <Badge variant="outline">v{currentVersion.version}</Badge> : null}
             {isOverdue ? <Badge variant="destructive">Review overdue</Badge> : null}
           </div>
-          <div className="truncate text-xs text-slate-500">
+          <div className="truncate text-xs text-slate-500 dark:text-slate-400">
             {doc.category ?? 'document'} · <span className="font-mono">{doc.key}</span>
           </div>
         </div>
@@ -344,8 +361,8 @@ export default async function DocumentDetailPage({
 
       {/* Split body: left 1/3 subtabs · right 2/3 the document */}
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <aside className="flex min-h-0 w-1/3 min-w-[300px] max-w-md flex-col border-r border-slate-200 bg-white">
-          <div className="border-b border-slate-200 px-3 pt-2">
+        <aside className="flex min-h-0 w-1/3 min-w-[300px] max-w-md flex-col border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+          <div className="border-b border-slate-200 dark:border-slate-800 px-3 pt-2">
             <TabNav
               basePath={basePath}
               currentParams={sp}
@@ -379,10 +396,13 @@ export default async function DocumentDetailPage({
             {active === 'overview' ? (
               <DocumentOverview
                 documentId={id}
+                categories={categories}
+                types={types}
                 initialMeta={{
                   title: doc.title,
                   key: doc.key,
-                  category: doc.category ?? '',
+                  categoryId: doc.categoryId ?? '',
+                  typeId: doc.typeId ?? '',
                   description: doc.description ?? '',
                   reviewFrequencyMonths:
                     doc.reviewFrequencyMonths != null ? String(doc.reviewFrequencyMonths) : '',
@@ -410,7 +430,7 @@ export default async function DocumentDetailPage({
                     description="Add a draft version below — once it's filled out, publish the document."
                   />
                 ) : (
-                  <ul className="divide-y divide-slate-100 text-sm">
+                  <ul className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
                     {versions.map((v) => (
                       <li key={v.id} className="py-3">
                         <div className="flex items-center justify-between">
@@ -422,14 +442,14 @@ export default async function DocumentDetailPage({
                               <Badge variant="secondary">draft</Badge>
                             )}
                           </div>
-                          <span className="text-xs text-slate-500">
+                          <span className="text-xs text-slate-500 dark:text-slate-400">
                             {v.publishedAt
                               ? `published ${new Date(v.publishedAt).toLocaleDateString()}`
                               : `created ${new Date(v.createdAt).toLocaleDateString()}`}
                           </span>
                         </div>
                         {v.changelog ? (
-                          <p className="mt-1 text-xs text-slate-600">{v.changelog}</p>
+                          <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{v.changelog}</p>
                         ) : null}
                       </li>
                     ))}
@@ -465,7 +485,7 @@ export default async function DocumentDetailPage({
                       </AlertDescription>
                     </Alert>
                   ) : publishedVersion ? (
-                    <form action={acknowledge} className="flex items-center justify-between gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
+                    <form action={acknowledge} className="flex items-center justify-between gap-3 rounded-md border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 p-3 text-sm">
                       <span>By acknowledging you confirm you've read and understood this document.</span>
                       <input type="hidden" name="documentId" value={id} />
                       <input type="hidden" name="versionId" value={publishedVersion.id} />
@@ -491,9 +511,9 @@ export default async function DocumentDetailPage({
                 )}
 
                 {acks.length === 0 ? (
-                  <p className="text-sm text-slate-500">No-one has acknowledged this yet.</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">No-one has acknowledged this yet.</p>
                 ) : (
-                  <ul className="divide-y divide-slate-100 text-sm">
+                  <ul className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
                     {acks.map((row) => (
                       <li key={row.ack.id} className="flex items-center justify-between py-2">
                         <Link
@@ -502,7 +522,7 @@ export default async function DocumentDetailPage({
                         >
                           {row.person.firstName} {row.person.lastName}
                         </Link>
-                        <span className="text-xs text-slate-500">
+                        <span className="text-xs text-slate-500 dark:text-slate-400">
                           {new Date(row.ack.acknowledgedAt).toLocaleString()}
                         </span>
                       </li>
@@ -522,9 +542,9 @@ export default async function DocumentDetailPage({
               </CardHeader>
               <CardContent>
                 {reviews.length === 0 ? (
-                  <p className="text-sm text-slate-500">No reviews recorded.</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">No reviews recorded.</p>
                 ) : (
-                  <ul className="divide-y divide-slate-100 text-sm">
+                  <ul className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
                     {reviews.map((row) => (
                       <li key={row.review.id} className="py-3">
                         <div className="flex items-center justify-between">
@@ -543,12 +563,12 @@ export default async function DocumentDetailPage({
                             {row.review.outcome.replace(/_/g, ' ')}
                           </Badge>
                         </div>
-                        <div className="mt-0.5 text-xs text-slate-500">
+                        <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
                           {new Date(row.review.reviewedAt).toLocaleDateString()}
                           {row.review.nextReviewOn ? ` · next ${row.review.nextReviewOn}` : ''}
                         </div>
                         {row.review.notes ? (
-                          <p className="mt-1 text-sm text-slate-700">{row.review.notes}</p>
+                          <p className="mt-1 text-sm text-slate-700 dark:text-slate-200">{row.review.notes}</p>
                         ) : null}
                       </li>
                     ))}
@@ -589,6 +609,7 @@ export default async function DocumentDetailPage({
             initialJson={initialJson}
             initialLayout={initialLayout}
             initialComments={comments}
+            aiEnabled={aiEnabled}
           />
         </div>
       </div>

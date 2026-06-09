@@ -68,6 +68,7 @@ export const NAV_MODULES: NavModule[] = [
 
   // Programs
   { key: 'training', href: '/training', label: 'Training', iconKey: 'grad', group: 'Programs' },
+  { key: 'my-learning', href: '/training/learn', label: 'My Learning', iconKey: 'grad', group: 'Programs' },
   { key: 'documents', href: '/documents', label: 'Documents', iconKey: 'book', group: 'Programs' },
   { key: 'confined-space', href: '/confined-space', label: 'Confined Space', iconKey: 'shield', requiredPermission: 'cs.permit.open', group: 'Programs' },
   { key: 'lone-worker', href: '/lone-worker', label: 'Lone Worker', iconKey: 'timer', group: 'Programs' },

@@ -13,12 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from '@beaconhs/ui'
-import {
-  hazidAssessmentTypes,
-  hazidAssessments,
-  orgUnits,
-  people,
-} from '@beaconhs/db/schema'
+import { hazidAssessmentTypes, hazidAssessments, orgUnits, people } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
@@ -26,6 +21,7 @@ import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
+import { TableToolbar } from '@/components/table-toolbar'
 import { HazidSubNav } from './_subnav'
 
 export const metadata = { title: 'Hazard assessments' }
@@ -68,14 +64,26 @@ export default async function HazidAssessmentsListPage({
 
     const orderBy =
       params.sort === 'reference'
-        ? [params.dir === 'asc' ? asc(hazidAssessments.reference) : desc(hazidAssessments.reference)]
+        ? [
+            params.dir === 'asc'
+              ? asc(hazidAssessments.reference)
+              : desc(hazidAssessments.reference),
+          ]
         : params.sort === 'site'
           ? [params.dir === 'asc' ? asc(orgUnits.name) : desc(orgUnits.name)]
           : params.sort === 'supervisor'
             ? [params.dir === 'asc' ? asc(people.lastName) : desc(people.lastName)]
             : params.sort === 'type'
-              ? [params.dir === 'asc' ? asc(hazidAssessmentTypes.name) : desc(hazidAssessmentTypes.name)]
-              : [params.dir === 'asc' ? asc(hazidAssessments.occurredAt) : desc(hazidAssessments.occurredAt)]
+              ? [
+                  params.dir === 'asc'
+                    ? asc(hazidAssessmentTypes.name)
+                    : desc(hazidAssessmentTypes.name),
+                ]
+              : [
+                  params.dir === 'asc'
+                    ? asc(hazidAssessments.occurredAt)
+                    : desc(hazidAssessments.occurredAt),
+                ]
 
     const [tot] = await tx.select({ c: count() }).from(hazidAssessments).where(whereClause)
     const data = await tx
@@ -88,7 +96,10 @@ export default async function HazidAssessmentsListPage({
       .from(hazidAssessments)
       .leftJoin(orgUnits, eq(orgUnits.id, hazidAssessments.siteOrgUnitId))
       .leftJoin(people, eq(people.id, hazidAssessments.supervisorPersonId))
-      .leftJoin(hazidAssessmentTypes, eq(hazidAssessmentTypes.id, hazidAssessments.assessmentTypeId))
+      .leftJoin(
+        hazidAssessmentTypes,
+        eq(hazidAssessmentTypes.id, hazidAssessments.assessmentTypeId),
+      )
       .where(whereClause)
       .orderBy(...orderBy)
       .limit(params.perPage)
@@ -137,10 +148,8 @@ export default async function HazidAssessmentsListPage({
               </Link>
             }
           />
-          <div className="flex flex-wrap items-center gap-3">
+          <TableToolbar>
             <SearchInput placeholder="Search reference, scope, location…" />
-          </div>
-          <div className="space-y-2">
             <FilterChips
               basePath="/hazid"
               currentParams={sp}
@@ -162,14 +171,18 @@ export default async function HazidAssessmentsListPage({
                 { value: 'locked', label: 'Locked / complete', count: statusCounts.locked },
               ]}
             />
-          </div>
+          </TableToolbar>
         </>
       }
     >
       {rows.length === 0 ? (
         <EmptyState
           icon={<ShieldAlert size={32} />}
-          title={params.q || typeFilter || statusFilter ? 'No assessments match these filters' : 'No assessments yet'}
+          title={
+            params.q || typeFilter || statusFilter
+              ? 'No assessments match these filters'
+              : 'No assessments yet'
+          }
           description="Capture a hazard ID for a planned task before crews start work."
           action={
             <Link href="/hazid/new">
@@ -182,11 +195,29 @@ export default async function HazidAssessmentsListPage({
           <Table>
             <TableHeader>
               <TableRow>
-                <SortableTh {...sortProps} column="reference" active={params.sort === 'reference'}>Ref</SortableTh>
-                <SortableTh {...sortProps} column="occurred_at" active={params.sort === 'occurred_at'}>Date</SortableTh>
-                <SortableTh {...sortProps} column="type" active={params.sort === 'type'}>Type</SortableTh>
-                <SortableTh {...sortProps} column="site" active={params.sort === 'site'}>Site</SortableTh>
-                <SortableTh {...sortProps} column="supervisor" active={params.sort === 'supervisor'}>Supervisor</SortableTh>
+                <SortableTh {...sortProps} column="reference" active={params.sort === 'reference'}>
+                  Ref
+                </SortableTh>
+                <SortableTh
+                  {...sortProps}
+                  column="occurred_at"
+                  active={params.sort === 'occurred_at'}
+                >
+                  Date
+                </SortableTh>
+                <SortableTh {...sortProps} column="type" active={params.sort === 'type'}>
+                  Type
+                </SortableTh>
+                <SortableTh {...sortProps} column="site" active={params.sort === 'site'}>
+                  Site
+                </SortableTh>
+                <SortableTh
+                  {...sortProps}
+                  column="supervisor"
+                  active={params.sort === 'supervisor'}
+                >
+                  Supervisor
+                </SortableTh>
                 <TableHead>Scope</TableHead>
                 <TableHead>Status</TableHead>
               </TableRow>

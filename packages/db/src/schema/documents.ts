@@ -18,7 +18,7 @@ import {
 import { id, softDelete, timestamps } from './_helpers'
 import { tenants, tenantUsers, users } from './core'
 import { people, trades } from './org'
-import { documentTypes } from './document-types'
+import { documentTypes, documentCategories } from './document-types'
 
 export const documentStatus = pgEnum('document_status', [
   'draft',
@@ -37,8 +37,9 @@ export const documents = pgTable(
     key: text('key').notNull(),
     title: text('title').notNull(),
     description: text('description'),
-    category: text('category'), // 'sds' | 'policy' | 'procedure' | 'form' | …
+    category: text('category'), // legacy freeform; superseded by categoryId
     typeId: uuid('type_id').references(() => documentTypes.id),
+    categoryId: uuid('category_id').references(() => documentCategories.id),
     status: documentStatus('status').default('draft').notNull(),
     ownerTenantUserId: uuid('owner_tenant_user_id').references(() => tenantUsers.id),
     reviewFrequencyMonths: integer('review_frequency_months'),
@@ -216,7 +217,11 @@ export const documentBooks = pgTable(
     title: text('title').notNull().default(''),
     name: text('name').notNull().default(''),
     description: text('description'),
-    category: text('category'),
+    category: text('category'), // legacy freeform; superseded by categoryId
+    typeId: uuid('type_id').references(() => documentTypes.id),
+    categoryId: uuid('category_id').references(() => documentCategories.id),
+    reviewFrequencyMonths: integer('review_frequency_months'),
+    nextReviewOn: date('next_review_on'),
     status: documentBookStatus('status').default('draft').notNull(),
     publishedAt: timestamp('published_at', { withTimezone: true }),
     publishedByUserId: text('published_by_user_id').references(() => users.id),

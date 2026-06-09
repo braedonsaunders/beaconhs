@@ -71,10 +71,10 @@ const toneClasses: Record<Tone, { ring: string; bg: string; chip: string; icon: 
     icon: 'text-violet-700',
   },
   slate: {
-    ring: 'hover:border-slate-300 hover:shadow-slate-200/60',
+    ring: 'hover:border-slate-300 dark:hover:border-slate-600 hover:shadow-slate-200/60',
     bg: 'group-hover:bg-slate-50/80',
-    chip: 'bg-slate-200 text-slate-700 group-hover:bg-slate-700 group-hover:text-white',
-    icon: 'text-slate-600',
+    chip: 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 group-hover:bg-slate-700 group-hover:text-white',
+    icon: 'text-slate-600 dark:text-slate-300',
   },
 }
 
@@ -98,7 +98,7 @@ export function QuickActions() {
           >
             <Link
               href={a.href as any}
-              className={`group inline-flex items-center gap-2.5 rounded-full border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-800 shadow-sm transition-all ${t.ring} ${t.bg}`}
+              className={`group inline-flex items-center gap-2.5 rounded-full border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3.5 py-2 text-sm font-medium text-slate-800 dark:text-slate-100 shadow-sm transition-all ${t.ring} ${t.bg}`}
             >
               <span
                 className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-xs transition-colors ${t.chip}`}

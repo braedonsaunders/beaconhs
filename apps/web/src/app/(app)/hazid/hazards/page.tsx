@@ -21,15 +21,12 @@ import {
   TableHeader,
   TableRow,
 } from '@beaconhs/ui'
-import {
-  hazidAssessmentHazards,
-  hazidHazardTypes,
-  hazidHazards,
-} from '@beaconhs/db/schema'
+import { hazidAssessmentHazards, hazidHazardTypes, hazidHazards } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
+import { TableToolbar } from '@/components/table-toolbar'
 import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
@@ -186,7 +183,11 @@ export default async function HazardsLibraryPage({
       .offset((params.page - 1) * params.perPage)
 
     const types = await tx
-      .select({ id: hazidHazardTypes.id, name: hazidHazardTypes.name, color: hazidHazardTypes.color })
+      .select({
+        id: hazidHazardTypes.id,
+        name: hazidHazardTypes.name,
+        color: hazidHazardTypes.color,
+      })
       .from(hazidHazardTypes)
       .orderBy(asc(hazidHazardTypes.name))
 
@@ -254,32 +255,32 @@ export default async function HazardsLibraryPage({
               </div>
             }
           />
-          <div className="flex flex-wrap items-center gap-3">
+          <TableToolbar>
             <SearchInput placeholder="Search hazards, controls, risks…" />
-          </div>
-          {typeOptions.length > 0 ? (
+            {typeOptions.length > 0 ? (
+              <FilterChips
+                basePath="/hazid/hazards"
+                currentParams={sp}
+                paramKey="type"
+                label="Type"
+                options={typeOptions.map((t) => ({
+                  value: t.id,
+                  label: t.name,
+                  count: typeCounts[t.id],
+                }))}
+              />
+            ) : null}
             <FilterChips
               basePath="/hazid/hazards"
               currentParams={sp}
-              paramKey="type"
-              label="Type"
-              options={typeOptions.map((t) => ({
-                value: t.id,
-                label: t.name,
-                count: typeCounts[t.id],
-              }))}
+              paramKey="photo"
+              label="Photo"
+              options={[
+                { value: 'with', label: 'Has photo' },
+                { value: 'without', label: 'No photo' },
+              ]}
             />
-          ) : null}
-          <FilterChips
-            basePath="/hazid/hazards"
-            currentParams={sp}
-            paramKey="photo"
-            label="Photo"
-            options={[
-              { value: 'with', label: 'Has photo' },
-              { value: 'without', label: 'No photo' },
-            ]}
-          />
+          </TableToolbar>
         </>
       }
     >
@@ -332,7 +333,7 @@ export default async function HazardsLibraryPage({
                       {h.name}
                     </Link>
                     {h.description ? (
-                      <div className="text-xs text-slate-500 line-clamp-1">{h.description}</div>
+                      <div className="line-clamp-1 text-xs text-slate-500">{h.description}</div>
                     ) : null}
                   </TableCell>
                   <TableCell>
@@ -347,14 +348,14 @@ export default async function HazardsLibraryPage({
                       <span className="text-slate-400">—</span>
                     )}
                   </TableCell>
-                  <TableCell className="max-w-md text-slate-600 text-xs">
+                  <TableCell className="max-w-md text-xs text-slate-600">
                     {h.standardControls ? (
                       <span className="line-clamp-2">{h.standardControls}</span>
                     ) : (
                       <span className="text-slate-400">—</span>
                     )}
                   </TableCell>
-                  <TableCell className="max-w-xs text-slate-600 text-xs">
+                  <TableCell className="max-w-xs text-xs text-slate-600">
                     {h.risks ? (
                       <span className="line-clamp-2">{h.risks}</span>
                     ) : (
@@ -399,11 +400,7 @@ export default async function HazardsLibraryPage({
       )}
       <HazardLibraryDrawers
         openDrawer={
-          drawer === 'new-hazard'
-            ? 'new-hazard'
-            : drawer === 'edit-hazard'
-              ? 'edit-hazard'
-              : null
+          drawer === 'new-hazard' ? 'new-hazard' : drawer === 'edit-hazard' ? 'edit-hazard' : null
         }
         closeHref="/hazid/hazards"
         types={typeOptions}

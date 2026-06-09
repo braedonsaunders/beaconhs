@@ -109,6 +109,39 @@ export async function generateAppFromPrompt(
   return { ok: false, error: `The AI returned an invalid app schema: ${lastErr}` }
 }
 
+// Edit an EXISTING app: the model receives the current schema + a change
+// request and returns the COMPLETE updated schema (preserving field ids where
+// it can). Powers the conversational "edit my app" assistant.
+export async function generateAppEdit(
+  config: AiConfig | null | undefined,
+  prompt: string,
+  currentSchema: FormSchemaV1,
+): Promise<GenResult<FormSchemaV1>> {
+  let lastErr = ''
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const base = `Here is the CURRENT app as JSON:\n${JSON.stringify(currentSchema)}\n\nApply this change request: ${prompt}\n\nReturn the COMPLETE updated app as a single JSON object (same shape). Preserve existing section/field ids wherever they still apply; only add/remove/modify what the request needs.`
+    const userPrompt =
+      attempt === 0
+        ? base
+        : `${base}\n\nYour previous JSON was invalid (${lastErr}). Return corrected JSON only.`
+    const text = await runBuilderPrompt(config, { system: APP_SYSTEM, prompt: userPrompt, tier: 'smart' })
+    if (!text) return { ok: false, error: 'AI is not configured for this workspace, or the model did not respond.' }
+    let json: unknown
+    try {
+      json = extractJson(text)
+    } catch {
+      lastErr = 'response was not valid JSON'
+      continue
+    }
+    const parsed = formSchemaV1.safeParse(json)
+    if (parsed.success) {
+      return { ok: true, value: parsed.data, warnings: lintFormSchema(parsed.data) }
+    }
+    lastErr = zodIssues(parsed.error)
+  }
+  return { ok: false, error: `The AI returned an invalid app schema: ${lastErr}` }
+}
+
 const FLOW_SYSTEM = `You design "Flows" (automation graphs) for BeaconHS forms. A Flow is a node graph: triggers → conditions → gates/actions. Output a SINGLE JSON object matching this shape and NOTHING else:
 
 type AutomationGraph = {

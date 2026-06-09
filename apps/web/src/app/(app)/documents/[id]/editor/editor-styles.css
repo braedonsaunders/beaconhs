@@ -9,7 +9,11 @@
   background-position: right 0.35rem center;
   background-size: 0.7rem;
   padding-right: 1.4rem;
-  line-height: 1.4;
+  /* Zero vertical padding + modest line-height maximizes the content box so the
+     value text is never clipped at smaller heights (macOS native-chrome bug). */
+  padding-top: 0;
+  padding-bottom: 0;
+  line-height: 1.2;
   text-overflow: ellipsis;
 }
 
@@ -30,10 +34,7 @@
 .pm-doc .ProseMirror .pm-page-spacer {
   margin-left: calc(-1 * var(--page-margin, 96px));
   margin-right: calc(-1 * var(--page-margin, 96px));
-  background: rgb(203 213 225 / 0.6);
-  box-shadow:
-    inset 0 2px 3px -2px rgba(15, 23, 42, 0.25),
-    inset 0 -2px 3px -2px rgba(15, 23, 42, 0.25);
+  /* background is set inline (white page-fill + a thin gray inter-page gap) */
   pointer-events: none;
   user-select: none;
 }
@@ -146,6 +147,23 @@
   color: #b91c1c;
   text-decoration: line-through;
   text-decoration-color: #f87171;
+}
+
+/* Side flyouts (AI assistant, comments) — float in over the document from the
+   right edge instead of taking layout width (the paper won't shrink, so an
+   in-flow column would get clipped to a sliver). */
+@keyframes doc-flyout-slide-in {
+  from {
+    transform: translateX(12px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+.doc-flyout {
+  animation: doc-flyout-slide-in 0.16s ease-out;
 }
 
 /* Find & replace */

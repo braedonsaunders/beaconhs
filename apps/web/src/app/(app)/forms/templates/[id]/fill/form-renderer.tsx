@@ -18,7 +18,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import Link from 'next/link'
-import { Check, ChevronLeft, ChevronRight, Cloud, CloudOff, Plus, Trash2 } from 'lucide-react'
+import { AlertTriangle, Bold, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Cloud, CloudOff, Italic, Link as LinkIcon, List, MapPin, Plus, ScanLine, ShieldCheck, Sparkles, Trash2 } from 'lucide-react'
 import {
   Alert,
   AlertDescription,
@@ -52,11 +52,20 @@ import {
   type TableConfig,
 } from '@beaconhs/forms-core'
 import {
+  analyzePhotos,
   createDraftResponse,
   fetchEntityAttrs,
   saveFormResponseDraft,
   submitFormResponse,
 } from './actions'
+import type { SafetyVisionAnalysis } from '@beaconhs/ai'
+import {
+  aggregateDataSource,
+  queryDataSource,
+  type DataAggregateResult,
+  type DataQueryResult,
+  type DataRow,
+} from '@/app/(app)/forms/_lib/data-sources'
 import { SignaturePad } from '@/components/signature-pad'
 import { FileUpload, dataUrlToFile, type AttachedFile } from '@/components/file-upload'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
@@ -109,6 +118,10 @@ export function FormRenderer({
   // Per-step progress so users can click back into completed steps.
   const [completedSteps, setCompletedSteps] = useState<Set<string>>(new Set())
   const [stepIndex, setStepIndex] = useState(initialStepIndex)
+  // Presentational tabs (single-step apps only). activeTabId drives which tab's
+  // sections render; validation still spans every tab.
+  const appTabs = schema.tabs ?? []
+  const [activeTabId, setActiveTabId] = useState(appTabs[0]?.id ?? '')
   const [values, setValues] = useState<Record<string, unknown>>(initialValues)
   const [rowsByStep, setRowsByStep] = useState<Record<string, Record<string, unknown>[]>>(initialRows)
   const [siteId, setSiteId] = useState<string | ''>('')
@@ -188,6 +201,12 @@ export function FormRenderer({
   const totalSteps = steps.length
   const step = steps[stepIndex]!
   const stepSections = sectionsByStep.get(step.key) ?? []
+  // Tabs apply to single-step apps (multi-step wizards keep their own nav). We
+  // filter only the RENDERED sections — validation still spans every tab.
+  const tabbed = appTabs.length >= 2 && totalSteps === 1
+  const renderedSections = tabbed
+    ? stepSections.filter((s) => (s.tabId ?? appTabs[0]!.id) === activeTabId)
+    : stepSections
 
   // Build the eval context used by visibility + formula evaluation. Includes
   // every section's rows under its section id so cross-step sum_section works,
@@ -554,11 +573,20 @@ export function FormRenderer({
     }
   }
 
+  // Jump to the tab that owns a field id (so submit errors are never hidden
+  // behind an inactive tab).
+  function switchToFieldTab(fieldId: string | undefined) {
+    if (!tabbed || !fieldId) return
+    const owner = stepSections.find((s) => s.fields.some((f) => f.id === fieldId))
+    if (owner) setActiveTabId(owner.tabId ?? appTabs[0]!.id)
+  }
+
   function submit() {
     setServerError(null)
     const stepErrs = validateCurrentStep()
     if (stepErrs.size > 0) {
       setErrors(stepErrs)
+      switchToFieldTab(stepErrs.keys().next().value)
       return
     }
     const payload = buildPayload()
@@ -569,14 +597,18 @@ export function FormRenderer({
       const map = new Map<string, string>()
       for (const e of globalErrs) map.set(e.fieldId, e.message)
       setErrors(map)
-      // Walk back to the first step with an error.
+      // Walk back to the first step (or tab) with an error.
       const firstSection = globalErrs[0]!.sectionId
       if (firstSection) {
         const ownerSec = schema.sections.find((s) => s.id === firstSection)
         if (ownerSec) {
-          const targetStepKey = ownerSec.step ?? steps[0]!.key
-          const idx = steps.findIndex((s) => s.key === targetStepKey)
-          if (idx >= 0) setStepIndex(idx)
+          if (tabbed) {
+            setActiveTabId(ownerSec.tabId ?? appTabs[0]!.id)
+          } else {
+            const targetStepKey = ownerSec.step ?? steps[0]!.key
+            const idx = steps.findIndex((s) => s.key === targetStepKey)
+            if (idx >= 0) setStepIndex(idx)
+          }
         }
       }
       return
@@ -727,19 +759,40 @@ export function FormRenderer({
         </Card>
       ) : null}
 
-      {stepSections.length === 0 ? (
+      {tabbed ? (
+        <div className="flex flex-wrap items-center gap-1 border-b border-slate-200 pb-2">
+          {appTabs.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setActiveTabId(t.id)}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
+                t.id === activeTabId
+                  ? 'bg-teal-600 text-white'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              {t.title?.en ?? t.id}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {renderedSections.length === 0 ? (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">{step.title?.en ?? step.key}</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-sm text-slate-500">
-              No sections bound to this step. Click Submit to finalise.
+              {tabbed
+                ? 'This tab has no sections yet.'
+                : 'No sections bound to this step. Click Submit to finalise.'}
             </p>
           </CardContent>
         </Card>
       ) : (
-        stepSections.map((sec) => {
+        renderedSections.map((sec) => {
           // Section-level visibility — completely hide the section if showIf
           // is false against the current values.
           if (sec.showIf && !evaluateLogicRule(sec.showIf, evalCtx)) return null
@@ -795,6 +848,7 @@ export function FormRenderer({
                                 field={f}
                                 value={values[f.id]}
                                 onChange={(v) => setValue(f.id, v)}
+                                setFieldValue={setValue}
                                 error={errors.get(f.id)}
                                 people={people}
                                 evalCtx={evalCtx}
@@ -827,6 +881,7 @@ export function FormRenderer({
                               field={f}
                               value={values[f.id]}
                               onChange={(v) => setValue(f.id, v)}
+                              setFieldValue={setValue}
                               error={errors.get(f.id)}
                               people={people}
                               evalCtx={evalCtx}
@@ -846,6 +901,7 @@ export function FormRenderer({
                         field={f}
                         value={values[f.id]}
                         onChange={(v) => setValue(f.id, v)}
+                        setFieldValue={setValue}
                         error={errors.get(f.id)}
                         people={people}
                         evalCtx={evalCtx}
@@ -934,6 +990,7 @@ function RepeatingSection({
                       field={f}
                       value={row[f.id]}
                       onChange={(v) => onUpdate(i, { [f.id]: v })}
+                      setFieldValue={(id, v) => onUpdate(i, { [id]: v })}
                       error={errors.get(`${section.id}.${i}.${f.id}`)}
                       people={people}
                       evalCtx={rowCtx}
@@ -984,6 +1041,7 @@ function FieldRow({
   people,
   evalCtx,
   loading,
+  setFieldValue,
 }: {
   field: FormField
   value: unknown
@@ -995,6 +1053,10 @@ function FieldRow({
   // a tiny "Looking up…" hint next to the label so users don't think the
   // downstream entity-attr fields are broken during the 200ms round trip.
   loading?: boolean
+  // Sibling-field setter — used by `lookup` auto-fill to write the picked
+  // row's columns into other fields. Scoped to the current repeating row when
+  // rendered inside one.
+  setFieldValue?: (fieldId: string, v: unknown) => void
 }) {
   return (
     <div className="space-y-1">
@@ -1012,7 +1074,14 @@ function FieldRow({
       {field.helpText?.en ? (
         <p className="text-xs text-slate-500">{field.helpText.en}</p>
       ) : null}
-      <FieldInput field={field} value={value} onChange={onChange} people={people} evalCtx={evalCtx} />
+      <FieldInput
+        field={field}
+        value={value}
+        onChange={onChange}
+        people={people}
+        evalCtx={evalCtx}
+        setFieldValue={setFieldValue}
+      />
       {error ? <p className="text-xs text-red-600">{error}</p> : null}
     </div>
   )
@@ -1024,12 +1093,14 @@ function FieldInput({
   onChange,
   people,
   evalCtx,
+  setFieldValue,
 }: {
   field: FormField
   value: unknown
   onChange: (v: unknown) => void
   people: { id: string; firstName: string; lastName: string }[]
   evalCtx: EvalContext
+  setFieldValue?: (fieldId: string, v: unknown) => void
 }) {
   // Formula fields are render-only: recompute the value on every render via
   // the evaluator and pass through to the display input. When the formula
@@ -1077,6 +1148,116 @@ function FieldInput({
           onChange={(e) => onChange(e.target.value === '' ? '' : Number(e.target.value))}
         />
       )
+    case 'slider': {
+      const c = (field.config ?? {}) as { min?: number; max?: number; step?: number; unit?: string }
+      const min = c.min ?? 0
+      const max = c.max ?? 10
+      const step = c.step ?? 1
+      const v = typeof value === 'number' ? value : min
+      return (
+        <div className="flex items-center gap-3">
+          <input
+            type="range"
+            min={min}
+            max={max}
+            step={step}
+            value={v}
+            onChange={(e) => onChange(Number(e.target.value))}
+            className="h-2 flex-1 cursor-pointer appearance-none rounded-full bg-slate-200 accent-teal-600"
+          />
+          <span className="w-12 text-right text-sm font-semibold tabular-nums text-slate-700">
+            {v}
+            {c.unit ? ` ${c.unit}` : ''}
+          </span>
+        </div>
+      )
+    }
+    case 'gps': {
+      const loc = value as { lat: number; lng: number; accuracy?: number } | null
+      return (
+        <div className="space-y-1">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              if (typeof navigator === 'undefined' || !navigator.geolocation) {
+                toast.error('Location is not available on this device')
+                return
+              }
+              navigator.geolocation.getCurrentPosition(
+                (p) =>
+                  onChange({
+                    lat: p.coords.latitude,
+                    lng: p.coords.longitude,
+                    accuracy: p.coords.accuracy,
+                    capturedAt: new Date().toISOString(),
+                  }),
+                () => toast.error('Could not get your location — check permissions'),
+                { enableHighAccuracy: true, timeout: 10_000 },
+              )
+            }}
+          >
+            <MapPin size={14} /> {loc ? 'Update location' : 'Capture location'}
+          </Button>
+          {loc ? (
+            <p className="text-xs text-slate-500">
+              {loc.lat.toFixed(5)}, {loc.lng.toFixed(5)}
+              {loc.accuracy ? ` · ±${Math.round(loc.accuracy)}m` : ''}
+            </p>
+          ) : null}
+        </div>
+      )
+    }
+    case 'matrix': {
+      const c = (field.config ?? {}) as {
+        rows?: { key: string; label: string }[]
+        scale?: { value: string; label: string }[]
+      }
+      const rows = c.rows ?? []
+      const scale = c.scale ?? []
+      const v = (value as Record<string, string> | null) ?? {}
+      if (rows.length === 0 || scale.length === 0) {
+        return (
+          <p className="text-xs text-slate-400">
+            Add rows and a scale to this grid in the element settings.
+          </p>
+        )
+      }
+      return (
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-sm">
+            <thead>
+              <tr>
+                <th className="p-1.5" />
+                {scale.map((s) => (
+                  <th key={s.value} className="p-1.5 text-center text-xs font-medium text-slate-500">
+                    {s.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.key} className="border-t border-slate-100">
+                  <td className="py-1.5 pr-2 text-slate-700">{r.label}</td>
+                  {scale.map((s) => (
+                    <td key={s.value} className="p-1.5 text-center">
+                      <input
+                        type="radio"
+                        name={`${field.id}_${r.key}`}
+                        checked={v[r.key] === s.value}
+                        onChange={() => onChange({ ...v, [r.key]: s.value })}
+                      />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )
+    }
     case 'formula':
     case 'calc':
       // No formula configured — fall back to a read-only blank.
@@ -1255,6 +1436,10 @@ function FieldInput({
           onChange={(files) => onChange(files)}
         />
       )
+    case 'photo_ai':
+      return <PhotoAiInput value={value} onChange={onChange} />
+    case 'photo_annotated':
+      return <PhotoAnnotateInput value={value} onChange={onChange} />
     case 'file':
       return (
         <FileUpload
@@ -1291,6 +1476,28 @@ function FieldInput({
       return <TypedAttestationField field={field} value={value} onChange={onChange} />
     case 'table':
       return <TableField field={field} value={value} onChange={onChange} />
+    case 'lookup':
+      return (
+        <LookupInput
+          field={field}
+          value={value}
+          onChange={onChange}
+          evalCtx={evalCtx}
+          setFieldValue={setFieldValue}
+        />
+      )
+    case 'data_table':
+      return <DataTableInput field={field} value={value} onChange={onChange} evalCtx={evalCtx} />
+    case 'metric':
+      return <MetricBlock field={field} evalCtx={evalCtx} />
+    case 'qr_scanner':
+      return <QrScannerInput value={value} onChange={onChange} />
+    case 'ranking':
+      return <RankingInput field={field} value={value} onChange={onChange} />
+    case 'rich_text':
+      return <RichTextInput value={value} onChange={onChange} />
+    case 'address':
+      return <AddressInput value={value} onChange={onChange} />
     default:
       return <Input value={(value as string) ?? ''} onChange={(e) => onChange(e.target.value)} />
   }
@@ -1534,7 +1741,849 @@ function ImageDisplay({ field }: { field: FormField }) {
 // show inline errors on Next-button click without re-running the full
 // schema-wide validator.
 
+// --- Data-bound element runtimes -------------------------------------------
+
+function labelForRow(row: DataRow, labelCol?: string): string {
+  if (labelCol && row[labelCol] != null && row[labelCol] !== '') return String(row[labelCol])
+  // Fall back to the first non-meta column with a value.
+  for (const k of Object.keys(row)) {
+    if (!k.startsWith('__') && row[k] != null && row[k] !== '') return String(row[k])
+  }
+  return String(row.__rowId ?? '—')
+}
+
+// A data-bound dropdown. Fetches rows from its source (optionally cascaded by a
+// parent field's value), and on selection can auto-fill sibling fields.
+function LookupInput({
+  field,
+  value,
+  onChange,
+  evalCtx,
+  setFieldValue,
+}: {
+  field: FormField
+  value: unknown
+  onChange: (v: unknown) => void
+  evalCtx: EvalContext
+  setFieldValue?: (fieldId: string, v: unknown) => void
+}) {
+  const b = field.binding
+  const parentVal = b?.filterByField ? evalCtx.values[b.filterByField] : undefined
+  const [rows, setRows] = useState<DataRow[]>([])
+  const [loading, setLoading] = useState(false)
+  const whereKey = JSON.stringify(b?.where ?? null)
+
+  useEffect(() => {
+    if (!b?.sourceKey) return
+    let alive = true
+    setLoading(true)
+    queryDataSource({
+      sourceKey: b.sourceKey,
+      where: b.where,
+      filterColumn: b.filterColumn,
+      filterValue: b.filterColumn ? parentVal : undefined,
+      limit: b.limit ?? 200,
+    })
+      .then((res) => {
+        if (alive) setRows(res.rows)
+      })
+      .catch(() => {
+        if (alive) setRows([])
+      })
+      .finally(() => {
+        if (alive) setLoading(false)
+      })
+    return () => {
+      alive = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [b?.sourceKey, b?.filterColumn, whereKey, String(parentVal ?? ''), b?.limit])
+
+  if (!b?.sourceKey) {
+    return (
+      <Select disabled>
+        <option>Configure a data source…</option>
+      </Select>
+    )
+  }
+
+  const valueCol = b.valueColumn || '__rowId'
+  const waitingParent = !!b.filterColumn && (parentVal == null || parentVal === '')
+
+  const pick = (rowVal: string) => {
+    onChange(rowVal)
+    if (setFieldValue && b.autofill?.length) {
+      const row = rows.find((r) => String(r[valueCol] ?? '') === rowVal)
+      if (row) for (const m of b.autofill) setFieldValue(m.targetFieldId, row[m.column] ?? null)
+    }
+  }
+
+  return (
+    <Select value={(value as string) ?? ''} onChange={(e) => pick(e.target.value)} disabled={waitingParent}>
+      <option value="">
+        {loading ? 'Loading…' : waitingParent ? 'Select the previous field first…' : 'Select…'}
+      </option>
+      {rows.map((r, i) => {
+        const v = String(r[valueCol] ?? '')
+        return (
+          <option key={`${v}-${i}`} value={v}>
+            {labelForRow(r, b.labelColumn)}
+          </option>
+        )
+      })}
+    </Select>
+  )
+}
+
+// A data-bound table — displays (and optionally lets the user select) rows from
+// a source. Selection stores the chosen rows' ids in the response value.
+function DataTableInput({
+  field,
+  value,
+  onChange,
+  evalCtx,
+}: {
+  field: FormField
+  value: unknown
+  onChange: (v: unknown) => void
+  evalCtx: EvalContext
+}) {
+  const b = field.binding
+  const parentVal = b?.filterByField ? evalCtx.values[b.filterByField] : undefined
+  const [res, setRes] = useState<DataQueryResult>({ columns: [], rows: [] })
+  const [loading, setLoading] = useState(false)
+  const whereKey = JSON.stringify(b?.where ?? null)
+
+  useEffect(() => {
+    if (!b?.sourceKey) return
+    let alive = true
+    setLoading(true)
+    queryDataSource({
+      sourceKey: b.sourceKey,
+      where: b.where,
+      filterColumn: b.filterColumn,
+      filterValue: b.filterColumn ? parentVal : undefined,
+      limit: b.limit ?? 50,
+    })
+      .then((r) => {
+        if (alive) setRes(r)
+      })
+      .catch(() => {
+        if (alive) setRes({ columns: [], rows: [] })
+      })
+      .finally(() => {
+        if (alive) setLoading(false)
+      })
+    return () => {
+      alive = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [b?.sourceKey, b?.filterColumn, whereKey, String(parentVal ?? ''), b?.limit])
+
+  if (!b?.sourceKey) return <p className="text-xs text-slate-400">Configure a data source…</p>
+
+  const selectable = b.selectable ?? 'none'
+  const showCols = b.columns?.length
+    ? res.columns.filter((c) => b.columns!.includes(c.key))
+    : res.columns.filter((c) => !c.key.startsWith('__'))
+  const selected = Array.isArray(value) ? (value as string[]) : []
+  const toggle = (rowId: string) => {
+    if (selectable === 'single') onChange([rowId])
+    else onChange(selected.includes(rowId) ? selected.filter((x) => x !== rowId) : [...selected, rowId])
+  }
+
+  if (loading && res.rows.length === 0) return <p className="text-xs text-slate-400">Loading…</p>
+  if (res.rows.length === 0) return <p className="text-xs text-slate-400">No matching records.</p>
+
+  return (
+    <div className="overflow-x-auto rounded border border-slate-200">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs text-slate-500">
+            {selectable !== 'none' ? <th className="w-8 px-2 py-1.5" /> : null}
+            {showCols.map((c) => (
+              <th key={c.key} className="px-2 py-1.5 font-medium">
+                {c.label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {res.rows.map((r, i) => {
+            const rowId = String(r.__rowId ?? i)
+            const isSel = selected.includes(rowId)
+            return (
+              <tr
+                key={rowId}
+                className={`border-b border-slate-100 ${isSel ? 'bg-teal-50' : ''} ${
+                  selectable !== 'none' ? 'cursor-pointer hover:bg-slate-50' : ''
+                }`}
+                onClick={selectable !== 'none' ? () => toggle(rowId) : undefined}
+              >
+                {selectable !== 'none' ? (
+                  <td className="px-2 py-1.5">
+                    <input
+                      type={selectable === 'single' ? 'radio' : 'checkbox'}
+                      checked={isSel}
+                      onChange={() => toggle(rowId)}
+                    />
+                  </td>
+                ) : null}
+                {showCols.map((c) => (
+                  <td key={c.key} className="px-2 py-1.5 text-slate-700">
+                    {r[c.key] == null || r[c.key] === '' ? '—' : String(r[c.key])}
+                  </td>
+                ))}
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+// A display-only KPI / chart — aggregates its source server-side and renders a
+// single number, a bar/line chart, or a proportion list (pie).
+function MetricBlock({ field, evalCtx }: { field: FormField; evalCtx: EvalContext }) {
+  const b = field.binding
+  const parentVal = b?.filterByField ? evalCtx.values[b.filterByField] : undefined
+  const [res, setRes] = useState<DataAggregateResult | null>(null)
+  const whereKey = JSON.stringify(b?.where ?? null)
+  const agg = b?.aggregate
+
+  useEffect(() => {
+    if (!b?.sourceKey) return
+    let alive = true
+    aggregateDataSource({
+      sourceKey: b.sourceKey,
+      fn: agg?.fn ?? 'count',
+      column: agg?.column,
+      groupBy: agg?.groupBy,
+      where: b.where,
+      limit: b.limit,
+    })
+      .then((r) => {
+        if (alive) setRes(r)
+      })
+      .catch(() => {
+        if (alive) setRes(null)
+      })
+    return () => {
+      alive = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [b?.sourceKey, agg?.fn, agg?.column, agg?.groupBy, whereKey, String(parentVal ?? '')])
+
+  if (!b?.sourceKey) return <p className="text-xs text-slate-400">Configure a data source…</p>
+
+  const fmt = (n: number | null) =>
+    n == null ? '—' : Number.isInteger(n) ? String(n) : n.toFixed(1)
+
+  if (res?.groups && res.groups.length > 0) {
+    const display = b.display ?? 'bar'
+    if (display === 'pie') {
+      const total = res.groups.reduce((a, g) => a + g.value, 0) || 1
+      return (
+        <div className="space-y-1.5">
+          {res.groups.slice(0, 8).map((g) => (
+            <div key={g.key} className="flex items-center gap-2 text-xs">
+              <span className="w-28 truncate text-slate-600">{g.key}</span>
+              <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
+                <div
+                  className="h-full rounded-full bg-teal-500"
+                  style={{ width: `${(g.value / total) * 100}%` }}
+                />
+              </div>
+              <span className="w-10 text-right tabular-nums text-slate-500">{fmt(g.value)}</span>
+            </div>
+          ))}
+        </div>
+      )
+    }
+    const max = Math.max(...res.groups.map((g) => g.value), 1)
+    return (
+      <div className="flex items-end gap-1.5" style={{ height: 120 }}>
+        {res.groups.slice(0, 12).map((g) => (
+          <div key={g.key} className="flex flex-1 flex-col items-center justify-end gap-1">
+            <div
+              className="w-full rounded-t bg-teal-400"
+              style={{ height: `${Math.max((g.value / max) * 100, 3)}%` }}
+              title={`${g.key}: ${fmt(g.value)}`}
+            />
+            <span className="w-full truncate text-center text-[9px] text-slate-400">{g.key}</span>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  return (
+    <div className="inline-flex flex-col rounded-lg border border-slate-200 bg-white px-4 py-3">
+      <span className="text-3xl font-semibold tabular-nums text-slate-800">
+        {fmt(res?.value ?? null)}
+      </span>
+      <span className="mt-0.5 text-[10px] uppercase tracking-wide text-slate-400">
+        {agg?.fn ?? 'count'}
+        {agg?.column ? ` · ${agg.column}` : ''}
+        {res ? ` · ${res.total} rows` : ''}
+      </span>
+    </div>
+  )
+}
+
+// --- AI photo analysis element ---------------------------------------------
+
+function riskTone(risk: string): string {
+  return risk === 'high'
+    ? 'bg-red-100 text-red-700'
+    : risk === 'medium'
+      ? 'bg-amber-100 text-amber-700'
+      : risk === 'low'
+        ? 'bg-yellow-100 text-yellow-700'
+        : 'bg-emerald-100 text-emerald-700'
+}
+function sevTone(sev: string): string {
+  return sev === 'high' ? 'text-red-600' : sev === 'medium' ? 'text-amber-600' : 'text-yellow-600'
+}
+
+type PhotoAiValue = {
+  attachments?: AttachedFile[]
+  analysis?: SafetyVisionAnalysis
+  analyzedAt?: string
+}
+
+// Photo capture + on-demand AI safety analysis (missing PPE / hazards). Stores a
+// compound value { attachments, analysis?, analyzedAt? }. Editing the photos
+// clears a stale analysis.
+function PhotoAiInput({ value, onChange }: { value: unknown; onChange: (v: unknown) => void }) {
+  const v = (value && typeof value === 'object' && !Array.isArray(value) ? value : {}) as PhotoAiValue
+  const attachments = Array.isArray(v.attachments) ? v.attachments : []
+  const [analyzing, setAnalyzing] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const a = v.analysis
+
+  const setFiles = (files: AttachedFile[]) => {
+    onChange({
+      attachments: files,
+      analysis: files.length ? v.analysis : undefined,
+      analyzedAt: files.length ? v.analyzedAt : undefined,
+    })
+  }
+  const analyze = () => {
+    if (attachments.length === 0 || analyzing) return
+    setErr(null)
+    setAnalyzing(true)
+    analyzePhotos({ attachmentIds: attachments.map((x) => x.attachmentId) })
+      .then((res) => {
+        if (res.ok) onChange({ attachments, analysis: res.analysis, analyzedAt: new Date().toISOString() })
+        else setErr(res.error)
+      })
+      .catch(() => setErr('Analysis failed'))
+      .finally(() => setAnalyzing(false))
+  }
+
+  return (
+    <div className="space-y-2">
+      <FileUpload variant="photo" value={attachments} onChange={setFiles} />
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={attachments.length === 0 || analyzing}
+          onClick={analyze}
+        >
+          <Sparkles size={14} /> {analyzing ? 'Analyzing…' : a ? 'Re-analyze' : 'Analyze for hazards'}
+        </Button>
+        {a ? (
+          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${riskTone(a.overallRisk)}`}>
+            {a.overallRisk === 'none' ? 'No concerns' : `${a.overallRisk} risk`}
+          </span>
+        ) : null}
+      </div>
+      {err ? <p className="text-xs text-red-600">{err}</p> : null}
+      {a ? (
+        <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50/60 p-3 text-sm">
+          {a.summary ? <p className="text-slate-700">{a.summary}</p> : null}
+          {a.ppe.length > 0 ? (
+            <div>
+              <div className="mb-1 flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                <ShieldCheck size={12} /> PPE
+              </div>
+              <ul className="space-y-0.5">
+                {a.ppe.map((p, i) => (
+                  <li key={i} className="flex items-start gap-1.5">
+                    <span className={p.status === 'present' ? 'text-emerald-600' : 'text-red-600'}>
+                      {p.status === 'present' ? '✓' : '✗'}
+                    </span>
+                    <span className="text-slate-700">
+                      <strong className="capitalize">{p.item}</strong>
+                      <span className="text-slate-500">
+                        {' '}
+                        — {p.status}
+                        {p.detail ? `: ${p.detail}` : ''}
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {a.hazards.length > 0 ? (
+            <div>
+              <div className="mb-1 flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                <AlertTriangle size={12} /> Hazards
+              </div>
+              <ul className="space-y-0.5">
+                {a.hazards.map((h, i) => (
+                  <li key={i} className="flex items-start gap-1.5">
+                    <AlertTriangle size={13} className={`mt-0.5 shrink-0 ${sevTone(h.severity)}`} />
+                    <span className="text-slate-700">
+                      <strong className="capitalize">{h.type}</strong>{' '}
+                      <span className={`text-xs uppercase ${sevTone(h.severity)}`}>({h.severity})</span>
+                      <span className="text-slate-500"> — {h.detail}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {a.ppe.length === 0 && a.hazards.length === 0 ? (
+            <p className="text-xs text-emerald-700">No PPE issues or hazards detected.</p>
+          ) : null}
+          <p className="text-[10px] text-slate-400">AI-generated — verify before acting.</p>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+// --- Photo annotation (tap-to-drop hazard markers) -------------------------
+
+type PhotoMarker = { id: string; x: number; y: number; label: string }
+type PhotoAnnotatedValue = { attachments?: AttachedFile[]; markers?: PhotoMarker[] }
+
+function PhotoAnnotateInput({ value, onChange }: { value: unknown; onChange: (v: unknown) => void }) {
+  const v = (value && typeof value === 'object' && !Array.isArray(value) ? value : {}) as PhotoAnnotatedValue
+  const attachments = Array.isArray(v.attachments) ? v.attachments : []
+  const markers = Array.isArray(v.markers) ? v.markers : []
+  const imgWrapRef = useRef<HTMLDivElement>(null)
+  const photo = attachments[0]
+
+  const setFiles = (files: AttachedFile[]) =>
+    onChange({ attachments: files, markers: files.length ? markers : [] })
+  const newId = () =>
+    globalThis.crypto?.randomUUID?.() ?? `m_${markers.length}_${markers.reduce((a, m) => a + m.x, 0)}`
+  const addMarker = (e: React.MouseEvent) => {
+    const rect = imgWrapRef.current?.getBoundingClientRect()
+    if (!rect || rect.width === 0) return
+    const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
+    const y = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height))
+    onChange({ attachments, markers: [...markers, { id: newId(), x, y, label: '' }] })
+  }
+  const setLabel = (id: string, label: string) =>
+    onChange({ attachments, markers: markers.map((m) => (m.id === id ? { ...m, label } : m)) })
+  const removeMarker = (id: string) =>
+    onChange({ attachments, markers: markers.filter((m) => m.id !== id) })
+
+  if (attachments.length === 0 || !photo) {
+    return <FileUpload variant="photo" value={attachments} onChange={setFiles} />
+  }
+
+  return (
+    <div className="space-y-2">
+      <div
+        ref={imgWrapRef}
+        onClick={addMarker}
+        className="relative inline-block max-w-full cursor-crosshair select-none"
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={photo.url}
+          alt="Annotate hazards"
+          draggable={false}
+          className="max-h-80 max-w-full rounded border border-slate-200"
+        />
+        {markers.map((m, i) => (
+          <span
+            key={m.id}
+            className="absolute flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-rose-600 text-xs font-bold text-white ring-2 ring-white"
+            style={{ left: `${m.x * 100}%`, top: `${m.y * 100}%` }}
+          >
+            {i + 1}
+          </span>
+        ))}
+      </div>
+      <p className="text-[11px] text-slate-400">Tap the photo to drop a numbered marker on a hazard.</p>
+      {markers.length > 0 ? (
+        <ul className="space-y-1">
+          {markers.map((m, i) => (
+            <li key={m.id} className="flex items-center gap-2">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-rose-600 text-[10px] font-bold text-white">
+                {i + 1}
+              </span>
+              <Input
+                value={m.label}
+                placeholder={`Marker ${i + 1} — note`}
+                onChange={(e) => setLabel(m.id, e.target.value)}
+                className="h-8 flex-1"
+              />
+              <button
+                type="button"
+                onClick={() => removeMarker(m.id)}
+                className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-500"
+                title="Remove marker"
+              >
+                <Trash2 size={14} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <button
+        type="button"
+        onClick={() => setFiles([])}
+        className="text-xs text-slate-500 hover:underline"
+      >
+        Replace photo
+      </button>
+    </div>
+  )
+}
+
+// --- QR / barcode scanner --------------------------------------------------
+
+function QrScannerInput({ value, onChange }: { value: unknown; onChange: (v: unknown) => void }) {
+  const [scanning, setScanning] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const intervalRef = useRef<number | null>(null)
+
+  const stop = useCallback(() => {
+    if (intervalRef.current) {
+      window.clearInterval(intervalRef.current)
+      intervalRef.current = null
+    }
+    streamRef.current?.getTracks().forEach((t) => t.stop())
+    streamRef.current = null
+    setScanning(false)
+  }, [])
+
+  useEffect(() => () => stop(), [stop])
+
+  const start = async () => {
+    setErr(null)
+    const Detector = (window as unknown as { BarcodeDetector?: new () => { detect: (s: unknown) => Promise<{ rawValue: string }[]> } }).BarcodeDetector
+    if (!Detector) {
+      setErr('Scanning isn’t supported on this device — type the code instead.')
+      return
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+      streamRef.current = stream
+      setScanning(true)
+      const v = videoRef.current
+      if (v) {
+        v.srcObject = stream
+        await v.play()
+        const detector = new Detector()
+        intervalRef.current = window.setInterval(async () => {
+          if (!streamRef.current || !videoRef.current) return
+          try {
+            const codes = await detector.detect(videoRef.current)
+            const first = codes?.[0]
+            if (first?.rawValue) {
+              onChange(first.rawValue)
+              stop()
+            }
+          } catch {
+            /* transient detect errors are fine */
+          }
+        }, 350)
+      }
+    } catch {
+      setErr('Couldn’t access the camera — type the code instead.')
+      setScanning(false)
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <Input
+          value={(value as string) ?? ''}
+          placeholder="Scan or type a code"
+          onChange={(e) => onChange(e.target.value)}
+          className="flex-1"
+        />
+        <Button type="button" variant="outline" size="sm" onClick={scanning ? stop : start}>
+          <ScanLine size={14} /> {scanning ? 'Stop' : 'Scan'}
+        </Button>
+      </div>
+      {scanning ? (
+        <video ref={videoRef} muted playsInline className="w-full max-w-xs rounded border border-slate-200" />
+      ) : null}
+      {err ? <p className="text-xs text-amber-600">{err}</p> : null}
+    </div>
+  )
+}
+
+// --- Ranking (reorder options) ---------------------------------------------
+
+function RankingInput({
+  field,
+  value,
+  onChange,
+}: {
+  field: FormField
+  value: unknown
+  onChange: (v: unknown) => void
+}) {
+  const opts = field.validation?.options ?? []
+  const labelOf = (v: string) => {
+    const o = opts.find((x) => x.value === v)
+    return o ? (o.label?.en ?? o.value) : v
+  }
+  const current = Array.isArray(value) ? (value as string[]) : []
+  // Start from the saved order, then append any options not yet ranked + drop
+  // any stale values whose option was removed.
+  const ordered = [
+    ...current.filter((v) => opts.some((o) => o.value === v)),
+    ...opts.filter((o) => !current.includes(o.value)).map((o) => o.value),
+  ]
+  const move = (i: number, dir: -1 | 1) => {
+    const j = i + dir
+    if (j < 0 || j >= ordered.length) return
+    const next = [...ordered]
+    const tmp = next[i]!
+    next[i] = next[j]!
+    next[j] = tmp
+    onChange(next)
+  }
+  if (opts.length === 0) return <p className="text-xs text-slate-400">Add options to rank (Element → Options).</p>
+  return (
+    <ol className="space-y-1">
+      {ordered.map((v, i) => (
+        <li
+          key={v}
+          className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-sm"
+        >
+          <span className="w-5 text-center font-semibold text-slate-400">{i + 1}</span>
+          <span className="flex-1 text-slate-700">{labelOf(v)}</span>
+          <button
+            type="button"
+            disabled={i === 0}
+            onClick={() => move(i, -1)}
+            className="rounded p-1 text-slate-400 enabled:hover:bg-slate-100 enabled:hover:text-slate-700 disabled:opacity-30"
+            title="Move up"
+          >
+            <ChevronUp size={14} />
+          </button>
+          <button
+            type="button"
+            disabled={i === ordered.length - 1}
+            onClick={() => move(i, 1)}
+            className="rounded p-1 text-slate-400 enabled:hover:bg-slate-100 enabled:hover:text-slate-700 disabled:opacity-30"
+            title="Move down"
+          >
+            <ChevronDown size={14} />
+          </button>
+        </li>
+      ))}
+    </ol>
+  )
+}
+
+// --- Rich text (lightweight contentEditable) -------------------------------
+
+function RichTextInput({ value, onChange }: { value: unknown; onChange: (v: unknown) => void }) {
+  const ref = useRef<HTMLDivElement>(null)
+  // Seed the editor once on mount; afterwards it's uncontrolled so the caret
+  // isn't reset on every keystroke.
+  useEffect(() => {
+    if (ref.current) ref.current.innerHTML = (value as string) ?? ''
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  const exec = (cmd: string, arg?: string) => {
+    document.execCommand(cmd, false, arg)
+    onChange(ref.current?.innerHTML ?? '')
+    ref.current?.focus()
+  }
+  const btn =
+    'flex h-7 w-7 items-center justify-center rounded text-slate-500 hover:bg-white hover:text-slate-800'
+  return (
+    <div className="rounded-md border border-slate-200">
+      <div className="flex gap-0.5 border-b border-slate-200 bg-slate-50 p-1">
+        <button type="button" className={btn} title="Bold" onClick={() => exec('bold')}>
+          <Bold size={13} />
+        </button>
+        <button type="button" className={btn} title="Italic" onClick={() => exec('italic')}>
+          <Italic size={13} />
+        </button>
+        <button type="button" className={btn} title="Bulleted list" onClick={() => exec('insertUnorderedList')}>
+          <List size={13} />
+        </button>
+        <button
+          type="button"
+          className={btn}
+          title="Link"
+          onClick={() => {
+            const url = window.prompt('Link URL')
+            if (url) exec('createLink', url)
+          }}
+        >
+          <LinkIcon size={13} />
+        </button>
+      </div>
+      <div
+        ref={ref}
+        contentEditable
+        suppressContentEditableWarning
+        onInput={(e) => onChange((e.target as HTMLDivElement).innerHTML)}
+        className="app-scroll prose prose-sm max-w-none min-h-[80px] max-h-60 overflow-auto p-2 text-sm focus:outline-none"
+      />
+    </div>
+  )
+}
+
+// --- Address (structured + free OSM autocomplete) --------------------------
+
+type AddressValue = {
+  query?: string
+  line1?: string
+  city?: string
+  region?: string
+  postal?: string
+  country?: string
+  lat?: number
+  lng?: number
+}
+type NominatimHit = {
+  display_name: string
+  lat: string
+  lon: string
+  address?: Record<string, string>
+}
+
+function AddressInput({ value, onChange }: { value: unknown; onChange: (v: unknown) => void }) {
+  const v = (value && typeof value === 'object' && !Array.isArray(value) ? value : {}) as AddressValue
+  const [suggestions, setSuggestions] = useState<NominatimHit[]>([])
+  const [searching, setSearching] = useState(false)
+  const timerRef = useRef<number | null>(null)
+  const set = (patch: Partial<AddressValue>) => onChange({ ...v, ...patch })
+
+  const onQuery = (q: string) => {
+    set({ query: q })
+    if (timerRef.current) window.clearTimeout(timerRef.current)
+    if (q.trim().length < 4) {
+      setSuggestions([])
+      return
+    }
+    timerRef.current = window.setTimeout(async () => {
+      try {
+        setSearching(true)
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=5&q=${encodeURIComponent(q)}`,
+          { headers: { Accept: 'application/json' } },
+        )
+        setSuggestions(res.ok ? ((await res.json()) as NominatimHit[]) : [])
+      } catch {
+        setSuggestions([])
+      } finally {
+        setSearching(false)
+      }
+    }, 500)
+  }
+
+  const choose = (s: NominatimHit) => {
+    const a = s.address ?? {}
+    onChange({
+      query: s.display_name,
+      line1: [a.house_number, a.road].filter(Boolean).join(' ') || s.display_name,
+      city: a.city || a.town || a.village || a.hamlet || '',
+      region: a.state || a.province || a.county || '',
+      postal: a.postcode || '',
+      country: a.country || '',
+      lat: Number(s.lat),
+      lng: Number(s.lon),
+    })
+    setSuggestions([])
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="relative">
+        <Input
+          value={v.query ?? ''}
+          placeholder="Search an address…"
+          onChange={(e) => onQuery(e.target.value)}
+        />
+        {searching ? (
+          <span className="absolute right-2 top-2.5 text-xs text-slate-400">…</span>
+        ) : null}
+        {suggestions.length > 0 ? (
+          <ul className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-md border border-slate-200 bg-white shadow-lg">
+            {suggestions.map((s, i) => (
+              <li key={i}>
+                <button
+                  type="button"
+                  onClick={() => choose(s)}
+                  className="block w-full px-2 py-1.5 text-left text-xs text-slate-600 hover:bg-slate-50"
+                >
+                  {s.display_name}
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <Input
+          value={v.line1 ?? ''}
+          placeholder="Address line 1"
+          onChange={(e) => set({ line1: e.target.value })}
+          className="col-span-2"
+        />
+        <Input value={v.city ?? ''} placeholder="City" onChange={(e) => set({ city: e.target.value })} />
+        <Input
+          value={v.region ?? ''}
+          placeholder="State / region"
+          onChange={(e) => set({ region: e.target.value })}
+        />
+        <Input
+          value={v.postal ?? ''}
+          placeholder="Postal code"
+          onChange={(e) => set({ postal: e.target.value })}
+        />
+        <Input
+          value={v.country ?? ''}
+          placeholder="Country"
+          onChange={(e) => set({ country: e.target.value })}
+        />
+      </div>
+    </div>
+  )
+}
+
 function validateOne(field: FormField, value: unknown): string | null {
+  // Display-only data block — holds no value, so it's never required/validated.
+  if (field.type === 'metric') return null
+  // Rich text: an "empty" editor can still hold <br>/<div> markup, so check text.
+  if (field.type === 'rich_text') {
+    const required = field.required || field.validation?.required
+    const text = String(value ?? '').replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim()
+    if (required && text === '') return field.validation?.message ?? 'Required'
+    return null
+  }
+  // Address: require at least line1 when required (compound object).
+  if (field.type === 'address') {
+    const required = field.required || field.validation?.required
+    const a = (value as AddressValue) ?? {}
+    if (required && !a.line1 && !a.query) return field.validation?.message ?? 'Required'
+    return null
+  }
   const v = field.validation
   const required = field.required || v?.required
   const isEmpty =
@@ -1547,11 +2596,27 @@ function validateOne(field: FormField, value: unknown): string | null {
 
   switch (field.type) {
     case 'number':
-    case 'rating': {
+    case 'rating':
+    case 'slider': {
       const n = Number(value)
       if (Number.isNaN(n)) return v?.message ?? 'Must be a number'
       if (v?.min !== undefined && n < v.min) return v?.message ?? `Must be >= ${v.min}`
       if (v?.max !== undefined && n > v.max) return v?.message ?? `Must be <= ${v.max}`
+      return null
+    }
+    case 'matrix': {
+      // Required matrices need at least one row rated (empty object isn't caught
+      // by the generic isEmpty check above).
+      const obj = (value as Record<string, unknown>) ?? {}
+      if (required && Object.keys(obj).length === 0) return v?.message ?? 'Rate at least one row'
+      return null
+    }
+    case 'photo_ai':
+    case 'photo_annotated': {
+      // Compound { attachments, ... } — require at least one photo.
+      const obj = (value as { attachments?: unknown[] }) ?? {}
+      if (required && (!Array.isArray(obj.attachments) || obj.attachments.length === 0))
+        return v?.message ?? 'Add a photo'
       return null
     }
     case 'text':

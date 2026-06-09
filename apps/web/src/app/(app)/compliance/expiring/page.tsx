@@ -75,7 +75,7 @@ export default async function ExpiringPage({
             description="Everything coming due, expiring, or overdue across every module — certs, permits, equipment, PPE, lone-worker, document reviews, corrective actions and more."
           />
           <ComplianceSubNav active="expiring" />
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <FilterChips
               basePath="/compliance/expiring"
               currentParams={sp}
@@ -167,7 +167,7 @@ function SummaryCard({
     tone === 'danger' ? 'text-red-700' : tone === 'warn' ? 'text-amber-700' : 'text-slate-900'
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4">
-      <div className="text-xs uppercase tracking-wide text-slate-500">{label}</div>
+      <div className="text-xs tracking-wide text-slate-500 uppercase">{label}</div>
       <div className={`mt-1 text-2xl font-semibold ${color}`}>{value}</div>
     </div>
   )

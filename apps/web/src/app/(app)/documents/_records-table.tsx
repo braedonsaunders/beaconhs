@@ -14,6 +14,7 @@ export type DocumentsTableRow = {
   id: string
   title: string
   category: string | null
+  type: { name: string; color: string | null } | null
   status: 'draft' | 'published' | 'archived' | 'under_review'
   nextReviewOn: string | null
 }
@@ -61,6 +62,7 @@ export function DocumentsRecordsTable({
               </th>
               <th className="px-3 py-2">Title</th>
               <th className="px-3 py-2">Category</th>
+              <th className="px-3 py-2">Type</th>
               <th className="px-3 py-2">Status</th>
               <th className="px-3 py-2">Next review</th>
             </tr>
@@ -89,6 +91,25 @@ export function DocumentsRecordsTable({
                     </Link>
                   </td>
                   <td className="px-3 py-2 text-slate-600">{r.category ?? '—'}</td>
+                  <td className="px-3 py-2">
+                    {r.type ? (
+                      <span
+                        className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium"
+                        style={
+                          r.type.color
+                            ? { backgroundColor: `${r.type.color}1a`, color: r.type.color }
+                            : { backgroundColor: '#f1f5f9', color: '#475569' }
+                        }
+                      >
+                        {r.type.color ? (
+                          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: r.type.color }} />
+                        ) : null}
+                        {r.type.name}
+                      </span>
+                    ) : (
+                      <span className="text-slate-400">—</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2">
                     <Badge variant={r.status === 'published' ? 'success' : 'secondary'}>
                       {r.status}

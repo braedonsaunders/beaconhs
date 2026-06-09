@@ -149,7 +149,8 @@ export async function updateDocumentMeta(input: {
   documentId: string
   title?: string
   key?: string
-  category?: string | null
+  categoryId?: string | null
+  typeId?: string | null
   description?: string | null
   reviewFrequencyMonths?: number | null
   nextReviewOn?: string | null
@@ -171,7 +172,8 @@ export async function updateDocumentMeta(input: {
     const k = slugify(input.key)
     if (k) patch.key = k
   }
-  if (input.category !== undefined) patch.category = input.category?.trim() || null
+  if (input.categoryId !== undefined) patch.categoryId = input.categoryId || null
+  if (input.typeId !== undefined) patch.typeId = input.typeId || null
   if (input.description !== undefined) patch.description = input.description?.trim() || null
   if (input.reviewFrequencyMonths !== undefined)
     patch.reviewFrequencyMonths = input.reviewFrequencyMonths

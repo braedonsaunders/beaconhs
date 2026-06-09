@@ -389,8 +389,8 @@ export function SignaturePad({
     <div ref={wrapRef} className={cn('w-full', className)}>
       <div
         className={cn(
-          'relative w-full overflow-hidden rounded-md border bg-white',
-          disabled ? 'border-slate-200 bg-slate-50' : 'border-slate-300',
+          'relative w-full overflow-hidden rounded-md border bg-white dark:bg-slate-900',
+          disabled ? 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900' : 'border-slate-300 dark:border-slate-700',
         )}
         style={{ height }}
       >
@@ -421,11 +421,11 @@ export function SignaturePad({
             {!hasInk && !disabled ? (
               <div className="pointer-events-none absolute inset-0">
                 <div
-                  className="absolute left-4 right-4 border-t border-dashed border-slate-200"
+                  className="absolute left-4 right-4 border-t border-dashed border-slate-200 dark:border-slate-800"
                   style={{ top: `${(2 / 3) * 100}%` }}
                 />
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-xs text-slate-400">Sign here</span>
+                  <span className="text-xs text-slate-400 dark:text-slate-500">Sign here</span>
                 </div>
               </div>
             ) : null}
@@ -439,7 +439,7 @@ export function SignaturePad({
 
       {!disabled ? (
         <div className="mt-2 flex items-center justify-between">
-          <span className="text-xs text-slate-500">
+          <span className="text-xs text-slate-500 dark:text-slate-400">
             {hasInk ? ' ' : 'Sign above with your finger, stylus, or mouse.'}
           </span>
           <Button

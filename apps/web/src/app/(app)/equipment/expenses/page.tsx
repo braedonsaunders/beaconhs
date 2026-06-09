@@ -18,18 +18,14 @@ import {
   TableRow,
   Textarea,
 } from '@beaconhs/ui'
-import {
-  equipmentExpenses,
-  equipmentItems,
-  equipmentTypes,
-  orgUnits,
-} from '@beaconhs/db/schema'
+import { equipmentExpenses, equipmentItems, equipmentTypes, orgUnits } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
+import { TableToolbar } from '@/components/table-toolbar'
 import { ListPageLayout } from '@/components/page-layout'
 import { Section } from '@/components/section'
 import { EquipmentSubNav } from '@/components/equipment-sub-nav'
@@ -71,8 +67,7 @@ async function createExpense(formData: FormData) {
   const vendor = String(formData.get('vendor') ?? '').trim() || null
   const description = String(formData.get('description') ?? '').trim() || null
   const amount = String(formData.get('amount') ?? '').trim()
-  const chargedToOrgUnitId =
-    String(formData.get('chargedToOrgUnitId') ?? '').trim() || null
+  const chargedToOrgUnitId = String(formData.get('chargedToOrgUnitId') ?? '').trim() || null
   if (!itemId || !incurredOn || !amount) return
   const amountNum = Number(amount)
   if (!Number.isFinite(amountNum)) return
@@ -167,12 +162,24 @@ export default async function EquipmentExpensesPage({
 
     const orderBy =
       params.sort === 'category'
-        ? [params.dir === 'asc' ? asc(equipmentExpenses.category) : desc(equipmentExpenses.category)]
+        ? [
+            params.dir === 'asc'
+              ? asc(equipmentExpenses.category)
+              : desc(equipmentExpenses.category),
+          ]
         : params.sort === 'amount'
           ? [params.dir === 'asc' ? asc(equipmentExpenses.amount) : desc(equipmentExpenses.amount)]
           : params.sort === 'vendor'
-            ? [params.dir === 'asc' ? asc(equipmentExpenses.vendor) : desc(equipmentExpenses.vendor)]
-            : [params.dir === 'asc' ? asc(equipmentExpenses.incurredOn) : desc(equipmentExpenses.incurredOn)]
+            ? [
+                params.dir === 'asc'
+                  ? asc(equipmentExpenses.vendor)
+                  : desc(equipmentExpenses.vendor),
+              ]
+            : [
+                params.dir === 'asc'
+                  ? asc(equipmentExpenses.incurredOn)
+                  : desc(equipmentExpenses.incurredOn),
+              ]
 
     const [tot] = await tx
       .select({ c: count(), sum: sql<string>`COALESCE(SUM(${equipmentExpenses.amount}), 0)::text` })
@@ -225,7 +232,7 @@ export default async function EquipmentExpensesPage({
               </Link>
             }
           />
-          <div className="flex flex-wrap items-center gap-3">
+          <TableToolbar>
             <SearchInput placeholder="Search vendor or description…" />
             <form className="flex items-center gap-2 text-xs text-slate-600">
               <input type="hidden" name="page" value="1" />
@@ -234,31 +241,21 @@ export default async function EquipmentExpensesPage({
               ) : null}
               {itemFilter ? <input type="hidden" name="item" value={itemFilter} /> : null}
               <Label className="text-xs">From</Label>
-              <Input
-                type="date"
-                name="from"
-                defaultValue={fromDate ?? ''}
-                className="h-8 w-36"
-              />
+              <Input type="date" name="from" defaultValue={fromDate ?? ''} className="h-8 w-36" />
               <Label className="text-xs">To</Label>
-              <Input
-                type="date"
-                name="to"
-                defaultValue={toDate ?? ''}
-                className="h-8 w-36"
-              />
+              <Input type="date" name="to" defaultValue={toDate ?? ''} className="h-8 w-36" />
               <Button type="submit" variant="outline" size="sm">
                 Apply
               </Button>
             </form>
-          </div>
-          <FilterChips
-            basePath="/equipment/expenses"
-            currentParams={sp}
-            paramKey="category"
-            label="Category"
-            options={CATEGORY_OPTIONS.map((o) => ({ ...o, count: catCounts[o.value] }))}
-          />
+            <FilterChips
+              basePath="/equipment/expenses"
+              currentParams={sp}
+              paramKey="category"
+              label="Category"
+              options={CATEGORY_OPTIONS.map((o) => ({ ...o, count: catCounts[o.value] }))}
+            />
+          </TableToolbar>
           <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
             <Badge variant="secondary">{total} entries</Badge>
             <Badge variant="warning">{fmtMoney(totalAmount.toFixed(2))} total</Badge>
@@ -391,7 +388,7 @@ export default async function EquipmentExpensesPage({
               <Label>Description</Label>
               <Input name="description" />
             </div>
-            <div className="sm:col-span-3 flex justify-end">
+            <div className="flex justify-end sm:col-span-3">
               <Button type="submit">Log expense</Button>
             </div>
           </form>

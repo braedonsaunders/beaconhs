@@ -29,6 +29,7 @@ import { SearchInput } from '@/components/search-input'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
+import { TableToolbar } from '@/components/table-toolbar'
 import { DateRangeFilter, RecipientFilter } from './_filters'
 
 export const metadata = { title: 'Email log' }
@@ -44,7 +45,9 @@ const STATUS_OPTIONS = [
   { value: 'opened', label: 'Opened' },
 ]
 
-function statusVariant(status: string): 'secondary' | 'success' | 'destructive' | 'warning' | 'outline' {
+function statusVariant(
+  status: string,
+): 'secondary' | 'success' | 'destructive' | 'warning' | 'outline' {
   switch (status) {
     case 'sent':
       return 'success'
@@ -179,7 +182,11 @@ export default async function EmailLogPage({
       total: Number(c?.c ?? 0),
       categoryFacets: facetRows
         .filter((r) => !!r.categoryKey)
-        .map((r) => ({ value: r.categoryKey as string, label: r.categoryKey as string, count: r.n })),
+        .map((r) => ({
+          value: r.categoryKey as string,
+          label: r.categoryKey as string,
+          count: r.n,
+        })),
     }
   })
 
@@ -192,29 +199,27 @@ export default async function EmailLogPage({
             title="Email log"
             subtitle="Every transactional email the worker has dispatched"
           />
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="flex-1 min-w-[240px]">
-              <SearchInput placeholder="Search subject, recipient, category" />
-            </div>
+          <TableToolbar>
+            <SearchInput placeholder="Search subject, recipient, category" />
             <RecipientFilter />
             <DateRangeFilter />
-          </div>
-          <FilterChips
-            basePath="/admin/email-log"
-            currentParams={sp}
-            paramKey="status"
-            label="Status"
-            options={STATUS_OPTIONS}
-          />
-          {categoryFacets.length > 0 ? (
             <FilterChips
               basePath="/admin/email-log"
               currentParams={sp}
-              paramKey="category"
-              label="Category"
-              options={categoryFacets}
+              paramKey="status"
+              label="Status"
+              options={STATUS_OPTIONS}
             />
-          ) : null}
+            {categoryFacets.length > 0 ? (
+              <FilterChips
+                basePath="/admin/email-log"
+                currentParams={sp}
+                paramKey="category"
+                label="Category"
+                options={categoryFacets}
+              />
+            ) : null}
+          </TableToolbar>
         </>
       }
     >
@@ -274,7 +279,7 @@ export default async function EmailLogPage({
                       ) : null}
                     </TableCell>
                     {ctx.isSuperAdmin ? (
-                      <TableCell className="text-slate-600 text-xs">
+                      <TableCell className="text-xs text-slate-600">
                         {tenant?.name ?? <span className="text-slate-400">platform</span>}
                       </TableCell>
                     ) : null}

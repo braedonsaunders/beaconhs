@@ -44,7 +44,7 @@ export function TabNav({
   return (
     <nav
       className={cn(
-        'flex flex-wrap items-center gap-1 border-b border-slate-200',
+        'flex flex-wrap items-center gap-1 border-b border-slate-200 dark:border-slate-800',
         className,
       )}
       role="tablist"
@@ -68,8 +68,8 @@ export function TabNav({
                 'transition-[color,border-color,background-color] duration-150 ease-out',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/40 focus-visible:rounded-t-md',
                 isActive
-                  ? 'border-teal-700 font-medium text-teal-700'
-                  : 'border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-900',
+                  ? 'border-teal-700 font-medium text-teal-700 dark:text-teal-300'
+                  : 'border-transparent text-slate-600 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600 hover:text-slate-900 dark:hover:text-slate-100',
               )}
             >
               {iconOnly && t.icon ? t.icon : t.label}
@@ -78,8 +78,8 @@ export function TabNav({
                   className={cn(
                     'rounded-full px-1.5 py-0.5 text-xs leading-none transition-colors duration-150',
                     isActive
-                      ? 'bg-teal-100 text-teal-900'
-                      : 'bg-slate-100 text-slate-600',
+                      ? 'bg-teal-100 text-teal-900 dark:text-teal-300'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300',
                   )}
                 >
                   {t.count}

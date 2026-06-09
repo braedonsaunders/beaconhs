@@ -4,6 +4,7 @@ import {
   Blocks,
   Boxes,
   Building2,
+  Database,
   KeyRound,
   Library,
   Mail,
@@ -83,6 +84,7 @@ const GROUPS: Group[] = [
     tiles: [
       { href: '/admin/settings', icon: SlidersHorizontal, title: 'Tenant settings', desc: 'Branding, languages, risk matrix, hierarchy depth.' },
       { href: '/admin/navigation', icon: PanelLeft, title: 'Navigation', desc: 'Reorder the sidebar, pin forms as native modules, hide unused sections.' },
+      { href: '/admin/data-sources', icon: Database, title: 'Data sources', desc: 'Reference lists + live data your apps bind to — lookups, cascades, KPIs.' },
       { href: '/admin/library', icon: Library, title: 'Library & catalogues', desc: 'Inspection banks, skill authorities, skill types, atmospheric sensors.' },
     ],
   },

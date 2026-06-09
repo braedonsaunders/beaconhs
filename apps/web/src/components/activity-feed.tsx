@@ -21,14 +21,14 @@ const ACTION_ICONS: Record<string, { icon: typeof Activity; tone: string }> = {
 export function ActivityFeed({ entries }: { entries: ActivityEntry[] }) {
   if (entries.length === 0) {
     return (
-      <div className="rounded-md border border-dashed border-slate-200 bg-slate-50/50 p-6 text-center text-sm text-slate-500">
+      <div className="rounded-md border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 p-6 text-center text-sm text-slate-500 dark:text-slate-400">
         No activity recorded yet.
       </div>
     )
   }
   return (
     <ol className="relative space-y-3 pl-6">
-      <span className="absolute left-2.5 top-2 bottom-2 w-px bg-slate-200" aria-hidden />
+      <span className="absolute left-2.5 top-2 bottom-2 w-px bg-slate-200 dark:bg-slate-700" aria-hidden />
       {entries.map((e) => {
         const meta = ACTION_ICONS[e.action] ?? { icon: Activity, tone: 'bg-slate-100 text-slate-600' }
         const Icon = meta.icon
@@ -39,20 +39,20 @@ export function ActivityFeed({ entries }: { entries: ActivityEntry[] }) {
             >
               <Icon size={11} />
             </span>
-            <div className="rounded-md border border-slate-200 bg-white p-3 text-sm">
+            <div className="rounded-md border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 text-sm">
               <div className="flex items-center justify-between">
-                <span className="font-medium text-slate-900">
+                <span className="font-medium text-slate-900 dark:text-slate-100">
                   {e.summary ?? humanise(e.action)}
                 </span>
-                <span className="text-xs text-slate-500">{formatRel(e.occurredAt)}</span>
+                <span className="text-xs text-slate-500 dark:text-slate-400">{formatRel(e.occurredAt)}</span>
               </div>
-              {e.actor ? <div className="mt-0.5 text-xs text-slate-500">by {e.actor}</div> : null}
+              {e.actor ? <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">by {e.actor}</div> : null}
               {e.after && Object.keys(e.after).length > 0 ? (
-                <details className="mt-2 text-xs text-slate-600">
-                  <summary className="cursor-pointer select-none text-slate-500 hover:text-slate-700">
+                <details className="mt-2 text-xs text-slate-600 dark:text-slate-300">
+                  <summary className="cursor-pointer select-none text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">
                     show changes
                   </summary>
-                  <pre className="mt-1 overflow-x-auto rounded bg-slate-50 p-2 text-[11px] text-slate-700">
+                  <pre className="mt-1 overflow-x-auto rounded bg-slate-50 dark:bg-slate-900 p-2 text-[11px] text-slate-700 dark:text-slate-200">
                     {JSON.stringify(e.after, null, 2)}
                   </pre>
                 </details>

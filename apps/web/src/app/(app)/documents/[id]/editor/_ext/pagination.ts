@@ -20,14 +20,18 @@ import type { EditorView } from '@tiptap/pm/view'
 
 export const paginationKey = new PluginKey('pagination')
 
-type Break = { pos: number; spacer: number }
+type Break = { pos: number; fill: number; gap: number }
 
-function spacerElement(height: number): HTMLElement {
+function spacerElement(fill: number, gap: number): HTMLElement {
   const el = document.createElement('div')
   el.className = 'pm-page-spacer'
   el.setAttribute('data-page-spacer', 'true')
   el.contentEditable = 'false'
-  el.style.height = `${Math.max(0, Math.round(height))}px`
+  const fillPx = Math.max(0, Math.round(fill))
+  const gapPx = Math.max(8, Math.round(gap))
+  el.style.height = `${fillPx + gapPx}px`
+  // White fills the rest of the current page; only the inter-page gap is gray.
+  el.style.background = `linear-gradient(to bottom, #ffffff 0, #ffffff ${fillPx}px, rgb(203 213 225 / 0.6) ${fillPx}px, rgb(203 213 225 / 0.6) 100%)`
   return el
 }
 
@@ -66,9 +70,8 @@ function computeBreaks(view: EditorView): Break[] {
 
     if (lastBottom > pageStart && contentBottom - pageStart > cssPH + 1) {
       const used = lastBottom - pageStart
-      const spacer = cssPH - used + 2 * M + GAP
       const pos = positions[blockIndex]
-      if (pos !== undefined && spacer > 4) breaks.push({ pos, spacer })
+      if (pos !== undefined) breaks.push({ pos, fill: cssPH - used, gap: GAP })
       pageStart = contentTop
     }
     lastBottom = contentBottom
@@ -110,13 +113,13 @@ export const Pagination = Extension.create({
             } catch {
               breaks = []
             }
-            const nextSig = breaks.map((b) => `${b.pos}:${Math.round(b.spacer)}`).join('|')
+            const nextSig = breaks.map((b) => `${b.pos}:${Math.round(b.fill)}`).join('|')
             if (nextSig === sig) return
             sig = nextSig
             const decos = breaks.map((b) =>
-              Decoration.widget(b.pos, () => spacerElement(b.spacer), {
+              Decoration.widget(b.pos, () => spacerElement(b.fill, b.gap), {
                 side: -1,
-                key: `pb-${b.pos}-${Math.round(b.spacer)}`,
+                key: `pb-${b.pos}-${Math.round(b.fill)}`,
               }),
             )
             view.dispatch(

@@ -1,11 +1,7 @@
 import Link from 'next/link'
 import { HardHat } from 'lucide-react'
 import { and, asc, count, desc, eq, ilike, isNull, or, type SQL } from 'drizzle-orm'
-import {
-  Button,
-  EmptyState,
-  PageHeader,
-} from '@beaconhs/ui'
+import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
 import { people, ppeItems, ppeTypes } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
@@ -13,6 +9,7 @@ import { SearchInput } from '@/components/search-input'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
+import { TableToolbar } from '@/components/table-toolbar'
 import { PpeSubNav } from '@/components/ppe-sub-nav'
 import { listPeopleForBulkPpe } from './_actions'
 import { PpeRecordsTable, type PpeTableRow } from './_records-table'
@@ -117,23 +114,25 @@ export default async function PpePage({
               </div>
             }
           />
-          <div className="flex items-center gap-3">
+          <TableToolbar>
             <SearchInput placeholder="Search type or serial #" />
-          </div>
-          <FilterChips
-            basePath="/ppe"
-            currentParams={sp}
-            paramKey="status"
-            label="Status"
-            options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
-          />
+            <FilterChips
+              basePath="/ppe"
+              currentParams={sp}
+              paramKey="status"
+              label="Status"
+              options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
+            />
+          </TableToolbar>
         </>
       }
     >
       {rows.length === 0 ? (
         <EmptyState
           icon={<HardHat size={32} />}
-          title={params.q || statusFilter ? 'No PPE matches these filters' : 'No PPE registered yet'}
+          title={
+            params.q || statusFilter ? 'No PPE matches these filters' : 'No PPE registered yet'
+          }
           description="Add helmets, harnesses, glasses, gloves — every inspectable item lives here."
           action={
             <Link href="/ppe/new">

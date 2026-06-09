@@ -21,6 +21,7 @@ import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
+import { TableToolbar } from '@/components/table-toolbar'
 
 export const metadata = { title: 'Document books' }
 
@@ -127,22 +128,28 @@ export default async function DocumentBooksPage({
               Books
             </Link>
             <Link
-              href="/documents/reference"
+              href="/documents/categories"
               className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:border-teal-500 hover:bg-teal-50 hover:text-teal-700"
             >
-              Reference library
+              Categories
+            </Link>
+            <Link
+              href="/documents/types"
+              className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:border-teal-500 hover:bg-teal-50 hover:text-teal-700"
+            >
+              Types
             </Link>
           </nav>
-          <div className="flex items-center gap-3">
+          <TableToolbar>
             <SearchInput placeholder="Search title or description" />
-          </div>
-          <FilterChips
-            basePath="/documents/books"
-            currentParams={sp}
-            paramKey="status"
-            label="Status"
-            options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
-          />
+            <FilterChips
+              basePath="/documents/books"
+              currentParams={sp}
+              paramKey="status"
+              label="Status"
+              options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
+            />
+          </TableToolbar>
         </>
       }
     >
@@ -172,7 +179,11 @@ export default async function DocumentBooksPage({
                   Status
                 </SortableTh>
                 <TableHead>Documents</TableHead>
-                <SortableTh {...sortProps} column="updated_at" active={params.sort === 'updated_at'}>
+                <SortableTh
+                  {...sortProps}
+                  column="updated_at"
+                  active={params.sort === 'updated_at'}
+                >
                   Updated
                 </SortableTh>
               </TableRow>

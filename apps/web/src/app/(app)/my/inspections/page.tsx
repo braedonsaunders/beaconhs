@@ -25,6 +25,7 @@ import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
+import { TableToolbar } from '@/components/table-toolbar'
 
 export const metadata = { title: 'My inspections' }
 export const dynamic = 'force-dynamic'
@@ -103,21 +104,14 @@ export default async function MyInspectionsPage({
               : desc(inspectionRecords.reference),
           ]
         : params.sort === 'status'
-          ? [
-              params.dir === 'asc'
-                ? asc(inspectionRecords.status)
-                : desc(inspectionRecords.status),
-            ]
+          ? [params.dir === 'asc' ? asc(inspectionRecords.status) : desc(inspectionRecords.status)]
           : [
               params.dir === 'asc'
                 ? asc(inspectionRecords.occurredAt)
                 : desc(inspectionRecords.occurredAt),
             ]
 
-    const [tot] = await tx
-      .select({ c: count() })
-      .from(inspectionRecords)
-      .where(whereClause)
+    const [tot] = await tx.select({ c: count() }).from(inspectionRecords).where(whereClause)
     const data = await tx
       .select({ rec: inspectionRecords, type: inspectionTypes, site: orgUnits })
       .from(inspectionRecords)
@@ -166,10 +160,8 @@ export default async function MyInspectionsPage({
               </div>
             }
           />
-          <div className="flex flex-wrap items-center gap-3">
+          <TableToolbar>
             <SearchInput placeholder="Search reference, notes…" />
-          </div>
-          <div className="space-y-2">
             <FilterChips
               basePath="/my/inspections"
               currentParams={sp}
@@ -177,7 +169,7 @@ export default async function MyInspectionsPage({
               label="Status"
               options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
             />
-          </div>
+          </TableToolbar>
         </>
       }
     >
@@ -201,11 +193,7 @@ export default async function MyInspectionsPage({
           <Table>
             <TableHeader>
               <TableRow>
-                <SortableTh
-                  {...sortProps}
-                  column="reference"
-                  active={params.sort === 'reference'}
-                >
+                <SortableTh {...sortProps} column="reference" active={params.sort === 'reference'}>
                   Ref
                 </SortableTh>
                 <SortableTh
@@ -217,11 +205,7 @@ export default async function MyInspectionsPage({
                 </SortableTh>
                 <TableHead>Type</TableHead>
                 <TableHead>Site</TableHead>
-                <SortableTh
-                  {...sortProps}
-                  column="status"
-                  active={params.sort === 'status'}
-                >
+                <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>
                   Status
                 </SortableTh>
                 <TableHead>Customer signed</TableHead>

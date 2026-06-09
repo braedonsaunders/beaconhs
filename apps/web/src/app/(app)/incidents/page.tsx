@@ -1,11 +1,7 @@
 import Link from 'next/link'
 import { AlertTriangle } from 'lucide-react'
 import { and, asc, count, desc, eq, ilike, isNull, or, type SQL } from 'drizzle-orm'
-import {
-  Button,
-  EmptyState,
-  PageHeader,
-} from '@beaconhs/ui'
+import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
 import { incidents, orgUnits } from '@beaconhs/db/schema'
 import { IncidentsSubNav } from './_sub-nav'
 import { requireRequestContext } from '@/lib/auth'
@@ -14,6 +10,7 @@ import { SearchInput } from '@/components/search-input'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
+import { TableToolbar } from '@/components/table-toolbar'
 import { listIncidentClassifications } from './_actions'
 import { IncidentsRecordsTable, type IncidentsTableRow } from './_records-table'
 
@@ -91,8 +88,14 @@ export default async function IncidentsPage({
       .limit(params.perPage)
       .offset((params.page - 1) * params.perPage)
 
-    const types = await tx.select({ type: incidents.type, c: count() }).from(incidents).groupBy(incidents.type)
-    const statuses = await tx.select({ status: incidents.status, c: count() }).from(incidents).groupBy(incidents.status)
+    const types = await tx
+      .select({ type: incidents.type, c: count() })
+      .from(incidents)
+      .groupBy(incidents.type)
+    const statuses = await tx
+      .select({ status: incidents.status, c: count() })
+      .from(incidents)
+      .groupBy(incidents.status)
 
     return {
       rows: data,
@@ -136,10 +139,8 @@ export default async function IncidentsPage({
           />
           <IncidentsSubNav active="records" />
 
-          <div className="flex flex-wrap items-center gap-3">
+          <TableToolbar>
             <SearchInput placeholder="Search reference, title, description…" />
-          </div>
-          <div className="space-y-2">
             <FilterChips
               basePath="/incidents"
               currentParams={sp}
@@ -154,14 +155,18 @@ export default async function IncidentsPage({
               label="Status"
               options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
             />
-          </div>
+          </TableToolbar>
         </>
       }
     >
       {rows.length === 0 ? (
         <EmptyState
           icon={<AlertTriangle size={32} />}
-          title={params.q || typeFilter || statusFilter ? 'No incidents match these filters' : 'No incidents reported'}
+          title={
+            params.q || typeFilter || statusFilter
+              ? 'No incidents match these filters'
+              : 'No incidents reported'
+          }
           description="When a worker reports an injury, illness, or near-miss it shows up here."
           action={
             <Link href="/incidents/new">
@@ -184,4 +189,3 @@ export default async function IncidentsPage({
     </ListPageLayout>
   )
 }
-

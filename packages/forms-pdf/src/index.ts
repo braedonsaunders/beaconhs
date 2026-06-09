@@ -8,6 +8,7 @@
 import {
   evaluateFormulaTree,
   evaluateLogicRule,
+  sanitizeDocumentHtml,
   type EntityAttrsByField,
   type EvalContext,
   type FormSchemaV1,
@@ -317,7 +318,8 @@ function renderValue(
   config?: Record<string, unknown>,
 ): string | null {
   if (raw === undefined || raw === null || raw === '') {
-    if (['heading', 'paragraph', 'image', 'divider'].includes(type)) return null
+    // `metric` is a live aggregate with no stored value — omit from the PDF.
+    if (['heading', 'paragraph', 'image', 'divider', 'metric'].includes(type)) return null
     return '<em style="color:#999">—</em>'
   }
   switch (type) {
@@ -338,6 +340,94 @@ function renderValue(
     case 'yes_no_comment': {
       const v = raw as { answer?: string; comment?: string }
       return `${escapeHtml(v.answer ?? '')}${v.comment ? ` <span style="color:#666">(${escapeHtml(v.comment)})</span>` : ''}`
+    }
+    case 'gps': {
+      const v = raw as { lat?: number; lng?: number; accuracy?: number }
+      if (typeof v.lat !== 'number' || typeof v.lng !== 'number') return '<em style="color:#999">—</em>'
+      return `${v.lat.toFixed(5)}, ${v.lng.toFixed(5)}${v.accuracy ? ` <span style="color:#666">(±${Math.round(v.accuracy)}m)</span>` : ''}`
+    }
+    case 'matrix': {
+      const v = raw as Record<string, string>
+      const cfg = (config ?? {}) as {
+        rows?: { key: string; label: string }[]
+        scale?: { value: string; label: string }[]
+      }
+      const rows = cfg.rows ?? []
+      const scale = cfg.scale ?? []
+      const scaleLabel = (val: string) => scale.find((s) => s.value === val)?.label ?? val
+      const entries = rows.length
+        ? rows.filter((r) => v[r.key]).map((r) => [r.label, v[r.key]!] as const)
+        : Object.entries(v)
+      if (entries.length === 0) return '<em style="color:#999">—</em>'
+      return entries
+        .map(([label, val]) => `${escapeHtml(label)}: <strong>${escapeHtml(scaleLabel(val))}</strong>`)
+        .join('<br/>')
+    }
+    case 'lookup':
+      return escapeHtml(String(raw))
+    case 'data_table': {
+      const ids = Array.isArray(raw) ? (raw as string[]) : []
+      return ids.length ? `${ids.length} record${ids.length === 1 ? '' : 's'} selected` : '<em style="color:#999">—</em>'
+    }
+    case 'photo_ai': {
+      const val = raw as {
+        attachments?: unknown[]
+        analysis?: {
+          summary?: string
+          overallRisk?: string
+          ppe?: { item: string; status: string }[]
+          hazards?: { type: string; severity: string }[]
+        }
+      }
+      const n = val.attachments?.length ?? 0
+      const a = val.analysis
+      if (!a) return `${n} photo${n === 1 ? '' : 's'}`
+      const parts = [`${n} photo${n === 1 ? '' : 's'} · risk <strong>${escapeHtml(a.overallRisk ?? '')}</strong>`]
+      if (a.summary) parts.push(escapeHtml(a.summary))
+      if (a.hazards?.length)
+        parts.push(`Hazards: ${a.hazards.map((h) => escapeHtml(`${h.type} (${h.severity})`)).join(', ')}`)
+      const badPpe = (a.ppe ?? []).filter((p) => p.status !== 'present')
+      if (badPpe.length) parts.push(`PPE: ${badPpe.map((p) => escapeHtml(p.item)).join(', ')}`)
+      return parts.join('<br/>')
+    }
+    case 'qr_scanner':
+      return escapeHtml(String(raw))
+    case 'ranking': {
+      const order = Array.isArray(raw) ? (raw as string[]) : []
+      return order.length
+        ? order.map((v, i) => `${i + 1}. ${escapeHtml(String(v))}`).join('<br/>')
+        : '<em style="color:#999">—</em>'
+    }
+    case 'rich_text':
+      return sanitizeDocumentHtml(String(raw))
+    case 'address': {
+      const a = raw as {
+        line1?: string
+        city?: string
+        region?: string
+        postal?: string
+        country?: string
+        query?: string
+      }
+      const lines = [
+        a.line1,
+        [a.city, a.region, a.postal].filter(Boolean).join(', '),
+        a.country,
+      ].filter(Boolean)
+      return lines.length
+        ? lines.map((l) => escapeHtml(String(l))).join('<br/>')
+        : a.query
+          ? escapeHtml(a.query)
+          : '<em style="color:#999">—</em>'
+    }
+    case 'photo_annotated': {
+      const val = raw as { attachments?: unknown[]; markers?: { label: string }[] }
+      const n = val.attachments?.length ?? 0
+      const markers = Array.isArray(val.markers) ? val.markers : []
+      const head = `${n} photo${n === 1 ? '' : 's'}, ${markers.length} marker${markers.length === 1 ? '' : 's'}`
+      return markers.length
+        ? head + '<br/>' + markers.map((m, i) => `${i + 1}. ${escapeHtml(m.label || '(no note)')}`).join('<br/>')
+        : escapeHtml(head)
     }
     case 'risk_matrix': {
       const v = raw as { severity?: string; likelihood?: string; score?: number; label?: string }

@@ -20,6 +20,7 @@ import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
+import { TableToolbar } from '@/components/table-toolbar'
 import { TrainingSubNav } from '../_components/training-sub-nav'
 
 export const metadata = { title: 'Training courses' }
@@ -52,10 +53,7 @@ export default async function TrainingCoursesPage({
     const filters: SQL<unknown>[] = []
     if (params.q) {
       const term = `%${params.q}%`
-      const cond = or(
-        ilike(trainingCourses.name, term),
-        ilike(trainingCourses.code, term),
-      )
+      const cond = or(ilike(trainingCourses.name, term), ilike(trainingCourses.code, term))
       if (cond) filters.push(cond)
     }
     if (deliveryFilter) filters.push(eq(trainingCourses.deliveryType, deliveryFilter as any))
@@ -118,16 +116,16 @@ export default async function TrainingCoursesPage({
             }
           />
           <TrainingSubNav active="courses" />
-          <div className="flex items-center gap-3">
+          <TableToolbar>
             <SearchInput placeholder="Search by name or code" />
-          </div>
-          <FilterChips
-            basePath="/training/courses"
-            currentParams={sp}
-            paramKey="delivery"
-            label="Delivery"
-            options={DELIVERY_OPTIONS.map((o) => ({ ...o, count: deliveryCounts[o.value] }))}
-          />
+            <FilterChips
+              basePath="/training/courses"
+              currentParams={sp}
+              paramKey="delivery"
+              label="Delivery"
+              options={DELIVERY_OPTIONS.map((o) => ({ ...o, count: deliveryCounts[o.value] }))}
+            />
+          </TableToolbar>
         </>
       }
     >

@@ -13,7 +13,7 @@ export function DayPicker({ value }: { value: string }) {
         id="day"
         name="day"
         defaultValue={value}
-        className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm"
+        className="h-8 rounded-md border border-slate-300 bg-white px-2 text-sm"
         onChange={(e) => {
           const next = new URLSearchParams(sp.toString())
           if (e.currentTarget.value) next.set('day', e.currentTarget.value)

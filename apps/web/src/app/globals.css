@@ -1,6 +1,10 @@
 @import "tailwindcss";
 @config "../../tailwind.config.ts";
 
+/* Class-based dark mode: `dark:` variants respond to a `.dark` class on <html>
+   (toggled by the theme switcher) instead of the OS `prefers-color-scheme`. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @layer base {
   /* Tailwind v4 compat: restore v3 default border color (gray-200) so bare
      `border` utilities don't fall back to currentColor across the app. */
@@ -59,6 +63,14 @@
   }
   .app-scroll::-webkit-scrollbar-track {
     background: transparent;
+  }
+  .dark .app-scroll::-webkit-scrollbar-thumb {
+    background: rgb(51 65 85);
+    background-clip: padding-box;
+  }
+  .dark .app-scroll::-webkit-scrollbar-thumb:hover {
+    background: rgb(71 85 105);
+    background-clip: padding-box;
   }
 }
 

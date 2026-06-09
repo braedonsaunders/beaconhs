@@ -83,6 +83,8 @@ export const TENANT_SCOPED_TABLES = [
   'form_response_comments',
   'form_automations',
   'form_response_participants',
+  'ai_conversations',
+  'ai_messages',
   'incidents',
   'incident_injuries',
   'incident_lost_time_events',
@@ -152,6 +154,11 @@ export const TENANT_SCOPED_TABLES = [
   'training_audience_assignment_records',
   'training_course_files',
   'training_extra_fields',
+  // Native LMS — curriculum, lessons, enrollments, per-lesson progress
+  'training_course_modules',
+  'training_lessons',
+  'training_enrollments',
+  'training_lesson_progress',
   'atmospheric_sensors',
   'atmospheric_calibrations',
   'report_schedules',
@@ -243,4 +250,8 @@ export const TENANT_SCOPED_TABLES = [
   'compliance_audience',
   'compliance_dispatches',
   'compliance_status',
+  // Generic admin-managed data sources — binding substrate for data-bound app
+  // elements (lookup, cascading dropdowns, data-table, KPI/chart).
+  'data_sources',
+  'data_source_rows',
 ] as const

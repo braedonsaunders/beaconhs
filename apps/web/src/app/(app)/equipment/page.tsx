@@ -1,11 +1,7 @@
 import Link from 'next/link'
 import { Wrench } from 'lucide-react'
 import { and, asc, count, desc, eq, ilike, isNull, or, type SQL } from 'drizzle-orm'
-import {
-  Button,
-  EmptyState,
-  PageHeader,
-} from '@beaconhs/ui'
+import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
 import { equipmentItems, equipmentTypes, orgUnits, people } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
@@ -13,6 +9,7 @@ import { SearchInput } from '@/components/search-input'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
+import { TableToolbar } from '@/components/table-toolbar'
 import { EquipmentSubNav } from '@/components/equipment-sub-nav'
 import { listPeopleForBulkHolder, listSiteOrgUnits } from './_actions'
 import { EquipmentRecordsTable, type EquipmentTableRow } from './_records-table'
@@ -40,7 +37,12 @@ export default async function EquipmentPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const sp = await searchParams
-  const params = parseListParams(sp, { sort: 'asset_tag', dir: 'asc', perPage: 25, allowedSorts: SORTS })
+  const params = parseListParams(sp, {
+    sort: 'asset_tag',
+    dir: 'asc',
+    perPage: 25,
+    allowedSorts: SORTS,
+  })
   const statusFilter = pickString(sp.status)
   const availabilityFilter = pickString(sp.availability)
   const ctx = await requireRequestContext()
@@ -74,8 +76,16 @@ export default async function EquipmentPage({
             : params.sort === 'holder'
               ? [params.dir === 'asc' ? asc(people.lastName) : desc(people.lastName)]
               : params.sort === 'purchase_date'
-                ? [params.dir === 'asc' ? asc(equipmentItems.purchaseDate) : desc(equipmentItems.purchaseDate)]
-                : [params.dir === 'asc' ? asc(equipmentItems.assetTag) : desc(equipmentItems.assetTag)]
+                ? [
+                    params.dir === 'asc'
+                      ? asc(equipmentItems.purchaseDate)
+                      : desc(equipmentItems.purchaseDate),
+                  ]
+                : [
+                    params.dir === 'asc'
+                      ? asc(equipmentItems.assetTag)
+                      : desc(equipmentItems.assetTag),
+                  ]
 
     const [tot] = await tx.select({ c: count() }).from(equipmentItems).where(whereClause)
     const data = await tx
@@ -107,10 +117,7 @@ export default async function EquipmentPage({
     }
   })
 
-  const [sites, holders] = await Promise.all([
-    listSiteOrgUnits(),
-    listPeopleForBulkHolder(),
-  ])
+  const [sites, holders] = await Promise.all([listSiteOrgUnits(), listPeopleForBulkHolder()])
 
   const tableRows: EquipmentTableRow[] = rows.map(({ item, type, site, holder }) => ({
     id: item.id,
@@ -148,33 +155,35 @@ export default async function EquipmentPage({
               </div>
             }
           />
-          <div className="flex items-center gap-3">
+          <TableToolbar>
             <SearchInput placeholder="Search asset tag, name, serial #" />
-          </div>
-          <FilterChips
-            basePath="/equipment"
-            currentParams={sp}
-            paramKey="status"
-            label="Status"
-            options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
-          />
-          <FilterChips
-            basePath="/equipment"
-            currentParams={sp}
-            paramKey="availability"
-            label="Availability"
-            options={AVAILABILITY_OPTIONS.map((o) => ({
-              ...o,
-              count: availabilityCounts[o.value],
-            }))}
-          />
+            <FilterChips
+              basePath="/equipment"
+              currentParams={sp}
+              paramKey="status"
+              label="Status"
+              options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
+            />
+            <FilterChips
+              basePath="/equipment"
+              currentParams={sp}
+              paramKey="availability"
+              label="Availability"
+              options={AVAILABILITY_OPTIONS.map((o) => ({
+                ...o,
+                count: availabilityCounts[o.value],
+              }))}
+            />
+          </TableToolbar>
         </>
       }
     >
       {rows.length === 0 ? (
         <EmptyState
           icon={<Wrench size={32} />}
-          title={params.q || statusFilter ? 'No equipment matches these filters' : 'No equipment yet'}
+          title={
+            params.q || statusFilter ? 'No equipment matches these filters' : 'No equipment yet'
+          }
           description="Add your first asset to start tracking inspections, transfers, and work orders."
           action={
             <Link href="/equipment/new">

@@ -7,7 +7,11 @@ import { z } from 'zod'
 import { formResponses, formTemplateVersions, formTemplates } from '@beaconhs/db/schema'
 import { extractScores, validateResponse } from '@beaconhs/forms-core'
 import { formResponseScores } from '@beaconhs/db/schema'
+import { can } from '@beaconhs/tenant'
+import type { SafetyVisionAnalysis } from '@beaconhs/ai'
 import { requireRequestContext } from '@/lib/auth'
+import { getTenantAiConfig } from '@/lib/ai-config'
+import { analyzePhotoAttachments } from '@/app/(app)/forms/_lib/analyze-photos'
 import { recordAudit } from '@/lib/audit'
 import { computeFormScore } from '@/app/(app)/forms/_lib/score-router'
 import { fetchSingleEntityAttrs } from '@/app/(app)/forms/_lib/entity-loader'
@@ -430,6 +434,34 @@ export async function createDraftResponse(args: {
     return result
   } catch (err) {
     const message = err instanceof Error ? err.message : 'failed to create draft'
+    return { ok: false, error: message }
+  }
+}
+
+// Fill-time safety analysis for a `photo_ai` element. Gated by forms.ai.generate
+// + a configured AI provider; returns a friendly error rather than throwing so
+// the filler can surface it inline. Never persists — the client stores the
+// returned findings on the field value.
+export async function analyzePhotos(args: {
+  attachmentIds: string[]
+}): Promise<{ ok: true; analysis: SafetyVisionAnalysis } | { ok: false; error: string }> {
+  const ctx = await requireRequestContext()
+  if (!can(ctx, 'forms.ai.generate')) {
+    return { ok: false, error: 'You do not have permission to use AI analysis.' }
+  }
+  const aiConfig = await getTenantAiConfig(ctx)
+  if (!aiConfig) {
+    return { ok: false, error: 'AI is not configured for this workspace (Admin → AI).' }
+  }
+  if (!args.attachmentIds || args.attachmentIds.length === 0) {
+    return { ok: false, error: 'Add a photo first, then run the analysis.' }
+  }
+  try {
+    const analysis = await analyzePhotoAttachments(ctx, args.attachmentIds)
+    if (!analysis) return { ok: false, error: 'No readable photo to analyse.' }
+    return { ok: true, analysis }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Analysis failed'
     return { ok: false, error: message }
   }
 }

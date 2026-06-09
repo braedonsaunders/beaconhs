@@ -21,15 +21,16 @@ import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
+import { TableToolbar } from '@/components/table-toolbar'
 import { formatDistance, SAFE_DISTANCE_TYPE_LABELS } from './_lib'
 
 export const metadata = { title: 'Safe Distance' }
 
 const SORTS = ['reference', 'occurred_at', 'type', 'complies'] as const
 
-const TYPE_OPTIONS = (
-  ['electrical', 'drone', 'overhead_crane', 'vehicle', 'other'] as const
-).map((v) => ({ value: v, label: SAFE_DISTANCE_TYPE_LABELS[v] }))
+const TYPE_OPTIONS = (['electrical', 'drone', 'overhead_crane', 'vehicle', 'other'] as const).map(
+  (v) => ({ value: v, label: SAFE_DISTANCE_TYPE_LABELS[v] }),
+)
 
 const COMPLIES_OPTIONS = [
   { value: 'yes', label: 'Compliant' },
@@ -75,17 +76,26 @@ export default async function SafeDistanceListPage({
 
     const orderBy =
       params.sort === 'reference'
-        ? [params.dir === 'asc' ? asc(safeDistanceRecords.reference) : desc(safeDistanceRecords.reference)]
+        ? [
+            params.dir === 'asc'
+              ? asc(safeDistanceRecords.reference)
+              : desc(safeDistanceRecords.reference),
+          ]
         : params.sort === 'type'
           ? [params.dir === 'asc' ? asc(safeDistanceRecords.type) : desc(safeDistanceRecords.type)]
           : params.sort === 'complies'
-            ? [params.dir === 'asc' ? asc(safeDistanceRecords.complies) : desc(safeDistanceRecords.complies)]
-            : [params.dir === 'asc' ? asc(safeDistanceRecords.occurredAt) : desc(safeDistanceRecords.occurredAt)]
+            ? [
+                params.dir === 'asc'
+                  ? asc(safeDistanceRecords.complies)
+                  : desc(safeDistanceRecords.complies),
+              ]
+            : [
+                params.dir === 'asc'
+                  ? asc(safeDistanceRecords.occurredAt)
+                  : desc(safeDistanceRecords.occurredAt),
+              ]
 
-    const [tot] = await tx
-      .select({ c: count() })
-      .from(safeDistanceRecords)
-      .where(whereClause)
+    const [tot] = await tx.select({ c: count() }).from(safeDistanceRecords).where(whereClause)
     const data = await tx
       .select({ rec: safeDistanceRecords, site: orgUnits })
       .from(safeDistanceRecords)
@@ -143,10 +153,8 @@ export default async function SafeDistanceListPage({
               </div>
             }
           />
-          <div className="flex items-center gap-3">
+          <TableToolbar>
             <SearchInput placeholder="Search reference, description, notes…" />
-          </div>
-          <div className="space-y-2">
             <FilterChips
               basePath="/tools/safe-distance"
               currentParams={sp}
@@ -173,7 +181,7 @@ export default async function SafeDistanceListPage({
                 options={sites.map((s) => ({ value: s.id, label: s.name }))}
               />
             ) : null}
-          </div>
+          </TableToolbar>
         </>
       }
     >
@@ -200,7 +208,11 @@ export default async function SafeDistanceListPage({
                 <SortableTh {...sortProps} column="reference" active={params.sort === 'reference'}>
                   Ref
                 </SortableTh>
-                <SortableTh {...sortProps} column="occurred_at" active={params.sort === 'occurred_at'}>
+                <SortableTh
+                  {...sortProps}
+                  column="occurred_at"
+                  active={params.sort === 'occurred_at'}
+                >
                   Occurred
                 </SortableTh>
                 <SortableTh {...sortProps} column="type" active={params.sort === 'type'}>
@@ -227,7 +239,11 @@ export default async function SafeDistanceListPage({
                   </TableCell>
                   <TableCell>
                     <Badge variant="secondary">
-                      {SAFE_DISTANCE_TYPE_LABELS[rec.type as keyof typeof SAFE_DISTANCE_TYPE_LABELS]}
+                      {
+                        SAFE_DISTANCE_TYPE_LABELS[
+                          rec.type as keyof typeof SAFE_DISTANCE_TYPE_LABELS
+                        ]
+                      }
                     </Badge>
                   </TableCell>
                   <TableCell className="text-slate-700">

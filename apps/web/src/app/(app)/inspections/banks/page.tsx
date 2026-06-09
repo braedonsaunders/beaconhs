@@ -20,10 +20,12 @@ import { requireModuleManage, assertCanManageModule } from '@/lib/module-admin/g
 import { recordAudit } from '@/lib/audit'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
+import { TableToolbar } from '@/components/table-toolbar'
 import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
+import { InspectionsSubNav } from '../_sub-nav'
 import { InspectionBanksDrawers } from './_drawers'
 
 export const metadata = { title: 'Inspection Banks' }
@@ -102,9 +104,17 @@ export default async function InspectionBanksPage({
       params.sort === 'category'
         ? [params.dir === 'asc' ? asc(inspectionBanks.category) : desc(inspectionBanks.category)]
         : params.sort === 'created_at'
-          ? [params.dir === 'asc' ? asc(inspectionBanks.createdAt) : desc(inspectionBanks.createdAt)]
+          ? [
+              params.dir === 'asc'
+                ? asc(inspectionBanks.createdAt)
+                : desc(inspectionBanks.createdAt),
+            ]
           : params.sort === 'status'
-            ? [params.dir === 'asc' ? asc(inspectionBanks.isPublished) : desc(inspectionBanks.isPublished)]
+            ? [
+                params.dir === 'asc'
+                  ? asc(inspectionBanks.isPublished)
+                  : desc(inspectionBanks.isPublished),
+              ]
             : [params.dir === 'asc' ? asc(inspectionBanks.name) : desc(inspectionBanks.name)]
 
     const [tot] = await tx.select({ c: count() }).from(inspectionBanks).where(whereClause)
@@ -150,36 +160,17 @@ export default async function InspectionBanksPage({
               </Link>
             }
           />
-          <nav className="flex flex-wrap items-center gap-2">
-            <Link
-              href="/inspections"
-              className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:border-teal-500 hover:bg-teal-50 hover:text-teal-700"
-            >
-              Recent inspections
-            </Link>
-            <Link
-              href="/forms?category=inspection"
-              className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:border-teal-500 hover:bg-teal-50 hover:text-teal-700"
-            >
-              Templates
-            </Link>
-            <Link
-              href="/inspections/banks"
-              className="rounded-full border border-teal-500 bg-teal-50 px-3 py-1 text-xs font-medium text-teal-700"
-            >
-              Inspection banks
-            </Link>
-          </nav>
-          <div className="flex items-center gap-3">
+          <InspectionsSubNav active="banks" />
+          <TableToolbar>
             <SearchInput placeholder="Search by bank name" />
-          </div>
-          <FilterChips
-            basePath="/inspections/banks"
-            currentParams={sp}
-            paramKey="status"
-            label="Status"
-            options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
-          />
+            <FilterChips
+              basePath="/inspections/banks"
+              currentParams={sp}
+              paramKey="status"
+              label="Status"
+              options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
+            />
+          </TableToolbar>
         </>
       }
     >
@@ -224,7 +215,7 @@ export default async function InspectionBanksPage({
                       {bank.name}
                     </Link>
                     {bank.description ? (
-                      <div className="mt-0.5 text-xs text-slate-500 line-clamp-1">
+                      <div className="mt-0.5 line-clamp-1 text-xs text-slate-500">
                         {bank.description}
                       </div>
                     ) : null}

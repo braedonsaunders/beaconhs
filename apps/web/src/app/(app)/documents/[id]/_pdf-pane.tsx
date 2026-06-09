@@ -64,8 +64,8 @@ export function DocumentPdfPane({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-slate-100">
-      <div className="flex h-14 shrink-0 items-center gap-3 border-b border-slate-200 bg-white px-3">
+    <div className="flex h-full min-h-0 flex-col bg-slate-100 dark:bg-slate-950">
+      <div className="flex h-14 shrink-0 items-center gap-3 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3">
         <ModeSwitch mode={mode} onChange={onModeChange} />
         <div className="ml-auto flex items-center gap-1.5">
           <button
@@ -74,18 +74,18 @@ export function DocumentPdfPane({
             className={cn(
               'inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors',
               uploadOpen
-                ? 'border-teal-300 bg-teal-50 text-teal-800'
-                : 'border-slate-200 text-slate-600 hover:bg-slate-50',
+                ? 'border-teal-300 dark:border-teal-800/60 bg-teal-50 dark:bg-teal-950/50 text-teal-800 dark:text-teal-300'
+                : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60',
             )}
           >
             <Upload size={13} /> Upload PDF
           </button>
           {url ? (
             <>
-              <a href={url} download className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 text-xs font-medium text-slate-600 hover:bg-slate-50">
+              <a href={url} download className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 dark:border-slate-800 px-2.5 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60">
                 <Download size={13} /> Download
               </a>
-              <a href={url} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 text-xs font-medium text-slate-600 hover:bg-slate-50">
+              <a href={url} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 dark:border-slate-800 px-2.5 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60">
                 <ExternalLink size={13} /> New tab
               </a>
             </>
@@ -94,7 +94,7 @@ export function DocumentPdfPane({
       </div>
 
       {uploadOpen ? (
-        <div className="border-b border-slate-200 bg-white p-3">
+        <div className="border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3">
           <FileUploader
             requestUploadAction={requestUpload}
             finalizeUploadAction={finalizeUpload}
@@ -110,7 +110,7 @@ export function DocumentPdfPane({
         {status === 'ready' && url ? (
           <iframe src={url} title="Document PDF" className="h-full w-full" />
         ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center text-sm text-slate-600">
+          <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center text-sm text-slate-600 dark:text-slate-300">
             {status === 'error' ? (
               <>
                 <p className="text-rose-600">{error ?? 'Could not load the PDF.'}</p>

@@ -29,7 +29,7 @@ export function DashboardHeader({
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-      className="relative overflow-hidden rounded-2xl border border-slate-200/60 bg-gradient-to-br from-slate-950 via-slate-900 to-teal-950 text-white shadow-[0_20px_60px_-20px_rgba(15,23,42,0.45)]"
+      className="relative overflow-hidden rounded-2xl border border-slate-200/60 dark:border-slate-800/60 bg-gradient-to-br from-slate-950 via-slate-900 to-teal-950 text-white shadow-[0_20px_60px_-20px_rgba(15,23,42,0.45)]"
     >
       <div
         aria-hidden

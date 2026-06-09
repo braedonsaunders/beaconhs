@@ -50,19 +50,19 @@ export function GenericSendEmailDialog({
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 p-4">
-      <div className="w-full max-w-lg rounded-lg border border-slate-200 bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
+      <div className="w-full max-w-lg rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xl">
+        <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 px-5 py-3">
           <div className="flex items-center gap-2">
-            <Mail size={16} className="text-teal-700" />
-            <h2 className="text-base font-semibold text-slate-900">
+            <Mail size={16} className="text-teal-700 dark:text-teal-300" />
+            <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
               {title}
-              {reference ? <span className="ml-2 font-mono text-xs text-slate-500">{reference}</span> : null}
+              {reference ? <span className="ml-2 font-mono text-xs text-slate-500 dark:text-slate-400">{reference}</span> : null}
             </h2>
           </div>
           <button
             type="button"
             onClick={() => router.replace(window.location.pathname as any)}
-            className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            className="rounded p-1 text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200"
             aria-label="Close"
           >
             <X size={16} />
@@ -82,7 +82,7 @@ export function GenericSendEmailDialog({
           {Object.entries(hiddenFields).map(([k, v]) => (
             <input key={k} type="hidden" name={k} value={v} />
           ))}
-          {description ? <p className="text-sm text-slate-600">{description}</p> : null}
+          {description ? <p className="text-sm text-slate-600 dark:text-slate-300">{description}</p> : null}
 
           <div className="space-y-1.5">
             <Label htmlFor="recipients">Recipients (comma-separated)</Label>
@@ -93,7 +93,7 @@ export function GenericSendEmailDialog({
               defaultValue={defaultRecipients}
               placeholder="alice@example.com, bob@example.com"
             />
-            <p className="text-[11px] text-slate-500">
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
               Each address gets its own copy. Leave blank to send to the default tenant admin
               distribution list.
             </p>
@@ -124,11 +124,11 @@ export function GenericSendEmailDialog({
             />
           </div>
 
-          <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-3">
+          <div className="flex items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-800 pt-3">
             <button
               type="button"
               onClick={() => router.replace(window.location.pathname as any)}
-              className="rounded-md border border-slate-200 px-3 py-1.5 text-sm hover:bg-slate-50"
+              className="rounded-md border border-slate-200 dark:border-slate-800 px-3 py-1.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-800/60"
             >
               Cancel
             </button>

@@ -38,15 +38,15 @@ export default async function CustomiseDashboardPage() {
           <div>
             <Link
               href="/dashboard"
-              className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 transition hover:text-teal-700"
+              className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 dark:text-slate-400 transition hover:text-teal-700 dark:hover:text-teal-300"
             >
               <ArrowLeft size={12} />
               Back to dashboard
             </Link>
-            <h1 className="mt-1 text-xl font-semibold text-slate-900">
+            <h1 className="mt-1 text-xl font-semibold text-slate-900 dark:text-slate-100">
               Customise your dashboard
             </h1>
-            <p className="mt-0.5 text-xs text-slate-500">
+            <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
               Tailored to your role: {ROLE_TIER_LABELS[role]}. Drag tiles, resize
               from any corner, add new widgets from the palette, or reset to the
               default layout for your role.

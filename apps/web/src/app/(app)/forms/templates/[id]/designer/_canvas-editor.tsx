@@ -6,7 +6,7 @@
 // PRODUCT renders mobile-first (see _lib/canvas.ts). Uses react-grid-layout v2,
 // which needs an explicit width, so we self-measure with a ResizeObserver.
 
-import { useMemo, useRef } from 'react'
+import { useMemo, useRef, type RefObject } from 'react'
 // react-grid-layout v2 (current API): config-object props + the
 // useContainerWidth hook (the modern WidthProvider replacement).
 import {
@@ -17,8 +17,16 @@ import {
   type LayoutItem,
 } from 'react-grid-layout'
 import 'react-grid-layout/css/styles.css'
+
+// Free-form placement: no auto-compaction (elements stay exactly where you drop
+// them), but collisions are BLOCKED rather than pushing neighbours away or
+// allowing overlap. `noCompactor` alone leaves `preventCollision` off, so RGL
+// shoves items far on collision (and can leave overlaps) — preventCollision
+// turns "push neighbour away" into "snap back", fixing both.
+const FREE_COMPACTOR = { ...noCompactor, preventCollision: true }
 import { GripVertical, Trash2 } from 'lucide-react'
 import { FIELD_TYPES, type CanvasItem, type FieldType, type FormSection } from '@beaconhs/forms-core'
+import { ElementPreview } from './_element-preview'
 
 // Curated widget palette with sensible default boxes (in grid units, 12 cols).
 const PALETTE: { type: FieldType; w: number; h: number }[] = [
@@ -66,6 +74,7 @@ function sameItems(a: CanvasItem[], b: CanvasItem[]): boolean {
 export function CanvasEditor({
   section,
   selectedFieldId,
+  dragTypeRef,
   onLayout,
   onAddWidget,
   onSelect,
@@ -73,6 +82,8 @@ export function CanvasEditor({
 }: {
   section: FormSection
   selectedFieldId: string | null
+  // The element type currently being dragged from the left palette.
+  dragTypeRef: RefObject<FieldType | null>
   onLayout: (items: CanvasItem[]) => void
   onAddWidget: (type: FieldType, box: { x: number; y: number; w: number; h: number }) => void
   onSelect: (fieldId: string) => void
@@ -80,7 +91,11 @@ export function CanvasEditor({
 }) {
   const canvas = section.canvas!
   const { width, mounted, containerRef } = useContainerWidth({ measureBeforeMount: true })
-  const dragType = useRef<FieldType | null>(null)
+  // Tells a real "select" click apart from the click event that fires at the END
+  // of a drag/resize: a drag's release click lands far from where the press
+  // began, so only a near-stationary click selects. A pure distance check can
+  // never block a genuine (stationary) click, so selection always works.
+  const pressRef = useRef<{ x: number; y: number } | null>(null)
 
   const fieldById = useMemo(() => new Map(section.fields.map((f) => [f.id, f])), [section.fields])
   // Only render items whose field still exists.
@@ -89,60 +104,42 @@ export function CanvasEditor({
     [canvas.items, fieldById],
   )
   const layout = useMemo(() => toLayout(items), [items])
-  const bottomY = items.reduce((m, it) => Math.max(m, it.y + it.h), 0)
 
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-dashed border-slate-300 bg-slate-50 p-2">
-        <span className="self-center pr-1 text-[11px] font-medium text-slate-500">
-          Drag onto the canvas →
-        </span>
-        {PALETTE.map((p) => (
-          <button
-            key={p.type}
-            type="button"
-            draggable
-            onDragStart={(e) => {
-              dragType.current = p.type
-              e.dataTransfer.setData('text/plain', p.type)
-              e.dataTransfer.effectAllowed = 'copy'
-            }}
-            onClick={() => onAddWidget(p.type, { x: 0, y: bottomY, ...defaultBox(p.type) })}
-            className="cursor-grab rounded border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700 transition hover:border-teal-400 hover:bg-teal-50 active:cursor-grabbing"
-            title={`Drag or click to add a ${FIELD_TYPES[p.type]?.label ?? p.type}`}
-          >
-            {FIELD_TYPES[p.type]?.label ?? p.type}
-          </button>
-        ))}
-      </div>
-
-      <div
-        ref={containerRef}
-        className="min-h-[220px] rounded-md border border-slate-200"
-        style={{
-          backgroundImage:
-            'linear-gradient(to right, #f1f5f9 1px, transparent 1px), linear-gradient(to bottom, #f1f5f9 1px, transparent 1px)',
-          backgroundSize: `${width > 0 ? width / canvas.cols : 40}px ${canvas.rowHeight}px`,
-        }}
-      >
-        {mounted && width > 0 ? (
-          <GridLayout
-            width={width}
-            layout={layout}
-            gridConfig={{ cols: canvas.cols, rowHeight: canvas.rowHeight, margin: [8, 8] }}
-            dragConfig={{ handle: '.cv-drag' }}
-            dropConfig={{
-              enabled: true,
-              defaultItem: { w: 4, h: 3 },
-              onDragOver: () => ({ w: 4, h: 3 }),
-            }}
-            compactor={noCompactor}
-            droppingItem={{ i: '__dropping__', x: 0, y: 0, w: 4, h: 3 }}
-            onDrop={(_l, item) => {
-              const t = dragType.current
-              if (t && item) onAddWidget(t, { x: item.x, y: item.y, ...defaultBox(t) })
-              dragType.current = null
-            }}
+    <div
+      ref={containerRef}
+      className="relative min-h-[240px] rounded-md border border-slate-200"
+      style={{
+        backgroundImage:
+          'linear-gradient(to right, #f1f5f9 1px, transparent 1px), linear-gradient(to bottom, #f1f5f9 1px, transparent 1px)',
+        backgroundSize: `${width > 0 ? width / canvas.cols : 40}px ${canvas.rowHeight}px`,
+      }}
+    >
+      {items.length === 0 ? (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <span className="rounded-md bg-white/80 px-3 py-1.5 text-xs text-slate-400">
+            Drag elements here from the left panel
+          </span>
+        </div>
+      ) : null}
+      {mounted && width > 0 ? (
+        <GridLayout
+          width={width}
+          layout={layout}
+          gridConfig={{ cols: canvas.cols, rowHeight: canvas.rowHeight, margin: [8, 8] }}
+          dragConfig={{ handle: '.cv-drag' }}
+          dropConfig={{
+            enabled: true,
+            defaultItem: { w: 4, h: 3 },
+            onDragOver: () => ({ w: 4, h: 3 }),
+          }}
+          compactor={FREE_COMPACTOR}
+          droppingItem={{ i: '__dropping__', x: 0, y: 0, w: 4, h: 3 }}
+          onDrop={(_l, item) => {
+            const t = dragTypeRef.current
+            if (t && item) onAddWidget(t, { x: item.x, y: item.y, ...defaultBox(t) })
+            dragTypeRef.current = null
+          }}
             onLayoutChange={(l) => {
               const next = fromLayout(l)
               if (!sameItems(items, next)) onLayout(next)
@@ -154,39 +151,52 @@ export function CanvasEditor({
               return (
                 <div
                   key={it.i}
-                  onClick={() => onSelect(f.id)}
-                  className={`group flex h-full flex-col overflow-hidden rounded-md border bg-white shadow-sm ${
-                    sel ? 'border-teal-500 ring-1 ring-teal-500' : 'border-slate-200'
+                  onPointerDown={(e) => {
+                    pressRef.current = { x: e.clientX, y: e.clientY }
+                  }}
+                  onClick={(e) => {
+                    const d = pressRef.current
+                    pressRef.current = null
+                    // The click that ends a drag/resize lands far from the press —
+                    // only a near-stationary click selects, so moving an element no
+                    // longer opens the properties panel.
+                    if (d && Math.hypot(e.clientX - d.x, e.clientY - d.y) > 5) return
+                    onSelect(f.id)
+                  }}
+                  title={FIELD_TYPES[f.type]?.label ?? f.type}
+                  className={`group relative flex h-full cursor-pointer flex-col overflow-hidden rounded-lg border bg-white shadow-sm transition ${
+                    sel ? 'border-teal-500 ring-1 ring-teal-500' : 'border-slate-200 hover:border-slate-300 hover:shadow'
                   }`}
                 >
-                  <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-1.5 py-0.5">
-                    <span className="cv-drag flex flex-1 cursor-grab items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-slate-400 active:cursor-grabbing">
-                      <GripVertical size={11} /> {FIELD_TYPES[f.type]?.label ?? f.type}
+                  {/* Hover toolbar: drag handle + remove. The card body is a live
+                      preview of the element as it ships. */}
+                  <div className="absolute right-1 top-1 z-10 flex items-center gap-0.5 opacity-0 transition group-hover:opacity-100">
+                    <span
+                      className="cv-drag flex h-5 w-5 cursor-grab items-center justify-center rounded bg-white/90 text-slate-400 shadow-sm ring-1 ring-slate-200 hover:text-slate-600 active:cursor-grabbing"
+                      title="Drag to move"
+                    >
+                      <GripVertical size={11} />
                     </span>
                     <button
                       type="button"
-                      title="Remove widget"
+                      title="Remove element"
                       onClick={(e) => {
                         e.stopPropagation()
                         onDelete(f.id)
                       }}
-                      className="text-slate-300 hover:text-rose-500"
+                      className="flex h-5 w-5 items-center justify-center rounded bg-white/90 text-slate-400 shadow-sm ring-1 ring-slate-200 hover:text-rose-500"
                     >
                       <Trash2 size={11} />
                     </button>
                   </div>
-                  <div className="min-w-0 flex-1 px-2 py-1">
-                    <div className="truncate text-xs font-medium text-slate-700">
-                      {f.label?.en ?? f.id}
-                    </div>
-                    {f.required ? <span className="text-[10px] text-rose-500">required</span> : null}
+                  <div className="app-scroll min-h-0 flex-1 overflow-auto p-2.5">
+                    <ElementPreview field={f} compact />
                   </div>
                 </div>
               )
             })}
           </GridLayout>
         ) : null}
-      </div>
     </div>
   )
 }

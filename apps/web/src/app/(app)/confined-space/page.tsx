@@ -21,6 +21,7 @@ import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
+import { TableToolbar } from '@/components/table-toolbar'
 
 export const metadata = { title: 'Confined Space' }
 
@@ -40,7 +41,12 @@ export default async function ConfinedSpacePage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const sp = await searchParams
-  const params = parseListParams(sp, { sort: 'issued_at', dir: 'desc', perPage: 25, allowedSorts: SORTS })
+  const params = parseListParams(sp, {
+    sort: 'issued_at',
+    dir: 'desc',
+    perPage: 25,
+    allowedSorts: SORTS,
+  })
   const statusFilter = pickString(sp.status)
   const ctx = await requireRequestContext()
 
@@ -118,16 +124,16 @@ export default async function ConfinedSpacePage({
               Atmospheric sensors
             </Link>
           </nav>
-          <div className="flex items-center gap-3">
+          <TableToolbar>
             <SearchInput placeholder="Search by permit title" />
-          </div>
-          <FilterChips
-            basePath="/confined-space"
-            currentParams={sp}
-            paramKey="status"
-            label="Status"
-            options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
-          />
+            <FilterChips
+              basePath="/confined-space"
+              currentParams={sp}
+              paramKey="status"
+              label="Status"
+              options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
+            />
+          </TableToolbar>
         </>
       }
     >
@@ -147,12 +153,24 @@ export default async function ConfinedSpacePage({
           <Table>
             <TableHeader>
               <TableRow>
-                <SortableTh {...sortProps} column="reference" active={params.sort === 'reference'}>Ref</SortableTh>
+                <SortableTh {...sortProps} column="reference" active={params.sort === 'reference'}>
+                  Ref
+                </SortableTh>
                 <TableHead>Title</TableHead>
-                <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>Status</SortableTh>
+                <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>
+                  Status
+                </SortableTh>
                 <TableHead>Site</TableHead>
-                <SortableTh {...sortProps} column="issued_at" active={params.sort === 'issued_at'}>Issued</SortableTh>
-                <SortableTh {...sortProps} column="expires_at" active={params.sort === 'expires_at'}>Expires</SortableTh>
+                <SortableTh {...sortProps} column="issued_at" active={params.sort === 'issued_at'}>
+                  Issued
+                </SortableTh>
+                <SortableTh
+                  {...sortProps}
+                  column="expires_at"
+                  active={params.sort === 'expires_at'}
+                >
+                  Expires
+                </SortableTh>
               </TableRow>
             </TableHeader>
             <TableBody>

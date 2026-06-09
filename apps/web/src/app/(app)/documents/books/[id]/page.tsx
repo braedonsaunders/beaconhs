@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { and, asc, eq, notInArray, ne, sql } from 'drizzle-orm'
+import { and, asc, eq, isNull, notInArray, ne, sql } from 'drizzle-orm'
 import { ArrowDown, ArrowUp, Check, FileDown, FileText, Trash2 } from 'lucide-react'
 import {
   Badge,
@@ -17,7 +17,7 @@ import {
   Select,
   Textarea,
 } from '@beaconhs/ui'
-import { documentBookItems, documentBooks, documents } from '@beaconhs/db/schema'
+import { documentBookItems, documentBooks, documentCategories, documentTypes, documents } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
@@ -223,12 +223,24 @@ async function updateBookSettings(formData: FormData) {
   const bookId = String(formData.get('bookId') ?? '')
   const title = String(formData.get('title') ?? '').trim()
   const description = String(formData.get('description') ?? '').trim() || null
-  const category = String(formData.get('category') ?? '').trim() || null
+  const categoryId = String(formData.get('categoryId') ?? '').trim() || null
+  const typeId = String(formData.get('typeId') ?? '').trim() || null
+  const reviewRaw = String(formData.get('reviewFrequencyMonths') ?? '').trim()
+  const reviewFrequencyMonths = reviewRaw ? Number(reviewRaw) : null
+  const nextReviewOn = String(formData.get('nextReviewOn') ?? '').trim() || null
   const status = String(formData.get('status') ?? '') as 'draft' | 'published'
   if (!bookId || !title) return
 
   await ctx.db(async (tx) => {
-    const patch: Record<string, unknown> = { title, name: title, description, category }
+    const patch: Record<string, unknown> = {
+      title,
+      name: title,
+      description,
+      categoryId,
+      typeId,
+      reviewFrequencyMonths,
+      nextReviewOn,
+    }
     if (status === 'published') {
       patch.status = 'published'
       patch.publishedAt = new Date()
@@ -245,7 +257,7 @@ async function updateBookSettings(formData: FormData) {
     entityId: bookId,
     action: 'update',
     summary: 'Updated book settings',
-    after: { title, description, category, status },
+    after: { title, description, categoryId, typeId, status },
   })
   revalidatePath(`/documents/books/${bookId}`)
   revalidatePath('/documents/books')
@@ -296,11 +308,21 @@ export default async function DocumentBookPage({
             .where(ne(documents.status, 'archived'))
             .orderBy(asc(documents.title))
             .limit(200)
-    return { book, items, available }
+    const categories = await tx
+      .select({ id: documentCategories.id, name: documentCategories.name })
+      .from(documentCategories)
+      .where(isNull(documentCategories.deletedAt))
+      .orderBy(asc(documentCategories.name))
+    const types = await tx
+      .select({ id: documentTypes.id, name: documentTypes.name })
+      .from(documentTypes)
+      .where(isNull(documentTypes.deletedAt))
+      .orderBy(asc(documentTypes.name))
+    return { book, items, available, categories, types }
   })
 
   if (!data) notFound()
-  const { book, items, available } = data
+  const { book, items, available, categories, types } = data
   const basePath = `/documents/books/${id}`
   const display = book.title || book.name || '(untitled)'
 
@@ -480,13 +502,38 @@ export default async function DocumentBookPage({
                 </Field>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <Field label="Category">
-                    <Input name="category" defaultValue={book.category ?? ''} />
+                    <Select name="categoryId" defaultValue={book.categoryId ?? ''}>
+                      <option value="">—</option>
+                      {categories.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </Select>
                   </Field>
+                  <Field label="Type">
+                    <Select name="typeId" defaultValue={book.typeId ?? ''}>
+                      <option value="">—</option>
+                      {types.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <Field label="Status">
                     <Select name="status" defaultValue={book.status}>
                       <option value="draft">Draft</option>
                       <option value="published">Published</option>
                     </Select>
+                  </Field>
+                  <Field label="Review every (mo.)">
+                    <Input name="reviewFrequencyMonths" type="number" min="1" defaultValue={book.reviewFrequencyMonths ?? ''} placeholder="12" />
+                  </Field>
+                  <Field label="Next review">
+                    <Input name="nextReviewOn" type="date" defaultValue={book.nextReviewOn ?? ''} />
                   </Field>
                 </div>
                 <Field label="Description">

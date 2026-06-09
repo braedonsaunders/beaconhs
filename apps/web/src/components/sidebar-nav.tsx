@@ -92,15 +92,25 @@ export type SidebarNavGroup = {
  * The "active" check is greedy: /equipment/123 highlights the /equipment
  * top-level nav item. Sub-routes therefore keep the parent illuminated.
  */
-export function SidebarNav({ groups }: { groups: SidebarNavGroup[] }) {
+export function SidebarNav({
+  groups,
+  collapsed = false,
+}: {
+  groups: SidebarNavGroup[]
+  collapsed?: boolean
+}) {
   const pathname = usePathname() ?? ''
   return (
-    <nav className="app-scroll flex-1 overflow-y-auto px-2 py-3">
+    <nav className={cn('app-scroll flex-1 overflow-y-auto py-3', collapsed ? 'px-2' : 'px-2')}>
       {groups.map((group) => (
         <div key={group.label} className="mb-3">
-          <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-            {group.label}
-          </div>
+          {collapsed ? (
+            <div className="mx-2 mb-1 border-t border-slate-100 dark:border-slate-800" aria-hidden />
+          ) : (
+            <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+              {group.label}
+            </div>
+          )}
           {group.items.map((item) => {
             const active = isActive(pathname, item.href)
             const Icon = ICONS[item.iconKey] ?? Gauge
@@ -109,25 +119,29 @@ export function SidebarNav({ groups }: { groups: SidebarNavGroup[] }) {
                 key={item.href}
                 href={item.href as any}
                 aria-current={active ? 'page' : undefined}
+                title={collapsed ? item.label : undefined}
                 className={cn(
-                  'group relative flex items-center gap-2.5 rounded-md px-2 py-1.5 text-sm',
+                  'group relative flex items-center rounded-md py-1.5 text-sm',
                   'transition-colors duration-150 ease-out',
+                  collapsed ? 'justify-center px-2' : 'gap-2.5 px-2',
                   'before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-5 before:w-[2px] before:rounded-full',
                   'before:transition-all before:duration-150 before:ease-out',
                   active
-                    ? 'bg-teal-50 text-teal-900 before:bg-teal-700 before:h-6'
-                    : 'text-slate-700 before:bg-transparent hover:bg-slate-100 hover:text-slate-900 hover:before:bg-slate-300',
+                    ? 'bg-teal-50 text-teal-900 before:h-6 before:bg-teal-700 dark:bg-teal-950/50 dark:text-teal-100 dark:before:bg-teal-400'
+                    : 'text-slate-700 before:bg-transparent hover:bg-slate-100 hover:text-slate-900 hover:before:bg-slate-300 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100 dark:hover:before:bg-slate-600',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/40',
                 )}
               >
                 <Icon
                   size={15}
                   className={cn(
-                    'transition-colors duration-150',
-                    active ? 'text-teal-700' : 'text-slate-500 group-hover:text-slate-700',
+                    'shrink-0 transition-colors duration-150',
+                    active
+                      ? 'text-teal-700 dark:text-teal-300'
+                      : 'text-slate-500 group-hover:text-slate-700 dark:text-slate-400 dark:group-hover:text-slate-200',
                   )}
                 />
-                <span>{item.label}</span>
+                {collapsed ? null : <span>{item.label}</span>}
               </Link>
             )
           })}

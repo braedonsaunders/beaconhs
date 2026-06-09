@@ -11,7 +11,7 @@
 // All edits mutate a local copy of FormSchemaV1. Publish writes a new immutable
 // version via the `publishNewVersion` server action.
 
-import { useState, useTransition, useMemo } from 'react'
+import { useEffect, useRef, useState, useTransition, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -24,7 +24,6 @@ import {
   CheckCircle2,
   CheckSquare,
   ChevronDown,
-  ChevronRight,
   ClipboardCheck,
   Eye,
   FileText,
@@ -76,6 +75,7 @@ import {
   FIELD_TYPES,
   entityKindForPicker,
   type CanvasLayout,
+  type DataBinding,
   type DefaultValueExpression,
   type FieldType,
   type FormField,
@@ -92,7 +92,10 @@ import { LogicBuilder } from './logic-builder'
 import { FormulaBuilder } from './formula-builder'
 import { CanvasEditor, defaultBox } from './_canvas-editor'
 import { FlowsCanvas, type FlowSummary } from '../flows/_flows-canvas'
-import { LayoutGrid, PanelLeft, Send, SlidersHorizontal, Workflow as WorkflowIcon } from 'lucide-react'
+import { AiAssistant } from '@/components/ai-assistant'
+import { runAppBuilderChat } from '../../../_ai-actions'
+import { BarChart3, Bold, Database, LayoutGrid, ListOrdered, MapPinned, PanelLeft, ScanLine, Send, SlidersHorizontal, Sparkles, Workflow as WorkflowIcon } from 'lucide-react'
+import { listDataSources, type DataSourceSummary } from '../../../_lib/data-sources'
 
 // --- Palette ---------------------------------------------------------------
 
@@ -102,6 +105,9 @@ const FIELD_ICONS: Partial<Record<FieldType, React.ComponentType<{ size?: number
   textarea: AlignLeft,
   long_text: AlignLeft,
   number: Hash,
+  slider: Sliders,
+  gps: MapPin,
+  matrix: LayoutGrid,
   date: Calendar,
   datetime: Calendar,
   time: Calendar,
@@ -125,6 +131,8 @@ const FIELD_ICONS: Partial<Record<FieldType, React.ComponentType<{ size?: number
   course_picker: ClipboardCheck,
   photo: ImageIcon,
   photo_upload: ImageIcon,
+  photo_ai: Sparkles,
+  photo_annotated: MapPinned,
   file: Upload,
   video: Video,
   audio: Mic,
@@ -138,22 +146,30 @@ const FIELD_ICONS: Partial<Record<FieldType, React.ComponentType<{ size?: number
   image: ImageIcon,
   divider: Minus,
   table: Table2,
+  lookup: Database,
+  data_table: Table2,
+  metric: BarChart3,
+  qr_scanner: ScanLine,
+  ranking: ListOrdered,
+  rich_text: Bold,
+  address: MapPin,
 }
 
 // Categorized palette. The first group of each section gets prominent
 // placement at the top; rare ones live in "More" further down.
 type PaletteGroup = { label: string; types: FieldType[] }
 const PALETTE_PRIMARY: PaletteGroup[] = [
-  { label: 'Common', types: ['text', 'long_text', 'number', 'date', 'table', 'select', 'checkbox_group', 'pass_fail_na', 'signature', 'photo', 'file', 'person_picker', 'formula'] },
+  { label: 'Common', types: ['text', 'long_text', 'number', 'slider', 'date', 'table', 'select', 'checkbox_group', 'pass_fail_na', 'signature', 'photo', 'file', 'person_picker', 'formula'] },
 ]
 const PALETTE_MORE: PaletteGroup[] = [
-  { label: 'Standard', types: ['textarea', 'datetime', 'time', 'email', 'phone', 'url'] },
-  { label: 'Choice', types: ['radio', 'multi_select'] },
-  { label: 'Scoring', types: ['rating', 'yes_no_comment', 'traffic_light'] },
+  { label: 'Standard', types: ['textarea', 'datetime', 'time', 'gps', 'email', 'phone', 'url', 'rich_text', 'address', 'qr_scanner'] },
+  { label: 'Choice', types: ['radio', 'multi_select', 'ranking'] },
+  { label: 'Scoring', types: ['rating', 'matrix', 'yes_no_comment', 'traffic_light'] },
   { label: 'Pickers', types: ['multi_person_picker', 'site_picker', 'equipment_picker', 'ppe_picker', 'document_picker', 'course_picker'] },
-  { label: 'Media', types: ['video', 'audio'] },
+  { label: 'Media', types: ['photo_ai', 'photo_annotated', 'video', 'audio'] },
   { label: 'Identity', types: ['typed_attestation'] },
   { label: 'Computed', types: ['calc', 'risk_matrix'] },
+  { label: 'Data', types: ['lookup', 'data_table', 'metric'] },
   { label: 'Display', types: ['heading', 'paragraph', 'image', 'divider'] },
 ]
 
@@ -196,14 +212,6 @@ export type AppOverview = {
   emailOnSubmit: boolean
 }
 
-export type AppAssignmentRow = {
-  id: string
-  mode: string
-  cron: string | null
-  targetRoleKeys: string[] | null
-  enabled: boolean
-}
-
 export function FormDesigner({
   templateId,
   templateName,
@@ -212,7 +220,6 @@ export function FormDesigner({
   currentVersion,
   initialSurface = 'build',
   overview,
-  assignments = [],
   allowedRoles = [],
   roles = [],
   flows = [],
@@ -225,7 +232,6 @@ export function FormDesigner({
   currentVersion: number
   initialSurface?: 'build' | 'flows'
   overview?: AppOverview
-  assignments?: AppAssignmentRow[]
   allowedRoles?: string[]
   roles?: { key: string; name: string }[]
   flows?: FlowSummary[]
@@ -237,6 +243,11 @@ export function FormDesigner({
   // Unified editor: left rail tab + right surface.
   const [leftTab, setLeftTab] = useState<'overview' | 'build' | 'assignments' | 'permissions'>('build')
   const [surface, setSurface] = useState<'build' | 'flows'>(initialSurface)
+  const [designerTab, setDesignerTab] = useState<string>(() => initialSchema.tabs?.[0]?.id ?? '')
+  const [showAiAssistant, setShowAiAssistant] = useState(false)
+  // The element type currently being dragged from the left palette — read by the
+  // canvas on drop. (HTML5 dataTransfer is also set, for the browser's drag UX.)
+  const dragElementRef = useRef<FieldType | null>(null)
   const [selection, setSelection] = useState<
     | { kind: 'form' }
     | { kind: 'section'; sectionId: string }
@@ -246,7 +257,6 @@ export function FormDesigner({
   // Which right-hand flyout is open. Preview + properties used to be permanent
   // columns (too cramped); now they slide in on demand.
   const [rightPanel, setRightPanel] = useState<'none' | 'props' | 'preview'>('none')
-  const [showMorePalette, setShowMorePalette] = useState(false)
   const [showPublish, setShowPublish] = useState(false)
   const [pending, start] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -303,17 +313,69 @@ export function FormDesigner({
         id,
         title: { en: 'New section' },
         fields: [],
+        // New sections land in the active designer tab (if the app uses tabs).
+        ...(draft.tabs?.length ? { tabId: designerTab || draft.tabs[0]!.id } : {}),
       })
       return draft
     })
     selectSection(id)
   }
 
+  // --- Tabs (presentational app pages) -------------------------------------
+
+  function addTab() {
+    const id = newId('tab')
+    update((draft) => {
+      const tabs = draft.tabs ?? []
+      const title = { en: `Tab ${tabs.length + 1}` }
+      if (tabs.length === 0) {
+        // First tab: pull every existing section into it so nothing is orphaned.
+        draft.tabs = [{ id, title }]
+        for (const s of draft.sections) s.tabId = id
+      } else {
+        draft.tabs = [...tabs, { id, title }]
+      }
+      return draft
+    })
+    setDesignerTab(id)
+  }
+
+  function renameTab(id: string, en: string) {
+    update((draft) => {
+      const t = draft.tabs?.find((x) => x.id === id)
+      if (t) t.title = { en }
+      return draft
+    })
+  }
+
+  function deleteTab(id: string) {
+    update((draft) => {
+      const remaining = (draft.tabs ?? []).filter((t) => t.id !== id)
+      const fallback = remaining[0]?.id
+      for (const s of draft.sections) if (s.tabId === id) s.tabId = fallback
+      draft.tabs = remaining.length ? remaining : undefined
+      return draft
+    })
+    setDesignerTab((cur) => (cur === id ? schema.tabs?.find((t) => t.id !== id)?.id ?? '' : cur))
+  }
+
+
   function addField(sectionId: string, type: FieldType) {
     const f = emptyField(type)
     update((draft) => {
       const sec = draft.sections.find((s) => s.id === sectionId)
-      if (sec) sec.fields.push(f)
+      if (!sec) return draft
+      sec.fields.push(f)
+      // If the section is in canvas mode, also place the new element on the grid
+      // (append below everything) — otherwise a clicked element would be invisible.
+      if (sec.canvas) {
+        const box = defaultBox(type)
+        const bottomY = sec.canvas.items.reduce((m, it) => Math.max(m, it.y + it.h), 0)
+        sec.canvas = {
+          ...sec.canvas,
+          items: [...sec.canvas.items, { i: f.id, x: 0, y: bottomY, w: Math.min(box.w * 2, 12), h: box.h }],
+        }
+      }
       return draft
     })
     selectField(sectionId, f.id)
@@ -399,32 +461,38 @@ export function FormDesigner({
     return defaultBox(type)
   }
 
-  // Turn a section into canvas mode, auto-placing its existing fields in a
-  // single column so nothing is lost.
-  function enableCanvas(sectionId: string) {
+  // Free-form CANVAS layout is a GLOBAL, app-level mode (advanced) — not a
+  // per-section toggle. Turning it on auto-places every section's fields in a
+  // column so nothing is lost; turning it off drops the positioning back to a
+  // stacked layout.
+  function setAllCanvas(on: boolean) {
     update((draft) => {
-      const sec = draft.sections.find((s) => s.id === sectionId)
-      if (!sec || sec.canvas) return draft
-      let y = 0
-      const items = sec.fields.map((f) => {
-        const box = canvasBoxFor(f.type)
-        const item = { i: f.id, x: 0, y, w: Math.min(box.w * 2, 12), h: box.h }
-        y += box.h
-        return item
-      })
-      sec.canvas = { cols: 12, rowHeight: 40, items }
+      for (const sec of draft.sections) {
+        if (on && !sec.canvas) {
+          let y = 0
+          sec.canvas = {
+            cols: 12,
+            rowHeight: 40,
+            items: sec.fields.map((f) => {
+              const box = canvasBoxFor(f.type)
+              const item = { i: f.id, x: 0, y, w: Math.min(box.w * 2, 12), h: box.h }
+              y += box.h
+              return item
+            }),
+          }
+        } else if (!on && sec.canvas) {
+          delete sec.canvas
+        }
+      }
       return draft
     })
   }
-
-  function disableCanvas(sectionId: string) {
-    update((draft) => {
-      const sec = draft.sections.find((s) => s.id === sectionId)
-      if (!sec) return draft
-      delete sec.canvas
-      return draft
-    })
-  }
+  const canvasMode = schema.sections.length > 0 && schema.sections.every((s) => !!s.canvas)
+  // When the app uses tabs, the build surface shows one tab's sections at a time.
+  const appTabs = schema.tabs ?? []
+  const visibleSections = appTabs.length
+    ? schema.sections.filter((s) => (s.tabId ?? appTabs[0]!.id) === designerTab)
+    : schema.sections
 
   function setCanvasItems(sectionId: string, items: CanvasLayout['items']) {
     update((draft) => {
@@ -501,6 +569,15 @@ export function FormDesigner({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {canGenerate ? (
+            <Button
+              size="sm"
+              onClick={() => setShowAiAssistant(true)}
+              className="bg-violet-600 text-white hover:bg-violet-700"
+            >
+              <Sparkles size={14} /> AI
+            </Button>
+          ) : null}
           <Link href={`/forms/templates/${templateId}/fill`}>
             <Button variant="outline" size="sm">
               <ClipboardCheck size={14} /> Fill
@@ -522,7 +599,7 @@ export function FormDesigner({
             <Eye size={14} />
             Preview
           </Button>
-          <Button onClick={() => setShowPublish(true)} disabled={pending}>
+          <Button size="sm" onClick={() => setShowPublish(true)} disabled={pending}>
             <Save size={14} />
             Publish v{currentVersion + 1}
           </Button>
@@ -531,18 +608,18 @@ export function FormDesigner({
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* LEFT 1/3 — Overview / Build / Assignments / Permissions */}
-        <aside className="flex w-1/3 min-w-[300px] max-w-md shrink-0 flex-col border-r border-slate-200 bg-white">
+        <aside className="flex w-72 shrink-0 flex-col border-r border-slate-200 bg-white">
           <div className="flex shrink-0 items-center gap-0.5 border-b border-slate-200 px-2 py-1.5">
-            <LeftTab active={leftTab === 'overview'} onClick={() => setLeftTab('overview')} icon={<SlidersHorizontal size={13} />} label="Overview" />
-            <LeftTab active={leftTab === 'build'} onClick={() => setLeftTab('build')} icon={<PanelLeft size={13} />} label="Build" />
-            <LeftTab active={leftTab === 'assignments'} onClick={() => setLeftTab('assignments')} icon={<Send size={13} />} label="Assign" />
-            <LeftTab active={leftTab === 'permissions'} onClick={() => setLeftTab('permissions')} icon={<ShieldCheck size={13} />} label="Access" />
+            <LeftTab active={leftTab === 'overview'} onClick={() => setLeftTab('overview')} icon={<SlidersHorizontal size={16} />} label="Overview" />
+            <LeftTab active={leftTab === 'build'} onClick={() => setLeftTab('build')} icon={<PanelLeft size={16} />} label="Build" />
+            <LeftTab active={leftTab === 'assignments'} onClick={() => setLeftTab('assignments')} icon={<Send size={16} />} label="Assign" />
+            <LeftTab active={leftTab === 'permissions'} onClick={() => setLeftTab('permissions')} icon={<ShieldCheck size={16} />} label="Access" />
           </div>
           <div className="app-scroll min-h-0 flex-1 overflow-y-auto p-3">
             {leftTab === 'overview' ? (
               <OverviewPanel templateId={templateId} name={appName} overview={overview} onSaved={setAppName} />
             ) : leftTab === 'assignments' ? (
-              <AssignmentsPanel assignments={assignments} />
+              <AssignmentsPanel templateId={templateId} />
             ) : leftTab === 'permissions' ? (
               <PermissionsPanel templateId={templateId} roles={roles} initial={allowedRoles} />
             ) : (
@@ -560,15 +637,18 @@ export function FormDesigner({
           </button>
 
           <h3 className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-            Add a field
+            Add an element
           </h3>
           <p className="mb-2 text-[10px] text-slate-500">
-            Click to append to selected section.
+            Drag onto the canvas, or click to add to the selected section.
           </p>
-          {PALETTE_PRIMARY.map((group) => (
+          {[...PALETTE_PRIMARY, ...PALETTE_MORE].map((group) => (
             <FieldPaletteGroup
               key={group.label}
               group={group}
+              onDragType={(t) => {
+                dragElementRef.current = t
+              }}
               onAdd={(t) => {
                 const targetSection =
                   selection.kind === 'section' || selection.kind === 'field'
@@ -578,29 +658,6 @@ export function FormDesigner({
               }}
             />
           ))}
-          <button
-            type="button"
-            className="mt-2 flex w-full items-center gap-1 rounded px-2 py-1 text-xs text-slate-600 hover:bg-slate-100"
-            onClick={() => setShowMorePalette((s) => !s)}
-          >
-            {showMorePalette ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-            More field types
-          </button>
-          {showMorePalette
-            ? PALETTE_MORE.map((group) => (
-                <FieldPaletteGroup
-                  key={group.label}
-                  group={group}
-                  onAdd={(t) => {
-                    const targetSection =
-                      selection.kind === 'section' || selection.kind === 'field'
-                        ? selection.sectionId
-                        : schema.sections[schema.sections.length - 1]?.id
-                    if (targetSection) addField(targetSection, t)
-                  }}
-                />
-              ))
-            : null}
               </>
             )}
           </div>
@@ -612,9 +669,34 @@ export function FormDesigner({
             <SurfaceTab active={surface === 'build'} onClick={() => setSurface('build')} icon={<LayoutGrid size={13} />} label="Build surface" />
             <SurfaceTab active={surface === 'flows'} onClick={() => setSurface('flows')} icon={<WorkflowIcon size={13} />} label="Flows" />
             {surface === 'build' ? (
-              <span className="ml-auto hidden text-[11px] text-slate-400 sm:block">
-                Toggle “Canvas” on a section for free-form drag-and-drop layout
-              </span>
+              <div className="ml-auto flex items-center gap-2">
+                <span
+                  className="hidden text-[10px] font-semibold uppercase tracking-wider text-slate-400 sm:block"
+                  title="Advanced layout — position widgets freely on a grid (Appsmith / WordPress style)"
+                >
+                  Advanced layout
+                </span>
+                <div className="flex items-center rounded-md border border-slate-200 p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setAllCanvas(false)}
+                    className={`rounded px-2 py-0.5 text-xs font-medium transition ${
+                      !canvasMode ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    Stacked
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAllCanvas(true)}
+                    className={`flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium transition ${
+                      canvasMode ? 'bg-violet-600 text-white' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <LayoutGrid size={12} /> Canvas
+                  </button>
+                </div>
+              </div>
             ) : null}
           </div>
           {surface === 'flows' ? (
@@ -626,11 +708,12 @@ export function FormDesigner({
                 flows={flows}
                 canEdit
                 canGenerate={canGenerate}
+                embedded
               />
             </div>
           ) : (
         <div className="app-scroll min-h-0 flex-1 overflow-y-auto p-4 lg:p-6">
-          <div className="mx-auto max-w-3xl">
+          <div className="w-full">
             <div className="space-y-3">
               {selection.kind === 'workflow' ? (
                 <WorkflowEditor
@@ -641,7 +724,46 @@ export function FormDesigner({
                 />
               ) : null}
 
-              {schema.sections.map((sec, i) => {
+              {/* Tabs — presentational pages for the fill experience. */}
+              <div className="flex flex-wrap items-center gap-1 rounded-lg border border-slate-200 bg-white p-1.5">
+                {appTabs.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setDesignerTab(t.id)}
+                    onDoubleClick={() => {
+                      const next = window.prompt('Rename tab', t.title?.en ?? '')
+                      if (next != null) renameTab(t.id, next.trim() || 'Tab')
+                    }}
+                    title="Click to open · double-click to rename"
+                    className={`group flex items-center gap-1 rounded-md px-3 py-1 text-xs font-medium transition ${
+                      designerTab === t.id ? 'bg-teal-600 text-white' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    {t.title?.en ?? 'Tab'}
+                    {appTabs.length > 1 ? (
+                      <Trash2
+                        size={11}
+                        className={designerTab === t.id ? 'text-white/70 hover:text-white' : 'text-slate-300 hover:text-rose-500'}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          deleteTab(t.id)
+                        }}
+                      />
+                    ) : null}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={addTab}
+                  className="flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium text-teal-700 hover:bg-teal-50"
+                  title={appTabs.length === 0 ? 'Split this app into tabs' : 'Add a tab'}
+                >
+                  <Plus size={12} /> {appTabs.length === 0 ? 'Add tabs' : 'Tab'}
+                </button>
+              </div>
+
+              {visibleSections.map((sec, i) => {
                 const active = selection.kind === 'section' && selection.sectionId === sec.id
                 return (
                   <Card
@@ -664,25 +786,13 @@ export function FormDesigner({
                         </CardTitle>
                       </button>
                       <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          title={sec.canvas ? 'Switch to stacked layout' : 'Switch to free-form canvas (drag & drop)'}
-                          onClick={() => (sec.canvas ? disableCanvas(sec.id) : enableCanvas(sec.id))}
-                          className={`flex items-center gap-1 rounded px-1.5 py-1 text-xs transition ${
-                            sec.canvas
-                              ? 'bg-violet-100 text-violet-700'
-                              : 'text-slate-500 hover:bg-slate-100'
-                          }`}
-                        >
-                          <LayoutGrid size={13} /> Canvas
-                        </button>
                         <IconButton title="Move up" onClick={() => moveSection(sec.id, -1)} disabled={i === 0}>
                           <ArrowUp size={14} />
                         </IconButton>
                         <IconButton
                           title="Move down"
                           onClick={() => moveSection(sec.id, 1)}
-                          disabled={i === schema.sections.length - 1}
+                          disabled={i === visibleSections.length - 1}
                         >
                           <ArrowDown size={14} />
                         </IconButton>
@@ -696,6 +806,7 @@ export function FormDesigner({
                         <CanvasEditor
                           section={sec}
                           selectedFieldId={selection.kind === 'field' && selection.sectionId === sec.id ? selection.fieldId : null}
+                          dragTypeRef={dragElementRef}
                           onLayout={(items) => setCanvasItems(sec.id, items)}
                           onAddWidget={(type, box) => addWidgetToCanvas(sec.id, type, box)}
                           onSelect={(fieldId) => selectField(sec.id, fieldId)}
@@ -703,7 +814,7 @@ export function FormDesigner({
                         />
                       ) : sec.fields.length === 0 ? (
                         <div className="rounded-md border border-dashed border-slate-300 p-4 text-center text-xs text-slate-400">
-                          No fields. Click a field type in the palette to add one — or switch on Canvas to drag &amp; drop.
+                          No elements yet. Drag one from the left panel, or click an element to add it here.
                         </div>
                       ) : (
                         <Reorder.Group
@@ -750,10 +861,10 @@ export function FormDesigner({
         onClose={() => setRightPanel('none')}
         title={
           selection.kind === 'field'
-            ? 'Field properties'
+            ? 'Element properties'
             : selection.kind === 'section'
               ? 'Section'
-              : 'Form settings'
+              : 'App settings'
         }
         size="sm"
       >
@@ -834,6 +945,34 @@ export function FormDesigner({
           ) : null}
         </div>
       </Drawer>
+
+      {/* AI assistant — build or edit this whole app, with persistent history. */}
+      <AiAssistant
+        open={showAiAssistant}
+        onClose={() => setShowAiAssistant(false)}
+        scope="builder.app"
+        scopeRefId={templateId}
+        title="App builder AI"
+        description="Build or edit this app by chatting. Review, then Apply."
+        placeholder="e.g. Add a section for PPE checks with yes/no items, or build a daily vehicle inspection"
+        applyLabel="Apply to builder"
+        suggestions={[
+          'Add a photo upload and a signature at the end',
+          'Split this into tabs: Details, Hazards, Sign-off',
+          'Make a daily pre-start vehicle inspection checklist',
+        ]}
+        onSend={async (conversationId, prompt) => {
+          const r = await runAppBuilderChat({ conversationId, templateId, currentSchema: schema, prompt })
+          return { ok: r.ok, conversationId: r.conversationId, error: r.error }
+        }}
+        onApply={(data) => {
+          const next = data?.schema as FormSchemaV1 | undefined
+          if (!next) return
+          setSchema(next)
+          if (next.tabs?.length) setDesignerTab(next.tabs[0]!.id)
+          toast.success('Applied — review and Publish when ready')
+        }}
+      />
     </div>
   )
 }
@@ -846,9 +985,12 @@ function stepLabel(schema: FormSchemaV1, stepKey: string): string {
 function FieldPaletteGroup({
   group,
   onAdd,
+  onDragType,
 }: {
   group: { label: string; types: FieldType[] }
   onAdd: (t: FieldType) => void
+  // Set when a palette item starts dragging, so the canvas drop knows the type.
+  onDragType?: (t: FieldType) => void
 }) {
   return (
     <div className="mb-3">
@@ -862,8 +1004,15 @@ function FieldPaletteGroup({
             <button
               key={t}
               type="button"
+              draggable
+              onDragStart={(e) => {
+                onDragType?.(t)
+                e.dataTransfer.setData('text/plain', t)
+                e.dataTransfer.effectAllowed = 'copy'
+              }}
               onClick={() => onAdd(t)}
-              className="flex items-center gap-2 rounded border border-slate-200 px-2 py-1 text-left text-xs hover:border-teal-500 hover:bg-teal-50"
+              className="flex cursor-grab items-center gap-2 rounded border border-slate-200 px-2 py-1 text-left text-xs hover:border-teal-500 hover:bg-teal-50 active:cursor-grabbing"
+              title="Drag onto the canvas — or click to add to the selected section"
             >
               <Icon size={12} />
               {FIELD_TYPES[t].label}
@@ -989,7 +1138,7 @@ function FormProperties({
 }) {
   return (
     <div className="space-y-3 text-sm">
-      <h3 className="text-sm font-semibold text-slate-700">Form properties</h3>
+      <h3 className="text-sm font-semibold text-slate-700">App properties</h3>
       <div className="space-y-1">
         <Label className="text-xs">Title (EN)</Label>
         <Input
@@ -1285,10 +1434,15 @@ function FieldBasicTab({
   schema: FormSchemaV1
   onChange: (patch: Partial<FormField>) => void
 }) {
+  // Other fields in the app — targets for cascade filters + lookup auto-fill.
+  const otherFields = schema.sections
+    .flatMap((s) => s.fields)
+    .filter((f) => f.id !== field.id)
+    .map((f) => ({ id: f.id, label: f.label?.en ?? f.id }))
   return (
     <div className="space-y-3">
       <div className="space-y-1">
-        <Label className="text-xs">Field ID (immutable)</Label>
+        <Label className="text-xs">Element ID (immutable)</Label>
         <Input value={field.id} disabled className="font-mono text-xs" />
       </div>
       <div className="space-y-1">
@@ -1338,12 +1492,554 @@ function FieldBasicTab({
       {field.type === 'select' ||
       field.type === 'radio' ||
       field.type === 'multi_select' ||
-      field.type === 'checkbox_group' ? (
+      field.type === 'checkbox_group' ||
+      field.type === 'ranking' ? (
         <ChoiceOptionsEditor field={field} onChange={onChange} />
       ) : null}
       {field.type === 'table' ? (
         <TableConfigEditor field={field} onChange={onChange} />
       ) : null}
+      {field.type === 'slider' ? (
+        <SliderConfigEditor field={field} onChange={onChange} />
+      ) : null}
+      {field.type === 'matrix' ? (
+        <MatrixConfigEditor field={field} onChange={onChange} />
+      ) : null}
+      {field.type === 'lookup' || field.type === 'data_table' || field.type === 'metric' ? (
+        <DataBindingEditor field={field} otherFields={otherFields} onChange={onChange} />
+      ) : null}
+    </div>
+  )
+}
+
+function SliderConfigEditor({
+  field,
+  onChange,
+}: {
+  field: FormField
+  onChange: (patch: Partial<FormField>) => void
+}) {
+  const c = (field.config ?? {}) as { min?: number; max?: number; step?: number; unit?: string }
+  const set = (patch: Partial<typeof c>) => onChange({ config: { ...field.config, ...patch } })
+  return (
+    <div className="space-y-2 rounded-md border border-slate-200 p-2">
+      <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Range</div>
+      <div className="grid grid-cols-3 gap-2">
+        <div className="space-y-1">
+          <Label className="text-xs">Min</Label>
+          <Input type="number" value={c.min ?? 0} onChange={(e) => set({ min: Number(e.target.value) })} />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Max</Label>
+          <Input type="number" value={c.max ?? 10} onChange={(e) => set({ max: Number(e.target.value) })} />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Step</Label>
+          <Input type="number" value={c.step ?? 1} onChange={(e) => set({ step: Number(e.target.value) })} />
+        </div>
+      </div>
+      <div className="space-y-1">
+        <Label className="text-xs">Unit (optional)</Label>
+        <Input value={c.unit ?? ''} placeholder="e.g. %, m, °C" onChange={(e) => set({ unit: e.target.value })} />
+      </div>
+    </div>
+  )
+}
+
+function MatrixConfigEditor({
+  field,
+  onChange,
+}: {
+  field: FormField
+  onChange: (patch: Partial<FormField>) => void
+}) {
+  const c = (field.config ?? {}) as {
+    rows?: { key: string; label: string }[]
+    scale?: { value: string; label: string }[]
+  }
+  const rows = c.rows ?? []
+  const scale = c.scale ?? []
+  const setRows = (next: typeof rows) => onChange({ config: { ...field.config, rows: next } })
+  const setScale = (next: typeof scale) => onChange({ config: { ...field.config, scale: next } })
+  return (
+    <div className="space-y-3 rounded-md border border-slate-200 p-2">
+      <div>
+        <div className="mb-1 flex items-center justify-between">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Rows</span>
+          <button
+            type="button"
+            className="text-xs text-teal-700 hover:underline"
+            onClick={() => setRows([...rows, { key: newId('row'), label: `Row ${rows.length + 1}` }])}
+          >
+            + Row
+          </button>
+        </div>
+        <div className="space-y-1">
+          {rows.map((r, i) => (
+            <div key={r.key} className="flex items-center gap-1">
+              <Input
+                value={r.label}
+                onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))}
+              />
+              <IconButton title="Remove row" onClick={() => setRows(rows.filter((_, j) => j !== i))}>
+                <Trash2 size={13} className="text-red-500" />
+              </IconButton>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div>
+        <div className="mb-1 flex items-center justify-between">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Scale</span>
+          <button
+            type="button"
+            className="text-xs text-teal-700 hover:underline"
+            onClick={() => setScale([...scale, { value: String(scale.length + 1), label: String(scale.length + 1) }])}
+          >
+            + Point
+          </button>
+        </div>
+        <div className="space-y-1">
+          {scale.map((s, i) => (
+            <div key={i} className="flex items-center gap-1">
+              <Input
+                className="w-16 font-mono text-xs"
+                value={s.value}
+                onChange={(e) => setScale(scale.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))}
+              />
+              <Input
+                value={s.label}
+                onChange={(e) => setScale(scale.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))}
+              />
+              <IconButton title="Remove point" onClick={() => setScale(scale.filter((_, j) => j !== i))}>
+                <Trash2 size={13} className="text-red-500" />
+              </IconButton>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// --- Data-bound element binding editor -------------------------------------
+
+// Module-cached list of the tenant's data sources, shared by every binding
+// editor instance so we hit the server action once per editor session.
+let _dataSourcesPromise: Promise<DataSourceSummary[]> | null = null
+function useDataSources(): { sources: DataSourceSummary[]; loading: boolean } {
+  const [sources, setSources] = useState<DataSourceSummary[]>([])
+  const [loading, setLoading] = useState(true)
+  useEffect(() => {
+    if (!_dataSourcesPromise) _dataSourcesPromise = listDataSources()
+    let alive = true
+    _dataSourcesPromise
+      .then((s) => {
+        if (alive) {
+          setSources(s)
+          setLoading(false)
+        }
+      })
+      .catch(() => {
+        if (alive) setLoading(false)
+      })
+    return () => {
+      alive = false
+    }
+  }, [])
+  return { sources, loading }
+}
+
+type DsColumns = DataSourceSummary['columns']
+
+function DataBindingEditor({
+  field,
+  otherFields,
+  onChange,
+}: {
+  field: FormField
+  otherFields: { id: string; label: string }[]
+  onChange: (patch: Partial<FormField>) => void
+}) {
+  const { sources, loading } = useDataSources()
+  const b = field.binding
+  const source = sources.find((s) => s.key === b?.sourceKey)
+  const cols = source?.columns ?? []
+
+  // Persist a binding patch — but drop the binding entirely if no source is
+  // chosen, so the schema never carries an invalid empty sourceKey.
+  const patch = (p: Partial<DataBinding>) => {
+    const next = { ...(b ?? {}), ...p } as DataBinding
+    if (!next.sourceKey) {
+      onChange({ binding: undefined })
+      return
+    }
+    onChange({ binding: next })
+  }
+
+  return (
+    <div className="space-y-2.5 rounded-md border border-violet-200 bg-violet-50/30 p-2">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-violet-500">
+          Data binding
+        </span>
+        <a
+          href="/admin/data-sources"
+          target="_blank"
+          rel="noreferrer"
+          className="text-[11px] text-violet-700 hover:underline"
+        >
+          Manage sources ↗
+        </a>
+      </div>
+
+      <div className="space-y-1">
+        <Label className="text-xs">Data source</Label>
+        <Select
+          className="h-8 text-xs"
+          value={b?.sourceKey ?? ''}
+          onChange={(e) => patch({ sourceKey: e.target.value })}
+        >
+          <option value="">{loading ? 'Loading…' : '— pick a data source —'}</option>
+          {sources.map((s) => (
+            <option key={s.id} value={s.key}>
+              {s.name}
+            </option>
+          ))}
+        </Select>
+        {!loading && sources.length === 0 ? (
+          <p className="text-[10px] text-slate-500">
+            No data sources yet. Create one in Admin → Data sources.
+          </p>
+        ) : null}
+      </div>
+
+      {source ? (
+        <>
+          {field.type === 'lookup' ? (
+            <LookupBindingFields b={b} cols={cols} otherFields={otherFields} patch={patch} />
+          ) : null}
+          {field.type === 'data_table' ? (
+            <DataTableBindingFields b={b} cols={cols} patch={patch} />
+          ) : null}
+          {field.type === 'metric' ? <MetricBindingFields b={b} cols={cols} patch={patch} /> : null}
+        </>
+      ) : null}
+    </div>
+  )
+}
+
+function LookupBindingFields({
+  b,
+  cols,
+  otherFields,
+  patch,
+}: {
+  b: DataBinding | undefined
+  cols: DsColumns
+  otherFields: { id: string; label: string }[]
+  patch: (p: Partial<DataBinding>) => void
+}) {
+  const autofill = b?.autofill ?? []
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1">
+          <Label className="text-xs">Show (label)</Label>
+          <Select
+            className="h-8 text-xs"
+            value={b?.labelColumn ?? ''}
+            onChange={(e) => patch({ labelColumn: e.target.value || undefined })}
+          >
+            <option value="">First column</option>
+            {cols.map((c) => (
+              <option key={c.key} value={c.key}>
+                {c.label}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Store (value)</Label>
+          <Select
+            className="h-8 text-xs"
+            value={b?.valueColumn ?? ''}
+            onChange={(e) => patch({ valueColumn: e.target.value || undefined })}
+          >
+            <option value="">Row id</option>
+            {cols.map((c) => (
+              <option key={c.key} value={c.key}>
+                {c.label}
+              </option>
+            ))}
+          </Select>
+        </div>
+      </div>
+
+      <div className="space-y-1.5 rounded border border-slate-200 bg-white p-2">
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+          Cascade (optional)
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-1">
+            <Label className="text-xs">Filter by field</Label>
+            <Select
+              className="h-8 text-xs"
+              value={b?.filterByField ?? ''}
+              onChange={(e) => patch({ filterByField: e.target.value || undefined })}
+            >
+              <option value="">— none —</option>
+              {otherFields.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.label}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Matched on column</Label>
+            <Select
+              className="h-8 text-xs"
+              value={b?.filterColumn ?? ''}
+              onChange={(e) => patch({ filterColumn: e.target.value || undefined })}
+            >
+              <option value="">—</option>
+              {cols.map((c) => (
+                <option key={c.key} value={c.key}>
+                  {c.label}
+                </option>
+              ))}
+            </Select>
+          </div>
+        </div>
+        <p className="text-[10px] text-slate-500">
+          Only show rows whose column matches the parent field&apos;s value — e.g. Area filtered by
+          the chosen Site.
+        </p>
+      </div>
+
+      <div className="space-y-1.5 rounded border border-slate-200 bg-white p-2">
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+            Auto-fill on select
+          </span>
+          <button
+            type="button"
+            className="text-xs text-teal-700 hover:underline"
+            onClick={() =>
+              patch({
+                autofill: [
+                  ...autofill,
+                  { column: cols[0]?.key ?? '', targetFieldId: otherFields[0]?.id ?? '' },
+                ],
+              })
+            }
+          >
+            + Mapping
+          </button>
+        </div>
+        {autofill.length === 0 ? (
+          <p className="text-[10px] text-slate-500">
+            Copy a column from the picked row into another field.
+          </p>
+        ) : (
+          autofill.map((m, i) => (
+            <div key={i} className="flex items-center gap-1">
+              <Select
+                className="h-8 text-xs"
+                value={m.column}
+                onChange={(e) =>
+                  patch({
+                    autofill: autofill.map((x, j) => (j === i ? { ...x, column: e.target.value } : x)),
+                  })
+                }
+              >
+                {cols.map((c) => (
+                  <option key={c.key} value={c.key}>
+                    {c.label}
+                  </option>
+                ))}
+              </Select>
+              <span className="text-slate-400">→</span>
+              <Select
+                className="h-8 text-xs"
+                value={m.targetFieldId}
+                onChange={(e) =>
+                  patch({
+                    autofill: autofill.map((x, j) =>
+                      j === i ? { ...x, targetFieldId: e.target.value } : x,
+                    ),
+                  })
+                }
+              >
+                {otherFields.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.label}
+                  </option>
+                ))}
+              </Select>
+              <IconButton
+                title="Remove mapping"
+                onClick={() => patch({ autofill: autofill.filter((_, j) => j !== i) })}
+              >
+                <Trash2 size={13} className="text-red-500" />
+              </IconButton>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  )
+}
+
+function DataTableBindingFields({
+  b,
+  cols,
+  patch,
+}: {
+  b: DataBinding | undefined
+  cols: DsColumns
+  patch: (p: Partial<DataBinding>) => void
+}) {
+  const allShown = !b?.columns
+  const shown = b?.columns ?? cols.map((c) => c.key)
+  const toggle = (key: string) => {
+    const base = b?.columns ?? cols.map((c) => c.key)
+    const next = base.includes(key) ? base.filter((k) => k !== key) : [...base, key]
+    patch({ columns: next })
+  }
+  return (
+    <div className="space-y-2">
+      <div className="space-y-1">
+        <Label className="text-xs">Columns shown</Label>
+        <div className="flex flex-wrap gap-1.5 rounded border border-slate-200 bg-white p-1.5">
+          {cols.map((c) => {
+            const on = allShown || shown.includes(c.key)
+            return (
+              <button
+                key={c.key}
+                type="button"
+                onClick={() => toggle(c.key)}
+                className={`rounded px-1.5 py-0.5 text-[11px] ${
+                  on ? 'bg-teal-100 text-teal-800' : 'bg-slate-100 text-slate-400 line-through'
+                }`}
+              >
+                {c.label}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1">
+          <Label className="text-xs">Selection</Label>
+          <Select
+            className="h-8 text-xs"
+            value={b?.selectable ?? 'none'}
+            onChange={(e) => patch({ selectable: e.target.value as DataBinding['selectable'] })}
+          >
+            <option value="none">Display only</option>
+            <option value="single">Pick one row</option>
+            <option value="multi">Pick many rows</option>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Max rows</Label>
+          <Input
+            type="number"
+            className="h-8 text-xs"
+            value={b?.limit ?? ''}
+            placeholder="50"
+            onChange={(e) => patch({ limit: e.target.value ? Number(e.target.value) : undefined })}
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function MetricBindingFields({
+  b,
+  cols,
+  patch,
+}: {
+  b: DataBinding | undefined
+  cols: DsColumns
+  patch: (p: Partial<DataBinding>) => void
+}) {
+  const agg = b?.aggregate ?? { fn: 'count' as const }
+  const setAgg = (p: Partial<NonNullable<DataBinding['aggregate']>>) =>
+    patch({ aggregate: { ...agg, ...p } })
+  const needsColumn = agg.fn !== 'count'
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1">
+          <Label className="text-xs">Aggregate</Label>
+          <Select
+            className="h-8 text-xs"
+            value={agg.fn}
+            onChange={(e) =>
+              setAgg({ fn: e.target.value as NonNullable<DataBinding['aggregate']>['fn'] })
+            }
+          >
+            <option value="count">Count</option>
+            <option value="sum">Sum</option>
+            <option value="avg">Average</option>
+            <option value="min">Min</option>
+            <option value="max">Max</option>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Of column</Label>
+          <Select
+            className="h-8 text-xs"
+            value={agg.column ?? ''}
+            disabled={!needsColumn}
+            onChange={(e) => setAgg({ column: e.target.value || undefined })}
+          >
+            <option value="">{needsColumn ? '— pick —' : 'n/a'}</option>
+            {cols.map((c) => (
+              <option key={c.key} value={c.key}>
+                {c.label}
+              </option>
+            ))}
+          </Select>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1">
+          <Label className="text-xs">Group by</Label>
+          <Select
+            className="h-8 text-xs"
+            value={agg.groupBy ?? ''}
+            onChange={(e) => setAgg({ groupBy: e.target.value || undefined })}
+          >
+            <option value="">— no grouping —</option>
+            {cols.map((c) => (
+              <option key={c.key} value={c.key}>
+                {c.label}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Display</Label>
+          <Select
+            className="h-8 text-xs"
+            value={b?.display ?? (agg.groupBy ? 'bar' : 'number')}
+            onChange={(e) => patch({ display: e.target.value as DataBinding['display'] })}
+          >
+            <option value="number">Number</option>
+            <option value="bar">Bar chart</option>
+            <option value="line">Line chart</option>
+            <option value="pie">Pie chart</option>
+          </Select>
+        </div>
+      </div>
+      <p className="text-[10px] text-slate-500">
+        Group by a column to render a chart; leave it blank for a single KPI number.
+      </p>
     </div>
   )
 }
@@ -1826,6 +2522,21 @@ function SectionProperties({
           onChange={(e) => onChange({ title: { ...(section.title ?? {}), en: e.target.value } })}
         />
       </div>
+      {schema.tabs?.length ? (
+        <div className="space-y-1">
+          <Label className="text-xs">Tab</Label>
+          <Select
+            value={section.tabId ?? schema.tabs[0]!.id}
+            onChange={(e) => onChange({ tabId: e.target.value })}
+          >
+            {schema.tabs.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.title?.en ?? t.id}
+              </option>
+            ))}
+          </Select>
+        </div>
+      ) : null}
       <div className="space-y-1">
         <Label className="text-xs">Description</Label>
         <Textarea
@@ -1869,7 +2580,7 @@ function SectionProperties({
           <option value="4">4 columns</option>
         </Select>
         <p className="text-[10px] text-slate-500">
-          Fields flow left→right; set each field's width in its Basic tab.
+          Elements flow left→right; set each element&apos;s width in its Basic tab.
         </p>
       </div>
       <label className="flex items-center gap-2">
@@ -2103,11 +2814,13 @@ function LeftTab({
     <button
       type="button"
       onClick={onClick}
-      className={`flex flex-1 items-center justify-center gap-1 rounded-md px-1.5 py-1.5 text-xs font-medium transition ${
+      title={label}
+      aria-label={label}
+      className={`flex flex-1 items-center justify-center rounded-md px-1.5 py-2 transition ${
         active ? 'bg-teal-50 text-teal-700' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
       }`}
     >
-      {icon} {label}
+      {icon}
     </button>
   )
 }
@@ -2149,8 +2862,6 @@ function OverviewPanel({
 }) {
   const [n, setN] = useState(name)
   const [description, setDescription] = useState(overview?.description ?? '')
-  const [category, setCategory] = useState(overview?.category ?? '')
-  const [emailOnSubmit, setEmailOnSubmit] = useState(!!overview?.emailOnSubmit)
   const [pending, start] = useTransition()
   const save = () => {
     if (n.trim().length < 2) {
@@ -2158,13 +2869,7 @@ function OverviewPanel({
       return
     }
     start(async () => {
-      const res = await updateAppOverview({
-        templateId,
-        name: n.trim(),
-        description,
-        category: category || null,
-        emailOnSubmit,
-      })
+      const res = await updateAppOverview({ templateId, name: n.trim(), description })
       if (!res.ok) {
         toast.error(res.error ?? 'Could not save')
         return
@@ -2176,39 +2881,19 @@ function OverviewPanel({
   return (
     <div className="space-y-3">
       <p className="text-xs text-slate-500">
-        The basics shown across the app — its name, what it&apos;s for, and how it behaves.
+        The basics shown across the app — its name and what it&apos;s for.
       </p>
       <LabeledField label="App name">
         <Input value={n} onChange={(e) => setN(e.target.value)} />
       </LabeledField>
       <LabeledField label="Description">
         <Textarea
-          rows={3}
+          rows={4}
           value={description}
           placeholder="What is this app for? Who fills it out?"
           onChange={(e) => setDescription(e.target.value)}
         />
       </LabeledField>
-      <LabeledField label="Category">
-        <Select value={category} onChange={(e) => setCategory(e.target.value)}>
-          <option value="">— None —</option>
-          {['inspection', 'jsha', 'toolbox_talk', 'lift_plan', 'wah', 'incident_investigation', 'audit', 'checklist', 'custom'].map(
-            (c) => (
-              <option key={c} value={c}>
-                {c.replace(/_/g, ' ')}
-              </option>
-            ),
-          )}
-        </Select>
-      </LabeledField>
-      <label className="flex items-center gap-2 text-sm text-slate-700">
-        <input
-          type="checkbox"
-          checked={emailOnSubmit}
-          onChange={(e) => setEmailOnSubmit(e.target.checked)}
-        />
-        Email a recap to recipients on submit
-      </label>
       <Button onClick={save} disabled={pending} className="w-full">
         {pending ? 'Saving…' : 'Save overview'}
       </Button>
@@ -2216,41 +2901,29 @@ function OverviewPanel({
   )
 }
 
-function AssignmentsPanel({ assignments }: { assignments: AppAssignmentRow[] }) {
+function AssignmentsPanel({ templateId }: { templateId: string }) {
   return (
     <div className="space-y-3">
       <p className="text-xs text-slate-500">
-        Assignments decide who&apos;s asked to fill this app and when — on a schedule, by role, or on
-        an event. People can always open it directly from the gallery too.
+        Requiring people to fill this app — who, on what schedule, and tracking completion — is
+        handled by the <span className="font-medium text-slate-700">Compliance</span> engine.
       </p>
-      {assignments.length === 0 ? (
-        <div className="rounded-md border border-dashed border-slate-300 p-4 text-center text-xs text-slate-400">
-          No assignments yet.
-        </div>
-      ) : (
-        <ul className="space-y-2">
-          {assignments.map((a) => (
-            <li key={a.id} className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="font-medium capitalize">{a.mode.replace(/_/g, ' ')}</span>
-                <span
-                  className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                    a.enabled ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'
-                  }`}
-                >
-                  {a.enabled ? 'enabled' : 'disabled'}
-                </span>
-              </div>
-              {(a.mode === 'scheduled' && a.cron) || a.targetRoleKeys?.length ? (
-                <div className="mt-0.5 text-xs text-slate-500">
-                  {a.mode === 'scheduled' && a.cron ? `Schedule: ${a.cron}` : ''}
-                  {a.targetRoleKeys?.length ? ` Roles: ${a.targetRoleKeys.join(', ')}` : ''}
-                </div>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      )}
+      <Link
+        href={`/compliance/obligations/new?kind=form&formTemplateId=${templateId}`}
+        className="block"
+      >
+        <Button className="w-full">
+          <Send size={14} /> Create an assignment
+        </Button>
+      </Link>
+      <Link href="/compliance/obligations" className="block">
+        <Button variant="outline" className="w-full">
+          View all obligations
+        </Button>
+      </Link>
+      <p className="text-[11px] text-slate-400">
+        Anyone with access can also open and fill this app directly from the gallery.
+      </p>
     </div>
   )
 }

@@ -100,6 +100,16 @@ export const actionDataSchema = z.discriminatedUnion('action', [
     prefill: z.record(z.string(), defaultValueExpressionSchema).optional(),
     assignee: assigneeTargetSchema.optional(),
   }),
+  z.object({
+    action: z.literal('analyze_photos'),
+    // Photo field to analyse (photo / photo_upload / photo_ai).
+    fieldId: z.string(),
+    // Optional: write the AI summary into this text field on the response.
+    storeInField: z.string().optional(),
+    // Optional: spawn a CAPA when hazards at/above `minSeverity` are found.
+    createCapaOnHazard: z.boolean().optional(),
+    minSeverity: z.enum(['low', 'medium', 'high']).optional(),
+  }),
 ])
 export type ActionData = z.infer<typeof actionDataSchema>
 

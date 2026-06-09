@@ -419,6 +419,9 @@ importers:
 
   packages/etl:
     dependencies:
+      '@aws-sdk/client-s3':
+        specifier: ^3.1063.0
+        version: 3.1063.0
       '@beaconhs/db':
         specifier: workspace:*
         version: link:../db
