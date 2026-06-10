@@ -16,6 +16,11 @@ services:
     environment:
       APP_ROLE: web
       NODE_ENV: production
+      # Next standalone server binds to $HOSTNAME (defaults to localhost), so it
+      # would only listen on 127.0.0.1 and Traefik's overlay connection is
+      # refused → 502. Force all-interfaces.
+      HOSTNAME: 0.0.0.0
+      PORT: '3000'
       DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: redis://redis:6379
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
@@ -27,7 +32,10 @@ services:
       R2_BUCKET: ${R2_BUCKET}
       R2_PUBLIC_URL: ${R2_PUBLIC_URL}
       RESEND_API_KEY: ${RESEND_API_KEY}
-    networks: [infra-net]
+    # dokploy-network so Dokploy's Traefik (which lives there) can reach the
+    # container for ingress; infra-net for in-stack traffic (redis). Without
+    # dokploy-network the route exists but Traefik can't connect → 502.
+    networks: [infra-net, dokploy-network]
     deploy:
       replicas: 1
       placement:
@@ -71,8 +79,11 @@ services:
       replicas: 1
       placement:
         constraints: [node.hostname==dokploy-mgr]
+      # The scheduler is a one-shot: it registers BullMQ repeatable jobs in
+      # Redis and exits 0. Only restart on failure, else swarm relaunches it
+      # forever on every clean exit. It re-runs on each deploy.
       restart_policy:
-        condition: any
+        condition: on-failure
         delay: 5s
 
   redis:
@@ -88,6 +99,8 @@ services:
 
 networks:
   infra-net:
+    external: true
+  dokploy-network:
     external: true
 
 volumes:

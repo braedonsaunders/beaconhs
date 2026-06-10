@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "scheduler:dev": "tsx watch src/scheduler.ts",
-    "build": "tsc -p tsconfig.json",
+    "build": "node build.mjs",
     "start": "node dist/index.js",
     "scheduler:start": "node dist/scheduler.js",
     "typecheck": "tsc --noEmit",
@@ -34,6 +34,7 @@
   "devDependencies": {
     "@types/node": "^25.9.2",
     "@types/web-push": "^3.6.4",
+    "esbuild": "^0.25.0",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3"
   }

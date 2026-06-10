@@ -22,6 +22,15 @@ COPY . .
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile
 RUN pnpm turbo run build --filter=@beaconhs/web --filter=@beaconhs/worker
+# `pnpm build` bundles the worker's first-party + @beaconhs/* code via esbuild,
+# leaving only real npm deps as external imports. Emit a prod-only deployment
+# with a HOISTED (flat) node_modules so those externals — including transitive
+# deps of the bundled workspace packages, e.g. `postgres` via @beaconhs/db —
+# all resolve from the top-level node_modules (pnpm's default isolated layout
+# nests them and the bundle can't find them).
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
+    npm_config_node_linker=hoisted \
+    pnpm --filter=@beaconhs/worker deploy --prod --legacy /prod/worker
 
 # --- Runtime ---
 FROM base AS runner
@@ -41,8 +50,7 @@ ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 COPY --from=builder /app/apps/web/.next/standalone ./
 COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static
 COPY --from=builder /app/apps/web/public ./apps/web/public
-COPY --from=builder /app/apps/worker/dist ./apps/worker/dist
-COPY --from=builder /app/apps/worker/node_modules ./apps/worker/node_modules
+COPY --from=builder /prod/worker ./apps/worker
 COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
