@@ -60,6 +60,25 @@ jobs:
           DATABASE_URL: ${{ secrets.DEV_DATABASE_URL }}
         run: pnpm --filter @beaconhs/db exec tsx src/migrate.ts
 
+      # Pre-pull the image onto the swarm MANAGER's local store. This runner is
+      # pinned to dokploy-mgr with the host docker socket mounted, and the app
+      # tasks are pinned to the same node — so a locally-present image is found
+      # without swarm-distributed registry auth (Dokploy's compose deploy does
+      # not pass --with-registry-auth, which is why agents otherwise fail with
+      # "No such image" on our private ghcr.io package).
+      - name: Pre-pull image onto swarm manager
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if ! command -v docker >/dev/null 2>&1; then
+            echo "::error::docker CLI not present on runner (socket mount expected)"; exit 1
+          fi
+          echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+          docker pull "${IMAGE_NAME}:${GITHUB_SHA}"
+          docker image inspect "${IMAGE_NAME}:${GITHUB_SHA}" --format 'pulled {{.Id}}'
+
       # The swarm manager pulls our PRIVATE ghcr.io image, so it needs a working
       # credential. No long-lived read:packages PAT is available, but THIS job's
       # GITHUB_TOKEN can read the package it just pushed — so refresh the Dokploy
