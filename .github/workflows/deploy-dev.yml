@@ -60,11 +60,34 @@ jobs:
           DATABASE_URL: ${{ secrets.DEV_DATABASE_URL }}
         run: pnpm --filter @beaconhs/db exec tsx src/migrate.ts
 
+      # The swarm manager pulls our PRIVATE ghcr.io image, so it needs a working
+      # credential. No long-lived read:packages PAT is available, but THIS job's
+      # GITHUB_TOKEN can read the package it just pushed — so refresh the Dokploy
+      # registry credential to it right before deploy. Dokploy then `docker
+      # login`s + deploys with --with-registry-auth; the manager caches the image
+      # after the first pull, so later container restarts don't need re-auth.
+      - name: Refresh GHCR pull credential on Dokploy
+        env:
+          DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
+          DOKPLOY_TOKEN: ${{ secrets.DOKPLOY_TOKEN }}
+          REGISTRY_ID: ${{ secrets.DOKPLOY_REGISTRY_ID }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          jq -n --arg id "$REGISTRY_ID" --arg u "$GHCR_USER" --arg p "$GHCR_TOKEN" \
+            '{registryId:$id, registryName:"ghcr-beaconhs", username:$u, password:$p,
+              registryUrl:"ghcr.io", imagePrefix:"braedonsaunders", registryType:"cloud"}' \
+            | curl -sf -X POST "$DOKPLOY_URL/api/registry.update" \
+                -H "x-api-key: $DOKPLOY_TOKEN" -H "content-type: application/json" --data @-
+          echo "GHCR credential refreshed"
+
       - name: Update env + redeploy on Dokploy
         env:
           DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
           DOKPLOY_TOKEN: ${{ secrets.DOKPLOY_TOKEN }}
           COMPOSE_ID: ${{ secrets.DOKPLOY_COMPOSE_ID }}
+          REGISTRY_ID: ${{ secrets.DOKPLOY_REGISTRY_ID }}
           DEV_DATABASE_URL: ${{ secrets.DEV_DATABASE_URL }}
           APP_URL: ${{ secrets.DEV_APP_URL }}
           BETTER_AUTH_SECRET: ${{ secrets.DEV_BETTER_AUTH_SECRET }}
@@ -88,8 +111,8 @@ jobs:
           R2_BUCKET=${R2_BUCKET}
           R2_PUBLIC_URL=${R2_PUBLIC_URL}
           RESEND_API_KEY=${RESEND_API_KEY}"
-          jq -n --arg id "$COMPOSE_ID" --arg cf "$COMPOSE_FILE" --arg env "$ENV_BLOCK" \
-            '{composeId:$id, sourceType:"raw", composeType:"stack", composeFile:$cf, env:$env}' \
+          jq -n --arg id "$COMPOSE_ID" --arg cf "$COMPOSE_FILE" --arg env "$ENV_BLOCK" --arg reg "$REGISTRY_ID" \
+            '{composeId:$id, sourceType:"raw", composeType:"stack", composeFile:$cf, env:$env, registryId:$reg}' \
             | curl -sf -X POST "$DOKPLOY_URL/api/compose.update" \
                 -H "x-api-key: $DOKPLOY_TOKEN" -H "content-type: application/json" --data @-
           curl -sf -X POST "$DOKPLOY_URL/api/compose.deploy" \
