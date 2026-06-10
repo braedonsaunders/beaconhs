@@ -2,108 +2,6 @@
   "version": 1,
   "runs": [
     {
-      "at": "2026-05-19T15:29:57.966Z",
-      "sha": "42ea99cfeee10ba3430336a7fef8d58687dfd03c",
-      "pr": null,
-      "actor": "braedonsaunders",
-      "files": 603,
-      "functions": 1619,
-      "loc": 286809,
-      "languages": 15,
-      "topLanguages": [
-        {
-          "ext": "json",
-          "pct": 56,
-          "lines": 160506
-        },
-        {
-          "ext": "tsx",
-          "pct": 26,
-          "lines": 75119
-        },
-        {
-          "ext": "ts",
-          "pct": 14,
-          "lines": 39374
-        },
-        {
-          "ext": "yaml",
-          "pct": 2,
-          "lines": 6104
-        },
-        {
-          "ext": "sql",
-          "pct": 2,
-          "lines": 4518
-        }
-      ],
-      "dead": 35,
-      "deadPct": 2.2,
-      "circular": 1,
-      "godObjects": 1,
-      "avgCoupling": 5,
-      "securityIssues": 16,
-      "patterns": 7,
-      "duplicates": 47,
-      "layerViolations": 179,
-      "connections": 2985,
-      "avgFnLines": 15.5,
-      "longestFn": 16,
-      "testFiles": 1,
-      "testRatio": 0.2,
-      "topFolders": [
-        {
-          "name": "apps",
-          "count": 426
-        },
-        {
-          "name": "packages",
-          "count": 164
-        },
-        {
-          "name": "root",
-          "count": 11
-        },
-        {
-          "name": "docker",
-          "count": 1
-        },
-        {
-          "name": "docs",
-          "count": 1
-        }
-      ],
-      "folders": 5,
-      "grade": "D",
-      "score": 66,
-      "topBlast": {
-        "path": "apps/web/src/lib/auth.ts",
-        "direct": 282,
-        "transitive": 385,
-        "total": 667
-      },
-      "fragility": [
-        {
-          "path": "apps/web/src/lib/auth.ts",
-          "direct": 282,
-          "transitive": 385,
-          "total": 667
-        },
-        {
-          "path": "apps/web/src/app/(app)/lift-plans/_actions.ts",
-          "direct": 149,
-          "transitive": 381,
-          "total": 530
-        },
-        {
-          "path": "packages/ui/src/badge.tsx",
-          "direct": 155,
-          "transitive": 360,
-          "total": 515
-        }
-      ]
-    },
-    {
       "at": "2026-05-19T15:53:47.887Z",
       "sha": "6bf9ea8a12ee44d94fd2451cd216f281ccda84cd",
       "pr": null,
@@ -2962,6 +2860,108 @@
     {
       "at": "2026-06-10T14:26:33.454Z",
       "sha": "c8411b7d085e55f29f3ba75e4263d0661fc69396",
+      "pr": null,
+      "actor": "braedonsaunders",
+      "files": 876,
+      "functions": 2588,
+      "loc": 218359,
+      "languages": 16,
+      "topLanguages": [
+        {
+          "ext": "tsx",
+          "pct": 50,
+          "lines": 108937
+        },
+        {
+          "ext": "ts",
+          "pct": 28,
+          "lines": 60259
+        },
+        {
+          "ext": "json",
+          "pct": 15,
+          "lines": 33710
+        },
+        {
+          "ext": "yaml",
+          "pct": 4,
+          "lines": 8055
+        },
+        {
+          "ext": "sql",
+          "pct": 2,
+          "lines": 3860
+        }
+      ],
+      "dead": 34,
+      "deadPct": 1.3,
+      "circular": 1,
+      "godObjects": 1,
+      "avgCoupling": 5.7,
+      "securityIssues": 39,
+      "patterns": 9,
+      "duplicates": 54,
+      "layerViolations": 359,
+      "connections": 4990,
+      "avgFnLines": 15.5,
+      "longestFn": 16,
+      "testFiles": 3,
+      "testRatio": 0.3,
+      "topFolders": [
+        {
+          "name": "apps",
+          "count": 641
+        },
+        {
+          "name": "packages",
+          "count": 211
+        },
+        {
+          "name": "root",
+          "count": 12
+        },
+        {
+          "name": "docs",
+          "count": 6
+        },
+        {
+          "name": "scripts",
+          "count": 3
+        }
+      ],
+      "folders": 5,
+      "grade": "D",
+      "score": 65,
+      "topBlast": {
+        "path": "apps/web/src/lib/auth.ts",
+        "direct": 313,
+        "transitive": 590,
+        "total": 903
+      },
+      "fragility": [
+        {
+          "path": "apps/web/src/lib/auth.ts",
+          "direct": 313,
+          "transitive": 590,
+          "total": 903
+        },
+        {
+          "path": "apps/web/src/app/(app)/forms/_lib/recap-email.ts",
+          "direct": 160,
+          "transitive": 644,
+          "total": 804
+        },
+        {
+          "path": "apps/web/src/app/(app)/forms/templates/[id]/designer/form-designer.tsx",
+          "direct": 187,
+          "transitive": 605,
+          "total": 792
+        }
+      ]
+    },
+    {
+      "at": "2026-06-10T14:33:50.331Z",
+      "sha": "17824ab32651e9c7ee1c14e6d97b6e91f0241a94",
       "pr": null,
       "actor": "braedonsaunders",
       "files": 876,
