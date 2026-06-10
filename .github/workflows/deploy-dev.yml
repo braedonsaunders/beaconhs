@@ -48,10 +48,11 @@ jobs:
     runs-on: [self-hosted, dokploy]
     steps:
       - uses: actions/checkout@v4
+      # No version here — package.json's packageManager field pins pnpm, and
+      # passing both errors with "Multiple versions of pnpm specified".
       - uses: pnpm/action-setup@v4
-        with: { version: 9.12.0 }
       - uses: actions/setup-node@v4
-        with: { node-version: 20, cache: pnpm }
+        with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
 
       - name: Migrate (schema + RLS + views)
