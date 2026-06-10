@@ -51,6 +51,37 @@ export type LessonBlock =
   | { id: string; type: 'callout'; tone: 'info' | 'warning' | 'success' | 'danger'; md: string }
   | { id: string; type: 'divider' }
 
+// Rich text authored in the training TipTap editor: ProseMirror JSON (source
+// of truth for editing) + sanitized HTML (render in player / slide regions).
+export type RichDoc = { html: string; json?: unknown }
+
+// One slide in a slideshow lesson / library deck. Structured layouts (the
+// Articulate-Rise pattern) rather than a freeform canvas. Text regions are
+// RichDoc (inline TipTap editing); legacy decks may still hold LessonBlock[]
+// regions — renderers support both. `pptx` slides are pixel-perfect page
+// images produced by the PowerPoint import pipeline (soffice → pdf → png).
+export type SlideRegion = RichDoc | LessonBlock[]
+export type Slide = {
+  id: string
+  layout: 'title' | 'title-content' | 'two-col' | 'image-text' | 'image-full' | 'pptx'
+  title?: string
+  subtitle?: string
+  body?: SlideRegion // title-content + image-text text region
+  left?: SlideRegion // two-col
+  right?: SlideRegion // two-col
+  imageAttachmentId?: string // image-text / image-full / pptx page render
+  bg?: 'white' | 'slate' | 'teal' | 'dark' // background preset
+  notes?: string // speaker / learner notes
+}
+
+export function isRichRegion(r: SlideRegion | null | undefined): r is RichDoc {
+  return !!r && !Array.isArray(r) && typeof (r as RichDoc).html === 'string'
+}
+
+// Per-criteria checklist on a practical (hands-on) lesson, signed off by an
+// evaluator with training manage permission.
+export type PracticalCriterion = { id: string; text: string }
+
 // Ordered sections within a course.
 export const trainingCourseModules = pgTable(
   'training_course_modules',
@@ -81,6 +112,8 @@ export const trainingLessonKind = pgEnum('training_lesson_kind', [
   'embed', // iframe url
   'quiz', // → training_assessment_types (existing engine)
   'session', // → training_classes (in-person / blended)
+  'slides', // structured slideshow (Slide[]) — native or PPTX-imported
+  'practical', // hands-on/physical test signed off by an evaluator
 ])
 
 export const trainingLessonCompletionRule = pgEnum('training_lesson_completion_rule', [
@@ -88,6 +121,7 @@ export const trainingLessonCompletionRule = pgEnum('training_lesson_completion_r
   'pass', // must pass the linked assessment
   'acknowledge', // explicit "I have read & understood"
   'min_time', // must spend minTimeSeconds on the lesson
+  'evaluator', // an evaluator must sign the learner off (practical lessons)
 ])
 
 // Ordered content items within a module.
@@ -107,8 +141,23 @@ export const trainingLessons = pgTable(
     title: text('title').notNull(),
     kind: trainingLessonKind('kind').default('rich').notNull(),
     sortOrder: integer('sort_order').default(0).notNull(),
-    // kind = 'rich'
+    // kind = 'rich' (content) | 'practical' (instructions) — legacy block format
     contentBlocks: jsonb('content_blocks').$type<LessonBlock[]>().default([]).notNull(),
+    // TipTap-authored content (supersedes contentBlocks when present):
+    // ProseMirror JSON is the editing source of truth; HTML is sanitized
+    // server-side at save and rendered in the player.
+    contentJson: jsonb('content_json').$type<Record<string, unknown> | null>(),
+    contentHtml: text('content_html'),
+    // kind = 'slides'
+    slides: jsonb('slides').$type<Slide[]>().default([]).notNull(),
+    // kind = 'practical'
+    practicalCriteria: jsonb('practical_criteria')
+      .$type<PracticalCriterion[]>()
+      .default([])
+      .notNull(),
+    // PPTX import lifecycle (worker writes these)
+    importStatus: text('import_status'), // 'pending' | 'processing' | 'complete' | 'failed'
+    importError: text('import_error'),
     // kind = 'quiz' → existing native assessment engine
     assessmentTypeId: uuid('assessment_type_id').references(() => trainingAssessmentTypes.id, {
       onDelete: 'set null',
@@ -119,6 +168,8 @@ export const trainingLessons = pgTable(
     attachmentId: uuid('attachment_id'),
     // kind = 'embed' | external 'video'
     embedUrl: text('embed_url'),
+    // Reuse a library content item instead of inline content (rich/video/file/embed).
+    contentItemId: uuid('content_item_id'),
     durationMinutes: integer('duration_minutes'),
     isRequired: boolean('is_required').default(true).notNull(),
     completionRule: trainingLessonCompletionRule('completion_rule').default('view').notNull(),
@@ -220,6 +271,11 @@ export const trainingLessonProgress = pgTable(
     assessmentId: uuid('assessment_id').references(() => trainingAssessments.id, {
       onDelete: 'set null',
     }),
+    // practical lessons: evaluator sign-off
+    evaluatedByTenantUserId: uuid('evaluated_by_tenant_user_id').references(() => tenantUsers.id),
+    evaluationNotes: text('evaluation_notes'),
+    evaluationSignatureDataUrl: text('evaluation_signature_data_url'),
+    criteriaResults: jsonb('criteria_results').$type<Record<string, boolean> | null>(),
     ...timestamps,
   },
   (t) => ({
@@ -274,3 +330,47 @@ export const trainingLessonProgressRelations = relations(trainingLessonProgress,
     references: [trainingLessons.id],
   }),
 }))
+
+// --- Reusable content library ----------------------------------------------
+//
+// "Material outside the course" — reusable content items referenced by lessons
+// via training_lessons.content_item_id. Native to training; same bespoke block
+// model as inline lesson content. Quizzes (assessment types) and sessions
+// (classes) are already their own reusable entities, so they're not duplicated
+// here — the library covers rich / video / file / embed material.
+export const trainingContentItemKind = pgEnum('training_content_item_kind', [
+  'rich',
+  'video',
+  'file',
+  'embed',
+  'slides',
+])
+
+export const trainingContentItems = pgTable(
+  'training_content_items',
+  {
+    id: id(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    title: text('title').notNull(),
+    description: text('description'),
+    kind: trainingContentItemKind('kind').default('rich').notNull(),
+    contentBlocks: jsonb('content_blocks').$type<LessonBlock[]>().default([]).notNull(),
+    contentJson: jsonb('content_json').$type<Record<string, unknown> | null>(),
+    contentHtml: text('content_html'),
+    slides: jsonb('slides').$type<Slide[]>().default([]).notNull(),
+    importStatus: text('import_status'),
+    importError: text('import_error'),
+    attachmentId: uuid('attachment_id'),
+    embedUrl: text('embed_url'),
+    tags: jsonb('tags').$type<string[]>().default([]).notNull(),
+    durationMinutes: integer('duration_minutes'),
+    ...timestamps,
+    ...softDelete,
+  },
+  (t) => ({
+    tenantIdx: index('training_content_items_tenant_idx').on(t.tenantId),
+    kindIdx: index('training_content_items_kind_idx').on(t.tenantId, t.kind),
+  }),
+)

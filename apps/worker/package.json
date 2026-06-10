@@ -27,6 +27,7 @@
     "bullmq": "^5.78.0",
     "drizzle-orm": "^0.45.2",
     "ioredis": "^5.11.1",
+    "jszip": "^3.10.1",
     "twilio": "^6.0.2",
     "web-push": "^3.6.7"
   },

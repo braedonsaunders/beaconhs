@@ -1,16 +1,22 @@
 // Entity loaders (legacy landing → app schema). Dependency-ordered. Start of the rassaun slice;
 // more loaders are appended here as each entity's mapping is finalised (see docs/migration/mapping.md).
-import { eq } from 'drizzle-orm'
+import { randomUUID } from 'node:crypto'
+import { and, eq, sql } from 'drizzle-orm'
 import { withSuperAdmin, schema } from '@beaconhs/db'
 import { ensureBucket, newAttachmentKey, putObject } from '@beaconhs/storage'
 import { H, internals, rowHash, type Loader, type Env } from './orchestrator'
 import { source } from './source/landing'
 
 const {
+  user, tenantUsers,
   personDivisions, trades, personTitles, people, orgUnits, incidents, journalEntries, correctiveActions,
   equipmentCategories, equipmentTypes, equipmentItems,
   documents, documentVersions, documentTypes, documentCategories,
   documentReferences, documentReferenceTypes, documentReferenceCategories, attachments,
+  trainingCourses, trainingRecords, trainingClasses, trainingClassAttendees,
+  trainingAssessmentTypes, trainingAssessmentTypeQuestions,
+  trainingSkillAuthorities, trainingSkillTypes, trainingSkillAssignments, trainingExtraFields,
+  complianceObligations, complianceAudience,
 } = schema
 
 const oneOf = (v: unknown, allowed: string[], fallback: string): string => {
@@ -136,6 +142,56 @@ export const RASSAUN_LOADERS: Loader[] = [
     },
   },
 
+  // ---- users (beaconhs.users → Better-Auth `user` + `tenant_users`) ----
+  {
+    entity: 'tenant_user',
+    srcSchema: 'beaconhs',
+    srcTable: 'users',
+    tenant: 'rassaun',
+    target: tenantUsers,
+    map: () => null,
+    custom: async (env: Env, tenantId: string) => {
+      const rows: any[] = await source().unsafe('select * from beaconhs."users" order by id')
+      let upserted = 0
+      await withSuperAdmin(env.db, async (tx: any) => {
+        for (const r of rows) {
+          const email = H.str(r.email)?.toLowerCase()
+          if (!email) continue // Better-Auth users require an email
+          // global user (unique by email)
+          let u = (await tx.select({ id: user.id }).from(user).where(eq(user.email, email)).limit(1))[0]
+          if (!u) {
+            const ins = await tx
+              .insert(user)
+              .values({ id: randomUUID(), email, name: H.str(r.name) ?? H.str(r.formalname) ?? email, emailVerified: true, isSuperAdmin: false })
+              .onConflictDoNothing({ target: user.email })
+              .returning({ id: user.id })
+            u = ins[0] ?? (await tx.select({ id: user.id }).from(user).where(eq(user.email, email)).limit(1))[0]
+          }
+          if (!u) continue
+          // tenant membership (unique tenant_id+user_id) — reuse if it already exists (e.g. bootstrap admin)
+          const displayName = H.str(r.formalname) ?? H.str(r.name)
+          const existing = (
+            await tx.select({ id: tenantUsers.id }).from(tenantUsers).where(and(eq(tenantUsers.tenantId, tenantId), eq(tenantUsers.userId, u.id))).limit(1)
+          )[0]
+          let tuId: string
+          if (existing) {
+            tuId = existing.id
+            await tx.update(tenantUsers).set({ displayName }).where(eq(tenantUsers.id, tuId))
+          } else {
+            tuId = randomUUID()
+            await tx.insert(tenantUsers).values({ id: tuId, tenantId, userId: u.id, displayName, status: H.bool(r.active) ? 'active' : 'suspended', joinedAt: H.ts(r.created_at) ?? new Date() })
+          }
+          // map crosswalk (beaconhs.users.id → tenant_user id) so child FKs (CA owner, incident reporter…) resolve
+          await tx.execute(sql`insert into etl.id_map (source_db, source_table, source_pk, entity_type, tenant_id, new_id, row_hash)
+            values ('beaconhs', 'users', ${String(r.id)}, 'tenant_user', ${tenantId}::uuid, ${tuId}::uuid, ${rowHash(r)})
+            on conflict (source_db, source_table, source_pk) do update set new_id=excluded.new_id, last_synced_at=now()`)
+          upserted++
+        }
+      })
+      return { source: rows.length, upserted }
+    },
+  },
+
   // ---- incidents ----
   {
     entity: 'incident',
@@ -160,6 +216,7 @@ export const RASSAUN_LOADERS: Loader[] = [
       ppeWorn: H.str(r.PPEWorn),
       witnesses: H.str(r.Witnesses),
       foremanText: H.str(r.Foreman),
+      reportedByTenantUserId: await ctx.lookup('beaconhs', 'users', r.UserID),
       criticalInjury: H.bool(r.CriticalInjury),
       ministryOfLabourNotified: H.bool(r.MOL),
       emsNotified: H.bool(r.EMS),
@@ -236,7 +293,11 @@ export const RASSAUN_LOADERS: Loader[] = [
         closedAt: H.ts(r.DateClosed),
         actionTaken: H.str(r.ActionTaken),
         siteOrgUnitId: await ctx.lookup('adminapp', 'CUSTOMERS', r.Jobsite),
-        // assigned_by / owner are tenant_user FKs — populated once the users loader exists
+        // tenant-user FKs. The feed shows the OWNER as the actor; the app sets owner=creator on create
+        // and only changes it on reassignment — so faithfully: owner = assignee, else the raiser/creator.
+        ownerTenantUserId:
+          (await ctx.lookup('beaconhs', 'users', r.AssignedToID)) ?? (await ctx.lookup('beaconhs', 'users', r.AssignedByID)),
+        assignedByTenantUserId: await ctx.lookup('beaconhs', 'users', r.AssignedByID),
         metadata: {
           legacy: 'beaconhs.CORRECTIVEACTIONS',
           assignedBy: H.str(r.AssignedBy),
@@ -486,4 +547,526 @@ export const RASSAUN_LOADERS: Loader[] = [
       return { source: rows.length, upserted }
     },
   },
+
+  // ---- training: courses + records ----
+  {
+    entity: 'training_course',
+    srcSchema: 'beaconhs',
+    srcTable: 'TRAININGCOURSE',
+    tenant: 'rassaun',
+    target: trainingCourses,
+    map: (r) => {
+      const ty = String(r.Type ?? '').toLowerCase()
+      const deliveryType = /external/.test(ty)
+        ? 'external_certificate'
+        : /self|online|e-?learn/.test(ty)
+          ? 'self_paced'
+          : 'classroom'
+      const expiryYears = H.int(r.Expiry)
+      return {
+        code: H.str(r.Shortform) ?? `TC-${r.id}`,
+        name: H.str(r.Name) ?? `Course ${r.id}`,
+        description: H.str(r.Description),
+        deliveryType,
+        // legacy "Expiry" is in years; the new column is months
+        validForMonths: H.bool(r.DoesExpire) && expiryYears ? expiryYears * 12 : null,
+        requiresEvaluator: false,
+        metadata: {
+          legacy: 'beaconhs.TRAININGCOURSE',
+          type: H.str(r.Type),
+          trainer: H.str(r.Trainer),
+          expiryYears,
+          doesExpire: H.bool(r.DoesExpire),
+          certTemplate: H.str(r.CertificateDetailsTemplate),
+        },
+      }
+    },
+  },
+  {
+    entity: 'training_record',
+    srcSchema: 'beaconhs',
+    srcTable: 'TRAININGRECORDS',
+    tenant: 'rassaun',
+    target: trainingRecords,
+    batch: 1000,
+    map: async (r, ctx) => {
+      // person_id + course_id are NOT NULL — skip the few orphans (24 null course / 3 null emp)
+      const personId = await ctx.lookup('peopleapp', 'EMPLOYEESHR', r.EmpID)
+      const courseId = await ctx.lookup('beaconhs', 'TRAININGCOURSE', r.CourseID)
+      if (!personId || !courseId) return null
+      const ct = String(r.CertificateType ?? '').toLowerCase()
+      return {
+        personId,
+        courseId,
+        source: 'migrated',
+        completedOn: H.date(r.TrainDate) ?? H.date(r.created_at) ?? '1970-01-01',
+        expiresOn: H.date(r.ExpiryDate),
+        score: H.int(r.ScorePercent),
+        instructor: H.str(r.Trainer),
+        evaluatorPersonId: await ctx.lookup('peopleapp', 'EMPLOYEESHR', r.EvaluatorID),
+        certificateType: /auto/.test(ct) ? 'auto' : /photo/.test(ct) ? 'photo' : null,
+        details: H.str(r.CertificateDetails),
+        notes: H.str(r.CourseName),
+      }
+    },
+  },
+  // training classes (scheduled sessions) — beaconhs.TRAININGCLASSES
+  {
+    entity: 'training_class',
+    srcSchema: 'beaconhs',
+    srcTable: 'TRAININGCLASSES',
+    tenant: 'rassaun',
+    target: trainingClasses,
+    batch: 1000,
+    prepare: async (env: Env, tenantId: string) => {
+      const m = new Map<string, string>()
+      await withSuperAdmin(env.db, async (tx: any) => {
+        const rows = await tx.select({ id: trainingCourses.id, name: trainingCourses.name }).from(trainingCourses).where(eq(trainingCourses.tenantId, tenantId))
+        for (const r of rows) m.set(r.id, r.name)
+      })
+      return m
+    },
+    map: async (r, ctx) => {
+      const courseId = await ctx.lookup('beaconhs', 'TRAININGCOURSE', r.CourseID)
+      if (!courseId) return null // course_id is NOT NULL
+      const starts = H.ts(r.Date) ?? H.ts(r.created_at) ?? new Date(0)
+      const tm = H.str(r.Time)?.trim()?.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i) // "7:30 AM" → set the time-of-day (approx, stored UTC)
+      if (tm) {
+        let h = Number(tm[1]) % 12
+        if (/pm/i.test(tm[3] ?? '')) h += 12
+        starts.setUTCHours(h, Number(tm[2]), 0, 0)
+      }
+      const hours = H.num(r.Hours) ?? H.num(r.Length) ?? 1
+      const ends = new Date(starts.getTime() + Math.max(0.5, hours) * 3600 * 1000)
+      const st = String(r.Status ?? '').toLowerCase()
+      const notes = [H.str(r.Location), H.str(r.Trainer) ? `Trainer: ${H.str(r.Trainer)}` : null].filter(Boolean).join(' · ')
+      return {
+        courseId,
+        title: H.str(r.ClassLabel) ?? H.str(r.CourseName) ?? (ctx.prepared as Map<string, string>)?.get(courseId) ?? `Class ${r.id}`,
+        startsAt: starts,
+        endsAt: ends,
+        cancelledAt: /cancel/.test(st) ? starts : null,
+        completedAt: /complet|closed|done|attend/.test(st) ? ends : null,
+        notes: notes || null,
+      }
+    },
+  },
+  // class attendees — beaconhs.TRAININGATTENDEES
+  {
+    entity: 'training_class_attendee',
+    srcSchema: 'beaconhs',
+    srcTable: 'TRAININGATTENDEES',
+    tenant: 'rassaun',
+    target: trainingClassAttendees,
+    batch: 1000,
+    map: async (r, ctx) => {
+      const classId = await ctx.lookup('beaconhs', 'TRAININGCLASSES', r.ClassID)
+      const personId = await ctx.lookup('peopleapp', 'EMPLOYEESHR', r.EmpID)
+      if (!classId || !personId) return null // both NOT NULL
+      return { classId, personId, status: H.bool(r.Attended) ? 'attended' : 'registered' }
+    },
+  },
+
+  // ---- training skills (authorities → skill types → per-person grants) ----
+  {
+    entity: 'training_skill_authority',
+    srcSchema: 'beaconhs',
+    srcTable: 'TRAININGSKILLAUTHORITY',
+    tenant: 'rassaun',
+    target: trainingSkillAuthorities,
+    map: (r) => ({ name: H.str(r.Name) ?? `Authority ${r.id}`, code: H.str(r.Shortform), notes: H.str(r.Description) }),
+  },
+  {
+    entity: 'training_skill_type',
+    srcSchema: 'beaconhs',
+    srcTable: 'TRAININGSKILLTYPE',
+    tenant: 'rassaun',
+    target: trainingSkillTypes,
+    map: async (r, ctx) => {
+      const authorityId = await ctx.lookup('beaconhs', 'TRAININGSKILLAUTHORITY', r.AuthorityID)
+      if (!authorityId) return null // authority_id is NOT NULL
+      const yrs = H.int(r.ValidLength) // legacy ValidLength is in years
+      return {
+        authorityId,
+        name: H.str(r.Name) ?? `Skill ${r.id}`,
+        code: H.str(r.Shortform),
+        validForMonths: H.bool(r.DoesExpire) && yrs ? yrs * 12 : null,
+        description: H.str(r.Description),
+      }
+    },
+  },
+  {
+    entity: 'training_skill_assignment',
+    srcSchema: 'beaconhs',
+    srcTable: 'TRAININGSKILLRECORDS',
+    tenant: 'rassaun',
+    target: trainingSkillAssignments,
+    batch: 1000,
+    map: async (r, ctx) => {
+      const personId = await ctx.lookup('peopleapp', 'EMPLOYEESHR', r.EmpID)
+      const skillTypeId = await ctx.lookup('beaconhs', 'TRAININGSKILLTYPE', r.TypeID)
+      if (!personId || !skillTypeId) return null // person_id + skill_type_id are NOT NULL
+      return {
+        personId,
+        skillTypeId,
+        grantedOn: H.date(r.TrainDate) ?? H.date(r.created_at) ?? '1970-01-01',
+        expiresOn: H.date(r.ExpiryDate),
+        notes: [H.str(r.Status), H.str(r.Certificate)].filter(Boolean).join(' · ') || null,
+      }
+    },
+  },
+  // per-cert custom fields (e.g. Position=F/H/V/O) → polymorphic extra fields on the skill grant
+  {
+    entity: 'training_extra_field',
+    srcSchema: 'beaconhs',
+    srcTable: 'TRAININGSKILLADDITIONAL',
+    tenant: 'rassaun',
+    target: trainingExtraFields,
+    batch: 1000,
+    map: async (r, ctx) => {
+      // Per-cert custom answers (Position, Level, …). TrainingSkillID → the migrated grant.
+      // ~1000 source rows are skipped on purpose: their parent skill record was deleted from the
+      // legacy DB (orphaned answers, no cert to attach to), plus 39 rows with TrainingSkillID=0 are
+      // authority field *definitions* keyed on an unmapped field-group id (46/49/52), not user data.
+      const fieldKey = H.str(r.AdditionalField)
+      if (!fieldKey || !r.TrainingSkillID || Number(r.TrainingSkillID) <= 0) return null
+      const ownerId = await ctx.lookup('beaconhs', 'TRAININGSKILLRECORDS', r.TrainingSkillID)
+      if (!ownerId) return null
+      return {
+        ownerType: 'skill',
+        ownerId,
+        fieldKey,
+        fieldValue: H.str(r.Answer) ?? H.str(r.Answers),
+        sortOrder: H.int(r.EntityOrder) ?? 0,
+      }
+    },
+  },
+  // ---- training REQUIREMENTS → unified compliance engine ----
+  // Course requirements (TRAININGASSIGNMENT) + skill requirements (TRAININGSKILLASSIGNMENT) become
+  // compliance_obligations; their audience records (Group/Individual/Division) expand to explicit
+  // person audience rows (the engine has no group/division kind). The engine evaluates them live
+  // against training_records (courses) / training_skill_assignments (skills). Evaluators are a
+  // signature/capability list, not an obligation → not folded in.
+  {
+    entity: 'compliance_training_requirement',
+    srcSchema: 'beaconhs',
+    srcTable: 'TRAININGASSIGNMENT',
+    tenant: 'rassaun',
+    target: complianceObligations,
+    map: () => null,
+    custom: async (env: Env, tenantId: string) => {
+      const src = source()
+      // --- legacy audience-membership maps (resolve Group/Division → legacy EmpIDs) ---
+      const groupMembers = new Map<string, number[]>()
+      for (const g of await src.unsafe('select "GroupID","EmpID" from beaconhs."PEOPLEGROUPRECORD"')) {
+        const k = String(g.GroupID)
+        ;(groupMembers.get(k) ?? groupMembers.set(k, []).get(k)!).push(g.EmpID)
+      }
+      const divisionName = new Map<string, string>()
+      for (const d of await src.unsafe('select id, "Name" from beaconhs."PEOPLEDIVISION"')) divisionName.set(String(d.id), String(d.Name ?? '').trim())
+      const empsByDivision = new Map<string, number[]>() // EMPLOYEESHR.Division is the division NAME (no id FK)
+      for (const e of await src.unsafe('select id, "Division" from peopleapp."EMPLOYEESHR" where "Division" is not null')) {
+        const k = String(e.Division).trim()
+        ;(empsByDivision.get(k) ?? empsByDivision.set(k, []).get(k)!).push(e.id)
+      }
+      // expand one audience record (Type, EntityID) → legacy EmpIDs
+      const empsFor = (type: unknown, entityId: unknown): number[] => {
+        const t = String(type ?? '').toLowerCase()
+        if (t === 'individual') return [Number(entityId)]
+        if (t === 'group') return groupMembers.get(String(entityId)) ?? []
+        if (t === 'division') {
+          const nm = divisionName.get(String(entityId))
+          return nm ? (empsByDivision.get(nm) ?? []) : []
+        }
+        return []
+      }
+      // titles + course-expiry lookups
+      const courseName = new Map<string, string>()
+      const courseExpires = new Map<string, boolean>()
+      for (const c of await src.unsafe('select id, "Name","DoesExpire" from beaconhs."TRAININGCOURSE"')) {
+        courseName.set(String(c.id), H.str(c.Name) ?? `Course ${c.id}`)
+        courseExpires.set(String(c.id), H.bool(c.DoesExpire))
+      }
+      const skillTypeName = new Map<string, string>()
+      for (const s of await src.unsafe('select id, "Name" from beaconhs."TRAININGSKILLTYPE"')) skillTypeName.set(String(s.id), H.str(s.Name) ?? `Skill ${s.id}`)
+
+      let obligations = 0
+      let audienceTotal = 0
+      let sourceRows = 0
+
+      const loadReqs = async (opts: {
+        assignTable: string
+        recordTable: string
+        mkTarget: (a: any, lookup: (sd: string, st: string, pk: unknown) => Promise<string | null>) => Promise<{ targetRef: Record<string, unknown>; title: string; cert: boolean } | null>
+      }) => {
+        const assigns: any[] = await src.unsafe(`select * from beaconhs."${opts.assignTable}" order by id`)
+        const records: any[] = await src.unsafe(`select * from beaconhs."${opts.recordTable}"`)
+        const recsByAssign = new Map<string, any[]>()
+        for (const r of records) {
+          const k = String(r.AssignmentID)
+          ;(recsByAssign.get(k) ?? recsByAssign.set(k, []).get(k)!).push(r)
+        }
+        sourceRows += assigns.length
+        for (const a of assigns) {
+          await withSuperAdmin(env.db, async (tx: any) => {
+            const lookup = internals.makeLookup(env, tx)
+            const built = await opts.mkTarget(a, lookup)
+            if (!built) return
+            const obId = await internals.reserve(env, tx, 'beaconhs', opts.assignTable, a.id, 'compliance_obligation', tenantId, rowHash(a))
+            const recurrence = built.cert ? { kind: 'expiry', remindBeforeDays: 30 } : { kind: 'one_time' }
+            const sourceModule = built.cert ? 'cert_requirement' : 'training'
+            await tx
+              .insert(complianceObligations)
+              .values({
+                id: obId,
+                tenantId,
+                sourceModule,
+                subjectKind: 'per_person',
+                title: built.title,
+                notes: H.str(a.Notes),
+                status: 'active',
+                targetRef: built.targetRef,
+                recurrence,
+                recurrenceKind: recurrence.kind,
+                legacyTable: `beaconhs.${opts.assignTable}`,
+              })
+              .onConflictDoUpdate({
+                target: complianceObligations.id,
+                set: { sourceModule, title: built.title, notes: H.str(a.Notes), targetRef: built.targetRef, recurrence, recurrenceKind: recurrence.kind },
+              })
+            obligations++
+            // audience: expand each record → person uuids, dedupe, upsert (ignore dup person rows)
+            const personIds = new Set<string>()
+            for (const rec of recsByAssign.get(String(a.id)) ?? []) {
+              for (const emp of empsFor(rec.Type, rec.EntityID)) {
+                const pid = await lookup('peopleapp', 'EMPLOYEESHR', emp)
+                if (pid) personIds.add(pid)
+              }
+            }
+            if (personIds.size) {
+              await tx
+                .insert(complianceAudience)
+                .values(Array.from(personIds).map((pid) => ({ tenantId, obligationId: obId, kind: 'person', entityKey: pid })))
+                .onConflictDoNothing({ target: [complianceAudience.obligationId, complianceAudience.kind, complianceAudience.entityKey] })
+              audienceTotal += personIds.size
+            }
+          })
+        }
+      }
+
+      // course requirements
+      await loadReqs({
+        assignTable: 'TRAININGASSIGNMENT',
+        recordTable: 'TRAININGASSIGNMENTRECORD',
+        mkTarget: async (a, lookup) => {
+          const courseId = await lookup('beaconhs', 'TRAININGCOURSE', a.CourseID)
+          if (!courseId) return null
+          return { targetRef: { courseId, trainingItemKind: 'course' }, title: courseName.get(String(a.CourseID)) ?? `Course ${a.CourseID}`, cert: courseExpires.get(String(a.CourseID)) ?? false }
+        },
+      })
+      // skill requirements (cert_requirement satisfied by a valid skill grant)
+      await loadReqs({
+        assignTable: 'TRAININGSKILLASSIGNMENT',
+        recordTable: 'TRAININGSKILLASSIGNMENTRECORD',
+        mkTarget: async (a, lookup) => {
+          const skillTypeId = await lookup('beaconhs', 'TRAININGSKILLTYPE', a.TypeID)
+          if (!skillTypeId) return null
+          return { targetRef: { skillTypeId }, title: skillTypeName.get(String(a.TypeID)) ?? `Skill ${a.TypeID}`, cert: true }
+        },
+      })
+
+      console.log(`[${obligations} obligations, ${audienceTotal} audience] `)
+      return { source: sourceRows, upserted: obligations }
+    },
+  },
 ]
+
+// ===================== ExternalTraining DB → `external-training` tenant =====================
+// Source schema `externaltraining`; its own CUSTOMERS / PEOPLE / quiz structure.
+export const EXTERNAL_TRAINING_LOADERS: Loader[] = [
+  // org units = ExternalTraining customers (the external client orgs)
+  {
+    entity: 'org_unit',
+    srcSchema: 'externaltraining',
+    srcTable: 'CUSTOMERS',
+    tenant: 'external-training',
+    target: orgUnits,
+    map: (r) => ({
+      level: 'customer',
+      name: H.str(r.Customer) ?? `Customer ${r.id}`,
+      code: String(r.id),
+      address: { line1: H.str(r.Address), formatted: H.str(r.FormattedAddress) },
+      metadata: { legacy: 'externaltraining.CUSTOMERS', industry: H.str(r.Industry), website: H.str(r.Website), active: H.bool(r.isActive) },
+    }),
+  },
+  // people lookups
+  { entity: 'person_division', srcSchema: 'externaltraining', srcTable: 'PEOPLEDIVISION', tenant: 'external-training', target: personDivisions, map: (r) => ({ name: H.str(r.Name) ?? `Division ${r.id}`, description: H.str(r.Description) }) },
+  { entity: 'trade', srcSchema: 'externaltraining', srcTable: 'PEOPLETRADES', tenant: 'external-training', target: trades, map: (r) => ({ name: H.str(r.Name) ?? `Trade ${r.id}` }) },
+  { entity: 'person_title', srcSchema: 'externaltraining', srcTable: 'PEOPLEJOBTITLE', tenant: 'external-training', target: personTitles, map: (r) => ({ name: H.str(r.Name) ?? `Title ${r.id}`, description: H.str(r.Scope), responsibilities: H.str(r.Responsibilities), education: H.str(r.Education), experience: H.str(r.Experience) }) },
+  // people
+  {
+    entity: 'person',
+    srcSchema: 'externaltraining',
+    srcTable: 'PEOPLE',
+    tenant: 'external-training',
+    target: people,
+    map: async (r, ctx) => {
+      const nm = H.name(r.PayrollName)
+      return {
+        firstName: nm.first || (H.str(r.PayrollName) ?? 'Unknown'),
+        lastName: nm.last || '',
+        formalName: H.str(r.PayrollName),
+        email: H.str(r.Email),
+        phone: H.str(r.Phone),
+        dateOfBirth: H.date(r.DOB),
+        tradeId: await ctx.lookup('externaltraining', 'PEOPLETRADES', r.TradeID),
+        emergencyContactName: H.str(r.EmergencyContactName),
+        emergencyContactPhone: H.str(r.EmergencyContactNumber),
+        status: H.bool(r.EmployeeActive) ? 'active' : 'inactive',
+        notes: H.str(r.Notes),
+        metadata: { legacy: 'externaltraining.PEOPLE', customerId: r.CustomerID, divisionId: r.DivisionID, jobTitleId: r.JobTitleID, address: H.str(r.Address) },
+      }
+    },
+  },
+  // training courses
+  {
+    entity: 'training_course',
+    srcSchema: 'externaltraining',
+    srcTable: 'TRAININGCOURSE',
+    tenant: 'external-training',
+    target: trainingCourses,
+    map: (r) => {
+      const expiryYears = H.int(r.Expiry)
+      return {
+        code: H.str(r.Shortform) ?? `TC-${r.id}`,
+        name: H.str(r.Name) ?? `Course ${r.id}`,
+        description: H.str(r.Description),
+        deliveryType: 'classroom',
+        validForMonths: H.bool(r.DoesExpire) && expiryYears ? expiryYears * 12 : null,
+        requiresEvaluator: false,
+        metadata: { legacy: 'externaltraining.TRAININGCOURSE', trainer: H.str(r.Trainer), capacity: H.int(r.Capacity), pricePerPerson: H.num(r.PricePerPerson), expiryYears, doesExpire: H.bool(r.DoesExpire), certTemplate: H.str(r.CertificateDetailsTemplate) },
+      }
+    },
+  },
+  // training records
+  {
+    entity: 'training_record',
+    srcSchema: 'externaltraining',
+    srcTable: 'TRAININGRECORDS',
+    tenant: 'external-training',
+    target: trainingRecords,
+    batch: 1000,
+    map: async (r, ctx) => {
+      const personId = await ctx.lookup('externaltraining', 'PEOPLE', r.EmpID)
+      const courseId = await ctx.lookup('externaltraining', 'TRAININGCOURSE', r.CourseID)
+      if (!personId || !courseId) return null
+      const ct = String(r.CertificateType ?? '').toLowerCase()
+      return {
+        personId,
+        courseId,
+        source: 'migrated',
+        completedOn: H.date(r.TrainDate) ?? H.date(r.created_at) ?? '1970-01-01',
+        expiresOn: H.date(r.ExpiryDate),
+        score: H.int(r.ScorePercent),
+        instructor: H.str(r.Trainer),
+        evaluatorPersonId: await ctx.lookup('externaltraining', 'PEOPLE', r.EvaluatorID),
+        certificateType: /auto/.test(ct) ? 'auto' : /photo/.test(ct) ? 'photo' : null,
+        details: H.str(r.CertificateDetails),
+      }
+    },
+  },
+  // training classes
+  {
+    entity: 'training_class',
+    srcSchema: 'externaltraining',
+    srcTable: 'TRAININGCLASSES',
+    tenant: 'external-training',
+    target: trainingClasses,
+    batch: 1000,
+    prepare: async (env: Env, tenantId: string) => {
+      const m = new Map<string, string>()
+      await withSuperAdmin(env.db, async (tx: any) => {
+        const rows = await tx.select({ id: trainingCourses.id, name: trainingCourses.name }).from(trainingCourses).where(eq(trainingCourses.tenantId, tenantId))
+        for (const r of rows) m.set(r.id, r.name)
+      })
+      return m
+    },
+    map: async (r, ctx) => {
+      const courseId = await ctx.lookup('externaltraining', 'TRAININGCOURSE', r.CourseID)
+      if (!courseId) return null // course_id is NOT NULL
+      const starts = H.ts(r.Date) ?? H.ts(r.created_at) ?? new Date(0)
+      const hours = H.num(r.Hours) ?? H.num(r.Length) ?? 1
+      const ends = new Date(starts.getTime() + Math.max(0.5, hours) * 3600 * 1000)
+      const st = String(r.Status ?? '').toLowerCase()
+      return {
+        courseId,
+        title: H.str(r.ClassCode) ?? (ctx.prepared as Map<string, string>)?.get(courseId) ?? `Class ${r.id}`,
+        startsAt: starts,
+        endsAt: ends,
+        siteOrgUnitId: await ctx.lookup('externaltraining', 'CUSTOMERS', r.CustomerID),
+        cancelledAt: /cancel/.test(st) ? starts : null,
+        completedAt: /complet|done|attend/.test(st) ? ends : null,
+        notes: H.str(r.CertificateDetails),
+      }
+    },
+  },
+  // class attendees
+  {
+    entity: 'training_class_attendee',
+    srcSchema: 'externaltraining',
+    srcTable: 'TRAININGATTENDEES',
+    tenant: 'external-training',
+    target: trainingClassAttendees,
+    batch: 1000,
+    map: async (r, ctx) => {
+      const classId = await ctx.lookup('externaltraining', 'TRAININGCLASSES', r.ClassID)
+      const personId = await ctx.lookup('externaltraining', 'PEOPLE', r.EmpID)
+      if (!classId || !personId) return null
+      return { classId, personId, status: H.bool(r.Attended) ? 'attended' : 'registered', notes: H.str(r.Notes) }
+    },
+  },
+  // quizzes → assessment types + questions (QUIZRESULTS are empty, so no attempts to load)
+  {
+    entity: 'training_assessment_type',
+    srcSchema: 'externaltraining',
+    srcTable: 'QUIZ',
+    tenant: 'external-training',
+    target: trainingAssessmentTypes,
+    map: async (r, ctx) => ({
+      name: H.str(r.Name) ?? `Quiz ${r.id}`,
+      description: H.str(r.Description),
+      passingScore: H.int(r.PassingGrade) ?? 80,
+      courseId: await ctx.lookup('externaltraining', 'TRAININGCOURSE', r.CourseID),
+      graded: H.bool(r.Graded),
+      preAssessmentMessage: H.str(r.PreAssessmentMessage),
+      postAssessmentMessage: H.str(r.PostAssessmentMessage),
+      metadata: { legacy: 'externaltraining.QUIZ', createdBy: H.str(r.CreatedBy) },
+    }),
+  },
+  {
+    entity: 'training_assessment_type_question',
+    srcSchema: 'externaltraining',
+    srcTable: 'QUIZQUESTIONS',
+    tenant: 'external-training',
+    target: trainingAssessmentTypeQuestions,
+    batch: 1000,
+    map: async (r, ctx) => {
+      const typeId = await ctx.lookup('externaltraining', 'QUIZ', r.QuizID)
+      if (!typeId) return null // type_id NOT NULL
+      const choices = [r.MultipleChoiceA, r.MultipleChoiceB, r.MultipleChoiceC, r.MultipleChoiceD].map((x) => H.str(x)).filter(Boolean) as string[]
+      const t = String(r.Type ?? '').toLowerCase()
+      const kind = choices.length ? 'single_choice' : /true.?false|bool/.test(t) ? 'true_false' : 'text'
+      return {
+        typeId,
+        prompt: H.str(r.Question) ?? `Q${r.id}`,
+        kind,
+        options: choices.length ? choices.map((c, i) => ({ value: String.fromCharCode(65 + i), label: c })) : null,
+        correctAnswer: H.str(r.Answer),
+        entityOrder: H.int(r.QuestionOrder) ?? 0,
+        mandatory: true,
+      }
+    },
+  },
+]
+
+export const ALL_LOADERS: Loader[] = [...RASSAUN_LOADERS, ...EXTERNAL_TRAINING_LOADERS]

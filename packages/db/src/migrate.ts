@@ -3,6 +3,7 @@ import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
 import { sql } from 'drizzle-orm'
 import { RLS_POLICY_SQL, TENANT_SCOPED_TABLES } from './rls'
+import { REPORT_VIEWS_SQL } from './views'
 
 async function main() {
   const url = process.env.DATABASE_URL
@@ -46,6 +47,12 @@ async function main() {
     }
   }
   console.log('✔ RLS applied')
+
+  console.log('▶ Applying reporting views…')
+  for (const viewSql of REPORT_VIEWS_SQL) {
+    await db.execute(sql.raw(viewSql))
+  }
+  console.log('✔ Views applied')
 
   await migrationClient.end()
 }

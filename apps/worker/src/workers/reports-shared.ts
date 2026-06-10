@@ -804,6 +804,18 @@ const CUSTOM_COLUMN_WHITELIST: Record<string, Record<string, string>> = {
     score: 'score',
     grade: 'grade',
   },
+  skill_assignments: {
+    employee_no: 'employee_no',
+    last_name: 'last_name',
+    first_name: 'first_name',
+    trade: 'trade',
+    authority: 'authority',
+    certification_code: 'certification_code',
+    certification_name: 'certification_name',
+    granted_on: 'granted_on',
+    expires_on: 'expires_on',
+    status: 'status',
+  },
   inspections: {
     reference: 'reference',
     status: 'status',
@@ -862,6 +874,8 @@ const CUSTOM_ENTITY_TABLE: Record<string, string> = {
   incidents: 'incidents',
   corrective_actions: 'corrective_actions',
   training_records: 'training_records',
+  // Join-baked view (packages/db/src/views.ts) — RLS flows through from base tables.
+  skill_assignments: 'report_skill_assignments',
   inspections: 'inspection_records',
   documents: 'documents',
   equipment: 'equipment_items',

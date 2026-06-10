@@ -39,7 +39,7 @@ import {
 import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
 
-export const metadata = { title: 'My' }
+export const metadata = { title: 'Workspace' }
 export const dynamic = 'force-dynamic'
 
 type Tile = {
@@ -234,7 +234,7 @@ export default async function MyLandingPage() {
     {
       href: '/my/training',
       label: 'My training',
-      description: 'Records, upcoming expirations, and assignments.',
+      description: 'Courses, records, upcoming expirations, and assignments.',
       icon: GraduationCap,
       count: counts.trainingRecords,
       hint:
@@ -269,7 +269,7 @@ export default async function MyLandingPage() {
     <PageContainer>
       <div className="space-y-6">
         <PageHeader
-          title="My"
+          title="Workspace"
           description={
             ctx.membership?.displayName
               ? `Personal views for ${ctx.membership.displayName}.`

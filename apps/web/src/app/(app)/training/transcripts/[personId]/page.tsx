@@ -353,7 +353,7 @@ export default async function TranscriptDetailPage({
                       <TableRow key={sk.id}>
                         <TableCell>
                           <Link
-                            href={`/training/skills/${type.id}`}
+                            href={`/training/skills/types/${type.id}`}
                             className="font-medium text-slate-900 hover:underline"
                           >
                             {type.name}

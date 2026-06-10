@@ -50,7 +50,7 @@ export default async function LibraryHubPage() {
       count: counts.auths,
     },
     {
-      href: '/training/skills',
+      href: '/training/skills/types',
       title: 'Skill types',
       desc: 'Catalogue of recognized skills and competencies workers can hold.',
       count: counts.skills,

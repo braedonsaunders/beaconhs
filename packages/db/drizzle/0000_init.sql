@@ -59,10 +59,11 @@ CREATE TYPE "public"."training_audience_assignment_record_status" AS ENUM('pendi
 CREATE TYPE "public"."training_audience_assignment_status" AS ENUM('active', 'archived');--> statement-breakpoint
 CREATE TYPE "public"."training_audience_assignment_target_kind" AS ENUM('person', 'trade', 'role', 'everyone');--> statement-breakpoint
 CREATE TYPE "public"."training_extra_field_owner_type" AS ENUM('skill', 'skill_type', 'authority');--> statement-breakpoint
+CREATE TYPE "public"."training_content_item_kind" AS ENUM('rich', 'video', 'file', 'embed', 'slides');--> statement-breakpoint
 CREATE TYPE "public"."training_enrollment_source" AS ENUM('self', 'assigned', 'compliance');--> statement-breakpoint
 CREATE TYPE "public"."training_enrollment_status" AS ENUM('not_started', 'in_progress', 'completed', 'expired', 'withdrawn');--> statement-breakpoint
-CREATE TYPE "public"."training_lesson_completion_rule" AS ENUM('view', 'pass', 'acknowledge', 'min_time');--> statement-breakpoint
-CREATE TYPE "public"."training_lesson_kind" AS ENUM('rich', 'video', 'file', 'embed', 'quiz', 'session');--> statement-breakpoint
+CREATE TYPE "public"."training_lesson_completion_rule" AS ENUM('view', 'pass', 'acknowledge', 'min_time', 'evaluator');--> statement-breakpoint
+CREATE TYPE "public"."training_lesson_kind" AS ENUM('rich', 'video', 'file', 'embed', 'quiz', 'session', 'slides', 'practical');--> statement-breakpoint
 CREATE TYPE "public"."training_progress_status" AS ENUM('not_started', 'in_progress', 'completed');--> statement-breakpoint
 CREATE TYPE "public"."report_cadence" AS ENUM('daily', 'weekly', 'monthly');--> statement-breakpoint
 CREATE TYPE "public"."report_definition_kind" AS ENUM('built_in', 'custom');--> statement-breakpoint
@@ -1864,6 +1865,27 @@ CREATE TABLE "training_extra_fields" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE "training_content_items" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"tenant_id" uuid NOT NULL,
+	"title" text NOT NULL,
+	"description" text,
+	"kind" "training_content_item_kind" DEFAULT 'rich' NOT NULL,
+	"content_blocks" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"content_json" jsonb,
+	"content_html" text,
+	"slides" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"import_status" text,
+	"import_error" text,
+	"attachment_id" uuid,
+	"embed_url" text,
+	"tags" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"duration_minutes" integer,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"deleted_at" timestamp with time zone
+);
+--> statement-breakpoint
 CREATE TABLE "training_course_modules" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
@@ -1910,6 +1932,10 @@ CREATE TABLE "training_lesson_progress" (
 	"attempts" integer DEFAULT 0 NOT NULL,
 	"last_position" jsonb,
 	"assessment_id" uuid,
+	"evaluated_by_tenant_user_id" uuid,
+	"evaluation_notes" text,
+	"evaluation_signature_data_url" text,
+	"criteria_results" jsonb,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
@@ -1923,10 +1949,17 @@ CREATE TABLE "training_lessons" (
 	"kind" "training_lesson_kind" DEFAULT 'rich' NOT NULL,
 	"sort_order" integer DEFAULT 0 NOT NULL,
 	"content_blocks" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"content_json" jsonb,
+	"content_html" text,
+	"slides" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"practical_criteria" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"import_status" text,
+	"import_error" text,
 	"assessment_type_id" uuid,
 	"class_id" uuid,
 	"attachment_id" uuid,
 	"embed_url" text,
+	"content_item_id" uuid,
 	"duration_minutes" integer,
 	"is_required" boolean DEFAULT true NOT NULL,
 	"completion_rule" "training_lesson_completion_rule" DEFAULT 'view' NOT NULL,
@@ -3131,6 +3164,7 @@ ALTER TABLE "training_course_files" ADD CONSTRAINT "training_course_files_tenant
 ALTER TABLE "training_course_files" ADD CONSTRAINT "training_course_files_course_id_training_courses_id_fk" FOREIGN KEY ("course_id") REFERENCES "public"."training_courses"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "training_course_files" ADD CONSTRAINT "training_course_files_attachment_id_attachments_id_fk" FOREIGN KEY ("attachment_id") REFERENCES "public"."attachments"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "training_extra_fields" ADD CONSTRAINT "training_extra_fields_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "training_content_items" ADD CONSTRAINT "training_content_items_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "training_course_modules" ADD CONSTRAINT "training_course_modules_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "training_course_modules" ADD CONSTRAINT "training_course_modules_course_id_training_courses_id_fk" FOREIGN KEY ("course_id") REFERENCES "public"."training_courses"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "training_enrollments" ADD CONSTRAINT "training_enrollments_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -3143,6 +3177,7 @@ ALTER TABLE "training_lesson_progress" ADD CONSTRAINT "training_lesson_progress_
 ALTER TABLE "training_lesson_progress" ADD CONSTRAINT "training_lesson_progress_lesson_id_training_lessons_id_fk" FOREIGN KEY ("lesson_id") REFERENCES "public"."training_lessons"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "training_lesson_progress" ADD CONSTRAINT "training_lesson_progress_person_id_people_id_fk" FOREIGN KEY ("person_id") REFERENCES "public"."people"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "training_lesson_progress" ADD CONSTRAINT "training_lesson_progress_assessment_id_training_assessments_id_fk" FOREIGN KEY ("assessment_id") REFERENCES "public"."training_assessments"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "training_lesson_progress" ADD CONSTRAINT "training_lesson_progress_evaluated_by_tenant_user_id_tenant_users_id_fk" FOREIGN KEY ("evaluated_by_tenant_user_id") REFERENCES "public"."tenant_users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "training_lessons" ADD CONSTRAINT "training_lessons_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "training_lessons" ADD CONSTRAINT "training_lessons_course_id_training_courses_id_fk" FOREIGN KEY ("course_id") REFERENCES "public"."training_courses"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "training_lessons" ADD CONSTRAINT "training_lessons_module_id_training_course_modules_id_fk" FOREIGN KEY ("module_id") REFERENCES "public"."training_course_modules"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -3585,6 +3620,8 @@ CREATE INDEX "training_course_files_tenant_idx" ON "training_course_files" USING
 CREATE INDEX "training_course_files_course_idx" ON "training_course_files" USING btree ("course_id");--> statement-breakpoint
 CREATE INDEX "training_extra_fields_tenant_idx" ON "training_extra_fields" USING btree ("tenant_id");--> statement-breakpoint
 CREATE INDEX "training_extra_fields_owner_idx" ON "training_extra_fields" USING btree ("owner_type","owner_id");--> statement-breakpoint
+CREATE INDEX "training_content_items_tenant_idx" ON "training_content_items" USING btree ("tenant_id");--> statement-breakpoint
+CREATE INDEX "training_content_items_kind_idx" ON "training_content_items" USING btree ("tenant_id","kind");--> statement-breakpoint
 CREATE INDEX "training_course_modules_tenant_idx" ON "training_course_modules" USING btree ("tenant_id");--> statement-breakpoint
 CREATE INDEX "training_course_modules_course_idx" ON "training_course_modules" USING btree ("course_id","sort_order");--> statement-breakpoint
 CREATE INDEX "training_enrollments_tenant_idx" ON "training_enrollments" USING btree ("tenant_id");--> statement-breakpoint

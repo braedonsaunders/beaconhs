@@ -1,5 +1,5 @@
 {
-  "id": "8fa475b9-ebd5-4811-9f08-eff13ed8e6f5",
+  "id": "387c4605-586e-495c-b271-51703fb3621d",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -20467,6 +20467,186 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.training_content_items": {
+      "name": "training_content_items",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "training_content_item_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'rich'"
+        },
+        "content_blocks": {
+          "name": "content_blocks",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "content_json": {
+          "name": "content_json",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "content_html": {
+          "name": "content_html",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "slides": {
+          "name": "slides",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "import_status": {
+          "name": "import_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "import_error": {
+          "name": "import_error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "attachment_id": {
+          "name": "attachment_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "embed_url": {
+          "name": "embed_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tags": {
+          "name": "tags",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "duration_minutes": {
+          "name": "duration_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "training_content_items_tenant_idx": {
+          "name": "training_content_items_tenant_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "training_content_items_kind_idx": {
+          "name": "training_content_items_kind_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "kind",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "training_content_items_tenant_id_tenants_id_fk": {
+          "name": "training_content_items_tenant_id_tenants_id_fk",
+          "tableFrom": "training_content_items",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.training_course_modules": {
       "name": "training_course_modules",
       "schema": "",
@@ -20957,6 +21137,30 @@
           "primaryKey": false,
           "notNull": false
         },
+        "evaluated_by_tenant_user_id": {
+          "name": "evaluated_by_tenant_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "evaluation_notes": {
+          "name": "evaluation_notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "evaluation_signature_data_url": {
+          "name": "evaluation_signature_data_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "criteria_results": {
+          "name": "criteria_results",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -21111,6 +21315,19 @@
           ],
           "onDelete": "set null",
           "onUpdate": "no action"
+        },
+        "training_lesson_progress_evaluated_by_tenant_user_id_tenant_users_id_fk": {
+          "name": "training_lesson_progress_evaluated_by_tenant_user_id_tenant_users_id_fk",
+          "tableFrom": "training_lesson_progress",
+          "tableTo": "tenant_users",
+          "columnsFrom": [
+            "evaluated_by_tenant_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -21176,6 +21393,44 @@
           "notNull": true,
           "default": "'[]'::jsonb"
         },
+        "content_json": {
+          "name": "content_json",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "content_html": {
+          "name": "content_html",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "slides": {
+          "name": "slides",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "practical_criteria": {
+          "name": "practical_criteria",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "import_status": {
+          "name": "import_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "import_error": {
+          "name": "import_error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "assessment_type_id": {
           "name": "assessment_type_id",
           "type": "uuid",
@@ -21197,6 +21452,12 @@
         "embed_url": {
           "name": "embed_url",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "content_item_id": {
+          "name": "content_item_id",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
@@ -32235,6 +32496,17 @@
         "authority"
       ]
     },
+    "public.training_content_item_kind": {
+      "name": "training_content_item_kind",
+      "schema": "public",
+      "values": [
+        "rich",
+        "video",
+        "file",
+        "embed",
+        "slides"
+      ]
+    },
     "public.training_enrollment_source": {
       "name": "training_enrollment_source",
       "schema": "public",
@@ -32262,7 +32534,8 @@
         "view",
         "pass",
         "acknowledge",
-        "min_time"
+        "min_time",
+        "evaluator"
       ]
     },
     "public.training_lesson_kind": {
@@ -32274,7 +32547,9 @@
         "file",
         "embed",
         "quiz",
-        "session"
+        "session",
+        "slides",
+        "practical"
       ]
     },
     "public.training_progress_status": {

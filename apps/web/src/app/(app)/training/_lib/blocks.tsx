@@ -55,7 +55,7 @@ export function renderMd(md: string): string {
   return out.join('\n')
 }
 
-function toEmbedUrl(url: string): string {
+export function toEmbedUrl(url: string): string {
   const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/)
   if (yt) return `https://www.youtube.com/embed/${yt[1]}`
   const vm = url.match(/vimeo\.com\/(\d+)/)

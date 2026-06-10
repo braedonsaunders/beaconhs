@@ -24,6 +24,7 @@ import {
   tenantUsers,
   trainingAssessments,
   trainingRecords,
+  trainingSkillAssignments,
 } from '@beaconhs/db/schema'
 import { type AudienceItem, type ResolvedMember, resolveObligationAudience } from './audience'
 
@@ -187,6 +188,22 @@ async function evalTraining(tx: Tx, tid: string, members: ResolvedMember[], ob: 
     for (const r of rows) {
       const valid = !r.expiresOn || r.expiresOn >= today
       if (valid) done.set(r.personId, r.completedOn)
+    }
+  } else if (ref.skillTypeId) {
+    // cert_requirement satisfied by holding a valid (non-expired) skill grant of this type
+    const rows = await tx
+      .select({ personId: trainingSkillAssignments.personId, grantedOn: trainingSkillAssignments.grantedOn, expiresOn: trainingSkillAssignments.expiresOn })
+      .from(trainingSkillAssignments)
+      .where(
+        and(
+          eq(trainingSkillAssignments.tenantId, tid),
+          eq(trainingSkillAssignments.skillTypeId, ref.skillTypeId),
+          inArray(trainingSkillAssignments.personId, ids),
+        ),
+      )
+    for (const r of rows) {
+      const valid = !r.expiresOn || r.expiresOn >= today
+      if (valid) done.set(r.personId, r.grantedOn)
     }
   }
 

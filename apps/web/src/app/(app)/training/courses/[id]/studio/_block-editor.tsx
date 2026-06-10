@@ -71,40 +71,46 @@ const ADD_MENU: { type: BlockType; label: string; icon: React.ReactNode }[] = [
 export function BlockEditor({
   initialBlocks,
   onSave,
+  onChange,
+  inline = false,
 }: {
   initialBlocks: LessonBlock[]
-  onSave: (blocks: LessonBlock[]) => Promise<void>
+  /** Standalone mode: persist on the Save button. */
+  onSave?: (blocks: LessonBlock[]) => Promise<void>
+  /** Inline mode: fire on every mutation (parent owns persistence). */
+  onChange?: (blocks: LessonBlock[]) => void
+  /** Hide the save bar; use with onChange when embedded in a larger editor. */
+  inline?: boolean
 }) {
   const [blocks, setBlocks] = useState<LessonBlock[]>(initialBlocks ?? [])
   const [dirty, setDirty] = useState(false)
   const [pending, startTransition] = useTransition()
 
-  function update(id: string, patch: Partial<LessonBlock>) {
-    setBlocks((prev) => prev.map((b) => (b.id === id ? ({ ...b, ...patch } as LessonBlock) : b)))
+  function commit(next: LessonBlock[]) {
+    setBlocks(next)
     setDirty(true)
+    onChange?.(next)
+  }
+  function update(id: string, patch: Partial<LessonBlock>) {
+    commit(blocks.map((b) => (b.id === id ? ({ ...b, ...patch } as LessonBlock) : b)))
   }
   function add(type: BlockType) {
-    setBlocks((prev) => [...prev, newBlock(type)])
-    setDirty(true)
+    commit([...blocks, newBlock(type)])
   }
   function remove(id: string) {
-    setBlocks((prev) => prev.filter((b) => b.id !== id))
-    setDirty(true)
+    commit(blocks.filter((b) => b.id !== id))
   }
   function move(id: string, dir: -1 | 1) {
-    setBlocks((prev) => {
-      const i = prev.findIndex((b) => b.id === id)
-      const j = i + dir
-      if (i < 0 || j < 0 || j >= prev.length) return prev
-      const next = [...prev]
-      ;[next[i], next[j]] = [next[j]!, next[i]!]
-      return next
-    })
-    setDirty(true)
+    const i = blocks.findIndex((b) => b.id === id)
+    const j = i + dir
+    if (i < 0 || j < 0 || j >= blocks.length) return
+    const next = [...blocks]
+    ;[next[i], next[j]] = [next[j]!, next[i]!]
+    commit(next)
   }
   function save() {
     startTransition(async () => {
-      await onSave(blocks)
+      await onSave?.(blocks)
       setDirty(false)
       toast.success('Lesson content saved')
     })
@@ -154,13 +160,15 @@ export function BlockEditor({
         </div>
       )}
 
-      <div className="sticky bottom-0 flex items-center justify-end gap-3 border-t border-slate-200 bg-white/90 py-3 backdrop-blur">
-        {dirty ? <span className="text-xs text-amber-600">Unsaved changes</span> : null}
-        <Button type="button" onClick={save} disabled={pending || !dirty}>
-          {pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
-          Save content
-        </Button>
-      </div>
+      {inline ? null : (
+        <div className="sticky bottom-0 flex items-center justify-end gap-3 border-t border-slate-200 bg-white/90 py-3 backdrop-blur">
+          {dirty ? <span className="text-xs text-amber-600">Unsaved changes</span> : null}
+          <Button type="button" onClick={save} disabled={pending || !dirty}>
+            {pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
+            Save content
+          </Button>
+        </div>
+      )}
     </div>
   )
 }

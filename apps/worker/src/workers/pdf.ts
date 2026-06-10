@@ -80,6 +80,7 @@ import {
 } from '@beaconhs/forms-pdf'
 import { enqueueEmail, type PdfJobData } from '@beaconhs/jobs'
 import { newAttachmentKey, presignGet, publicUrl, putObject } from '@beaconhs/storage'
+import { importSlidesFromPptx } from './slides-import'
 import { audit } from '@beaconhs/audit'
 
 export async function processPdf(job: Job<PdfJobData>): Promise<void> {
@@ -106,6 +107,8 @@ export async function processPdf(job: Job<PdfJobData>): Promise<void> {
         return await renderPpeIssue(data.tenantId, data.issueReportId)
       case 'hazid_signed_report':
         return await renderHazidSignedReport(data.tenantId, data.reportId)
+      case 'slides_import':
+        return await importSlidesFromPptx(data)
     }
   } catch (err) {
     console.error(`[pdf] job ${job.id} failed:`, err)

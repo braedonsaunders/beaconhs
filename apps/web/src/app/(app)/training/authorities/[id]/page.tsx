@@ -216,7 +216,7 @@ export default async function AuthorityDetailPage({
                       <TableRow key={type.id}>
                         <TableCell>
                           <Link
-                            href={`/training/skills/${type.id}`}
+                            href={`/training/skills/types/${type.id}`}
                             className="font-medium text-slate-900 hover:underline"
                           >
                             {type.name}

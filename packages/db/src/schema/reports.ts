@@ -47,6 +47,10 @@ export const REPORT_CUSTOM_ENTITIES = [
   'incidents',
   'corrective_actions',
   'training_records',
+  // Externally-issued skills/certs per person — backed by the join-baked
+  // `report_skill_assignments` view (see packages/db/src/views.ts), so the
+  // single-table executor gets person/authority/trade columns flat.
+  'skill_assignments',
   'inspections',
   'documents',
   'equipment',

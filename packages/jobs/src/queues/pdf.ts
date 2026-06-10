@@ -16,6 +16,15 @@ export type PdfJobData =
   // the worker flips it to 'rendering', concatenates per-assessment HTML +
   // a cover page, prints once, then stamps pdfAttachmentId/status='completed'.
   | { kind: 'hazid_signed_report'; tenantId: string; reportId: string }
+  // LMS: convert an uploaded PowerPoint into per-slide PNG images + notes and
+  // write the resulting Slide[] onto a training lesson or library content item.
+  | {
+      kind: 'slides_import'
+      tenantId: string
+      target: 'lesson' | 'content_item'
+      targetId: string
+      attachmentId: string
+    }
 
 export const pdfQueue = new Queue<PdfJobData>('pdfs', {
   connection,
@@ -29,4 +38,13 @@ export const pdfQueue = new Queue<PdfJobData>('pdfs', {
 
 export async function enqueuePdf(data: PdfJobData) {
   await pdfQueue.add(data.kind, data)
+}
+
+export async function enqueueSlidesImport(
+  data: Extract<PdfJobData, { kind: 'slides_import' }>,
+) {
+  // PPTX→PNG conversion is deterministic; a retry after partial failure would
+  // duplicate appended slides, so run a single attempt and surface failures
+  // through importStatus='failed' instead.
+  await pdfQueue.add(data.kind, data, { attempts: 1 })
 }

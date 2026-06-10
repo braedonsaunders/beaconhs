@@ -90,6 +90,7 @@ export type ComplianceTargetRef = {
   courseId?: string
   assessmentTypeId?: string
   trainingItemKind?: 'course' | 'assessment_type'
+  skillTypeId?: string // cert_requirement satisfied by a valid training_skill_assignment grant
   formTemplateId?: string
   equipmentTypeId?: string
   ppeTypeId?: string

@@ -54,3 +54,6 @@ uploads/
 # Misc
 .cache/
 *.local
+
+# Local ops helpers that embed cluster creds — never commit.
+packages/db/src/scripts/dokploy-*.ts

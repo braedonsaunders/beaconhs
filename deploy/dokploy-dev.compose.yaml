@@ -1,0 +1,94 @@
+# BeaconHS — DEV stack (Docker Swarm, deployed via Dokploy).
+#
+# Single image (ghcr.io/braedonsaunders/beaconhs), three roles selected by
+# APP_ROLE (web / worker / scheduler) + a Redis for BullMQ & sessions. Points
+# at the existing HA Postgres dev DB (DATABASE_URL) and the shared MinIO
+# (R2_*). The CI deploy job injects all ${VARS} via Dokploy compose.update, so
+# the image tag is pinned per-commit (IMAGE=...:<sha>) for a guaranteed pull.
+#
+# Conventions (see memory dokploy-cluster): external overlay `infra-net`,
+# stateful svcs pinned to the manager. Traefik routing for `web` is attached by
+# Dokploy's domain.create (serviceName=web, port=3000).
+
+services:
+  web:
+    image: ${IMAGE}
+    environment:
+      APP_ROLE: web
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: redis://redis:6379
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      BETTER_AUTH_URL: ${APP_URL}
+      APP_URL: ${APP_URL}
+      R2_ENDPOINT: ${R2_ENDPOINT}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY}
+      R2_BUCKET: ${R2_BUCKET}
+      R2_PUBLIC_URL: ${R2_PUBLIC_URL}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+    networks: [infra-net]
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.hostname==dokploy-mgr]
+      restart_policy:
+        condition: any
+        delay: 5s
+
+  worker:
+    image: ${IMAGE}
+    environment:
+      APP_ROLE: worker
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: redis://redis:6379
+      R2_ENDPOINT: ${R2_ENDPOINT}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY}
+      R2_BUCKET: ${R2_BUCKET}
+      R2_PUBLIC_URL: ${R2_PUBLIC_URL}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      APP_URL: ${APP_URL}
+    networks: [infra-net]
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.hostname==dokploy-mgr]
+      restart_policy:
+        condition: any
+        delay: 5s
+
+  scheduler:
+    image: ${IMAGE}
+    environment:
+      APP_ROLE: scheduler
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: redis://redis:6379
+    networks: [infra-net]
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.hostname==dokploy-mgr]
+      restart_policy:
+        condition: any
+        delay: 5s
+
+  redis:
+    image: redis:7-alpine
+    command: ['redis-server', '--save', '60', '1', '--appendonly', 'no']
+    volumes:
+      - redis-data:/data
+    networks: [infra-net]
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.hostname==dokploy-mgr]
+
+networks:
+  infra-net:
+    external: true
+
+volumes:
+  redis-data:

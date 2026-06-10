@@ -28,11 +28,13 @@ RUN pnpm turbo run build --filter=@beaconhs/web --filter=@beaconhs/worker
 FROM base AS runner
 ENV NODE_ENV=production
 
-# Puppeteer / Chromium deps for PDF rendering (worker)
+# Puppeteer / Chromium deps for PDF rendering (worker), plus LibreOffice +
+# poppler for the LMS PowerPoint→slides import (soffice → pdf → pdftoppm).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium fonts-liberation libnss3 libatk-bridge2.0-0 libcups2 \
     libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 \
     libxrandr2 libgbm1 libasound2 ca-certificates curl \
+    libreoffice-impress poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 ENV PUPPETEER_SKIP_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium

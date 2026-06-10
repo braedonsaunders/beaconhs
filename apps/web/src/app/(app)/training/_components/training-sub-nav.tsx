@@ -7,14 +7,15 @@ import { ModuleNav } from '@/components/module-admin/module-nav'
 
 export type TrainingTab =
   | 'records'
+  | 'skills'
   | 'courses'
+  | 'library'
   | 'classes'
   | 'assessments'
   | 'assessment-types'
   | 'matrix'
   | 'transcripts'
-  | 'reports'
-  | 'skills'
+  | 'skill-types'
   | 'authorities'
 
 export function TrainingSubNav({ active }: { active: TrainingTab }) {

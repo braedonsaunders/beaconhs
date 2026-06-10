@@ -18,10 +18,18 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
         backgroundRepeat: 'no-repeat',
         backgroundPosition: 'right 0.65rem center',
         backgroundSize: '0.7rem',
+        // Inline so it survives tailwind-merge: any caller passing a `text-*`
+        // size override silently strips `leading-*` utilities (font-size and
+        // leading share a tw-merge conflict group), which re-introduced the
+        // clipped-descender bug at small heights. line-height:normal keeps the
+        // value text vertically sane at every h-* / text-* combination.
+        lineHeight: 'normal',
         ...style,
       }}
       className={cn(
-        'flex h-10 w-full appearance-none rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 pr-9 text-sm leading-normal text-slate-900 dark:text-slate-100',
+        // NOTE: `block`, not `flex` — a <select> as a flex container breaks the
+        // browser's native vertical centering of the value text.
+        'block h-10 w-full appearance-none rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 pr-9 text-sm text-slate-900 dark:text-slate-100',
         'transition-shadow duration-150',
         'focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/40 focus:ring-offset-0',
         'focus-visible:outline-none focus-visible:border-teal-500 focus-visible:ring-2 focus-visible:ring-teal-500/40',

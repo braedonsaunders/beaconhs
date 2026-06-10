@@ -1,11 +1,11 @@
-// "My training" — three-tab personal training view:
-//   1. Records   — every training_record the current person has earned
-//   2. Expiring  — records expiring within 90 days (the action-needed list)
-//   3. Assigned  — audience-assigned items the person hasn't completed yet
+// "My training" — the personal training hub:
+//   1. Courses   — available courses + your progress (the learner catalog,
+//                  formerly the standalone "My Learning")
+//   2. Records   — every training_record you've earned
+//   3. Expiring  — records expiring within 90 days
+//   4. Assigned  — audience-assigned items you haven't completed yet
 //
-// All three queries pivot on `people.userId = ctx.userId` -> `people.id` so we
-// can hit `training_records` / `training_audience_assignment_records` which
-// store the person id rather than the membership / user id.
+// All queries pivot on `people.userId = ctx.userId` -> `people.id`.
 
 import Link from 'next/link'
 import { GraduationCap } from 'lucide-react'
@@ -13,6 +13,8 @@ import { and, asc, count, desc, eq, gte, isNull, lte, or, type SQL } from 'drizz
 import {
   Badge,
   Button,
+  Card,
+  CardContent,
   EmptyState,
   PageHeader,
   Table,
@@ -26,7 +28,9 @@ import {
   people,
   trainingAudienceAssignmentRecords,
   trainingAudienceAssignments,
+  trainingCourseModules,
   trainingCourses,
+  trainingEnrollments,
   trainingRecords,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
@@ -38,8 +42,18 @@ import { TabNav, pickActiveTab } from '@/components/tab-nav'
 export const metadata = { title: 'My training' }
 export const dynamic = 'force-dynamic'
 
-const TABS = ['records', 'expiring', 'assigned'] as const
+const TABS = ['courses', 'records', 'expiring', 'assigned'] as const
 type Tab = (typeof TABS)[number]
+
+type CourseCard = {
+  id: string
+  code: string
+  name: string
+  description: string | null
+  deliveryType: string
+  status: string | null
+  percent: number
+}
 
 export default async function MyTrainingPage({
   searchParams,
@@ -47,7 +61,7 @@ export default async function MyTrainingPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const sp = await searchParams
-  const tab: Tab = pickActiveTab(sp, TABS, 'records')
+  const tab: Tab = pickActiveTab(sp, TABS, 'courses')
   const params = parseListParams(sp, {
     sort: 'completedOn',
     dir: 'desc',
@@ -65,18 +79,29 @@ export default async function MyTrainingPage({
       .limit(1)
     const personId = person?.id ?? null
 
-    if (!personId) {
-      return {
-        personId: null,
-        recordsCount: 0,
-        expiringCount: 0,
-        assignedCount: 0,
-        records: [] as any[],
-        expiring: [] as any[],
-        assigned: [] as any[],
-        total: 0,
-      }
+    // Available courses = those with a published curriculum (>= 1 module).
+    const modCourses = await tx
+      .select({ courseId: trainingCourseModules.courseId })
+      .from(trainingCourseModules)
+      .where(isNull(trainingCourseModules.deletedAt))
+      .groupBy(trainingCourseModules.courseId)
+    const contentCourseIds = new Set(modCourses.map((m) => m.courseId))
+    const coursesCount = contentCourseIds.size
+
+    const base = {
+      personId,
+      coursesCount,
+      recordsCount: 0,
+      expiringCount: 0,
+      assignedCount: 0,
+      courses: [] as CourseCard[],
+      records: [] as any[],
+      expiring: [] as any[],
+      assigned: [] as any[],
+      total: 0,
     }
+
+    if (!personId) return base
 
     const today = new Date()
     const todayStr = today.toISOString().slice(0, 10)
@@ -84,7 +109,6 @@ export default async function MyTrainingPage({
     ninetyDays.setDate(ninetyDays.getDate() + 90)
     const ninetyDaysStr = ninetyDays.toISOString().slice(0, 10)
 
-    // ---- Tab counts -----------------------------------------------------
     const [recCntRow] = await tx
       .select({ c: count() })
       .from(trainingRecords)
@@ -115,7 +139,36 @@ export default async function MyTrainingPage({
       .where(and(eq(trainingAudienceAssignmentRecords.personId, personId), assignedScope))
     const assignedCount = Number(assignedCntRow?.c ?? 0)
 
-    // ---- Active-tab data ------------------------------------------------
+    const counts = { ...base, recordsCount, expiringCount, assignedCount }
+
+    if (tab === 'courses') {
+      const all = await tx
+        .select()
+        .from(trainingCourses)
+        .where(isNull(trainingCourses.deletedAt))
+        .orderBy(asc(trainingCourses.name))
+      const enrollments = await tx
+        .select()
+        .from(trainingEnrollments)
+        .where(eq(trainingEnrollments.personId, personId))
+      const enrollBy = new Map(enrollments.map((e) => [e.courseId, e]))
+      const courses: CourseCard[] = all
+        .filter((c) => contentCourseIds.has(c.id))
+        .map((c) => {
+          const e = enrollBy.get(c.id)
+          return {
+            id: c.id,
+            code: c.code,
+            name: c.name,
+            description: c.description,
+            deliveryType: c.deliveryType,
+            status: e?.status ?? null,
+            percent: e?.progressPercent ?? 0,
+          }
+        })
+      return { ...counts, courses, total: courses.length }
+    }
+
     if (tab === 'records') {
       const order =
         params.sort === 'course'
@@ -132,16 +185,7 @@ export default async function MyTrainingPage({
         .orderBy(...order)
         .limit(params.perPage)
         .offset((params.page - 1) * params.perPage)
-      return {
-        personId,
-        recordsCount,
-        expiringCount,
-        assignedCount,
-        records,
-        expiring: [],
-        assigned: [],
-        total: recordsCount,
-      }
+      return { ...counts, records, total: recordsCount }
     }
     if (tab === 'expiring') {
       const expiring = await tx
@@ -159,16 +203,7 @@ export default async function MyTrainingPage({
         .orderBy(asc(trainingRecords.expiresOn))
         .limit(params.perPage)
         .offset((params.page - 1) * params.perPage)
-      return {
-        personId,
-        recordsCount,
-        expiringCount,
-        assignedCount,
-        records: [],
-        expiring,
-        assigned: [],
-        total: expiringCount,
-      }
+      return { ...counts, expiring, total: expiringCount }
     }
     // tab === 'assigned'
     const assigned = await tx
@@ -183,25 +218,14 @@ export default async function MyTrainingPage({
         eq(trainingAudienceAssignments.id, trainingAudienceAssignmentRecords.assignmentId),
       )
       .leftJoin(trainingCourses, eq(trainingCourses.id, trainingAudienceAssignments.courseId))
-      .where(
-        and(eq(trainingAudienceAssignmentRecords.personId, personId), assignedScope),
-      )
+      .where(and(eq(trainingAudienceAssignmentRecords.personId, personId), assignedScope))
       .orderBy(
         asc(trainingAudienceAssignments.dueOn),
         desc(trainingAudienceAssignmentRecords.lastEvaluatedAt),
       )
       .limit(params.perPage)
       .offset((params.page - 1) * params.perPage)
-    return {
-      personId,
-      recordsCount,
-      expiringCount,
-      assignedCount,
-      records: [],
-      expiring: [],
-      assigned,
-      total: assignedCount,
-    }
+    return { ...counts, assigned, total: assignedCount }
   })
 
   if (!data.personId) {
@@ -210,10 +234,10 @@ export default async function MyTrainingPage({
         header={
           <PageHeader
             title="My training"
-            description="Your training records and assignments."
+            description="Your courses, records and assignments."
             actions={
-              <Link href="/training">
-                <Button variant="outline">All training</Button>
+              <Link href="/training/records">
+                <Button variant="outline">All records</Button>
               </Link>
             }
           />
@@ -222,7 +246,7 @@ export default async function MyTrainingPage({
         <EmptyState
           icon={<GraduationCap size={32} />}
           title="No person record linked to your account"
-          description="Ask an administrator to link your user account to a person record so your training history shows up here."
+          description="Ask an administrator to link your user account to a person record so your training shows up here."
         />
       </ListPageLayout>
     )
@@ -236,10 +260,10 @@ export default async function MyTrainingPage({
         <>
           <PageHeader
             title="My training"
-            description="Your training records, upcoming expirations, and outstanding assignments."
+            description="Your courses, records, upcoming expirations, and outstanding assignments."
             actions={
-              <Link href="/training">
-                <Button variant="outline">All training</Button>
+              <Link href="/training/records">
+                <Button variant="outline">All records</Button>
               </Link>
             }
           />
@@ -248,6 +272,7 @@ export default async function MyTrainingPage({
             currentParams={sp}
             active={tab}
             tabs={[
+              { key: 'courses', label: 'Courses', count: data.coursesCount },
               { key: 'records', label: 'Records', count: data.recordsCount },
               { key: 'expiring', label: 'Expiring (90d)', count: data.expiringCount },
               { key: 'assigned', label: 'Assigned', count: data.assignedCount },
@@ -256,6 +281,63 @@ export default async function MyTrainingPage({
         </>
       }
     >
+      {tab === 'courses' ? (
+        data.courses.length === 0 ? (
+          <EmptyState
+            icon={<GraduationCap size={32} />}
+            title="No courses available yet"
+            description="Once a course has published content it'll appear here for you to take."
+          />
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {data.courses.map((c) => {
+              const label =
+                c.status === 'completed' ? 'Review' : c.status ? `Continue · ${c.percent}%` : 'Start'
+              return (
+                <Card key={c.id} className="flex flex-col">
+                  <CardContent className="flex flex-1 flex-col gap-3 py-5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <h3 className="truncate font-semibold text-slate-900">{c.name}</h3>
+                        <p className="text-xs text-slate-500">{c.code}</p>
+                      </div>
+                      {c.status === 'completed' ? (
+                        <Badge variant="success">Completed</Badge>
+                      ) : c.status ? (
+                        <Badge variant="secondary">In progress</Badge>
+                      ) : (
+                        <Badge variant="outline">{c.deliveryType.replace('_', ' ')}</Badge>
+                      )}
+                    </div>
+                    {c.description ? (
+                      <p className="line-clamp-2 text-sm text-slate-600">{c.description}</p>
+                    ) : null}
+                    {c.status ? (
+                      <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+                        <div
+                          className="h-full rounded-full bg-teal-500"
+                          style={{ width: `${c.percent}%` }}
+                        />
+                      </div>
+                    ) : null}
+                    <div className="mt-auto pt-1">
+                      <Link href={`/training/learn/${c.id}`}>
+                        <Button
+                          variant={c.status === 'completed' ? 'outline' : 'default'}
+                          className="w-full"
+                        >
+                          {label}
+                        </Button>
+                      </Link>
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            })}
+          </div>
+        )
+      ) : null}
+
       {tab === 'records' ? (
         data.records.length === 0 ? (
           <EmptyState
@@ -278,11 +360,14 @@ export default async function MyTrainingPage({
               <TableBody>
                 {data.records.map(({ rec, course }: any) => {
                   const expiringSoon =
-                    rec.expiresOn && rec.expiresOn >= todayStr && rec.expiresOn <= (() => {
-                      const d = new Date()
-                      d.setDate(d.getDate() + 90)
-                      return d.toISOString().slice(0, 10)
-                    })()
+                    rec.expiresOn &&
+                    rec.expiresOn >= todayStr &&
+                    rec.expiresOn <=
+                      (() => {
+                        const d = new Date()
+                        d.setDate(d.getDate() + 90)
+                        return d.toISOString().slice(0, 10)
+                      })()
                   const expired = rec.expiresOn && rec.expiresOn < todayStr
                   return (
                     <TableRow key={rec.id}>

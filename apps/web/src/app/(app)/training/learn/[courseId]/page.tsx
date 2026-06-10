@@ -4,7 +4,9 @@ import { Card, CardContent, DetailHeader } from '@beaconhs/ui'
 import {
   attachments,
   people,
+  tenantUsers,
   trainingClasses,
+  trainingContentItems,
   trainingCourseModules,
   trainingCourses,
   trainingEnrollments,
@@ -14,6 +16,7 @@ import {
 import { publicUrl } from '@beaconhs/storage'
 import { requireRequestContext } from '@/lib/auth'
 import { DetailPageLayout } from '@/components/page-layout'
+import { lessonProseCss } from '../../_editor/prose'
 import { CoursePlayer, EnrollGate, type PlayerModule } from './_player'
 
 export const dynamic = 'force-dynamic'
@@ -61,7 +64,10 @@ export default async function PlayerPage({ params }: { params: Promise<{ courseI
       .where(eq(trainingClasses.courseId, courseId))
 
     let enrollment: typeof trainingEnrollments.$inferSelect | null = null
-    let progress: (typeof trainingLessonProgress.$inferSelect)[] = []
+    let progress: {
+      row: typeof trainingLessonProgress.$inferSelect
+      evaluatorName: string | null
+    }[] = []
     if (person) {
       const [e] = await tx
         .select()
@@ -75,22 +81,57 @@ export default async function PlayerPage({ params }: { params: Promise<{ courseI
         .limit(1)
       enrollment = e ?? null
       if (enrollment) {
-        progress = await tx
-          .select()
+        const rows = await tx
+          .select({ row: trainingLessonProgress, evaluator: tenantUsers })
           .from(trainingLessonProgress)
+          .leftJoin(
+            tenantUsers,
+            eq(tenantUsers.id, trainingLessonProgress.evaluatedByTenantUserId),
+          )
           .where(eq(trainingLessonProgress.enrollmentId, enrollment.id))
+        progress = rows.map((r) => ({ row: r.row, evaluatorName: r.evaluator?.displayName ?? null }))
       }
     }
 
-    // Resolve media URLs for image/video/file blocks + media lessons.
+    // Library items referenced by lessons (reuse-from-library).
+    const itemIds = [
+      ...new Set(lessons.map((l) => l.contentItemId).filter((x): x is string => !!x)),
+    ]
+    const items = itemIds.length
+      ? await tx.select().from(trainingContentItems).where(inArray(trainingContentItems.id, itemIds))
+      : []
+
+    // Resolve media URLs for image/video/file blocks + media lessons + library
+    // items + slide decks (page images and region blocks).
     const attIds = new Set<string>()
-    for (const l of lessons) {
-      if (l.attachmentId) attIds.add(l.attachmentId)
-      for (const b of l.contentBlocks ?? []) {
-        if ((b.type === 'image' || b.type === 'file' || b.type === 'video') && 'attachmentId' in b && b.attachmentId) {
+    const collectBlockAtts = (blocks: (typeof lessons)[number]['contentBlocks'] | null) => {
+      for (const b of blocks ?? []) {
+        if (
+          (b.type === 'image' || b.type === 'file' || b.type === 'video') &&
+          'attachmentId' in b &&
+          b.attachmentId
+        ) {
           attIds.add(b.attachmentId)
         }
       }
+    }
+    const collectSlideAtts = (slides: (typeof lessons)[number]['slides'] | null) => {
+      for (const s of slides ?? []) {
+        if (s.imageAttachmentId) attIds.add(s.imageAttachmentId)
+        collectBlockAtts(Array.isArray(s.body) ? s.body : null)
+        collectBlockAtts(Array.isArray(s.left) ? s.left : null)
+        collectBlockAtts(Array.isArray(s.right) ? s.right : null)
+      }
+    }
+    for (const l of lessons) {
+      if (l.attachmentId) attIds.add(l.attachmentId)
+      collectBlockAtts(l.contentBlocks)
+      collectSlideAtts(l.slides)
+    }
+    for (const it of items) {
+      if (it.attachmentId) attIds.add(it.attachmentId)
+      collectBlockAtts(it.contentBlocks)
+      collectSlideAtts(it.slides)
     }
     const atts = attIds.size
       ? await tx
@@ -99,49 +140,68 @@ export default async function PlayerPage({ params }: { params: Promise<{ courseI
           .where(inArray(attachments.id, [...attIds]))
       : []
 
-    return { course, person, mods, lessons, classes, enrollment, progress, atts }
+    return { course, person, mods, lessons, classes, enrollment, progress, atts, items }
   })
 
   if (!data) notFound()
-  const { course, person, mods, lessons, classes, enrollment, progress, atts } = data
+  const { course, person, mods, lessons, classes, enrollment, progress, atts, items } = data
 
   const attachmentUrls: Record<string, string | null> = Object.fromEntries(
     atts.map((a) => [a.id, a.key ? publicUrl(a.key) : null]),
   )
   const classTitleById = new Map(classes.map((c) => [c.id, c.title]))
-  const statusByLesson = new Map(progress.map((p) => [p.lessonId, p.status]))
+  const progressByLesson = new Map(progress.map((p) => [p.row.lessonId, p]))
+  const itemById = new Map(items.map((i) => [i.id, i]))
 
   const modules: PlayerModule[] = mods.map((m) => ({
     id: m.id,
     title: m.title,
     lessons: lessons
       .filter((l) => l.moduleId === m.id)
-      .map((l) => ({
-        id: l.id,
-        title: l.title,
-        kind: l.kind,
-        completionRule: l.completionRule,
-        isRequired: l.isRequired,
-        blocks: l.contentBlocks ?? [],
-        embedUrl: l.embedUrl,
-        attachmentId: l.attachmentId,
-        assessmentTypeId: l.assessmentTypeId,
-        classTitle: l.classId ? classTitleById.get(l.classId) ?? null : null,
-        durationMinutes: l.durationMinutes,
-        status: statusByLesson.get(l.id) ?? 'not_started',
-      })),
+      .map((l) => {
+        // Library-backed lessons render the referenced item's content.
+        const item = l.contentItemId ? itemById.get(l.contentItemId) : null
+        const prog = progressByLesson.get(l.id)
+        return {
+          id: l.id,
+          title: l.title,
+          kind: item ? item.kind : l.kind,
+          completionRule: l.completionRule,
+          isRequired: l.isRequired,
+          blocks: item ? item.contentBlocks ?? [] : l.contentBlocks ?? [],
+          contentHtml: item ? item.contentHtml : l.contentHtml,
+          slides: item ? item.slides ?? [] : l.slides ?? [],
+          practicalCriteria: l.practicalCriteria ?? [],
+          evaluation: prog?.row.evaluatedByTenantUserId
+            ? {
+                evaluatorName: prog.evaluatorName,
+                notes: prog.row.evaluationNotes,
+                signatureDataUrl: prog.row.evaluationSignatureDataUrl,
+                criteriaResults: prog.row.criteriaResults ?? null,
+                completedAt: prog.row.completedAt?.toISOString() ?? null,
+              }
+            : null,
+          embedUrl: item ? item.embedUrl : l.embedUrl,
+          attachmentId: item ? item.attachmentId : l.attachmentId,
+          assessmentTypeId: l.assessmentTypeId,
+          classTitle: l.classId ? classTitleById.get(l.classId) ?? null : null,
+          durationMinutes: l.durationMinutes,
+          status: prog?.row.status ?? 'not_started',
+        }
+      }),
   }))
 
   return (
     <DetailPageLayout
       header={
         <DetailHeader
-          back={{ href: '/training/learn', label: 'My Learning' }}
+          back={{ href: '/my/training', label: 'My Learning' }}
           title={course.name}
           subtitle={course.code}
         />
       }
     >
+      <style dangerouslySetInnerHTML={{ __html: lessonProseCss('.lesson-prose') }} />
       {!person ? (
         <Card>
           <CardContent className="py-10 text-center text-sm text-slate-500">

@@ -105,18 +105,19 @@ async function main() {
       await bootstrap()
       break
     }
-    case 'import': {
-      const { runImport } = await import('./orchestrator')
-      const { RASSAUN_LOADERS } = await import('./loaders')
-      const only = args.includes('--only') ? args[args.indexOf('--only') + 1] : undefined
-      await runImport(RASSAUN_LOADERS, { only })
-      break
-    }
+    case 'import':
     case 'sync': {
       const { runImport } = await import('./orchestrator')
-      const { RASSAUN_LOADERS } = await import('./loaders')
+      const { RASSAUN_LOADERS, EXTERNAL_TRAINING_LOADERS, ALL_LOADERS } = await import('./loaders')
+      const set = args.includes('--set') ? args[args.indexOf('--set') + 1] : 'all'
+      const loaders =
+        set === 'rassaun'
+          ? RASSAUN_LOADERS
+          : set === 'et' || set === 'external-training'
+            ? EXTERNAL_TRAINING_LOADERS
+            : ALL_LOADERS
       const only = args.includes('--only') ? args[args.indexOf('--only') + 1] : undefined
-      await runImport(RASSAUN_LOADERS, { only, mode: 'sync' })
+      await runImport(loaders, { only, mode: cmd === 'sync' ? 'sync' : 'import' })
       break
     }
     case 'reconcile':

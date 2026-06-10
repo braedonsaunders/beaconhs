@@ -15,20 +15,35 @@ import {
   GraduationCap,
   Loader2,
   PlayCircle,
+  Presentation,
+  UserCheck,
 } from 'lucide-react'
 import { Badge, Button, Card, CardContent } from '@beaconhs/ui'
-import type { LessonBlock } from '@beaconhs/db/schema'
+import type { LessonBlock, PracticalCriterion, Slide } from '@beaconhs/db/schema'
 import { LessonBlocksView } from '../../_lib/blocks'
+import { SlidePlayer } from '../../_components/slide-player'
 import { enrollInCourse, markLessonComplete, startLessonQuiz } from '../_actions'
 import { toast } from '@/lib/toast'
+
+export type PlayerEvaluation = {
+  evaluatorName: string | null
+  notes: string | null
+  signatureDataUrl: string | null
+  criteriaResults: Record<string, boolean> | null
+  completedAt: string | null
+}
 
 export type PlayerLesson = {
   id: string
   title: string
-  kind: 'rich' | 'video' | 'file' | 'embed' | 'quiz' | 'session'
-  completionRule: 'view' | 'pass' | 'acknowledge' | 'min_time'
+  kind: 'rich' | 'video' | 'file' | 'embed' | 'quiz' | 'session' | 'slides' | 'practical'
+  completionRule: 'view' | 'pass' | 'acknowledge' | 'min_time' | 'evaluator'
   isRequired: boolean
   blocks: LessonBlock[]
+  contentHtml: string | null
+  slides: Slide[]
+  practicalCriteria: PracticalCriterion[]
+  evaluation: PlayerEvaluation | null
   embedUrl: string | null
   attachmentId: string | null
   assessmentTypeId: string | null
@@ -80,6 +95,8 @@ export function CoursePlayer({
   const firstIncomplete = all.find((l) => l.status !== 'completed') ?? all[0] ?? null
   const [currentId, setCurrentId] = useState<string | null>(firstIncomplete?.id ?? null)
   const [pending, startTransition] = useTransition()
+  // Slideshow lessons unlock their Mark-complete button on reaching the end.
+  const [finishedSlides, setFinishedSlides] = useState<Set<string>>(new Set())
 
   const current = all.find((l) => l.id === currentId) ?? null
   const completedCount = all.filter((l) => l.status === 'completed').length
@@ -147,6 +164,10 @@ export function CoursePlayer({
                             <Check size={15} className="text-emerald-600" />
                           ) : l.kind === 'quiz' ? (
                             <ClipboardCheck size={15} className="text-slate-400" />
+                          ) : l.kind === 'slides' ? (
+                            <Presentation size={15} className="text-slate-400" />
+                          ) : l.kind === 'practical' ? (
+                            <UserCheck size={15} className="text-slate-400" />
                           ) : (
                             <PlayCircle size={15} className="text-slate-300" />
                           )}
@@ -217,7 +238,83 @@ export function CoursePlayer({
                 </div>
               </div>
 
-              {current.kind === 'quiz' ? (
+              {current.kind === 'slides' ? (
+                <SlidePlayer
+                  slides={current.slides}
+                  attachmentUrls={attachmentUrls}
+                  onReachedEnd={() =>
+                    setFinishedSlides((prev) => {
+                      const next = new Set(prev)
+                      next.add(current.id)
+                      return next
+                    })
+                  }
+                />
+              ) : current.kind === 'practical' ? (
+                <div className="space-y-4">
+                  {current.contentHtml ? (
+                    <div
+                      className="lesson-prose"
+                      dangerouslySetInnerHTML={{ __html: current.contentHtml }}
+                    />
+                  ) : current.blocks.length > 0 ? (
+                    <LessonBlocksView blocks={current.blocks} attachmentUrls={attachmentUrls} />
+                  ) : null}
+                  {current.practicalCriteria.length > 0 ? (
+                    <div className="rounded-lg border border-slate-200 p-4">
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        What your evaluator checks
+                      </p>
+                      <ul className="space-y-1.5">
+                        {current.practicalCriteria.map((c) => {
+                          const result = current.evaluation?.criteriaResults?.[c.id]
+                          return (
+                            <li key={c.id} className="flex items-center gap-2 text-sm text-slate-700">
+                              {result === true ? (
+                                <Check size={14} className="shrink-0 text-emerald-600" />
+                              ) : result === false ? (
+                                <span className="shrink-0 text-rose-500">✗</span>
+                              ) : (
+                                <span className="h-3.5 w-3.5 shrink-0 rounded-full border border-slate-300" />
+                              )}
+                              {c.text}
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    </div>
+                  ) : null}
+                  {current.status === 'completed' && current.evaluation ? (
+                    <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+                      <p className="flex items-center gap-1.5 text-sm font-semibold text-emerald-800">
+                        <UserCheck size={15} /> Signed off
+                        {current.evaluation.evaluatorName
+                          ? ` by ${current.evaluation.evaluatorName}`
+                          : ''}
+                        {current.evaluation.completedAt
+                          ? ` · ${new Date(current.evaluation.completedAt).toLocaleDateString()}`
+                          : ''}
+                      </p>
+                      {current.evaluation.notes ? (
+                        <p className="mt-1 text-sm text-emerald-900/80">{current.evaluation.notes}</p>
+                      ) : null}
+                      {current.evaluation.signatureDataUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={current.evaluation.signatureDataUrl}
+                          alt="Evaluator signature"
+                          className="mt-2 h-14 rounded border border-emerald-200 bg-white px-2"
+                        />
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                      This is a hands-on test — a training manager signs you off in person after you
+                      demonstrate the skill.
+                    </div>
+                  )}
+                </div>
+              ) : current.kind === 'quiz' ? (
                 <div className="rounded-lg border border-slate-200 bg-slate-50 p-6 text-center">
                   <ClipboardCheck size={28} className="mx-auto text-slate-400" />
                   <p className="mt-2 text-sm text-slate-600">
@@ -234,6 +331,11 @@ export function CoursePlayer({
                     the scheduled class, then mark it complete.
                   </p>
                 </div>
+              ) : current.kind === 'rich' && current.contentHtml ? (
+                <div
+                  className="lesson-prose"
+                  dangerouslySetInnerHTML={{ __html: current.contentHtml }}
+                />
               ) : (
                 <LessonBlocksView blocks={asBlocks(current)} attachmentUrls={attachmentUrls} />
               )}
@@ -243,6 +345,10 @@ export function CoursePlayer({
                   <Badge variant="success">
                     <Check size={12} className="mr-1" /> Done
                   </Badge>
+                ) : current.kind === 'practical' ? (
+                  <Badge variant="warning">
+                    <UserCheck size={12} className="mr-1" /> Awaiting evaluator sign-off
+                  </Badge>
                 ) : current.kind === 'quiz' ? (
                   <>
                     <Button type="button" onClick={() => startQuiz(current.id)} disabled={pending || !current.assessmentTypeId}>
@@ -251,6 +357,22 @@ export function CoursePlayer({
                     </Button>
                     <Button type="button" variant="outline" onClick={() => complete(current.id)} disabled={pending}>
                       I&apos;ve passed — mark complete
+                    </Button>
+                  </>
+                ) : current.kind === 'slides' ? (
+                  <>
+                    {!finishedSlides.has(current.id) && current.slides.length > 1 ? (
+                      <span className="text-xs text-slate-400">
+                        Go through all the slides to continue
+                      </span>
+                    ) : null}
+                    <Button
+                      type="button"
+                      onClick={() => complete(current.id)}
+                      disabled={pending || (!finishedSlides.has(current.id) && current.slides.length > 1)}
+                    >
+                      {pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
+                      Mark complete
                     </Button>
                   </>
                 ) : (

@@ -276,19 +276,24 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
     iconKey: 'grad',
     permission: 'training.course.manage',
     tabs: [
-      { key: 'records', label: 'Records', href: '/training' },
+      // Two credential lists: Certificates = course-completion records;
+      // Skills = externally-issued credentials (authority/code/expiry).
+      { key: 'records', label: 'Certificates', href: '/training/records' },
+      { key: 'skills', label: 'Skills', href: '/training/skills' },
       { key: 'courses', label: 'Courses', href: '/training/courses' },
+      { key: 'library', label: 'Library', href: '/training/library' },
       { key: 'classes', label: 'Classes', href: '/training/classes' },
       { key: 'assessments', label: 'Assessments', href: '/training/assessments' },
       { key: 'matrix', label: 'Matrix', href: '/training/matrix' },
       { key: 'transcripts', label: 'Transcripts', href: '/training/transcripts' },
-      { key: 'reports', label: 'Reports', href: '/training/reports' },
+      // No Reports tab — training reporting lives in the global /reports
+      // builder (incl. the seeded "CWB welder roster" custom definition).
     ],
     sections: [
       {
-        key: 'skills',
+        key: 'skill-types',
         label: 'Skill types',
-        href: '/training/skills',
+        href: '/training/skills/types',
         iconKey: 'star',
         desc: 'The catalogue of competencies tracked across the workforce.',
       },

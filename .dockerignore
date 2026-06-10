@@ -1,0 +1,22 @@
+# Keep the build context lean AND keep secrets/local state out of the image.
+.git
+.github
+**/node_modules
+**/.next
+**/.turbo
+**/dist
+**/.vercel
+# Never bake env into the image — runtime env is injected by the orchestrator.
+.env
+.env.*
+!.env.example
+**/*.log
+.claude
+.vscode
+.idea
+.DS_Store
+# Large local-only migration dumps (gitignored anyway, but be explicit).
+docs/migration/*.json
+coverage
+playwright-report
+test-results

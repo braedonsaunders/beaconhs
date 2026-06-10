@@ -10,8 +10,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { randomBytes } from 'node:crypto'
-import { and, asc, desc, eq, isNull } from 'drizzle-orm'
+import { and, asc, desc, eq } from 'drizzle-orm'
 import type { RequestContext } from '@beaconhs/tenant'
 import {
   people,
@@ -19,15 +18,13 @@ import {
   trainingAssessmentTypeQuestions,
   trainingAssessmentTypes,
   trainingAssessments,
-  trainingCertificates,
-  trainingCourses,
   trainingEnrollments,
   trainingLessonProgress,
   trainingLessons,
-  trainingRecords,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { recomputeEnrollmentCompletion } from './_lib/completion'
 
 // Resolve the signed-in user's People record (workers without an app login have
 // no people.user_id, so an explicit personId must be passed for those).
@@ -111,6 +108,11 @@ export async function markLessonComplete(enrollmentId: string, lessonId: string)
       .limit(1)
     if (!lesson) throw new Error('Lesson not found')
 
+    // Practical lessons can never be self-completed.
+    if (lesson.completionRule === 'evaluator') {
+      throw new Error('This lesson requires an evaluator sign-off.')
+    }
+
     // Quiz lessons that gate on a pass require a passed attempt first.
     if (lesson.kind === 'quiz' && lesson.completionRule === 'pass') {
       if (!lesson.assessmentTypeId) throw new Error('This quiz has no assessment configured.')
@@ -157,81 +159,16 @@ export async function markLessonComplete(enrollmentId: string, lessonId: string)
       })
     }
 
-    // Recompute progress across all lessons; finish if every required one is done.
-    const lessons = await tx
-      .select()
-      .from(trainingLessons)
-      .where(and(eq(trainingLessons.courseId, enr.courseId), isNull(trainingLessons.deletedAt)))
-    const progressRows = await tx
-      .select()
-      .from(trainingLessonProgress)
-      .where(eq(trainingLessonProgress.enrollmentId, enrollmentId))
-    const completedIds = new Set(
-      progressRows.filter((p) => p.status === 'completed').map((p) => p.lessonId),
-    )
-    completedIds.add(lessonId)
-    const total = lessons.length || 1
-    const completedCount = lessons.filter((l) => completedIds.has(l.id)).length
-    const percent = Math.round((completedCount / total) * 100)
-    const required = lessons.filter((l) => l.isRequired)
-    const allRequiredDone = required.length > 0 && required.every((l) => completedIds.has(l.id))
-
-    if (allRequiredDone && enr.status !== 'completed') {
-      const [course] = await tx
-        .select()
-        .from(trainingCourses)
-        .where(eq(trainingCourses.id, enr.courseId))
-        .limit(1)
-      const completedOn = new Date().toISOString().slice(0, 10)
-      const expiresOn = course?.validForMonths
-        ? new Date(Date.now() + course.validForMonths * 30 * 86_400_000).toISOString().slice(0, 10)
-        : null
-      const [rec] = await tx
-        .insert(trainingRecords)
-        .values({
-          tenantId,
-          personId,
-          courseId: enr.courseId,
-          source: 'self_paced',
-          completedOn,
-          expiresOn,
-          instructor: 'Self-paced course',
-          details: `Completed via the learning player (enrollment ${enrollmentId})`,
-          certificateType: 'auto',
-        })
-        .returning()
-      let certificateId: string | null = null
-      if (rec) {
-        const [cert] = await tx
-          .insert(trainingCertificates)
-          .values({ tenantId, recordId: rec.id, verifyToken: randomBytes(20).toString('hex') })
-          .returning()
-        certificateId = cert?.id ?? null
-      }
-      await tx
-        .update(trainingEnrollments)
-        .set({
-          status: 'completed',
-          completedAt: now,
-          progressPercent: 100,
-          currentLessonId: lessonId,
-          recordId: rec?.id ?? null,
-        })
-        .where(eq(trainingEnrollments.id, enrollmentId))
-      return {
-        courseId: enr.courseId,
-        completed: true,
-        percent: 100,
-        recordId: rec?.id ?? null,
-        certificateId,
-      }
-    }
-
-    await tx
-      .update(trainingEnrollments)
-      .set({ status: 'in_progress', progressPercent: percent, currentLessonId: lessonId })
-      .where(eq(trainingEnrollments.id, enrollmentId))
-    return { courseId: enr.courseId, completed: false, percent, recordId: null, certificateId: null }
+    // Recompute progress across all lessons; finish (record + certificate) if
+    // every required one is done. Shared with the evaluator sign-off path.
+    const summary = await recomputeEnrollmentCompletion(tx, {
+      tenantId,
+      enrollmentId,
+      courseId: enr.courseId,
+      personId,
+      currentLessonId: lessonId,
+    })
+    return { courseId: enr.courseId, ...summary }
   })
 
   if (result.completed) {

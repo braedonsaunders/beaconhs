@@ -76,6 +76,26 @@ export const BUILDER_ENTITIES: BuilderEntity[] = [
     defaultSort: { column: 'completed_on', direction: 'desc' },
   },
   {
+    key: 'skill_assignments',
+    label: 'Skills & certifications',
+    category: 'training',
+    description:
+      'Externally-issued skills and certifications per person — authority, code, granted and expiry dates (e.g. CWB welder rosters).',
+    columns: [
+      { key: 'employee_no', label: 'Employee #', kind: 'text' },
+      { key: 'last_name', label: 'Last name', kind: 'text' },
+      { key: 'first_name', label: 'First name', kind: 'text' },
+      { key: 'trade', label: 'Trade', kind: 'text' },
+      { key: 'authority', label: 'Authority', kind: 'text' },
+      { key: 'certification_code', label: 'Certification code', kind: 'text' },
+      { key: 'certification_name', label: 'Certification name', kind: 'text' },
+      { key: 'granted_on', label: 'Granted on', kind: 'date' },
+      { key: 'expires_on', label: 'Expires on', kind: 'date' },
+      { key: 'status', label: 'Status', kind: 'enum' },
+    ],
+    defaultSort: { column: 'expires_on', direction: 'asc' },
+  },
+  {
     key: 'inspections',
     label: 'Inspection records',
     category: 'inspections',

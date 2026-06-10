@@ -209,28 +209,30 @@ async function runGeneric(env: Env, loader: Loader, mode: Mode): Promise<{ sourc
     await withSuperAdmin(env.db, async (tx) => {
       const lookup = makeLookup(env, tx)
       source += rows.length
-      const idMap = await reserveBatch(
-        env,
-        tx,
-        loader.srcSchema,
-        loader.srcTable,
-        loader.entity,
-        tenantId,
-        rows.map((r: any) => ({ pk: r[pk], rh: rowHash(r) })),
-      )
-      const out: Record<string, unknown>[] = []
+      // Map FIRST (so we know which rows survive), then reserve crosswalk ids only for the survivors.
+      // Reserving for skipped rows would leave phantom id_map entries → child FK lookups resolve to
+      // non-existent parents → FK violations.
+      const mapped: { pk: unknown; rh: string; vals: Record<string, unknown> }[] = []
       for (const row of rows) {
-        const id = idMap.get(String(row[pk]))
         const u = H.ts((row as any).updated_at)
         if (u) {
           const iso = u.toISOString()
           if (!maxU || iso > maxU) maxU = iso
         }
         const vals = await loader.map(row, { tenantId, tx, lookup, prepared })
-        if (!vals) continue
-        out.push({ id, tenantId, ...vals })
+        if (vals) mapped.push({ pk: row[pk], rh: rowHash(row), vals })
       }
-      if (out.length) {
+      if (mapped.length) {
+        const idMap = await reserveBatch(
+          env,
+          tx,
+          loader.srcSchema,
+          loader.srcTable,
+          loader.entity,
+          tenantId,
+          mapped.map((m) => ({ pk: m.pk, rh: m.rh })),
+        )
+        const out = mapped.map((m) => ({ id: idMap.get(String(m.pk)), tenantId, ...m.vals }))
         await tx
           .insert(loader.target)
           .values(out)

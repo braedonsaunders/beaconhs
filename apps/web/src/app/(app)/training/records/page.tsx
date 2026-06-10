@@ -37,7 +37,7 @@ import { TableToolbar } from '@/components/table-toolbar'
 import { TrainingSubNav } from '../_components/training-sub-nav'
 import { TrainingRecordsTable, type TrainingRecordsTableRow } from './_records-table'
 
-export const metadata = { title: 'Training Records' }
+export const metadata = { title: 'Certificates' }
 export const dynamic = 'force-dynamic'
 
 const SORTS = ['completed_on', 'expires_on', 'source', 'employee', 'course'] as const
@@ -199,12 +199,12 @@ export default async function TrainingRecordsPage({
       header={
         <>
           <PageHeader
-            title="Training Records"
-            description="Every issued training record — flat, paginated, bulk-actionable."
+            title="Certificates"
+            description="Course-completion certificates — every earned training record, with expiry tracking. Externally-issued credentials live under Skills."
             actions={
               <div className="flex items-center gap-2">
-                <Link href="/training">
-                  <Button variant="outline">Dashboard</Button>
+                <Link href="/training/courses/new">
+                  <Button variant="outline">New course</Button>
                 </Link>
                 <Link href="/training/records/new">
                   <Button>Log a record</Button>
