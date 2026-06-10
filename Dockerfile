@@ -4,7 +4,9 @@
 
 ARG NODE_VERSION=20.18.0
 FROM node:${NODE_VERSION}-bookworm-slim AS base
-RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
+# Upgrade corepack first: the version bundled with node 20.18 ships stale pnpm
+# signing keys and fails `pnpm install` with "Cannot find matching keyid".
+RUN npm install -g corepack@latest && corepack enable && corepack prepare pnpm@9.12.0 --activate
 WORKDIR /app
 
 # --- Dependencies layer ---
