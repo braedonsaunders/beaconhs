@@ -2,11 +2,7 @@ import Link from 'next/link'
 import { Users } from 'lucide-react'
 import { asc, count, eq, sql } from 'drizzle-orm'
 import { Badge, EmptyState, PageHeader } from '@beaconhs/ui'
-import {
-  correctiveActions,
-  tenantUsers,
-  user,
-} from '@beaconhs/db/schema'
+import { correctiveActions, tenantUsers, user } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { ListPageLayout } from '@/components/page-layout'
 import { CorrectiveActionsSubNav } from '@/components/corrective-actions-sub-nav'
@@ -46,23 +42,37 @@ export default async function ByAssigneeReport() {
         userName: user.name,
         userEmail: user.email,
         total: count().mapWith(Number),
-        open: sql<number>`SUM(CASE WHEN ${correctiveActions.status} = 'open' THEN 1 ELSE 0 END)`.mapWith(Number),
-        inProgress: sql<number>`SUM(CASE WHEN ${correctiveActions.status} = 'in_progress' THEN 1 ELSE 0 END)`.mapWith(Number),
-        pendingVerification: sql<number>`SUM(CASE WHEN ${correctiveActions.status} = 'pending_verification' THEN 1 ELSE 0 END)`.mapWith(Number),
-        closed: sql<number>`SUM(CASE WHEN ${correctiveActions.status} = 'closed' THEN 1 ELSE 0 END)`.mapWith(Number),
-        cancelled: sql<number>`SUM(CASE WHEN ${correctiveActions.status} = 'cancelled' THEN 1 ELSE 0 END)`.mapWith(Number),
-        overdue: sql<number>`SUM(CASE WHEN ${correctiveActions.dueOn} < ${today}::date AND ${correctiveActions.status} IN ('open','in_progress','pending_verification') THEN 1 ELSE 0 END)`.mapWith(Number),
-        avgDaysToClose: sql<number | null>`AVG(CASE WHEN ${correctiveActions.closedAt} IS NOT NULL AND ${correctiveActions.assignedOn} IS NOT NULL THEN EXTRACT(EPOCH FROM (${correctiveActions.closedAt} - ${correctiveActions.assignedOn}::timestamp)) / 86400.0 ELSE NULL END)`,
+        open: sql<number>`SUM(CASE WHEN ${correctiveActions.status} = 'open' THEN 1 ELSE 0 END)`.mapWith(
+          Number,
+        ),
+        inProgress:
+          sql<number>`SUM(CASE WHEN ${correctiveActions.status} = 'in_progress' THEN 1 ELSE 0 END)`.mapWith(
+            Number,
+          ),
+        pendingVerification:
+          sql<number>`SUM(CASE WHEN ${correctiveActions.status} = 'pending_verification' THEN 1 ELSE 0 END)`.mapWith(
+            Number,
+          ),
+        closed:
+          sql<number>`SUM(CASE WHEN ${correctiveActions.status} = 'closed' THEN 1 ELSE 0 END)`.mapWith(
+            Number,
+          ),
+        cancelled:
+          sql<number>`SUM(CASE WHEN ${correctiveActions.status} = 'cancelled' THEN 1 ELSE 0 END)`.mapWith(
+            Number,
+          ),
+        overdue:
+          sql<number>`SUM(CASE WHEN ${correctiveActions.dueOn} < ${today}::date AND ${correctiveActions.status} IN ('open','in_progress','pending_verification') THEN 1 ELSE 0 END)`.mapWith(
+            Number,
+          ),
+        avgDaysToClose: sql<
+          number | null
+        >`AVG(CASE WHEN ${correctiveActions.closedAt} IS NOT NULL AND ${correctiveActions.assignedOn} IS NOT NULL THEN EXTRACT(EPOCH FROM (${correctiveActions.closedAt} - ${correctiveActions.assignedOn}::timestamp)) / 86400.0 ELSE NULL END)`,
       })
       .from(correctiveActions)
       .leftJoin(tenantUsers, eq(tenantUsers.id, correctiveActions.ownerTenantUserId))
       .leftJoin(user, eq(user.id, tenantUsers.userId))
-      .groupBy(
-        correctiveActions.ownerTenantUserId,
-        tenantUsers.displayName,
-        user.name,
-        user.email,
-      )
+      .groupBy(correctiveActions.ownerTenantUserId, tenantUsers.displayName, user.name, user.email)
       .orderBy(sql`COUNT(*) DESC`),
   )
 
@@ -104,9 +114,7 @@ export default async function ByAssigneeReport() {
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <Badge variant="secondary">{stats.length} assignees</Badge>
             <Badge variant="secondary">{totalCAs} total CAs</Badge>
-            {totalOverdue > 0 ? (
-              <Badge variant="destructive">{totalOverdue} overdue</Badge>
-            ) : null}
+            {totalOverdue > 0 ? <Badge variant="destructive">{totalOverdue} overdue</Badge> : null}
           </div>
         </>
       }
@@ -121,7 +129,7 @@ export default async function ByAssigneeReport() {
         <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs uppercase tracking-wide text-slate-500">
+              <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase">
                 <th className="px-4 py-2">Owner</th>
                 <th className="px-4 py-2 text-right">Total</th>
                 <th className="px-4 py-2 text-right">Open</th>
@@ -140,9 +148,7 @@ export default async function ByAssigneeReport() {
                     <div className="text-slate-900">
                       {s.ownerId ? (
                         <Link
-                          href={
-                            `/corrective-actions?owner=${s.ownerId}` as any
-                          }
+                          href={`/corrective-actions?owner=${s.ownerId}` as any}
                           className="font-medium hover:underline"
                         >
                           {s.ownerName}
@@ -187,12 +193,7 @@ export default async function ByAssigneeReport() {
 
 function CompletionBar({ value }: { value: number }) {
   const pct = Math.round(value * 100)
-  const tone =
-    pct >= 80
-      ? 'bg-emerald-500'
-      : pct >= 50
-        ? 'bg-amber-500'
-        : 'bg-red-500'
+  const tone = pct >= 80 ? 'bg-emerald-500' : pct >= 50 ? 'bg-amber-500' : 'bg-red-500'
   return (
     <div className="inline-flex w-32 items-center gap-2">
       <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">

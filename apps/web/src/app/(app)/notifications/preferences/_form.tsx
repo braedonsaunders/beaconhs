@@ -65,7 +65,7 @@ export function PreferencesForm({ initial }: { initial: Cell[] }) {
     <div className="space-y-4">
       <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
         <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-left text-xs uppercase tracking-wider text-slate-500">
+          <thead className="bg-slate-50 text-left text-xs tracking-wider text-slate-500 uppercase">
             <tr>
               <th className="px-4 py-3 font-medium">Category</th>
               {NOTIFICATION_CHANNELS.map((ch) => (

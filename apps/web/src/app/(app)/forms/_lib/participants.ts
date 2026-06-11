@@ -5,12 +5,7 @@
 
 import { desc, eq, sql } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
-import {
-  formResponseParticipants,
-  formResponses,
-  formTemplates,
-  people,
-} from '@beaconhs/db/schema'
+import { formResponseParticipants, formResponses, formTemplates, people } from '@beaconhs/db/schema'
 import { extractParticipants, type FormSchemaV1 } from '@beaconhs/forms-core'
 import type { RequestContext } from '@beaconhs/tenant'
 
@@ -145,7 +140,8 @@ export async function listTranscriptPeople(
       .limit(500)
     return rows.map((r) => ({
       personId: r.personId,
-      name: `${r.lastName ?? ''}${r.lastName ? ', ' : ''}${r.firstName ?? ''}`.trim() || '(unnamed)',
+      name:
+        `${r.lastName ?? ''}${r.lastName ? ', ' : ''}${r.firstName ?? ''}`.trim() || '(unnamed)',
       count: Number(r.count),
     }))
   })

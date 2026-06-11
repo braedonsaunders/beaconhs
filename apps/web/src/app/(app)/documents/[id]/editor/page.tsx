@@ -14,11 +14,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   return { title: `Edit · ${id.slice(0, 8)}` }
 }
 
-export default async function DocumentEditorPage({
-  params,
-}: {
-  params: Promise<{ id: string }>
-}) {
+export default async function DocumentEditorPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const ctx = await requireRequestContext()
 

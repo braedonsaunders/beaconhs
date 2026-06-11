@@ -8,7 +8,16 @@
 // widget id matches an entry in the central widget registry. The grid
 // is 12 columns wide; row height is set in the client.
 
-import { boolean, index, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
+import {
+  boolean,
+  index,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core'
 import { id, timestamps } from './_helpers'
 import { tenants, users } from './core'
 

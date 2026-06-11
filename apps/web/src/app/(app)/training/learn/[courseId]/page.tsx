@@ -84,12 +84,12 @@ export default async function PlayerPage({ params }: { params: Promise<{ courseI
         const rows = await tx
           .select({ row: trainingLessonProgress, evaluator: tenantUsers })
           .from(trainingLessonProgress)
-          .leftJoin(
-            tenantUsers,
-            eq(tenantUsers.id, trainingLessonProgress.evaluatedByTenantUserId),
-          )
+          .leftJoin(tenantUsers, eq(tenantUsers.id, trainingLessonProgress.evaluatedByTenantUserId))
           .where(eq(trainingLessonProgress.enrollmentId, enrollment.id))
-        progress = rows.map((r) => ({ row: r.row, evaluatorName: r.evaluator?.displayName ?? null }))
+        progress = rows.map((r) => ({
+          row: r.row,
+          evaluatorName: r.evaluator?.displayName ?? null,
+        }))
       }
     }
 
@@ -98,7 +98,10 @@ export default async function PlayerPage({ params }: { params: Promise<{ courseI
       ...new Set(lessons.map((l) => l.contentItemId).filter((x): x is string => !!x)),
     ]
     const items = itemIds.length
-      ? await tx.select().from(trainingContentItems).where(inArray(trainingContentItems.id, itemIds))
+      ? await tx
+          .select()
+          .from(trainingContentItems)
+          .where(inArray(trainingContentItems.id, itemIds))
       : []
 
     // Resolve media URLs for image/video/file blocks + media lessons + library
@@ -168,9 +171,9 @@ export default async function PlayerPage({ params }: { params: Promise<{ courseI
           kind: item ? item.kind : l.kind,
           completionRule: l.completionRule,
           isRequired: l.isRequired,
-          blocks: item ? item.contentBlocks ?? [] : l.contentBlocks ?? [],
+          blocks: item ? (item.contentBlocks ?? []) : (l.contentBlocks ?? []),
           contentHtml: item ? item.contentHtml : l.contentHtml,
-          slides: item ? item.slides ?? [] : l.slides ?? [],
+          slides: item ? (item.slides ?? []) : (l.slides ?? []),
           practicalCriteria: l.practicalCriteria ?? [],
           evaluation: prog?.row.evaluatedByTenantUserId
             ? {
@@ -184,7 +187,7 @@ export default async function PlayerPage({ params }: { params: Promise<{ courseI
           embedUrl: item ? item.embedUrl : l.embedUrl,
           attachmentId: item ? item.attachmentId : l.attachmentId,
           assessmentTypeId: l.assessmentTypeId,
-          classTitle: l.classId ? classTitleById.get(l.classId) ?? null : null,
+          classTitle: l.classId ? (classTitleById.get(l.classId) ?? null) : null,
           durationMinutes: l.durationMinutes,
           status: prog?.row.status ?? 'not_started',
         }

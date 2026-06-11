@@ -84,10 +84,7 @@ export default async function SeedTemplatesPage() {
       .from(tenants)
       .leftJoin(
         formTemplates,
-        and(
-          eq(formTemplates.tenantId, tenants.id),
-          eq(formTemplates.key, LIFT_PLAN_TEMPLATE_KEY),
-        ),
+        and(eq(formTemplates.tenantId, tenants.id), eq(formTemplates.key, LIFT_PLAN_TEMPLATE_KEY)),
       )
       .orderBy(asc(tenants.name))
   })
@@ -113,8 +110,8 @@ export default async function SeedTemplatesPage() {
         <Alert variant="info">
           <AlertTitle>{LIFT_PLAN_TEMPLATE_NAME}</AlertTitle>
           <AlertDescription>
-            Per-tenant form template with category <code>lift_plan</code>. Surfaces in
-            the form gallery at{' '}
+            Per-tenant form template with category <code>lift_plan</code>. Surfaces in the form
+            gallery at{' '}
             <Link
               href="/forms?category=lift_plan"
               className="font-medium text-teal-700 hover:underline"

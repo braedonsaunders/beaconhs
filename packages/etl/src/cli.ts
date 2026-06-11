@@ -17,8 +17,15 @@ async function counts() {
        GROUP BY t.name ORDER BY rows DESC`,
     )
     const total = rows.reduce((a, r) => a + Number(r.rows || 0), 0)
-    console.log(`\n## ${db} → ${TENANT_SLUG_BY_DB[db]}  (${rows.length} tables, ${total.toLocaleString()} rows)`)
-    for (const r of rows) console.log(`  ${r.tbl.padEnd(40)} ${Number(r.rows || 0).toLocaleString().padStart(12)}`)
+    console.log(
+      `\n## ${db} → ${TENANT_SLUG_BY_DB[db]}  (${rows.length} tables, ${total.toLocaleString()} rows)`,
+    )
+    for (const r of rows)
+      console.log(
+        `  ${r.tbl.padEnd(40)} ${Number(r.rows || 0)
+          .toLocaleString()
+          .padStart(12)}`,
+      )
   }
 }
 
@@ -67,7 +74,9 @@ async function clusterCheck() {
   } catch (e: any) {
     console.error(`FAILED to reach DATABASE_URL: ${e.message}`)
     if (/pg_hba|no encryption|SSL/.test(e.message)) {
-      console.error('\nHint: the cluster has no pg_hba.conf rule for this host, or requires/forbids SSL.')
+      console.error(
+        '\nHint: the cluster has no pg_hba.conf rule for this host, or requires/forbids SSL.',
+      )
     }
     process.exitCode = 1
   } finally {
@@ -121,7 +130,9 @@ async function main() {
       break
     }
     case 'reconcile':
-      console.error(`"${cmd}" is not implemented yet — depends on cluster access (see plan Phase 1+).`)
+      console.error(
+        `"${cmd}" is not implemented yet — depends on cluster access (see plan Phase 1+).`,
+      )
       process.exitCode = 1
       break
     default:

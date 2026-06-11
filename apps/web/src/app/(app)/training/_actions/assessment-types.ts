@@ -3,10 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { and, asc, eq, max } from 'drizzle-orm'
-import {
-  trainingAssessmentTypeQuestions,
-  trainingAssessmentTypes,
-} from '@beaconhs/db/schema'
+import { trainingAssessmentTypeQuestions, trainingAssessmentTypes } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
@@ -141,13 +138,7 @@ export async function deleteAssessmentType(typeId: string) {
 
 // ----- Question CRUD ------------------------------------------------------
 
-const QUESTION_KINDS = [
-  'text',
-  'single_choice',
-  'multi_choice',
-  'numeric',
-  'true_false',
-] as const
+const QUESTION_KINDS = ['text', 'single_choice', 'multi_choice', 'numeric', 'true_false'] as const
 type QuestionKind = (typeof QUESTION_KINDS)[number]
 
 function parseOptions(raw: string | null): { value: string; label: string }[] | null {

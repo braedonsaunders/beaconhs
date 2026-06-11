@@ -10,13 +10,7 @@
 
 import { and, eq, inArray, isNull } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
-import {
-  people,
-  peopleAssignments,
-  roleAssignments,
-  roles,
-  tenantUsers,
-} from '@beaconhs/db/schema'
+import { people, peopleAssignments, roleAssignments, roles, tenantUsers } from '@beaconhs/db/schema'
 
 export type AudienceKind = 'everyone' | 'person' | 'role' | 'trade' | 'department' | 'org_unit'
 

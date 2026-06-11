@@ -137,8 +137,8 @@ function FieldRow({
   return (
     <li className="flex items-start justify-between gap-3 py-2">
       <div className="min-w-0 flex-1">
-        <div className="text-xs uppercase tracking-wide text-slate-500">{row.fieldKey}</div>
-        <div className="mt-0.5 break-words text-sm text-slate-800">
+        <div className="text-xs tracking-wide text-slate-500 uppercase">{row.fieldKey}</div>
+        <div className="mt-0.5 text-sm break-words text-slate-800">
           {row.fieldValue && row.fieldValue.length > 0 ? row.fieldValue : '—'}
         </div>
       </div>

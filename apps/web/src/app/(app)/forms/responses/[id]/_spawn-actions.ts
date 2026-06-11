@@ -11,15 +11,8 @@
 
 import { revalidatePath } from 'next/cache'
 import { count, eq, sql } from 'drizzle-orm'
-import {
-  correctiveActions,
-  formResponses,
-  incidents,
-} from '@beaconhs/db/schema'
-import {
-  emitCorrectiveActionAssigned,
-  emitIncidentReported,
-} from '@beaconhs/events'
+import { correctiveActions, formResponses, incidents } from '@beaconhs/db/schema'
+import { emitCorrectiveActionAssigned, emitIncidentReported } from '@beaconhs/events'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 
@@ -29,8 +22,7 @@ async function loadResponseForSpawn(
   ctx: Awaited<ReturnType<typeof requireRequestContext>>,
   responseId: string,
 ): Promise<
-  | { ok: true; response: typeof formResponses.$inferSelect }
-  | { ok: false; error: string }
+  { ok: true; response: typeof formResponses.$inferSelect } | { ok: false; error: string }
 > {
   const row = await ctx.db(async (tx) => {
     const [r] = await tx
@@ -95,8 +87,7 @@ export async function createCorrectiveActionFromResponse(
         sourceEntityType: 'form_response',
         sourceEntityId: input.responseId,
         sourceFormResponseId: input.responseId,
-        siteOrgUnitId:
-          input.siteOrgUnitId ?? loaded.response.siteOrgUnitId ?? null,
+        siteOrgUnitId: input.siteOrgUnitId ?? loaded.response.siteOrgUnitId ?? null,
         assignedOn,
         dueOn: input.dueOn ?? null,
         assignedByTenantUserId: ctx.membership?.id,
@@ -147,7 +138,14 @@ export type CreateIncidentFromResponseInput = {
   responseId: string
   title: string
   description?: string | null
-  type?: 'injury' | 'illness' | 'near_miss' | 'property_damage' | 'environmental' | 'security' | 'other'
+  type?:
+    | 'injury'
+    | 'illness'
+    | 'near_miss'
+    | 'property_damage'
+    | 'environmental'
+    | 'security'
+    | 'other'
   severity?: 'first_aid_only' | 'medical_aid' | 'lost_time' | 'fatality' | 'no_injury'
   occurredAt?: string | null
   siteOrgUnitId?: string | null
@@ -156,10 +154,7 @@ export type CreateIncidentFromResponseInput = {
 
 export async function createIncidentFromResponse(
   input: CreateIncidentFromResponseInput,
-): Promise<
-  | { ok: true; incidentId: string; reference: string }
-  | { ok: false; error: string }
-> {
+): Promise<{ ok: true; incidentId: string; reference: string } | { ok: false; error: string }> {
   const ctx = await requireRequestContext()
   if (!ctx.tenantId) return { ok: false, error: 'Active tenant required' }
   if (!input.responseId) return { ok: false, error: 'Missing responseId' }
@@ -192,8 +187,7 @@ export async function createIncidentFromResponse(
         title,
         description: input.description?.trim() || null,
         occurredAt,
-        siteOrgUnitId:
-          input.siteOrgUnitId ?? loaded.response.siteOrgUnitId ?? null,
+        siteOrgUnitId: input.siteOrgUnitId ?? loaded.response.siteOrgUnitId ?? null,
         location: input.location?.trim() || null,
         reportedByTenantUserId: ctx.membership?.id ?? null,
         sourceFormResponseId: input.responseId,
@@ -227,4 +221,3 @@ export async function createIncidentFromResponse(
   revalidatePath('/incidents')
   return { ok: true, incidentId: row.id, reference: row.reference }
 }
-

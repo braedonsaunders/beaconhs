@@ -59,7 +59,10 @@ function monthLabel(year: number, month: number): string {
 // Build a 6-row × 7-col grid that starts on the Sunday on/before the 1st of the
 // month and ends on the Saturday on/after the last day. Returns 42 cells (or
 // trimmed to 35 if the month perfectly fits 5 rows).
-function buildGrid(year: number, month: number): {
+function buildGrid(
+  year: number,
+  month: number,
+): {
   days: { date: Date; iso: string; inMonth: boolean; isToday: boolean }[]
   rows: number
 } {
@@ -228,7 +231,7 @@ export default async function TrainingClassesCalendarPage({
       }
     >
       <div className="rounded-lg border border-slate-200 bg-white">
-        <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50 text-[11px] font-medium uppercase tracking-wide text-slate-500">
+        <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50 text-[11px] font-medium tracking-wide text-slate-500 uppercase">
           {DOW.map((d) => (
             <div key={d} className="px-2 py-2 text-center">
               {d}
@@ -243,7 +246,7 @@ export default async function TrainingClassesCalendarPage({
               <div
                 key={cell.iso + idx}
                 className={[
-                  'min-h-[110px] border-b border-r border-slate-100 p-1.5',
+                  'min-h-[110px] border-r border-b border-slate-100 p-1.5',
                   idx % 7 === 6 ? 'border-r-0' : '',
                   cell.inMonth ? 'bg-white' : 'bg-slate-50/60',
                 ].join(' ')}
@@ -280,7 +283,7 @@ export default async function TrainingClassesCalendarPage({
                               : 'bg-teal-50 text-teal-900 hover:bg-teal-100',
                         ].join(' ')}
                       >
-                        <span className="tabular-nums text-[10px] text-slate-500">
+                        <span className="text-[10px] text-slate-500 tabular-nums">
                           {c.start.toLocaleTimeString([], {
                             hour: '2-digit',
                             minute: '2-digit',
@@ -291,9 +294,7 @@ export default async function TrainingClassesCalendarPage({
                     </li>
                   ))}
                   {chips.length > 4 ? (
-                    <li className="px-1.5 text-[10px] text-slate-400">
-                      +{chips.length - 4} more
-                    </li>
+                    <li className="px-1.5 text-[10px] text-slate-400">+{chips.length - 4} more</li>
                   ) : null}
                 </ul>
               </div>

@@ -29,7 +29,7 @@ export function DashboardHeader({
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-      className="relative overflow-hidden rounded-2xl border border-slate-200/60 dark:border-slate-800/60 bg-gradient-to-br from-slate-950 via-slate-900 to-teal-950 text-white shadow-[0_20px_60px_-20px_rgba(15,23,42,0.45)]"
+      className="relative overflow-hidden rounded-2xl border border-slate-200/60 bg-gradient-to-br from-slate-950 via-slate-900 to-teal-950 text-white shadow-[0_20px_60px_-20px_rgba(15,23,42,0.45)] dark:border-slate-800/60"
     >
       <div
         aria-hidden
@@ -43,32 +43,30 @@ export function DashboardHeader({
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute -right-24 -top-24 h-56 w-56 rounded-full bg-teal-400/20 blur-3xl"
+        className="pointer-events-none absolute -top-24 -right-24 h-56 w-56 rounded-full bg-teal-400/20 blur-3xl"
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute -left-32 bottom-0 h-56 w-56 rounded-full bg-sky-500/10 blur-3xl"
+        className="pointer-events-none absolute bottom-0 -left-32 h-56 w-56 rounded-full bg-sky-500/10 blur-3xl"
       />
 
       <div className="relative flex flex-wrap items-start justify-between gap-4 p-5 sm:p-6">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-teal-400/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-teal-200 ring-1 ring-inset ring-teal-300/30">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-teal-400/15 px-2 py-0.5 text-[10px] font-semibold tracking-[0.18em] text-teal-200 uppercase ring-1 ring-teal-300/30 ring-inset">
               <Sparkles size={10} />
               Safety command center
             </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.14em] text-slate-200 ring-1 ring-inset ring-white/10">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-medium tracking-[0.14em] text-slate-200 uppercase ring-1 ring-white/10 ring-inset">
               {roleLabel} view
             </span>
             {isCustomised ? (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-200 ring-1 ring-inset ring-amber-300/30">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-400/10 px-2 py-0.5 text-[10px] font-semibold tracking-[0.14em] text-amber-200 uppercase ring-1 ring-amber-300/30 ring-inset">
                 Customised
               </span>
             ) : null}
           </div>
-          <h1 className="mt-2 text-2xl font-semibold text-white sm:text-[26px]">
-            {greeting}
-          </h1>
+          <h1 className="mt-2 text-2xl font-semibold text-white sm:text-[26px]">{greeting}</h1>
           <p className="mt-1 text-sm text-slate-300">{tenantSummary}</p>
         </div>
         <div className="flex flex-col items-end gap-2 text-right">

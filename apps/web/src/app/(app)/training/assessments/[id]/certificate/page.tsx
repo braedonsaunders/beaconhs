@@ -38,11 +38,7 @@ export default async function AssessmentCertificatePage({
       .from(trainingAssessmentTypes)
       .where(eq(trainingAssessmentTypes.id, attempt.typeId))
       .limit(1)
-    const [person] = await tx
-      .select()
-      .from(people)
-      .where(eq(people.id, attempt.personId))
-      .limit(1)
+    const [person] = await tx.select().from(people).where(eq(people.id, attempt.personId)).limit(1)
     const [course] = attempt.courseId
       ? await tx
           .select()
@@ -60,14 +56,12 @@ export default async function AssessmentCertificatePage({
     <div className="min-h-screen bg-white print:bg-white">
       <div className="mx-auto max-w-3xl px-12 py-16">
         <div className="mb-8 flex items-center justify-between">
-          <p className="text-xs uppercase tracking-widest text-slate-500">
+          <p className="text-xs tracking-widest text-slate-500 uppercase">
             Certificate of completion
           </p>
           <p className="text-xs text-slate-500">ID: {attempt.id.slice(0, 8)}</p>
         </div>
-        <h1 className="text-3xl font-semibold text-slate-900">
-          {type?.name ?? 'Assessment'}
-        </h1>
+        <h1 className="text-3xl font-semibold text-slate-900">{type?.name ?? 'Assessment'}</h1>
         {course ? (
           <p className="mt-1 text-sm text-slate-500">
             {course.code} · {course.name}
@@ -75,7 +69,7 @@ export default async function AssessmentCertificatePage({
         ) : null}
 
         <div className="my-10 border-y border-slate-200 py-10 text-center">
-          <p className="text-xs uppercase tracking-widest text-slate-500">Awarded to</p>
+          <p className="text-xs tracking-widest text-slate-500 uppercase">Awarded to</p>
           <p className="mt-3 text-4xl font-semibold text-slate-900">
             {person?.firstName} {person?.lastName}
           </p>
@@ -86,21 +80,21 @@ export default async function AssessmentCertificatePage({
 
         <dl className="grid grid-cols-2 gap-x-12 gap-y-3 text-sm">
           <div>
-            <dt className="text-xs uppercase tracking-wide text-slate-500">Score</dt>
+            <dt className="text-xs tracking-wide text-slate-500 uppercase">Score</dt>
             <dd className="font-semibold text-slate-900">{attempt.score}%</dd>
           </div>
           <div>
-            <dt className="text-xs uppercase tracking-wide text-slate-500">Passing score</dt>
+            <dt className="text-xs tracking-wide text-slate-500 uppercase">Passing score</dt>
             <dd className="text-slate-900">{attempt.passingScore}%</dd>
           </div>
           <div>
-            <dt className="text-xs uppercase tracking-wide text-slate-500">Points</dt>
+            <dt className="text-xs tracking-wide text-slate-500 uppercase">Points</dt>
             <dd className="text-slate-900">
               {attempt.pointsAwarded} / {attempt.pointsPossible}
             </dd>
           </div>
           <div>
-            <dt className="text-xs uppercase tracking-wide text-slate-500">Status</dt>
+            <dt className="text-xs tracking-wide text-slate-500 uppercase">Status</dt>
             <dd className="font-semibold text-green-700">Passed</dd>
           </div>
         </dl>

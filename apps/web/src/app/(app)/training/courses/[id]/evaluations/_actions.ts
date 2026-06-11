@@ -7,11 +7,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { and, eq } from 'drizzle-orm'
-import {
-  trainingEnrollments,
-  trainingLessonProgress,
-  trainingLessons,
-} from '@beaconhs/db/schema'
+import { trainingEnrollments, trainingLessonProgress, trainingLessons } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'

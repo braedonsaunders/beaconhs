@@ -26,10 +26,7 @@ export default async function ImportPeoplePage() {
           title="Import people from CSV"
           subtitle="One-off bulk add. For ongoing sync, prefer the NetSuite / BambooHR plugin."
         />
-        <ImportPeopleForm
-          knownDepartments={lookups.departments}
-          knownTrades={lookups.trades}
-        />
+        <ImportPeopleForm knownDepartments={lookups.departments} knownTrades={lookups.trades} />
       </div>
     </PageContainer>
   )

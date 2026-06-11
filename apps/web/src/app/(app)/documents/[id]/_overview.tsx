@@ -85,20 +85,30 @@ export function DocumentOverview({
   }
 
   return (
-    <div className="rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-      <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-4 py-2.5">
-        <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Document details</h3>
+    <div className="rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+      <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5 dark:border-slate-800">
+        <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+          Document details
+        </h3>
         <SaveBadge state={saveState} />
       </div>
       <div className="space-y-4 p-4">
         <div className="space-y-1.5">
           <Label htmlFor="o-title">Title</Label>
-          <Input id="o-title" value={m.title} onChange={(e) => field('title', e.currentTarget.value)} />
+          <Input
+            id="o-title"
+            value={m.title}
+            onChange={(e) => field('title', e.currentTarget.value)}
+          />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
             <Label htmlFor="o-category">Category</Label>
-            <Select id="o-category" value={m.categoryId} onChange={(e) => field('categoryId', e.currentTarget.value)}>
+            <Select
+              id="o-category"
+              value={m.categoryId}
+              onChange={(e) => field('categoryId', e.currentTarget.value)}
+            >
               <option value="">—</option>
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -109,7 +119,11 @@ export function DocumentOverview({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="o-type">Type</Label>
-            <Select id="o-type" value={m.typeId} onChange={(e) => field('typeId', e.currentTarget.value)}>
+            <Select
+              id="o-type"
+              value={m.typeId}
+              onChange={(e) => field('typeId', e.currentTarget.value)}
+            >
               <option value="">—</option>
               {types.map((t) => (
                 <option key={t.id} value={t.id}>
@@ -126,44 +140,88 @@ export function DocumentOverview({
         ) : null}
         <div className="space-y-1.5">
           <Label htmlFor="o-key">Key</Label>
-          <Input id="o-key" className="font-mono" value={m.key} onChange={(e) => field('key', e.currentTarget.value)} />
+          <Input
+            id="o-key"
+            className="font-mono"
+            value={m.key}
+            onChange={(e) => field('key', e.currentTarget.value)}
+          />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="o-desc">Short description</Label>
-          <Textarea id="o-desc" rows={2} value={m.description} onChange={(e) => field('description', e.currentTarget.value)} />
+          <Textarea
+            id="o-desc"
+            rows={2}
+            value={m.description}
+            onChange={(e) => field('description', e.currentTarget.value)}
+          />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
             <Label htmlFor="o-review">Review every (mo.)</Label>
-            <Input id="o-review" type="number" min="1" value={m.reviewFrequencyMonths} onChange={(e) => field('reviewFrequencyMonths', e.currentTarget.value)} placeholder="12" />
+            <Input
+              id="o-review"
+              type="number"
+              min="1"
+              value={m.reviewFrequencyMonths}
+              onChange={(e) => field('reviewFrequencyMonths', e.currentTarget.value)}
+              placeholder="12"
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="o-next">Next review</Label>
-            <Input id="o-next" type="date" value={m.nextReviewOn} onChange={(e) => field('nextReviewOn', e.currentTarget.value)} />
+            <Input
+              id="o-next"
+              type="date"
+              value={m.nextReviewOn}
+              onChange={(e) => field('nextReviewOn', e.currentTarget.value)}
+            />
           </div>
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="o-page">Page size</Label>
-          <Select id="o-page" value={m.pageSize} onChange={(e) => field('pageSize', e.currentTarget.value as 'Letter' | 'A4')}>
+          <Select
+            id="o-page"
+            value={m.pageSize}
+            onChange={(e) => field('pageSize', e.currentTarget.value as 'Letter' | 'A4')}
+          >
             <option value="Letter">Letter</option>
             <option value="A4">A4</option>
           </Select>
         </div>
-        <div className="space-y-2 rounded-md border border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900 p-3">
-          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">PDF header &amp; footer</p>
+        <div className="space-y-2 rounded-md border border-slate-100 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-900">
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+            PDF header &amp; footer
+          </p>
           <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
-            <input type="checkbox" checked={m.printHeader} onChange={(e) => field('printHeader', e.currentTarget.checked)} />
+            <input
+              type="checkbox"
+              checked={m.printHeader}
+              onChange={(e) => field('printHeader', e.currentTarget.checked)}
+            />
             Print header
           </label>
           {m.printHeader ? (
-            <Input value={m.headerText} onChange={(e) => field('headerText', e.currentTarget.value)} placeholder="Header text (optional)" />
+            <Input
+              value={m.headerText}
+              onChange={(e) => field('headerText', e.currentTarget.value)}
+              placeholder="Header text (optional)"
+            />
           ) : null}
           <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
-            <input type="checkbox" checked={m.printFooter} onChange={(e) => field('printFooter', e.currentTarget.checked)} />
+            <input
+              type="checkbox"
+              checked={m.printFooter}
+              onChange={(e) => field('printFooter', e.currentTarget.checked)}
+            />
             Print footer + page number
           </label>
           {m.printFooter ? (
-            <Input value={m.footerText} onChange={(e) => field('footerText', e.currentTarget.value)} placeholder="Footer text (optional)" />
+            <Input
+              value={m.footerText}
+              onChange={(e) => field('footerText', e.currentTarget.value)}
+              placeholder="Footer text (optional)"
+            />
           ) : null}
         </div>
       </div>
@@ -179,7 +237,12 @@ function SaveBadge({ state }: { state: SaveState }) {
       </span>
     )
   return (
-    <span className={cn('inline-flex items-center gap-1 text-xs', state === 'saved' ? 'text-teal-600' : 'text-slate-400 dark:text-slate-500')}>
+    <span
+      className={cn(
+        'inline-flex items-center gap-1 text-xs',
+        state === 'saved' ? 'text-teal-600' : 'text-slate-400 dark:text-slate-500',
+      )}
+    >
       <Check size={12} /> Saved
     </span>
   )

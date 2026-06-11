@@ -27,15 +27,14 @@ async function togglePlugin(formData: FormData) {
   const pluginId = String(formData.get('pluginId') ?? '')
   const enable = formData.get('enable') === 'true'
   const installed = await ctx.db((tx) =>
-    tx
-      .select()
-      .from(tenantPlugins)
-      .where(eq(tenantPlugins.pluginId, pluginId))
-      .limit(1),
+    tx.select().from(tenantPlugins).where(eq(tenantPlugins.pluginId, pluginId)).limit(1),
   )
   if (installed[0]) {
     await ctx.db((tx) =>
-      tx.update(tenantPlugins).set({ enabled: enable }).where(eq(tenantPlugins.id, installed[0]!.id)),
+      tx
+        .update(tenantPlugins)
+        .set({ enabled: enable })
+        .where(eq(tenantPlugins.id, installed[0]!.id)),
     )
   } else if (enable) {
     await ctx.db((tx) =>

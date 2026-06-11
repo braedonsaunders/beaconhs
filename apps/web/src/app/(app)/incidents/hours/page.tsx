@@ -99,9 +99,7 @@ async function deletePeriod(formData: FormData): Promise<void> {
     return row ?? null
   })
   if (!before) return
-  await ctx.db((tx) =>
-    tx.delete(incidentHoursPeriods).where(eq(incidentHoursPeriods.id, id)),
-  )
+  await ctx.db((tx) => tx.delete(incidentHoursPeriods).where(eq(incidentHoursPeriods.id, id)))
   await recordAudit(ctx, {
     entityType: 'incident_hours_period',
     entityId: id,
@@ -336,8 +334,8 @@ export default async function HoursPage() {
                 <strong>LTIR</strong> = (lost-time incidents × 200 000) / hours worked.
               </div>
               <p>
-                Multiplier 200 000 ≈ 100 full-time employees × 40 h × 50 weeks. The same
-                divisor is used by OSHA, BLS, ANSI Z16.4, and CSA Z1000.
+                Multiplier 200 000 ≈ 100 full-time employees × 40 h × 50 weeks. The same divisor is
+                used by OSHA, BLS, ANSI Z16.4, and CSA Z1000.
               </p>
             </CardContent>
           </Card>
@@ -350,7 +348,7 @@ export default async function HoursPage() {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <span className="rounded-md border border-slate-200 bg-white px-2.5 py-1">
-      <span className="text-xs uppercase tracking-wide text-slate-500">{label}: </span>
+      <span className="text-xs tracking-wide text-slate-500 uppercase">{label}: </span>
       <span className="font-medium tabular-nums">{value}</span>
     </span>
   )

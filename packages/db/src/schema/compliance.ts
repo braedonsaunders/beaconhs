@@ -16,7 +16,18 @@
 // worker scan later); `compliance_dispatches` is the recurring-fire ledger.
 
 import { relations } from 'drizzle-orm'
-import { date, index, integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
+import {
+  date,
+  index,
+  integer,
+  jsonb,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core'
 import { id, softDelete, timestamps } from './_helpers'
 import { tenants, tenantUsers } from './core'
 import { people } from './org'

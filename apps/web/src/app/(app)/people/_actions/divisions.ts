@@ -8,10 +8,7 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { and, eq, inArray, sql } from 'drizzle-orm'
-import {
-  personDivisionMemberships,
-  personDivisions,
-} from '@beaconhs/db/schema'
+import { personDivisionMemberships, personDivisions } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
@@ -61,11 +58,7 @@ export async function updateDivision(formData: FormData): Promise<void> {
   if (!name) return
   if (parentDivisionId === id) return // can't be own parent
   const before = await ctx.db(async (tx) => {
-    const [r] = await tx
-      .select()
-      .from(personDivisions)
-      .where(eq(personDivisions.id, id))
-      .limit(1)
+    const [r] = await tx.select().from(personDivisions).where(eq(personDivisions.id, id)).limit(1)
     return r
   })
   await ctx.db((tx) =>
@@ -92,11 +85,7 @@ export async function deleteDivision(formData: FormData): Promise<void> {
   const id = String(formData.get('id') ?? '')
   if (!id) return
   const before = await ctx.db(async (tx) => {
-    const [r] = await tx
-      .select()
-      .from(personDivisions)
-      .where(eq(personDivisions.id, id))
-      .limit(1)
+    const [r] = await tx.select().from(personDivisions).where(eq(personDivisions.id, id)).limit(1)
     const members = await tx
       .select({ personId: personDivisionMemberships.personId })
       .from(personDivisionMemberships)
@@ -221,11 +210,7 @@ export async function togglePersonInDivision(formData: FormData): Promise<void> 
   revalidatePath(`/people/divisions/${divisionId}`)
 }
 
-async function refreshDivisionCache(
-  tx: any,
-  tenantId: string,
-  personIds: string[],
-): Promise<void> {
+async function refreshDivisionCache(tx: any, tenantId: string, personIds: string[]): Promise<void> {
   if (personIds.length === 0) return
   await tx.execute(sql`
     UPDATE people
@@ -234,7 +219,10 @@ async function refreshDivisionCache(
       FROM person_division_memberships
       WHERE person_id = people.id AND tenant_id = ${tenantId}
     ), '[]'::jsonb)
-    WHERE id IN (${sql.join(personIds.map((id) => sql`${id}::uuid`), sql`, `)})
+    WHERE id IN (${sql.join(
+      personIds.map((id) => sql`${id}::uuid`),
+      sql`, `,
+    )})
       AND tenant_id = ${tenantId}
   `)
 }

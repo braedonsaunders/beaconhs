@@ -16,11 +16,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
-import {
-  people,
-  trainingCourses,
-  trainingRecords,
-} from '@beaconhs/db/schema'
+import { people, trainingCourses, trainingRecords } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { csvRow } from '@/lib/csv'
@@ -39,9 +35,7 @@ function makeBatchId(): string {
   return `bat_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
 }
 
-function safeTenantUserId(
-  ctx: Awaited<ReturnType<typeof requireRequestContext>>,
-): string | null {
+function safeTenantUserId(ctx: Awaited<ReturnType<typeof requireRequestContext>>): string | null {
   const id = ctx.membership?.id
   if (!id || id === 'super-admin') return null
   return id
@@ -84,9 +78,7 @@ export async function bulkRenewTrainingRecords(args: {
       })
       .from(trainingRecords)
       .innerJoin(trainingCourses, eq(trainingCourses.id, trainingRecords.courseId))
-      .where(
-        and(inArray(trainingRecords.id, ids), isNull(trainingRecords.deletedAt)),
-      )
+      .where(and(inArray(trainingRecords.id, ids), isNull(trainingRecords.deletedAt)))
     const skipped = ids.length - rows.length
     if (rows.length === 0) return { updated: 0, skipped }
 
@@ -99,9 +91,7 @@ export async function bulkRenewTrainingRecords(args: {
       score: record.score,
       grade: record.grade,
       completedOn: today,
-      expiresOn: course.validForMonths
-        ? addMonthsIso(today, course.validForMonths)
-        : null,
+      expiresOn: course.validForMonths ? addMonthsIso(today, course.validForMonths) : null,
       instructor: record.instructor,
       evaluatorPersonId: record.evaluatorPersonId,
       certificateType: null,

@@ -22,7 +22,10 @@ function flattenForExport(html: string): string {
     .replace(/<span[^>]*data-deletion[^>]*>[\s\S]*?<\/span>/gi, '')
     .replace(/<span[^>]*data-insertion[^>]*>([\s\S]*?)<\/span>/gi, '$1')
     .replace(/<span[^>]*data-comment-id[^>]*>([\s\S]*?)<\/span>/gi, '$1')
-    .replace(/<div[^>]*data-page-break[^>]*>\s*<\/div>/gi, '<br style="page-break-after: always" />')
+    .replace(
+      /<div[^>]*data-page-break[^>]*>\s*<\/div>/gi,
+      '<br style="page-break-after: always" />',
+    )
     .replace(/<div[^>]*data-page-break[^>]*\/?>/gi, '<br style="page-break-after: always" />')
 }
 

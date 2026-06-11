@@ -226,7 +226,10 @@ export const documentBooks = pgTable(
     publishedAt: timestamp('published_at', { withTimezone: true }),
     publishedByUserId: text('published_by_user_id').references(() => users.id),
     // Legacy jsonb representation — kept for back-compat; new readers use document_book_items.
-    contents: jsonb('contents').$type<{ documentId: string; versionId?: string }[]>().default([]).notNull(),
+    contents: jsonb('contents')
+      .$type<{ documentId: string; versionId?: string }[]>()
+      .default([])
+      .notNull(),
     ...timestamps,
   },
   (t) => ({

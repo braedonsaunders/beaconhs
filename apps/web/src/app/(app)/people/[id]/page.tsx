@@ -228,10 +228,7 @@ export default async function PersonDetailPage({
       tx
         .select({ membership: personDivisionMemberships, division: personDivisions })
         .from(personDivisionMemberships)
-        .innerJoin(
-          personDivisions,
-          eq(personDivisions.id, personDivisionMemberships.divisionId),
-        )
+        .innerJoin(personDivisions, eq(personDivisions.id, personDivisionMemberships.divisionId))
         .where(eq(personDivisionMemberships.personId, id))
         .orderBy(asc(personDivisions.name)),
       tx.select().from(personDivisions).orderBy(asc(personDivisions.name)),
@@ -294,9 +291,7 @@ export default async function PersonDetailPage({
         ? await tx
             .select()
             .from(jobTitleTaskAcknowledgments)
-            .where(
-              inArray(jobTitleTaskAcknowledgments.taskId, taskIds),
-            )
+            .where(inArray(jobTitleTaskAcknowledgments.taskId, taskIds))
         : []
     const acksForThisPerson = acksForPerson.filter((a) => a.personId === id)
 
@@ -361,7 +356,13 @@ export default async function PersonDetailPage({
       const exp = t.record.expiresOn ? new Date(t.record.expiresOn) : null
       const daysLeft = exp ? Math.round((exp.getTime() - today.getTime()) / 86_400_000) : null
       const status: 'ok' | 'expiring' | 'expired' | 'no_expiry' =
-        daysLeft === null ? 'no_expiry' : daysLeft < 0 ? 'expired' : daysLeft <= 30 ? 'expiring' : 'ok'
+        daysLeft === null
+          ? 'no_expiry'
+          : daysLeft < 0
+            ? 'expired'
+            : daysLeft <= 30
+              ? 'expiring'
+              : 'ok'
       return { ...t, daysLeft, status }
     })
     .sort((a, b) => {
@@ -374,7 +375,13 @@ export default async function PersonDetailPage({
       const exp = s.assignment.expiresOn ? new Date(s.assignment.expiresOn) : null
       const daysLeft = exp ? Math.round((exp.getTime() - today.getTime()) / 86_400_000) : null
       const status: 'ok' | 'expiring' | 'expired' | 'no_expiry' =
-        daysLeft === null ? 'no_expiry' : daysLeft < 0 ? 'expired' : daysLeft <= 30 ? 'expiring' : 'ok'
+        daysLeft === null
+          ? 'no_expiry'
+          : daysLeft < 0
+            ? 'expired'
+            : daysLeft <= 30
+              ? 'expiring'
+              : 'ok'
       return { ...s, daysLeft, status }
     })
     .sort((a, b) => {
@@ -385,7 +392,10 @@ export default async function PersonDetailPage({
   const expiredCount = trainingWithStatus.filter((t) => t.status === 'expired').length
   const expiringCount = trainingWithStatus.filter((t) => t.status === 'expiring').length
 
-  const incidentMap = new Map<string, { incident: typeof incidents.$inferSelect; injured: boolean }>()
+  const incidentMap = new Map<
+    string,
+    { incident: typeof incidents.$inferSelect; injured: boolean }
+  >()
   for (const r of incidentInvolvement)
     incidentMap.set(r.incident.id, { incident: r.incident, injured: false })
   for (const r of injuryRows) {
@@ -394,8 +404,7 @@ export default async function PersonDetailPage({
     else incidentMap.set(r.incident.id, { incident: r.incident, injured: true })
   }
   const allIncidents = Array.from(incidentMap.values()).sort(
-    (a, b) =>
-      new Date(b.incident.occurredAt).getTime() - new Date(a.incident.occurredAt).getTime(),
+    (a, b) => new Date(b.incident.occurredAt).getTime() - new Date(a.incident.occurredAt).getTime(),
   )
 
   const activity = active === 'activity' ? await recentActivityForEntity(ctx, 'person', id, 50) : []
@@ -407,7 +416,9 @@ export default async function PersonDetailPage({
         <DetailHeader
           back={{ href: '/people', label: 'Back to people' }}
           title={`${person.firstName} ${person.lastName}`}
-          subtitle={person.formalName ?? (person.employeeNo ? `Employee ${person.employeeNo}` : undefined)}
+          subtitle={
+            person.formalName ?? (person.employeeNo ? `Employee ${person.employeeNo}` : undefined)
+          }
           badge={
             <Badge variant={person.status === 'active' ? 'success' : 'secondary'}>
               {person.status}
@@ -497,7 +508,7 @@ export default async function PersonDetailPage({
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm">Notes</CardTitle>
                 </CardHeader>
-                <CardContent className="whitespace-pre-wrap pt-0 text-sm text-slate-700">
+                <CardContent className="pt-0 text-sm whitespace-pre-wrap text-slate-700">
                   {person.notes}
                 </CardContent>
               </Card>
@@ -645,11 +656,7 @@ export default async function PersonDetailPage({
             ) : null}
 
             {active === 'groups' ? (
-              <GroupsTab
-                personId={person.id}
-                memberships={personGroupRows}
-                allGroups={allGroups}
-              />
+              <GroupsTab personId={person.id} memberships={personGroupRows} allGroups={allGroups} />
             ) : null}
 
             {active === 'divisions' ? (
@@ -771,11 +778,7 @@ export default async function PersonDetailPage({
                       value={trainingWithStatus.filter((t) => t.status === 'ok').length}
                       tone="success"
                     />
-                    <Stat
-                      label="Expiring within 30 days"
-                      value={expiringCount}
-                      tone="warning"
-                    />
+                    <Stat label="Expiring within 30 days" value={expiringCount} tone="warning" />
                     <Stat label="Expired" value={expiredCount} tone="destructive" />
                   </CardContent>
                 </Card>
@@ -968,10 +971,7 @@ export default async function PersonDetailPage({
                         {ackedDocs.map((row) => (
                           <TableRow key={row.ack.id}>
                             <TableCell className="font-medium">
-                              <Link
-                                href={`/documents/${row.doc.id}`}
-                                className="hover:underline"
-                              >
+                              <Link href={`/documents/${row.doc.id}`} className="hover:underline">
                                 {row.doc.title}
                               </Link>
                             </TableCell>
@@ -1034,9 +1034,7 @@ export default async function PersonDetailPage({
                           <TableRow key={file.id}>
                             <TableCell className="font-medium">{file.label}</TableCell>
                             <TableCell>
-                              <Badge variant="secondary">
-                                {file.kind.replace('_', ' ')}
-                              </Badge>
+                              <Badge variant="secondary">{file.kind.replace('_', ' ')}</Badge>
                             </TableCell>
                             <TableCell className="text-xs text-slate-600">
                               {attachment ? (
@@ -1105,10 +1103,7 @@ export default async function PersonDetailPage({
                         {allIncidents.map(({ incident, injured }) => (
                           <TableRow key={incident.id}>
                             <TableCell className="font-mono text-xs">
-                              <Link
-                                href={`/incidents/${incident.id}`}
-                                className="hover:underline"
-                              >
+                              <Link href={`/incidents/${incident.id}`} className="hover:underline">
                                 {incident.reference}
                               </Link>
                             </TableCell>
@@ -1224,7 +1219,7 @@ export default async function PersonDetailPage({
 function SidebarRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between text-sm">
-      <span className="text-xs uppercase tracking-wide text-slate-500">{label}</span>
+      <span className="text-xs tracking-wide text-slate-500 uppercase">{label}</span>
       <span>{children}</span>
     </div>
   )
@@ -1233,7 +1228,7 @@ function SidebarRow({ label, children }: { label: string; children: React.ReactN
 function ProfileRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col">
-      <dt className="text-xs uppercase tracking-wide text-slate-500">{label}</dt>
+      <dt className="text-xs tracking-wide text-slate-500 uppercase">{label}</dt>
       <dd className="text-slate-900">{children}</dd>
     </div>
   )
@@ -1249,14 +1244,10 @@ function Stat({
   tone: 'success' | 'warning' | 'destructive'
 }) {
   const colour =
-    tone === 'success'
-      ? 'text-emerald-700'
-      : tone === 'warning'
-        ? 'text-amber-700'
-        : 'text-red-700'
+    tone === 'success' ? 'text-emerald-700' : tone === 'warning' ? 'text-amber-700' : 'text-red-700'
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4">
-      <div className="text-xs uppercase tracking-wide text-slate-500">{label}</div>
+      <div className="text-xs tracking-wide text-slate-500 uppercase">{label}</div>
       <div className={`mt-1 text-2xl font-semibold tabular-nums ${colour}`}>{value}</div>
     </div>
   )
@@ -1270,7 +1261,10 @@ function GroupsTab({
   allGroups,
 }: {
   personId: string
-  memberships: { membership: typeof personGroupMemberships.$inferSelect; group: typeof personGroups.$inferSelect }[]
+  memberships: {
+    membership: typeof personGroupMemberships.$inferSelect
+    group: typeof personGroups.$inferSelect
+  }[]
   allGroups: (typeof personGroups.$inferSelect)[]
 }) {
   const memberIds = new Set(memberships.map((m) => m.group.id))
@@ -1294,11 +1288,7 @@ function GroupsTab({
                 <li
                   key={group.id}
                   className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-sm"
-                  style={
-                    group.color
-                      ? { borderColor: group.color, color: group.color }
-                      : undefined
-                  }
+                  style={group.color ? { borderColor: group.color, color: group.color } : undefined}
                 >
                   {group.color ? (
                     <span
@@ -1614,7 +1604,12 @@ function TitleTab({
                         <form action={revokeTitleTaskAck} className="inline">
                           <input type="hidden" name="taskId" value={t.id} />
                           <input type="hidden" name="personId" value={personId} />
-                          <Button type="submit" size="sm" variant="ghost" className="text-emerald-700">
+                          <Button
+                            type="submit"
+                            size="sm"
+                            variant="ghost"
+                            className="text-emerald-700"
+                          >
                             <CheckSquare size={14} />
                           </Button>
                         </form>
@@ -1663,12 +1658,9 @@ function ComplianceTab({
   titleTaskAckedCount: number
   incidentsCount: number
 }) {
-  const trainingPct =
-    trainingTotal === 0 ? null : Math.round((trainingValid / trainingTotal) * 100)
+  const trainingPct = trainingTotal === 0 ? null : Math.round((trainingValid / trainingTotal) * 100)
   const titleTaskPct =
-    titleTaskTotal === 0
-      ? null
-      : Math.round((titleTaskAckedCount / titleTaskTotal) * 100)
+    titleTaskTotal === 0 ? null : Math.round((titleTaskAckedCount / titleTaskTotal) * 100)
   const overdueCount = trainingExpired
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

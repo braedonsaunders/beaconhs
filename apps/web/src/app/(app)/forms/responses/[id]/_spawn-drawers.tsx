@@ -11,14 +11,7 @@
 import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
-import {
-  Button,
-  Input,
-  Label,
-  Select,
-  Textarea,
-  UrlDrawer,
-} from '@beaconhs/ui'
+import { Button, Input, Label, Select, Textarea, UrlDrawer } from '@beaconhs/ui'
 import { toast } from '@/lib/toast'
 import type { SpawnPrefill } from './_spawn-prefill'
 
@@ -30,23 +23,25 @@ type SpawnCAAction = (input: {
   dueOn?: string | null
   siteOrgUnitId?: string | null
   failedFieldKey?: string | null
-}) => Promise<
-  { ok: true; caId: string; reference: string } | { ok: false; error: string }
->
+}) => Promise<{ ok: true; caId: string; reference: string } | { ok: false; error: string }>
 
 type SpawnIncidentAction = (input: {
   responseId: string
   title: string
   description?: string | null
-  type?: 'injury' | 'illness' | 'near_miss' | 'property_damage' | 'environmental' | 'security' | 'other'
+  type?:
+    | 'injury'
+    | 'illness'
+    | 'near_miss'
+    | 'property_damage'
+    | 'environmental'
+    | 'security'
+    | 'other'
   severity?: 'first_aid_only' | 'medical_aid' | 'lost_time' | 'fatality' | 'no_injury'
   occurredAt?: string | null
   siteOrgUnitId?: string | null
   location?: string | null
-}) => Promise<
-  | { ok: true; incidentId: string; reference: string }
-  | { ok: false; error: string }
->
+}) => Promise<{ ok: true; incidentId: string; reference: string } | { ok: false; error: string }>
 
 export type SpawnDrawerKind = 'spawn-ca' | 'spawn-incident' | null
 
@@ -119,8 +114,7 @@ function SpawnCAPADrawer({
   const router = useRouter()
   const [title, setTitle] = useState(prefill.caTitle)
   const [description, setDescription] = useState(prefill.caDescription)
-  const [severity, setSeverity] =
-    useState<(typeof SEVERITIES)[number]>(prefill.caSeverity)
+  const [severity, setSeverity] = useState<(typeof SEVERITIES)[number]>(prefill.caSeverity)
   const [dueOn, setDueOn] = useState<string>('')
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
@@ -214,9 +208,7 @@ function SpawnCAPADrawer({
             <Select
               id="ca-severity"
               value={severity}
-              onChange={(e) =>
-                setSeverity(e.currentTarget.value as (typeof SEVERITIES)[number])
-              }
+              onChange={(e) => setSeverity(e.currentTarget.value as (typeof SEVERITIES)[number])}
             >
               {SEVERITIES.map((s) => (
                 <option key={s} value={s}>
@@ -224,9 +216,7 @@ function SpawnCAPADrawer({
                 </option>
               ))}
             </Select>
-            <p className="text-[11px] text-slate-500">
-              Default chosen from compliance score band.
-            </p>
+            <p className="text-[11px] text-slate-500">Default chosen from compliance score band.</p>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="ca-due">Due on</Label>
@@ -265,11 +255,8 @@ function SpawnIncidentDrawer({
   const [title, setTitle] = useState(prefill.incidentTitle)
   const [description, setDescription] = useState(prefill.incidentDescription)
   const [type, setType] = useState<(typeof INCIDENT_TYPES)[number]>('other')
-  const [severity, setSeverity] =
-    useState<(typeof INCIDENT_SEVERITIES)[number]>('no_injury')
-  const [occurredAt, setOccurredAt] = useState<string>(() =>
-    new Date().toISOString().slice(0, 16),
-  )
+  const [severity, setSeverity] = useState<(typeof INCIDENT_SEVERITIES)[number]>('no_injury')
+  const [occurredAt, setOccurredAt] = useState<string>(() => new Date().toISOString().slice(0, 16))
   const [location, setLocation] = useState<string>('')
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
@@ -360,9 +347,7 @@ function SpawnIncidentDrawer({
             <Select
               id="inc-type"
               value={type}
-              onChange={(e) =>
-                setType(e.currentTarget.value as (typeof INCIDENT_TYPES)[number])
-              }
+              onChange={(e) => setType(e.currentTarget.value as (typeof INCIDENT_TYPES)[number])}
             >
               {INCIDENT_TYPES.map((t) => (
                 <option key={t} value={t}>
@@ -377,9 +362,7 @@ function SpawnIncidentDrawer({
               id="inc-severity"
               value={severity}
               onChange={(e) =>
-                setSeverity(
-                  e.currentTarget.value as (typeof INCIDENT_SEVERITIES)[number],
-                )
+                setSeverity(e.currentTarget.value as (typeof INCIDENT_SEVERITIES)[number])
               }
             >
               {INCIDENT_SEVERITIES.map((s) => (

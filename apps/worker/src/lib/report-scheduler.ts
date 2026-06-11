@@ -46,10 +46,7 @@ export async function scanReportSchedules(now: Date = new Date()): Promise<void>
     // because the worker is idempotent at the schedule-id grain (runs are
     // separate rows).
     await withSuperAdmin(db, async (tx) => {
-      await tx
-        .update(reportSchedules)
-        .set({ nextRunAt: next })
-        .where(eq(reportSchedules.id, s.id))
+      await tx.update(reportSchedules).set({ nextRunAt: next }).where(eq(reportSchedules.id, s.id))
     })
 
     try {

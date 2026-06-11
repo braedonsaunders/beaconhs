@@ -74,10 +74,7 @@ export default async function FrequencyReportPage({
     }),
   )
 
-  const maxRate = rows.reduce(
-    (m, r) => (r.rate != null && r.rate > m ? r.rate : m),
-    0,
-  )
+  const maxRate = rows.reduce((m, r) => (r.rate != null && r.rate > m ? r.rate : m), 0)
 
   return (
     <ListPageLayout
@@ -121,12 +118,10 @@ export default async function FrequencyReportPage({
                   {rows.map((r) => (
                     <TableRow key={r.key}>
                       <TableCell className="font-medium text-slate-900">{r.label}</TableCell>
-                      <TableCell className="text-right tabular-nums text-slate-600">
+                      <TableCell className="text-right text-slate-600 tabular-nums">
                         {r.hours > 0 ? r.hours.toLocaleString() : '—'}
                       </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {r.recordable}
-                      </TableCell>
+                      <TableCell className="text-right tabular-nums">{r.recordable}</TableCell>
                       <TableCell className="text-right">
                         {r.rate == null ? (
                           <span className="text-xs text-slate-400">no hours</span>
@@ -163,10 +158,7 @@ export default async function FrequencyReportPage({
                 value={overallHours.totalHours.toLocaleString()}
                 sub={`${overallHours.periodCount} period${overallHours.periodCount === 1 ? '' : 's'} captured`}
               />
-              <KpiRow
-                label="Recordable incidents"
-                value={overallRecordable.toLocaleString()}
-              />
+              <KpiRow label="Recordable incidents" value={overallRecordable.toLocaleString()} />
               <KpiRow
                 label="TRIR (range)"
                 value={fmtRate(overallTrir)}
@@ -188,8 +180,8 @@ export default async function FrequencyReportPage({
             </CardHeader>
             <CardContent className="space-y-2 text-sm text-slate-600">
               <p>
-                A month is shown as <em>no hours</em> when no incident_hours_periods row covers
-                that window — the rate is mathematically undefined.
+                A month is shown as <em>no hours</em> when no incident_hours_periods row covers that
+                window — the rate is mathematically undefined.
               </p>
               <p>
                 "Recordable" is a property of the linked classification. Toggle the
@@ -232,22 +224,14 @@ function RateBadge({ rate }: { rate: number }) {
   return <Badge variant={variant}>{rate.toFixed(2)}</Badge>
 }
 
-function KpiRow({
-  label,
-  value,
-  sub,
-}: {
-  label: string
-  value: string
-  sub?: string
-}) {
+function KpiRow({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div className="flex items-center justify-between border-b border-slate-100 pb-2 last:border-b-0 last:pb-0">
       <div>
-        <div className="text-xs uppercase tracking-wide text-slate-500">{label}</div>
+        <div className="text-xs tracking-wide text-slate-500 uppercase">{label}</div>
         {sub ? <div className="text-xs text-slate-400">{sub}</div> : null}
       </div>
-      <div className="text-xl font-semibold tabular-nums text-slate-900">{value}</div>
+      <div className="text-xl font-semibold text-slate-900 tabular-nums">{value}</div>
     </div>
   )
 }

@@ -32,7 +32,12 @@ export function Popover({
 }) {
   const triggerRef = React.useRef<HTMLDivElement>(null)
   const panelRef = React.useRef<HTMLDivElement>(null)
-  const [rect, setRect] = React.useState<{ top: number; left: number; width: number; height: number } | null>(null)
+  const [rect, setRect] = React.useState<{
+    top: number
+    left: number
+    width: number
+    height: number
+  } | null>(null)
   const [mounted, setMounted] = React.useState(false)
 
   React.useEffect(() => setMounted(true), [])
@@ -79,7 +84,9 @@ export function Popover({
 
   return (
     <>
-      <div ref={triggerRef} className="contents">{trigger}</div>
+      <div ref={triggerRef} className="contents">
+        {trigger}
+      </div>
       {mounted && rect && typeof document !== 'undefined'
         ? createPortal(
             <AnimatePresence>
@@ -91,7 +98,7 @@ export function Popover({
                   exit={{ opacity: 0, y: side === 'bottom' ? -4 : 4, scale: 0.97 }}
                   transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
                   className={cn(
-                    'fixed z-40 min-w-[12rem] origin-top rounded-md border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xl',
+                    'fixed z-40 min-w-[12rem] origin-top rounded-md border border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-slate-900',
                     className,
                   )}
                   style={{

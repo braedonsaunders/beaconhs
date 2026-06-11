@@ -45,9 +45,7 @@ export const PageBreak = Node.create({
       setPageBreak:
         () =>
         ({ chain }) =>
-          chain()
-            .insertContent({ type: this.name })
-            .run(),
+          chain().insertContent({ type: this.name }).run(),
     }
   },
 })

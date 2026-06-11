@@ -57,12 +57,7 @@ export default async function DashboardPage() {
           isCustomised={isCustomised}
         />
 
-        <DashboardGrid
-          initialLayout={layout}
-          nodes={nodes}
-          role={role}
-          mode="view"
-        />
+        <DashboardGrid initialLayout={layout} nodes={nodes} role={role} mode="view" />
       </div>
     </PageContainer>
   )

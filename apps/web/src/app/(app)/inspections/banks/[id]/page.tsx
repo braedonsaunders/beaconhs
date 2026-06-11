@@ -77,7 +77,9 @@ async function addCriteria(formData: FormData) {
 
   await ctx.db(async (tx) => {
     const [maxRow] = await tx
-      .select({ m: sql<number>`coalesce(max(${inspectionBankCriteria.sequence}), 0)`.mapWith(Number) })
+      .select({
+        m: sql<number>`coalesce(max(${inspectionBankCriteria.sequence}), 0)`.mapWith(Number),
+      })
       .from(inspectionBankCriteria)
       .where(eq(inspectionBankCriteria.bankId, bankId))
     const nextSeq = Number(maxRow?.m ?? 0) + 1
@@ -126,9 +128,7 @@ async function moveCriteria(formData: FormData) {
             : gt(inspectionBankCriteria.sequence, current.sequence),
         ),
       )
-      .orderBy(
-        direction === 'up' ? sql`sequence desc` : sql`sequence asc`,
-      )
+      .orderBy(direction === 'up' ? sql`sequence desc` : sql`sequence asc`)
       .limit(1)
     const swapWith = neighbour[0]
     if (!swapWith) return
@@ -271,10 +271,8 @@ export default async function InspectionBankDetailPage({
               />
               {bank.description ? (
                 <div className="mt-4">
-                  <div className="text-xs uppercase tracking-wide text-slate-500">
-                    Description
-                  </div>
-                  <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">
+                  <div className="text-xs tracking-wide text-slate-500 uppercase">Description</div>
+                  <p className="mt-1 text-sm whitespace-pre-wrap text-slate-700">
                     {bank.description}
                   </p>
                 </div>
@@ -315,7 +313,7 @@ export default async function InspectionBankDetailPage({
                       const isLast = i === criteria.length - 1
                       return (
                         <TableRow key={c.id}>
-                          <TableCell className="font-mono text-xs tabular-nums text-slate-500">
+                          <TableCell className="font-mono text-xs text-slate-500 tabular-nums">
                             {c.sequence}
                           </TableCell>
                           <TableCell>{c.text}</TableCell>

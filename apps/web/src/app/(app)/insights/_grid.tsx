@@ -22,10 +22,9 @@ import {
   type InsightWidgetMeta,
 } from './_widgets'
 
-const Responsive = dynamic(
-  () => import('react-grid-layout').then((m) => m.Responsive),
-  { ssr: false },
-) as unknown as React.ComponentType<any>
+const Responsive = dynamic(() => import('react-grid-layout').then((m) => m.Responsive), {
+  ssr: false,
+}) as unknown as React.ComponentType<any>
 
 type LW = InsightDashboardLayout['widgets'][number]
 const COLS = { lg: 12, md: 12, sm: 6, xs: 4, xxs: 2 }
@@ -94,7 +93,10 @@ export function InsightsGrid({
   function add(meta: InsightWidgetMeta) {
     if (present.has(meta.id)) return
     const maxY = widgets.reduce((m, w) => Math.max(m, w.y + w.h), 0)
-    onChange([...widgets, { id: meta.id, x: 0, y: maxY, w: meta.defaultSize.w, h: meta.defaultSize.h }])
+    onChange([
+      ...widgets,
+      { id: meta.id, x: 0, y: maxY, w: meta.defaultSize.w, h: meta.defaultSize.h },
+    ])
   }
   function remove(id: string) {
     onChange(widgets.filter((w) => w.id !== id))
@@ -105,7 +107,9 @@ export function InsightsGrid({
       <div ref={ref} className="min-w-0">
         {widgets.length === 0 ? (
           <div className="grid h-64 place-items-center rounded-xl border border-dashed border-slate-200 bg-slate-50/40 text-center text-sm text-slate-400">
-            {editing ? 'Add widgets from the library →' : 'This dashboard is empty. Click Customise to add widgets.'}
+            {editing
+              ? 'Add widgets from the library →'
+              : 'This dashboard is empty. Click Customise to add widgets.'}
           </div>
         ) : (
           <Responsive
@@ -117,7 +121,12 @@ export function InsightsGrid({
             rowHeight={48}
             margin={[16, 16]}
             containerPadding={[0, 0]}
-            dragConfig={{ enabled: editing, bounded: false, cancel: '.no-drag,a,button,input,select,textarea', threshold: 3 }}
+            dragConfig={{
+              enabled: editing,
+              bounded: false,
+              cancel: '.no-drag,a,button,input,select,textarea',
+              threshold: 3,
+            }}
             resizeConfig={{ enabled: editing, handles: ['se'] }}
             onDragStop={(n: Layout) => commit(n)}
             onResizeStop={(n: Layout) => commit(n)}
@@ -127,12 +136,12 @@ export function InsightsGrid({
                 <div className="relative h-full w-full">
                   {editing ? (
                     <>
-                      <div className="pointer-events-none absolute inset-0 z-10 rounded-xl ring-1 ring-dashed ring-teal-300/0 transition group-hover/cell:ring-teal-400/80" />
+                      <div className="ring-dashed pointer-events-none absolute inset-0 z-10 rounded-xl ring-1 ring-teal-300/0 transition group-hover/cell:ring-teal-400/80" />
                       <button
                         type="button"
                         onClick={() => remove(w.id)}
                         aria-label="Remove widget"
-                        className="no-drag absolute -right-2 -top-2 z-20 grid h-6 w-6 place-items-center rounded-full border border-rose-200 bg-white text-rose-600 opacity-0 shadow-sm transition hover:bg-rose-50 group-hover/cell:opacity-100"
+                        className="no-drag absolute -top-2 -right-2 z-20 grid h-6 w-6 place-items-center rounded-full border border-rose-200 bg-white text-rose-600 opacity-0 shadow-sm transition group-hover/cell:opacity-100 hover:bg-rose-50"
                       >
                         <X size={12} />
                       </button>
@@ -155,7 +164,13 @@ export function InsightsGrid({
   )
 }
 
-function Palette({ present, onAdd }: { present: Set<string>; onAdd: (w: InsightWidgetMeta) => void }) {
+function Palette({
+  present,
+  onAdd,
+}: {
+  present: Set<string>
+  onAdd: (w: InsightWidgetMeta) => void
+}) {
   const byCategory = new Map<InsightWidgetCategory, InsightWidgetMeta[]>()
   for (const w of INSIGHT_WIDGETS) {
     const arr = byCategory.get(w.category) ?? []
@@ -173,7 +188,7 @@ function Palette({ present, onAdd }: { present: Set<string>; onAdd: (w: InsightW
       <div className="space-y-3">
         {[...byCategory.entries()].map(([cat, widgets]) => (
           <div key={cat}>
-            <h4 className="mb-1 px-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+            <h4 className="mb-1 px-1 text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
               {INSIGHT_CATEGORY_LABELS[cat]}
             </h4>
             <ul className="space-y-1">
@@ -186,12 +201,16 @@ function Palette({ present, onAdd }: { present: Set<string>; onAdd: (w: InsightW
                       onClick={() => onAdd(w)}
                       disabled={added}
                       className={`flex w-full items-start justify-between gap-2 rounded-lg border border-transparent px-2 py-1.5 text-left transition ${
-                        added ? 'cursor-not-allowed bg-slate-50 text-slate-400' : 'hover:border-teal-200 hover:bg-teal-50/50'
+                        added
+                          ? 'cursor-not-allowed bg-slate-50 text-slate-400'
+                          : 'hover:border-teal-200 hover:bg-teal-50/50'
                       }`}
                     >
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-xs font-medium text-slate-800">{w.label}</div>
-                        <div className="line-clamp-2 text-[10px] text-slate-500">{w.description}</div>
+                        <div className="line-clamp-2 text-[10px] text-slate-500">
+                          {w.description}
+                        </div>
                       </div>
                       {added ? (
                         <span className="shrink-0 text-[10px] text-slate-400">added</span>

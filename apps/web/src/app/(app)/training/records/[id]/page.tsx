@@ -281,10 +281,7 @@ export default async function TrainingRecordPage({
                 {
                   label: 'Person',
                   value: (
-                    <Link
-                      href={`/people/${person.id}`}
-                      className="text-teal-700 hover:underline"
-                    >
+                    <Link href={`/people/${person.id}`} className="text-teal-700 hover:underline">
                       {person.firstName} {person.lastName}
                     </Link>
                   ),
@@ -314,7 +311,7 @@ export default async function TrainingRecordPage({
                   <CardTitle>Details</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="whitespace-pre-wrap text-sm text-slate-700">{record.details}</p>
+                  <p className="text-sm whitespace-pre-wrap text-slate-700">{record.details}</p>
                 </CardContent>
               </Card>
             ) : null}
@@ -324,7 +321,7 @@ export default async function TrainingRecordPage({
                   <CardTitle>Notes</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="whitespace-pre-wrap text-sm text-slate-700">{record.notes}</p>
+                  <p className="text-sm whitespace-pre-wrap text-slate-700">{record.notes}</p>
                 </CardContent>
               </Card>
             ) : null}
@@ -355,18 +352,12 @@ export default async function TrainingRecordPage({
                   <Input name="instructor" defaultValue={record.instructor ?? ''} />
                 </Field>
                 <Field label="Grade %">
-                  <Input
-                    name="grade"
-                    type="number"
-                    min="0"
-                    max="100"
-                    placeholder="optional"
-                  />
+                  <Input name="grade" type="number" min="0" max="100" placeholder="optional" />
                 </Field>
                 <Field label="Notes" className="sm:col-span-2">
                   <Textarea name="notes" rows={2} placeholder="What was renewed?" />
                 </Field>
-                <div className="sm:col-span-2 flex justify-end">
+                <div className="flex justify-end sm:col-span-2">
                   <Button type="submit">
                     <RotateCcw size={14} /> Renew
                   </Button>
@@ -562,7 +553,7 @@ function WalletCardPreview({
       <div className="w-[340px] rounded-xl border-2 border-teal-700 bg-gradient-to-br from-teal-50 to-white p-5 shadow-md">
         <div className="mb-3 flex items-start justify-between">
           <div>
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-teal-700">
+            <div className="text-[10px] font-semibold tracking-wider text-teal-700 uppercase">
               Certificate of Training
             </div>
             <div className="mt-0.5 text-base font-bold text-slate-900">
@@ -585,7 +576,7 @@ function WalletCardPreview({
           <Cell label="Instructor">{instructor ?? '—'}</Cell>
         </div>
         {verifyToken ? (
-          <div className="mt-3 border-t border-teal-200 pt-2 text-center text-[10px] font-mono text-slate-600">
+          <div className="mt-3 border-t border-teal-200 pt-2 text-center font-mono text-[10px] text-slate-600">
             Verify: {verifyToken.slice(0, 16)}…
           </div>
         ) : null}
@@ -597,7 +588,7 @@ function WalletCardPreview({
 function Cell({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="rounded bg-white/60 p-1.5">
-      <div className="text-[9px] uppercase tracking-wide text-teal-700">{label}</div>
+      <div className="text-[9px] tracking-wide text-teal-700 uppercase">{label}</div>
       <div className="text-slate-900">{children}</div>
     </div>
   )

@@ -66,10 +66,7 @@ import { pickString } from '@/lib/list-params'
 import { WorkflowPanel, type WorkflowStepProp } from './_workflow-panel'
 import { FlowApprovalsPanel } from './_flow-approvals'
 import { getPendingFlowGates } from './_flow-gate-actions'
-import {
-  createCorrectiveActionFromResponse,
-  createIncidentFromResponse,
-} from './_spawn-actions'
+import { createCorrectiveActionFromResponse, createIncidentFromResponse } from './_spawn-actions'
 import { buildSpawnPrefill, labelForField } from './_spawn-prefill'
 import { SpawnDrawers, type SpawnDrawerKind } from './_spawn-drawers'
 
@@ -197,10 +194,7 @@ export default async function FormResponsePage({
         .leftJoin(user, eq(user.id, tenantUsers.userId))
         .where(eq(formResponseComments.responseId, id))
         .orderBy(desc(formResponseComments.createdAt)),
-      tx
-        .select()
-        .from(formResponseScores)
-        .where(eq(formResponseScores.responseId, id)),
+      tx.select().from(formResponseScores).where(eq(formResponseScores.responseId, id)),
       // Show any CAPAs / incidents spawned from this response on the detail
       // page so the "Create CAPA" button is contextual ("Already spawned 2").
       tx
@@ -247,11 +241,7 @@ export default async function FormResponsePage({
   // Resolve picker-bound entity attributes so `entity_attr` formula fields
   // in the response viewer show the same live values the filler did.
   // RLS-scoped via the request context.
-  const entitiesByField = await loadEntitiesForPickers(
-    ctx,
-    version.schema,
-    response.data,
-  )
+  const entitiesByField = await loadEntitiesForPickers(ctx, version.schema, response.data)
 
   const failCount = scoreRows.filter((r) => r.score === 0).length
   const passCount = scoreRows.filter((r) => r.score === 1).length
@@ -264,20 +254,12 @@ export default async function FormResponsePage({
   for (const sec of version.schema.sections) {
     if (!sec.repeating) continue
     const v = response.data[sec.id]
-    evalRowsForScore[sec.id] = Array.isArray(v)
-      ? (v as Array<Record<string, unknown>>)
-      : []
+    evalRowsForScore[sec.id] = Array.isArray(v) ? (v as Array<Record<string, unknown>>) : []
   }
-  const liveVerdict = computeFormScore(
-    version.schema,
-    response.data,
-    evalRowsForScore,
-  )
-  const persistedScore =
-    response.complianceScore != null ? Number(response.complianceScore) : null
+  const liveVerdict = computeFormScore(version.schema, response.data, evalRowsForScore)
+  const persistedScore = response.complianceScore != null ? Number(response.complianceScore) : null
   const complianceScore = persistedScore ?? liveVerdict.score
-  const complianceStatus =
-    response.complianceStatus ?? liveVerdict.status
+  const complianceStatus = response.complianceStatus ?? liveVerdict.status
   const failedFieldKeys = liveVerdict.failedFieldKeys
   const referenceShort = id.slice(0, 8)
   const spawnPrefill = buildSpawnPrefill({
@@ -311,8 +293,7 @@ export default async function FormResponsePage({
       (joined?.signerPerson
         ? `${joined.signerPerson.firstName} ${joined.signerPerson.lastName}`
         : null)
-    const rejectedByName =
-      joined?.rejectorUser?.name ?? joined?.rejectorTu?.displayName ?? null
+    const rejectedByName = joined?.rejectorUser?.name ?? joined?.rejectorTu?.displayName ?? null
     const assigneeLabel =
       wf.assignee.type === 'literal'
         ? wf.assignee.userId
@@ -339,8 +320,7 @@ export default async function FormResponsePage({
 
   // The form's schema may declare needs-follow-up logic in metadata.
   const schemaMeta = (version.schema as any)?.metadata ?? {}
-  const flagsFollowup =
-    !!schemaMeta.needsFollowUpOnFail && failCount > 0
+  const flagsFollowup = !!schemaMeta.needsFollowUpOnFail && failCount > 0
 
   const supportsReopen = response.status === 'closed' || response.status === 'rejected'
 
@@ -371,22 +351,21 @@ export default async function FormResponsePage({
               >
                 {response.status.replace('_', ' ')}
               </Badge>
-              <ComplianceBadge
-                status={complianceStatus}
-                score={complianceScore}
-              />
+              <ComplianceBadge status={complianceStatus} score={complianceScore} />
             </div>
           }
           actions={
             <>
-              <Link href={`${basePath}?drawer=spawn-ca${active === 'response' ? '' : `&tab=${active}`}`}>
-                <Button
-                  variant={complianceStatus === 'non_compliant' ? 'default' : 'outline'}
-                >
+              <Link
+                href={`${basePath}?drawer=spawn-ca${active === 'response' ? '' : `&tab=${active}`}`}
+              >
+                <Button variant={complianceStatus === 'non_compliant' ? 'default' : 'outline'}>
                   <Plus size={14} /> Create CAPA
                 </Button>
               </Link>
-              <Link href={`${basePath}?drawer=spawn-incident${active === 'response' ? '' : `&tab=${active}`}`}>
+              <Link
+                href={`${basePath}?drawer=spawn-incident${active === 'response' ? '' : `&tab=${active}`}`}
+              >
                 <Button variant="outline">
                   <ShieldAlert size={14} /> Create incident
                 </Button>
@@ -413,17 +392,17 @@ export default async function FormResponsePage({
           <Alert variant="destructive">
             <AlertTitle>Non-compliant response</AlertTitle>
             <AlertDescription>
-              Score {complianceScore.toFixed(1)} · {failedFieldKeys.length} failed
-              check{failedFieldKeys.length === 1 ? '' : 's'}. Spawn a corrective
-              action to address each failure.
+              Score {complianceScore.toFixed(1)} · {failedFieldKeys.length} failed check
+              {failedFieldKeys.length === 1 ? '' : 's'}. Spawn a corrective action to address each
+              failure.
             </AlertDescription>
           </Alert>
         ) : flagsFollowup ? (
           <Alert variant="warning">
             <AlertTitle>Follow-up required</AlertTitle>
             <AlertDescription>
-              This response has {failCount} failing item{failCount === 1 ? '' : 's'} and the template
-              is configured to require a corrective action.
+              This response has {failCount} failing item{failCount === 1 ? '' : 's'} and the
+              template is configured to require a corrective action.
             </AlertDescription>
           </Alert>
         ) : null
@@ -525,12 +504,12 @@ export default async function FormResponsePage({
               </Section>
             ) : null}
 
-            {(spawnedCAs.length > 0 || spawnedIncidents.length > 0) ? (
+            {spawnedCAs.length > 0 || spawnedIncidents.length > 0 ? (
               <Section title="Spawned from this response">
                 <div className="space-y-3 text-sm">
                   {spawnedCAs.length > 0 ? (
                     <div>
-                      <div className="mb-1 text-xs uppercase tracking-wide text-slate-500">
+                      <div className="mb-1 text-xs tracking-wide text-slate-500 uppercase">
                         Corrective actions ({spawnedCAs.length})
                       </div>
                       <ul className="space-y-1.5">
@@ -555,7 +534,7 @@ export default async function FormResponsePage({
                   ) : null}
                   {spawnedIncidents.length > 0 ? (
                     <div>
-                      <div className="mb-1 text-xs uppercase tracking-wide text-slate-500">
+                      <div className="mb-1 text-xs tracking-wide text-slate-500 uppercase">
                         Incidents ({spawnedIncidents.length})
                       </div>
                       <ul className="space-y-1.5">
@@ -775,15 +754,13 @@ function ComplianceBadge({
   )
 }
 
-function renderFlat(
-  sec: any,
-  values: Record<string, unknown>,
-  evalCtx: EvalContext,
-) {
+function renderFlat(sec: any, values: Record<string, unknown>, evalCtx: EvalContext) {
   if (sec.fields.length === 0) return <p className="text-sm text-slate-500">No fields.</p>
   const visible = sec.fields.filter((f: any) => !f.showIf || evaluateLogicRule(f.showIf, evalCtx))
   if (visible.length === 0) {
-    return <p className="text-sm text-slate-500">All fields in this section are conditionally hidden.</p>
+    return (
+      <p className="text-sm text-slate-500">All fields in this section are conditionally hidden.</p>
+    )
   }
 
   // A single field's label/value cell — reused across all layout modes.
@@ -794,7 +771,7 @@ function renderFlat(
     }
     return (
       <div className="flex min-w-0 flex-col">
-        <dt className="text-xs uppercase tracking-wide text-slate-500">{f.label?.en ?? f.id}</dt>
+        <dt className="text-xs tracking-wide text-slate-500 uppercase">{f.label?.en ?? f.id}</dt>
         <dd className="text-slate-900">{renderValue(f, raw, evalCtx.entities)}</dd>
       </div>
     )
@@ -852,11 +829,7 @@ function renderFlat(
   )
 }
 
-function renderRepeating(
-  sec: any,
-  values: Record<string, unknown>,
-  evalCtx: EvalContext,
-) {
+function renderRepeating(sec: any, values: Record<string, unknown>, evalCtx: EvalContext) {
   const rows = (values[sec.id] as Array<Record<string, unknown>> | undefined) ?? []
   if (rows.length === 0) return <p className="text-sm text-slate-500">No rows recorded.</p>
   return (
@@ -866,7 +839,7 @@ function renderRepeating(
         const rowCtx: EvalContext = { ...evalCtx, values: { ...evalCtx.values, ...row } }
         return (
           <li key={i} className="rounded-md border border-slate-200 p-3">
-            <div className="mb-2 text-xs uppercase tracking-wide text-slate-500">Row {i + 1}</div>
+            <div className="mb-2 text-xs tracking-wide text-slate-500 uppercase">Row {i + 1}</div>
             {renderFlat(sec, row, rowCtx)}
           </li>
         )
@@ -898,7 +871,7 @@ function renderValue(
 ) {
   const type = field.type
   // Metric blocks are display-only (live aggregates) — nothing is stored.
-  if (type === 'metric') return <span className="italic text-slate-400">live metric</span>
+  if (type === 'metric') return <span className="text-slate-400 italic">live metric</span>
   if (raw === undefined || raw === null || raw === '') {
     return <span className="text-slate-400">—</span>
   }
@@ -914,7 +887,8 @@ function renderValue(
     }
     case 'gps': {
       const v = raw as { lat?: number; lng?: number; accuracy?: number }
-      if (typeof v.lat !== 'number' || typeof v.lng !== 'number') return <span className="text-slate-400">—</span>
+      if (typeof v.lat !== 'number' || typeof v.lng !== 'number')
+        return <span className="text-slate-400">—</span>
       return (
         <a
           href={`https://www.google.com/maps?q=${v.lat},${v.lng}`}
@@ -940,8 +914,7 @@ function renderValue(
         <ul className="space-y-0.5 text-sm">
           {entries.map(([label, val]) => (
             <li key={label}>
-              <span className="text-slate-500">{label}:</span>{' '}
-              <strong>{scaleLabel(val)}</strong>
+              <span className="text-slate-500">{label}:</span> <strong>{scaleLabel(val)}</strong>
             </li>
           ))}
         </ul>
@@ -976,7 +949,12 @@ function renderValue(
         <div className="space-y-1 text-sm">
           <div className="text-xs text-slate-500">
             {n} photo{n === 1 ? '' : 's'}
-            {a ? <> · risk <strong className="text-slate-700">{a.overallRisk}</strong></> : null}
+            {a ? (
+              <>
+                {' '}
+                · risk <strong className="text-slate-700">{a.overallRisk}</strong>
+              </>
+            ) : null}
           </div>
           {a?.summary ? <p className="text-slate-600">{a.summary}</p> : null}
           {a?.hazards?.length ? (
@@ -1141,7 +1119,12 @@ function renderValue(
         <ul className="space-y-1">
           {files.map((f, i) => (
             <li key={f.attachmentId ?? i}>
-              <a href={f.url} target="_blank" rel="noreferrer" className="text-teal-700 hover:underline">
+              <a
+                href={f.url}
+                target="_blank"
+                rel="noreferrer"
+                className="text-teal-700 hover:underline"
+              >
                 {f.filename ?? 'attachment'}
               </a>
             </li>
@@ -1205,7 +1188,7 @@ function renderTableValue(rawConfig: Record<string, unknown> | undefined, raw: u
           {rows.map((row, i) => (
             <tr key={i} className="border-b border-slate-100 last:border-b-0">
               {rowMode === 'fixed' ? (
-                <td className="whitespace-nowrap px-2 py-1 text-xs font-medium text-slate-700">
+                <td className="px-2 py-1 text-xs font-medium whitespace-nowrap text-slate-700">
                   {fixedRows[i]?.label ?? `Row ${i + 1}`}
                 </td>
               ) : null}

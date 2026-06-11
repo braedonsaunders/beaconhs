@@ -10,7 +10,10 @@ import { type ObligationKind, kindLabel } from './obligations/_meta'
 
 type Ctx = Awaited<ReturnType<typeof requireRequestContext>>
 
-const liveFilter = () => [isNull(complianceObligations.deletedAt), ne(complianceObligations.status, 'archived')]
+const liveFilter = () => [
+  isNull(complianceObligations.deletedAt),
+  ne(complianceObligations.status, 'archived'),
+]
 
 export type RollupRow = {
   kind: ObligationKind
@@ -48,7 +51,8 @@ export async function obligationRollup(ctx: Ctx): Promise<RollupRow[]> {
       total: Number(r.total),
       completed: Number(r.completed),
       overdue: Number(r.overdue),
-      percent: Number(r.total) === 0 ? 0 : Math.round((Number(r.completed) / Number(r.total)) * 100),
+      percent:
+        Number(r.total) === 0 ? 0 : Math.round((Number(r.completed) / Number(r.total)) * 100),
     }))
     .sort((a, b) => b.overdue - a.overdue || a.percent - b.percent)
 }
@@ -77,11 +81,16 @@ export async function personCompliance(ctx: Ctx, personId: string): Promise<Pers
       .from(complianceStatus)
       .innerJoin(complianceObligations, eq(complianceObligations.id, complianceStatus.obligationId))
       .where(
-        and(eq(complianceStatus.tenantId, ctx.tenantId), eq(complianceStatus.personId, personId), ...liveFilter()),
+        and(
+          eq(complianceStatus.tenantId, ctx.tenantId),
+          eq(complianceStatus.personId, personId),
+          ...liveFilter(),
+        ),
       )
       .limit(1000),
   )
-  const rank = (s: string) => (s === 'overdue' || s === 'expiring' ? 0 : s === 'pending' ? 1 : s === 'in_progress' ? 2 : 3)
+  const rank = (s: string) =>
+    s === 'overdue' || s === 'expiring' ? 0 : s === 'pending' ? 1 : s === 'in_progress' ? 2 : 3
   return rows
     .map((r) => ({
       kind: r.kind as ObligationKind,
@@ -122,7 +131,13 @@ export async function agingFromStatus(ctx: Ctx): Promise<AgingRow[]> {
   const t30 = iso(new Date(today.getTime() - 30 * 864e5))
   const collapsed = new Map<string, AgingRow>()
   for (const r of rows) {
-    const bucket: AgingBucket = !r.dueOn ? 'no_date' : r.dueOn >= t7 ? '0_7' : r.dueOn >= t30 ? '7_30' : '30_plus'
+    const bucket: AgingBucket = !r.dueOn
+      ? 'no_date'
+      : r.dueOn >= t7
+        ? '0_7'
+        : r.dueOn >= t30
+          ? '7_30'
+          : '30_plus'
     const key = `${r.kind}::${bucket}`
     const cur = collapsed.get(key) ?? { kind: r.kind as ObligationKind, bucket, count: 0 }
     cur.count += 1

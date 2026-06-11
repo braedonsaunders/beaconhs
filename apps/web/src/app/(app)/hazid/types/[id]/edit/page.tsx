@@ -56,7 +56,10 @@ export default async function EditAssessmentTypePage({
   return (
     <PageContainer>
       <div className="max-w-2xl space-y-6">
-        <DetailHeader back={{ href: `/hazid/types/${id}`, label: 'Back' }} title="Edit assessment type" />
+        <DetailHeader
+          back={{ href: `/hazid/types/${id}`, label: 'Back' }}
+          title="Edit assessment type"
+        />
         <Card>
           <CardContent className="pt-6">
             <form action={update} className="space-y-4">
@@ -88,11 +91,17 @@ export default async function EditAssessmentTypePage({
                 </Select>
               </div>
               <fieldset className="space-y-2 rounded-md border border-slate-200 p-3">
-                <legend className="px-1 text-xs font-medium text-slate-500">Enable sub-sections</legend>
+                <legend className="px-1 text-xs font-medium text-slate-500">
+                  Enable sub-sections
+                </legend>
                 <Check name="hasTasks" label="Tasks" defaultChecked={row.hasTasks} />
                 <Check name="hasHazards" label="Hazards" defaultChecked={row.hasHazards} />
                 <Check name="hasPPE" label="PPE" defaultChecked={row.hasPPE} />
-                <Check name="hasQuestions" label="Questions & Answers" defaultChecked={row.hasQuestions} />
+                <Check
+                  name="hasQuestions"
+                  label="Questions & Answers"
+                  defaultChecked={row.hasQuestions}
+                />
                 <Check name="hasWAH" label="Fall Protection" defaultChecked={row.hasWAH} />
                 <Check name="hasCS" label="Confined Space" defaultChecked={row.hasCS} />
                 <Check name="hasArcFlash" label="Arc Flash" defaultChecked={row.hasArcFlash} />
@@ -119,7 +128,15 @@ export default async function EditAssessmentTypePage({
   )
 }
 
-function Check({ name, label, defaultChecked }: { name: string; label: string; defaultChecked?: boolean }) {
+function Check({
+  name,
+  label,
+  defaultChecked,
+}: {
+  name: string
+  label: string
+  defaultChecked?: boolean
+}) {
   return (
     <label className="flex items-center gap-2 text-sm">
       <input

@@ -43,7 +43,8 @@ export const Indent = Extension.create({
 
   addCommands() {
     const types = this.options.types
-    const shift = (delta: number) =>
+    const shift =
+      (delta: number) =>
       ({ editor, commands }: { editor: any; commands: any }) =>
         types.every((type) => {
           if (!editor.isActive(type)) return true

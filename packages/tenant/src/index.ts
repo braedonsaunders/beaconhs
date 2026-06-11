@@ -89,7 +89,11 @@ export function canSeeSite(ctx: RequestContext, siteId: string | null): boolean 
 // 'self' scope: a worker should only see records where they are the subject/submitter.
 export function selfOnlyFilter(
   ctx: RequestContext,
-): { type: 'tenant' } | { type: 'self' } | { type: 'sites'; siteIds: string[] } | { type: 'crews'; crewIds: string[] } {
+):
+  | { type: 'tenant' }
+  | { type: 'self' }
+  | { type: 'sites'; siteIds: string[] }
+  | { type: 'crews'; crewIds: string[] } {
   if (ctx.isSuperAdmin) return { type: 'tenant' }
   // Take the widest scope the user has.
   let widest: RoleScope | null = null

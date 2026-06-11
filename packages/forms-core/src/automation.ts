@@ -207,11 +207,7 @@ export type AutomationPlan = { actions: ActionData[]; gates: PlannedGate[] }
 // Shared traversal: from each start node, collect ordered Actions and pause at
 // Gates. Conditions branch then/else; gates pause (their approve/reject branch
 // is resumed later via `planFromGate`).
-function collect(
-  graph: AutomationGraph,
-  evalCtx: EvalContext,
-  startIds: string[],
-): AutomationPlan {
+function collect(graph: AutomationGraph, evalCtx: EvalContext, startIds: string[]): AutomationPlan {
   const byId = new Map(graph.nodes.map((n) => [n.id, n]))
   const out = (id: string) => graph.edges.filter((e) => e.source === id)
   const actions: ActionData[] = []

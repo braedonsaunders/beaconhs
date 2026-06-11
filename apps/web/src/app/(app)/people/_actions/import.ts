@@ -32,9 +32,7 @@ export type ImportResult = {
   errors: { line: number; reason: string }[]
 }
 
-export async function importPeopleCsv(args: {
-  rows: ImportRow[]
-}): Promise<ImportResult> {
+export async function importPeopleCsv(args: { rows: ImportRow[] }): Promise<ImportResult> {
   const ctx = await requireRequestContext()
   const batchId = `imp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
 
@@ -71,8 +69,8 @@ export async function importPeopleCsv(args: {
       skipped++
       continue
     }
-    const deptId = row.department ? deptByName.get(row.department.toLowerCase()) ?? null : null
-    const tradeId = row.trade ? tradeByName.get(row.trade.toLowerCase()) ?? null : null
+    const deptId = row.department ? (deptByName.get(row.department.toLowerCase()) ?? null) : null
+    const tradeId = row.trade ? (tradeByName.get(row.trade.toLowerCase()) ?? null) : null
 
     try {
       const [inserted] = await ctx.db((tx) =>

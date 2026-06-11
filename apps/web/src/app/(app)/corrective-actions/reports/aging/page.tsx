@@ -1,17 +1,8 @@
 import Link from 'next/link'
 import { Hourglass } from 'lucide-react'
 import { and, asc, eq, inArray, sql } from 'drizzle-orm'
-import {
-  Badge,
-  EmptyState,
-  PageHeader,
-} from '@beaconhs/ui'
-import {
-  correctiveActions,
-  orgUnits,
-  tenantUsers,
-  user,
-} from '@beaconhs/db/schema'
+import { Badge, EmptyState, PageHeader } from '@beaconhs/ui'
+import { correctiveActions, orgUnits, tenantUsers, user } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { ListPageLayout } from '@/components/page-layout'
 import { CorrectiveActionsSubNav } from '@/components/corrective-actions-sub-nav'
@@ -24,7 +15,12 @@ type Bucket = '<7d' | '7-30d' | '30-60d' | '60+d'
 const BUCKETS: { key: Bucket; label: string; tone: string; help: string }[] = [
   { key: '<7d', label: '< 7 days', tone: 'bg-emerald-100 text-emerald-900', help: 'Fresh' },
   { key: '7-30d', label: '7–30 days', tone: 'bg-amber-100 text-amber-900', help: 'Warming up' },
-  { key: '30-60d', label: '30–60 days', tone: 'bg-orange-100 text-orange-900', help: 'Getting stale' },
+  {
+    key: '30-60d',
+    label: '30–60 days',
+    tone: 'bg-orange-100 text-orange-900',
+    help: 'Getting stale',
+  },
   { key: '60+d', label: '60+ days', tone: 'bg-red-100 text-red-900', help: 'Hot potato' },
 ]
 
@@ -71,9 +67,7 @@ export default async function AgingReport() {
       .leftJoin(tenantUsers, eq(tenantUsers.id, correctiveActions.ownerTenantUserId))
       .leftJoin(user, eq(user.id, tenantUsers.userId))
       .leftJoin(orgUnits, eq(orgUnits.id, correctiveActions.siteOrgUnitId))
-      .where(
-        inArray(correctiveActions.status, ['open', 'in_progress', 'pending_verification']),
-      )
+      .where(inArray(correctiveActions.status, ['open', 'in_progress', 'pending_verification']))
       .orderBy(asc(correctiveActions.assignedOn)),
   )
 
@@ -83,10 +77,7 @@ export default async function AgingReport() {
       : r.ca.createdAt
         ? new Date(r.ca.createdAt).getTime()
         : Date.now()
-    const ageDays = Math.max(
-      0,
-      Math.round((Date.parse(today) - baseline) / 86_400_000),
-    )
+    const ageDays = Math.max(0, Math.round((Date.parse(today) - baseline) / 86_400_000))
     return {
       id: r.ca.id,
       reference: r.ca.reference,
@@ -128,14 +119,9 @@ export default async function AgingReport() {
           />
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {BUCKETS.map((b) => (
-              <div
-                key={b.key}
-                className="rounded-lg border border-slate-200 bg-white px-4 py-3"
-              >
+              <div key={b.key} className="rounded-lg border border-slate-200 bg-white px-4 py-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs uppercase tracking-wide text-slate-500">
-                    {b.label}
-                  </span>
+                  <span className="text-xs tracking-wide text-slate-500 uppercase">{b.label}</span>
                   <Badge className={b.tone} variant="default">
                     {counts[b.key]}
                   </Badge>
@@ -174,7 +160,7 @@ export default async function AgingReport() {
                 </header>
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-slate-100 text-left text-xs uppercase tracking-wide text-slate-500">
+                    <tr className="border-b border-slate-100 text-left text-xs tracking-wide text-slate-500 uppercase">
                       <th className="px-4 py-2">Ref</th>
                       <th className="px-4 py-2">Title</th>
                       <th className="px-4 py-2">Severity</th>

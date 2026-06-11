@@ -6,30 +6,17 @@
 
 import { notFound } from 'next/navigation'
 import { asc, eq } from 'drizzle-orm'
-import {
-  jobTitleTasks,
-  people,
-  personTitleAssignments,
-  personTitles,
-} from '@beaconhs/db/schema'
+import { jobTitleTasks, people, personTitleAssignments, personTitles } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Job Description — Print view' }
 
-export default async function TitlePdfPage({
-  params,
-}: {
-  params: Promise<{ id: string }>
-}) {
+export default async function TitlePdfPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const ctx = await requireRequestContext()
   const data = await ctx.db(async (tx) => {
-    const [row] = await tx
-      .select()
-      .from(personTitles)
-      .where(eq(personTitles.id, id))
-      .limit(1)
+    const [row] = await tx.select().from(personTitles).where(eq(personTitles.id, id)).limit(1)
     if (!row) return null
     const tasks = await tx
       .select()
@@ -52,9 +39,7 @@ export default async function TitlePdfPage({
     <div className="mx-auto max-w-[210mm] bg-white p-8 text-sm text-slate-900 print:p-0">
       <header className="mb-6 flex items-start justify-between border-b-2 border-slate-800 pb-3">
         <div>
-          <p className="text-[10px] uppercase tracking-widest text-slate-500">
-            Job Description
-          </p>
+          <p className="text-[10px] tracking-widest text-slate-500 uppercase">Job Description</p>
           <h1 className="text-2xl font-bold">{row.name}</h1>
         </div>
         <div className="text-right text-xs text-slate-600">
@@ -91,9 +76,7 @@ export default async function TitlePdfPage({
 
       <Section title={`Tasks (${tasks.length})`}>
         {tasks.length === 0 ? (
-          <p className="text-xs text-slate-500">
-            No tasks defined for this title yet.
-          </p>
+          <p className="text-xs text-slate-500">No tasks defined for this title yet.</p>
         ) : (
           <table className="w-full border-collapse text-xs">
             <thead>
@@ -108,7 +91,7 @@ export default async function TitlePdfPage({
                 <tr key={t.id} className="border-b border-slate-200 align-top">
                   <td className="py-1 font-medium">{i + 1}</td>
                   <td className="py-1 font-medium">{t.task}</td>
-                  <td className="py-1 text-slate-600 whitespace-pre-wrap">
+                  <td className="py-1 whitespace-pre-wrap text-slate-600">
                     {t.description ?? '—'}
                   </td>
                 </tr>
@@ -120,8 +103,8 @@ export default async function TitlePdfPage({
 
       <Section title="Sign-off">
         <p className="mb-3 text-xs text-slate-600">
-          I have read and understood the responsibilities and tasks above. I
-          will perform my duties according to this Job Description.
+          I have read and understood the responsibilities and tasks above. I will perform my duties
+          according to this Job Description.
         </p>
         <table className="w-full text-xs">
           <thead>
@@ -181,9 +164,7 @@ export default async function TitlePdfPage({
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="mb-5 break-inside-avoid">
-      <h2 className="mb-1 border-b border-slate-300 text-base font-semibold">
-        {title}
-      </h2>
+      <h2 className="mb-1 border-b border-slate-300 text-base font-semibold">{title}</h2>
       <div className="mt-2">{children}</div>
     </section>
   )

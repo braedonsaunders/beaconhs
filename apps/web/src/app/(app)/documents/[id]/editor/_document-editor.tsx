@@ -145,7 +145,7 @@ export function DocumentEditor({
   if (!editor) {
     return (
       <div
-        className={`${embedded ? 'h-full' : 'fixed inset-0 z-50'} grid place-items-center bg-slate-100 dark:bg-slate-950 text-sm text-slate-500 dark:text-slate-400`}
+        className={`${embedded ? 'h-full' : 'fixed inset-0 z-50'} grid place-items-center bg-slate-100 text-sm text-slate-500 dark:bg-slate-950 dark:text-slate-400`}
       >
         Loading editor…
       </div>

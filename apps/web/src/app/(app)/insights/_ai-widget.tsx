@@ -34,7 +34,11 @@ const SEV_TONE: Record<string, string> = {
 
 export function JournalAnalysisWidget({ aiEnabled }: { aiEnabled: boolean }) {
   const [days, setDays] = useState(30)
-  const [result, setResult] = useState<{ analysis: JournalAnalysis; entryCount: number; days: number } | null>(null)
+  const [result, setResult] = useState<{
+    analysis: JournalAnalysis
+    entryCount: number
+    days: number
+  } | null>(null)
   const [pending, start] = useTransition()
 
   function run(d: number) {
@@ -72,7 +76,9 @@ export function JournalAnalysisWidget({ aiEnabled }: { aiEnabled: boolean }) {
                 disabled={pending}
                 className={cn(
                   'px-2 py-1 text-xs font-medium transition-colors disabled:opacity-60',
-                  days === p.days ? 'bg-teal-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50',
+                  days === p.days
+                    ? 'bg-teal-600 text-white'
+                    : 'bg-white text-slate-600 hover:bg-slate-50',
                 )}
               >
                 {p.label}
@@ -107,8 +113,9 @@ export function JournalAnalysisWidget({ aiEnabled }: { aiEnabled: boolean }) {
           </Empty>
         ) : !a ? (
           <Empty>
-            Analyse recent field journals to surface <strong>sentiment</strong>, <strong>recurring issues</strong> and{' '}
-            <strong>recommended corrective actions</strong> routed to the right people.
+            Analyse recent field journals to surface <strong>sentiment</strong>,{' '}
+            <strong>recurring issues</strong> and <strong>recommended corrective actions</strong>{' '}
+            routed to the right people.
           </Empty>
         ) : (
           <div className="space-y-3">
@@ -116,7 +123,7 @@ export function JournalAnalysisWidget({ aiEnabled }: { aiEnabled: boolean }) {
             <div className="flex items-start gap-2">
               <span
                 className={cn(
-                  'inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ring-1 ring-inset',
+                  'inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[11px] font-semibold tracking-wide uppercase ring-1 ring-inset',
                   SENTIMENT_TONE[a.sentiment.label] ?? SENTIMENT_TONE.mixed,
                 )}
                 title={a.sentiment.rationale}
@@ -132,10 +139,12 @@ export function JournalAnalysisWidget({ aiEnabled }: { aiEnabled: boolean }) {
                 {a.themes.map((t, i) => (
                   <span
                     key={`${t.label}-${i}`}
-                    className="inline-flex items-center gap-1 rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-medium text-teal-800 ring-1 ring-inset ring-teal-600/15"
+                    className="inline-flex items-center gap-1 rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-medium text-teal-800 ring-1 ring-teal-600/15 ring-inset"
                   >
                     {t.label}
-                    <span className="rounded-full bg-white/70 px-1 text-[10px] tabular-nums">{t.count}</span>
+                    <span className="rounded-full bg-white/70 px-1 text-[10px] tabular-nums">
+                      {t.count}
+                    </span>
                   </span>
                 ))}
               </div>
@@ -143,7 +152,10 @@ export function JournalAnalysisWidget({ aiEnabled }: { aiEnabled: boolean }) {
 
             {/* surfaced issues */}
             {a.issues.length > 0 ? (
-              <Section icon={<AlertTriangle size={13} className="text-amber-500" />} title="Surfaced issues">
+              <Section
+                icon={<AlertTriangle size={13} className="text-amber-500" />}
+                title="Surfaced issues"
+              >
                 <ul className="space-y-1.5">
                   {a.issues.map((it, i) => (
                     <li key={i} className="rounded-lg border border-slate-100 bg-slate-50/50 p-2">
@@ -157,7 +169,11 @@ export function JournalAnalysisWidget({ aiEnabled }: { aiEnabled: boolean }) {
                           {it.severity}
                         </span>
                         <span className="text-xs font-semibold text-slate-800">{it.title}</span>
-                        {it.site ? <span className="ml-auto shrink-0 text-[10px] text-slate-400">{it.site}</span> : null}
+                        {it.site ? (
+                          <span className="ml-auto shrink-0 text-[10px] text-slate-400">
+                            {it.site}
+                          </span>
+                        ) : null}
                       </div>
                       <p className="mt-0.5 text-[11px] leading-snug text-slate-500">{it.detail}</p>
                     </li>
@@ -186,10 +202,14 @@ export function JournalAnalysisWidget({ aiEnabled }: { aiEnabled: boolean }) {
                         </span>
                         <div className="min-w-0 flex-1">
                           <p className="text-xs font-semibold text-slate-800">{ac.action}</p>
-                          <p className="mt-0.5 text-[11px] leading-snug text-slate-500">{ac.rationale}</p>
+                          <p className="mt-0.5 text-[11px] leading-snug text-slate-500">
+                            {ac.rationale}
+                          </p>
                           <div className="mt-1 flex items-center gap-1.5">
-                            <span className="text-[10px] uppercase tracking-wide text-slate-400">Owner</span>
-                            <span className="rounded-full bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-700 ring-1 ring-inset ring-slate-200">
+                            <span className="text-[10px] tracking-wide text-slate-400 uppercase">
+                              Owner
+                            </span>
+                            <span className="rounded-full bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-700 ring-1 ring-slate-200 ring-inset">
                               {ac.owner}
                             </span>
                           </div>
@@ -208,7 +228,8 @@ export function JournalAnalysisWidget({ aiEnabled }: { aiEnabled: boolean }) {
             ) : null}
 
             <p className="pt-1 text-[10px] text-slate-400">
-              Based on {result?.entryCount} entries · last {result?.days} days · AI-generated, review before acting.
+              Based on {result?.entryCount} entries · last {result?.days} days · AI-generated,
+              review before acting.
             </p>
           </div>
         )}
@@ -217,10 +238,18 @@ export function JournalAnalysisWidget({ aiEnabled }: { aiEnabled: boolean }) {
   )
 }
 
-function Section({ icon, title, children }: { icon: ReactNode; title: string; children: ReactNode }) {
+function Section({
+  icon,
+  title,
+  children,
+}: {
+  icon: ReactNode
+  title: string
+  children: ReactNode
+}) {
   return (
     <div>
-      <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+      <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold tracking-wide text-slate-500 uppercase">
         {icon} {title}
       </div>
       {children}

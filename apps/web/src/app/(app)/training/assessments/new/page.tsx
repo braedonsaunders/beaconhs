@@ -24,11 +24,7 @@ export default async function NewAssessmentAttemptPage({
 }) {
   const sp = await searchParams
   const defaultTypeId =
-    typeof sp.typeId === 'string'
-      ? sp.typeId
-      : Array.isArray(sp.typeId)
-        ? sp.typeId[0]
-        : undefined
+    typeof sp.typeId === 'string' ? sp.typeId : Array.isArray(sp.typeId) ? sp.typeId[0] : undefined
   const defaultPersonId =
     typeof sp.personId === 'string'
       ? sp.personId
@@ -107,9 +103,9 @@ export default async function NewAssessmentAttemptPage({
         </Card>
 
         <p className="text-xs text-slate-500">
-          The attempt opens in "in progress" status. Submitting auto-grades it from each
-          question's correct answer and points value. Passing an assessment type that's linked to
-          a course also writes a training record.
+          The attempt opens in "in progress" status. Submitting auto-grades it from each question's
+          correct answer and points value. Passing an assessment type that's linked to a course also
+          writes a training record.
         </p>
       </div>
     </PageContainer>

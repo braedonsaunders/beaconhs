@@ -9,7 +9,9 @@ export async function GET(req: NextRequest) {
   const sp = Object.fromEntries(req.nextUrl.searchParams.entries())
   const days = Number(pickString(sp.days) ?? '30')
   const horizon = new Date()
-  horizon.setDate(horizon.getDate() + (Number.isFinite(days) ? Math.max(1, Math.min(180, days)) : 30))
+  horizon.setDate(
+    horizon.getDate() + (Number.isFinite(days) ? Math.max(1, Math.min(180, days)) : 30),
+  )
   const horizonIso = horizon.toISOString().slice(0, 10)
 
   const ctx = await requireRequestContext()
@@ -37,16 +39,7 @@ export async function GET(req: NextRequest) {
 
   return csvResponse({
     filename: csvFilename('upcoming-inspections'),
-    headers: [
-      'Asset tag',
-      'Name',
-      'Type',
-      'Site',
-      'Holder',
-      'Last annual',
-      'Next due',
-      'Status',
-    ],
+    headers: ['Asset tag', 'Name', 'Type', 'Site', 'Holder', 'Last annual', 'Next due', 'Status'],
     rows: rows.map(({ item, type, site, holder }) => [
       item.assetTag,
       item.name,

@@ -42,11 +42,7 @@ import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { emitCorrectiveActionCompleted } from '@beaconhs/events'
 import { reopenCorrectiveAction, setVerificationRequired } from '../_actions'
 import { CloseBody, CloseButton } from './_close-button'
-import {
-  AddStepBody,
-  CompleteStepsTimeline,
-  type CompleteStep,
-} from './_complete-steps-panel'
+import { AddStepBody, CompleteStepsTimeline, type CompleteStep } from './_complete-steps-panel'
 import { PhotosPanel, type CaPhotoRow } from './_photos-panel'
 import { SendEmailBody, SendEmailButton } from './_send-email-button'
 import { VerificationPanel, VerifyBody } from './_verification-panel'
@@ -54,14 +50,7 @@ import { VerificationPanel, VerifyBody } from './_verification-panel'
 export const dynamic = 'force-dynamic'
 
 const STATUSES = ['open', 'in_progress', 'pending_verification', 'closed', 'cancelled'] as const
-const CA_TABS = [
-  'overview',
-  'work',
-  'photos',
-  'verification',
-  'status',
-  'activity',
-] as const
+const CA_TABS = ['overview', 'work', 'photos', 'verification', 'status', 'activity'] as const
 type CaTab = (typeof CA_TABS)[number]
 
 async function updateStatus(formData: FormData) {
@@ -315,16 +304,16 @@ export default async function CorrectiveActionPage({
           <Alert variant="warning">
             <AlertTitle>This action is locked</AlertTitle>
             <AlertDescription>
-              Closed on {ca.closedAt ? new Date(ca.closedAt).toLocaleDateString() : '—'}.
-              Reopen from the header to edit.
+              Closed on {ca.closedAt ? new Date(ca.closedAt).toLocaleDateString() : '—'}. Reopen
+              from the header to edit.
             </AlertDescription>
           </Alert>
         ) : ca.verificationRequired && !ca.verifiedAt ? (
           <Alert variant="info">
             <AlertTitle>Verification pending</AlertTitle>
             <AlertDescription>
-              This corrective action can't be closed until a verifier signs off
-              on the Verification tab.
+              This corrective action can't be closed until a verifier signs off on the Verification
+              tab.
             </AlertDescription>
           </Alert>
         ) : null
@@ -361,7 +350,7 @@ export default async function CorrectiveActionPage({
                         {source.type} · {source.ref}
                       </Link>
                     ) : (
-                      ca.source ?? '—'
+                      (ca.source ?? '—')
                     ),
                   },
                   { label: 'Severity', value: ca.severity },
@@ -385,8 +374,10 @@ export default async function CorrectiveActionPage({
               />
               {ca.description ? (
                 <div className="mt-4">
-                  <div className="text-xs uppercase tracking-wide text-slate-500">Description</div>
-                  <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{ca.description}</p>
+                  <div className="text-xs tracking-wide text-slate-500 uppercase">Description</div>
+                  <p className="mt-1 text-sm whitespace-pre-wrap text-slate-700">
+                    {ca.description}
+                  </p>
                 </div>
               ) : null}
             </Section>
@@ -496,9 +487,8 @@ export default async function CorrectiveActionPage({
             </CardHeader>
             <CardContent className="space-y-3">
               <p className="text-sm text-slate-600">
-                Use this dropdown for non-terminal transitions only. To close +
-                lock, use the "Close + lock" button at the top of the page so the
-                cost-impact prompt is captured.
+                Use this dropdown for non-terminal transitions only. To close + lock, use the "Close
+                + lock" button at the top of the page so the cost-impact prompt is captured.
               </p>
               <form action={updateStatus} className="flex items-end gap-3">
                 <input type="hidden" name="id" value={id} />
@@ -625,11 +615,7 @@ export default async function CorrectiveActionPage({
           </>
         }
       >
-        <CloseBody
-          caId={id}
-          formId="ca-close-form"
-          closeHref={`/corrective-actions/${id}`}
-        />
+        <CloseBody caId={id} formId="ca-close-form" closeHref={`/corrective-actions/${id}`} />
       </UrlDrawer>
     </DetailPageLayout>
   )

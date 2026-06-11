@@ -132,7 +132,11 @@ export function ObligationForm({
         <CardContent className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="ob-kind">Kind *</Label>
-            <Select id="ob-kind" value={kind} onChange={(e) => changeKind(e.target.value as ObligationKind)}>
+            <Select
+              id="ob-kind"
+              value={kind}
+              onChange={(e) => changeKind(e.target.value as ObligationKind)}
+            >
               {OBLIGATION_KINDS.map((k) => (
                 <option key={k} value={k}>
                   {kindLabel(k)}
@@ -148,12 +152,19 @@ export function ObligationForm({
                 id="ob-title"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder={kind === 'journal' ? 'e.g. Daily field journal' : 'Falls back to the kind name'}
+                placeholder={
+                  kind === 'journal' ? 'e.g. Daily field journal' : 'Falls back to the kind name'
+                }
               />
             </div>
             <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="ob-notes">Notes</Label>
-              <Textarea id="ob-notes" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
+              <Textarea
+                id="ob-notes"
+                rows={2}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+              />
             </div>
           </div>
         </CardContent>
@@ -166,36 +177,86 @@ export function ObligationForm({
           </CardHeader>
           <CardContent className="space-y-4">
             {meta.target === 'inspectionType' ? (
-              <TargetSelect value={inspectionTypeId} onChange={setInspectionTypeId} placeholder="inspection type" options={targets.inspectionTypes.map((t) => ({ id: t.id, label: t.name }))} />
+              <TargetSelect
+                value={inspectionTypeId}
+                onChange={setInspectionTypeId}
+                placeholder="inspection type"
+                options={targets.inspectionTypes.map((t) => ({ id: t.id, label: t.name }))}
+              />
             ) : null}
             {meta.target === 'document' ? (
-              <TargetSelect value={documentId} onChange={setDocumentId} placeholder="document" options={targets.documents.map((d) => ({ id: d.id, label: d.title }))} />
+              <TargetSelect
+                value={documentId}
+                onChange={setDocumentId}
+                placeholder="document"
+                options={targets.documents.map((d) => ({ id: d.id, label: d.title }))}
+              />
             ) : null}
             {meta.target === 'cert' ? (
-              <TargetSelect value={courseId} onChange={setCourseId} placeholder="certification (course)" options={targets.courses.map((c) => ({ id: c.id, label: c.label }))} />
+              <TargetSelect
+                value={courseId}
+                onChange={setCourseId}
+                placeholder="certification (course)"
+                options={targets.courses.map((c) => ({ id: c.id, label: c.label }))}
+              />
             ) : null}
             {meta.target === 'formTemplate' ? (
-              <TargetSelect value={formTemplateId} onChange={setFormTemplateId} placeholder="app / form template" options={targets.formTemplates.map((t) => ({ id: t.id, label: t.name }))} />
+              <TargetSelect
+                value={formTemplateId}
+                onChange={setFormTemplateId}
+                placeholder="app / form template"
+                options={targets.formTemplates.map((t) => ({ id: t.id, label: t.name }))}
+              />
             ) : null}
             {meta.target === 'equipmentType' ? (
-              <TargetSelect value={equipmentTypeId} onChange={setEquipmentTypeId} placeholder="equipment type" options={targets.equipmentTypes.map((t) => ({ id: t.id, label: t.name }))} />
+              <TargetSelect
+                value={equipmentTypeId}
+                onChange={setEquipmentTypeId}
+                placeholder="equipment type"
+                options={targets.equipmentTypes.map((t) => ({ id: t.id, label: t.name }))}
+              />
             ) : null}
             {meta.target === 'ppeType' ? (
-              <TargetSelect value={ppeTypeId} onChange={setPpeTypeId} placeholder="PPE type" options={targets.ppeTypes.map((t) => ({ id: t.id, label: t.name }))} />
+              <TargetSelect
+                value={ppeTypeId}
+                onChange={setPpeTypeId}
+                placeholder="PPE type"
+                options={targets.ppeTypes.map((t) => ({ id: t.id, label: t.name }))}
+              />
             ) : null}
             {meta.target === 'jobTitle' ? (
-              <TargetSelect value={jobTitleId} onChange={setJobTitleId} placeholder="job title" options={targets.jobTitles.map((t) => ({ id: t.id, label: t.name }))} />
+              <TargetSelect
+                value={jobTitleId}
+                onChange={setJobTitleId}
+                placeholder="job title"
+                options={targets.jobTitles.map((t) => ({ id: t.id, label: t.name }))}
+              />
             ) : null}
             {meta.target === 'trainingItem' ? (
               <div className="space-y-3">
-                <Select value={trainingItemKind} onChange={(e) => setTrainingItemKind(e.target.value as 'course' | 'assessment_type')}>
+                <Select
+                  value={trainingItemKind}
+                  onChange={(e) =>
+                    setTrainingItemKind(e.target.value as 'course' | 'assessment_type')
+                  }
+                >
                   <option value="course">Course</option>
                   <option value="assessment_type">Assessment (graded quiz)</option>
                 </Select>
                 {trainingItemKind === 'course' ? (
-                  <TargetSelect value={courseId} onChange={setCourseId} placeholder="course" options={targets.courses.map((c) => ({ id: c.id, label: c.label }))} />
+                  <TargetSelect
+                    value={courseId}
+                    onChange={setCourseId}
+                    placeholder="course"
+                    options={targets.courses.map((c) => ({ id: c.id, label: c.label }))}
+                  />
                 ) : (
-                  <TargetSelect value={assessmentTypeId} onChange={setAssessmentTypeId} placeholder="assessment type" options={targets.assessmentTypes.map((t) => ({ id: t.id, label: t.name }))} />
+                  <TargetSelect
+                    value={assessmentTypeId}
+                    onChange={setAssessmentTypeId}
+                    placeholder="assessment type"
+                    options={targets.assessmentTypes.map((t) => ({ id: t.id, label: t.name }))}
+                  />
                 )}
               </div>
             ) : null}
@@ -221,7 +282,9 @@ export function ObligationForm({
       ) : null}
 
       {error ? (
-        <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>
+        <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {error}
+        </div>
       ) : null}
 
       <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-4">

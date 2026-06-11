@@ -73,7 +73,7 @@ export async function sendIncidentEmail(
   const injuryLines = data.injuries.map((j) => {
     const name = j.person
       ? `${j.person.firstName} ${j.person.lastName}`
-      : j.inj.personName ?? 'Unknown'
+      : (j.inj.personName ?? 'Unknown')
     const parts = j.inj.bodyParts.join(', ') || '—'
     const types =
       Array.isArray(j.inj.injuryTypes) && j.inj.injuryTypes.length > 0
@@ -133,9 +133,11 @@ export async function sendIncidentEmail(
         severity ${escapeHtml(data.i.severity.replace(/_/g, ' '))} ·
         status ${escapeHtml(data.i.status.replace(/_/g, ' '))}
       </div>
-      ${options?.messageOverride
-        ? `<div style="border-left:3px solid #0f766e;padding:8px 12px;background:#ecfdf5;margin-bottom:12px;font-size:13px;">${escapeHtml(options.messageOverride)}</div>`
-        : ''}
+      ${
+        options?.messageOverride
+          ? `<div style="border-left:3px solid #0f766e;padding:8px 12px;background:#ecfdf5;margin-bottom:12px;font-size:13px;">${escapeHtml(options.messageOverride)}</div>`
+          : ''
+      }
       <table style="border-collapse:collapse;font-size:13px;margin-bottom:12px;">
         <tr><td style="padding:4px 12px 4px 0;color:#64748b;">Occurred</td>
             <td style="padding:4px 0;">${escapeHtml(data.i.occurredAt.toLocaleString())}</td></tr>
@@ -150,21 +152,23 @@ export async function sendIncidentEmail(
       ${section('Events leading up', data.i.eventsLeadingUp)}
       ${section('Immediate action taken', data.i.immediateActionTaken)}
       <h3 style="margin:18px 0 4px;font-size:14px;">Injuries (${data.injuries.length})</h3>
-      ${data.injuries.length === 0
-        ? '<div style="font-size:13px;color:#64748b;">None recorded.</div>'
-        : `<ul style="font-size:13px;margin:0 0 12px 18px;padding:0;">${data.injuries
-            .map((j) => {
-              const name = j.person
-                ? `${escapeHtml(j.person.firstName)} ${escapeHtml(j.person.lastName)}`
-                : escapeHtml(j.inj.personName ?? 'Unknown')
-              const types =
-                Array.isArray(j.inj.injuryTypes) && j.inj.injuryTypes.length > 0
-                  ? escapeHtml(j.inj.injuryTypes.join(', '))
-                  : '—'
-              const parts = escapeHtml(j.inj.bodyParts.join(', ') || '—')
-              return `<li>${name} — ${types} (${parts})</li>`
-            })
-            .join('')}</ul>`}
+      ${
+        data.injuries.length === 0
+          ? '<div style="font-size:13px;color:#64748b;">None recorded.</div>'
+          : `<ul style="font-size:13px;margin:0 0 12px 18px;padding:0;">${data.injuries
+              .map((j) => {
+                const name = j.person
+                  ? `${escapeHtml(j.person.firstName)} ${escapeHtml(j.person.lastName)}`
+                  : escapeHtml(j.inj.personName ?? 'Unknown')
+                const types =
+                  Array.isArray(j.inj.injuryTypes) && j.inj.injuryTypes.length > 0
+                    ? escapeHtml(j.inj.injuryTypes.join(', '))
+                    : '—'
+                const parts = escapeHtml(j.inj.bodyParts.join(', ') || '—')
+                return `<li>${name} — ${types} (${parts})</li>`
+              })
+              .join('')}</ul>`
+      }
       <h3 style="margin:18px 0 4px;font-size:14px;">Medical / notification</h3>
       <table style="border-collapse:collapse;font-size:13px;margin-bottom:12px;">
         <tr><td style="padding:2px 12px 2px 0;color:#64748b;">EMS called</td>

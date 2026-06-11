@@ -27,7 +27,8 @@ function isValidConfig(config: unknown): config is TenantNavConfig {
       if (!item || typeof item !== 'object') return false
       if (item.kind === 'module' && typeof item.moduleKey === 'string') continue
       if (item.kind === 'form' && typeof item.templateId === 'string') continue
-      if (item.kind === 'link' && typeof item.href === 'string' && typeof item.label === 'string') continue
+      if (item.kind === 'link' && typeof item.href === 'string' && typeof item.label === 'string')
+        continue
       return false
     }
   }

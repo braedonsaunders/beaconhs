@@ -33,7 +33,10 @@ export const formAssignmentDispatches = pgTable(
   },
   (t) => ({
     tenantIdx: index('form_assignment_dispatches_tenant_idx').on(t.tenantId),
-    assignmentIdx: index('form_assignment_dispatches_assignment_idx').on(t.assignmentId, t.occurredAt),
+    assignmentIdx: index('form_assignment_dispatches_assignment_idx').on(
+      t.assignmentId,
+      t.occurredAt,
+    ),
   }),
 )
 

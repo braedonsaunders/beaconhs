@@ -37,7 +37,7 @@ export default async function AssessmentTypesPage() {
           <HazidSubNav pathname="/hazid/types" />
           <PageHeader
             title="Assessment types"
-            description='Templates that drive which sections (PPE, Q&A, WAH, CS, AF) appear on new assessments.'
+            description="Templates that drive which sections (PPE, Q&A, WAH, CS, AF) appear on new assessments."
             actions={
               <Link href="/hazid/types/new">
                 <Button>New assessment type</Button>
@@ -71,7 +71,10 @@ export default async function AssessmentTypesPage() {
             {rows.map((r) => (
               <TableRow key={r.id}>
                 <TableCell>
-                  <Link href={`/hazid/types/${r.id}`} className="font-medium text-slate-900 hover:underline">
+                  <Link
+                    href={`/hazid/types/${r.id}`}
+                    className="font-medium text-slate-900 hover:underline"
+                  >
                     {r.name}
                   </Link>
                 </TableCell>

@@ -4,13 +4,7 @@
 // learner player (inline stage) and the studio Present overlay.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import {
-  ChevronLeft,
-  ChevronRight,
-  Maximize2,
-  Minimize2,
-  StickyNote,
-} from 'lucide-react'
+import { ChevronLeft, ChevronRight, Maximize2, Minimize2, StickyNote } from 'lucide-react'
 import type { Slide } from '@beaconhs/db/schema'
 import { SlideView } from './slide-view'
 
@@ -123,7 +117,7 @@ export function SlidePlayer({
       />
 
       {/* control bar */}
-      <div className="absolute inset-x-0 bottom-0 z-10 flex items-center gap-1 bg-gradient-to-t from-black/70 to-transparent px-3 pb-2 pt-6 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+      <div className="absolute inset-x-0 bottom-0 z-10 flex items-center gap-1 bg-gradient-to-t from-black/70 to-transparent px-3 pt-6 pb-2 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
         <button
           type="button"
           onClick={() => go(-1)}
@@ -142,7 +136,7 @@ export function SlidePlayer({
         >
           <ChevronRight size={18} />
         </button>
-        <span className="ml-1 text-xs tabular-nums text-white/80">
+        <span className="ml-1 text-xs text-white/80 tabular-nums">
           {idx + 1} / {total}
         </span>
         <div className="ml-auto flex items-center gap-1">

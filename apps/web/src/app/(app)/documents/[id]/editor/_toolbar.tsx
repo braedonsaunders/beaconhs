@@ -49,11 +49,19 @@ export function FormattingToolbar({
 }) {
   const inTable = editor.isActive('table')
   return (
-    <div className="flex flex-wrap items-center gap-0.5 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-2 py-1">
-      <Btn label="Undo" disabled={!editor.can().undo()} onClick={() => editor.chain().focus().undo().run()}>
+    <div className="flex flex-wrap items-center gap-0.5 border-b border-slate-200 bg-white px-2 py-1 dark:border-slate-800 dark:bg-slate-900">
+      <Btn
+        label="Undo"
+        disabled={!editor.can().undo()}
+        onClick={() => editor.chain().focus().undo().run()}
+      >
         <Undo2 size={15} />
       </Btn>
-      <Btn label="Redo" disabled={!editor.can().redo()} onClick={() => editor.chain().focus().redo().run()}>
+      <Btn
+        label="Redo"
+        disabled={!editor.can().redo()}
+        onClick={() => editor.chain().focus().redo().run()}
+      >
         <Redo2 size={15} />
       </Btn>
       <Sep />
@@ -63,50 +71,102 @@ export function FormattingToolbar({
       <FontSizeSelect editor={editor} />
       <Sep />
 
-      <Btn label="Bold" active={editor.isActive('bold')} onClick={() => editor.chain().focus().toggleBold().run()}>
+      <Btn
+        label="Bold"
+        active={editor.isActive('bold')}
+        onClick={() => editor.chain().focus().toggleBold().run()}
+      >
         <Bold size={15} />
       </Btn>
-      <Btn label="Italic" active={editor.isActive('italic')} onClick={() => editor.chain().focus().toggleItalic().run()}>
+      <Btn
+        label="Italic"
+        active={editor.isActive('italic')}
+        onClick={() => editor.chain().focus().toggleItalic().run()}
+      >
         <Italic size={15} />
       </Btn>
-      <Btn label="Underline" active={editor.isActive('underline')} onClick={() => editor.chain().focus().toggleUnderline().run()}>
+      <Btn
+        label="Underline"
+        active={editor.isActive('underline')}
+        onClick={() => editor.chain().focus().toggleUnderline().run()}
+      >
         <UnderlineIcon size={15} />
       </Btn>
-      <Btn label="Strikethrough" active={editor.isActive('strike')} onClick={() => editor.chain().focus().toggleStrike().run()}>
+      <Btn
+        label="Strikethrough"
+        active={editor.isActive('strike')}
+        onClick={() => editor.chain().focus().toggleStrike().run()}
+      >
         <Strikethrough size={15} />
       </Btn>
       <ColorMenu editor={editor} mode="text" />
       <ColorMenu editor={editor} mode="highlight" />
-      <Btn label="Subscript" active={editor.isActive('subscript')} onClick={() => editor.chain().focus().toggleSubscript().run()}>
+      <Btn
+        label="Subscript"
+        active={editor.isActive('subscript')}
+        onClick={() => editor.chain().focus().toggleSubscript().run()}
+      >
         <SubIcon size={15} />
       </Btn>
-      <Btn label="Superscript" active={editor.isActive('superscript')} onClick={() => editor.chain().focus().toggleSuperscript().run()}>
+      <Btn
+        label="Superscript"
+        active={editor.isActive('superscript')}
+        onClick={() => editor.chain().focus().toggleSuperscript().run()}
+      >
         <SupIcon size={15} />
       </Btn>
       <Sep />
 
-      <Btn label="Align left" active={editor.isActive({ textAlign: 'left' })} onClick={() => editor.chain().focus().setTextAlign('left').run()}>
+      <Btn
+        label="Align left"
+        active={editor.isActive({ textAlign: 'left' })}
+        onClick={() => editor.chain().focus().setTextAlign('left').run()}
+      >
         <AlignLeft size={15} />
       </Btn>
-      <Btn label="Align center" active={editor.isActive({ textAlign: 'center' })} onClick={() => editor.chain().focus().setTextAlign('center').run()}>
+      <Btn
+        label="Align center"
+        active={editor.isActive({ textAlign: 'center' })}
+        onClick={() => editor.chain().focus().setTextAlign('center').run()}
+      >
         <AlignCenter size={15} />
       </Btn>
-      <Btn label="Align right" active={editor.isActive({ textAlign: 'right' })} onClick={() => editor.chain().focus().setTextAlign('right').run()}>
+      <Btn
+        label="Align right"
+        active={editor.isActive({ textAlign: 'right' })}
+        onClick={() => editor.chain().focus().setTextAlign('right').run()}
+      >
         <AlignRight size={15} />
       </Btn>
-      <Btn label="Justify" active={editor.isActive({ textAlign: 'justify' })} onClick={() => editor.chain().focus().setTextAlign('justify').run()}>
+      <Btn
+        label="Justify"
+        active={editor.isActive({ textAlign: 'justify' })}
+        onClick={() => editor.chain().focus().setTextAlign('justify').run()}
+      >
         <AlignJustify size={15} />
       </Btn>
       <LineSpacingMenu editor={editor} />
       <Sep />
 
-      <Btn label="Bullet list" active={editor.isActive('bulletList')} onClick={() => editor.chain().focus().toggleBulletList().run()}>
+      <Btn
+        label="Bullet list"
+        active={editor.isActive('bulletList')}
+        onClick={() => editor.chain().focus().toggleBulletList().run()}
+      >
         <List size={15} />
       </Btn>
-      <Btn label="Numbered list" active={editor.isActive('orderedList')} onClick={() => editor.chain().focus().toggleOrderedList().run()}>
+      <Btn
+        label="Numbered list"
+        active={editor.isActive('orderedList')}
+        onClick={() => editor.chain().focus().toggleOrderedList().run()}
+      >
         <ListOrdered size={15} />
       </Btn>
-      <Btn label="Checklist" active={editor.isActive('taskList')} onClick={() => editor.chain().focus().toggleTaskList().run()}>
+      <Btn
+        label="Checklist"
+        active={editor.isActive('taskList')}
+        onClick={() => editor.chain().focus().toggleTaskList().run()}
+      >
         <ListChecks size={15} />
       </Btn>
       <Btn label="Decrease indent" onClick={() => editor.chain().focus().outdent().run()}>
@@ -117,10 +177,18 @@ export function FormattingToolbar({
       </Btn>
       <Sep />
 
-      <Btn label="Quote" active={editor.isActive('blockquote')} onClick={() => editor.chain().focus().toggleBlockquote().run()}>
+      <Btn
+        label="Quote"
+        active={editor.isActive('blockquote')}
+        onClick={() => editor.chain().focus().toggleBlockquote().run()}
+      >
         <Quote size={15} />
       </Btn>
-      <Btn label="Code block" active={editor.isActive('codeBlock')} onClick={() => editor.chain().focus().toggleCodeBlock().run()}>
+      <Btn
+        label="Code block"
+        active={editor.isActive('codeBlock')}
+        onClick={() => editor.chain().focus().toggleCodeBlock().run()}
+      >
         <Code2 size={15} />
       </Btn>
       <Btn label="Link" active={editor.isActive('link')} onClick={() => setLink(editor)}>
@@ -131,7 +199,10 @@ export function FormattingToolbar({
       <Btn label="Page break" onClick={() => editor.chain().focus().setPageBreak().run()}>
         <SeparatorHorizontal size={15} />
       </Btn>
-      <Btn label="Clear formatting" onClick={() => editor.chain().focus().unsetAllMarks().clearNodes().run()}>
+      <Btn
+        label="Clear formatting"
+        onClick={() => editor.chain().focus().unsetAllMarks().clearNodes().run()}
+      >
         <RemoveFormatting size={15} />
       </Btn>
 
@@ -180,7 +251,11 @@ function FontFamilySelect({ editor }: { editor: Editor }) {
     <ToolbarSelect
       value={value}
       title="Font"
-      onChange={(v) => (v ? editor.chain().focus().setFontFamily(v).run() : editor.chain().focus().unsetFontFamily().run())}
+      onChange={(v) =>
+        v
+          ? editor.chain().focus().setFontFamily(v).run()
+          : editor.chain().focus().unsetFontFamily().run()
+      }
       options={FONT_FAMILIES}
       widthClass="w-32"
     />
@@ -193,8 +268,15 @@ function FontSizeSelect({ editor }: { editor: Editor }) {
     <ToolbarSelect
       value={value}
       title="Font size"
-      onChange={(v) => (v ? editor.chain().focus().setFontSize(v).run() : editor.chain().focus().unsetFontSize().run())}
-      options={[{ value: '', label: 'Size' }, ...FONT_SIZES.map((s) => ({ value: s, label: s.replace('px', '') }))]}
+      onChange={(v) =>
+        v
+          ? editor.chain().focus().setFontSize(v).run()
+          : editor.chain().focus().unsetFontSize().run()
+      }
+      options={[
+        { value: '', label: 'Size' },
+        ...FONT_SIZES.map((s) => ({ value: s, label: s.replace('px', '') })),
+      ]}
       widthClass="w-16"
     />
   )
@@ -213,7 +295,7 @@ function LineSpacingMenu({ editor }: { editor: Editor }) {
                 editor.chain().focus().setLineHeight(s.value).run()
                 close()
               }}
-              className="block w-full px-3 py-1.5 text-left text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/60"
+              className="block w-full px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800/60"
             >
               {s.label}
             </button>
@@ -243,7 +325,7 @@ function ToolbarSelect({
       value={value}
       onChange={(e) => onChange(e.currentTarget.value)}
       className={cn(
-        'doc-select h-8 rounded border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-1.5 text-xs text-slate-700 dark:text-slate-200 outline-none hover:border-slate-300 dark:hover:border-slate-700 focus:border-teal-400',
+        'doc-select h-8 rounded border border-slate-200 bg-white px-1.5 text-xs text-slate-700 outline-none hover:border-slate-300 focus:border-teal-400 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-slate-700',
         widthClass,
       )}
     >
@@ -291,7 +373,7 @@ function ColorMenu({ editor, mode }: { editor: Editor; mode: 'text' | 'highlight
               else editor.chain().focus().unsetHighlight().run()
               close()
             }}
-            className="mt-2 w-full rounded px-2 py-1 text-left text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60"
+            className="mt-2 w-full rounded px-2 py-1 text-left text-xs text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/60"
           >
             Clear {mode === 'text' ? 'color' : 'highlight'}
           </button>
@@ -342,11 +424,21 @@ function TableMenu({ editor, inTable }: { editor: Editor; inTable: boolean }) {
           {inTable ? (
             <>
               <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
-              <MenuItem onClick={() => editor.chain().focus().addRowAfter().run()}>Add row below</MenuItem>
-              <MenuItem onClick={() => editor.chain().focus().addColumnAfter().run()}>Add column right</MenuItem>
-              <MenuItem onClick={() => editor.chain().focus().deleteRow().run()}>Delete row</MenuItem>
-              <MenuItem onClick={() => editor.chain().focus().deleteColumn().run()}>Delete column</MenuItem>
-              <MenuItem onClick={() => editor.chain().focus().toggleHeaderRow().run()}>Toggle header row</MenuItem>
+              <MenuItem onClick={() => editor.chain().focus().addRowAfter().run()}>
+                Add row below
+              </MenuItem>
+              <MenuItem onClick={() => editor.chain().focus().addColumnAfter().run()}>
+                Add column right
+              </MenuItem>
+              <MenuItem onClick={() => editor.chain().focus().deleteRow().run()}>
+                Delete row
+              </MenuItem>
+              <MenuItem onClick={() => editor.chain().focus().deleteColumn().run()}>
+                Delete column
+              </MenuItem>
+              <MenuItem onClick={() => editor.chain().focus().toggleHeaderRow().run()}>
+                Toggle header row
+              </MenuItem>
               <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
               <MenuItem
                 danger
@@ -422,8 +514,10 @@ function Btn({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        'inline-flex h-7 min-w-[28px] items-center justify-center rounded px-1.5 text-slate-600 dark:text-slate-300 transition-colors',
-        active ? 'bg-teal-100 dark:bg-teal-950/50 text-teal-900 dark:text-teal-300' : 'hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100',
+        'inline-flex h-7 min-w-[28px] items-center justify-center rounded px-1.5 text-slate-600 transition-colors dark:text-slate-300',
+        active
+          ? 'bg-teal-100 text-teal-900 dark:bg-teal-950/50 dark:text-teal-300'
+          : 'hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-slate-100',
         disabled && 'cursor-not-allowed opacity-30 hover:bg-transparent',
       )}
     >
@@ -472,8 +566,8 @@ function Dropdown({
         aria-label={title}
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          'inline-flex h-7 items-center gap-0.5 rounded px-1.5 text-slate-600 dark:text-slate-300 transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100',
-          open && 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100',
+          'inline-flex h-7 items-center gap-0.5 rounded px-1.5 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100',
+          open && 'bg-slate-100 text-slate-900 dark:bg-slate-800 dark:text-slate-100',
         )}
       >
         {trigger}
@@ -482,7 +576,7 @@ function Dropdown({
       {open ? (
         <div
           className={cn(
-            'absolute left-0 top-9 z-40 overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-lg',
+            'absolute top-9 left-0 z-40 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-800 dark:bg-slate-900',
             widthClass,
           )}
         >

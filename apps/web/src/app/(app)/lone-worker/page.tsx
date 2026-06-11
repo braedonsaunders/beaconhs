@@ -42,7 +42,12 @@ export default async function LoneWorkerPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const sp = await searchParams
-  const params = parseListParams(sp, { sort: 'started_at', dir: 'desc', perPage: 25, allowedSorts: SORTS })
+  const params = parseListParams(sp, {
+    sort: 'started_at',
+    dir: 'desc',
+    perPage: 25,
+    allowedSorts: SORTS,
+  })
   const statusFilter = pickString(sp.status)
   const ctx = await requireRequestContext()
 
@@ -53,7 +58,11 @@ export default async function LoneWorkerPage({
 
     const orderBy =
       params.sort === 'next_checkin_due_at'
-        ? [params.dir === 'asc' ? asc(lwSessions.nextCheckinDueAt) : desc(lwSessions.nextCheckinDueAt)]
+        ? [
+            params.dir === 'asc'
+              ? asc(lwSessions.nextCheckinDueAt)
+              : desc(lwSessions.nextCheckinDueAt),
+          ]
         : params.sort === 'status'
           ? [params.dir === 'asc' ? asc(lwSessions.status) : desc(lwSessions.status)]
           : [params.dir === 'asc' ? asc(lwSessions.startedAt) : desc(lwSessions.startedAt)]
@@ -114,7 +123,9 @@ export default async function LoneWorkerPage({
 
           {activeCount > 0 ? (
             <Alert variant="info">
-              <AlertTitle>{activeCount} active session{activeCount === 1 ? '' : 's'}</AlertTitle>
+              <AlertTitle>
+                {activeCount} active session{activeCount === 1 ? '' : 's'}
+              </AlertTitle>
               <AlertDescription>
                 The scheduled-tick worker checks every minute and escalates any overdue session.
               </AlertDescription>
@@ -150,9 +161,23 @@ export default async function LoneWorkerPage({
                 <TableHead>Worker</TableHead>
                 <TableHead>Site</TableHead>
                 <TableHead>Task</TableHead>
-                <SortableTh {...sortProps} column="started_at" active={params.sort === 'started_at'}>Started</SortableTh>
-                <SortableTh {...sortProps} column="next_checkin_due_at" active={params.sort === 'next_checkin_due_at'}>Next check-in</SortableTh>
-                <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>Status</SortableTh>
+                <SortableTh
+                  {...sortProps}
+                  column="started_at"
+                  active={params.sort === 'started_at'}
+                >
+                  Started
+                </SortableTh>
+                <SortableTh
+                  {...sortProps}
+                  column="next_checkin_due_at"
+                  active={params.sort === 'next_checkin_due_at'}
+                >
+                  Next check-in
+                </SortableTh>
+                <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>
+                  Status
+                </SortableTh>
               </TableRow>
             </TableHeader>
             <TableBody>

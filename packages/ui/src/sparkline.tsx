@@ -120,15 +120,11 @@ export function Sparkline({
     return [x, y] as const
   })
 
-  const pathD =
-    'M ' + coords.map(([x, y]) => `${x.toFixed(2)} ${y.toFixed(2)}`).join(' L ')
-  const areaD =
-    pathD +
-    ` L ${VB_W} ${VB_H} L 0 ${VB_H} Z` // close path to baseline for the fill
+  const pathD = 'M ' + coords.map(([x, y]) => `${x.toFixed(2)} ${y.toFixed(2)}`).join(' L ')
+  const areaD = pathD + ` L ${VB_W} ${VB_H} L 0 ${VB_H} Z` // close path to baseline for the fill
 
   const label =
-    ariaLabel ??
-    `Trend: ${points.length} points from ${points[0]} to ${points[points.length - 1]}`
+    ariaLabel ?? `Trend: ${points.length} points from ${points[0]} to ${points[points.length - 1]}`
 
   return (
     <svg
@@ -149,20 +145,22 @@ export function Sparkline({
         vectorEffect="non-scaling-stroke"
       />
       {dots
-        ? [minIdx, maxIdx].filter((i, idx, arr) => arr.indexOf(i) === idx).map((i) => {
-            const [x, y] = coords[i]!
-            return (
-              <circle
-                key={`dot-${i}`}
-                cx={x}
-                cy={y}
-                r={1.75}
-                fill={strokeColor}
-                stroke="white"
-                strokeWidth={0.75}
-              />
-            )
-          })
+        ? [minIdx, maxIdx]
+            .filter((i, idx, arr) => arr.indexOf(i) === idx)
+            .map((i) => {
+              const [x, y] = coords[i]!
+              return (
+                <circle
+                  key={`dot-${i}`}
+                  cx={x}
+                  cy={y}
+                  r={1.75}
+                  fill={strokeColor}
+                  stroke="white"
+                  strokeWidth={0.75}
+                />
+              )
+            })
         : null}
     </svg>
   )

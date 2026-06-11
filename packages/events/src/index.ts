@@ -429,7 +429,11 @@ export async function emitCorrectiveActionCompleted(
     if (args.completerUserId) {
       const completerUserId = args.completerUserId
       const [u] = await ctx.db((tx) =>
-        tx.select({ id: users.id, name: users.name }).from(users).where(eq(users.id, completerUserId)).limit(1),
+        tx
+          .select({ id: users.id, name: users.name })
+          .from(users)
+          .where(eq(users.id, completerUserId))
+          .limit(1),
       )
       completer = u ? { userId: u.id, displayName: u.name } : null
     }
@@ -437,9 +441,7 @@ export async function emitCorrectiveActionCompleted(
     const assigner = ca.assignedByTenantUserId
       ? await tenantUserToUserId(ctx, ca.assignedByTenantUserId)
       : null
-    const owner = ca.ownerTenantUserId
-      ? await tenantUserToUserId(ctx, ca.ownerTenantUserId)
-      : null
+    const owner = ca.ownerTenantUserId ? await tenantUserToUserId(ctx, ca.ownerTenantUserId) : null
     const verifier = ca.verifiedByTenantUserId
       ? await tenantUserToUserId(ctx, ca.verifiedByTenantUserId)
       : null
@@ -488,10 +490,7 @@ export async function emitCorrectiveActionCompleted(
   }
 }
 
-export async function emitCorrectiveActionOverdue(
-  tenantId: string,
-  caId: string,
-): Promise<void> {
+export async function emitCorrectiveActionOverdue(tenantId: string, caId: string): Promise<void> {
   const ctx = workerEventCtx(tenantId)
   try {
     const ca = await ctx.db(async (tx) => {
@@ -507,9 +506,7 @@ export async function emitCorrectiveActionOverdue(
     const tenant = await getTenant(ctx, tenantId)
     if (!tenant) return
 
-    const owner = ca.ownerTenantUserId
-      ? await tenantUserToUserId(ctx, ca.ownerTenantUserId)
-      : null
+    const owner = ca.ownerTenantUserId ? await tenantUserToUserId(ctx, ca.ownerTenantUserId) : null
     const assigner = ca.assignedByTenantUserId
       ? await tenantUserToUserId(ctx, ca.assignedByTenantUserId)
       : null
@@ -557,7 +554,11 @@ export async function emitCorrectiveActionOverdue(
 async function loadTrainingForEvent(
   ctx: EventCtx,
   trainingRecordId: string,
-): Promise<{ record: typeof trainingRecords.$inferSelect; courseName: string; personName: string } | null> {
+): Promise<{
+  record: typeof trainingRecords.$inferSelect
+  courseName: string
+  personName: string
+} | null> {
   return ctx.db(async (tx) => {
     const [row] = await tx
       .select({
@@ -685,10 +686,7 @@ export async function emitTrainingExpired(
 
 // --- Documents ------------------------------------------------------------
 
-export async function emitDocumentReviewDue(
-  tenantId: string,
-  documentId: string,
-): Promise<void> {
+export async function emitDocumentReviewDue(tenantId: string, documentId: string): Promise<void> {
   const ctx = workerEventCtx(tenantId)
   try {
     const document = await ctx.db(async (tx) => {
@@ -748,10 +746,7 @@ export async function emitDocumentReviewDue(
 
 // --- Lone worker ----------------------------------------------------------
 
-export async function emitLoneWorkerOverdue(
-  tenantId: string,
-  sessionId: string,
-): Promise<void> {
+export async function emitLoneWorkerOverdue(tenantId: string, sessionId: string): Promise<void> {
   const ctx = workerEventCtx(tenantId)
   try {
     const session = await ctx.db(async (tx) => {
@@ -816,10 +811,7 @@ export async function emitLoneWorkerOverdue(
 
 // --- Confined-space permits ----------------------------------------------
 
-export async function emitCsPermitExpiring(
-  tenantId: string,
-  permitId: string,
-): Promise<void> {
+export async function emitCsPermitExpiring(tenantId: string, permitId: string): Promise<void> {
   const ctx = workerEventCtx(tenantId)
   try {
     const permit = await ctx.db(async (tx) => {

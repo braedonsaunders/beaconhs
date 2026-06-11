@@ -2,7 +2,16 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { asc, desc, eq, isNull } from 'drizzle-orm'
-import { Activity, BadgeCheck, Check, ClipboardCheck, FileText, History, Info, Mail } from 'lucide-react'
+import {
+  Activity,
+  BadgeCheck,
+  Check,
+  ClipboardCheck,
+  FileText,
+  History,
+  Info,
+  Mail,
+} from 'lucide-react'
 import {
   Alert,
   AlertDescription,
@@ -281,9 +290,10 @@ export default async function DocumentDetailPage({
 
   // Right pane: the live editor for in-app docs, or the PDF for uploaded-file docs.
   const isFileDoc = !draft && !!currentVersion?.contentAttachmentId
-  const initialJson = (draft?.contentJson ?? publishedVersion?.contentJson ?? null) as
-    | Record<string, unknown>
-    | null
+  const initialJson = (draft?.contentJson ?? publishedVersion?.contentJson ?? null) as Record<
+    string,
+    unknown
+  > | null
   const initialHtml = draft?.contentHtml ?? publishedVersion?.contentMarkdown ?? ''
   const initialLayout = {
     pageSize: (doc.pageSize === 'A4' ? 'A4' : 'Letter') as 'Letter' | 'A4',
@@ -313,17 +323,21 @@ export default async function DocumentDetailPage({
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* Top bar */}
-      <div className="flex shrink-0 items-center gap-3 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-2">
+      <div className="flex shrink-0 items-center gap-3 border-b border-slate-200 bg-white px-4 py-2 dark:border-slate-800 dark:bg-slate-900">
         <Link
           href="/documents"
-          className="shrink-0 text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+          className="shrink-0 text-xs font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
         >
           ← Documents
         </Link>
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{doc.title}</span>
-            <Badge variant={doc.status === 'published' ? 'success' : 'secondary'}>{doc.status}</Badge>
+            <span className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+              {doc.title}
+            </span>
+            <Badge variant={doc.status === 'published' ? 'success' : 'secondary'}>
+              {doc.status}
+            </Badge>
             {currentVersion ? <Badge variant="outline">v{currentVersion.version}</Badge> : null}
             {isOverdue ? <Badge variant="destructive">Review overdue</Badge> : null}
           </div>
@@ -361,8 +375,8 @@ export default async function DocumentDetailPage({
 
       {/* Split body: left 1/3 subtabs · right 2/3 the document */}
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <aside className="flex min-h-0 w-1/3 min-w-[300px] max-w-md flex-col border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-          <div className="border-b border-slate-200 dark:border-slate-800 px-3 pt-2">
+        <aside className="flex min-h-0 w-1/3 max-w-md min-w-[300px] flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+          <div className="border-b border-slate-200 px-3 pt-2 dark:border-slate-800">
             <TabNav
               basePath={basePath}
               currentParams={sp}
@@ -370,9 +384,24 @@ export default async function DocumentDetailPage({
               iconOnly
               tabs={[
                 { key: 'overview', label: 'Overview', icon: <Info size={16} /> },
-                { key: 'versions', label: 'Versions', count: versions.length, icon: <History size={16} /> },
-                { key: 'acknowledgments', label: 'Acknowledgments', count: acks.length, icon: <BadgeCheck size={16} /> },
-                { key: 'reviews', label: 'Reviews', count: reviews.length, icon: <ClipboardCheck size={16} /> },
+                {
+                  key: 'versions',
+                  label: 'Versions',
+                  count: versions.length,
+                  icon: <History size={16} />,
+                },
+                {
+                  key: 'acknowledgments',
+                  label: 'Acknowledgments',
+                  count: acks.length,
+                  icon: <BadgeCheck size={16} />,
+                },
+                {
+                  key: 'reviews',
+                  label: 'Reviews',
+                  count: reviews.length,
+                  icon: <ClipboardCheck size={16} />,
+                },
                 { key: 'activity', label: 'Activity', icon: <Activity size={16} /> },
               ]}
             />
@@ -416,186 +445,199 @@ export default async function DocumentDetailPage({
               />
             ) : null}
 
-        {active === 'versions' ? (
-          <div className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Version history</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {versions.length === 0 ? (
-                  <EmptyState
-                    icon={<FileText size={24} />}
-                    title="No versions yet"
-                    description="Add a draft version below — once it's filled out, publish the document."
-                  />
-                ) : (
-                  <ul className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
-                    {versions.map((v) => (
-                      <li key={v.id} className="py-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">Version {v.version}</span>
-                            {v.publishedAt ? (
-                              <Badge variant="success">published</Badge>
-                            ) : (
-                              <Badge variant="secondary">draft</Badge>
-                            )}
-                          </div>
-                          <span className="text-xs text-slate-500 dark:text-slate-400">
-                            {v.publishedAt
-                              ? `published ${new Date(v.publishedAt).toLocaleDateString()}`
-                              : `created ${new Date(v.createdAt).toLocaleDateString()}`}
-                          </span>
-                        </div>
-                        {v.changelog ? (
-                          <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{v.changelog}</p>
-                        ) : null}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </CardContent>
-            </Card>
-            <div className="flex justify-end">
-              <form action={publish}>
-                <input type="hidden" name="id" value={id} />
-                <Button type="submit">
-                  <Check size={14} /> Publish new version
-                </Button>
-              </form>
-            </div>
-          </div>
-        ) : null}
+            {active === 'versions' ? (
+              <div className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Version history</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {versions.length === 0 ? (
+                      <EmptyState
+                        icon={<FileText size={24} />}
+                        title="No versions yet"
+                        description="Add a draft version below — once it's filled out, publish the document."
+                      />
+                    ) : (
+                      <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
+                        {versions.map((v) => (
+                          <li key={v.id} className="py-3">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium">Version {v.version}</span>
+                                {v.publishedAt ? (
+                                  <Badge variant="success">published</Badge>
+                                ) : (
+                                  <Badge variant="secondary">draft</Badge>
+                                )}
+                              </div>
+                              <span className="text-xs text-slate-500 dark:text-slate-400">
+                                {v.publishedAt
+                                  ? `published ${new Date(v.publishedAt).toLocaleDateString()}`
+                                  : `created ${new Date(v.createdAt).toLocaleDateString()}`}
+                              </span>
+                            </div>
+                            {v.changelog ? (
+                              <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+                                {v.changelog}
+                              </p>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </CardContent>
+                </Card>
+                <div className="flex justify-end">
+                  <form action={publish}>
+                    <input type="hidden" name="id" value={id} />
+                    <Button type="submit">
+                      <Check size={14} /> Publish new version
+                    </Button>
+                  </form>
+                </div>
+              </div>
+            ) : null}
 
-        {active === 'acknowledgments' ? (
-          <div className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Acknowledgments ({acks.length})</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {currentPerson ? (
-                  myAck ? (
-                    <Alert variant="success">
-                      <Check size={16} />
-                      <AlertTitle>You've acknowledged this</AlertTitle>
-                      <AlertDescription>
-                        Recorded {new Date(myAck.ack.acknowledgedAt).toLocaleString()}.
-                      </AlertDescription>
-                    </Alert>
-                  ) : publishedVersion ? (
-                    <form action={acknowledge} className="flex items-center justify-between gap-3 rounded-md border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 p-3 text-sm">
-                      <span>By acknowledging you confirm you've read and understood this document.</span>
-                      <input type="hidden" name="documentId" value={id} />
-                      <input type="hidden" name="versionId" value={publishedVersion.id} />
-                      <Button type="submit">
-                        <Check size={14} /> Acknowledge
-                      </Button>
-                    </form>
-                  ) : (
-                    <Alert variant="warning">
-                      <AlertTitle>Not yet published</AlertTitle>
-                      <AlertDescription>
-                        Publish a version of this document before users can acknowledge it.
-                      </AlertDescription>
-                    </Alert>
-                  )
-                ) : (
-                  <Alert variant="warning">
-                    <AlertTitle>Your account isn't linked to a person record</AlertTitle>
-                    <AlertDescription>
-                      Acknowledgments require a person record in the directory.
-                    </AlertDescription>
-                  </Alert>
-                )}
-
-                {acks.length === 0 ? (
-                  <p className="text-sm text-slate-500 dark:text-slate-400">No-one has acknowledged this yet.</p>
-                ) : (
-                  <ul className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
-                    {acks.map((row) => (
-                      <li key={row.ack.id} className="flex items-center justify-between py-2">
-                        <Link
-                          href={`/people/${row.person.id}`}
-                          className="font-medium hover:underline"
+            {active === 'acknowledgments' ? (
+              <div className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Acknowledgments ({acks.length})</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {currentPerson ? (
+                      myAck ? (
+                        <Alert variant="success">
+                          <Check size={16} />
+                          <AlertTitle>You've acknowledged this</AlertTitle>
+                          <AlertDescription>
+                            Recorded {new Date(myAck.ack.acknowledgedAt).toLocaleString()}.
+                          </AlertDescription>
+                        </Alert>
+                      ) : publishedVersion ? (
+                        <form
+                          action={acknowledge}
+                          className="flex items-center justify-between gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm dark:border-slate-800 dark:bg-slate-900"
                         >
-                          {row.person.firstName} {row.person.lastName}
-                        </Link>
-                        <span className="text-xs text-slate-500 dark:text-slate-400">
-                          {new Date(row.ack.acknowledgedAt).toLocaleString()}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        ) : null}
-
-        {active === 'reviews' ? (
-          <div className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Review history ({reviews.length})</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {reviews.length === 0 ? (
-                  <p className="text-sm text-slate-500 dark:text-slate-400">No reviews recorded.</p>
-                ) : (
-                  <ul className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
-                    {reviews.map((row) => (
-                      <li key={row.review.id} className="py-3">
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium">
-                            {row.account?.name ?? row.member?.displayName ?? 'Reviewer'}
+                          <span>
+                            By acknowledging you confirm you've read and understood this document.
                           </span>
-                          <Badge
-                            variant={
-                              row.review.outcome === 'approved_no_change'
-                                ? 'success'
-                                : row.review.outcome === 'updated'
-                                  ? 'warning'
-                                  : 'destructive'
-                            }
-                          >
-                            {row.review.outcome.replace(/_/g, ' ')}
-                          </Badge>
-                        </div>
-                        <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                          {new Date(row.review.reviewedAt).toLocaleDateString()}
-                          {row.review.nextReviewOn ? ` · next ${row.review.nextReviewOn}` : ''}
-                        </div>
-                        {row.review.notes ? (
-                          <p className="mt-1 text-sm text-slate-700 dark:text-slate-200">{row.review.notes}</p>
-                        ) : null}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </CardContent>
-            </Card>
-            <div className="flex justify-end">
-              <Link href={`${basePath}?tab=reviews&drawer=record-review`}>
-                <Button type="button">
-                  <Check size={14} /> Record review
-                </Button>
-              </Link>
-            </div>
-          </div>
-        ) : null}
+                          <input type="hidden" name="documentId" value={id} />
+                          <input type="hidden" name="versionId" value={publishedVersion.id} />
+                          <Button type="submit">
+                            <Check size={14} /> Acknowledge
+                          </Button>
+                        </form>
+                      ) : (
+                        <Alert variant="warning">
+                          <AlertTitle>Not yet published</AlertTitle>
+                          <AlertDescription>
+                            Publish a version of this document before users can acknowledge it.
+                          </AlertDescription>
+                        </Alert>
+                      )
+                    ) : (
+                      <Alert variant="warning">
+                        <AlertTitle>Your account isn't linked to a person record</AlertTitle>
+                        <AlertDescription>
+                          Acknowledgments require a person record in the directory.
+                        </AlertDescription>
+                      </Alert>
+                    )}
 
-        {active === 'activity' ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>Activity</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ActivityFeed entries={activity} />
-            </CardContent>
-          </Card>
-        ) : null}
+                    {acks.length === 0 ? (
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                        No-one has acknowledged this yet.
+                      </p>
+                    ) : (
+                      <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
+                        {acks.map((row) => (
+                          <li key={row.ack.id} className="flex items-center justify-between py-2">
+                            <Link
+                              href={`/people/${row.person.id}`}
+                              className="font-medium hover:underline"
+                            >
+                              {row.person.firstName} {row.person.lastName}
+                            </Link>
+                            <span className="text-xs text-slate-500 dark:text-slate-400">
+                              {new Date(row.ack.acknowledgedAt).toLocaleString()}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            ) : null}
+
+            {active === 'reviews' ? (
+              <div className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Review history ({reviews.length})</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {reviews.length === 0 ? (
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                        No reviews recorded.
+                      </p>
+                    ) : (
+                      <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
+                        {reviews.map((row) => (
+                          <li key={row.review.id} className="py-3">
+                            <div className="flex items-center justify-between">
+                              <span className="font-medium">
+                                {row.account?.name ?? row.member?.displayName ?? 'Reviewer'}
+                              </span>
+                              <Badge
+                                variant={
+                                  row.review.outcome === 'approved_no_change'
+                                    ? 'success'
+                                    : row.review.outcome === 'updated'
+                                      ? 'warning'
+                                      : 'destructive'
+                                }
+                              >
+                                {row.review.outcome.replace(/_/g, ' ')}
+                              </Badge>
+                            </div>
+                            <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                              {new Date(row.review.reviewedAt).toLocaleDateString()}
+                              {row.review.nextReviewOn ? ` · next ${row.review.nextReviewOn}` : ''}
+                            </div>
+                            {row.review.notes ? (
+                              <p className="mt-1 text-sm text-slate-700 dark:text-slate-200">
+                                {row.review.notes}
+                              </p>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </CardContent>
+                </Card>
+                <div className="flex justify-end">
+                  <Link href={`${basePath}?tab=reviews&drawer=record-review`}>
+                    <Button type="button">
+                      <Check size={14} /> Record review
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            ) : null}
+
+            {active === 'activity' ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Activity</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ActivityFeed entries={activity} />
+                </CardContent>
+              </Card>
+            ) : null}
           </div>
         </aside>
 

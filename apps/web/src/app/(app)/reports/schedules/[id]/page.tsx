@@ -20,38 +20,21 @@ import {
   TableRow,
   Textarea,
 } from '@beaconhs/ui'
-import {
-  reportDefinitions,
-  reportRuns,
-  reportSchedules,
-} from '@beaconhs/db/schema'
+import { reportDefinitions, reportRuns, reportSchedules } from '@beaconhs/db/schema'
 import { db, withSuperAdmin } from '@beaconhs/db'
 import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
-import {
-  deleteSchedule,
-  setActive,
-  triggerNow,
-  updateSchedule,
-} from './actions'
+import { deleteSchedule, setActive, triggerNow, updateSchedule } from './actions'
 import { StatusBadge } from '../../page'
 
 export const metadata = { title: 'Report schedule' }
 
-export default async function ScheduleDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>
-}) {
+export default async function ScheduleDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const ctx = await requireRequestContext()
 
   const schedule = await ctx.db(async (tx) => {
-    const [row] = await tx
-      .select()
-      .from(reportSchedules)
-      .where(eq(reportSchedules.id, id))
-      .limit(1)
+    const [row] = await tx.select().from(reportSchedules).where(eq(reportSchedules.id, id)).limit(1)
     return row ?? null
   })
   if (!schedule) notFound()
@@ -202,8 +185,14 @@ export default async function ScheduleDetailPage({
 
               <div className="flex items-center justify-between text-xs text-slate-500">
                 <div>
-                  Next run: <strong>{schedule.nextRunAt ? new Date(schedule.nextRunAt).toLocaleString() : '—'}</strong> · Last run:{' '}
-                  <strong>{schedule.lastRunAt ? new Date(schedule.lastRunAt).toLocaleString() : 'never'}</strong>
+                  Next run:{' '}
+                  <strong>
+                    {schedule.nextRunAt ? new Date(schedule.nextRunAt).toLocaleString() : '—'}
+                  </strong>{' '}
+                  · Last run:{' '}
+                  <strong>
+                    {schedule.lastRunAt ? new Date(schedule.lastRunAt).toLocaleString() : 'never'}
+                  </strong>
                 </div>
                 <Button type="submit">Save changes</Button>
               </div>

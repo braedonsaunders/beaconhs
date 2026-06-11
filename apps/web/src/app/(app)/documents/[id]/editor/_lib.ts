@@ -19,7 +19,18 @@ export const FONT_FAMILIES: { label: string; value: string }[] = [
   { label: 'Courier', value: 'ui-monospace, "Courier New", monospace' },
 ]
 
-export const FONT_SIZES = ['10px', '11px', '12px', '14px', '16px', '18px', '24px', '30px', '36px', '48px']
+export const FONT_SIZES = [
+  '10px',
+  '11px',
+  '12px',
+  '14px',
+  '16px',
+  '18px',
+  '24px',
+  '30px',
+  '36px',
+  '48px',
+]
 
 export const LINE_SPACINGS: { label: string; value: string }[] = [
   { label: 'Single', value: '1' },
@@ -29,12 +40,18 @@ export const LINE_SPACINGS: { label: string; value: string }[] = [
 ]
 
 export const TEXT_COLORS = [
-  '#0f172a', '#475569', '#ef4444', '#f97316', '#eab308',
-  '#22c55e', '#0ea5e9', '#0f766e', '#6366f1', '#ec4899',
+  '#0f172a',
+  '#475569',
+  '#ef4444',
+  '#f97316',
+  '#eab308',
+  '#22c55e',
+  '#0ea5e9',
+  '#0f766e',
+  '#6366f1',
+  '#ec4899',
 ]
-export const HIGHLIGHT_COLORS = [
-  '#fef08a', '#bbf7d0', '#bfdbfe', '#fbcfe8', '#fed7aa', '#e9d5ff',
-]
+export const HIGHLIGHT_COLORS = ['#fef08a', '#bbf7d0', '#bfdbfe', '#fbcfe8', '#fed7aa', '#e9d5ff']
 
 // Client-side comment row (mirrors DocumentCommentRow from _actions.ts).
 export type EditorComment = {

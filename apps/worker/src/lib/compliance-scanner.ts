@@ -28,7 +28,9 @@ export async function scanCompliance(): Promise<ComplianceScanResult> {
       materialized = await withTenant(db, t.id, (tx) => materializeTenant(tx, t.id))
     } catch (err) {
       result.errors += 1
-      console.warn(`[compliance_scan] tenant ${t.id} failed: ${err instanceof Error ? err.message : err}`)
+      console.warn(
+        `[compliance_scan] tenant ${t.id} failed: ${err instanceof Error ? err.message : err}`,
+      )
       continue
     }
     result.obligations += materialized.length

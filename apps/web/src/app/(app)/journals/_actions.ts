@@ -197,11 +197,7 @@ export async function runEntryAI(
 
   const where = await scopedWhere(ctx, id)
   const [entry] = await ctx.db((tx) =>
-    tx
-      .select({ bodyText: journalEntries.bodyText })
-      .from(journalEntries)
-      .where(where)
-      .limit(1),
+    tx.select({ bodyText: journalEntries.bodyText }).from(journalEntries).where(where).limit(1),
   )
   if (!entry) return { ok: false, error: 'Entry not found.' }
 
@@ -393,15 +389,14 @@ export async function fetchEntry(id: string): Promise<JournalEntryDetail | null>
   return getEntry(ctx, id)
 }
 
-export async function emailEntry(
-  id: string,
-): Promise<ActionOk<{ sent: number }> | ActionErr> {
+export async function emailEntry(id: string): Promise<ActionOk<{ sent: number }> | ActionErr> {
   const ctx = await requireRequestContext()
   const sent = await sendJournalEntryEmail(ctx, id)
   if (sent === 0) {
     return {
       ok: false,
-      error: 'No recipients found. Add journal recipients in Admin → Notifications, or set a supervisor with an email.',
+      error:
+        'No recipients found. Add journal recipients in Admin → Notifications, or set a supervisor with an email.',
     }
   }
   return { ok: true, sent }

@@ -28,51 +28,44 @@ export const scheduledQueue = new Queue<ScheduledTick>('scheduled', {
 
 export async function registerSchedules() {
   // Every minute: form assignment dispatch + lone-worker overdue scan
-  await scheduledQueue.add(
-    'tick:every_minute',
-    { kind: 'form_assignment_scan' } as ScheduledTick,
-    { repeat: { pattern: '* * * * *' }, jobId: 'tick:form_assignment_scan' },
-  )
+  await scheduledQueue.add('tick:every_minute', { kind: 'form_assignment_scan' } as ScheduledTick, {
+    repeat: { pattern: '* * * * *' },
+    jobId: 'tick:form_assignment_scan',
+  })
   await scheduledQueue.add(
     'tick:lone_worker',
     { kind: 'lone_worker_overdue_scan' } as ScheduledTick,
     { repeat: { pattern: '* * * * *' }, jobId: 'tick:lone_worker_overdue' },
   )
   // Every 5 minutes: report scheduler scan
-  await scheduledQueue.add(
-    'tick:reports',
-    { kind: 'report_schedule_scan' } as ScheduledTick,
-    { repeat: { pattern: '*/5 * * * *' }, jobId: 'tick:reports' },
-  )
+  await scheduledQueue.add('tick:reports', { kind: 'report_schedule_scan' } as ScheduledTick, {
+    repeat: { pattern: '*/5 * * * *' },
+    jobId: 'tick:reports',
+  })
   // Hourly: confined-space permit expiry + corrective-action overdue
-  await scheduledQueue.add(
-    'tick:cs_permits',
-    { kind: 'cs_permit_expiry_scan' } as ScheduledTick,
-    { repeat: { pattern: '0 * * * *' }, jobId: 'tick:cs_permits' },
-  )
-  await scheduledQueue.add(
-    'tick:ca_overdue',
-    { kind: 'ca_overdue_scan' } as ScheduledTick,
-    { repeat: { pattern: '0 * * * *' }, jobId: 'tick:ca_overdue' },
-  )
+  await scheduledQueue.add('tick:cs_permits', { kind: 'cs_permit_expiry_scan' } as ScheduledTick, {
+    repeat: { pattern: '0 * * * *' },
+    jobId: 'tick:cs_permits',
+  })
+  await scheduledQueue.add('tick:ca_overdue', { kind: 'ca_overdue_scan' } as ScheduledTick, {
+    repeat: { pattern: '0 * * * *' },
+    jobId: 'tick:ca_overdue',
+  })
   // Daily 07:00 local: cert expiry reminders + document review reminders + daily plugins
-  await scheduledQueue.add(
-    'tick:cert_expiry',
-    { kind: 'cert_expiry_scan' } as ScheduledTick,
-    { repeat: { pattern: '0 7 * * *' }, jobId: 'tick:cert_expiry' },
-  )
-  await scheduledQueue.add(
-    'tick:doc_review',
-    { kind: 'document_review_scan' } as ScheduledTick,
-    { repeat: { pattern: '15 7 * * *' }, jobId: 'tick:doc_review' },
-  )
+  await scheduledQueue.add('tick:cert_expiry', { kind: 'cert_expiry_scan' } as ScheduledTick, {
+    repeat: { pattern: '0 7 * * *' },
+    jobId: 'tick:cert_expiry',
+  })
+  await scheduledQueue.add('tick:doc_review', { kind: 'document_review_scan' } as ScheduledTick, {
+    repeat: { pattern: '15 7 * * *' },
+    jobId: 'tick:doc_review',
+  })
   // Daily 06:00: re-materialise every obligation's compliance_status + reminders.
   // (Create/update materialise instantly on the write path; this is the refresh.)
-  await scheduledQueue.add(
-    'tick:compliance_scan',
-    { kind: 'compliance_scan' } as ScheduledTick,
-    { repeat: { pattern: '0 6 * * *' }, jobId: 'tick:compliance_scan' },
-  )
+  await scheduledQueue.add('tick:compliance_scan', { kind: 'compliance_scan' } as ScheduledTick, {
+    repeat: { pattern: '0 6 * * *' },
+    jobId: 'tick:compliance_scan',
+  })
   await scheduledQueue.add(
     'tick:plugin_hourly',
     { kind: 'plugin_cron', cadence: 'hourly' } as ScheduledTick,
@@ -90,9 +83,8 @@ export async function registerSchedules() {
   )
   // Nightly 02:00: legacy MSSQL → BeaconHS incremental ETL sync (reads the rassaun landing delta).
   // Override the cron with ETL_SYNC_CRON if needed.
-  await scheduledQueue.add(
-    'tick:etl_mssql_sync',
-    { kind: 'etl_mssql_sync' } as ScheduledTick,
-    { repeat: { pattern: process.env.ETL_SYNC_CRON ?? '0 2 * * *' }, jobId: 'tick:etl_mssql_sync' },
-  )
+  await scheduledQueue.add('tick:etl_mssql_sync', { kind: 'etl_mssql_sync' } as ScheduledTick, {
+    repeat: { pattern: process.env.ETL_SYNC_CRON ?? '0 2 * * *' },
+    jobId: 'tick:etl_mssql_sync',
+  })
 }

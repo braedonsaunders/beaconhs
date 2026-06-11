@@ -17,13 +17,7 @@ function intensity(count: number): string {
   return 'bg-teal-700 hover:bg-teal-800'
 }
 
-export function Heatmap({
-  data,
-  onPick,
-}: {
-  data: HeatmapCell[]
-  onPick: (date: string) => void
-}) {
+export function Heatmap({ data, onPick }: { data: HeatmapCell[]; onPick: (date: string) => void }) {
   const { columns, monthTicks } = useMemo(() => {
     const counts = new Map(data.map((d) => [d.date, d.count]))
     const today = new Date()
@@ -55,7 +49,7 @@ export function Heatmap({
   }, [data])
 
   return (
-    <div className="overflow-x-auto pb-1 app-scroll">
+    <div className="app-scroll overflow-x-auto pb-1">
       <div className="inline-flex flex-col gap-1">
         <div className="flex gap-[3px] pl-[2px] text-[8px] leading-none text-slate-400">
           {columns.map((_, w) => {
@@ -79,7 +73,7 @@ export function Heatmap({
                     type="button"
                     title={`${cell.date} · ${cell.count} ${cell.count === 1 ? 'entry' : 'entries'}`}
                     onClick={() => onPick(cell.date)}
-                    className={`h-[10px] w-[10px] rounded-[2px] ring-1 ring-inset ring-black/[0.03] transition-colors ${intensity(cell.count)}`}
+                    className={`h-[10px] w-[10px] rounded-[2px] ring-1 ring-black/[0.03] transition-colors ring-inset ${intensity(cell.count)}`}
                   />
                 ),
               )}

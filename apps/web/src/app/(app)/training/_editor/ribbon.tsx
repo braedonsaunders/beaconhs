@@ -35,7 +35,16 @@ import { cn } from '@beaconhs/ui'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
 import { toast } from '@/lib/toast'
 
-const TEXT_COLORS = ['#0f172a', '#dc2626', '#d97706', '#059669', '#0f766e', '#2563eb', '#7c3aed', '#ffffff']
+const TEXT_COLORS = [
+  '#0f172a',
+  '#dc2626',
+  '#d97706',
+  '#059669',
+  '#0f766e',
+  '#2563eb',
+  '#7c3aed',
+  '#ffffff',
+]
 const HIGHLIGHTS = ['#fef08a', '#bbf7d0', '#fbcfe8', '#bfdbfe', '#fed7aa']
 
 export function LessonRibbon({ editor, extra }: { editor: Editor | null; extra?: ReactNode }) {
@@ -46,10 +55,18 @@ export function LessonRibbon({ editor, extra }: { editor: Editor | null; extra?:
   const can = !!e
   return (
     <div className="flex flex-wrap items-center gap-0.5 border-b border-slate-200 bg-white px-2 py-1">
-      <Btn label="Undo" disabled={!can || !e!.can().undo()} onClick={() => e!.chain().focus().undo().run()}>
+      <Btn
+        label="Undo"
+        disabled={!can || !e!.can().undo()}
+        onClick={() => e!.chain().focus().undo().run()}
+      >
         <Undo2 size={15} />
       </Btn>
-      <Btn label="Redo" disabled={!can || !e!.can().redo()} onClick={() => e!.chain().focus().redo().run()}>
+      <Btn
+        label="Redo"
+        disabled={!can || !e!.can().redo()}
+        onClick={() => e!.chain().focus().redo().run()}
+      >
         <Redo2 size={15} />
       </Btn>
       <Sep />
@@ -57,43 +74,98 @@ export function LessonRibbon({ editor, extra }: { editor: Editor | null; extra?:
       <StyleSelect editor={e} />
       <Sep />
 
-      <Btn label="Bold" disabled={!can} active={can && e!.isActive('bold')} onClick={() => e!.chain().focus().toggleBold().run()}>
+      <Btn
+        label="Bold"
+        disabled={!can}
+        active={can && e!.isActive('bold')}
+        onClick={() => e!.chain().focus().toggleBold().run()}
+      >
         <Bold size={15} />
       </Btn>
-      <Btn label="Italic" disabled={!can} active={can && e!.isActive('italic')} onClick={() => e!.chain().focus().toggleItalic().run()}>
+      <Btn
+        label="Italic"
+        disabled={!can}
+        active={can && e!.isActive('italic')}
+        onClick={() => e!.chain().focus().toggleItalic().run()}
+      >
         <Italic size={15} />
       </Btn>
-      <Btn label="Underline" disabled={!can} active={can && e!.isActive('underline')} onClick={() => e!.chain().focus().toggleUnderline().run()}>
+      <Btn
+        label="Underline"
+        disabled={!can}
+        active={can && e!.isActive('underline')}
+        onClick={() => e!.chain().focus().toggleUnderline().run()}
+      >
         <UnderlineIcon size={15} />
       </Btn>
-      <Btn label="Strikethrough" disabled={!can} active={can && e!.isActive('strike')} onClick={() => e!.chain().focus().toggleStrike().run()}>
+      <Btn
+        label="Strikethrough"
+        disabled={!can}
+        active={can && e!.isActive('strike')}
+        onClick={() => e!.chain().focus().toggleStrike().run()}
+      >
         <Strikethrough size={15} />
       </Btn>
       <ColorMenu editor={e} mode="text" />
       <ColorMenu editor={e} mode="highlight" />
       <Sep />
 
-      <Btn label="Bullet list" disabled={!can} active={can && e!.isActive('bulletList')} onClick={() => e!.chain().focus().toggleBulletList().run()}>
+      <Btn
+        label="Bullet list"
+        disabled={!can}
+        active={can && e!.isActive('bulletList')}
+        onClick={() => e!.chain().focus().toggleBulletList().run()}
+      >
         <List size={15} />
       </Btn>
-      <Btn label="Numbered list" disabled={!can} active={can && e!.isActive('orderedList')} onClick={() => e!.chain().focus().toggleOrderedList().run()}>
+      <Btn
+        label="Numbered list"
+        disabled={!can}
+        active={can && e!.isActive('orderedList')}
+        onClick={() => e!.chain().focus().toggleOrderedList().run()}
+      >
         <ListOrdered size={15} />
       </Btn>
-      <Btn label="Checklist" disabled={!can} active={can && e!.isActive('taskList')} onClick={() => e!.chain().focus().toggleTaskList().run()}>
+      <Btn
+        label="Checklist"
+        disabled={!can}
+        active={can && e!.isActive('taskList')}
+        onClick={() => e!.chain().focus().toggleTaskList().run()}
+      >
         <ListChecks size={15} />
       </Btn>
-      <Btn label="Quote" disabled={!can} active={can && e!.isActive('blockquote')} onClick={() => e!.chain().focus().toggleBlockquote().run()}>
+      <Btn
+        label="Quote"
+        disabled={!can}
+        active={can && e!.isActive('blockquote')}
+        onClick={() => e!.chain().focus().toggleBlockquote().run()}
+      >
         <Quote size={15} />
       </Btn>
       <Sep />
 
-      <Btn label="Align left" disabled={!can} active={can && e!.isActive({ textAlign: 'left' })} onClick={() => e!.chain().focus().setTextAlign('left').run()}>
+      <Btn
+        label="Align left"
+        disabled={!can}
+        active={can && e!.isActive({ textAlign: 'left' })}
+        onClick={() => e!.chain().focus().setTextAlign('left').run()}
+      >
         <AlignLeft size={15} />
       </Btn>
-      <Btn label="Align centre" disabled={!can} active={can && e!.isActive({ textAlign: 'center' })} onClick={() => e!.chain().focus().setTextAlign('center').run()}>
+      <Btn
+        label="Align centre"
+        disabled={!can}
+        active={can && e!.isActive({ textAlign: 'center' })}
+        onClick={() => e!.chain().focus().setTextAlign('center').run()}
+      >
         <AlignCenter size={15} />
       </Btn>
-      <Btn label="Align right" disabled={!can} active={can && e!.isActive({ textAlign: 'right' })} onClick={() => e!.chain().focus().setTextAlign('right').run()}>
+      <Btn
+        label="Align right"
+        disabled={!can}
+        active={can && e!.isActive({ textAlign: 'right' })}
+        onClick={() => e!.chain().focus().setTextAlign('right').run()}
+      >
         <AlignRight size={15} />
       </Btn>
       <Sep />
@@ -104,14 +176,24 @@ export function LessonRibbon({ editor, extra }: { editor: Editor | null; extra?:
         label="Insert table"
         disabled={!can}
         active={can && e!.isActive('table')}
-        onClick={() => e!.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
+        onClick={() =>
+          e!.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
+        }
       >
         <TableIcon size={15} />
       </Btn>
-      <Btn label="Divider" disabled={!can} onClick={() => e!.chain().focus().setHorizontalRule().run()}>
+      <Btn
+        label="Divider"
+        disabled={!can}
+        onClick={() => e!.chain().focus().setHorizontalRule().run()}
+      >
         <SeparatorHorizontal size={15} />
       </Btn>
-      <Btn label="Clear formatting" disabled={!can} onClick={() => e!.chain().focus().clearNodes().unsetAllMarks().run()}>
+      <Btn
+        label="Clear formatting"
+        disabled={!can}
+        onClick={() => e!.chain().focus().clearNodes().unsetAllMarks().run()}
+      >
         <RemoveFormatting size={15} />
       </Btn>
 
@@ -183,7 +265,12 @@ function StyleSelect({ editor }: { editor: Editor | null }) {
         const v = e.currentTarget.value
         if (!editor) return
         if (v === 'p') editor.chain().focus().setParagraph().run()
-        else editor.chain().focus().setHeading({ level: Number(v[1]) as 1 | 2 | 3 }).run()
+        else
+          editor
+            .chain()
+            .focus()
+            .setHeading({ level: Number(v[1]) as 1 | 2 | 3 })
+            .run()
       }}
       className="h-7 rounded border border-transparent bg-transparent px-1.5 text-xs font-medium text-slate-700 hover:border-slate-200 focus:outline-none disabled:opacity-40"
     >
@@ -210,7 +297,7 @@ function ColorMenu({ editor, mode }: { editor: Editor | null; mode: 'text' | 'hi
         <ChevronDown size={8} className="-ml-0.5" />
       </Btn>
       {open && editor ? (
-        <span className="absolute left-0 top-8 z-40 flex gap-1 rounded-md border border-slate-200 bg-white p-1.5 shadow-lg">
+        <span className="absolute top-8 left-0 z-40 flex gap-1 rounded-md border border-slate-200 bg-white p-1.5 shadow-lg">
           {colors.map((c) => (
             <button
               key={c}
@@ -270,7 +357,11 @@ function ImageBtn({ editor }: { editor: Editor | null }) {
   const [busy, setBusy] = useState(false)
   return (
     <>
-      <Btn label="Insert image" disabled={!editor || busy} onClick={() => inputRef.current?.click()}>
+      <Btn
+        label="Insert image"
+        disabled={!editor || busy}
+        onClick={() => inputRef.current?.click()}
+      >
         {busy ? <Loader2 size={15} className="animate-spin" /> : <ImageIcon size={15} />}
       </Btn>
       <input
@@ -291,7 +382,11 @@ function ImageBtn({ editor }: { editor: Editor | null }) {
               sizeBytes: file.size,
             })
             if (!req.ok) throw new Error(req.error)
-            await fetch(req.putUrl, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } })
+            await fetch(req.putUrl, {
+              method: 'PUT',
+              body: file,
+              headers: { 'Content-Type': file.type },
+            })
             const fin = await finalizeUpload({
               key: req.key,
               kind: 'image',

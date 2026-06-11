@@ -38,7 +38,7 @@ const KIND_META: Record<
 export function CompleteStepsTimeline({ steps }: { steps: CompleteStep[] }) {
   return (
     <div>
-      <div className="text-xs uppercase tracking-wide text-slate-500">Timeline</div>
+      <div className="text-xs tracking-wide text-slate-500 uppercase">Timeline</div>
       {steps.length === 0 ? (
         <p className="mt-2 text-sm text-slate-500">No steps recorded yet.</p>
       ) : (
@@ -47,10 +47,7 @@ export function CompleteStepsTimeline({ steps }: { steps: CompleteStep[] }) {
             const meta = KIND_META[s.kind]
             const Icon = meta.icon
             return (
-              <li
-                key={s.id}
-                className="rounded-md border border-slate-200 bg-white p-3 text-sm"
-              >
+              <li key={s.id} className="rounded-md border border-slate-200 bg-white p-3 text-sm">
                 <div className="flex items-center justify-between gap-2">
                   <span className="flex items-center gap-2">
                     <span
@@ -60,9 +57,7 @@ export function CompleteStepsTimeline({ steps }: { steps: CompleteStep[] }) {
                     </span>
                     <span className="font-medium text-slate-900">{meta.label}</span>
                   </span>
-                  <span className="text-xs text-slate-500">
-                    {s.completedAt.toLocaleString()}
-                  </span>
+                  <span className="text-xs text-slate-500">{s.completedAt.toLocaleString()}</span>
                 </div>
                 {s.completedByName ? (
                   <div className="mt-1 text-xs text-slate-500">by {s.completedByName}</div>

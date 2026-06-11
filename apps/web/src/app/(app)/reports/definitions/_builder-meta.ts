@@ -172,7 +172,8 @@ export const BUILDER_ENTITIES: BuilderEntity[] = [
     key: 'form_responses',
     label: 'Form responses',
     category: 'forms',
-    description: 'Submitted form responses across all templates (JSHA, toolbox, inspections, custom).',
+    description:
+      'Submitted form responses across all templates (JSHA, toolbox, inspections, custom).',
     columns: [
       { key: 'template_id', label: 'Template (id)', kind: 'uuid' },
       { key: 'status', label: 'Status', kind: 'enum' },

@@ -69,10 +69,7 @@ export default async function AssessmentTypeDetailPage({
       .from(trainingAssessmentTypeQuestions)
       .where(eq(trainingAssessmentTypeQuestions.typeId, id))
       .orderBy(asc(trainingAssessmentTypeQuestions.entityOrder))
-    const courses = await tx
-      .select()
-      .from(trainingCourses)
-      .orderBy(asc(trainingCourses.name))
+    const courses = await tx.select().from(trainingCourses).orderBy(asc(trainingCourses.name))
     return { type, course, questions, courses }
   })
 
@@ -165,19 +162,11 @@ export default async function AssessmentTypeDetailPage({
               </Field>
               <div className="flex flex-col gap-2 sm:flex-row sm:gap-6">
                 <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    name="graded"
-                    defaultChecked={type.graded}
-                  />
+                  <input type="checkbox" name="graded" defaultChecked={type.graded} />
                   Graded
                 </label>
                 <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    name="active"
-                    defaultChecked={type.active}
-                  />
+                  <input type="checkbox" name="active" defaultChecked={type.active} />
                   Active
                 </label>
               </div>
@@ -207,24 +196,17 @@ export default async function AssessmentTypeDetailPage({
                   const reorderDown = reorderAssessmentQuestion.bind(null, id, q.id, 'down')
                   const opts = Array.isArray(q.options) ? q.options : []
                   return (
-                    <li
-                      key={q.id}
-                      className="rounded-lg border border-slate-200 bg-white p-3"
-                    >
+                    <li key={q.id} className="rounded-lg border border-slate-200 bg-white p-3">
                       <details>
                         <summary className="flex cursor-pointer items-center justify-between gap-3">
                           <span className="flex min-w-0 items-center gap-2">
                             <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-medium text-slate-700">
                               {i + 1}
                             </span>
-                            <span className="truncate font-medium text-slate-900">
-                              {q.prompt}
-                            </span>
+                            <span className="truncate font-medium text-slate-900">{q.prompt}</span>
                           </span>
                           <span className="flex shrink-0 items-center gap-2">
-                            <Badge variant="secondary">
-                              {KIND_LABELS[q.kind] ?? q.kind}
-                            </Badge>
+                            <Badge variant="secondary">{KIND_LABELS[q.kind] ?? q.kind}</Badge>
                             <Badge variant="outline">{q.points} pt</Badge>
                             <form action={reorderUp}>
                               <button
@@ -264,12 +246,7 @@ export default async function AssessmentTypeDetailPage({
                               </Select>
                             </Field>
                             <Field label="Points">
-                              <Input
-                                name="points"
-                                type="number"
-                                min={1}
-                                defaultValue={q.points}
-                              />
+                              <Input name="points" type="number" min={1} defaultValue={q.points} />
                             </Field>
                             <div className="flex items-end">
                               <label className="flex items-center gap-2 text-sm">
@@ -294,10 +271,7 @@ export default async function AssessmentTypeDetailPage({
                           )}
                           <Field label="Correct answer">
                             {q.kind === 'true_false' ? (
-                              <Select
-                                name="correctAnswer"
-                                defaultValue={q.correctAnswer ?? 'true'}
-                              >
+                              <Select name="correctAnswer" defaultValue={q.correctAnswer ?? 'true'}>
                                 <option value="true">True</option>
                                 <option value="false">False</option>
                               </Select>

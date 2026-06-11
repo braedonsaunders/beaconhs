@@ -49,10 +49,7 @@ export function journalScopeWhere(
  * never compared as a uuid; a context with no person and no membership resolves
  * to `false` (an empty personal workspace), never the whole tenant.
  */
-export function journalSelfScopeWhere(
-  ctx: RequestContext,
-  authorPersonId: string | null,
-): SQL {
+export function journalSelfScopeWhere(ctx: RequestContext, authorPersonId: string | null): SQL {
   const conds: SQL[] = []
   if (authorPersonId) conds.push(eq(journalEntries.personId, authorPersonId))
   const tenantUserId = authorTenantUserId(ctx)

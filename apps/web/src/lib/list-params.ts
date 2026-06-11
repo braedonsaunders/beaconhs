@@ -22,9 +22,18 @@ export function parseListParams<S extends string>(
   const q = pickString(searchParams.q)
   const rawSort = pickString(searchParams.sort)
   const sort = config.allowedSorts.includes(rawSort as S) ? (rawSort as S) : config.sort
-  const dir = pickString(searchParams.dir) === 'asc' ? 'asc' : pickString(searchParams.dir) === 'desc' ? 'desc' : (config.dir ?? 'desc')
+  const dir =
+    pickString(searchParams.dir) === 'asc'
+      ? 'asc'
+      : pickString(searchParams.dir) === 'desc'
+        ? 'desc'
+        : (config.dir ?? 'desc')
   const page = clamp(Number(pickString(searchParams.page) ?? '1'), 1, 10_000)
-  const perPage = clamp(Number(pickString(searchParams.perPage) ?? String(config.perPage ?? 25)), 5, 100)
+  const perPage = clamp(
+    Number(pickString(searchParams.perPage) ?? String(config.perPage ?? 25)),
+    5,
+    100,
+  )
   return { q: q && q.length ? q : undefined, sort, dir, page, perPage }
 }
 

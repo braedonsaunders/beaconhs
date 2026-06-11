@@ -37,7 +37,10 @@ export function defaultRangeYmd(): { start: string; end: string } {
 
 // Slice an [a, b] yyyy-mm-dd range into N month buckets.  Inclusive of
 // both endpoints — used by every monthly chart.
-export function monthBuckets(startYmd: string, endYmd: string): {
+export function monthBuckets(
+  startYmd: string,
+  endYmd: string,
+): {
   key: string
   label: string
   start: string
@@ -76,8 +79,13 @@ export async function hoursInRange(
   const [row] = await ctx.db((tx) =>
     tx
       .select({
-        totalHours: sql<number>`coalesce(sum(${incidentHoursPeriods.totalHours}::numeric), 0)`.mapWith(Number),
-        employeeCount: sql<number>`coalesce(sum(${incidentHoursPeriods.employeeCount}), 0)`.mapWith(Number),
+        totalHours:
+          sql<number>`coalesce(sum(${incidentHoursPeriods.totalHours}::numeric), 0)`.mapWith(
+            Number,
+          ),
+        employeeCount: sql<number>`coalesce(sum(${incidentHoursPeriods.employeeCount}), 0)`.mapWith(
+          Number,
+        ),
         periodCount: sql<number>`count(*)`.mapWith(Number),
       })
       .from(incidentHoursPeriods)
@@ -110,17 +118,10 @@ export async function recordableCountInRange(
         c: sql<number>`count(*)`.mapWith(Number),
       })
       .from(incidents)
-      .leftJoin(
-        incidentClassifications,
-        eq(incidentClassifications.id, incidents.classificationId),
-      )
+      .leftJoin(incidentClassifications, eq(incidentClassifications.id, incidents.classificationId))
       .where(
         and(
-          between(
-            sql`date(${incidents.occurredAt})` as any,
-            startYmd as any,
-            endYmd as any,
-          ),
+          between(sql`date(${incidents.occurredAt})` as any, startYmd as any, endYmd as any),
           sql`(
             (${incidentClassifications.isRecordable} = 1)
             or (${incidents.classificationId} is null and ${incidents.severity} <> 'no_injury')
@@ -141,7 +142,9 @@ export async function dartCountsInRange(
   const [row] = await ctx.db((tx) =>
     tx
       .select({
-        dartCount: sql<number>`count(distinct ${incidentLostTimeEvents.incidentId})`.mapWith(Number),
+        dartCount: sql<number>`count(distinct ${incidentLostTimeEvents.incidentId})`.mapWith(
+          Number,
+        ),
         daysAway: sql<number>`
           coalesce(sum(
             case when ${incidentLostTimeEvents.status} = 'off_work'

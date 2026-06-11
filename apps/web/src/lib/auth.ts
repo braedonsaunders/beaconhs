@@ -1,19 +1,9 @@
 import { cookies, headers } from 'next/headers'
 import { auth } from '@beaconhs/auth'
 import { db } from '@beaconhs/db'
-import {
-  roleAssignments,
-  roles,
-  tenants,
-  tenantUsers,
-  users,
-} from '@beaconhs/db/schema'
+import { roleAssignments, roles, tenants, tenantUsers, users } from '@beaconhs/db/schema'
 import { and, eq, sql } from 'drizzle-orm'
-import {
-  makeTenantContext,
-  UnauthorizedError,
-  type RequestContext,
-} from '@beaconhs/tenant'
+import { makeTenantContext, UnauthorizedError, type RequestContext } from '@beaconhs/tenant'
 
 export const ACTIVE_TENANT_COOKIE = 'bhs-active-tenant'
 
@@ -113,9 +103,7 @@ export async function getRequestContext(): Promise<RequestContext | null> {
         userId,
         tenantId: t.id,
         isSuperAdmin: true,
-        membership: m
-          ? { id: m.id, displayName: m.displayName ?? u.name }
-          : null,
+        membership: m ? { id: m.id, displayName: m.displayName ?? u.name } : null,
         permissions,
         scopes: [{ type: 'tenant' }],
       })

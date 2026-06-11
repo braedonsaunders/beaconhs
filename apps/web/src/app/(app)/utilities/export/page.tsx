@@ -41,9 +41,9 @@ export default function ExportHubPage() {
         <Alert>
           <AlertTitle>How this page works</AlertTitle>
           <AlertDescription>
-            Picking an entity opens the canonical CSV endpoint shipped by that module — the
-            same one the module&apos;s list page uses. Filters carried through query string
-            apply; for &quot;everything&quot; export, just click the button.
+            Picking an entity opens the canonical CSV endpoint shipped by that module — the same one
+            the module&apos;s list page uses. Filters carried through query string apply; for
+            &quot;everything&quot; export, just click the button.
           </AlertDescription>
         </Alert>
 

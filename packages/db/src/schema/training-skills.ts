@@ -104,25 +104,22 @@ export const trainingSkillTypesRelations = relations(trainingSkillTypes, ({ one,
   assignments: many(trainingSkillAssignments),
 }))
 
-export const trainingSkillAssignmentsRelations = relations(
-  trainingSkillAssignments,
-  ({ one }) => ({
-    tenant: one(tenants, { fields: [trainingSkillAssignments.tenantId], references: [tenants.id] }),
-    person: one(people, {
-      fields: [trainingSkillAssignments.personId],
-      references: [people.id],
-    }),
-    skillType: one(trainingSkillTypes, {
-      fields: [trainingSkillAssignments.skillTypeId],
-      references: [trainingSkillTypes.id],
-    }),
-    grantedBy: one(tenantUsers, {
-      fields: [trainingSkillAssignments.grantedByTenantUserId],
-      references: [tenantUsers.id],
-    }),
-    evidence: one(attachments, {
-      fields: [trainingSkillAssignments.evidenceAttachmentId],
-      references: [attachments.id],
-    }),
+export const trainingSkillAssignmentsRelations = relations(trainingSkillAssignments, ({ one }) => ({
+  tenant: one(tenants, { fields: [trainingSkillAssignments.tenantId], references: [tenants.id] }),
+  person: one(people, {
+    fields: [trainingSkillAssignments.personId],
+    references: [people.id],
   }),
-)
+  skillType: one(trainingSkillTypes, {
+    fields: [trainingSkillAssignments.skillTypeId],
+    references: [trainingSkillTypes.id],
+  }),
+  grantedBy: one(tenantUsers, {
+    fields: [trainingSkillAssignments.grantedByTenantUserId],
+    references: [tenantUsers.id],
+  }),
+  evidence: one(attachments, {
+    fields: [trainingSkillAssignments.evidenceAttachmentId],
+    references: [attachments.id],
+  }),
+}))

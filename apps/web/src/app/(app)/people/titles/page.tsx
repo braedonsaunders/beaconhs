@@ -13,11 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from '@beaconhs/ui'
-import {
-  jobTitleTasks,
-  personTitleAssignments,
-  personTitles,
-} from '@beaconhs/db/schema'
+import { jobTitleTasks, personTitleAssignments, personTitles } from '@beaconhs/db/schema'
 import { requireModuleManage } from '@/lib/module-admin/guard'
 import { ListPageLayout } from '@/components/page-layout'
 import { PeopleSubNav } from '../_components/people-sub-nav'
@@ -97,11 +93,7 @@ export default async function TitlesPage() {
                   </Link>
                 </TableCell>
                 <TableCell className="text-slate-600">
-                  {t.description ? (
-                    <span className="line-clamp-2">{t.description}</span>
-                  ) : (
-                    '—'
-                  )}
+                  {t.description ? <span className="line-clamp-2">{t.description}</span> : '—'}
                 </TableCell>
                 <TableCell>
                   <Badge variant="secondary">
@@ -132,10 +124,7 @@ export default async function TitlesPage() {
                       PDF
                     </Link>
                     <span className="text-slate-300">·</span>
-                    <Link
-                      href={`/people/titles/${t.id}`}
-                      className="text-teal-700 hover:underline"
-                    >
+                    <Link href={`/people/titles/${t.id}`} className="text-teal-700 hover:underline">
                       View →
                     </Link>
                   </div>

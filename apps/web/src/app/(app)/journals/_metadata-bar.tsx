@@ -25,7 +25,12 @@ export function MetadataBar({
   people: JournalOption[]
   tagSuggestions: TagSuggestion[]
   editable: boolean
-  onPatch: (patch: { entryDate?: string; definition?: JournalDefinition; siteOrgUnitId?: string | null; supervisorPersonId?: string | null }) => void
+  onPatch: (patch: {
+    entryDate?: string
+    definition?: JournalDefinition
+    siteOrgUnitId?: string | null
+    supervisorPersonId?: string | null
+  }) => void
   onTagsChange: (tags: string[]) => void
 }) {
   return (
@@ -88,7 +93,7 @@ export function MetadataBar({
 
       {/* Tags — full width */}
       <div>
-        <div className="mb-1 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-slate-400">
+        <div className="mb-1 flex items-center gap-1.5 text-[11px] font-medium tracking-wide text-slate-400 uppercase">
           <Tag size={12} /> Tags
         </div>
         <TagEditor
@@ -114,7 +119,11 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className={cn('mb-1 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-slate-400')}>
+      <span
+        className={cn(
+          'mb-1 flex items-center gap-1.5 text-[11px] font-medium tracking-wide text-slate-400 uppercase',
+        )}
+      >
         {icon}
         {label}
       </span>

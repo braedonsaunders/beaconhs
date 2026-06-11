@@ -4,11 +4,7 @@
 
 import { NextRequest } from 'next/server'
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
-import {
-  people,
-  trainingCourses,
-  trainingRecords,
-} from '@beaconhs/db/schema'
+import { people, trainingCourses, trainingRecords } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { csvFilename, csvResponse } from '@/lib/csv'
 
@@ -52,9 +48,7 @@ export async function GET(req: NextRequest) {
             expiresOn: trainingRecords.expiresOn,
           })
           .from(trainingRecords)
-          .where(
-            and(inArray(trainingRecords.personId, ids), isNull(trainingRecords.deletedAt)),
-          )
+          .where(and(inArray(trainingRecords.personId, ids), isNull(trainingRecords.deletedAt)))
       : []
     return { peopleRows: peopleQuery, coursesRows: coursesQuery, recs: recRows }
   })
@@ -77,11 +71,7 @@ export async function GET(req: NextRequest) {
     ...coursesRows.map((c) => `${c.code}: ${c.name}`),
   ]
   const rows: (string | null)[][] = peopleRows.map((p) => {
-    const row: (string | null)[] = [
-      p.employeeNo ?? null,
-      p.lastName,
-      p.firstName,
-    ]
+    const row: (string | null)[] = [p.employeeNo ?? null, p.lastName, p.firstName]
     for (const c of coursesRows) {
       const r = latest.get(`${p.id}:${c.id}`)
       if (!r) {

@@ -58,7 +58,13 @@ function buildTargetRef(input: ObligationInput): { ref: ComplianceTargetRef; err
       if (k === 'course' && !input.courseId) return { ref: {}, error: 'Pick a course' }
       if (k === 'assessment_type' && !input.assessmentTypeId)
         return { ref: {}, error: 'Pick an assessment type' }
-      return { ref: { trainingItemKind: k, courseId: input.courseId, assessmentTypeId: input.assessmentTypeId } }
+      return {
+        ref: {
+          trainingItemKind: k,
+          courseId: input.courseId,
+          assessmentTypeId: input.assessmentTypeId,
+        },
+      }
     }
     case 'cert_requirement':
       if (!input.courseId) return { ref: {}, error: 'Pick the certification (course)' }
@@ -91,7 +97,12 @@ function buildRecurrence(kind: ObligationKind, r: RecurrenceValue): ComplianceRe
   if (kind === 'training')
     return r.kind === 'one_time'
       ? { kind: 'one_time', dueOn: r.dueOn, remindBeforeDays: r.remindBeforeDays ?? 7 }
-      : { kind: 'frequency', frequency: r.frequency ?? 'week', cron: cronFor(), remindBeforeDays: r.remindBeforeDays ?? 7 }
+      : {
+          kind: 'frequency',
+          frequency: r.frequency ?? 'week',
+          cron: cronFor(),
+          remindBeforeDays: r.remindBeforeDays ?? 7,
+        }
   // inspection / journal → frequency
   return {
     kind: 'frequency',

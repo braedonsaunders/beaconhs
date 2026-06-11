@@ -140,9 +140,7 @@ export async function submitAssessmentAttempt(attemptId: string, formData: FormD
         .limit(1)
       const completedOn = new Date().toISOString().slice(0, 10)
       const expiresOn = course?.validForMonths
-        ? new Date(Date.now() + course.validForMonths * 30 * 86_400_000)
-            .toISOString()
-            .slice(0, 10)
+        ? new Date(Date.now() + course.validForMonths * 30 * 86_400_000).toISOString().slice(0, 10)
         : null
       const [rec] = await tx
         .insert(trainingRecords)
@@ -246,7 +244,7 @@ export async function setAssessmentAnswer(
       .set({
         answer,
         correct,
-        pointsAwarded: correct === true ? row.pointsPossible ?? 1 : 0,
+        pointsAwarded: correct === true ? (row.pointsPossible ?? 1) : 0,
       })
       .where(eq(trainingAssessmentResults.id, resultId))
   })

@@ -17,12 +17,7 @@
 import Link from 'next/link'
 import { isNull, asc } from 'drizzle-orm'
 import { Users } from 'lucide-react'
-import {
-  Badge,
-  Button,
-  EmptyState,
-  PageHeader,
-} from '@beaconhs/ui'
+import { Badge, Button, EmptyState, PageHeader } from '@beaconhs/ui'
 import { people } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { ListPageLayout } from '@/components/page-layout'
@@ -99,9 +94,7 @@ export default async function OrgChartPage({
           <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
             <Badge variant="secondary">{totalPeople} people</Badge>
             <Badge variant="secondary">{orphanCount} top-level</Badge>
-            {rootParam ? (
-              <Badge variant="warning">Subtree view</Badge>
-            ) : null}
+            {rootParam ? <Badge variant="warning">Subtree view</Badge> : null}
           </div>
         </>
       }

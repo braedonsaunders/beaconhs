@@ -7,7 +7,7 @@ import { collectSuggestionRuns } from './_ext/suggestion'
 export function SuggestionBar({ editor }: { editor: Editor }) {
   const runs = collectSuggestionRuns(editor.state)
   return (
-    <div className="flex flex-wrap items-center gap-1.5 border-b border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/40 px-3 py-1.5 text-xs">
+    <div className="flex flex-wrap items-center gap-1.5 border-b border-amber-200 bg-amber-50 px-3 py-1.5 text-xs dark:border-amber-800/60 dark:bg-amber-950/40">
       <span className="font-medium text-amber-800 dark:text-amber-300">
         Suggesting · {runs.length} change{runs.length === 1 ? '' : 's'}
       </span>

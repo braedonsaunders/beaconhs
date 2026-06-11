@@ -22,11 +22,7 @@ import { loadPersonTranscript } from '../../_lib/participants'
 
 export const dynamic = 'force-dynamic'
 
-export async function generateMetadata({
-  params,
-}: {
-  params: Promise<{ personId: string }>
-}) {
+export async function generateMetadata({ params }: { params: Promise<{ personId: string }> }) {
   const { personId } = await params
   return { title: `Form transcript · ${personId.slice(0, 8)}` }
 }

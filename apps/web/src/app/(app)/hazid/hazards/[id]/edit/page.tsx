@@ -74,7 +74,11 @@ export default async function EditHazardPage({ params }: { params: Promise<{ id:
               </div>
               <div className="space-y-1.5">
                 <Label>Standard controls</Label>
-                <Textarea name="standardControls" rows={4} defaultValue={row.standardControls ?? ''} />
+                <Textarea
+                  name="standardControls"
+                  rows={4}
+                  defaultValue={row.standardControls ?? ''}
+                />
               </div>
               <div className="space-y-1.5">
                 <Label>Risks</Label>

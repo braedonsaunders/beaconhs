@@ -23,8 +23,7 @@ const buttonVariants = cva(
           'bg-red-600 text-white shadow-sm hover:bg-red-700 hover:shadow active:bg-red-800',
         secondary:
           'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 hover:bg-slate-200 dark:hover:bg-slate-700 active:bg-slate-300 dark:active:bg-slate-600',
-        link:
-          'text-teal-700 dark:text-teal-300 underline-offset-4 hover:underline focus-visible:ring-offset-0',
+        link: 'text-teal-700 dark:text-teal-300 underline-offset-4 hover:underline focus-visible:ring-offset-0',
       },
       size: {
         sm: 'h-8 px-3',

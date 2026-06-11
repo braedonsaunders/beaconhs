@@ -130,7 +130,9 @@ export async function clearTenantAiKey(ctx: RequestContext): Promise<void> {
     const prev = (settings.ai && typeof settings.ai === 'object' ? settings.ai : {}) as RawAi
     await tx
       .update(tenants)
-      .set({ settings: { ...settings, ai: { ...prev, keyCiphertext: undefined, keyNonce: undefined } } })
+      .set({
+        settings: { ...settings, ai: { ...prev, keyCiphertext: undefined, keyNonce: undefined } },
+      })
       .where(eq(tenants.id, ctx.tenantId))
   })
 }

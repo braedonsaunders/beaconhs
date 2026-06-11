@@ -413,9 +413,7 @@ export default async function CSPermitDetailPage({
                       <TableCell>{r.lelPct ?? '—'}</TableCell>
                       <TableCell>{r.h2sPpm ?? '—'}</TableCell>
                       <TableCell>{r.coPpm ?? '—'}</TableCell>
-                      <TableCell className="text-slate-600">
-                        {r.sensorIdentifier ?? '—'}
-                      </TableCell>
+                      <TableCell className="text-slate-600">{r.sensorIdentifier ?? '—'}</TableCell>
                       <TableCell>
                         <Badge variant={r.outOfSpec ? 'destructive' : 'success'}>
                           {r.outOfSpec ? 'Out of spec' : 'Pass'}
@@ -485,9 +483,7 @@ export default async function CSPermitDetailPage({
                             <Badge variant="secondary">{row.row.role}</Badge>
                           </TableCell>
                           <TableCell>
-                            {row.row.enteredAt
-                              ? new Date(row.row.enteredAt).toLocaleString()
-                              : '—'}
+                            {row.row.enteredAt ? new Date(row.row.enteredAt).toLocaleString() : '—'}
                           </TableCell>
                           <TableCell>
                             {row.row.exitedAt ? (
@@ -642,7 +638,7 @@ export default async function CSPermitDetailPage({
           <Field label="Note" className="sm:col-span-2">
             <Input name="note" placeholder="Optional — e.g. shift label, contact number" />
           </Field>
-          <div className="sm:col-span-2 flex items-center gap-3">
+          <div className="flex items-center gap-3 sm:col-span-2">
             <input
               id="cs-mark-entered"
               type="checkbox"
@@ -662,7 +658,7 @@ export default async function CSPermitDetailPage({
 function TextBlock({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="text-xs uppercase tracking-wide text-slate-500">{label}</div>
+      <div className="text-xs tracking-wide text-slate-500 uppercase">{label}</div>
       <div className="mt-0.5 whitespace-pre-wrap text-slate-900">{children}</div>
     </div>
   )

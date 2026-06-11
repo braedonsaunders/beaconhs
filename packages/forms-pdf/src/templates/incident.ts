@@ -100,8 +100,8 @@ export function renderIncidentHtml(input: IncidentRenderInput): string {
   const involvedHtml =
     (input.involved ?? []).length === 0
       ? '<em class="muted">None listed</em>'
-      : `<ul class="people-list">${input.involved!
-          .map(
+      : `<ul class="people-list">${input
+          .involved!.map(
             (p) =>
               `<li><strong>${esc(p.name)}</strong>${p.role ? ` <span class="muted">(${esc(p.role)})</span>` : ''}</li>`,
           )
@@ -116,8 +116,8 @@ export function renderIncidentHtml(input: IncidentRenderInput): string {
             <th>Treatment</th><th>Facility</th><th>Hours&nbsp;prior</th>
           </tr></thead>
           <tbody>
-          ${input.injuries!
-            .map(
+          ${input
+            .injuries!.map(
               (inj) => `<tr>
                 <td>${esc(inj.personName)}</td>
                 <td>${esc(inj.bodyParts.join(', ') || '—')}</td>
@@ -137,8 +137,8 @@ export function renderIncidentHtml(input: IncidentRenderInput): string {
       : `<table class="data-table">
           <thead><tr><th>Status</th><th>From</th><th>To</th><th>Notes</th></tr></thead>
           <tbody>
-          ${input.lostTimeEvents!
-            .map(
+          ${input
+            .lostTimeEvents!.map(
               (e) =>
                 `<tr><td>${esc(e.status.replace(/_/g, ' '))}</td><td>${esc(e.validFrom)}</td><td>${esc(e.validTo ?? '—')}</td><td>${esc(e.notes ?? '')}</td></tr>`,
             )
@@ -159,8 +159,8 @@ export function renderIncidentHtml(input: IncidentRenderInput): string {
       : `<section class="page-break">
           <h2>Photos &amp; Files</h2>
           <div class="photo-grid">
-          ${input.photos!
-            .slice(0, 12)
+          ${input
+            .photos!.slice(0, 12)
             .map(
               (p) => `<figure>
                 <img src="${esc(p.url)}" alt="" />
@@ -386,11 +386,15 @@ export function renderIncidentHtml(input: IncidentRenderInput): string {
       i.firstAidReceived || i.medicalAttentionReceived
         ? `<div class="conditional">
             ${i.firstAidReceived ? `<div class="field-line"><span class="lbl">First aid provider</span><span>${esc(i.firstAidProvider ?? '—')}</span></div>` : ''}
-            ${i.medicalAttentionReceived ? `
+            ${
+              i.medicalAttentionReceived
+                ? `
               <div class="field-line"><span class="lbl">Treated at</span><span>${esc(i.treatedAtHospital ?? '—')}</span></div>
               <div class="field-line"><span class="lbl">City</span><span>${esc(i.treatedInCity ?? '—')}</span></div>
               <div class="field-line"><span class="lbl">Transportation</span><span>${esc(i.transportation ?? '—')}</span></div>
-            ` : ''}
+            `
+                : ''
+            }
           </div>`
         : ''
     }
@@ -398,16 +402,24 @@ export function renderIncidentHtml(input: IncidentRenderInput): string {
     ${
       i.lostTime || i.modifiedDuty
         ? `<div class="conditional">
-            ${i.lostTime ? `
+            ${
+              i.lostTime
+                ? `
               <div class="field-line"><span class="lbl">Lost time first day</span><span>${esc(i.lostTimeFirstDay ?? '—')}</span></div>
               <div class="field-line"><span class="lbl">Lost time last day</span><span>${esc(i.lostTimeLastDay ?? 'still ongoing')}</span></div>
               <div class="field-line"><span class="lbl">Total lost-time days</span><span>${i.lostTimeDays ?? '—'}</span></div>
-            ` : ''}
-            ${i.modifiedDuty ? `
+            `
+                : ''
+            }
+            ${
+              i.modifiedDuty
+                ? `
               <div class="field-line"><span class="lbl">Modified duty first day</span><span>${esc(i.modifiedDutyFirstDay ?? '—')}</span></div>
               <div class="field-line"><span class="lbl">Modified duty last day</span><span>${esc(i.modifiedDutyLastDay ?? 'still ongoing')}</span></div>
               <div class="field-line"><span class="lbl">Total modified-duty days</span><span>${i.modifiedDutyDays ?? '—'}</span></div>
-            ` : ''}
+            `
+                : ''
+            }
           </div>`
         : ''
     }

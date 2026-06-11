@@ -23,9 +23,7 @@ import { computeFormScore } from '../apps/web/src/app/(app)/forms/_lib/score-rou
 
 const TENANT_ID = 'eaede59e-a090-4a72-b09c-ee82c1ac2e06'
 
-const url =
-  process.env.DATABASE_URL ??
-  'postgresql://beaconhs:beaconhs@localhost:5433/beaconhs'
+const url = process.env.DATABASE_URL ?? 'postgresql://beaconhs:beaconhs@localhost:5433/beaconhs'
 const sql = postgres(url, { max: 1 })
 const db = drizzle(sql)
 

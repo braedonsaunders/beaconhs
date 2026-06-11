@@ -15,11 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from '@beaconhs/ui'
-import {
-  equipmentCategories,
-  equipmentRates,
-  equipmentTypes,
-} from '@beaconhs/db/schema'
+import { equipmentCategories, equipmentRates, equipmentTypes } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { ListPageLayout } from '@/components/page-layout'
@@ -148,9 +144,7 @@ export default async function EquipmentRatesPage() {
           />
           <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
             <Badge variant="secondary">{rows.length} types</Badge>
-            <Badge variant={filled > 0 ? 'success' : 'warning'}>
-              {filled} with rates set
-            </Badge>
+            <Badge variant={filled > 0 ? 'success' : 'warning'}>{filled} with rates set</Badge>
             <Badge variant="secondary">
               {fmtMoney(totalMonthly.toFixed(2), currency)} total monthly
             </Badge>
@@ -206,7 +200,7 @@ export default async function EquipmentRatesPage() {
                     </TableCell>
                     <TableCell>
                       <details className="relative">
-                        <summary className="list-none cursor-pointer text-xs text-teal-700 hover:underline">
+                        <summary className="cursor-pointer list-none text-xs text-teal-700 hover:underline">
                           <DollarSign size={12} className="inline" /> Edit
                         </summary>
                         <div className="absolute right-0 z-10 mt-1 w-[28rem] rounded-md border border-slate-200 bg-white p-4 shadow-lg">

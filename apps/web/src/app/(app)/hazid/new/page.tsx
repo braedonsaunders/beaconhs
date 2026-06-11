@@ -13,12 +13,7 @@ import {
   Select,
   Textarea,
 } from '@beaconhs/ui'
-import {
-  hazidAssessmentTypes,
-  hazidAssessments,
-  orgUnits,
-  people,
-} from '@beaconhs/db/schema'
+import { hazidAssessmentTypes, hazidAssessments, orgUnits, people } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
 import { createAssessment } from '../_actions'
@@ -71,7 +66,10 @@ export default async function NewHazidAssessmentPage() {
   return (
     <PageContainer>
       <div className="max-w-3xl space-y-6">
-        <DetailHeader back={{ href: '/hazid', label: 'Back to assessments' }} title="New hazard assessment" />
+        <DetailHeader
+          back={{ href: '/hazid', label: 'Back to assessments' }}
+          title="New hazard assessment"
+        />
         <Alert variant="info">
           <AlertTitle>Pick a type and a site</AlertTitle>
           <AlertDescription>
@@ -140,7 +138,11 @@ export default async function NewHazidAssessmentPage() {
                   </Select>
                 </Field>
                 <Field label="Job scope (short summary)" className="sm:col-span-2">
-                  <Textarea name="jobScope" rows={4} placeholder="What is the work? E.g. tank entry to replace gasket." />
+                  <Textarea
+                    name="jobScope"
+                    rows={4}
+                    placeholder="What is the work? E.g. tank entry to replace gasket."
+                  />
                 </Field>
               </div>
               <div className="flex items-center justify-end gap-2">

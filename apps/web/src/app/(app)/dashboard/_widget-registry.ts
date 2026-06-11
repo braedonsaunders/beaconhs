@@ -53,7 +53,8 @@ export const WIDGETS: Record<string, WidgetMeta> = {
     id: 'kpi-trir',
     category: 'kpi',
     label: 'TRIR',
-    description: 'Total recordable incident rate — rolling 12-mo, with prior-period delta and sparkline.',
+    description:
+      'Total recordable incident rate — rolling 12-mo, with prior-period delta and sparkline.',
     defaultSize: { w: 3, h: 3 },
     minSize: { w: 2, h: 3 },
     maxSize: { w: 6, h: 4 },
@@ -144,7 +145,8 @@ export const WIDGETS: Record<string, WidgetMeta> = {
     id: 'chart-severity-pyramid',
     category: 'incidents',
     label: 'Severity pyramid',
-    description: '12-month Heinrich-style distribution: fatality → lost time → medical aid → first aid → near miss.',
+    description:
+      '12-month Heinrich-style distribution: fatality → lost time → medical aid → first aid → near miss.',
     defaultSize: { w: 6, h: 5 },
     minSize: { w: 4, h: 4 },
     rolesShown: ['super_admin', 'tenant_admin', 'safety_manager'],
@@ -289,7 +291,5 @@ export const CATEGORY_LABELS: Record<WidgetCategory, string> = {
 
 /** Filter the registry by which widgets a role should see in the palette. */
 export function widgetsForRole(role: RoleTier): WidgetMeta[] {
-  return Object.values(WIDGETS).filter(
-    (w) => !w.rolesShown || w.rolesShown.includes(role),
-  )
+  return Object.values(WIDGETS).filter((w) => !w.rolesShown || w.rolesShown.includes(role))
 }

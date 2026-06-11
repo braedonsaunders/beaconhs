@@ -134,10 +134,7 @@ export default async function SafeDistancePrintPage({
         </header>
 
         <section className="psd-row">
-          <Field
-            label="Type"
-            value={SAFE_DISTANCE_TYPE_LABELS[rec.type as SafeDistanceType]}
-          />
+          <Field label="Type" value={SAFE_DISTANCE_TYPE_LABELS[rec.type as SafeDistanceType]} />
           <Field
             label="Occurred"
             value={

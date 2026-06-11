@@ -96,8 +96,8 @@ export default async function NewInspectionTypePage() {
         <Alert variant="info">
           <AlertTitle>Two-step</AlertTitle>
           <AlertDescription>
-            Create the shell here, then link the criteria banks (your question pool) on the
-            detail page that opens after save.
+            Create the shell here, then link the criteria banks (your question pool) on the detail
+            page that opens after save.
           </AlertDescription>
         </Alert>
         <Card>

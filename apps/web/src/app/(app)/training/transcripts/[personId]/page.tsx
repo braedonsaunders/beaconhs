@@ -44,11 +44,7 @@ export default async function TranscriptDetailPage({
   const ctx = await requireRequestContext()
 
   const data = await ctx.db(async (tx) => {
-    const [person] = await tx
-      .select()
-      .from(people)
-      .where(eq(people.id, personId))
-      .limit(1)
+    const [person] = await tx.select().from(people).where(eq(people.id, personId)).limit(1)
     if (!person) return null
 
     const records = await tx
@@ -65,9 +61,7 @@ export default async function TranscriptDetailPage({
         trainingAssessmentTypes,
         eq(trainingAssessmentTypes.id, trainingAssessments.typeId),
       )
-      .where(
-        and(eq(trainingAssessments.personId, personId), isNull(trainingAssessments.deletedAt)),
-      )
+      .where(and(eq(trainingAssessments.personId, personId), isNull(trainingAssessments.deletedAt)))
       .orderBy(desc(trainingAssessments.completedAt))
 
     const skills = await tx
@@ -77,7 +71,10 @@ export default async function TranscriptDetailPage({
         auth: trainingSkillAuthorities,
       })
       .from(trainingSkillAssignments)
-      .innerJoin(trainingSkillTypes, eq(trainingSkillTypes.id, trainingSkillAssignments.skillTypeId))
+      .innerJoin(
+        trainingSkillTypes,
+        eq(trainingSkillTypes.id, trainingSkillAssignments.skillTypeId),
+      )
       .innerJoin(
         trainingSkillAuthorities,
         eq(trainingSkillAuthorities.id, trainingSkillTypes.authorityId),
@@ -174,10 +171,7 @@ export default async function TranscriptDetailPage({
                       )
                     : null
                   return (
-                    <li
-                      key={row.rec.id}
-                      className="flex items-center justify-between py-2"
-                    >
+                    <li key={row.rec.id} className="flex items-center justify-between py-2">
                       <span>
                         <Link
                           href={`/training/courses/${row.course.id}`}
@@ -190,9 +184,7 @@ export default async function TranscriptDetailPage({
                         </span>
                       </span>
                       {days !== null ? (
-                        <Badge variant={days < 14 ? 'destructive' : 'warning'}>
-                          {days}d left
-                        </Badge>
+                        <Badge variant={days < 14 ? 'destructive' : 'warning'}>{days}d left</Badge>
                       ) : null}
                     </li>
                   )
@@ -379,11 +371,10 @@ export default async function TranscriptDetailPage({
         </Card>
 
         <p className="text-xs text-slate-400">
-          Print produces a hard-copy transcript; use the browser's "Save as PDF" option to keep
-          the file. Suppression: try View → Headers and footers off for a cleaner result.
+          Print produces a hard-copy transcript; use the browser's "Save as PDF" option to keep the
+          file. Suppression: try View → Headers and footers off for a cleaner result.
         </p>
       </div>
     </PageContainer>
   )
 }
-

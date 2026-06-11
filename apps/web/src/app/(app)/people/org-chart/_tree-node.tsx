@@ -63,9 +63,7 @@ export function TreeNode({
             >
               {node.firstName} {node.lastName}
             </Link>
-            {node.jobTitle ? (
-              <span className="text-xs text-slate-500">{node.jobTitle}</span>
-            ) : null}
+            {node.jobTitle ? <span className="text-xs text-slate-500">{node.jobTitle}</span> : null}
           </div>
         </div>
         {hasReports ? (

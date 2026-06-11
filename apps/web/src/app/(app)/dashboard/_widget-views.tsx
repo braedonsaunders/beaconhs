@@ -119,12 +119,7 @@ export function WidgetCard({ widgetId, data, todayIso }: Props) {
 
     // Big-number scoreboard
     case 'kpi-days-since-recordable':
-      return (
-        <DaysSinceCard
-          days={data.daysSinceLastRecordable}
-          lastDate={data.lastRecordableAt}
-        />
-      )
+      return <DaysSinceCard days={data.daysSinceLastRecordable} lastDate={data.lastRecordableAt} />
 
     // Compact KPIs
     case 'kpi-open-cas':
@@ -164,9 +159,7 @@ export function WidgetCard({ widgetId, data, todayIso }: Props) {
           href="/incidents"
           icon={AlertTriangle}
           caption={
-            delta === 0
-              ? 'flat vs prior 30d'
-              : `${delta > 0 ? '+' : ''}${delta} vs prior 30d`
+            delta === 0 ? 'flat vs prior 30d' : `${delta > 0 ? '+' : ''}${delta} vs prior 30d`
           }
           tone={delta > 0 ? 'warning' : 'normal'}
         />
@@ -287,7 +280,7 @@ export function WidgetCard({ widgetId, data, todayIso }: Props) {
     case 'personal-actions':
       return (
         <CardShell title="Quick actions" icon={TrendingDown} accent="teal">
-          <div className="px-1 pb-1 pt-2">
+          <div className="px-1 pt-2 pb-1">
             <QuickActions />
           </div>
         </CardShell>
@@ -344,10 +337,10 @@ function CountTile({
   return (
     <Link
       href={href as any}
-      className="group relative flex h-full flex-col rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm transition-all hover:border-teal-200 dark:hover:border-teal-800/60 hover:shadow-md"
+      className="group relative flex h-full flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-teal-200 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:hover:border-teal-800/60"
     >
       <div className="flex items-start justify-between">
-        <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
+        <span className="text-[10px] font-semibold tracking-[0.14em] text-slate-500 uppercase dark:text-slate-400">
           {label}
         </span>
         <span
@@ -357,7 +350,7 @@ function CountTile({
         </span>
       </div>
       <div className="mt-1 flex-1">
-        <div className={`text-4xl font-semibold leading-none tabular-nums ${valueClass}`}>
+        <div className={`text-4xl leading-none font-semibold tabular-nums ${valueClass}`}>
           <AnimatedNumber value={value ?? 0} format={(v) => Math.round(v).toLocaleString()} />
         </div>
       </div>
@@ -399,17 +392,10 @@ function RateTile({
 }) {
   const hasValue = value !== null && Number.isFinite(value)
   const delta =
-    value !== null && prevValue !== null && Number.isFinite(prevValue)
-      ? value - prevValue
-      : null
+    value !== null && prevValue !== null && Number.isFinite(prevValue) ? value - prevValue : null
   const dir: 'up' | 'down' | 'flat' =
-    delta === null || Math.abs(delta) < 0.005
-      ? 'flat'
-      : delta > 0
-        ? 'up'
-        : 'down'
-  const good =
-    dir === 'flat' ? null : invertedDelta ? dir === 'down' : dir === 'up'
+    delta === null || Math.abs(delta) < 0.005 ? 'flat' : delta > 0 ? 'up' : 'down'
+  const good = dir === 'flat' ? null : invertedDelta ? dir === 'down' : dir === 'up'
   const deltaTone =
     good === null
       ? 'text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-800'
@@ -423,13 +409,13 @@ function RateTile({
     <Link
       href={href as any}
       title={tooltip}
-      className="group relative flex h-full flex-col rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm transition-all hover:border-teal-200 dark:hover:border-teal-800/60 hover:shadow-md"
+      className="group relative flex h-full flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-teal-200 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:hover:border-teal-800/60"
     >
       <div className="flex items-start justify-between">
-        <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
+        <span className="text-[10px] font-semibold tracking-[0.14em] text-slate-500 uppercase dark:text-slate-400">
           {label}
         </span>
-        <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 ring-1 ring-inset ring-slate-100">
+        <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600 ring-1 ring-slate-100 ring-inset dark:bg-slate-800 dark:text-slate-300">
           <Icon size={14} />
         </span>
       </div>
@@ -439,14 +425,16 @@ function RateTile({
             <AnimatedNumber
               value={value!}
               format={formatFn}
-              className="text-4xl font-semibold leading-none tabular-nums text-slate-900 dark:text-slate-100"
+              className="text-4xl leading-none font-semibold text-slate-900 tabular-nums dark:text-slate-100"
             />
             {suffix ? (
-              <span className="text-xl font-semibold text-slate-500 dark:text-slate-400">{suffix}</span>
+              <span className="text-xl font-semibold text-slate-500 dark:text-slate-400">
+                {suffix}
+              </span>
             ) : null}
           </>
         ) : (
-          <span className="text-4xl font-semibold leading-none tabular-nums text-slate-400 dark:text-slate-500">
+          <span className="text-4xl leading-none font-semibold text-slate-400 tabular-nums dark:text-slate-500">
             —
           </span>
         )}
@@ -474,13 +462,7 @@ function RateTile({
   )
 }
 
-function DaysSinceCard({
-  days,
-  lastDate,
-}: {
-  days: number | null
-  lastDate: Date | null
-}) {
+function DaysSinceCard({ days, lastDate }: { days: number | null; lastDate: Date | null }) {
   const value = days ?? 0
   const display = days === null ? '—' : days.toLocaleString()
   const tone = days === null ? 'muted' : days >= 90 ? 'good' : days >= 30 ? 'ok' : 'attention'
@@ -507,7 +489,7 @@ function DaysSinceCard({
         }}
       />
       <div className="relative flex h-full min-h-0 flex-col">
-        <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/70">
+        <div className="flex items-center gap-1.5 text-[10px] font-semibold tracking-[0.16em] text-white/70 uppercase">
           <ShieldCheck size={12} />
           Days since last recordable
         </div>
@@ -517,16 +499,12 @@ function DaysSinceCard({
           ) : (
             <>
               <FitText text={display} className="text-white" />
-              <div className="mt-1 text-[11px] uppercase tracking-[0.14em] text-white/60">
-                days
-              </div>
+              <div className="mt-1 text-[11px] tracking-[0.14em] text-white/60 uppercase">days</div>
             </>
           )}
         </div>
         <div className="text-center text-[11px] text-white/70">
-          {lastDate
-            ? `Last incident ${lastDate.toLocaleDateString()}`
-            : 'No recordable on record'}
+          {lastDate ? `Last incident ${lastDate.toLocaleDateString()}` : 'No recordable on record'}
         </div>
       </div>
     </div>
@@ -554,8 +532,14 @@ function SeverityPyramid({ dist }: { dist: DashboardMetrics['severityDistributio
   ]
   const max = rows.reduce((m, r) => Math.max(m, r.count), 0) || 1
   return (
-    <CardShell title="Severity pyramid" caption="Last 12 months" icon={TrendingDown} href="/incidents" accent="rose">
-      <ul className="space-y-1.5 px-4 pb-3 pt-1">
+    <CardShell
+      title="Severity pyramid"
+      caption="Last 12 months"
+      icon={TrendingDown}
+      href="/incidents"
+      accent="rose"
+    >
+      <ul className="space-y-1.5 px-4 pt-1 pb-3">
         {rows.map((r, idx) => {
           const pct = (r.count / max) * 100
           return (
@@ -575,7 +559,7 @@ function SeverityPyramid({ dist }: { dist: DashboardMetrics['severityDistributio
                   className={`h-full rounded-md ${r.tone}`}
                 />
               </div>
-              <span className="text-right text-xs font-semibold tabular-nums text-slate-700 dark:text-slate-200">
+              <span className="text-right text-xs font-semibold text-slate-700 tabular-nums dark:text-slate-200">
                 {r.count}
               </span>
             </motion.li>
@@ -586,11 +570,7 @@ function SeverityPyramid({ dist }: { dist: DashboardMetrics['severityDistributio
   )
 }
 
-function CapaAgingChart({
-  buckets,
-}: {
-  buckets: DashboardMetrics['openCABuckets']
-}) {
+function CapaAgingChart({ buckets }: { buckets: DashboardMetrics['openCABuckets'] }) {
   const rows = [
     { key: 'lt7', label: '< 7 days', count: buckets.lt7, tone: 'bg-emerald-500' },
     { key: 'lt30', label: '7 – 30 days', count: buckets.lt30, tone: 'bg-teal-500' },
@@ -607,7 +587,7 @@ function CapaAgingChart({
       href="/corrective-actions"
       accent="amber"
     >
-      <div className="space-y-2 px-4 pb-3 pt-1">
+      <div className="space-y-2 px-4 pt-1 pb-3">
         {rows.map((r, idx) => {
           const pct = (r.count / max) * 100
           return (
@@ -619,7 +599,9 @@ function CapaAgingChart({
             >
               <div className="flex items-center justify-between gap-2 text-[11px] text-slate-600 dark:text-slate-300">
                 <span>{r.label}</span>
-                <span className="tabular-nums font-semibold text-slate-700 dark:text-slate-200">{r.count}</span>
+                <span className="font-semibold text-slate-700 tabular-nums dark:text-slate-200">
+                  {r.count}
+                </span>
               </div>
               <div className="relative mt-1 h-2.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
                 <motion.div
@@ -637,11 +619,7 @@ function CapaAgingChart({
   )
 }
 
-function TopSitesChart({
-  items,
-}: {
-  items: DashboardMetrics['topSitesByIncidents']
-}) {
+function TopSitesChart({ items }: { items: DashboardMetrics['topSitesByIncidents'] }) {
   const max = items.reduce((m, s) => Math.max(m, s.incidents), 0) || 1
   return (
     <CardShell
@@ -666,12 +644,14 @@ function TopSitesChart({
               >
                 <div className="flex items-center justify-between gap-3 text-xs">
                   <div className="flex min-w-0 items-center gap-2">
-                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 text-[10px] font-bold tabular-nums text-slate-700 dark:text-slate-200">
+                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 text-[10px] font-bold text-slate-700 tabular-nums dark:bg-slate-800 dark:text-slate-200">
                       {idx + 1}
                     </span>
-                    <span className="truncate font-medium text-slate-800 dark:text-slate-100">{s.siteName}</span>
+                    <span className="truncate font-medium text-slate-800 dark:text-slate-100">
+                      {s.siteName}
+                    </span>
                   </div>
-                  <span className="shrink-0 rounded-full bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-rose-700">
+                  <span className="shrink-0 rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700 tabular-nums dark:bg-rose-950/40">
                     {s.incidents}
                   </span>
                 </div>
@@ -728,7 +708,7 @@ function RecentIncidentsList({ items }: { items: DashboardMetrics['recentInciden
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="truncate text-sm font-medium text-slate-900 dark:text-slate-100 group-hover:text-teal-700 dark:group-hover:text-teal-300">
+                      <span className="truncate text-sm font-medium text-slate-900 group-hover:text-teal-700 dark:text-slate-100 dark:group-hover:text-teal-300">
                         {i.title}
                       </span>
                     </div>
@@ -753,13 +733,7 @@ function RecentIncidentsList({ items }: { items: DashboardMetrics['recentInciden
   )
 }
 
-function DueCAsList({
-  items,
-  todayIso,
-}: {
-  items: DashboardMetrics['dueCAs']
-  todayIso: string
-}) {
+function DueCAsList({ items, todayIso }: { items: DashboardMetrics['dueCAs']; todayIso: string }) {
   return (
     <CardShell
       title="Corrective actions due"
@@ -791,10 +765,12 @@ function DueCAsList({
                         className={`inline-block h-2 w-2 shrink-0 rounded-full ${aging.dotColor}`}
                         aria-hidden
                       />
-                      <span className="truncate text-sm font-medium text-slate-900 dark:text-slate-100 group-hover:text-teal-700 dark:group-hover:text-teal-300">
+                      <span className="truncate text-sm font-medium text-slate-900 group-hover:text-teal-700 dark:text-slate-100 dark:group-hover:text-teal-300">
                         {c.reference}
                       </span>
-                      <span className="truncate text-sm text-slate-600 dark:text-slate-300">— {c.title}</span>
+                      <span className="truncate text-sm text-slate-600 dark:text-slate-300">
+                        — {c.title}
+                      </span>
                     </div>
                     <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
                       Due {c.dueOn ?? '—'} · severity {c.severity}
@@ -813,11 +789,7 @@ function DueCAsList({
   )
 }
 
-function OverdueCAsList({
-  items,
-}: {
-  items: DashboardMetrics['topOverdueCAs']
-}) {
+function OverdueCAsList({ items }: { items: DashboardMetrics['topOverdueCAs'] }) {
   return (
     <CardShell
       title="Most-overdue corrective actions"
@@ -847,8 +819,10 @@ function OverdueCAsList({
                 className="group flex items-center justify-between gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60"
               >
                 <div className="min-w-0 flex-1">
-                  <span className="truncate text-sm font-medium text-slate-900 dark:text-slate-100 group-hover:text-teal-700 dark:group-hover:text-teal-300">
-                    <span className="font-mono text-slate-500 dark:text-slate-400">{c.reference}</span>{' '}
+                  <span className="truncate text-sm font-medium text-slate-900 group-hover:text-teal-700 dark:text-slate-100 dark:group-hover:text-teal-300">
+                    <span className="font-mono text-slate-500 dark:text-slate-400">
+                      {c.reference}
+                    </span>{' '}
                     <span>— {c.title}</span>
                   </span>
                   <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
@@ -903,7 +877,7 @@ function ExpiringTrainingList({
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <Calendar size={11} className="shrink-0 text-slate-400 dark:text-slate-500" />
-                      <span className="truncate text-sm font-medium text-slate-900 dark:text-slate-100 group-hover:text-teal-700 dark:group-hover:text-teal-300">
+                      <span className="truncate text-sm font-medium text-slate-900 group-hover:text-teal-700 dark:text-slate-100 dark:group-hover:text-teal-300">
                         {row.personName}
                       </span>
                     </div>
@@ -948,7 +922,7 @@ function InboxList({ items }: { items: DashboardMetrics['myInbox'] }) {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-teal-500" />
-                    <span className="truncate text-sm font-medium text-slate-900 dark:text-slate-100 group-hover:text-teal-700 dark:group-hover:text-teal-300">
+                    <span className="truncate text-sm font-medium text-slate-900 group-hover:text-teal-700 dark:text-slate-100 dark:group-hover:text-teal-300">
                       {n.title}
                     </span>
                   </div>
@@ -1010,8 +984,8 @@ function CardShell({
             ? 'bg-sky-50 dark:bg-sky-950/40 text-sky-700 ring-sky-100'
             : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 ring-slate-200'
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
-      <div className="flex items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 px-4 py-3">
+    <div className="flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-4 py-3 dark:border-slate-800">
         <div className="flex items-center gap-2.5">
           {Icon ? (
             <span
@@ -1021,7 +995,9 @@ function CardShell({
             </span>
           ) : null}
           <div className="min-w-0">
-            <h3 className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
+            <h3 className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+              {title}
+            </h3>
             {caption ? (
               <p className="truncate text-[11px] text-slate-500 dark:text-slate-400">{caption}</p>
             ) : null}
@@ -1030,7 +1006,7 @@ function CardShell({
         {href ? (
           <Link
             href={href as any}
-            className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-slate-500 dark:text-slate-400 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-teal-700 dark:hover:text-teal-300"
+            className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-50 hover:text-teal-700 dark:text-slate-400 dark:hover:bg-slate-800/60 dark:hover:text-teal-300"
           >
             {hrefLabel}
             <ArrowRight size={11} />

@@ -5,11 +5,7 @@
   "description": "POST every subscribed event to a configured URL with an HMAC SHA-256 signature.",
   "author": "BeaconHS",
   "entry": "index.js",
-  "capabilities": [
-    "incident.reported",
-    "ca.assigned",
-    "training.expired"
-  ],
+  "capabilities": ["incident.reported", "ca.assigned", "training.expired"],
   "webhooks": [
     {
       "name": "primary",

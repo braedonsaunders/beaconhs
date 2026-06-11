@@ -36,10 +36,7 @@ import { tenants } from './core'
 
 // --- Definitions (built-in cross-tenant + tenant-scoped custom) -----------
 
-export const reportDefinitionKind = pgEnum('report_definition_kind', [
-  'built_in',
-  'custom',
-])
+export const reportDefinitionKind = pgEnum('report_definition_kind', ['built_in', 'custom'])
 
 /** The set of entities a custom report can target. Kept narrow on purpose —
  *  each value maps to a query plan in `apps/worker/src/workers/reports.ts`. */

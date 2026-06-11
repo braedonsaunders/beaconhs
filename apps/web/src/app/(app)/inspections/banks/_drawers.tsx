@@ -9,14 +9,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
-import {
-  Button,
-  Input,
-  Label,
-  Select,
-  Textarea,
-  UrlDrawer,
-} from '@beaconhs/ui'
+import { Button, Input, Label, Select, Textarea, UrlDrawer } from '@beaconhs/ui'
 
 const CATEGORIES = [
   { value: 'site_inspection', label: 'Site inspection' },

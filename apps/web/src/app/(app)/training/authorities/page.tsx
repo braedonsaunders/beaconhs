@@ -77,10 +77,7 @@ export default async function TrainingAuthoritiesPage({
                   : desc(trainingSkillAuthorities.name),
               ]
 
-    const [tot] = await tx
-      .select({ c: count() })
-      .from(trainingSkillAuthorities)
-      .where(whereClause)
+    const [tot] = await tx.select({ c: count() }).from(trainingSkillAuthorities).where(whereClause)
 
     const data = await tx
       .select({

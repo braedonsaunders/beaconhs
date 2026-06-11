@@ -11,14 +11,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
-import {
-  Button,
-  FileUploader,
-  Input,
-  Label,
-  Select,
-  UrlDrawer,
-} from '@beaconhs/ui'
+import { Button, FileUploader, Input, Label, Select, UrlDrawer } from '@beaconhs/ui'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
 import { toast } from '@/lib/toast'
 import { addPersonFile, setPersonSignature } from '../_actions/files'
@@ -137,11 +130,7 @@ function UploadFileDrawer({
       <div className="space-y-4">
         <div className="space-y-1.5">
           <Label htmlFor="kind">Kind</Label>
-          <Select
-            id="kind"
-            value={kind}
-            onChange={(e) => setKind(e.currentTarget.value)}
-          >
+          <Select id="kind" value={kind} onChange={(e) => setKind(e.currentTarget.value)}>
             {FILE_KINDS.map((k) => (
               <option key={k.value} value={k.value}>
                 {k.label}
@@ -157,9 +146,7 @@ function UploadFileDrawer({
             onChange={(e) => setLabel(e.currentTarget.value)}
             placeholder={uploaded?.filename ?? 'e.g. 2024 forklift cert'}
           />
-          <p className="text-[11px] text-slate-500">
-            Defaults to the filename if left blank.
-          </p>
+          <p className="text-[11px] text-slate-500">Defaults to the filename if left blank.</p>
         </div>
         <div className="space-y-1.5">
           <Label>File</Label>
@@ -288,9 +275,7 @@ function SignatureUploadDrawer({
             finalizeUploadAction={finalizeUpload}
             kind="signature"
             accept="image/*"
-            onUploaded={(f) =>
-              setUploaded({ attachmentId: f.attachmentId, filename: f.filename })
-            }
+            onUploaded={(f) => setUploaded({ attachmentId: f.attachmentId, filename: f.filename })}
             label="Drop signature image or click to choose"
             hint="Transparent PNG works best."
           />

@@ -57,11 +57,7 @@ export function AnimatedNumber({
   )
 }
 
-function formatValue(
-  n: number,
-  format?: (n: number) => string,
-  decimals?: number,
-): string {
+function formatValue(n: number, format?: (n: number) => string, decimals?: number): string {
   if (format) return format(n)
   const d = decimals ?? 0
   const rounded = d > 0 ? n.toFixed(d) : Math.round(n).toString()

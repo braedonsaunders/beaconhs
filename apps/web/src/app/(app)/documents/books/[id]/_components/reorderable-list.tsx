@@ -20,13 +20,7 @@ export type BookItem = {
  * Reorder is committed when the user releases the drag (drop fires the server
  * action). Up/down buttons commit immediately too.
  */
-export function ReorderableList({
-  bookId,
-  initial,
-}: {
-  bookId: string
-  initial: BookItem[]
-}) {
+export function ReorderableList({ bookId, initial }: { bookId: string; initial: BookItem[] }) {
   const router = useRouter()
   const [pending, start] = useTransition()
   const [items, setItems] = useState(initial)
@@ -113,9 +107,7 @@ export function ReorderableList({
             >
               {row.title}
             </Link>
-            {row.status !== 'published' ? (
-              <Badge variant="warning">{row.status}</Badge>
-            ) : null}
+            {row.status !== 'published' ? <Badge variant="warning">{row.status}</Badge> : null}
           </div>
           <div className="flex shrink-0 items-center gap-1">
             <Button

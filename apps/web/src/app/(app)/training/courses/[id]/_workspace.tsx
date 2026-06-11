@@ -126,14 +126,54 @@ export type FileLite = {
 const DRAG_MIME = 'text/lesson-kind'
 
 const ELEMENTS: { kind: LessonKind; label: string; desc: string; icon: React.ReactNode }[] = [
-  { kind: 'rich', label: 'Text lesson', desc: 'Rich content blocks — text, images, callouts.', icon: <Type size={15} /> },
-  { kind: 'slides', label: 'Slideshow', desc: 'Structured slides, or import a PowerPoint.', icon: <Presentation size={15} /> },
-  { kind: 'video', label: 'Video', desc: 'Upload a video or link YouTube / Vimeo.', icon: <Video size={15} /> },
-  { kind: 'quiz', label: 'Quiz', desc: 'Graded questions from an assessment set.', icon: <ClipboardCheck size={15} /> },
-  { kind: 'practical', label: 'Practical test', desc: 'Hands-on test signed off by an evaluator.', icon: <UserCheck size={15} /> },
-  { kind: 'session', label: 'In-person session', desc: 'Tie a scheduled class into the course.', icon: <GraduationCap size={15} /> },
-  { kind: 'file', label: 'File / handout', desc: 'A downloadable PDF or document.', icon: <Paperclip size={15} /> },
-  { kind: 'embed', label: 'Embedded page', desc: 'Embed an external web page.', icon: <Link2 size={15} /> },
+  {
+    kind: 'rich',
+    label: 'Text lesson',
+    desc: 'Rich content blocks — text, images, callouts.',
+    icon: <Type size={15} />,
+  },
+  {
+    kind: 'slides',
+    label: 'Slideshow',
+    desc: 'Structured slides, or import a PowerPoint.',
+    icon: <Presentation size={15} />,
+  },
+  {
+    kind: 'video',
+    label: 'Video',
+    desc: 'Upload a video or link YouTube / Vimeo.',
+    icon: <Video size={15} />,
+  },
+  {
+    kind: 'quiz',
+    label: 'Quiz',
+    desc: 'Graded questions from an assessment set.',
+    icon: <ClipboardCheck size={15} />,
+  },
+  {
+    kind: 'practical',
+    label: 'Practical test',
+    desc: 'Hands-on test signed off by an evaluator.',
+    icon: <UserCheck size={15} />,
+  },
+  {
+    kind: 'session',
+    label: 'In-person session',
+    desc: 'Tie a scheduled class into the course.',
+    icon: <GraduationCap size={15} />,
+  },
+  {
+    kind: 'file',
+    label: 'File / handout',
+    desc: 'A downloadable PDF or document.',
+    icon: <Paperclip size={15} />,
+  },
+  {
+    kind: 'embed',
+    label: 'Embedded page',
+    desc: 'Embed an external web page.',
+    icon: <Link2 size={15} />,
+  },
 ]
 
 const KIND_META: Record<LessonKind, { label: string; icon: React.ReactNode }> = {
@@ -206,14 +246,20 @@ export function CourseWorkspace({
     setTree(next)
     if (moduleOrderTimer.current) clearTimeout(moduleOrderTimer.current)
     moduleOrderTimer.current = setTimeout(() => {
-      void reorderModules(course.id, next.map((m) => m.id))
+      void reorderModules(
+        course.id,
+        next.map((m) => m.id),
+      )
     }, 600)
   }
   function onReorderLessons(moduleId: string, next: LessonLite[]) {
     setTree((prev) => prev.map((m) => (m.id === moduleId ? { ...m, lessons: next } : m)))
     if (lessonOrderTimer.current) clearTimeout(lessonOrderTimer.current)
     lessonOrderTimer.current = setTimeout(() => {
-      void reorderLessons(course.id, next.map((l) => l.id))
+      void reorderLessons(
+        course.id,
+        next.map((l) => l.id),
+      )
     }, 600)
   }
 
@@ -281,11 +327,36 @@ export function CourseWorkspace({
         {/* left rail */}
         <aside className="flex w-80 shrink-0 flex-col border-r border-slate-200 bg-white">
           <div className="flex shrink-0 items-center gap-0.5 border-b border-slate-200 px-2 py-1.5">
-            <RailTabBtn active={railTab === 'overview'} onClick={() => setRailTab('overview')} icon={<Settings2 size={15} />} label="Overview" />
-            <RailTabBtn active={railTab === 'build'} onClick={() => setRailTab('build')} icon={<Layers size={15} />} label="Build" />
-            <RailTabBtn active={railTab === 'records'} onClick={() => setRailTab('records')} icon={<Award size={15} />} label="Records" />
-            <RailTabBtn active={railTab === 'classes'} onClick={() => setRailTab('classes')} icon={<CalendarDays size={15} />} label="Classes" />
-            <RailTabBtn active={railTab === 'files'} onClick={() => setRailTab('files')} icon={<FileText size={15} />} label="Files" />
+            <RailTabBtn
+              active={railTab === 'overview'}
+              onClick={() => setRailTab('overview')}
+              icon={<Settings2 size={15} />}
+              label="Overview"
+            />
+            <RailTabBtn
+              active={railTab === 'build'}
+              onClick={() => setRailTab('build')}
+              icon={<Layers size={15} />}
+              label="Build"
+            />
+            <RailTabBtn
+              active={railTab === 'records'}
+              onClick={() => setRailTab('records')}
+              icon={<Award size={15} />}
+              label="Records"
+            />
+            <RailTabBtn
+              active={railTab === 'classes'}
+              onClick={() => setRailTab('classes')}
+              icon={<CalendarDays size={15} />}
+              label="Classes"
+            />
+            <RailTabBtn
+              active={railTab === 'files'}
+              onClick={() => setRailTab('files')}
+              icon={<FileText size={15} />}
+              label="Files"
+            />
           </div>
           <div className="app-scroll min-h-0 flex-1 overflow-y-auto p-3">
             {railTab === 'overview' ? <OverviewPanel course={course} /> : null}
@@ -315,87 +386,93 @@ export function CourseWorkspace({
             />
           </div>
         ) : (
-        <div className="flex min-w-0 flex-1 flex-col bg-slate-50">
-          <div className="flex shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-4 py-1.5">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-              Course content
-            </span>
-            <span className="text-xs text-slate-400">
-              drag elements from the Build tab into a module
-            </span>
-            <div className="ml-auto">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  startTransition(async () => {
-                    const fd = new FormData()
-                    fd.set('title', `Module ${tree.length + 1}`)
-                    await createModule(course.id, fd)
-                    router.refresh()
-                  })
-                }
-              >
-                <Plus size={13} /> Add module
-              </Button>
-            </div>
-          </div>
-
-          <div className="app-scroll min-h-0 flex-1 overflow-y-auto p-4 lg:p-6">
-            <div className="w-full space-y-4">
-              {tree.length === 0 ? (
-                <div
-                  onDragOver={(e) => {
-                    if (e.dataTransfer.types.includes(DRAG_MIME)) {
-                      e.preventDefault()
-                      e.dataTransfer.dropEffect = 'copy'
-                      setDropHover('__empty__')
-                    }
-                  }}
-                  onDragLeave={() => setDropHover(null)}
-                  onDrop={(e) => {
-                    e.preventDefault()
-                    setDropHover(null)
-                    const kind = e.dataTransfer.getData(DRAG_MIME) as LessonKind
-                    if (kind) addElement(kind, null)
-                  }}
-                  className={`grid place-items-center rounded-xl border-2 border-dashed px-6 py-20 text-center transition-colors ${
-                    dropHover === '__empty__'
-                      ? 'border-teal-400 bg-teal-50'
-                      : 'border-slate-300 bg-white'
-                  }`}
+          <div className="flex min-w-0 flex-1 flex-col bg-slate-50">
+            <div className="flex shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-4 py-1.5">
+              <span className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
+                Course content
+              </span>
+              <span className="text-xs text-slate-400">
+                drag elements from the Build tab into a module
+              </span>
+              <div className="ml-auto">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    startTransition(async () => {
+                      const fd = new FormData()
+                      fd.set('title', `Module ${tree.length + 1}`)
+                      await createModule(course.id, fd)
+                      router.refresh()
+                    })
+                  }
                 >
-                  <div>
-                    <Layers size={28} className="mx-auto text-slate-300" />
-                    <p className="mt-2 text-sm font-medium text-slate-600">
-                      Drag your first element here
-                    </p>
-                    <p className="text-xs text-slate-400">
-                      Pick a content type from the Build tab on the left — a module is created
-                      automatically.
-                    </p>
+                  <Plus size={13} /> Add module
+                </Button>
+              </div>
+            </div>
+
+            <div className="app-scroll min-h-0 flex-1 overflow-y-auto p-4 lg:p-6">
+              <div className="w-full space-y-4">
+                {tree.length === 0 ? (
+                  <div
+                    onDragOver={(e) => {
+                      if (e.dataTransfer.types.includes(DRAG_MIME)) {
+                        e.preventDefault()
+                        e.dataTransfer.dropEffect = 'copy'
+                        setDropHover('__empty__')
+                      }
+                    }}
+                    onDragLeave={() => setDropHover(null)}
+                    onDrop={(e) => {
+                      e.preventDefault()
+                      setDropHover(null)
+                      const kind = e.dataTransfer.getData(DRAG_MIME) as LessonKind
+                      if (kind) addElement(kind, null)
+                    }}
+                    className={`grid place-items-center rounded-xl border-2 border-dashed px-6 py-20 text-center transition-colors ${
+                      dropHover === '__empty__'
+                        ? 'border-teal-400 bg-teal-50'
+                        : 'border-slate-300 bg-white'
+                    }`}
+                  >
+                    <div>
+                      <Layers size={28} className="mx-auto text-slate-300" />
+                      <p className="mt-2 text-sm font-medium text-slate-600">
+                        Drag your first element here
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        Pick a content type from the Build tab on the left — a module is created
+                        automatically.
+                      </p>
+                    </div>
                   </div>
-                </div>
-              ) : (
-                <Reorder.Group axis="y" values={tree} onReorder={onReorderModules} as="div" className="space-y-4">
-                  {tree.map((mod) => (
-                    <ModuleCard
-                      key={mod.id}
-                      mod={mod}
-                      courseId={course.id}
-                      dropHover={dropHover === mod.id}
-                      onDragState={(over) => setDropHover(over ? mod.id : null)}
-                      onDropElement={(kind) => addElement(kind, mod.id)}
-                      onReorderLessons={(next) => onReorderLessons(mod.id, next)}
-                      onOpenLesson={openLesson}
-                    />
-                  ))}
-                </Reorder.Group>
-              )}
+                ) : (
+                  <Reorder.Group
+                    axis="y"
+                    values={tree}
+                    onReorder={onReorderModules}
+                    as="div"
+                    className="space-y-4"
+                  >
+                    {tree.map((mod) => (
+                      <ModuleCard
+                        key={mod.id}
+                        mod={mod}
+                        courseId={course.id}
+                        dropHover={dropHover === mod.id}
+                        onDragState={(over) => setDropHover(over ? mod.id : null)}
+                        onDropElement={(kind) => addElement(kind, mod.id)}
+                        onReorderLessons={(next) => onReorderLessons(mod.id, next)}
+                        onOpenLesson={openLesson}
+                      />
+                    ))}
+                  </Reorder.Group>
+                )}
+              </div>
             </div>
           </div>
-        </div>
         )}
       </div>
     </div>
@@ -433,7 +510,7 @@ function RailTabBtn({
 function BuildPalette({ onAdd }: { onAdd: (kind: LessonKind) => void }) {
   return (
     <div className="space-y-2">
-      <p className="px-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+      <p className="px-1 text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
         Elements
       </p>
       {ELEMENTS.map((el) => (
@@ -489,16 +566,34 @@ function OverviewPanel({ course }: { course: CourseLite }) {
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="ov-desc">Description</Label>
-        <Textarea id="ov-desc" name="description" rows={3} defaultValue={course.description ?? ''} />
+        <Textarea
+          id="ov-desc"
+          name="description"
+          rows={3}
+          defaultValue={course.description ?? ''}
+        />
       </div>
       <div className="grid grid-cols-2 gap-2">
         <div className="space-y-1.5">
           <Label htmlFor="ov-dur">Duration (min)</Label>
-          <Input id="ov-dur" name="durationMinutes" type="number" min="0" defaultValue={course.durationMinutes ?? ''} />
+          <Input
+            id="ov-dur"
+            name="durationMinutes"
+            type="number"
+            min="0"
+            defaultValue={course.durationMinutes ?? ''}
+          />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="ov-valid">Valid (months)</Label>
-          <Input id="ov-valid" name="validForMonths" type="number" min="0" defaultValue={course.validForMonths ?? ''} placeholder="never" />
+          <Input
+            id="ov-valid"
+            name="validForMonths"
+            type="number"
+            min="0"
+            defaultValue={course.validForMonths ?? ''}
+            placeholder="never"
+          />
         </div>
       </div>
       <Button type="submit" disabled={pending} className="w-full">
@@ -522,7 +617,7 @@ function RecordsPanel({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between px-1">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+        <p className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
           Records ({total})
         </p>
         <Link
@@ -562,7 +657,7 @@ function ClassesPanel({ classes }: { classes: ClassLite[] }) {
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between px-1">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+        <p className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
           Scheduled classes
         </p>
         <Link href="/training/classes/new" className="text-[11px] text-teal-700 hover:underline">
@@ -579,7 +674,9 @@ function ClassesPanel({ classes }: { classes: ClassLite[] }) {
             className="block rounded-md border border-slate-200 px-2.5 py-1.5 hover:border-teal-300"
           >
             <div className="truncate text-xs font-medium text-slate-800">{c.title}</div>
-            <div className="text-[10px] text-slate-500">{new Date(c.startsAt).toLocaleString()}</div>
+            <div className="text-[10px] text-slate-500">
+              {new Date(c.startsAt).toLocaleString()}
+            </div>
           </Link>
         ))
       )}
@@ -592,7 +689,7 @@ function FilesPanel({ courseId, files }: { courseId: string; files: FileLite[] }
   const [, startTransition] = useTransition()
   return (
     <div className="space-y-2">
-      <p className="px-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+      <p className="px-1 text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
         Course files
       </p>
       <FileUploader
@@ -758,9 +855,19 @@ function ModuleCard({
               Drop an element here
             </p>
           ) : (
-            <Reorder.Group axis="y" values={mod.lessons} onReorder={onReorderLessons} as="div" className="space-y-1">
+            <Reorder.Group
+              axis="y"
+              values={mod.lessons}
+              onReorder={onReorderLessons}
+              as="div"
+              className="space-y-1"
+            >
               {mod.lessons.map((lesson) => (
-                <LessonCard key={lesson.id} lesson={lesson} onOpen={() => onOpenLesson(lesson.id)} />
+                <LessonCard
+                  key={lesson.id}
+                  lesson={lesson}
+                  onOpen={() => onOpenLesson(lesson.id)}
+                />
               ))}
             </Reorder.Group>
           )}
@@ -813,4 +920,3 @@ function LessonCard({ lesson, onOpen }: { lesson: LessonLite; onOpen: () => void
     </Reorder.Item>
   )
 }
-

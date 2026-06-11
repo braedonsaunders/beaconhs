@@ -87,10 +87,7 @@ function deriveDefaultScore(
 
 // --- Hard-fail rule evaluation ---------------------------------------------
 
-function evaluateHardFailRules(
-  rules: HardFailRule[],
-  values: Record<string, unknown>,
-): string[] {
+function evaluateHardFailRules(rules: HardFailRule[], values: Record<string, unknown>): string[] {
   const trigger: string[] = []
   for (const rule of rules) {
     for (const key of rule.fieldKeys) {
@@ -149,8 +146,7 @@ export function computeFormScore(
   let status: ComplianceStatus = 'compliant'
 
   const hardFailTriggered =
-    !!routing?.hardFailRules &&
-    evaluateHardFailRules(routing.hardFailRules, values).length > 0
+    !!routing?.hardFailRules && evaluateHardFailRules(routing.hardFailRules, values).length > 0
 
   if (hardFailTriggered) {
     status = 'non_compliant'
@@ -176,9 +172,7 @@ export function computeFormScore(
 
 // Used by the spawn-CAPA drawer to pick a default severity based on how badly
 // the response missed its threshold. Caller can override.
-export function severityFromScore(
-  score: number,
-): 'low' | 'medium' | 'high' | 'critical' {
+export function severityFromScore(score: number): 'low' | 'medium' | 'high' | 'critical' {
   if (score >= 80) return 'low'
   if (score >= 60) return 'medium'
   if (score >= 40) return 'high'

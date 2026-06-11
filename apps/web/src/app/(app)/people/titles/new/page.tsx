@@ -1,13 +1,5 @@
 import Link from 'next/link'
-import {
-  Button,
-  Card,
-  CardContent,
-  DetailHeader,
-  Input,
-  Label,
-  Textarea,
-} from '@beaconhs/ui'
+import { Button, Card, CardContent, DetailHeader, Input, Label, Textarea } from '@beaconhs/ui'
 import { PageContainer } from '@/components/page-layout'
 import { requireModuleManage } from '@/lib/module-admin/guard'
 import { createTitle } from '../../_actions/titles'
@@ -30,12 +22,7 @@ export default async function NewTitlePage() {
             <form action={createTitle} className="space-y-4">
               <div className="space-y-1.5">
                 <Label htmlFor="name">Name *</Label>
-                <Input
-                  id="name"
-                  name="name"
-                  required
-                  placeholder="e.g. Pipe Welder"
-                />
+                <Input id="name" name="name" required placeholder="e.g. Pipe Welder" />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="description">Scope</Label>

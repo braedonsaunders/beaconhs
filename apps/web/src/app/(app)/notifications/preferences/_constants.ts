@@ -17,32 +17,33 @@ export const NOTIFICATION_CATEGORIES = [
 
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number]
 
-export const CATEGORY_LABELS: Record<NotificationCategory, { title: string; description: string }> = {
-  incident: {
-    title: 'Incidents',
-    description: 'New incidents reported, status changes, investigations.',
-  },
-  ca: {
-    title: 'Corrective actions',
-    description: 'Assignments, due-date reminders, overdue escalations.',
-  },
-  training: {
-    title: 'Training',
-    description: 'Course assignments, expiry reminders, completions.',
-  },
-  document: {
-    title: 'Documents',
-    description: 'Periodic-review due, new versions to acknowledge.',
-  },
-  cs_permit: {
-    title: 'Confined-space permits',
-    description: 'Permit submissions, approvals, expiry warnings.',
-  },
-  lone_worker: {
-    title: 'Lone worker',
-    description: 'Missed check-ins, escalations, session alerts.',
-  },
-}
+export const CATEGORY_LABELS: Record<NotificationCategory, { title: string; description: string }> =
+  {
+    incident: {
+      title: 'Incidents',
+      description: 'New incidents reported, status changes, investigations.',
+    },
+    ca: {
+      title: 'Corrective actions',
+      description: 'Assignments, due-date reminders, overdue escalations.',
+    },
+    training: {
+      title: 'Training',
+      description: 'Course assignments, expiry reminders, completions.',
+    },
+    document: {
+      title: 'Documents',
+      description: 'Periodic-review due, new versions to acknowledge.',
+    },
+    cs_permit: {
+      title: 'Confined-space permits',
+      description: 'Permit submissions, approvals, expiry warnings.',
+    },
+    lone_worker: {
+      title: 'Lone worker',
+      description: 'Missed check-ins, escalations, session alerts.',
+    },
+  }
 
 export const NOTIFICATION_CHANNELS = ['in_app', 'email', 'push', 'sms'] as const
 

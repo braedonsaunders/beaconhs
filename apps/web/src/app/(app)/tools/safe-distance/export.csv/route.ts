@@ -43,12 +43,24 @@ export async function GET(req: NextRequest) {
 
     const orderBy =
       params.sort === 'reference'
-        ? [params.dir === 'asc' ? asc(safeDistanceRecords.reference) : desc(safeDistanceRecords.reference)]
+        ? [
+            params.dir === 'asc'
+              ? asc(safeDistanceRecords.reference)
+              : desc(safeDistanceRecords.reference),
+          ]
         : params.sort === 'type'
           ? [params.dir === 'asc' ? asc(safeDistanceRecords.type) : desc(safeDistanceRecords.type)]
           : params.sort === 'complies'
-            ? [params.dir === 'asc' ? asc(safeDistanceRecords.complies) : desc(safeDistanceRecords.complies)]
-            : [params.dir === 'asc' ? asc(safeDistanceRecords.occurredAt) : desc(safeDistanceRecords.occurredAt)]
+            ? [
+                params.dir === 'asc'
+                  ? asc(safeDistanceRecords.complies)
+                  : desc(safeDistanceRecords.complies),
+              ]
+            : [
+                params.dir === 'asc'
+                  ? asc(safeDistanceRecords.occurredAt)
+                  : desc(safeDistanceRecords.occurredAt),
+              ]
 
     return tx
       .select({ rec: safeDistanceRecords, site: orgUnits })

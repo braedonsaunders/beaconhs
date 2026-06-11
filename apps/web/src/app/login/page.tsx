@@ -12,7 +12,7 @@ export default async function LoginPage() {
     <main className="grid min-h-screen place-items-center px-4">
       <div className="w-full max-w-sm space-y-6">
         <div className="text-center">
-          <div className="mx-auto inline-flex h-10 w-10 items-center justify-center rounded-lg bg-teal-700 text-white font-bold">
+          <div className="mx-auto inline-flex h-10 w-10 items-center justify-center rounded-lg bg-teal-700 font-bold text-white">
             B
           </div>
           <h1 className="mt-3 text-xl font-semibold">Sign in to BeaconHS</h1>

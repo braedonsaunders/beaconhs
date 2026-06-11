@@ -147,7 +147,12 @@ function DueTable({
   dateKey,
 }: {
   rows: {
-    item: { id: string; serialNumber: string | null; nextInspectionDue: string | null; nextAnnualInspectionDue: string | null }
+    item: {
+      id: string
+      serialNumber: string | null
+      nextInspectionDue: string | null
+      nextAnnualInspectionDue: string | null
+    }
     type: { name: string }
     holder: { firstName: string; lastName: string } | null
   }[]
@@ -172,7 +177,10 @@ function DueTable({
           return (
             <TableRow key={item.id}>
               <TableCell>
-                <Link href={`/ppe/${item.id}`} className="font-medium text-slate-900 hover:underline">
+                <Link
+                  href={`/ppe/${item.id}`}
+                  className="font-medium text-slate-900 hover:underline"
+                >
                   {type.name}
                 </Link>
               </TableCell>

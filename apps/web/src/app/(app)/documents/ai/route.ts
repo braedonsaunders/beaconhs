@@ -25,7 +25,10 @@ export async function POST(req: Request): Promise<Response> {
   const messages: DocChatMessage[] = raw
     .map((m) => m as Record<string, unknown>)
     .filter((m) => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
-    .map((m) => ({ role: m.role as 'user' | 'assistant', content: String(m.content).slice(0, 12000) }))
+    .map((m) => ({
+      role: m.role as 'user' | 'assistant',
+      content: String(m.content).slice(0, 12000),
+    }))
   const docText = typeof b.docText === 'string' ? b.docText : undefined
 
   if (messages.length === 0) return new Response('No messages', { status: 400 })

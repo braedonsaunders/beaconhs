@@ -110,7 +110,7 @@ export const LIFT_PLAN_TEMPLATE_SCHEMA: FormSchemaV1 = {
           id: 'supervisor_job_title',
           type: 'formula',
           label: { en: 'Supervisor — current job title' },
-          helpText: { en: 'Read-only. Pulled from the supervisor\'s people record.' },
+          helpText: { en: "Read-only. Pulled from the supervisor's people record." },
           formula: {
             kind: 'entity_attr',
             pickerFieldKey: 'supervisor',
@@ -127,9 +127,24 @@ export const LIFT_PLAN_TEMPLATE_SCHEMA: FormSchemaV1 = {
       fields: [
         { id: 'crane_type', type: 'text', label: { en: 'Crane type' }, required: true },
         { id: 'crane_model', type: 'text', label: { en: 'Crane model' } },
-        { id: 'crane_capacity_lbs', type: 'number', label: { en: 'Crane capacity (lbs)' }, required: true },
-        { id: 'crane_radius_ft', type: 'number', label: { en: 'Working radius (ft)' }, required: true },
-        { id: 'crane_boom_length_ft', type: 'number', label: { en: 'Boom length (ft)' }, required: true },
+        {
+          id: 'crane_capacity_lbs',
+          type: 'number',
+          label: { en: 'Crane capacity (lbs)' },
+          required: true,
+        },
+        {
+          id: 'crane_radius_ft',
+          type: 'number',
+          label: { en: 'Working radius (ft)' },
+          required: true,
+        },
+        {
+          id: 'crane_boom_length_ft',
+          type: 'number',
+          label: { en: 'Boom length (ft)' },
+          required: true,
+        },
         { id: 'crane_counterweight_lbs', type: 'number', label: { en: 'Counterweight (lbs)' } },
         { id: 'ground_bearing_psi', type: 'number', label: { en: 'Ground bearing (psi)' } },
         { id: 'tail_swing_ft', type: 'number', label: { en: 'Tail swing (ft)' } },
@@ -147,7 +162,7 @@ export const LIFT_PLAN_TEMPLATE_SCHEMA: FormSchemaV1 = {
           id: 'crane_current_status',
           type: 'formula',
           label: { en: 'Crane — current status' },
-          helpText: { en: 'Read-only. Pulled from the equipment item\'s status column.' },
+          helpText: { en: "Read-only. Pulled from the equipment item's status column." },
           formula: {
             kind: 'entity_attr',
             pickerFieldKey: 'crane_equipment',
@@ -166,7 +181,12 @@ export const LIFT_PLAN_TEMPLATE_SCHEMA: FormSchemaV1 = {
       step: 'plan',
       fields: [
         { id: 'description', type: 'text', label: { en: 'Description' }, required: true },
-        { id: 'load_weight_lbs', type: 'number', label: { en: 'Load weight (lbs)' }, required: true },
+        {
+          id: 'load_weight_lbs',
+          type: 'number',
+          label: { en: 'Load weight (lbs)' },
+          required: true,
+        },
         { id: 'rigging_weight_lbs', type: 'number', label: { en: 'Rigging weight (lbs)' } },
       ],
     },
@@ -265,10 +285,30 @@ export const LIFT_PLAN_TEMPLATE_SCHEMA: FormSchemaV1 = {
       title: { en: 'Signatures' },
       step: 'sign',
       fields: [
-        { id: 'supervisor_signature', type: 'signature', label: { en: 'Supervisor signature' }, required: true },
-        { id: 'operator_signature', type: 'signature', label: { en: 'Operator signature' }, required: true },
-        { id: 'rigger_signature', type: 'signature', label: { en: 'Rigger signature' }, required: true },
-        { id: 'spotter_signature', type: 'signature', label: { en: 'Spotter signature' }, required: true },
+        {
+          id: 'supervisor_signature',
+          type: 'signature',
+          label: { en: 'Supervisor signature' },
+          required: true,
+        },
+        {
+          id: 'operator_signature',
+          type: 'signature',
+          label: { en: 'Operator signature' },
+          required: true,
+        },
+        {
+          id: 'rigger_signature',
+          type: 'signature',
+          label: { en: 'Rigger signature' },
+          required: true,
+        },
+        {
+          id: 'spotter_signature',
+          type: 'signature',
+          label: { en: 'Spotter signature' },
+          required: true,
+        },
       ],
     },
   ],
@@ -321,12 +361,7 @@ export async function seedLiftPlanTemplate(
   const existing = await tx
     .select({ id: formTemplates.id })
     .from(formTemplates)
-    .where(
-      and(
-        eq(formTemplates.tenantId, tenantId),
-        eq(formTemplates.key, LIFT_PLAN_TEMPLATE_KEY),
-      ),
-    )
+    .where(and(eq(formTemplates.tenantId, tenantId), eq(formTemplates.key, LIFT_PLAN_TEMPLATE_KEY)))
     .limit(1)
   if (existing.length > 0) return 'skipped'
 

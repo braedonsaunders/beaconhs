@@ -191,42 +191,90 @@ export function JournalEditor({
     <div className="flex h-full min-h-0 flex-col">
       {/* Toolbar */}
       <div className="sticky top-0 z-10 flex flex-wrap items-center gap-0.5 border-b border-slate-200 bg-white/90 px-1 py-1 backdrop-blur">
-        <TBtn active={editor.isActive('bold')} onClick={() => editor.chain().focus().toggleBold().run()} label="Bold">
+        <TBtn
+          active={editor.isActive('bold')}
+          onClick={() => editor.chain().focus().toggleBold().run()}
+          label="Bold"
+        >
           <Bold size={15} />
         </TBtn>
-        <TBtn active={editor.isActive('italic')} onClick={() => editor.chain().focus().toggleItalic().run()} label="Italic">
+        <TBtn
+          active={editor.isActive('italic')}
+          onClick={() => editor.chain().focus().toggleItalic().run()}
+          label="Italic"
+        >
           <Italic size={15} />
         </TBtn>
-        <TBtn active={editor.isActive('strike')} onClick={() => editor.chain().focus().toggleStrike().run()} label="Strikethrough">
+        <TBtn
+          active={editor.isActive('strike')}
+          onClick={() => editor.chain().focus().toggleStrike().run()}
+          label="Strikethrough"
+        >
           <Strikethrough size={15} />
         </TBtn>
-        <TBtn active={editor.isActive('highlight')} onClick={() => editor.chain().focus().toggleHighlight().run()} label="Highlight">
+        <TBtn
+          active={editor.isActive('highlight')}
+          onClick={() => editor.chain().focus().toggleHighlight().run()}
+          label="Highlight"
+        >
           <Highlighter size={15} />
         </TBtn>
         <Divider />
-        <TBtn active={editor.isActive('heading', { level: 1 })} onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} label="Heading 1">
+        <TBtn
+          active={editor.isActive('heading', { level: 1 })}
+          onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+          label="Heading 1"
+        >
           <Heading1 size={15} />
         </TBtn>
-        <TBtn active={editor.isActive('heading', { level: 2 })} onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} label="Heading 2">
+        <TBtn
+          active={editor.isActive('heading', { level: 2 })}
+          onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+          label="Heading 2"
+        >
           <Heading2 size={15} />
         </TBtn>
-        <TBtn active={editor.isActive('heading', { level: 3 })} onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} label="Heading 3">
+        <TBtn
+          active={editor.isActive('heading', { level: 3 })}
+          onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+          label="Heading 3"
+        >
           <Heading3 size={15} />
         </TBtn>
         <Divider />
-        <TBtn active={editor.isActive('bulletList')} onClick={() => editor.chain().focus().toggleBulletList().run()} label="Bullet list">
+        <TBtn
+          active={editor.isActive('bulletList')}
+          onClick={() => editor.chain().focus().toggleBulletList().run()}
+          label="Bullet list"
+        >
           <List size={15} />
         </TBtn>
-        <TBtn active={editor.isActive('orderedList')} onClick={() => editor.chain().focus().toggleOrderedList().run()} label="Numbered list">
+        <TBtn
+          active={editor.isActive('orderedList')}
+          onClick={() => editor.chain().focus().toggleOrderedList().run()}
+          label="Numbered list"
+        >
           <ListOrdered size={15} />
         </TBtn>
-        <TBtn active={editor.isActive('taskList')} onClick={() => editor.chain().focus().toggleTaskList().run()} label="Checklist">
+        <TBtn
+          active={editor.isActive('taskList')}
+          onClick={() => editor.chain().focus().toggleTaskList().run()}
+          label="Checklist"
+        >
           <CheckSquare size={15} />
         </TBtn>
-        <TBtn active={editor.isActive('blockquote')} onClick={() => editor.chain().focus().toggleBlockquote().run()} label="Quote">
+        <TBtn
+          active={editor.isActive('blockquote')}
+          onClick={() => editor.chain().focus().toggleBlockquote().run()}
+          label="Quote"
+        >
           <Quote size={15} />
         </TBtn>
-        <TBtn active={editor.isActive('codeBlock')} onClick={() => editor.chain().focus().toggleCodeBlock().run()} label="Code block">
+        <TBtn
+          active={editor.isActive('codeBlock')}
+          onClick={() => editor.chain().focus().toggleCodeBlock().run()}
+          label="Code block"
+        >
           <Code size={15} />
         </TBtn>
         <TBtn active={editor.isActive('link')} onClick={setLink} label="Link">
@@ -238,7 +286,11 @@ export function JournalEditor({
         <div ref={aiRef} className="relative">
           <button
             type="button"
-            onClick={() => (aiEnabled ? setAiOpen((v) => !v) : toast.error('AI isn’t configured. Add an API key to enable it.'))}
+            onClick={() =>
+              aiEnabled
+                ? setAiOpen((v) => !v)
+                : toast.error('AI isn’t configured. Add an API key to enable it.')
+            }
             disabled={!!aiBusy}
             className={cn(
               'inline-flex h-7 items-center gap-1 rounded px-2 text-xs font-medium transition-colors',
@@ -252,8 +304,8 @@ export function JournalEditor({
             {aiBusy ? 'Writing…' : 'AI'}
           </button>
           {aiOpen ? (
-            <div className="absolute left-0 top-9 z-30 w-60 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
-              <div className="px-3 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+            <div className="absolute top-9 left-0 z-30 w-60 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+              <div className="px-3 pt-1.5 pb-1 text-[10px] font-semibold tracking-wide text-slate-400 uppercase">
                 Selection, or whole entry
               </div>
               {AI_ACTIONS.map((a) => (
@@ -278,11 +330,21 @@ export function JournalEditor({
         />
 
         <div className="ml-auto flex items-center gap-0.5 pr-1">
-          <span className="mr-1 hidden text-[11px] tabular-nums text-slate-400 sm:inline">{words} words</span>
-          <TBtn disabled={!editor.can().undo()} onClick={() => editor.chain().focus().undo().run()} label="Undo">
+          <span className="mr-1 hidden text-[11px] text-slate-400 tabular-nums sm:inline">
+            {words} words
+          </span>
+          <TBtn
+            disabled={!editor.can().undo()}
+            onClick={() => editor.chain().focus().undo().run()}
+            label="Undo"
+          >
             <Undo2 size={15} />
           </TBtn>
-          <TBtn disabled={!editor.can().redo()} onClick={() => editor.chain().focus().redo().run()} label="Redo">
+          <TBtn
+            disabled={!editor.can().redo()}
+            onClick={() => editor.chain().focus().redo().run()}
+            label="Redo"
+          >
             <Redo2 size={15} />
           </TBtn>
         </div>

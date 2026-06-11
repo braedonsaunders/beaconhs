@@ -57,10 +57,7 @@ export async function enrollInCourse(courseId: string, personIdArg?: string) {
       .select()
       .from(trainingEnrollments)
       .where(
-        and(
-          eq(trainingEnrollments.courseId, courseId),
-          eq(trainingEnrollments.personId, personId),
-        ),
+        and(eq(trainingEnrollments.courseId, courseId), eq(trainingEnrollments.personId, personId)),
       )
       .limit(1)
     if (existing) {
@@ -78,7 +75,7 @@ export async function enrollInCourse(courseId: string, personIdArg?: string) {
       personId,
       status: 'in_progress',
       source: assigning ? 'assigned' : 'self',
-      assignedByTenantUserId: assigning ? ctx.membership?.id ?? null : null,
+      assignedByTenantUserId: assigning ? (ctx.membership?.id ?? null) : null,
       startedAt: new Date(),
     })
   })

@@ -13,12 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from '@beaconhs/ui'
-import {
-  equipmentItems,
-  equipmentTypes,
-  orgUnits,
-  people,
-} from '@beaconhs/db/schema'
+import { equipmentItems, equipmentTypes, orgUnits, people } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { buildExportHref, pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
@@ -131,8 +126,7 @@ export default async function UpcomingInspections({
             <TableBody>
               {rows.map(({ item, type, site, holder }) => {
                 const overdue =
-                  item.nextAnnualInspectionDue !== null &&
-                  item.nextAnnualInspectionDue < today
+                  item.nextAnnualInspectionDue !== null && item.nextAnnualInspectionDue < today
                 return (
                   <TableRow key={item.id}>
                     <TableCell className="font-mono text-xs">
@@ -149,7 +143,7 @@ export default async function UpcomingInspections({
                     <TableCell className="text-slate-600">
                       {item.lastAnnualInspectionOn ?? '—'}
                     </TableCell>
-                    <TableCell className={overdue ? 'text-red-700 font-medium' : 'text-slate-700'}>
+                    <TableCell className={overdue ? 'font-medium text-red-700' : 'text-slate-700'}>
                       {item.nextAnnualInspectionDue ?? 'unscheduled'}
                       {overdue ? (
                         <Badge variant="destructive" className="ml-2">

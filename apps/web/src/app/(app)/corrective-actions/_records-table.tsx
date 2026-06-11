@@ -66,7 +66,7 @@ export function RecordsTable({
       <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs uppercase tracking-wide text-slate-500">
+            <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase">
               <th className="w-8 px-3 py-2">
                 <HeaderSelectAll allSelected={allSelected} onToggleAll={toggleAll} />
               </th>
@@ -85,22 +85,12 @@ export function RecordsTable({
                 r.dueOn && r.dueOn < today && !['closed', 'cancelled'].includes(r.status)
               const isSelected = selected.has(r.id)
               return (
-                <tr
-                  key={r.id}
-                  className={isSelected ? 'bg-teal-50/40' : 'hover:bg-slate-50/50'}
-                >
+                <tr key={r.id} className={isSelected ? 'bg-teal-50/40' : 'hover:bg-slate-50/50'}>
                   <td className="w-8 px-3 py-2">
-                    <SelectionCheckbox
-                      id={r.id}
-                      selected={isSelected}
-                      onToggle={toggleOne}
-                    />
+                    <SelectionCheckbox id={r.id} selected={isSelected} onToggle={toggleOne} />
                   </td>
                   <td className="px-3 py-2 font-mono text-xs">
-                    <Link
-                      href={`/corrective-actions/${r.id}` as any}
-                      className="hover:underline"
-                    >
+                    <Link href={`/corrective-actions/${r.id}` as any} className="hover:underline">
                       {r.reference}
                     </Link>
                   </td>
@@ -157,11 +147,7 @@ export function RecordsTable({
           </tbody>
         </table>
       </div>
-      <BulkReassignBar
-        selectedIds={Array.from(selected)}
-        onClear={clear}
-        owners={owners}
-      />
+      <BulkReassignBar selectedIds={Array.from(selected)} onClear={clear} owners={owners} />
     </>
   )
 }

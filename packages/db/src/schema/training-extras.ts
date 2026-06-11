@@ -74,8 +74,7 @@ export const trainingExtraFieldOwnerType = pgEnum('training_extra_field_owner_ty
   'authority',
 ])
 
-export type TrainingExtraFieldOwnerType =
-  (typeof trainingExtraFieldOwnerType.enumValues)[number]
+export type TrainingExtraFieldOwnerType = (typeof trainingExtraFieldOwnerType.enumValues)[number]
 
 export const trainingExtraFields = pgTable(
   'training_extra_fields',

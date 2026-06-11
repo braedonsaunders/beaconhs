@@ -91,9 +91,7 @@ export async function sendPpeIssueEmail(
     ? `${data.activeIssue.person.firstName} ${data.activeIssue.person.lastName}`
     : '—'
   const reporterName =
-    data.openReport?.reporterUser?.name ??
-    data.openReport?.reporterMembership?.displayName ??
-    '—'
+    data.openReport?.reporterUser?.name ?? data.openReport?.reporterMembership?.displayName ?? '—'
 
   const subject =
     (options?.subjectPrefix ? `${options.subjectPrefix} · ` : '') +
@@ -132,11 +130,14 @@ export async function sendPpeIssueEmail(
         Holder: ${escapeHtml(holderName)}
         ${data.item.expiresOn ? ` · Expires ${escapeHtml(String(data.item.expiresOn))}` : ''}
       </div>
-      ${options?.messageOverride
-        ? `<div style="border-left:3px solid #0f766e;padding:8px 12px;background:#ecfdf5;margin-bottom:12px;font-size:13px;">${escapeHtml(options.messageOverride)}</div>`
-        : ''}
-      ${data.openReport
-        ? `<h3 style="margin:18px 0 4px;font-size:14px;color:#b91c1c">Open issue report</h3>
+      ${
+        options?.messageOverride
+          ? `<div style="border-left:3px solid #0f766e;padding:8px 12px;background:#ecfdf5;margin-bottom:12px;font-size:13px;">${escapeHtml(options.messageOverride)}</div>`
+          : ''
+      }
+      ${
+        data.openReport
+          ? `<h3 style="margin:18px 0 4px;font-size:14px;color:#b91c1c">Open issue report</h3>
            <table style="border-collapse:collapse;font-size:13px;margin-bottom:12px;">
              <tr><td style="padding:4px 12px 4px 0;color:#64748b;">Reported</td>
                  <td style="padding:4px 0;">${escapeHtml(data.openReport.report.reportedAt.toLocaleString())}</td></tr>
@@ -144,7 +145,8 @@ export async function sendPpeIssueEmail(
                  <td style="padding:4px 0;">${escapeHtml(reporterName)}</td></tr>
            </table>
            <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:12px;font-size:13px;white-space:pre-wrap;">${escapeHtml(data.openReport.report.description ?? '(none)')}</div>`
-        : `<div style="font-size:13px;color:#64748b;">No open issue report on this item.</div>`}
+          : `<div style="font-size:13px;color:#64748b;">No open issue report on this item.</div>`
+      }
     </div>
   `
 

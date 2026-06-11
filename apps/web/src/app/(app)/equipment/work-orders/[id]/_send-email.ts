@@ -36,10 +36,7 @@ export async function sendWorkOrderEmail(
       })
       .from(equipmentWorkOrders)
       .leftJoin(equipmentItems, eq(equipmentItems.id, equipmentWorkOrders.itemId))
-      .leftJoin(
-        tenantUsers,
-        eq(tenantUsers.id, equipmentWorkOrders.assignedToTenantUserId),
-      )
+      .leftJoin(tenantUsers, eq(tenantUsers.id, equipmentWorkOrders.assignedToTenantUserId))
       .leftJoin(user, eq(user.id, tenantUsers.userId))
       .leftJoin(people, eq(people.id, equipmentWorkOrders.reportedByPersonId))
       .where(eq(equipmentWorkOrders.id, workOrderId))
@@ -75,9 +72,7 @@ export async function sendWorkOrderEmail(
 
   const assigneeName =
     data.assigneeUser?.name ?? data.assigneeMembership?.displayName ?? 'Unassigned'
-  const reporterName = data.reporter
-    ? `${data.reporter.firstName} ${data.reporter.lastName}`
-    : '—'
+  const reporterName = data.reporter ? `${data.reporter.firstName} ${data.reporter.lastName}` : '—'
   const equipmentLine = data.item
     ? `${data.item.assetTag ?? ''} ${data.item.name ?? ''}`.trim()
     : '—'
@@ -118,9 +113,11 @@ export async function sendWorkOrderEmail(
         status ${escapeHtml(data.wo.status)}
         ${data.wo.closedAt ? ` · closed ${escapeHtml(data.wo.closedAt.toLocaleString())}` : ''}
       </div>
-      ${options?.messageOverride
-        ? `<div style="border-left:3px solid #0f766e;padding:8px 12px;background:#ecfdf5;margin-bottom:12px;font-size:13px;">${escapeHtml(options.messageOverride)}</div>`
-        : ''}
+      ${
+        options?.messageOverride
+          ? `<div style="border-left:3px solid #0f766e;padding:8px 12px;background:#ecfdf5;margin-bottom:12px;font-size:13px;">${escapeHtml(options.messageOverride)}</div>`
+          : ''
+      }
       <table style="border-collapse:collapse;font-size:13px;margin-bottom:12px;">
         <tr><td style="padding:4px 12px 4px 0;color:#64748b;">Equipment</td>
             <td style="padding:4px 0;">${escapeHtml(equipmentLine)}</td></tr>
@@ -130,10 +127,12 @@ export async function sendWorkOrderEmail(
             <td style="padding:4px 0;">${escapeHtml(reporterName)}</td></tr>
         <tr><td style="padding:4px 12px 4px 0;color:#64748b;">Opened</td>
             <td style="padding:4px 0;">${escapeHtml(data.wo.openedAt.toLocaleString())}</td></tr>
-        ${data.wo.cost
-          ? `<tr><td style="padding:4px 12px 4px 0;color:#64748b;">Cost</td>
+        ${
+          data.wo.cost
+            ? `<tr><td style="padding:4px 12px 4px 0;color:#64748b;">Cost</td>
                  <td style="padding:4px 0;">$${escapeHtml(Number(data.wo.cost).toLocaleString())}</td></tr>`
-          : ''}
+            : ''
+        }
       </table>
       <h3 style="margin:18px 0 4px;font-size:14px;">Description</h3>
       <div style="font-size:13px;white-space:pre-wrap;margin-bottom:12px;">${escapeHtml(data.wo.description ?? '(none)')}</div>

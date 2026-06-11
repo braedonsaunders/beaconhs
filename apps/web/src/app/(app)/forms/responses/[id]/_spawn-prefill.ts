@@ -65,9 +65,7 @@ export function buildSpawnPrefill(args: {
   const summary = failedFieldSummary(
     args.schema,
     args.values,
-    args.singleFailedFieldKey
-      ? [args.singleFailedFieldKey]
-      : args.failedFieldKeys,
+    args.singleFailedFieldKey ? [args.singleFailedFieldKey] : args.failedFieldKeys,
   )
   const caTitle = args.singleFailedFieldKey
     ? `Address "${labelForField(args.schema, args.singleFailedFieldKey)}" failure in ${args.templateName}`

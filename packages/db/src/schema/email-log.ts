@@ -11,16 +11,7 @@
 // the body itself is fetched lazily by the viewer (separate query) to keep
 // list-page payloads tight.
 
-import {
-  index,
-  integer,
-  jsonb,
-  pgEnum,
-  pgTable,
-  text,
-  timestamp,
-  uuid,
-} from 'drizzle-orm/pg-core'
+import { index, integer, jsonb, pgEnum, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
 import { id, timestamps } from './_helpers'
 import { tenants } from './core'
 

@@ -42,7 +42,13 @@ export const TOOLBOX_TEMPLATE_SCHEMA: FormSchemaV1 = {
       title: { en: 'Topic' },
       fields: [
         { id: 'topic', type: 'text', label: { en: 'Topic' }, required: true },
-        { id: 'date', type: 'date', label: { en: 'Date' }, required: true, defaultValue: { kind: 'today' } },
+        {
+          id: 'date',
+          type: 'date',
+          label: { en: 'Date' },
+          required: true,
+          defaultValue: { kind: 'today' },
+        },
         { id: 'site', type: 'site_picker', label: { en: 'Site' }, required: true },
         {
           id: 'facilitator',
@@ -57,7 +63,12 @@ export const TOOLBOX_TEMPLATE_SCHEMA: FormSchemaV1 = {
       id: 'discussion',
       title: { en: 'Discussion' },
       fields: [
-        { id: 'discussion_notes', type: 'long_text', label: { en: 'Discussion notes' }, required: true },
+        {
+          id: 'discussion_notes',
+          type: 'long_text',
+          label: { en: 'Discussion notes' },
+          required: true,
+        },
         { id: 'questions_raised', type: 'long_text', label: { en: 'Questions raised' } },
         { id: 'action_items', type: 'long_text', label: { en: 'Action items' } },
       ],
@@ -76,7 +87,9 @@ export const TOOLBOX_TEMPLATE_SCHEMA: FormSchemaV1 = {
     {
       id: 'photos',
       title: { en: 'Photos' },
-      fields: [{ id: 'photos', type: 'photo_upload', label: { en: 'Photos' }, config: { multiple: true } }],
+      fields: [
+        { id: 'photos', type: 'photo_upload', label: { en: 'Photos' }, config: { multiple: true } },
+      ],
     },
   ],
   workflow: {

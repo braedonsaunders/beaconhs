@@ -69,7 +69,8 @@ export default async function NewSafeDistancePage({
       supervisors: sv.map((r) => ({ id: r.id, name: r.name ?? '(unnamed)' })),
       operators: op.map((p) => ({
         id: p.id,
-        name: `${p.lastName ?? ''}${p.lastName ? ', ' : ''}${p.firstName ?? ''}`.trim() || '(unnamed)',
+        name:
+          `${p.lastName ?? ''}${p.lastName ? ', ' : ''}${p.firstName ?? ''}`.trim() || '(unnamed)',
       })),
     }
   })
@@ -88,12 +89,12 @@ export default async function NewSafeDistancePage({
           <AlertDescription>
             <ul className="ml-4 list-disc space-y-1 text-sm">
               <li>
-                <strong>Electrical / overhead crane:</strong> IEEE C2 / CSA limits-of-approach
-                table — pick a kV and the required clearance is set automatically.
+                <strong>Electrical / overhead crane:</strong> IEEE C2 / CSA limits-of-approach table
+                — pick a kV and the required clearance is set automatically.
               </li>
               <li>
-                <strong>Drone:</strong> Transport Canada minimum {DRONE_DEFAULT_CLEARANCE_M} m
-                from non-involved people.
+                <strong>Drone:</strong> Transport Canada minimum {DRONE_DEFAULT_CLEARANCE_M} m from
+                non-involved people.
               </li>
               <li>
                 <strong>Vehicle:</strong> {VEHICLE_DEFAULT_CLEARANCE_M} m baseline stand-off.
@@ -177,7 +178,7 @@ export default async function NewSafeDistancePage({
           </CardHeader>
           <CardContent>
             <table className="w-full text-sm">
-              <thead className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+              <thead className="border-b border-slate-200 text-left text-xs tracking-wide text-slate-500 uppercase">
                 <tr>
                   <th className="px-2 py-1">Voltage range (kV)</th>
                   <th className="px-2 py-1">Required distance (m)</th>
@@ -203,8 +204,8 @@ export default async function NewSafeDistancePage({
               </tbody>
             </table>
             <p className="mt-3 text-xs text-slate-500">
-              Source: IEEE C2 / CSA Z462 abbreviated limits of approach. Always check the
-              local AHJ for jurisdiction-specific overrides.
+              Source: IEEE C2 / CSA Z462 abbreviated limits of approach. Always check the local AHJ
+              for jurisdiction-specific overrides.
             </p>
           </CardContent>
         </Card>

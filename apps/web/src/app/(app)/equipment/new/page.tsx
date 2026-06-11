@@ -3,14 +3,7 @@ import { revalidatePath } from 'next/cache'
 import Link from 'next/link'
 import { asc } from 'drizzle-orm'
 import { randomBytes } from 'crypto'
-import {
-  Button,
-  Input,
-  Label,
-  PageHeader,
-  Select,
-  Textarea,
-} from '@beaconhs/ui'
+import { Button, Input, Label, PageHeader, Select, Textarea } from '@beaconhs/ui'
 import { equipmentItems, equipmentTypes, orgUnits } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
@@ -70,7 +63,10 @@ export default async function NewEquipmentPage() {
   const { types, sites } = await ctx.db(async (tx) => {
     const [t, s] = await Promise.all([
       tx.select().from(equipmentTypes).orderBy(asc(equipmentTypes.name)),
-      tx.select().from(orgUnits).where(/* level filter via SQL below */ asc(orgUnits.name) as any),
+      tx
+        .select()
+        .from(orgUnits)
+        .where(/* level filter via SQL below */ asc(orgUnits.name) as any),
     ])
     return { types: t, sites: s }
   })
@@ -83,7 +79,10 @@ export default async function NewEquipmentPage() {
           description="Register a new piece of equipment. You'll be able to attach inspection schedules, transfer to a site, and assign a holder from the detail page."
           back={{ href: '/equipment', label: 'Back to equipment' }}
         />
-        <form action={createEquipment} className="mt-6 space-y-5 rounded-lg border border-slate-200 bg-white p-6">
+        <form
+          action={createEquipment}
+          className="mt-6 space-y-5 rounded-lg border border-slate-200 bg-white p-6"
+        >
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="name">Name *</Label>

@@ -106,7 +106,10 @@ export default async function NewObligationPage({
         .select({ id: equipmentTypes.id, name: equipmentTypes.name })
         .from(equipmentTypes)
         .orderBy(asc(equipmentTypes.name)),
-      tx.select({ id: ppeTypes.id, name: ppeTypes.name }).from(ppeTypes).orderBy(asc(ppeTypes.name)),
+      tx
+        .select({ id: ppeTypes.id, name: ppeTypes.name })
+        .from(ppeTypes)
+        .orderBy(asc(ppeTypes.name)),
       tx
         .select({ id: personTitles.id, name: personTitles.name })
         .from(personTitles)
@@ -158,7 +161,9 @@ export default async function NewObligationPage({
             departments: data.allDepts.map((d) => ({ id: d.id, label: d.name })),
             people: data.allPeople.map((p) => ({
               id: p.id,
-              label: `${p.lastName ?? ''}${p.lastName ? ', ' : ''}${p.firstName ?? ''}`.trim() || '(unnamed)',
+              label:
+                `${p.lastName ?? ''}${p.lastName ? ', ' : ''}${p.firstName ?? ''}`.trim() ||
+                '(unnamed)',
               sub: p.jobTitle ?? undefined,
             })),
             orgUnits: data.allOrgUnits

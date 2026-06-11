@@ -36,11 +36,7 @@ export async function runAnalyzer(ctx: RequestContext): Promise<Finding[]> {
       })
       .from(people)
       .where(
-        and(
-          eq(people.status, 'active'),
-          isNull(people.departmentId),
-          isNull(people.deletedAt),
-        ),
+        and(eq(people.status, 'active'), isNull(people.departmentId), isNull(people.deletedAt)),
       )
       .limit(2000)
     findings.push({
@@ -54,8 +50,7 @@ export async function runAnalyzer(ctx: RequestContext): Promise<Finding[]> {
       samples: noDept.slice(0, 10).map((p) => ({
         id: p.id,
         label:
-          `${p.lastName ?? ''}${p.lastName ? ', ' : ''}${p.firstName ?? ''}`.trim() ||
-          '(unnamed)',
+          `${p.lastName ?? ''}${p.lastName ? ', ' : ''}${p.firstName ?? ''}`.trim() || '(unnamed)',
       })),
     })
 
@@ -67,13 +62,7 @@ export async function runAnalyzer(ctx: RequestContext): Promise<Finding[]> {
         lastName: people.lastName,
       })
       .from(people)
-      .where(
-        and(
-          eq(people.status, 'active'),
-          isNull(people.tradeId),
-          isNull(people.deletedAt),
-        ),
-      )
+      .where(and(eq(people.status, 'active'), isNull(people.tradeId), isNull(people.deletedAt)))
       .limit(2000)
     findings.push({
       key: 'people-no-trade',
@@ -86,8 +75,7 @@ export async function runAnalyzer(ctx: RequestContext): Promise<Finding[]> {
       samples: noTrade.slice(0, 10).map((p) => ({
         id: p.id,
         label:
-          `${p.lastName ?? ''}${p.lastName ? ', ' : ''}${p.firstName ?? ''}`.trim() ||
-          '(unnamed)',
+          `${p.lastName ?? ''}${p.lastName ? ', ' : ''}${p.firstName ?? ''}`.trim() || '(unnamed)',
       })),
     })
 
@@ -119,12 +107,7 @@ export async function runAnalyzer(ctx: RequestContext): Promise<Finding[]> {
         title: correctiveActions.title,
       })
       .from(correctiveActions)
-      .where(
-        and(
-          isNull(correctiveActions.source),
-          isNull(correctiveActions.deletedAt),
-        ),
-      )
+      .where(and(isNull(correctiveActions.source), isNull(correctiveActions.deletedAt)))
       .limit(2000)
     findings.push({
       key: 'ca-no-source',
@@ -226,8 +209,8 @@ export async function runAnalyzer(ctx: RequestContext): Promise<Finding[]> {
       .where(isNull(incidents.deletedAt))
     // The totals don't go into findings — we expose them via a parallel
     // function for the page header summary strip.
-    return findings.sort((a, b) =>
-      severityRank(b.severity) - severityRank(a.severity) || b.count - a.count,
+    return findings.sort(
+      (a, b) => severityRank(b.severity) - severityRank(a.severity) || b.count - a.count,
     )
   })
 }
@@ -252,10 +235,7 @@ export async function getTenantTableTotals(
       .select({ c: count() })
       .from(correctiveActions)
       .where(isNull(correctiveActions.deletedAt))
-    const [i] = await tx
-      .select({ c: count() })
-      .from(incidents)
-      .where(isNull(incidents.deletedAt))
+    const [i] = await tx.select({ c: count() }).from(incidents).where(isNull(incidents.deletedAt))
     return {
       people: Number(p?.c ?? 0),
       equipment: Number(e?.c ?? 0),

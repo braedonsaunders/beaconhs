@@ -24,14 +24,22 @@ import {
   type NodeProps,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { ArrowLeft, GitBranch, Mail, Pencil, Plus, Rocket, Save, ShieldCheck, Sparkles, Trash2, Workflow, Zap } from 'lucide-react'
+import {
+  ArrowLeft,
+  GitBranch,
+  Mail,
+  Pencil,
+  Plus,
+  Rocket,
+  Save,
+  ShieldCheck,
+  Sparkles,
+  Trash2,
+  Workflow,
+  Zap,
+} from 'lucide-react'
 import { Button, Drawer, Input, Label, Select, Textarea } from '@beaconhs/ui'
-import type {
-  ActionData,
-  AutomationGraph,
-  AutomationNode,
-  TriggerData,
-} from '@beaconhs/forms-core'
+import type { ActionData, AutomationGraph, AutomationNode, TriggerData } from '@beaconhs/forms-core'
 import { emptyAutomationGraph } from '@beaconhs/forms-core'
 import { LogicBuilder } from '../designer/logic-builder'
 import { toast } from '@/lib/toast'
@@ -49,7 +57,12 @@ const newId = (p: string) => `${p}_${(_seq += 1)}_${Math.random().toString(36).s
 
 function toFlow(graph: AutomationGraph): { nodes: FlowNode[]; edges: Edge[] } {
   return {
-    nodes: graph.nodes.map((n) => ({ id: n.id, type: n.data.kind, position: n.position, data: n.data })),
+    nodes: graph.nodes.map((n) => ({
+      id: n.id,
+      type: n.data.kind,
+      position: n.position,
+      data: n.data,
+    })),
     edges: graph.edges.map((e) => ({
       id: e.id,
       source: e.source,
@@ -72,7 +85,7 @@ function fromFlow(nodes: FlowNode[], edges: Edge[]): AutomationGraph {
       id: e.id,
       source: e.source,
       target: e.target,
-      sourceHandle: ((e.sourceHandle as AutomationGraph['edges'][number]['sourceHandle']) ?? 'next'),
+      sourceHandle: (e.sourceHandle as AutomationGraph['edges'][number]['sourceHandle']) ?? 'next',
     })),
   }
 }
@@ -110,7 +123,9 @@ const HANDLE = { width: 9, height: 9 }
 function TriggerNode({ data, selected }: NodeProps) {
   const d = data as Extract<NData, { kind: 'trigger' }>
   return (
-    <div className={`${CARD} ${selected ? 'border-teal-500 ring-1 ring-teal-500' : 'border-emerald-300'}`}>
+    <div
+      className={`${CARD} ${selected ? 'border-teal-500 ring-1 ring-teal-500' : 'border-emerald-300'}`}
+    >
       <div className="flex items-center gap-1.5 font-semibold text-emerald-700">
         <Zap size={13} /> Trigger
       </div>
@@ -123,7 +138,9 @@ function TriggerNode({ data, selected }: NodeProps) {
 function ConditionNode({ data, selected }: NodeProps) {
   const d = data as Extract<NData, { kind: 'condition' }>
   return (
-    <div className={`${CARD} ${selected ? 'border-teal-500 ring-1 ring-teal-500' : 'border-amber-300'}`}>
+    <div
+      className={`${CARD} ${selected ? 'border-teal-500 ring-1 ring-teal-500' : 'border-amber-300'}`}
+    >
       <Handle type="target" position={Position.Left} style={HANDLE} />
       <div className="flex items-center gap-1.5 font-semibold text-amber-700">
         <GitBranch size={13} /> Condition
@@ -138,14 +155,26 @@ function ConditionNode({ data, selected }: NodeProps) {
 function GateNode({ data, selected }: NodeProps) {
   const d = data as Extract<NData, { kind: 'gate' }>
   return (
-    <div className={`${CARD} ${selected ? 'border-teal-500 ring-1 ring-teal-500' : 'border-violet-300'}`}>
+    <div
+      className={`${CARD} ${selected ? 'border-teal-500 ring-1 ring-teal-500' : 'border-violet-300'}`}
+    >
       <Handle type="target" position={Position.Left} style={HANDLE} />
       <div className="flex items-center gap-1.5 font-semibold text-violet-700">
         <ShieldCheck size={13} /> Approval
       </div>
       <div className="mt-0.5 truncate text-slate-600">{d.gate.title || 'Approve / reject'}</div>
-      <Handle type="source" position={Position.Right} id="approve" style={{ ...HANDLE, top: '38%' }} />
-      <Handle type="source" position={Position.Right} id="reject" style={{ ...HANDLE, top: '70%' }} />
+      <Handle
+        type="source"
+        position={Position.Right}
+        id="approve"
+        style={{ ...HANDLE, top: '38%' }}
+      />
+      <Handle
+        type="source"
+        position={Position.Right}
+        id="reject"
+        style={{ ...HANDLE, top: '70%' }}
+      />
     </div>
   )
 }
@@ -153,7 +182,9 @@ function GateNode({ data, selected }: NodeProps) {
 function ActionNode({ data, selected }: NodeProps) {
   const d = data as Extract<NData, { kind: 'action' }>
   return (
-    <div className={`${CARD} ${selected ? 'border-teal-500 ring-1 ring-teal-500' : 'border-sky-300'}`}>
+    <div
+      className={`${CARD} ${selected ? 'border-teal-500 ring-1 ring-teal-500' : 'border-sky-300'}`}
+    >
       <Handle type="target" position={Position.Left} style={HANDLE} />
       <div className="flex items-center gap-1.5 font-semibold text-sky-700">
         <Mail size={13} /> Action
@@ -173,11 +204,19 @@ function defaultData(kind: NData['kind'], firstField: string): NData {
     case 'condition':
       return { kind: 'condition', rule: { op: 'isSet', field: firstField }, label: 'If…' }
     case 'gate':
-      return { kind: 'gate', gate: { title: 'Supervisor approval', assignee: { type: 'submitter' } } }
+      return {
+        kind: 'gate',
+        gate: { title: 'Supervisor approval', assignee: { type: 'submitter' } },
+      }
     case 'action':
       return {
         kind: 'action',
-        action: { action: 'send_email', to: [{ type: 'submitter' }], subject: '', bodyTemplate: '' },
+        action: {
+          action: 'send_email',
+          to: [{ type: 'submitter' }],
+          subject: '',
+          bodyTemplate: '',
+        },
       }
   }
 }
@@ -219,7 +258,12 @@ function MiniToggle({
 
 // Quick-start flows for common automations. Each builds a ready-to-tweak graph;
 // the user fills in blanks (role/url) and hits Save.
-type FlowTemplate = { key: string; label: string; description: string; build: () => AutomationGraph }
+type FlowTemplate = {
+  key: string
+  label: string
+  description: string
+  build: () => AutomationGraph
+}
 
 const FLOW_TEMPLATES: FlowTemplate[] = [
   {
@@ -229,8 +273,24 @@ const FLOW_TEMPLATES: FlowTemplate[] = [
     build: () => ({
       schemaVersion: 1,
       nodes: [
-        { id: 'trg', position: { x: 60, y: 140 }, data: { kind: 'trigger', trigger: { trigger: 'on_submit' } } },
-        { id: 'act', position: { x: 380, y: 140 }, data: { kind: 'action', action: { action: 'send_email', to: [{ type: 'submitter' }], subject: 'Submission received', bodyTemplate: 'Thanks — your submission has been received.' } } },
+        {
+          id: 'trg',
+          position: { x: 60, y: 140 },
+          data: { kind: 'trigger', trigger: { trigger: 'on_submit' } },
+        },
+        {
+          id: 'act',
+          position: { x: 380, y: 140 },
+          data: {
+            kind: 'action',
+            action: {
+              action: 'send_email',
+              to: [{ type: 'submitter' }],
+              subject: 'Submission received',
+              bodyTemplate: 'Thanks — your submission has been received.',
+            },
+          },
+        },
       ],
       edges: [{ id: 'e1', source: 'trg', target: 'act', sourceHandle: 'next' }],
     }),
@@ -242,8 +302,19 @@ const FLOW_TEMPLATES: FlowTemplate[] = [
     build: () => ({
       schemaVersion: 1,
       nodes: [
-        { id: 'trg', position: { x: 60, y: 140 }, data: { kind: 'trigger', trigger: { trigger: 'on_submit' } } },
-        { id: 'act', position: { x: 380, y: 140 }, data: { kind: 'action', action: { action: 'notify_role', role: '', message: 'A new submission needs review.' } } },
+        {
+          id: 'trg',
+          position: { x: 60, y: 140 },
+          data: { kind: 'trigger', trigger: { trigger: 'on_submit' } },
+        },
+        {
+          id: 'act',
+          position: { x: 380, y: 140 },
+          data: {
+            kind: 'action',
+            action: { action: 'notify_role', role: '', message: 'A new submission needs review.' },
+          },
+        },
       ],
       edges: [{ id: 'e1', source: 'trg', target: 'act', sourceHandle: 'next' }],
     }),
@@ -255,9 +326,32 @@ const FLOW_TEMPLATES: FlowTemplate[] = [
     build: () => ({
       schemaVersion: 1,
       nodes: [
-        { id: 'trg', position: { x: 40, y: 160 }, data: { kind: 'trigger', trigger: { trigger: 'on_submit' } } },
-        { id: 'cnd', position: { x: 320, y: 160 }, data: { kind: 'condition', rule: { op: 'lt', field: 'compliance_score', value: 80 }, label: 'Score below 80' } },
-        { id: 'act', position: { x: 620, y: 100 }, data: { kind: 'action', action: { action: 'create_capa', titleTemplate: 'Follow-up corrective action', severity: 'high' } } },
+        {
+          id: 'trg',
+          position: { x: 40, y: 160 },
+          data: { kind: 'trigger', trigger: { trigger: 'on_submit' } },
+        },
+        {
+          id: 'cnd',
+          position: { x: 320, y: 160 },
+          data: {
+            kind: 'condition',
+            rule: { op: 'lt', field: 'compliance_score', value: 80 },
+            label: 'Score below 80',
+          },
+        },
+        {
+          id: 'act',
+          position: { x: 620, y: 100 },
+          data: {
+            kind: 'action',
+            action: {
+              action: 'create_capa',
+              titleTemplate: 'Follow-up corrective action',
+              severity: 'high',
+            },
+          },
+        },
       ],
       edges: [
         { id: 'e1', source: 'trg', target: 'cnd', sourceHandle: 'next' },
@@ -272,8 +366,19 @@ const FLOW_TEMPLATES: FlowTemplate[] = [
     build: () => ({
       schemaVersion: 1,
       nodes: [
-        { id: 'trg', position: { x: 60, y: 140 }, data: { kind: 'trigger', trigger: { trigger: 'on_submit' } } },
-        { id: 'gat', position: { x: 380, y: 140 }, data: { kind: 'gate', gate: { title: 'Supervisor approval', assignee: { type: 'role', role: '' } } } },
+        {
+          id: 'trg',
+          position: { x: 60, y: 140 },
+          data: { kind: 'trigger', trigger: { trigger: 'on_submit' } },
+        },
+        {
+          id: 'gat',
+          position: { x: 380, y: 140 },
+          data: {
+            kind: 'gate',
+            gate: { title: 'Supervisor approval', assignee: { type: 'role', role: '' } },
+          },
+        },
       ],
       edges: [{ id: 'e1', source: 'trg', target: 'gat', sourceHandle: 'next' }],
     }),
@@ -285,8 +390,16 @@ const FLOW_TEMPLATES: FlowTemplate[] = [
     build: () => ({
       schemaVersion: 1,
       nodes: [
-        { id: 'trg', position: { x: 60, y: 140 }, data: { kind: 'trigger', trigger: { trigger: 'on_submit' } } },
-        { id: 'act', position: { x: 380, y: 140 }, data: { kind: 'action', action: { action: 'webhook', url: '', method: 'POST' } } },
+        {
+          id: 'trg',
+          position: { x: 60, y: 140 },
+          data: { kind: 'trigger', trigger: { trigger: 'on_submit' } },
+        },
+        {
+          id: 'act',
+          position: { x: 380, y: 140 },
+          data: { kind: 'action', action: { action: 'webhook', url: '', method: 'POST' } },
+        },
       ],
       edges: [{ id: 'e1', source: 'trg', target: 'act', sourceHandle: 'next' }],
     }),
@@ -315,9 +428,7 @@ export function FlowsCanvas({
   // Working graphs live in a ref keyed by flow id; switching flows captures the
   // current canvas into the ref and loads the target's graph. Save persists the
   // selected flow only (n8n-style). The sidebar list holds name/enabled.
-  const graphs = useRef<Map<string, AutomationGraph>>(
-    new Map(flows.map((f) => [f.id, f.graph])),
-  )
+  const graphs = useRef<Map<string, AutomationGraph>>(new Map(flows.map((f) => [f.id, f.graph])))
   const [flowList, setFlowList] = useState<FlowMeta[]>(
     flows.map((f) => ({ id: f.id, name: f.name, enabled: f.enabled })),
   )
@@ -348,7 +459,7 @@ export function FlowsCanvas({
 
   const loadFlow = useCallback(
     (id: string | null) => {
-      const g = id ? graphs.current.get(id) ?? emptyAutomationGraph() : emptyAutomationGraph()
+      const g = id ? (graphs.current.get(id) ?? emptyAutomationGraph()) : emptyAutomationGraph()
       const f = toFlow(g)
       setNodes(id ? f.nodes : [])
       setEdges(id ? f.edges : [])
@@ -488,7 +599,7 @@ export function FlowsCanvas({
       {/* Left rail — flows list */}
       <aside className="flex w-60 shrink-0 flex-col border-r border-slate-200 bg-slate-50">
         <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2">
-          <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <span className="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-slate-500 uppercase">
             <Workflow size={13} /> Flows
           </span>
           {canEdit ? (
@@ -508,7 +619,10 @@ export function FlowsCanvas({
             <div className="px-2 py-6 text-center text-xs text-slate-400">
               No flows yet.
               {canEdit ? (
-                <button onClick={addFlow} className="mt-2 block w-full text-teal-600 hover:underline">
+                <button
+                  onClick={addFlow}
+                  className="mt-2 block w-full text-teal-600 hover:underline"
+                >
                   + Create your first flow
                 </button>
               ) : null}
@@ -638,7 +752,12 @@ export function FlowsCanvas({
               </Button>
             ) : null}
             {canGenerate && selectedFlowId ? (
-              <Button variant="outline" size="sm" onClick={() => setShowAi(true)} disabled={pending}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowAi(true)}
+                disabled={pending}
+              >
                 <Sparkles size={13} /> AI
               </Button>
             ) : null}
@@ -697,7 +816,9 @@ export function FlowsCanvas({
                         className="rounded-lg border border-slate-200 bg-white p-2.5 transition hover:border-teal-400 hover:bg-teal-50/40"
                       >
                         <div className="text-xs font-semibold text-slate-800">{t.label}</div>
-                        <div className="mt-0.5 text-[11px] leading-snug text-slate-500">{t.description}</div>
+                        <div className="mt-0.5 text-[11px] leading-snug text-slate-500">
+                          {t.description}
+                        </div>
                       </button>
                     ))}
                   </div>
@@ -781,7 +902,9 @@ export function FlowsCanvas({
             placeholder="e.g. When the compliance score is below 80, create a high-severity CAPA and email the safety manager."
             onChange={(e) => setAiPrompt(e.target.value)}
           />
-          <p className="text-[11px] text-slate-400">Replaces the selected flow with the AI draft.</p>
+          <p className="text-[11px] text-slate-400">
+            Replaces the selected flow with the AI draft.
+          </p>
         </div>
       </Drawer>
     </div>
@@ -836,7 +959,13 @@ function NodeInspector({
               rule={t.rule}
               availableFields={availableFields}
               onChange={(rule) =>
-                onChange({ kind: 'trigger', trigger: { trigger: 'on_field_value', rule: rule ?? { op: 'isSet', field: fieldIds[0] ?? '' } } })
+                onChange({
+                  kind: 'trigger',
+                  trigger: {
+                    trigger: 'on_field_value',
+                    rule: rule ?? { op: 'isSet', field: fieldIds[0] ?? '' },
+                  },
+                })
               }
             />
           </Field>
@@ -846,7 +975,12 @@ function NodeInspector({
             <Select
               value={t.to}
               disabled={readOnly}
-              onChange={(e) => onChange({ kind: 'trigger', trigger: { trigger: 'status_change', to: e.target.value } })}
+              onChange={(e) =>
+                onChange({
+                  kind: 'trigger',
+                  trigger: { trigger: 'status_change', to: e.target.value },
+                })
+              }
             >
               {['submitted', 'in_review', 'closed', 'rejected', 'non_compliant'].map((s) => (
                 <option key={s} value={s}>
@@ -861,7 +995,12 @@ function NodeInspector({
             <Input
               value={t.cron}
               disabled={readOnly}
-              onChange={(e) => onChange({ kind: 'trigger', trigger: { trigger: 'scheduled', cron: e.target.value } })}
+              onChange={(e) =>
+                onChange({
+                  kind: 'trigger',
+                  trigger: { trigger: 'scheduled', cron: e.target.value },
+                })
+              }
             />
           </Field>
         ) : null}
@@ -883,7 +1022,9 @@ function NodeInspector({
           <LogicBuilder
             rule={data.rule}
             availableFields={availableFields}
-            onChange={(rule) => onChange({ ...data, rule: rule ?? { op: 'isSet', field: fieldIds[0] ?? '' } })}
+            onChange={(rule) =>
+              onChange({ ...data, rule: rule ?? { op: 'isSet', field: fieldIds[0] ?? '' } })
+            }
           />
         </Field>
       </div>
@@ -910,7 +1051,8 @@ function NodeInspector({
                 kind: 'gate',
                 gate: {
                   ...g,
-                  assignee: e.target.value === 'role' ? { type: 'role', role: '' } : { type: 'submitter' },
+                  assignee:
+                    e.target.value === 'role' ? { type: 'role', role: '' } : { type: 'submitter' },
                 },
               })
             }
@@ -924,7 +1066,12 @@ function NodeInspector({
             <Input
               value={g.assignee.role}
               disabled={readOnly}
-              onChange={(e) => onChange({ kind: 'gate', gate: { ...g, assignee: { type: 'role', role: e.target.value } } })}
+              onChange={(e) =>
+                onChange({
+                  kind: 'gate',
+                  gate: { ...g, assignee: { type: 'role', role: e.target.value } },
+                })
+              }
             />
           </Field>
         ) : null}
@@ -933,7 +1080,9 @@ function NodeInspector({
             type="checkbox"
             checked={!!g.signatureRequired}
             disabled={readOnly}
-            onChange={(e) => onChange({ kind: 'gate', gate: { ...g, signatureRequired: e.target.checked } })}
+            onChange={(e) =>
+              onChange({ kind: 'gate', gate: { ...g, signatureRequired: e.target.checked } })
+            }
           />
           Signature required
         </label>
@@ -981,7 +1130,16 @@ function ActionInspector({
               value={a.to[0]?.type ?? 'submitter'}
               disabled={readOnly}
               onChange={(e) =>
-                set({ ...a, to: [e.target.value === 'role' ? { type: 'role', role: '' } : e.target.value === 'literal' ? { type: 'literal', email: '' } : { type: 'submitter' }] })
+                set({
+                  ...a,
+                  to: [
+                    e.target.value === 'role'
+                      ? { type: 'role', role: '' }
+                      : e.target.value === 'literal'
+                        ? { type: 'literal', email: '' }
+                        : { type: 'submitter' },
+                  ],
+                })
               }
             >
               <option value="submitter">The submitter</option>
@@ -991,19 +1149,36 @@ function ActionInspector({
           </Field>
           {a.to[0]?.type === 'role' ? (
             <Field label="Role">
-              <Input value={a.to[0].role} disabled={readOnly} onChange={(e) => set({ ...a, to: [{ type: 'role', role: e.target.value }] })} />
+              <Input
+                value={a.to[0].role}
+                disabled={readOnly}
+                onChange={(e) => set({ ...a, to: [{ type: 'role', role: e.target.value }] })}
+              />
             </Field>
           ) : null}
           {a.to[0]?.type === 'literal' ? (
             <Field label="Email">
-              <Input value={a.to[0].email} disabled={readOnly} onChange={(e) => set({ ...a, to: [{ type: 'literal', email: e.target.value }] })} />
+              <Input
+                value={a.to[0].email}
+                disabled={readOnly}
+                onChange={(e) => set({ ...a, to: [{ type: 'literal', email: e.target.value }] })}
+              />
             </Field>
           ) : null}
           <Field label="Subject">
-            <Input value={a.subject} disabled={readOnly} onChange={(e) => set({ ...a, subject: e.target.value })} />
+            <Input
+              value={a.subject}
+              disabled={readOnly}
+              onChange={(e) => set({ ...a, subject: e.target.value })}
+            />
           </Field>
           <Field label="Body (supports {{field_id}})">
-            <Textarea rows={4} value={a.bodyTemplate} disabled={readOnly} onChange={(e) => set({ ...a, bodyTemplate: e.target.value })} />
+            <Textarea
+              rows={4}
+              value={a.bodyTemplate}
+              disabled={readOnly}
+              onChange={(e) => set({ ...a, bodyTemplate: e.target.value })}
+            />
           </Field>
         </>
       ) : null}
@@ -1011,10 +1186,20 @@ function ActionInspector({
       {a.action === 'create_capa' ? (
         <>
           <Field label="Title (supports {{field_id}})">
-            <Input value={a.titleTemplate} disabled={readOnly} onChange={(e) => set({ ...a, titleTemplate: e.target.value })} />
+            <Input
+              value={a.titleTemplate}
+              disabled={readOnly}
+              onChange={(e) => set({ ...a, titleTemplate: e.target.value })}
+            />
           </Field>
           <Field label="Severity">
-            <Select value={a.severity ?? 'medium'} disabled={readOnly} onChange={(e) => set({ ...a, severity: e.target.value as 'low' | 'medium' | 'high' | 'critical' })}>
+            <Select
+              value={a.severity ?? 'medium'}
+              disabled={readOnly}
+              onChange={(e) =>
+                set({ ...a, severity: e.target.value as 'low' | 'medium' | 'high' | 'critical' })
+              }
+            >
               {['low', 'medium', 'high', 'critical'].map((s) => (
                 <option key={s} value={s}>
                   {s}
@@ -1023,24 +1208,43 @@ function ActionInspector({
             </Select>
           </Field>
           <Field label="Due in (days)">
-            <Input type="number" value={a.dueInDays ?? ''} disabled={readOnly} onChange={(e) => set({ ...a, dueInDays: e.target.value === '' ? undefined : Number(e.target.value) })} />
+            <Input
+              type="number"
+              value={a.dueInDays ?? ''}
+              disabled={readOnly}
+              onChange={(e) =>
+                set({ ...a, dueInDays: e.target.value === '' ? undefined : Number(e.target.value) })
+              }
+            />
           </Field>
         </>
       ) : null}
 
       {a.action === 'create_incident' ? (
         <Field label="Title (supports {{field_id}})">
-          <Input value={a.titleTemplate} disabled={readOnly} onChange={(e) => set({ ...a, titleTemplate: e.target.value })} />
+          <Input
+            value={a.titleTemplate}
+            disabled={readOnly}
+            onChange={(e) => set({ ...a, titleTemplate: e.target.value })}
+          />
         </Field>
       ) : null}
 
       {a.action === 'notify_role' ? (
         <>
           <Field label="Role">
-            <Input value={a.role} disabled={readOnly} onChange={(e) => set({ ...a, role: e.target.value })} />
+            <Input
+              value={a.role}
+              disabled={readOnly}
+              onChange={(e) => set({ ...a, role: e.target.value })}
+            />
           </Field>
           <Field label="Message">
-            <Input value={a.message} disabled={readOnly} onChange={(e) => set({ ...a, message: e.target.value })} />
+            <Input
+              value={a.message}
+              disabled={readOnly}
+              onChange={(e) => set({ ...a, message: e.target.value })}
+            />
           </Field>
         </>
       ) : null}
@@ -1048,7 +1252,11 @@ function ActionInspector({
       {a.action === 'set_field' ? (
         <>
           <Field label="Field">
-            <Select value={a.field} disabled={readOnly} onChange={(e) => set({ ...a, field: e.target.value })}>
+            <Select
+              value={a.field}
+              disabled={readOnly}
+              onChange={(e) => set({ ...a, field: e.target.value })}
+            >
               <option value="">— pick a field —</option>
               {fieldIds.map((f) => (
                 <option key={f} value={f}>
@@ -1069,17 +1277,29 @@ function ActionInspector({
 
       {a.action === 'flag_non_compliant' ? (
         <Field label="Reason">
-          <Input value={a.reason ?? ''} disabled={readOnly} onChange={(e) => set({ ...a, reason: e.target.value })} />
+          <Input
+            value={a.reason ?? ''}
+            disabled={readOnly}
+            onChange={(e) => set({ ...a, reason: e.target.value })}
+          />
         </Field>
       ) : null}
 
       {a.action === 'webhook' ? (
         <>
           <Field label="URL">
-            <Input value={a.url} disabled={readOnly} onChange={(e) => set({ ...a, url: e.target.value })} />
+            <Input
+              value={a.url}
+              disabled={readOnly}
+              onChange={(e) => set({ ...a, url: e.target.value })}
+            />
           </Field>
           <Field label="Method">
-            <Select value={a.method} disabled={readOnly} onChange={(e) => set({ ...a, method: e.target.value as 'POST' | 'PUT' })}>
+            <Select
+              value={a.method}
+              disabled={readOnly}
+              onChange={(e) => set({ ...a, method: e.target.value as 'POST' | 'PUT' })}
+            >
               <option value="POST">POST</option>
               <option value="PUT">PUT</option>
             </Select>
@@ -1090,7 +1310,11 @@ function ActionInspector({
       {a.action === 'analyze_photos' ? (
         <>
           <Field label="Photo field">
-            <Select value={a.fieldId} disabled={readOnly} onChange={(e) => set({ ...a, fieldId: e.target.value })}>
+            <Select
+              value={a.fieldId}
+              disabled={readOnly}
+              onChange={(e) => set({ ...a, fieldId: e.target.value })}
+            >
               <option value="">— pick a field —</option>
               {fieldIds.map((f) => (
                 <option key={f} value={f}>
@@ -1127,7 +1351,9 @@ function ActionInspector({
               <Select
                 value={a.minSeverity ?? 'medium'}
                 disabled={readOnly}
-                onChange={(e) => set({ ...a, minSeverity: e.target.value as 'low' | 'medium' | 'high' })}
+                onChange={(e) =>
+                  set({ ...a, minSeverity: e.target.value as 'low' | 'medium' | 'high' })
+                }
               >
                 <option value="low">Low and above</option>
                 <option value="medium">Medium and above</option>
@@ -1152,7 +1378,11 @@ function defaultAction(kind: ActionData['action'], fieldIds: string[]): ActionDa
     case 'notify_role':
       return { action: 'notify_role', role: '', message: '' }
     case 'set_field':
-      return { action: 'set_field', field: fieldIds[0] ?? '', value: { kind: 'literal', value: '' } }
+      return {
+        action: 'set_field',
+        field: fieldIds[0] ?? '',
+        value: { kind: 'literal', value: '' },
+      }
     case 'flag_non_compliant':
       return { action: 'flag_non_compliant' }
     case 'webhook':

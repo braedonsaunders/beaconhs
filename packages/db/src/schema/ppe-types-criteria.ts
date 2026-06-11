@@ -40,9 +40,7 @@ export const ppeTypeInspectionCriteria = pgTable(
     ppeTypeId: uuid('ppe_type_id')
       .notNull()
       .references(() => ppeTypes.id, { onDelete: 'cascade' }),
-    inspectionKind: ppeCriterionInspectionKind('inspection_kind')
-      .notNull()
-      .default('pre_use'),
+    inspectionKind: ppeCriterionInspectionKind('inspection_kind').notNull().default('pre_use'),
     question: text('question').notNull(),
     description: text('description'),
     severity: ppeCriterionSeverity('severity').default('medium').notNull(),

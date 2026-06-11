@@ -74,7 +74,9 @@ async function main() {
         legacyTable: row.legacyTable,
         legacyId: row.legacyId,
       })
-      .onConflictDoNothing({ target: [s.complianceObligations.legacyTable, s.complianceObligations.legacyId] })
+      .onConflictDoNothing({
+        target: [s.complianceObligations.legacyTable, s.complianceObligations.legacyId],
+      })
       .returning({ id: s.complianceObligations.id })
     if (!ob) {
       skipped++
@@ -83,7 +85,12 @@ async function main() {
     created++
     if (audience.length > 0) {
       await db.insert(s.complianceAudience).values(
-        audience.map((a) => ({ tenantId, obligationId: ob.id, kind: a.kind as never, entityKey: a.entityKey })),
+        audience.map((a) => ({
+          tenantId,
+          obligationId: ob.id,
+          kind: a.kind as never,
+          entityKey: a.entityKey,
+        })),
       )
     }
   }
@@ -94,7 +101,12 @@ async function main() {
       .select({ a: s.inspectionAssignments, typeName: s.inspectionTypes.name })
       .from(s.inspectionAssignments)
       .leftJoin(s.inspectionTypes, eq(s.inspectionTypes.id, s.inspectionAssignments.typeId))
-      .where(and(eq(s.inspectionAssignments.tenantId, tenantId), isNull(s.inspectionAssignments.deletedAt)))
+      .where(
+        and(
+          eq(s.inspectionAssignments.tenantId, tenantId),
+          isNull(s.inspectionAssignments.deletedAt),
+        ),
+      )
     for (const { a, typeName } of insp) {
       await insertOb(
         tenantId,
@@ -131,10 +143,15 @@ async function main() {
       .select({ a: s.documentAssignments, docTitle: s.documents.title })
       .from(s.documentAssignments)
       .innerJoin(s.documents, eq(s.documents.id, s.documentAssignments.documentId))
-      .where(and(eq(s.documentAssignments.tenantId, tenantId), isNull(s.documentAssignments.deletedAt)))
+      .where(
+        and(eq(s.documentAssignments.tenantId, tenantId), isNull(s.documentAssignments.deletedAt)),
+      )
     for (const { a, docTitle } of docs) {
       const aud = await db
-        .select({ type: s.documentAssignmentAudience.type, entityKey: s.documentAssignmentAudience.entityKey })
+        .select({
+          type: s.documentAssignmentAudience.type,
+          entityKey: s.documentAssignmentAudience.entityKey,
+        })
         .from(s.documentAssignmentAudience)
         .where(eq(s.documentAssignmentAudience.assignmentId, a.id))
       await insertOb(
@@ -151,7 +168,10 @@ async function main() {
           legacyTable: 'document_assignments',
           legacyId: a.id,
         },
-        aud.map((r) => ({ kind: r.type === 'everyone' ? 'everyone' : r.type, entityKey: r.type === 'everyone' ? '' : r.entityKey })),
+        aud.map((r) => ({
+          kind: r.type === 'everyone' ? 'everyone' : r.type,
+          entityKey: r.type === 'everyone' ? '' : r.entityKey,
+        })),
       )
     }
 
@@ -159,7 +179,12 @@ async function main() {
     const tr = await db
       .select()
       .from(s.trainingAudienceAssignments)
-      .where(and(eq(s.trainingAudienceAssignments.tenantId, tenantId), isNull(s.trainingAudienceAssignments.deletedAt)))
+      .where(
+        and(
+          eq(s.trainingAudienceAssignments.tenantId, tenantId),
+          isNull(s.trainingAudienceAssignments.deletedAt),
+        ),
+      )
     for (const a of tr) {
       const targets = await db
         .select()
@@ -183,10 +208,18 @@ async function main() {
           subjectKind: 'per_person',
           title: a.name,
           notes: a.notes,
-          targetRef: { trainingItemKind: a.itemKind, courseId: a.courseId ?? undefined, assessmentTypeId: a.assessmentTypeId ?? undefined },
+          targetRef: {
+            trainingItemKind: a.itemKind,
+            courseId: a.courseId ?? undefined,
+            assessmentTypeId: a.assessmentTypeId ?? undefined,
+          },
           recurrence: a.recurrenceCron
             ? { kind: 'frequency', cron: a.recurrenceCron, remindBeforeDays: a.remindBeforeDays }
-            : { kind: 'one_time', dueOn: a.dueOn ?? undefined, remindBeforeDays: a.remindBeforeDays },
+            : {
+                kind: 'one_time',
+                dueOn: a.dueOn ?? undefined,
+                remindBeforeDays: a.remindBeforeDays,
+              },
           recurrenceKind: a.recurrenceCron ? 'frequency' : 'one_time',
           status: a.status === 'active' ? 'active' : 'archived',
           legacyTable: 'training_audience_assignments',
@@ -210,13 +243,21 @@ async function main() {
           subjectKind: 'per_person',
           title: templateName,
           targetRef: { formTemplateId: a.templateId },
-          recurrence: { kind: 'cron', cron: a.cron ?? undefined, dueOffsetMinutes: a.dueOffsetMinutes ?? undefined },
+          recurrence: {
+            kind: 'cron',
+            cron: a.cron ?? undefined,
+            dueOffsetMinutes: a.dueOffsetMinutes ?? undefined,
+          },
           recurrenceKind: 'cron',
           status: a.enabled ? 'active' : 'paused',
           legacyTable: 'form_assignments',
           legacyId: a.id,
         },
-        audFromArrays({ roleKeys: a.targetRoleKeys, personIds: a.targetPersonIds, orgUnitIds: a.targetOrgUnitIds }),
+        audFromArrays({
+          roleKeys: a.targetRoleKeys,
+          personIds: a.targetPersonIds,
+          orgUnitIds: a.targetOrgUnitIds,
+        }),
       )
     }
 
@@ -224,10 +265,20 @@ async function main() {
     const journals = await db
       .select()
       .from(s.journalAssignments)
-      .where(and(eq(s.journalAssignments.tenantId, tenantId), isNull(s.journalAssignments.deletedAt)))
+      .where(
+        and(eq(s.journalAssignments.tenantId, tenantId), isNull(s.journalAssignments.deletedAt)),
+      )
     for (const a of journals) {
-      const jaud = (a.audience ?? {}) as { roleKeys?: string[]; personIds?: string[]; orgUnitIds?: string[] }
-      const aud = audFromArrays({ roleKeys: jaud.roleKeys, personIds: jaud.personIds, orgUnitIds: jaud.orgUnitIds })
+      const jaud = (a.audience ?? {}) as {
+        roleKeys?: string[]
+        personIds?: string[]
+        orgUnitIds?: string[]
+      }
+      const aud = audFromArrays({
+        roleKeys: jaud.roleKeys,
+        personIds: jaud.personIds,
+        orgUnitIds: jaud.orgUnitIds,
+      })
       await insertOb(
         tenantId,
         {
@@ -236,7 +287,12 @@ async function main() {
           title: a.name,
           notes: a.description,
           targetRef: {},
-          recurrence: { kind: 'frequency', frequency: a.frequency, quantity: a.quantity, compliantPercentage: a.compliantPercentage },
+          recurrence: {
+            kind: 'frequency',
+            frequency: a.frequency,
+            quantity: a.quantity,
+            compliantPercentage: a.compliantPercentage,
+          },
           recurrenceKind: 'frequency',
           status: a.active ? 'active' : 'paused',
           legacyTable: 'journal_assignments',
@@ -247,7 +303,9 @@ async function main() {
     }
   }
 
-  console.log(`✔ backfill done — ${created} obligations created, ${skipped} already existed (${tenants.length} tenants)`)
+  console.log(
+    `✔ backfill done — ${created} obligations created, ${skipped} already existed (${tenants.length} tenants)`,
+  )
   await sql.end()
 }
 

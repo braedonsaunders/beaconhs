@@ -8,23 +8,52 @@ import { H, internals, rowHash, type Loader, type Env } from './orchestrator'
 import { source } from './source/landing'
 
 const {
-  user, tenantUsers,
-  personDivisions, trades, personTitles, people, orgUnits, incidents, journalEntries, correctiveActions,
-  equipmentCategories, equipmentTypes, equipmentItems,
-  documents, documentVersions, documentTypes, documentCategories,
-  documentReferences, documentReferenceTypes, documentReferenceCategories, attachments,
-  trainingCourses, trainingRecords, trainingClasses, trainingClassAttendees,
-  trainingAssessmentTypes, trainingAssessmentTypeQuestions,
-  trainingSkillAuthorities, trainingSkillTypes, trainingSkillAssignments, trainingExtraFields,
-  complianceObligations, complianceAudience,
+  user,
+  tenantUsers,
+  personDivisions,
+  trades,
+  personTitles,
+  people,
+  orgUnits,
+  incidents,
+  journalEntries,
+  correctiveActions,
+  equipmentCategories,
+  equipmentTypes,
+  equipmentItems,
+  documents,
+  documentVersions,
+  documentTypes,
+  documentCategories,
+  documentReferences,
+  documentReferenceTypes,
+  documentReferenceCategories,
+  attachments,
+  trainingCourses,
+  trainingRecords,
+  trainingClasses,
+  trainingClassAttendees,
+  trainingAssessmentTypes,
+  trainingAssessmentTypeQuestions,
+  trainingSkillAuthorities,
+  trainingSkillTypes,
+  trainingSkillAssignments,
+  trainingExtraFields,
+  complianceObligations,
+  complianceAudience,
 } = schema
 
 const oneOf = (v: unknown, allowed: string[], fallback: string): string => {
-  const s = String(v ?? '').toLowerCase().replace(/\s+/g, '_')
+  const s = String(v ?? '')
+    .toLowerCase()
+    .replace(/\s+/g, '_')
   return allowed.includes(s) ? s : fallback
 }
 const slugify = (v: unknown, fallback: string): string =>
-  (H.str(v) ?? fallback).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || fallback
+  (H.str(v) ?? fallback)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '') || fallback
 
 const sevFromLegacy = (r: any): string => {
   if (H.bool(r.LostTime)) return 'lost_time'
@@ -88,14 +117,32 @@ export const RASSAUN_LOADERS: Loader[] = [
       await withSuperAdmin(env.db, async (tx: any) => {
         const out: any[] = []
         for (const r of refs) {
-          const id = await internals.reserve(env, tx, 'adminapp', 'CUSTOMERS', r.id, 'org_unit', tenantId, rowHash(r))
-          out.push({ id, tenantId, level: 'customer', name: H.str(r.name) ?? `Location ${r.id}`, code: String(r.id) })
+          const id = await internals.reserve(
+            env,
+            tx,
+            'adminapp',
+            'CUSTOMERS',
+            r.id,
+            'org_unit',
+            tenantId,
+            rowHash(r),
+          )
+          out.push({
+            id,
+            tenantId,
+            level: 'customer',
+            name: H.str(r.name) ?? `Location ${r.id}`,
+            code: String(r.id),
+          })
         }
         if (out.length) {
           await tx
             .insert(orgUnits)
             .values(out)
-            .onConflictDoUpdate({ target: orgUnits.id, set: internals.buildUpsertSet(orgUnits, Object.keys(out[0])) })
+            .onConflictDoUpdate({
+              target: orgUnits.id,
+              set: internals.buildUpsertSet(orgUnits, Object.keys(out[0])),
+            })
           upserted = out.length
         }
       })
@@ -158,20 +205,34 @@ export const RASSAUN_LOADERS: Loader[] = [
           const email = H.str(r.email)?.toLowerCase()
           if (!email) continue // Better-Auth users require an email
           // global user (unique by email)
-          let u = (await tx.select({ id: user.id }).from(user).where(eq(user.email, email)).limit(1))[0]
+          let u = (
+            await tx.select({ id: user.id }).from(user).where(eq(user.email, email)).limit(1)
+          )[0]
           if (!u) {
             const ins = await tx
               .insert(user)
-              .values({ id: randomUUID(), email, name: H.str(r.name) ?? H.str(r.formalname) ?? email, emailVerified: true, isSuperAdmin: false })
+              .values({
+                id: randomUUID(),
+                email,
+                name: H.str(r.name) ?? H.str(r.formalname) ?? email,
+                emailVerified: true,
+                isSuperAdmin: false,
+              })
               .onConflictDoNothing({ target: user.email })
               .returning({ id: user.id })
-            u = ins[0] ?? (await tx.select({ id: user.id }).from(user).where(eq(user.email, email)).limit(1))[0]
+            u =
+              ins[0] ??
+              (await tx.select({ id: user.id }).from(user).where(eq(user.email, email)).limit(1))[0]
           }
           if (!u) continue
           // tenant membership (unique tenant_id+user_id) — reuse if it already exists (e.g. bootstrap admin)
           const displayName = H.str(r.formalname) ?? H.str(r.name)
           const existing = (
-            await tx.select({ id: tenantUsers.id }).from(tenantUsers).where(and(eq(tenantUsers.tenantId, tenantId), eq(tenantUsers.userId, u.id))).limit(1)
+            await tx
+              .select({ id: tenantUsers.id })
+              .from(tenantUsers)
+              .where(and(eq(tenantUsers.tenantId, tenantId), eq(tenantUsers.userId, u.id)))
+              .limit(1)
           )[0]
           let tuId: string
           if (existing) {
@@ -179,7 +240,14 @@ export const RASSAUN_LOADERS: Loader[] = [
             await tx.update(tenantUsers).set({ displayName }).where(eq(tenantUsers.id, tuId))
           } else {
             tuId = randomUUID()
-            await tx.insert(tenantUsers).values({ id: tuId, tenantId, userId: u.id, displayName, status: H.bool(r.active) ? 'active' : 'suspended', joinedAt: H.ts(r.created_at) ?? new Date() })
+            await tx.insert(tenantUsers).values({
+              id: tuId,
+              tenantId,
+              userId: u.id,
+              displayName,
+              status: H.bool(r.active) ? 'active' : 'suspended',
+              joinedAt: H.ts(r.created_at) ?? new Date(),
+            })
           }
           // map crosswalk (beaconhs.users.id → tenant_user id) so child FKs (CA owner, incident reporter…) resolve
           await tx.execute(sql`insert into etl.id_map (source_db, source_table, source_pk, entity_type, tenant_id, new_id, row_hash)
@@ -257,7 +325,11 @@ export const RASSAUN_LOADERS: Loader[] = [
       siteOrgUnitId: await ctx.lookup('adminapp', 'CUSTOMERS', r.Customer),
       personId: await ctx.lookup('peopleapp', 'EMPLOYEESHR', r.EmpID),
       supervisorPersonId: await ctx.lookup('peopleapp', 'EMPLOYEESHR', r.SupervisorID),
-      metadata: { legacy: 'beaconhs.DAILYJOURNALS', username: H.str(r.Username), supervisor: H.str(r.Supervisor) },
+      metadata: {
+        legacy: 'beaconhs.DAILYJOURNALS',
+        username: H.str(r.Username),
+        supervisor: H.str(r.Supervisor),
+      },
     }),
   },
 
@@ -287,7 +359,11 @@ export const RASSAUN_LOADERS: Loader[] = [
         description: desc,
         severity: oneOf(r.Severity, ['low', 'medium', 'high', 'critical'], 'medium'),
         status,
-        source: oneOf(r.Source, ['inspection', 'incident', 'near_miss', 'observation', 'audit', 'jsha'], 'other'),
+        source: oneOf(
+          r.Source,
+          ['inspection', 'incident', 'near_miss', 'observation', 'audit', 'jsha'],
+          'other',
+        ),
         assignedOn: H.date(r.DateAssigned),
         dueOn: H.date(r.DateDue),
         closedAt: H.ts(r.DateClosed),
@@ -296,7 +372,8 @@ export const RASSAUN_LOADERS: Loader[] = [
         // tenant-user FKs. The feed shows the OWNER as the actor; the app sets owner=creator on create
         // and only changes it on reassignment — so faithfully: owner = assignee, else the raiser/creator.
         ownerTenantUserId:
-          (await ctx.lookup('beaconhs', 'users', r.AssignedToID)) ?? (await ctx.lookup('beaconhs', 'users', r.AssignedByID)),
+          (await ctx.lookup('beaconhs', 'users', r.AssignedToID)) ??
+          (await ctx.lookup('beaconhs', 'users', r.AssignedByID)),
         assignedByTenantUserId: await ctx.lookup('beaconhs', 'users', r.AssignedByID),
         metadata: {
           legacy: 'beaconhs.CORRECTIVEACTIONS',
@@ -315,7 +392,11 @@ export const RASSAUN_LOADERS: Loader[] = [
     srcTable: 'EQUIPMENTCATEGORIES',
     tenant: 'rassaun',
     target: equipmentCategories,
-    map: (r) => ({ name: H.str(r.Name) ?? `Category ${r.id}`, slug: slugify(r.Name, `cat-${r.id}`), description: H.str(r.Description) }),
+    map: (r) => ({
+      name: H.str(r.Name) ?? `Category ${r.id}`,
+      slug: slugify(r.Name, `cat-${r.id}`),
+      description: H.str(r.Description),
+    }),
   },
   {
     entity: 'equipment_type',
@@ -353,52 +434,52 @@ export const RASSAUN_LOADERS: Loader[] = [
       if (p.seen.has(assetTag)) assetTag = `${assetTag} (#${r.id})`
       p.seen.add(assetTag)
       return {
-      typeId: p.typeMap.get(String(r.Type ?? '').toLowerCase()) ?? null,
-      assetTag,
-      qrToken: `bhs-eq-${r.id}`,
-      serialNumber: H.str(r.SerialNumber),
-      name: H.str(r.Name) ?? `Equipment ${r.id}`,
-      description: H.str(r.Description),
-      status: H.bool(r.Scrapped)
-        ? 'retired'
-        : H.bool(r.ReportedMissing)
-          ? 'lost'
-          : H.bool(r.InService)
-            ? 'in_service'
-            : 'out_of_service',
-      requiresPreUseInspection: H.bool(r.RequiresPreUse),
-      requiresAnnualInspection: H.bool(r.RequiresInspection),
-      lastAnnualInspectionOn: H.date(r.LastInspection),
-      nextAnnualInspectionDue: H.date(r.NextInspectionDue),
-      requiresOilChange: H.bool(r.RequiresOilChange),
-      oilChangeIntervalMonths: H.int(r.OilChangeIntervalMonths),
-      lastOilChangeOn: H.date(r.LastOilChange),
-      nextOilChangeDue: H.date(r.NextOilChange),
-      purchasePrice: H.num(r.PurchasePrice),
-      billingRateCategory: H.str(r.RateCategory),
-      isMissing: H.bool(r.ReportedMissing),
-      missingLastSeenLocation: H.str(r.LastSeenLocation),
-      // ~30 niche legacy columns with no first-class home land in metadata (see gaps.md)
-      metadata: {
-        legacy: 'toolcrib.EQUIPMENT',
-        type: H.str(r.Type),
-        category: H.str(r.Category),
-        division: H.str(r.Division),
-        currentLocation: H.str(r.CurrentLocation),
-        licensePlate: H.str(r.LicensePlate),
-        assignedTo: H.str(r.AssignedTo),
-        odometer: H.num(r.Odometer),
-        currentHours: H.str(r.CurrentHours),
-        year: H.num(r.Year),
-        condition: H.num(r.Condition),
-        weight: H.num(r.Weight),
-        grossWeight: H.num(r.GrossWeight),
-        dims: { l: H.num(r.DimL), w: H.num(r.DimW), h: H.num(r.DimH) },
-        ndtLast: H.date(r.NDTLast),
-        ndtNext: H.date(r.NDTNext),
-        atmosphericEquipment: H.str(r.AtmosphericEquipment),
-        sensorIds: [r.Sensor1ID, r.Sensor2ID, r.Sensor3ID, r.Sensor4ID].filter((x) => x),
-      },
+        typeId: p.typeMap.get(String(r.Type ?? '').toLowerCase()) ?? null,
+        assetTag,
+        qrToken: `bhs-eq-${r.id}`,
+        serialNumber: H.str(r.SerialNumber),
+        name: H.str(r.Name) ?? `Equipment ${r.id}`,
+        description: H.str(r.Description),
+        status: H.bool(r.Scrapped)
+          ? 'retired'
+          : H.bool(r.ReportedMissing)
+            ? 'lost'
+            : H.bool(r.InService)
+              ? 'in_service'
+              : 'out_of_service',
+        requiresPreUseInspection: H.bool(r.RequiresPreUse),
+        requiresAnnualInspection: H.bool(r.RequiresInspection),
+        lastAnnualInspectionOn: H.date(r.LastInspection),
+        nextAnnualInspectionDue: H.date(r.NextInspectionDue),
+        requiresOilChange: H.bool(r.RequiresOilChange),
+        oilChangeIntervalMonths: H.int(r.OilChangeIntervalMonths),
+        lastOilChangeOn: H.date(r.LastOilChange),
+        nextOilChangeDue: H.date(r.NextOilChange),
+        purchasePrice: H.num(r.PurchasePrice),
+        billingRateCategory: H.str(r.RateCategory),
+        isMissing: H.bool(r.ReportedMissing),
+        missingLastSeenLocation: H.str(r.LastSeenLocation),
+        // ~30 niche legacy columns with no first-class home land in metadata (see gaps.md)
+        metadata: {
+          legacy: 'toolcrib.EQUIPMENT',
+          type: H.str(r.Type),
+          category: H.str(r.Category),
+          division: H.str(r.Division),
+          currentLocation: H.str(r.CurrentLocation),
+          licensePlate: H.str(r.LicensePlate),
+          assignedTo: H.str(r.AssignedTo),
+          odometer: H.num(r.Odometer),
+          currentHours: H.str(r.CurrentHours),
+          year: H.num(r.Year),
+          condition: H.num(r.Condition),
+          weight: H.num(r.Weight),
+          grossWeight: H.num(r.GrossWeight),
+          dims: { l: H.num(r.DimL), w: H.num(r.DimW), h: H.num(r.DimH) },
+          ndtLast: H.date(r.NDTLast),
+          ndtNext: H.date(r.NDTNext),
+          atmosphericEquipment: H.str(r.AtmosphericEquipment),
+          sensorIds: [r.Sensor1ID, r.Sensor2ID, r.Sensor3ID, r.Sensor4ID].filter((x) => x),
+        },
       }
     },
   },
@@ -418,7 +499,11 @@ export const RASSAUN_LOADERS: Loader[] = [
     srcTable: 'DOCUMENTATIONTYPE',
     tenant: 'rassaun',
     target: documentTypes,
-    map: (r) => ({ key: slugify(r.Name, `dtype-${r.id}`), name: H.str(r.Name) ?? `Type ${r.id}`, description: H.str(r.Description) }),
+    map: (r) => ({
+      key: slugify(r.Name, `dtype-${r.id}`),
+      name: H.str(r.Name) ?? `Type ${r.id}`,
+      description: H.str(r.Description),
+    }),
   },
   {
     entity: 'document',
@@ -429,7 +514,9 @@ export const RASSAUN_LOADERS: Loader[] = [
     // documents.category is plain text → resolve the legacy CategoryID to a name
     prepare: async () => {
       const m = new Map<number, string>()
-      const rows: any[] = await source().unsafe('select id, "Name" from beaconhs."DOCUMENTATIONCATEGORY"')
+      const rows: any[] = await source().unsafe(
+        'select id, "Name" from beaconhs."DOCUMENTATIONCATEGORY"',
+      )
       for (const r of rows) m.set(Number(r.id), String(r.Name ?? ''))
       return m
     },
@@ -476,7 +563,11 @@ export const RASSAUN_LOADERS: Loader[] = [
     srcTable: 'DOCUMENTATIONREFERENCETYPE',
     tenant: 'rassaun',
     target: documentReferenceTypes,
-    map: (r) => ({ key: slugify(r.Name, `rtype-${r.id}`), name: H.str(r.Name) ?? `Type ${r.id}`, description: H.str(r.Description) }),
+    map: (r) => ({
+      key: slugify(r.Name, `rtype-${r.id}`),
+      name: H.str(r.Name) ?? `Type ${r.id}`,
+      description: H.str(r.Description),
+    }),
   },
   // The physical PDFs: download from Azure Blob → put to R2/MinIO → attachments + document_references.
   {
@@ -488,7 +579,9 @@ export const RASSAUN_LOADERS: Loader[] = [
     map: () => null,
     custom: async (env: Env, tenantId: string) => {
       await ensureBucket()
-      const rows: any[] = await source().unsafe('select * from beaconhs."DOCUMENTATIONREFERENCE" order by id')
+      const rows: any[] = await source().unsafe(
+        'select * from beaconhs."DOCUMENTATIONREFERENCE" order by id',
+      )
       let upserted = 0
       let files = 0
       let failed = 0
@@ -509,11 +602,31 @@ export const RASSAUN_LOADERS: Loader[] = [
                   const key = newAttachmentKey({ tenantId, kind: 'document', filename })
                   await putObject({ key, body: buf, contentType: ct })
                   await withSuperAdmin(env.db, async (tx: any) => {
-                    attachmentId = await internals.reserve(env, tx, 'beaconhs', 'DOCUMENTATIONREFERENCE_FILE', r.id, 'attachment', tenantId, rowHash(r))
+                    attachmentId = await internals.reserve(
+                      env,
+                      tx,
+                      'beaconhs',
+                      'DOCUMENTATIONREFERENCE_FILE',
+                      r.id,
+                      'attachment',
+                      tenantId,
+                      rowHash(r),
+                    )
                     await tx
                       .insert(attachments)
-                      .values({ id: attachmentId, tenantId, kind: 'document', r2Key: key, contentType: ct, sizeBytes: buf.length, filename })
-                      .onConflictDoUpdate({ target: attachments.id, set: { r2Key: key, sizeBytes: buf.length, filename } })
+                      .values({
+                        id: attachmentId,
+                        tenantId,
+                        kind: 'document',
+                        r2Key: key,
+                        contentType: ct,
+                        sizeBytes: buf.length,
+                        filename,
+                      })
+                      .onConflictDoUpdate({
+                        target: attachments.id,
+                        set: { r2Key: key, sizeBytes: buf.length, filename },
+                      })
                   })
                   kind = 'attachment'
                   files++
@@ -524,7 +637,16 @@ export const RASSAUN_LOADERS: Loader[] = [
             }
             await withSuperAdmin(env.db, async (tx: any) => {
               const lookup = internals.makeLookup(env, tx)
-              const refId = await internals.reserve(env, tx, 'beaconhs', 'DOCUMENTATIONREFERENCE', r.id, 'document_reference', tenantId, rowHash(r))
+              const refId = await internals.reserve(
+                env,
+                tx,
+                'beaconhs',
+                'DOCUMENTATIONREFERENCE',
+                r.id,
+                'document_reference',
+                tenantId,
+                rowHash(r),
+              )
               await tx
                 .insert(documentReferences)
                 .values({
@@ -537,7 +659,10 @@ export const RASSAUN_LOADERS: Loader[] = [
                   url: kind === 'url' ? url : null,
                   typeId: await lookup('beaconhs', 'DOCUMENTATIONREFERENCETYPE', r.TypeID),
                 })
-                .onConflictDoUpdate({ target: documentReferences.id, set: { kind, attachmentId, url: kind === 'url' ? url : null } })
+                .onConflictDoUpdate({
+                  target: documentReferences.id,
+                  set: { kind, attachmentId, url: kind === 'url' ? url : null },
+                })
             })
             upserted++
           }),
@@ -621,7 +746,10 @@ export const RASSAUN_LOADERS: Loader[] = [
     prepare: async (env: Env, tenantId: string) => {
       const m = new Map<string, string>()
       await withSuperAdmin(env.db, async (tx: any) => {
-        const rows = await tx.select({ id: trainingCourses.id, name: trainingCourses.name }).from(trainingCourses).where(eq(trainingCourses.tenantId, tenantId))
+        const rows = await tx
+          .select({ id: trainingCourses.id, name: trainingCourses.name })
+          .from(trainingCourses)
+          .where(eq(trainingCourses.tenantId, tenantId))
         for (const r of rows) m.set(r.id, r.name)
       })
       return m
@@ -630,7 +758,9 @@ export const RASSAUN_LOADERS: Loader[] = [
       const courseId = await ctx.lookup('beaconhs', 'TRAININGCOURSE', r.CourseID)
       if (!courseId) return null // course_id is NOT NULL
       const starts = H.ts(r.Date) ?? H.ts(r.created_at) ?? new Date(0)
-      const tm = H.str(r.Time)?.trim()?.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i) // "7:30 AM" → set the time-of-day (approx, stored UTC)
+      const tm = H.str(r.Time)
+        ?.trim()
+        ?.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i) // "7:30 AM" → set the time-of-day (approx, stored UTC)
       if (tm) {
         let h = Number(tm[1]) % 12
         if (/pm/i.test(tm[3] ?? '')) h += 12
@@ -639,10 +769,16 @@ export const RASSAUN_LOADERS: Loader[] = [
       const hours = H.num(r.Hours) ?? H.num(r.Length) ?? 1
       const ends = new Date(starts.getTime() + Math.max(0.5, hours) * 3600 * 1000)
       const st = String(r.Status ?? '').toLowerCase()
-      const notes = [H.str(r.Location), H.str(r.Trainer) ? `Trainer: ${H.str(r.Trainer)}` : null].filter(Boolean).join(' · ')
+      const notes = [H.str(r.Location), H.str(r.Trainer) ? `Trainer: ${H.str(r.Trainer)}` : null]
+        .filter(Boolean)
+        .join(' · ')
       return {
         courseId,
-        title: H.str(r.ClassLabel) ?? H.str(r.CourseName) ?? (ctx.prepared as Map<string, string>)?.get(courseId) ?? `Class ${r.id}`,
+        title:
+          H.str(r.ClassLabel) ??
+          H.str(r.CourseName) ??
+          (ctx.prepared as Map<string, string>)?.get(courseId) ??
+          `Class ${r.id}`,
         startsAt: starts,
         endsAt: ends,
         cancelledAt: /cancel/.test(st) ? starts : null,
@@ -674,7 +810,11 @@ export const RASSAUN_LOADERS: Loader[] = [
     srcTable: 'TRAININGSKILLAUTHORITY',
     tenant: 'rassaun',
     target: trainingSkillAuthorities,
-    map: (r) => ({ name: H.str(r.Name) ?? `Authority ${r.id}`, code: H.str(r.Shortform), notes: H.str(r.Description) }),
+    map: (r) => ({
+      name: H.str(r.Name) ?? `Authority ${r.id}`,
+      code: H.str(r.Shortform),
+      notes: H.str(r.Description),
+    }),
   },
   {
     entity: 'training_skill_type',
@@ -758,14 +898,19 @@ export const RASSAUN_LOADERS: Loader[] = [
       const src = source()
       // --- legacy audience-membership maps (resolve Group/Division → legacy EmpIDs) ---
       const groupMembers = new Map<string, number[]>()
-      for (const g of await src.unsafe('select "GroupID","EmpID" from beaconhs."PEOPLEGROUPRECORD"')) {
+      for (const g of await src.unsafe(
+        'select "GroupID","EmpID" from beaconhs."PEOPLEGROUPRECORD"',
+      )) {
         const k = String(g.GroupID)
         ;(groupMembers.get(k) ?? groupMembers.set(k, []).get(k)!).push(g.EmpID)
       }
       const divisionName = new Map<string, string>()
-      for (const d of await src.unsafe('select id, "Name" from beaconhs."PEOPLEDIVISION"')) divisionName.set(String(d.id), String(d.Name ?? '').trim())
+      for (const d of await src.unsafe('select id, "Name" from beaconhs."PEOPLEDIVISION"'))
+        divisionName.set(String(d.id), String(d.Name ?? '').trim())
       const empsByDivision = new Map<string, number[]>() // EMPLOYEESHR.Division is the division NAME (no id FK)
-      for (const e of await src.unsafe('select id, "Division" from peopleapp."EMPLOYEESHR" where "Division" is not null')) {
+      for (const e of await src.unsafe(
+        'select id, "Division" from peopleapp."EMPLOYEESHR" where "Division" is not null',
+      )) {
         const k = String(e.Division).trim()
         ;(empsByDivision.get(k) ?? empsByDivision.set(k, []).get(k)!).push(e.id)
       }
@@ -783,12 +928,15 @@ export const RASSAUN_LOADERS: Loader[] = [
       // titles + course-expiry lookups
       const courseName = new Map<string, string>()
       const courseExpires = new Map<string, boolean>()
-      for (const c of await src.unsafe('select id, "Name","DoesExpire" from beaconhs."TRAININGCOURSE"')) {
+      for (const c of await src.unsafe(
+        'select id, "Name","DoesExpire" from beaconhs."TRAININGCOURSE"',
+      )) {
         courseName.set(String(c.id), H.str(c.Name) ?? `Course ${c.id}`)
         courseExpires.set(String(c.id), H.bool(c.DoesExpire))
       }
       const skillTypeName = new Map<string, string>()
-      for (const s of await src.unsafe('select id, "Name" from beaconhs."TRAININGSKILLTYPE"')) skillTypeName.set(String(s.id), H.str(s.Name) ?? `Skill ${s.id}`)
+      for (const s of await src.unsafe('select id, "Name" from beaconhs."TRAININGSKILLTYPE"'))
+        skillTypeName.set(String(s.id), H.str(s.Name) ?? `Skill ${s.id}`)
 
       let obligations = 0
       let audienceTotal = 0
@@ -797,9 +945,14 @@ export const RASSAUN_LOADERS: Loader[] = [
       const loadReqs = async (opts: {
         assignTable: string
         recordTable: string
-        mkTarget: (a: any, lookup: (sd: string, st: string, pk: unknown) => Promise<string | null>) => Promise<{ targetRef: Record<string, unknown>; title: string; cert: boolean } | null>
+        mkTarget: (
+          a: any,
+          lookup: (sd: string, st: string, pk: unknown) => Promise<string | null>,
+        ) => Promise<{ targetRef: Record<string, unknown>; title: string; cert: boolean } | null>
       }) => {
-        const assigns: any[] = await src.unsafe(`select * from beaconhs."${opts.assignTable}" order by id`)
+        const assigns: any[] = await src.unsafe(
+          `select * from beaconhs."${opts.assignTable}" order by id`,
+        )
         const records: any[] = await src.unsafe(`select * from beaconhs."${opts.recordTable}"`)
         const recsByAssign = new Map<string, any[]>()
         for (const r of records) {
@@ -812,8 +965,19 @@ export const RASSAUN_LOADERS: Loader[] = [
             const lookup = internals.makeLookup(env, tx)
             const built = await opts.mkTarget(a, lookup)
             if (!built) return
-            const obId = await internals.reserve(env, tx, 'beaconhs', opts.assignTable, a.id, 'compliance_obligation', tenantId, rowHash(a))
-            const recurrence = built.cert ? { kind: 'expiry', remindBeforeDays: 30 } : { kind: 'one_time' }
+            const obId = await internals.reserve(
+              env,
+              tx,
+              'beaconhs',
+              opts.assignTable,
+              a.id,
+              'compliance_obligation',
+              tenantId,
+              rowHash(a),
+            )
+            const recurrence = built.cert
+              ? { kind: 'expiry', remindBeforeDays: 30 }
+              : { kind: 'one_time' }
             const sourceModule = built.cert ? 'cert_requirement' : 'training'
             await tx
               .insert(complianceObligations)
@@ -832,7 +996,14 @@ export const RASSAUN_LOADERS: Loader[] = [
               })
               .onConflictDoUpdate({
                 target: complianceObligations.id,
-                set: { sourceModule, title: built.title, notes: H.str(a.Notes), targetRef: built.targetRef, recurrence, recurrenceKind: recurrence.kind },
+                set: {
+                  sourceModule,
+                  title: built.title,
+                  notes: H.str(a.Notes),
+                  targetRef: built.targetRef,
+                  recurrence,
+                  recurrenceKind: recurrence.kind,
+                },
               })
             obligations++
             // audience: expand each record → person uuids, dedupe, upsert (ignore dup person rows)
@@ -846,8 +1017,21 @@ export const RASSAUN_LOADERS: Loader[] = [
             if (personIds.size) {
               await tx
                 .insert(complianceAudience)
-                .values(Array.from(personIds).map((pid) => ({ tenantId, obligationId: obId, kind: 'person', entityKey: pid })))
-                .onConflictDoNothing({ target: [complianceAudience.obligationId, complianceAudience.kind, complianceAudience.entityKey] })
+                .values(
+                  Array.from(personIds).map((pid) => ({
+                    tenantId,
+                    obligationId: obId,
+                    kind: 'person',
+                    entityKey: pid,
+                  })),
+                )
+                .onConflictDoNothing({
+                  target: [
+                    complianceAudience.obligationId,
+                    complianceAudience.kind,
+                    complianceAudience.entityKey,
+                  ],
+                })
               audienceTotal += personIds.size
             }
           })
@@ -861,7 +1045,11 @@ export const RASSAUN_LOADERS: Loader[] = [
         mkTarget: async (a, lookup) => {
           const courseId = await lookup('beaconhs', 'TRAININGCOURSE', a.CourseID)
           if (!courseId) return null
-          return { targetRef: { courseId, trainingItemKind: 'course' }, title: courseName.get(String(a.CourseID)) ?? `Course ${a.CourseID}`, cert: courseExpires.get(String(a.CourseID)) ?? false }
+          return {
+            targetRef: { courseId, trainingItemKind: 'course' },
+            title: courseName.get(String(a.CourseID)) ?? `Course ${a.CourseID}`,
+            cert: courseExpires.get(String(a.CourseID)) ?? false,
+          }
         },
       })
       // skill requirements (cert_requirement satisfied by a valid skill grant)
@@ -871,7 +1059,11 @@ export const RASSAUN_LOADERS: Loader[] = [
         mkTarget: async (a, lookup) => {
           const skillTypeId = await lookup('beaconhs', 'TRAININGSKILLTYPE', a.TypeID)
           if (!skillTypeId) return null
-          return { targetRef: { skillTypeId }, title: skillTypeName.get(String(a.TypeID)) ?? `Skill ${a.TypeID}`, cert: true }
+          return {
+            targetRef: { skillTypeId },
+            title: skillTypeName.get(String(a.TypeID)) ?? `Skill ${a.TypeID}`,
+            cert: true,
+          }
         },
       })
 
@@ -896,13 +1088,45 @@ export const EXTERNAL_TRAINING_LOADERS: Loader[] = [
       name: H.str(r.Customer) ?? `Customer ${r.id}`,
       code: String(r.id),
       address: { line1: H.str(r.Address), formatted: H.str(r.FormattedAddress) },
-      metadata: { legacy: 'externaltraining.CUSTOMERS', industry: H.str(r.Industry), website: H.str(r.Website), active: H.bool(r.isActive) },
+      metadata: {
+        legacy: 'externaltraining.CUSTOMERS',
+        industry: H.str(r.Industry),
+        website: H.str(r.Website),
+        active: H.bool(r.isActive),
+      },
     }),
   },
   // people lookups
-  { entity: 'person_division', srcSchema: 'externaltraining', srcTable: 'PEOPLEDIVISION', tenant: 'external-training', target: personDivisions, map: (r) => ({ name: H.str(r.Name) ?? `Division ${r.id}`, description: H.str(r.Description) }) },
-  { entity: 'trade', srcSchema: 'externaltraining', srcTable: 'PEOPLETRADES', tenant: 'external-training', target: trades, map: (r) => ({ name: H.str(r.Name) ?? `Trade ${r.id}` }) },
-  { entity: 'person_title', srcSchema: 'externaltraining', srcTable: 'PEOPLEJOBTITLE', tenant: 'external-training', target: personTitles, map: (r) => ({ name: H.str(r.Name) ?? `Title ${r.id}`, description: H.str(r.Scope), responsibilities: H.str(r.Responsibilities), education: H.str(r.Education), experience: H.str(r.Experience) }) },
+  {
+    entity: 'person_division',
+    srcSchema: 'externaltraining',
+    srcTable: 'PEOPLEDIVISION',
+    tenant: 'external-training',
+    target: personDivisions,
+    map: (r) => ({ name: H.str(r.Name) ?? `Division ${r.id}`, description: H.str(r.Description) }),
+  },
+  {
+    entity: 'trade',
+    srcSchema: 'externaltraining',
+    srcTable: 'PEOPLETRADES',
+    tenant: 'external-training',
+    target: trades,
+    map: (r) => ({ name: H.str(r.Name) ?? `Trade ${r.id}` }),
+  },
+  {
+    entity: 'person_title',
+    srcSchema: 'externaltraining',
+    srcTable: 'PEOPLEJOBTITLE',
+    tenant: 'external-training',
+    target: personTitles,
+    map: (r) => ({
+      name: H.str(r.Name) ?? `Title ${r.id}`,
+      description: H.str(r.Scope),
+      responsibilities: H.str(r.Responsibilities),
+      education: H.str(r.Education),
+      experience: H.str(r.Experience),
+    }),
+  },
   // people
   {
     entity: 'person',
@@ -924,7 +1148,13 @@ export const EXTERNAL_TRAINING_LOADERS: Loader[] = [
         emergencyContactPhone: H.str(r.EmergencyContactNumber),
         status: H.bool(r.EmployeeActive) ? 'active' : 'inactive',
         notes: H.str(r.Notes),
-        metadata: { legacy: 'externaltraining.PEOPLE', customerId: r.CustomerID, divisionId: r.DivisionID, jobTitleId: r.JobTitleID, address: H.str(r.Address) },
+        metadata: {
+          legacy: 'externaltraining.PEOPLE',
+          customerId: r.CustomerID,
+          divisionId: r.DivisionID,
+          jobTitleId: r.JobTitleID,
+          address: H.str(r.Address),
+        },
       }
     },
   },
@@ -944,7 +1174,15 @@ export const EXTERNAL_TRAINING_LOADERS: Loader[] = [
         deliveryType: 'classroom',
         validForMonths: H.bool(r.DoesExpire) && expiryYears ? expiryYears * 12 : null,
         requiresEvaluator: false,
-        metadata: { legacy: 'externaltraining.TRAININGCOURSE', trainer: H.str(r.Trainer), capacity: H.int(r.Capacity), pricePerPerson: H.num(r.PricePerPerson), expiryYears, doesExpire: H.bool(r.DoesExpire), certTemplate: H.str(r.CertificateDetailsTemplate) },
+        metadata: {
+          legacy: 'externaltraining.TRAININGCOURSE',
+          trainer: H.str(r.Trainer),
+          capacity: H.int(r.Capacity),
+          pricePerPerson: H.num(r.PricePerPerson),
+          expiryYears,
+          doesExpire: H.bool(r.DoesExpire),
+          certTemplate: H.str(r.CertificateDetailsTemplate),
+        },
       }
     },
   },
@@ -986,7 +1224,10 @@ export const EXTERNAL_TRAINING_LOADERS: Loader[] = [
     prepare: async (env: Env, tenantId: string) => {
       const m = new Map<string, string>()
       await withSuperAdmin(env.db, async (tx: any) => {
-        const rows = await tx.select({ id: trainingCourses.id, name: trainingCourses.name }).from(trainingCourses).where(eq(trainingCourses.tenantId, tenantId))
+        const rows = await tx
+          .select({ id: trainingCourses.id, name: trainingCourses.name })
+          .from(trainingCourses)
+          .where(eq(trainingCourses.tenantId, tenantId))
         for (const r of rows) m.set(r.id, r.name)
       })
       return m
@@ -1000,7 +1241,10 @@ export const EXTERNAL_TRAINING_LOADERS: Loader[] = [
       const st = String(r.Status ?? '').toLowerCase()
       return {
         courseId,
-        title: H.str(r.ClassCode) ?? (ctx.prepared as Map<string, string>)?.get(courseId) ?? `Class ${r.id}`,
+        title:
+          H.str(r.ClassCode) ??
+          (ctx.prepared as Map<string, string>)?.get(courseId) ??
+          `Class ${r.id}`,
         startsAt: starts,
         endsAt: ends,
         siteOrgUnitId: await ctx.lookup('externaltraining', 'CUSTOMERS', r.CustomerID),
@@ -1022,7 +1266,12 @@ export const EXTERNAL_TRAINING_LOADERS: Loader[] = [
       const classId = await ctx.lookup('externaltraining', 'TRAININGCLASSES', r.ClassID)
       const personId = await ctx.lookup('externaltraining', 'PEOPLE', r.EmpID)
       if (!classId || !personId) return null
-      return { classId, personId, status: H.bool(r.Attended) ? 'attended' : 'registered', notes: H.str(r.Notes) }
+      return {
+        classId,
+        personId,
+        status: H.bool(r.Attended) ? 'attended' : 'registered',
+        notes: H.str(r.Notes),
+      }
     },
   },
   // quizzes → assessment types + questions (QUIZRESULTS are empty, so no attempts to load)
@@ -1053,14 +1302,22 @@ export const EXTERNAL_TRAINING_LOADERS: Loader[] = [
     map: async (r, ctx) => {
       const typeId = await ctx.lookup('externaltraining', 'QUIZ', r.QuizID)
       if (!typeId) return null // type_id NOT NULL
-      const choices = [r.MultipleChoiceA, r.MultipleChoiceB, r.MultipleChoiceC, r.MultipleChoiceD].map((x) => H.str(x)).filter(Boolean) as string[]
+      const choices = [r.MultipleChoiceA, r.MultipleChoiceB, r.MultipleChoiceC, r.MultipleChoiceD]
+        .map((x) => H.str(x))
+        .filter(Boolean) as string[]
       const t = String(r.Type ?? '').toLowerCase()
-      const kind = choices.length ? 'single_choice' : /true.?false|bool/.test(t) ? 'true_false' : 'text'
+      const kind = choices.length
+        ? 'single_choice'
+        : /true.?false|bool/.test(t)
+          ? 'true_false'
+          : 'text'
       return {
         typeId,
         prompt: H.str(r.Question) ?? `Q${r.id}`,
         kind,
-        options: choices.length ? choices.map((c, i) => ({ value: String.fromCharCode(65 + i), label: c })) : null,
+        options: choices.length
+          ? choices.map((c, i) => ({ value: String.fromCharCode(65 + i), label: c }))
+          : null,
         correctAnswer: H.str(r.Answer),
         entityOrder: H.int(r.QuestionOrder) ?? 0,
         mandatory: true,

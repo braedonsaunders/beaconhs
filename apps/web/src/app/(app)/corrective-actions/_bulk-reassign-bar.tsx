@@ -118,11 +118,7 @@ export function SelectionCheckbox({
       aria-pressed={selected}
       className="inline-flex items-center justify-center rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
     >
-      {selected ? (
-        <CheckSquare size={16} className="text-teal-700" />
-      ) : (
-        <Square size={16} />
-      )}
+      {selected ? <CheckSquare size={16} className="text-teal-700" /> : <Square size={16} />}
     </button>
   )
 }
@@ -141,11 +137,7 @@ export function HeaderSelectAll({
       aria-pressed={allSelected}
       className="inline-flex items-center justify-center rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
     >
-      {allSelected ? (
-        <CheckSquare size={16} className="text-teal-700" />
-      ) : (
-        <Square size={16} />
-      )}
+      {allSelected ? <CheckSquare size={16} className="text-teal-700" /> : <Square size={16} />}
     </button>
   )
 }

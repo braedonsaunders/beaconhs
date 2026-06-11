@@ -149,7 +149,11 @@ export async function PersonEditTab({ personId }: { personId: string }) {
               <Input name="emergencyContactName" defaultValue={person.emergencyContactName ?? ''} />
             </Field>
             <Field label="Emergency contact phone">
-              <Input name="emergencyContactPhone" type="tel" defaultValue={person.emergencyContactPhone ?? ''} />
+              <Input
+                name="emergencyContactPhone"
+                type="tel"
+                defaultValue={person.emergencyContactPhone ?? ''}
+              />
             </Field>
             <Field label="Notes" className="sm:col-span-2">
               <Textarea name="notes" rows={3} defaultValue={person.notes ?? ''} />

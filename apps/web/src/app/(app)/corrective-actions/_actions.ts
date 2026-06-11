@@ -44,9 +44,7 @@ function assertNotLocked(ca: { locked: boolean }): ActionResult | null {
 
 // Super-admin viewing a tenant has a synthetic membership id ('super-admin')
 // that doesn't exist in tenant_users — null it so the FK passes.
-function safeTenantUserId(
-  ctx: Awaited<ReturnType<typeof requireRequestContext>>,
-): string | null {
+function safeTenantUserId(ctx: Awaited<ReturnType<typeof requireRequestContext>>): string | null {
   const id = ctx.membership?.id
   if (!id || id === 'super-admin') return null
   return id
@@ -58,10 +56,7 @@ function safeTenantUserId(
  * Bind a batch of just-uploaded attachment IDs to a CA. Called from the
  * PhotoUploaderSection after FileUpload finalises each file.
  */
-export async function attachCaPhotos(
-  caId: string,
-  attachmentIds: string[],
-): Promise<ActionResult> {
+export async function attachCaPhotos(caId: string, attachmentIds: string[]): Promise<ActionResult> {
   if (attachmentIds.length === 0) return { ok: true }
   const ctx = await requireRequestContext()
   const ca = await loadCA(ctx, caId)
@@ -402,10 +397,7 @@ export async function bulkReassignCorrectiveActions(args: {
       .select({ id: tenantUsers.id })
       .from(tenantUsers)
       .where(
-        and(
-          eq(tenantUsers.id, args.newOwnerTenantUserId),
-          eq(tenantUsers.tenantId, ctx.tenantId),
-        ),
+        and(eq(tenantUsers.id, args.newOwnerTenantUserId), eq(tenantUsers.tenantId, ctx.tenantId)),
       )
       .limit(1)
     return Boolean(r)

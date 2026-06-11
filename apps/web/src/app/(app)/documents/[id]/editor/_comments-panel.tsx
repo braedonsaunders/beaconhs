@@ -66,7 +66,10 @@ export function CommentsPanel({
     let range: { from: number; to: number } | null = null
     editor.state.doc.descendants((node, pos) => {
       if (range) return false
-      if (node.isText && node.marks.some((m) => m.type === markType && m.attrs.commentId === commentId)) {
+      if (
+        node.isText &&
+        node.marks.some((m) => m.type === markType && m.attrs.commentId === commentId)
+      ) {
         range = { from: pos, to: pos + node.nodeSize }
       }
       return true
@@ -121,8 +124,10 @@ export function CommentsPanel({
       <div
         key={root.id}
         className={cn(
-          'rounded-lg border bg-white dark:bg-slate-900 p-2.5 text-sm shadow-sm',
-          root.resolvedAt ? 'border-slate-200 dark:border-slate-800 opacity-70' : 'border-slate-200 dark:border-slate-800',
+          'rounded-lg border bg-white p-2.5 text-sm shadow-sm dark:bg-slate-900',
+          root.resolvedAt
+            ? 'border-slate-200 opacity-70 dark:border-slate-800'
+            : 'border-slate-200 dark:border-slate-800',
         )}
       >
         {root.quotedText ? (
@@ -132,8 +137,8 @@ export function CommentsPanel({
             className={cn(
               'mb-1.5 block w-full truncate rounded border-l-2 px-2 py-0.5 text-left text-xs italic',
               detached
-                ? 'border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-400 dark:text-slate-500'
-                : 'border-amber-300 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/40 text-slate-600 dark:text-slate-300 hover:bg-amber-100 dark:hover:bg-amber-950/60',
+                ? 'border-slate-300 bg-slate-50 text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-500'
+                : 'border-amber-300 bg-amber-50 text-slate-600 hover:bg-amber-100 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-slate-300 dark:hover:bg-amber-950/60',
             )}
             title={detached ? 'Original text was removed' : 'Jump to comment'}
           >
@@ -142,7 +147,7 @@ export function CommentsPanel({
         ) : null}
         <Comment c={root} />
         {replies.map((r) => (
-          <div key={r.id} className="mt-2 border-l border-slate-100 dark:border-slate-800 pl-2">
+          <div key={r.id} className="mt-2 border-l border-slate-100 pl-2 dark:border-slate-800">
             <Comment c={r} />
           </div>
         ))}
@@ -154,26 +159,55 @@ export function CommentsPanel({
               onChange={(e) => setReplyBody(e.target.value)}
               rows={2}
               placeholder="Reply…"
-              className="w-full rounded border border-slate-200 dark:border-slate-800 px-2 py-1 text-sm outline-none focus:border-teal-400"
+              className="w-full rounded border border-slate-200 px-2 py-1 text-sm outline-none focus:border-teal-400 dark:border-slate-800"
             />
             <div className="mt-1 flex justify-end gap-1.5">
-              <button type="button" onClick={() => setReplyFor(null)} className="rounded px-2 py-0.5 text-xs text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
+              <button
+                type="button"
+                onClick={() => setReplyFor(null)}
+                className="rounded px-2 py-0.5 text-xs text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+              >
                 Cancel
               </button>
-              <button type="button" disabled={busy} onClick={() => submitReply(root.id)} className="rounded bg-teal-700 px-2 py-0.5 text-xs font-medium text-white hover:bg-teal-800 disabled:opacity-60">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => submitReply(root.id)}
+                className="rounded bg-teal-700 px-2 py-0.5 text-xs font-medium text-white hover:bg-teal-800 disabled:opacity-60"
+              >
                 Reply
               </button>
             </div>
           </div>
         ) : (
           <div className="mt-1.5 flex items-center gap-2 text-xs">
-            <button type="button" onClick={() => setReplyFor(root.id)} className="inline-flex items-center gap-1 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200">
+            <button
+              type="button"
+              onClick={() => setReplyFor(root.id)}
+              className="inline-flex items-center gap-1 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+            >
               <CornerDownRight size={12} /> Reply
             </button>
-            <button type="button" onClick={() => toggleResolve(root)} className="inline-flex items-center gap-1 text-slate-500 dark:text-slate-400 hover:text-teal-700">
-              {root.resolvedAt ? <><RotateCcw size={12} /> Reopen</> : <><Check size={12} /> Resolve</>}
+            <button
+              type="button"
+              onClick={() => toggleResolve(root)}
+              className="inline-flex items-center gap-1 text-slate-500 hover:text-teal-700 dark:text-slate-400"
+            >
+              {root.resolvedAt ? (
+                <>
+                  <RotateCcw size={12} /> Reopen
+                </>
+              ) : (
+                <>
+                  <Check size={12} /> Resolve
+                </>
+              )}
             </button>
-            <button type="button" onClick={() => del(root)} className="ml-auto inline-flex items-center gap-1 text-slate-400 dark:text-slate-500 hover:text-rose-600">
+            <button
+              type="button"
+              onClick={() => del(root)}
+              className="ml-auto inline-flex items-center gap-1 text-slate-400 hover:text-rose-600 dark:text-slate-500"
+            >
               <Trash2 size={12} />
             </button>
           </div>
@@ -183,18 +217,23 @@ export function CommentsPanel({
   }
 
   return (
-    <aside className="doc-flyout absolute inset-y-0 right-0 z-30 flex w-80 max-w-[92%] flex-col border-l border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 shadow-2xl">
-      <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 px-3 py-2">
+    <aside className="doc-flyout absolute inset-y-0 right-0 z-30 flex w-80 max-w-[92%] flex-col border-l border-slate-200 bg-slate-50 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+      <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2 dark:border-slate-800">
         <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">Comments</span>
-        <button type="button" onClick={onClose} className="grid h-7 w-7 place-items-center rounded text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700" aria-label="Close comments">
+        <button
+          type="button"
+          onClick={onClose}
+          className="grid h-7 w-7 place-items-center rounded text-slate-500 hover:bg-slate-200 dark:text-slate-400 dark:hover:bg-slate-700"
+          aria-label="Close comments"
+        >
           <X size={15} />
         </button>
       </div>
 
-      <div className="border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3">
+      <div className="border-b border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
         {hasSelection ? (
           <>
-            <div className="mb-1 truncate rounded border-l-2 border-amber-300 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 text-xs italic text-slate-600 dark:text-slate-300">
+            <div className="mb-1 truncate rounded border-l-2 border-amber-300 bg-amber-50 px-2 py-0.5 text-xs text-slate-600 italic dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-slate-300">
               “{quoted}”
             </div>
             <textarea
@@ -202,16 +241,23 @@ export function CommentsPanel({
               onChange={(e) => setBody(e.target.value)}
               rows={2}
               placeholder="Add a comment…"
-              className="w-full rounded border border-slate-200 dark:border-slate-800 px-2 py-1 text-sm outline-none focus:border-teal-400"
+              className="w-full rounded border border-slate-200 px-2 py-1 text-sm outline-none focus:border-teal-400 dark:border-slate-800"
             />
             <div className="mt-1 flex justify-end">
-              <button type="button" disabled={busy || !body.trim()} onClick={submitNew} className="inline-flex items-center gap-1 rounded bg-teal-700 px-2.5 py-1 text-xs font-medium text-white hover:bg-teal-800 disabled:opacity-60">
+              <button
+                type="button"
+                disabled={busy || !body.trim()}
+                onClick={submitNew}
+                className="inline-flex items-center gap-1 rounded bg-teal-700 px-2.5 py-1 text-xs font-medium text-white hover:bg-teal-800 disabled:opacity-60"
+              >
                 <MessageSquarePlus size={13} /> Comment
               </button>
             </div>
           </>
         ) : (
-          <p className="text-xs text-slate-400 dark:text-slate-500">Select text in the document to add a comment.</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500">
+            Select text in the document to add a comment.
+          </p>
         )}
       </div>
 
@@ -223,7 +269,7 @@ export function CommentsPanel({
 
         {detachedRoots.length > 0 ? (
           <div className="pt-2">
-            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+            <p className="mb-1.5 text-[10px] font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500">
               Detached · original text removed
             </p>
             <div className="space-y-2">{detachedRoots.map((r) => renderThread(r, true))}</div>
@@ -238,10 +284,14 @@ function Comment({ c }: { c: EditorComment }) {
   return (
     <div>
       <div className="flex items-baseline justify-between gap-2">
-        <span className="text-xs font-semibold text-slate-800 dark:text-slate-100">{c.authorName}</span>
-        <span className="text-[10px] text-slate-400 dark:text-slate-500">{new Date(c.createdAt).toLocaleDateString()}</span>
+        <span className="text-xs font-semibold text-slate-800 dark:text-slate-100">
+          {c.authorName}
+        </span>
+        <span className="text-[10px] text-slate-400 dark:text-slate-500">
+          {new Date(c.createdAt).toLocaleDateString()}
+        </span>
       </div>
-      <p className="whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-200">{c.body}</p>
+      <p className="text-sm whitespace-pre-wrap text-slate-700 dark:text-slate-200">{c.body}</p>
     </div>
   )
 }

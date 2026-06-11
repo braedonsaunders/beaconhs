@@ -73,20 +73,12 @@ export async function submitFormResponse(args: {
           status: formResponses.status,
         })
         .from(formResponses)
-        .where(
-          and(
-            eq(formResponses.id, args.responseId),
-            eq(formResponses.tenantId, ctx.tenantId),
-          ),
-        )
+        .where(and(eq(formResponses.id, args.responseId), eq(formResponses.tenantId, ctx.tenantId)))
         .limit(1)
       // Only finalize if the row exists AND is still in a pre-submit state.
       // If someone else already submitted it we fall through to the insert
       // path below so the user's work isn't lost.
-      if (
-        existing &&
-        (existing.status === 'draft' || existing.status === 'in_progress')
-      ) {
+      if (existing && (existing.status === 'draft' || existing.status === 'in_progress')) {
         const [updated] = await tx
           .update(formResponses)
           .set({
@@ -220,17 +212,10 @@ export async function submitFormResponse(args: {
 export async function fetchEntityAttrs(args: {
   pickerFieldType: string
   entityId: string
-}): Promise<
-  | { ok: true; attrs: Record<string, unknown> | null }
-  | { ok: false; error: string }
-> {
+}): Promise<{ ok: true; attrs: Record<string, unknown> | null } | { ok: false; error: string }> {
   const ctx = await requireRequestContext()
   try {
-    const attrs = await fetchSingleEntityAttrs(
-      ctx,
-      args.pickerFieldType,
-      args.entityId,
-    )
+    const attrs = await fetchSingleEntityAttrs(ctx, args.pickerFieldType, args.entityId)
     return { ok: true, attrs }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'fetch failed'
@@ -272,10 +257,7 @@ export type SaveDraftInput = z.infer<typeof draftInputSchema>
 
 export async function saveFormResponseDraft(
   input: SaveDraftInput,
-): Promise<
-  | { ok: true; savedAt: string }
-  | { ok: false; error: string }
-> {
+): Promise<{ ok: true; savedAt: string } | { ok: false; error: string }> {
   const parsed = draftInputSchema.safeParse(input)
   if (!parsed.success) {
     return { ok: false, error: 'Invalid draft payload' }
@@ -293,10 +275,7 @@ export async function saveFormResponseDraft(
 export async function persistDraft(
   ctx: Awaited<ReturnType<typeof requireRequestContext>>,
   input: SaveDraftInput,
-): Promise<
-  | { ok: true; savedAt: string }
-  | { ok: false; error: string }
-> {
+): Promise<{ ok: true; savedAt: string } | { ok: false; error: string }> {
   const now = new Date()
 
   try {
@@ -310,10 +289,7 @@ export async function persistDraft(
         })
         .from(formResponses)
         .where(
-          and(
-            eq(formResponses.id, input.responseId),
-            eq(formResponses.tenantId, ctx.tenantId),
-          ),
+          and(eq(formResponses.id, input.responseId), eq(formResponses.tenantId, ctx.tenantId)),
         )
         .limit(1)
 
@@ -336,8 +312,7 @@ export async function persistDraft(
       // helping a worker recover a form).
       const submitterId = row.submittedBy
       const callerMembershipId = ctx.membership?.id ?? null
-      const isOwner =
-        submitterId !== null && submitterId === callerMembershipId
+      const isOwner = submitterId !== null && submitterId === callerMembershipId
       const hasOverride =
         ctx.isSuperAdmin ||
         ctx.permissions.has('*') ||
@@ -363,9 +338,7 @@ export async function persistDraft(
           draftStepIndex: input.stepIndex,
           // Adopt ownership on first save if it was unset (typical for
           // brand-new drafts created by createDraftResponse below).
-          ...(isAdopting && callerMembershipId
-            ? { submittedBy: callerMembershipId }
-            : {}),
+          ...(isAdopting && callerMembershipId ? { submittedBy: callerMembershipId } : {}),
           // Bump status to in_progress on the first content save so list
           // views can distinguish "empty shell" from "actively being filled".
           ...(row.status === 'draft' ? { status: 'in_progress' as const } : {}),

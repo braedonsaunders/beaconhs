@@ -338,11 +338,7 @@ export default async function InspectionTypeDetailPage({
             </div>
             <div className="flex items-center gap-3 sm:col-span-2">
               <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  name="allowPassAll"
-                  defaultChecked={t.allowPassAll}
-                />
+                <input type="checkbox" name="allowPassAll" defaultChecked={t.allowPassAll} />
                 <span>Allow "pass all" shortcut</span>
               </label>
               <label className="flex items-center gap-2 text-sm">
@@ -354,7 +350,7 @@ export default async function InspectionTypeDetailPage({
                 <span>Failed criterion auto-creates a work order</span>
               </label>
             </div>
-            <div className="sm:col-span-2 flex justify-end">
+            <div className="flex justify-end sm:col-span-2">
               <Button type="submit">Save settings</Button>
             </div>
           </form>
@@ -389,9 +385,7 @@ export default async function InspectionTypeDetailPage({
                             {c.question}
                           </div>
                           {c.description ? (
-                            <div className="truncate text-xs text-slate-500">
-                              {c.description}
-                            </div>
+                            <div className="truncate text-xs text-slate-500">{c.description}</div>
                           ) : null}
                         </div>
                         <div className="flex shrink-0 flex-wrap items-center gap-1">
@@ -407,16 +401,10 @@ export default async function InspectionTypeDetailPage({
                           >
                             {c.severity}
                           </Badge>
-                          {c.isRequired ? null : (
-                            <Badge variant="secondary">optional</Badge>
-                          )}
+                          {c.isRequired ? null : <Badge variant="secondary">optional</Badge>}
                           {c.isCritical ? <Badge variant="destructive">critical</Badge> : null}
-                          {c.requiresPhoto ? (
-                            <Badge variant="secondary">photo</Badge>
-                          ) : null}
-                          {c.requiresComment ? (
-                            <Badge variant="secondary">comment</Badge>
-                          ) : null}
+                          {c.requiresPhoto ? <Badge variant="secondary">photo</Badge> : null}
+                          {c.requiresComment ? <Badge variant="secondary">comment</Badge> : null}
                         </div>
                         <div className="ml-2 flex shrink-0 items-center gap-1">
                           <form action={moveCriterion}>
@@ -456,12 +444,7 @@ export default async function InspectionTypeDetailPage({
                           <form action={deleteCriterion}>
                             <input type="hidden" name="id" value={c.id} />
                             <input type="hidden" name="inspectionTypeId" value={t.id} />
-                            <Button
-                              type="submit"
-                              size="sm"
-                              variant="outline"
-                              aria-label="Delete"
-                            >
+                            <Button type="submit" size="sm" variant="outline" aria-label="Delete">
                               <Trash2 size={12} />
                             </Button>
                           </form>
@@ -560,11 +543,7 @@ export default async function InspectionTypeDetailPage({
             <input type="hidden" name="inspectionTypeId" value={t.id} />
             <div className="space-y-1.5 sm:col-span-2">
               <Label>Question *</Label>
-              <Input
-                name="question"
-                required
-                placeholder='e.g. "Are the brake lights working?"'
-              />
+              <Input name="question" required placeholder='e.g. "Are the brake lights working?"' />
             </div>
             <div className="space-y-1.5">
               <Label>Kind</Label>
@@ -590,7 +569,7 @@ export default async function InspectionTypeDetailPage({
               <Label>Help text</Label>
               <Textarea name="description" rows={2} placeholder="Optional guidance" />
             </div>
-            <div className="flex flex-wrap items-center gap-3 sm:col-span-2 text-sm">
+            <div className="flex flex-wrap items-center gap-3 text-sm sm:col-span-2">
               <label className="flex items-center gap-2">
                 <input type="checkbox" name="isOptional" />
                 <span>Optional answer (default: required)</span>
@@ -608,7 +587,7 @@ export default async function InspectionTypeDetailPage({
                 <span>Critical (fail forces WO + red flag)</span>
               </label>
             </div>
-            <div className="sm:col-span-2 flex justify-end">
+            <div className="flex justify-end sm:col-span-2">
               <Button type="submit">Add criterion</Button>
             </div>
           </form>

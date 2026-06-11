@@ -101,7 +101,10 @@ export default async function ExpiredPpeReport({
               {rows.map(({ item, type, holder }) => (
                 <TableRow key={item.id}>
                   <TableCell>
-                    <Link href={`/ppe/${item.id}`} className="font-medium text-slate-900 hover:underline">
+                    <Link
+                      href={`/ppe/${item.id}`}
+                      className="font-medium text-slate-900 hover:underline"
+                    >
                       {type.name}
                     </Link>
                   </TableCell>

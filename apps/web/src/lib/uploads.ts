@@ -9,7 +9,11 @@ const requestSchema = z.object({
   kind: z.enum(['image', 'document', 'video', 'audio', 'signature', 'other']),
   filename: z.string().min(1).max(255),
   contentType: z.string().min(1).max(120),
-  sizeBytes: z.number().int().nonnegative().max(50 * 1024 * 1024),
+  sizeBytes: z
+    .number()
+    .int()
+    .nonnegative()
+    .max(50 * 1024 * 1024),
 })
 
 const finalizeSchema = z.object({
@@ -22,7 +26,9 @@ const finalizeSchema = z.object({
 
 export async function requestUpload(
   input: z.infer<typeof requestSchema>,
-): Promise<{ ok: true; key: string; putUrl: string; publicUrl: string } | { ok: false; error: string }> {
+): Promise<
+  { ok: true; key: string; putUrl: string; publicUrl: string } | { ok: false; error: string }
+> {
   const ctx = await requireRequestContext()
   const parsed = requestSchema.safeParse(input)
   if (!parsed.success) return { ok: false, error: parsed.error.message }

@@ -1,13 +1,7 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import Link from 'next/link'
-import {
-  ArrowRight,
-  CheckCircle2,
-  HardHat,
-  MessageSquare,
-  Sparkles,
-} from 'lucide-react'
+import { ArrowRight, CheckCircle2, HardHat, MessageSquare, Sparkles } from 'lucide-react'
 import {
   Badge,
   Button,
@@ -57,7 +51,10 @@ const MODULE_BINDINGS = [
   { value: 'ppe_inspection', label: 'PPE inspections' },
 ]
 
-const CANONICAL_ICONS: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
+const CANONICAL_ICONS: Record<
+  string,
+  React.ComponentType<{ size?: number; className?: string }>
+> = {
   jsha_v1: HardHat,
   toolbox_v1: MessageSquare,
   wah_rescue_v1: CheckCircle2,
@@ -234,7 +231,14 @@ async function createFromCanonical(formData: FormData): Promise<void> {
   redirect(`/forms/templates/${templateId}/designer`)
 }
 
-function CanonicalCard({ canonicalKey, name, description, sectionCount, fieldCount, category }: {
+function CanonicalCard({
+  canonicalKey,
+  name,
+  description,
+  sectionCount,
+  fieldCount,
+  category,
+}: {
   canonicalKey: string
   name: string
   description: string
@@ -312,7 +316,8 @@ export default function NewTemplatePage() {
             <div>
               <h2 className="text-lg font-semibold text-slate-900">Start from a template</h2>
               <p className="text-sm text-slate-600">
-                The four big modules from the legacy app — now shipped as form templates. Pick one and tweak.
+                The four big modules from the legacy app — now shipped as form templates. Pick one
+                and tweak.
               </p>
             </div>
             <Badge variant="secondary">{CANONICAL_TEMPLATES.length} canonical templates</Badge>
@@ -337,7 +342,8 @@ export default function NewTemplatePage() {
           <div>
             <h2 className="text-lg font-semibold text-slate-900">Or build from scratch</h2>
             <p className="text-sm text-slate-600">
-              Create an empty template and add sections, fields, and conditional logic in the designer.
+              Create an empty template and add sections, fields, and conditional logic in the
+              designer.
             </p>
           </div>
           <Card>
@@ -351,7 +357,12 @@ export default function NewTemplatePage() {
               <form action={createTemplate} className="space-y-5">
                 <div className="space-y-1.5">
                   <Label htmlFor="name">Name *</Label>
-                  <Input id="name" name="name" required placeholder="e.g. Daily site walk inspection" />
+                  <Input
+                    id="name"
+                    name="name"
+                    required
+                    placeholder="e.g. Daily site walk inspection"
+                  />
                   <p className="text-xs text-slate-500">
                     Shown in lists, on PDFs, and as the form heading.
                   </p>
@@ -378,7 +389,8 @@ export default function NewTemplatePage() {
                       ))}
                     </Select>
                     <p className="text-xs text-slate-500">
-                      Hides the template from the generic /forms list when bound to a specialty module.
+                      Hides the template from the generic /forms list when bound to a specialty
+                      module.
                     </p>
                   </div>
                 </div>

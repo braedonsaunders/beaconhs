@@ -30,7 +30,7 @@ export function TableSkeleton({
 
   const body = (
     <table className="w-full caption-bottom text-sm">
-      <thead className="bg-slate-50/95 dark:bg-slate-900/80 shadow-[inset_0_-1px_0_rgb(226_232_240)]">
+      <thead className="bg-slate-50/95 shadow-[inset_0_-1px_0_rgb(226_232_240)] dark:bg-slate-900/80">
         <tr>
           {Array.from({ length: cols }).map((_, i) => (
             <th key={`h-${i}`} className="h-10 px-3 text-left align-middle">
@@ -69,7 +69,7 @@ export function TableSkeleton({
       aria-label="Loading table contents"
       aria-busy="true"
       className={cn(
-        'w-full overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm',
+        'w-full overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900',
         className,
       )}
     >

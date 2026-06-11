@@ -94,7 +94,10 @@ export async function bulkAssignPeopleToGroup(args: {
         FROM person_group_memberships
         WHERE person_id = people.id AND tenant_id = ${ctx.tenantId}
       ), '[]'::jsonb)
-      WHERE id IN (${sql.join(validIds.map((v) => sql`${v}::uuid`), sql`, `)})
+      WHERE id IN (${sql.join(
+        validIds.map((v) => sql`${v}::uuid`),
+        sql`, `,
+      )})
         AND tenant_id = ${ctx.tenantId}
     `)
 
@@ -143,9 +146,7 @@ export async function bulkAssignPeopleToDivision(args: {
     const [d] = await tx
       .select({ id: personDivisions.id })
       .from(personDivisions)
-      .where(
-        and(eq(personDivisions.id, args.divisionId), isNull(personDivisions.deletedAt)),
-      )
+      .where(and(eq(personDivisions.id, args.divisionId), isNull(personDivisions.deletedAt)))
       .limit(1)
     return Boolean(d)
   })
@@ -179,7 +180,10 @@ export async function bulkAssignPeopleToDivision(args: {
         FROM person_division_memberships
         WHERE person_id = people.id AND tenant_id = ${ctx.tenantId}
       ), '[]'::jsonb)
-      WHERE id IN (${sql.join(validIds.map((v) => sql`${v}::uuid`), sql`, `)})
+      WHERE id IN (${sql.join(
+        validIds.map((v) => sql`${v}::uuid`),
+        sql`, `,
+      )})
         AND tenant_id = ${ctx.tenantId}
     `)
 
@@ -236,10 +240,7 @@ export async function bulkSetPeopleStatus(args: {
     const editable = rows.filter((r) => r.deletedAt === null).map((r) => r.id)
     const skipped = rows.length - editable.length
     if (editable.length === 0) return { updated: 0, skipped }
-    await tx
-      .update(people)
-      .set({ status: args.status })
-      .where(inArray(people.id, editable))
+    await tx.update(people).set({ status: args.status }).where(inArray(people.id, editable))
     return { updated: editable.length, skipped, editable }
   })
 
@@ -258,7 +259,12 @@ export async function bulkSetPeopleStatus(args: {
       entityType: 'person',
       action: 'update',
       summary: `Bulk set status to ${args.status} on ${result.editable.length} person${result.editable.length === 1 ? '' : 's'}`,
-      metadata: { batchId, status: args.status, personIds: result.editable, skipped: result.skipped },
+      metadata: {
+        batchId,
+        status: args.status,
+        personIds: result.editable,
+        skipped: result.skipped,
+      },
     })
   }
 
@@ -266,9 +272,7 @@ export async function bulkSetPeopleStatus(args: {
   return { ok: true, updated: result.updated, skipped: result.skipped }
 }
 
-export async function bulkExportPeopleCsv(args: {
-  personIds: string[]
-}): Promise<BulkCsvResult> {
+export async function bulkExportPeopleCsv(args: { personIds: string[] }): Promise<BulkCsvResult> {
   const ctx = await requireRequestContext()
   if (args.personIds.length === 0) return { ok: false, error: 'No people selected.' }
   const ids = args.personIds.slice(0, MAX_BULK)
@@ -347,9 +351,7 @@ export async function listPersonGroupsForBulk(): Promise<{ id: string; name: str
   )
 }
 
-export async function listPersonDivisionsForBulk(): Promise<
-  { id: string; name: string }[]
-> {
+export async function listPersonDivisionsForBulk(): Promise<{ id: string; name: string }[]> {
   const ctx = await requireRequestContext()
   return ctx.db(async (tx) =>
     tx

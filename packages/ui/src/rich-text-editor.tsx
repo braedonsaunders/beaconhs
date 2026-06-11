@@ -78,10 +78,7 @@ export function RichTextEditor({
   if (!editor) {
     return (
       <div
-        className={cn(
-          'rounded-md border border-slate-300 bg-white shadow-sm',
-          className,
-        )}
+        className={cn('rounded-md border border-slate-300 bg-white shadow-sm', className)}
         style={{ minHeight }}
       />
     )
@@ -98,9 +95,7 @@ export function RichTextEditor({
     >
       <Toolbar editor={editor} disabled={disabled} />
       <EditorContent editor={editor} />
-      {name ? (
-        <input type="hidden" name={name} value={editor.getHTML()} readOnly />
-      ) : null}
+      {name ? <input type="hidden" name={name} value={editor.getHTML()} readOnly /> : null}
     </div>
   )
 }
@@ -252,9 +247,7 @@ function Btn({
       aria-label={label}
       className={cn(
         'inline-flex h-7 min-w-[28px] items-center justify-center rounded px-2 text-xs font-medium transition-colors',
-        active
-          ? 'bg-teal-100 text-teal-900'
-          : 'text-slate-600 hover:bg-white hover:text-slate-900',
+        active ? 'bg-teal-100 text-teal-900' : 'text-slate-600 hover:bg-white hover:text-slate-900',
         disabled && 'cursor-not-allowed opacity-40 hover:bg-transparent',
       )}
     >

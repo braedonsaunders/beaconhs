@@ -134,7 +134,10 @@ export function CoursePlayer({
             <span>{percent}%</span>
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-            <div className="h-full rounded-full bg-teal-500 transition-all" style={{ width: `${percent}%` }} />
+            <div
+              className="h-full rounded-full bg-teal-500 transition-all"
+              style={{ width: `${percent}%` }}
+            />
           </div>
           <p className="mt-1 text-[11px] text-slate-400">
             {completedCount} of {all.length} lessons complete
@@ -144,7 +147,7 @@ export function CoursePlayer({
         <nav className="space-y-3">
           {modules.map((m) => (
             <div key={m.id}>
-              <p className="px-1 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <p className="px-1 pb-1 text-xs font-semibold tracking-wide text-slate-400 uppercase">
                 {m.title}
               </p>
               <ul className="space-y-0.5">
@@ -196,7 +199,8 @@ export function CoursePlayer({
               <div>
                 <h2 className="text-lg font-semibold text-slate-900">Course complete 🎉</h2>
                 <p className="text-sm text-slate-500">
-                  Your training record has been logged{certificateRecordId ? ' and a certificate issued' : ''}.
+                  Your training record has been logged
+                  {certificateRecordId ? ' and a certificate issued' : ''}.
                 </p>
               </div>
               {certificateRecordId ? (
@@ -262,14 +266,17 @@ export function CoursePlayer({
                   ) : null}
                   {current.practicalCriteria.length > 0 ? (
                     <div className="rounded-lg border border-slate-200 p-4">
-                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      <p className="mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase">
                         What your evaluator checks
                       </p>
                       <ul className="space-y-1.5">
                         {current.practicalCriteria.map((c) => {
                           const result = current.evaluation?.criteriaResults?.[c.id]
                           return (
-                            <li key={c.id} className="flex items-center gap-2 text-sm text-slate-700">
+                            <li
+                              key={c.id}
+                              className="flex items-center gap-2 text-sm text-slate-700"
+                            >
                               {result === true ? (
                                 <Check size={14} className="shrink-0 text-emerald-600" />
                               ) : result === false ? (
@@ -296,7 +303,9 @@ export function CoursePlayer({
                           : ''}
                       </p>
                       {current.evaluation.notes ? (
-                        <p className="mt-1 text-sm text-emerald-900/80">{current.evaluation.notes}</p>
+                        <p className="mt-1 text-sm text-emerald-900/80">
+                          {current.evaluation.notes}
+                        </p>
                       ) : null}
                       {current.evaluation.signatureDataUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
@@ -351,11 +360,20 @@ export function CoursePlayer({
                   </Badge>
                 ) : current.kind === 'quiz' ? (
                   <>
-                    <Button type="button" onClick={() => startQuiz(current.id)} disabled={pending || !current.assessmentTypeId}>
+                    <Button
+                      type="button"
+                      onClick={() => startQuiz(current.id)}
+                      disabled={pending || !current.assessmentTypeId}
+                    >
                       {pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
                       Start quiz
                     </Button>
-                    <Button type="button" variant="outline" onClick={() => complete(current.id)} disabled={pending}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => complete(current.id)}
+                      disabled={pending}
+                    >
                       I&apos;ve passed — mark complete
                     </Button>
                   </>
@@ -369,7 +387,9 @@ export function CoursePlayer({
                     <Button
                       type="button"
                       onClick={() => complete(current.id)}
-                      disabled={pending || (!finishedSlides.has(current.id) && current.slides.length > 1)}
+                      disabled={
+                        pending || (!finishedSlides.has(current.id) && current.slides.length > 1)
+                      }
                     >
                       {pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
                       Mark complete
@@ -413,7 +433,9 @@ export function EnrollGate({
         </div>
         <div>
           <h2 className="text-lg font-semibold text-slate-900">{courseName}</h2>
-          {summary ? <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">{summary}</p> : null}
+          {summary ? (
+            <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">{summary}</p>
+          ) : null}
         </div>
         <Button
           type="button"

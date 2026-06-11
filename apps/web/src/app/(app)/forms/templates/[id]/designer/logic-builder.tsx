@@ -4,7 +4,11 @@ import { Plus, Trash2 } from 'lucide-react'
 import { Button, Input, Label, Select } from '@beaconhs/ui'
 import type { FormField, LogicRule } from '@beaconhs/forms-core'
 
-const OPS: { value: LogicRule extends infer R ? (R extends { op: string } ? R['op'] : never) : never; label: string; takesValue: boolean }[] = [
+const OPS: {
+  value: LogicRule extends infer R ? (R extends { op: string } ? R['op'] : never) : never
+  label: string
+  takesValue: boolean
+}[] = [
   { value: 'eq', label: 'equals', takesValue: true },
   { value: 'ne', label: 'does not equal', takesValue: true },
   { value: 'gt', label: 'greater than', takesValue: true },
@@ -46,7 +50,9 @@ export function LogicBuilder({
   }
 
   function updateClause(i: number, patch: Partial<SimpleRule>) {
-    const next = clauses.map((c, j) => (j === i ? ({ ...(c as SimpleRule), ...patch } as LogicRule) : c))
+    const next = clauses.map((c, j) =>
+      j === i ? ({ ...(c as SimpleRule), ...patch } as LogicRule) : c,
+    )
     emit(combinator, next)
   }
 
@@ -57,7 +63,10 @@ export function LogicBuilder({
   }
 
   function removeClause(i: number) {
-    emit(combinator, clauses.filter((_, j) => j !== i))
+    emit(
+      combinator,
+      clauses.filter((_, j) => j !== i),
+    )
   }
 
   function emit(comb: 'and' | 'or', list: LogicRule[]) {
@@ -110,7 +119,7 @@ export function LogicBuilder({
                     updateClause(i, {
                       op: e.target.value as SimpleRule['op'],
                       value: OPS.find((o) => o.value === e.target.value)?.takesValue
-                        ? clause.value ?? ''
+                        ? (clause.value ?? '')
                         : undefined,
                     })
                   }
@@ -147,7 +156,10 @@ export function LogicBuilder({
   )
 }
 
-function normalize(rule: LogicRule | undefined): { combinator: 'and' | 'or'; clauses: LogicRule[] } {
+function normalize(rule: LogicRule | undefined): {
+  combinator: 'and' | 'or'
+  clauses: LogicRule[]
+} {
   if (!rule) return { combinator: 'and', clauses: [] }
   if ('rules' in rule && (rule.op === 'and' || rule.op === 'or')) {
     return { combinator: rule.op, clauses: rule.rules }
@@ -161,7 +173,9 @@ export function describeRule(
 ): string {
   if (!rule) return 'Always'
   if ('rules' in rule) {
-    return rule.rules.map((r) => describeRule(r, fieldLookup)).join(` ${rule.op === 'or' ? 'OR' : 'AND'} `)
+    return rule.rules
+      .map((r) => describeRule(r, fieldLookup))
+      .join(` ${rule.op === 'or' ? 'OR' : 'AND'} `)
   }
   if ('rule' in rule) return `NOT (${describeRule(rule.rule, fieldLookup)})`
   if (rule.op === 'isSet') return `${fieldLookup[rule.field] ?? rule.field} has value`

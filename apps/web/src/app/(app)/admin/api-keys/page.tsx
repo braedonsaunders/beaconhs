@@ -79,9 +79,7 @@ async function revokeApiKey(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
   const id = String(formData.get('id') ?? '')
-  await ctx.db((tx) =>
-    tx.update(apiKeys).set({ revokedAt: new Date() }).where(eq(apiKeys.id, id)),
-  )
+  await ctx.db((tx) => tx.update(apiKeys).set({ revokedAt: new Date() }).where(eq(apiKeys.id, id)))
   await recordAudit(ctx, {
     entityType: 'api_key',
     entityId: id,
@@ -100,9 +98,7 @@ async function dismissReveal() {
 
 export default async function ApiKeysPage() {
   const ctx = await requireRequestContext()
-  const rows = await ctx.db((tx) =>
-    tx.select().from(apiKeys).orderBy(desc(apiKeys.createdAt)),
-  )
+  const rows = await ctx.db((tx) => tx.select().from(apiKeys).orderBy(desc(apiKeys.createdAt)))
   const cookieStore = await cookies()
   const reveal = cookieStore.get(REVEAL_COOKIE)?.value ?? null
 

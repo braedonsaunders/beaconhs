@@ -79,19 +79,20 @@ export default async function TitleTasksPage({
       .where(eq(personTitleAssignments.titleId, id))
       .orderBy(asc(people.lastName), asc(people.firstName))
     const taskIds = tasks.map((t) => t.id)
-    const acks = taskIds.length > 0
-      ? await tx
-          .select()
-          .from(jobTitleTaskAcknowledgments)
-          .where(inArray(jobTitleTaskAcknowledgments.taskId, taskIds))
-      : []
+    const acks =
+      taskIds.length > 0
+        ? await tx
+            .select()
+            .from(jobTitleTaskAcknowledgments)
+            .where(inArray(jobTitleTaskAcknowledgments.taskId, taskIds))
+        : []
     return { row, tasks, assignments, acks }
   })
   if (!data) notFound()
   const { row, tasks, assignments, acks } = data
 
   // Build the lookup map: taskId|personId -> ack
-  const ackMap = new Map<string, typeof acks[number]>()
+  const ackMap = new Map<string, (typeof acks)[number]>()
   for (const a of acks) ackMap.set(`${a.taskId}|${a.personId}`, a)
 
   // Per-person completion stats for the matrix view
@@ -167,9 +168,7 @@ export default async function TitleTasksPage({
                                 <ArrowUp size={12} />
                               </Button>
                             </form>
-                            <span className="text-xs font-medium text-slate-400">
-                              {i + 1}
-                            </span>
+                            <span className="text-xs font-medium text-slate-400">{i + 1}</span>
                             <form action={reorderTitleTask}>
                               <input type="hidden" name="id" value={t.id} />
                               <input type="hidden" name="direction" value="down" />
@@ -185,10 +184,7 @@ export default async function TitleTasksPage({
                             </form>
                           </div>
                           {isEditing ? (
-                            <form
-                              action={updateTitleTask}
-                              className="flex-1 space-y-2"
-                            >
+                            <form action={updateTitleTask} className="flex-1 space-y-2">
                               <input type="hidden" name="id" value={t.id} />
                               <Input
                                 name="task"
@@ -214,13 +210,9 @@ export default async function TitleTasksPage({
                             </form>
                           ) : (
                             <div className="min-w-0 flex-1">
-                              <div className="font-medium text-slate-900">
-                                {t.task}
-                              </div>
+                              <div className="font-medium text-slate-900">{t.task}</div>
                               {t.description ? (
-                                <div className="text-xs text-slate-500">
-                                  {t.description}
-                                </div>
+                                <div className="text-xs text-slate-500">{t.description}</div>
                               ) : null}
                               <div className="mt-1 text-xs text-slate-400">
                                 {ackCount}/{assignments.length} acknowledged
@@ -315,14 +307,12 @@ export default async function TitleTasksPage({
                           className="px-1 py-2 text-center font-normal text-slate-500"
                           title={t.task}
                         >
-                          <div className="rotate-180 [writing-mode:vertical-rl] text-[10px]">
+                          <div className="rotate-180 text-[10px] [writing-mode:vertical-rl]">
                             {i + 1}. {t.task.slice(0, 40)}
                           </div>
                         </th>
                       ))}
-                      <th className="px-2 py-2 text-right font-semibold text-slate-500">
-                        Done
-                      </th>
+                      <th className="px-2 py-2 text-right font-semibold text-slate-500">Done</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -371,9 +361,7 @@ export default async function TitleTasksPage({
                             )
                           })}
                           <td className="px-2 py-1 text-right">
-                            <Badge
-                              variant={done === totalTasks ? 'success' : 'secondary'}
-                            >
+                            <Badge variant={done === totalTasks ? 'success' : 'secondary'}>
                               {done}/{totalTasks}
                             </Badge>
                           </td>

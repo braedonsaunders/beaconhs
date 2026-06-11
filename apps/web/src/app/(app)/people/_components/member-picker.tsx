@@ -207,11 +207,11 @@ function ListColumn({
   return (
     <div className="flex h-[420px] flex-col rounded-md border border-slate-200 bg-white">
       <div className="border-b border-slate-100 p-2">
-        <Label className="text-[11px] uppercase tracking-wide text-slate-500">{label}</Label>
+        <Label className="text-[11px] tracking-wide text-slate-500 uppercase">{label}</Label>
         <div className="relative mt-1">
           <Search
             size={12}
-            className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-slate-400"
+            className="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-slate-400"
           />
           <Input
             value={query}

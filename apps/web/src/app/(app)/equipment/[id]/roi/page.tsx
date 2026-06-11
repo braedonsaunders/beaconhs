@@ -12,15 +12,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { and, asc, between, eq, gte, lte, sql } from 'drizzle-orm'
-import {
-  Badge,
-  Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  PageHeader,
-} from '@beaconhs/ui'
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, PageHeader } from '@beaconhs/ui'
 import {
   equipmentExpenses,
   equipmentItems,
@@ -193,11 +185,7 @@ export default async function EquipmentRoiPage({
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard label="Expenses" value={fmtMoney(expensesTotal)} tone="amber" />
           <StatCard label="Revenue" value={fmtMoney(revenueTotal)} tone="teal" />
-          <StatCard
-            label="Net"
-            value={fmtMoney(net)}
-            tone={net >= 0 ? 'teal' : 'rose'}
-          />
+          <StatCard label="Net" value={fmtMoney(net)} tone={net >= 0 ? 'teal' : 'rose'} />
           <StatCard
             label="ROI"
             value={roiPct === null ? '—' : fmtPct(roiPct)}
@@ -229,7 +217,7 @@ export default async function EquipmentRoiPage({
                             tone="teal"
                           />
                         </div>
-                        <span className="w-20 shrink-0 text-right text-[11px] tabular-nums text-emerald-700">
+                        <span className="w-20 shrink-0 text-right text-[11px] text-emerald-700 tabular-nums">
                           {fmtMoney(m.revenue)}
                         </span>
                       </div>
@@ -241,7 +229,7 @@ export default async function EquipmentRoiPage({
                             tone="amber"
                           />
                         </div>
-                        <span className="w-20 shrink-0 text-right text-[11px] tabular-nums text-amber-700">
+                        <span className="w-20 shrink-0 text-right text-[11px] text-amber-700 tabular-nums">
                           {fmtMoney(m.expenses)}
                         </span>
                       </div>
@@ -268,20 +256,24 @@ export default async function EquipmentRoiPage({
                   <>
                     Revenue (estimated): daily rate <strong>{fmtMoney(dailyRate)}</strong> ×{' '}
                     <strong>{daysInUse}</strong> days in use. No hourly rate is set for this
-                    equipment type — switch to hourly under <Link className="text-teal-700 hover:underline" href="/equipment/rates">Rates</Link> for a more precise figure.
+                    equipment type — switch to hourly under{' '}
+                    <Link className="text-teal-700 hover:underline" href="/equipment/rates">
+                      Rates
+                    </Link>{' '}
+                    for a more precise figure.
                   </>
                 ) : (
                   <>
-                    Revenue: hours-on-site (from <Badge variant="secondary">truck_log_entries</Badge>) ×{' '}
-                    hourly rate <strong>{fmtMoney(hourly)}</strong> for{' '}
-                    <strong>{type?.name ?? '—'}</strong>. <strong>{hoursTotal.toFixed(1)}</strong>{' '}
-                    hours across the period.
+                    Revenue: hours-on-site (from{' '}
+                    <Badge variant="secondary">truck_log_entries</Badge>) × hourly rate{' '}
+                    <strong>{fmtMoney(hourly)}</strong> for <strong>{type?.name ?? '—'}</strong>.{' '}
+                    <strong>{hoursTotal.toFixed(1)}</strong> hours across the period.
                   </>
                 )}
               </li>
               <li>
-                ROI % = (revenue − expenses) ÷ expenses. Defaults to a trailing
-                365-day window; pass <code>?from=YYYY-MM-DD&amp;to=YYYY-MM-DD</code> to override.
+                ROI % = (revenue − expenses) ÷ expenses. Defaults to a trailing 365-day window; pass{' '}
+                <code>?from=YYYY-MM-DD&amp;to=YYYY-MM-DD</code> to override.
               </li>
             </ul>
           </CardContent>
@@ -312,10 +304,10 @@ function StatCard({
           : 'text-slate-900'
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+      <div className="text-[10px] font-semibold tracking-[0.14em] text-slate-500 uppercase">
         {label}
       </div>
-      <div className={`mt-2 text-3xl font-semibold leading-none tabular-nums ${valueClass}`}>
+      <div className={`mt-2 text-3xl leading-none font-semibold tabular-nums ${valueClass}`}>
         {value}
       </div>
       {caption ? <div className="mt-2 text-[11px] text-slate-500">{caption}</div> : null}

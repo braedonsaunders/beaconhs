@@ -1,18 +1,8 @@
 import Link from 'next/link'
 import { AlertTriangle, Clock } from 'lucide-react'
 import { and, asc, eq, inArray, lt, ne, sql } from 'drizzle-orm'
-import {
-  Badge,
-  Button,
-  EmptyState,
-  PageHeader,
-} from '@beaconhs/ui'
-import {
-  correctiveActions,
-  orgUnits,
-  tenantUsers,
-  user,
-} from '@beaconhs/db/schema'
+import { Badge, Button, EmptyState, PageHeader } from '@beaconhs/ui'
+import { correctiveActions, orgUnits, tenantUsers, user } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { ListPageLayout } from '@/components/page-layout'
 import { CorrectiveActionsSubNav } from '@/components/corrective-actions-sub-nav'
@@ -135,13 +125,11 @@ export default async function OverdueReport() {
                     <div className="text-xs text-slate-500">{g.ownerEmail}</div>
                   ) : null}
                 </div>
-                <Badge variant="destructive">
-                  {g.rows.length} overdue
-                </Badge>
+                <Badge variant="destructive">{g.rows.length} overdue</Badge>
               </header>
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-slate-100 text-left text-xs uppercase tracking-wide text-slate-500">
+                  <tr className="border-b border-slate-100 text-left text-xs tracking-wide text-slate-500 uppercase">
                     <th className="px-4 py-2">Ref</th>
                     <th className="px-4 py-2">Title</th>
                     <th className="px-4 py-2">Severity</th>
@@ -187,9 +175,7 @@ export default async function OverdueReport() {
                         <Badge variant="warning">{r.status.replace('_', ' ')}</Badge>
                       </td>
                       <td className="px-4 py-2 text-slate-700">{r.dueOn ?? '—'}</td>
-                      <td className="px-4 py-2 font-medium text-red-700">
-                        {r.daysOverdue}
-                      </td>
+                      <td className="px-4 py-2 font-medium text-red-700">{r.daysOverdue}</td>
                       <td className="px-4 py-2 text-slate-600">{r.siteName ?? '—'}</td>
                     </tr>
                   ))}

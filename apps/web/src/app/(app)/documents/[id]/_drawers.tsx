@@ -96,7 +96,12 @@ function RecordReviewDrawer({
       size="md"
       footer={
         <div className="flex justify-end gap-2">
-          <Button type="button" variant="outline" onClick={() => router.push(closeHref)} disabled={pending}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => router.push(closeHref)}
+            disabled={pending}
+          >
             Cancel
           </Button>
           <Button type="button" onClick={submit} disabled={pending}>
@@ -121,8 +126,8 @@ function RecordReviewDrawer({
             <option value="retired">Retired</option>
           </Select>
           <p className="text-[11px] text-slate-500 dark:text-slate-400">
-            "Retired" archives the document. "Updated" leaves it as-is; edit the document and publish a
-            new version separately if the content changes.
+            "Retired" archives the document. "Updated" leaves it as-is; edit the document and
+            publish a new version separately if the content changes.
           </p>
         </div>
         <div className="space-y-1.5">

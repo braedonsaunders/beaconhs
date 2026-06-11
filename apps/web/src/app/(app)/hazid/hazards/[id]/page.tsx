@@ -28,8 +28,7 @@ export default async function HazardDetailPage({ params }: { params: Promise<{ i
     <DetailPageLayout
       header={
         <>
-          <div className="mb-2">
-          </div>
+          <div className="mb-2"></div>
           <DetailHeader
             back={{ href: '/hazid/hazards', label: 'Back to hazards' }}
             title={h.name}
@@ -60,10 +59,10 @@ export default async function HazardDetailPage({ params }: { params: Promise<{ i
           />
         </Section>
         <Section title="Standard controls" defaultOpen>
-          <p className="whitespace-pre-wrap text-sm text-slate-900">{h.standardControls ?? '—'}</p>
+          <p className="text-sm whitespace-pre-wrap text-slate-900">{h.standardControls ?? '—'}</p>
         </Section>
         <Section title="Risks" defaultOpen>
-          <p className="whitespace-pre-wrap text-sm text-slate-900">{h.risks ?? '—'}</p>
+          <p className="text-sm whitespace-pre-wrap text-slate-900">{h.risks ?? '—'}</p>
         </Section>
       </div>
     </DetailPageLayout>

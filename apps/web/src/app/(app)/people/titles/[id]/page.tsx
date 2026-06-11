@@ -14,20 +14,11 @@ import {
   Label,
   Textarea,
 } from '@beaconhs/ui'
-import {
-  jobTitleTasks,
-  people,
-  personTitleAssignments,
-  personTitles,
-} from '@beaconhs/db/schema'
+import { jobTitleTasks, people, personTitleAssignments, personTitles } from '@beaconhs/db/schema'
 import { PageContainer } from '@/components/page-layout'
 import { requireModuleManage } from '@/lib/module-admin/guard'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
-import {
-  deleteTitle,
-  unassignTitleFromPerson,
-  updateTitle,
-} from '../../_actions/titles'
+import { deleteTitle, unassignTitleFromPerson, updateTitle } from '../../_actions/titles'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,11 +42,7 @@ export default async function TitleDetailPage({
 
   const ctx = await requireModuleManage('people')
   const data = await ctx.db(async (tx) => {
-    const [row] = await tx
-      .select()
-      .from(personTitles)
-      .where(eq(personTitles.id, id))
-      .limit(1)
+    const [row] = await tx.select().from(personTitles).where(eq(personTitles.id, id)).limit(1)
     if (!row) return null
     const tasks = await tx
       .select()
@@ -202,22 +189,15 @@ export default async function TitleDetailPage({
                       key={assignment.id}
                       className="flex items-center justify-between gap-2 rounded border border-slate-200 px-3 py-2"
                     >
-                      <Link
-                        href={`/people/${person.id}`}
-                        className="flex-1 hover:underline"
-                      >
-                        <span className="block font-medium text-sm">
+                      <Link href={`/people/${person.id}`} className="flex-1 hover:underline">
+                        <span className="block text-sm font-medium">
                           {person.lastName}, {person.firstName}
                         </span>
                         {person.employeeNo ? (
-                          <span className="text-xs text-slate-500">
-                            {person.employeeNo}
-                          </span>
+                          <span className="text-xs text-slate-500">{person.employeeNo}</span>
                         ) : null}
                       </Link>
-                      {assignment.isPrimary ? (
-                        <Badge variant="success">Primary</Badge>
-                      ) : null}
+                      {assignment.isPrimary ? <Badge variant="success">Primary</Badge> : null}
                       <form action={unassignTitleFromPerson}>
                         <input type="hidden" name="titleId" value={row.id} />
                         <input type="hidden" name="personId" value={person.id} />

@@ -23,7 +23,7 @@ export function PhotoGallery({ photos }: { photos: GalleryPhoto[] }) {
             key={p.id}
             type="button"
             onClick={() => setLightbox(p)}
-            className="group relative aspect-square overflow-hidden rounded-md border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800"
+            className="group relative aspect-square overflow-hidden rounded-md border border-slate-200 bg-slate-100 dark:border-slate-800 dark:bg-slate-800"
           >
             <img
               src={p.url}
@@ -44,7 +44,7 @@ export function PhotoGallery({ photos }: { photos: GalleryPhoto[] }) {
           onClick={() => setLightbox(null)}
         >
           <button
-            className="absolute right-4 top-4 text-white hover:text-slate-300"
+            className="absolute top-4 right-4 text-white hover:text-slate-300"
             onClick={() => setLightbox(null)}
             aria-label="Close"
           >

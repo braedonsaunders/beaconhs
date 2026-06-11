@@ -26,7 +26,7 @@ export async function createContentItem(formData: FormData) {
   if (!ctx.tenantId) throw new Error('No active tenant')
   const tenantId = ctx.tenantId
   const title = String(formData.get('title') ?? '').trim() || 'Untitled item'
-  const kind = ((String(formData.get('kind') ?? 'rich').trim() || 'rich') as ContentKind)
+  const kind = (String(formData.get('kind') ?? 'rich').trim() || 'rich') as ContentKind
 
   const created = await ctx.db(async (tx) => {
     const [row] = await tx

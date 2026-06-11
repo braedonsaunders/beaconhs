@@ -47,7 +47,10 @@ async function manualCheckin(formData: FormData) {
       sessionId,
       kind: 'manual',
     })
-    await tx.update(lwSessions).set({ nextCheckinDueAt: nextDue }).where(eq(lwSessions.id, sessionId))
+    await tx
+      .update(lwSessions)
+      .set({ nextCheckinDueAt: nextDue })
+      .where(eq(lwSessions.id, sessionId))
   })
   await recordAudit(ctx, {
     entityType: 'lw_session',
@@ -144,11 +147,7 @@ export default async function LoneWorkerSessionPage({
           badge={
             <Badge
               variant={
-                isActive
-                  ? 'success'
-                  : session.status === 'missed'
-                    ? 'destructive'
-                    : 'secondary'
+                isActive ? 'success' : session.status === 'missed' ? 'destructive' : 'secondary'
               }
             >
               {session.status}

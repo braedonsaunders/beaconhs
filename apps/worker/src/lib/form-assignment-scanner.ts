@@ -237,7 +237,10 @@ async function resolveAssigneeUserIds(
   const items: AudienceItem[] = [
     ...(assignment.targetPersonIds ?? []).map((id) => ({ kind: 'person' as const, entityKey: id })),
     ...(assignment.targetRoleKeys ?? []).map((k) => ({ kind: 'role' as const, entityKey: k })),
-    ...(assignment.targetOrgUnitIds ?? []).map((id) => ({ kind: 'org_unit' as const, entityKey: id })),
+    ...(assignment.targetOrgUnitIds ?? []).map((id) => ({
+      kind: 'org_unit' as const,
+      entityKey: id,
+    })),
   ]
   if (items.length === 0) return []
   const members = await withSuperAdmin(db, (tx) =>

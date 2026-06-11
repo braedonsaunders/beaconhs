@@ -34,11 +34,7 @@ const tsvector = customType<{ data: string }>({
   },
 })
 
-export const journalEntryStatus = pgEnum('journal_entry_status', [
-  'draft',
-  'submitted',
-  'archived',
-])
+export const journalEntryStatus = pgEnum('journal_entry_status', ['draft', 'submitted', 'archived'])
 
 // Mirrors the legacy "Definition" field (Worker vs Supervisor log).
 export const journalDefinition = pgEnum('journal_definition', ['worker', 'supervisor'])
@@ -114,11 +110,7 @@ export const journalEntries = pgTable(
     tenantIdx: index('journal_entries_tenant_idx').on(t.tenantId),
     tenantReferenceUx: uniqueIndex('journal_entries_tenant_ref_ux').on(t.tenantId, t.reference),
     dateIdx: index('journal_entries_date_idx').on(t.tenantId, t.entryDate),
-    personDateIdx: index('journal_entries_person_date_idx').on(
-      t.tenantId,
-      t.personId,
-      t.entryDate,
-    ),
+    personDateIdx: index('journal_entries_person_date_idx').on(t.tenantId, t.personId, t.entryDate),
     siteIdx: index('journal_entries_site_idx').on(t.tenantId, t.siteOrgUnitId),
     statusIdx: index('journal_entries_status_idx').on(t.tenantId, t.status),
     searchIdx: index('journal_entries_search_idx').using('gin', t.searchVector),

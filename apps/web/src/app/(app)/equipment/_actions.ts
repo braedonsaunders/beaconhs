@@ -13,12 +13,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
-import {
-  equipmentItems,
-  equipmentTypes,
-  orgUnits,
-  people,
-} from '@beaconhs/db/schema'
+import { equipmentItems, equipmentTypes, orgUnits, people } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { csvRow } from '@/lib/csv'
@@ -174,12 +169,7 @@ export async function bulkAssignEquipmentToHolder(args: {
   return { ok: true, updated: result.updated, skipped: result.skipped }
 }
 
-export type EquipmentStatus =
-  | 'in_service'
-  | 'out_of_service'
-  | 'in_repair'
-  | 'lost'
-  | 'retired'
+export type EquipmentStatus = 'in_service' | 'out_of_service' | 'in_repair' | 'lost' | 'retired'
 
 const EQUIPMENT_STATUSES: EquipmentStatus[] = [
   'in_service',

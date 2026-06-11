@@ -37,9 +37,9 @@ async function saveSettings(formData: FormData) {
   const name = String(formData.get('name') ?? '').trim()
   const slug = String(formData.get('slug') ?? '').trim()
   const defaultLanguage = String(formData.get('defaultLanguage') ?? 'en')
-  const enabledLanguages = KNOWN_LANGUAGES
-    .map((l) => l.value)
-    .filter((l) => formData.get(`lang_${l}`) === 'on')
+  const enabledLanguages = KNOWN_LANGUAGES.map((l) => l.value).filter(
+    (l) => formData.get(`lang_${l}`) === 'on',
+  )
   const hierarchy = {
     customer: formData.get('lvl_customer') === 'on',
     project: formData.get('lvl_project') === 'on',
@@ -128,7 +128,11 @@ export default async function AdminSettingsPage() {
             </CardHeader>
             <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field label="Logo URL">
-                <Input name="logoUrl" defaultValue={tenant.branding.logoUrl ?? ''} placeholder="https://…" />
+                <Input
+                  name="logoUrl"
+                  defaultValue={tenant.branding.logoUrl ?? ''}
+                  placeholder="https://…"
+                />
               </Field>
               <Field label="Primary color (hex)">
                 <Input
@@ -149,7 +153,10 @@ export default async function AdminSettingsPage() {
                   <Label className="text-xs">Preview</Label>
                   <div className="mt-1 flex items-center gap-3 rounded-md border border-slate-200 bg-white p-3">
                     <img src={tenant.branding.logoUrl} alt="" className="h-8" />
-                    <span className="font-semibold" style={{ color: tenant.branding.primaryColor ?? '#0f766e' }}>
+                    <span
+                      className="font-semibold"
+                      style={{ color: tenant.branding.primaryColor ?? '#0f766e' }}
+                    >
                       {tenant.name}
                     </span>
                   </div>
@@ -166,7 +173,10 @@ export default async function AdminSettingsPage() {
             <CardContent className="space-y-3">
               <div className="grid grid-cols-3 gap-2">
                 {KNOWN_LANGUAGES.map((l) => (
-                  <label key={l.value} className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm">
+                  <label
+                    key={l.value}
+                    className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm"
+                  >
                     <input
                       type="checkbox"
                       name={`lang_${l.value}`}
@@ -183,7 +193,9 @@ export default async function AdminSettingsPage() {
                   className="h-10 w-32 rounded-md border border-slate-300 bg-white px-3 text-sm"
                 >
                   {KNOWN_LANGUAGES.map((l) => (
-                    <option key={l.value} value={l.value}>{l.label}</option>
+                    <option key={l.value} value={l.value}>
+                      {l.label}
+                    </option>
                   ))}
                 </select>
               </Field>
@@ -197,7 +209,10 @@ export default async function AdminSettingsPage() {
             </CardHeader>
             <CardContent className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {LEVELS.map((lvl) => (
-                <label key={lvl} className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm">
+                <label
+                  key={lvl}
+                  className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm"
+                >
                   <input type="checkbox" name={`lvl_${lvl}`} defaultChecked={hierarchy[lvl]} />
                   {lvl}
                 </label>
@@ -216,7 +231,9 @@ export default async function AdminSettingsPage() {
               ) : (
                 <Alert variant="info">
                   <AlertTitle>No matrix configured</AlertTitle>
-                  <AlertDescription>JSHAs that reference a matrix won't render scores.</AlertDescription>
+                  <AlertDescription>
+                    JSHAs that reference a matrix won't render scores.
+                  </AlertDescription>
                 </Alert>
               )}
             </CardContent>
@@ -231,7 +248,15 @@ export default async function AdminSettingsPage() {
   )
 }
 
-function Field({ label, className, children }: { label: string; className?: string; children: React.ReactNode }) {
+function Field({
+  label,
+  className,
+  children,
+}: {
+  label: string
+  className?: string
+  children: React.ReactNode
+}) {
   return (
     <div className={`space-y-1.5 ${className ?? ''}`}>
       <Label>{label}</Label>
@@ -240,7 +265,11 @@ function Field({ label, className, children }: { label: string; className?: stri
   )
 }
 
-function RiskMatrixPreview({ matrix }: { matrix: NonNullable<typeof tenants.$inferSelect.riskMatrix> }) {
+function RiskMatrixPreview({
+  matrix,
+}: {
+  matrix: NonNullable<typeof tenants.$inferSelect.riskMatrix>
+}) {
   const sev = matrix.axes.severity.values
   const lik = matrix.axes.likelihood.values
   return (

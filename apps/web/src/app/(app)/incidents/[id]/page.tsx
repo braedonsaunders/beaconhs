@@ -77,7 +77,13 @@ import { SeverityBadge, StatusBadge } from '../_badges'
 
 export const dynamic = 'force-dynamic'
 
-const STATUSES = ['reported', 'under_investigation', 'pending_review', 'closed', 'reopened'] as const
+const STATUSES = [
+  'reported',
+  'under_investigation',
+  'pending_review',
+  'closed',
+  'reopened',
+] as const
 
 async function updateStatus(formData: FormData) {
   'use server'
@@ -292,9 +298,7 @@ async function deleteLostTimeEvent(formData: FormData) {
     return row ?? null
   })
   if (!before) return
-  await ctx.db((tx) =>
-    tx.delete(incidentLostTimeEvents).where(eq(incidentLostTimeEvents.id, id)),
-  )
+  await ctx.db((tx) => tx.delete(incidentLostTimeEvents).where(eq(incidentLostTimeEvents.id, id)))
   await recordAudit(ctx, {
     entityType: 'incident',
     entityId: incidentId,
@@ -404,8 +408,7 @@ async function saveFactorAction(input: {
   const ctx = await requireRequestContext()
   const desc = input.description.trim()
   if (!input.incidentId || !desc) return { ok: false, error: 'Description is required.' }
-  if (!FACTOR_CATEGORIES.includes(input.category))
-    return { ok: false, error: 'Invalid category.' }
+  if (!FACTOR_CATEGORIES.includes(input.category)) return { ok: false, error: 'Invalid category.' }
 
   if (input.id) {
     const before = await ctx.db(async (tx) => {
@@ -500,9 +503,7 @@ async function saveRootCause(formData: FormData) {
       .limit(1)
     return row ?? null
   })
-  await ctx.db((tx) =>
-    tx.update(incidents).set({ rootCause }).where(eq(incidents.id, incidentId)),
-  )
+  await ctx.db((tx) => tx.update(incidents).set({ rootCause }).where(eq(incidents.id, incidentId)))
   await recordAudit(ctx, {
     entityType: 'incident',
     entityId: incidentId,
@@ -616,8 +617,7 @@ async function savePrevStepAction(input: {
   const ctx = await requireRequestContext()
   const desc = input.description.trim()
   if (!input.incidentId || !desc) return { ok: false, error: 'Description is required.' }
-  if (!PREV_STEP_STATUSES.includes(input.status))
-    return { ok: false, error: 'Invalid status.' }
+  if (!PREV_STEP_STATUSES.includes(input.status)) return { ok: false, error: 'Invalid status.' }
 
   if (input.id) {
     const before = await ctx.db(async (tx) => {
@@ -785,7 +785,10 @@ export default async function IncidentDetailPage({
       .select()
       .from(correctiveActions)
       .where(
-        and(eq(correctiveActions.sourceEntityType, 'incident'), eq(correctiveActions.sourceEntityId, id)),
+        and(
+          eq(correctiveActions.sourceEntityType, 'incident'),
+          eq(correctiveActions.sourceEntityId, id),
+        ),
       )
     const photos = await tx
       .select({
@@ -804,7 +807,10 @@ export default async function IncidentDetailPage({
       .select()
       .from(incidentContributingFactors)
       .where(eq(incidentContributingFactors.incidentId, id))
-      .orderBy(asc(incidentContributingFactors.category), desc(incidentContributingFactors.createdAt))
+      .orderBy(
+        asc(incidentContributingFactors.category),
+        desc(incidentContributingFactors.createdAt),
+      )
     const whys = await tx
       .select()
       .from(incidentRootCauseWhys)
@@ -929,7 +935,8 @@ export default async function IncidentDetailPage({
               <AlertTitle>This incident is locked</AlertTitle>
               <AlertDescription className="flex items-center justify-between">
                 <span>
-                  Closed on {incident.closedAt ? new Date(incident.closedAt).toLocaleDateString() : '—'}.
+                  Closed on{' '}
+                  {incident.closedAt ? new Date(incident.closedAt).toLocaleDateString() : '—'}.
                   Unlock to make edits.
                 </span>
                 <form action={toggleLock} className="inline">
@@ -982,509 +989,443 @@ export default async function IncidentDetailPage({
     >
       <div className="space-y-5">
         {active === 'overview' ? (
-        <Section title="General Information" subtitle="Who, what, where, when">
-          <DetailGrid
-            rows={[
-              { label: 'Reference', value: <span className="font-mono">{incident.reference}</span> },
-              { label: 'Type', value: incident.type.replace(/_/g, ' ') },
-              { label: 'Occurred', value: new Date(incident.occurredAt).toLocaleString() },
-              { label: 'Reported', value: new Date(incident.reportedAt).toLocaleString() },
-              { label: 'Site', value: site?.name ?? '—' },
-              { label: 'Location on site', value: incident.location ?? '—' },
-              { label: 'Department', value: department?.name ?? '—' },
-              { label: 'Weather', value: incident.weather ?? '—' },
-              {
-                label: 'Supervisor',
-                value: supervisor ? `${supervisor.firstName} ${supervisor.lastName}` : '—',
-              },
-              { label: 'Foreman', value: incident.foremanText ?? '—' },
-            ]}
-          />
-          <div className="mt-4 space-y-3 text-sm">
-            <TextBlock label="People involved">
-              {involved.length === 0 ? (
-                <span className="text-slate-500">—</span>
+          <Section title="General Information" subtitle="Who, what, where, when">
+            <DetailGrid
+              rows={[
+                {
+                  label: 'Reference',
+                  value: <span className="font-mono">{incident.reference}</span>,
+                },
+                { label: 'Type', value: incident.type.replace(/_/g, ' ') },
+                { label: 'Occurred', value: new Date(incident.occurredAt).toLocaleString() },
+                { label: 'Reported', value: new Date(incident.reportedAt).toLocaleString() },
+                { label: 'Site', value: site?.name ?? '—' },
+                { label: 'Location on site', value: incident.location ?? '—' },
+                { label: 'Department', value: department?.name ?? '—' },
+                { label: 'Weather', value: incident.weather ?? '—' },
+                {
+                  label: 'Supervisor',
+                  value: supervisor ? `${supervisor.firstName} ${supervisor.lastName}` : '—',
+                },
+                { label: 'Foreman', value: incident.foremanText ?? '—' },
+              ]}
+            />
+            <div className="mt-4 space-y-3 text-sm">
+              <TextBlock label="People involved">
+                {involved.length === 0 ? (
+                  <span className="text-slate-500">—</span>
+                ) : (
+                  <ul className="flex flex-wrap gap-2">
+                    {involved.map((row) => (
+                      <li key={row.link.id}>
+                        {row.person ? (
+                          <Link
+                            href={`/people/${row.person.id}`}
+                            className="rounded-full border border-slate-200 px-2 py-0.5 text-xs hover:bg-slate-50"
+                          >
+                            {row.person.firstName} {row.person.lastName}
+                          </Link>
+                        ) : (
+                          <span className="rounded-full border border-slate-200 px-2 py-0.5 text-xs">
+                            {row.link.personNameText}
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </TextBlock>
+              <TextBlock label="Witnesses">
+                {incident.witnesses ?? <span className="text-slate-500">—</span>}
+              </TextBlock>
+              <TextBlock label="External people involved">
+                {incident.externalPeopleInvolved ?? <span className="text-slate-500">—</span>}
+              </TextBlock>
+              <TextBlock label="Events leading up to the incident">
+                {incident.eventsLeadingUp ?? <span className="text-slate-500">—</span>}
+              </TextBlock>
+              <TextBlock label="Event details / cause">
+                {incident.description ?? <span className="text-slate-500">—</span>}
+              </TextBlock>
+              <TextBlock label="Immediate action taken">
+                {incident.immediateActionTaken ?? <span className="text-slate-500">—</span>}
+              </TextBlock>
+              <TextBlock label="PPE worn">
+                {incident.ppeWorn ?? <span className="text-slate-500">—</span>}
+              </TextBlock>
+            </div>
+          </Section>
+        ) : null}
+
+        {active === 'medical' ? (
+          <>
+            <Section title="Medical" subtitle="EMS, first aid, hospital, lost time / modified duty">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <CheckIndicator checked={incident.criticalInjury} label="Critical injury" />
+                <CheckIndicator
+                  checked={incident.ministryOfLabourNotified}
+                  label="Ministry of Labour notified"
+                />
+                <CheckIndicator
+                  checked={incident.emsNotified || incident.emsCalled}
+                  label="EMS called"
+                />
+                <CheckIndicator
+                  checked={incident.firstAidReceived || incident.firstAidGiven}
+                  label="First aid given"
+                />
+                <CheckIndicator
+                  checked={incident.medicalAttentionReceived}
+                  label="Medical attention received"
+                />
+                <CheckIndicator checked={incident.lostTime} label="Lost time" />
+                <CheckIndicator checked={incident.modifiedDuty} label="Modified duty" />
+                <CheckIndicator
+                  checked={incident.externallyReportable}
+                  label="Externally reportable"
+                />
+                <CheckIndicator checked={incident.policeNotified} label="Police notified" />
+              </div>
+
+              {/* EMS trail */}
+              {incident.emsCalled || incident.emsNotified || incident.emsArrivedAt ? (
+                <div className="mt-4 grid grid-cols-1 gap-3 rounded-md border border-rose-200 bg-rose-50/40 p-3 text-sm sm:grid-cols-2">
+                  <FieldRow label="EMS called">
+                    {yesNo(incident.emsCalled || incident.emsNotified)}
+                  </FieldRow>
+                  <FieldRow label="EMS arrived at">
+                    {incident.emsArrivedAt ? new Date(incident.emsArrivedAt).toLocaleString() : '—'}
+                  </FieldRow>
+                </div>
+              ) : null}
+
+              {/* First-aid trail */}
+              {incident.firstAidGiven || incident.firstAidReceived ? (
+                <div className="mt-4 grid grid-cols-1 gap-3 rounded-md border border-amber-200 bg-amber-50/50 p-3 text-sm sm:grid-cols-2">
+                  <FieldRow label="First aid provider">{incident.firstAidProvider ?? '—'}</FieldRow>
+                  <FieldRow label="First aid notes">{incident.firstAidNotes ?? '—'}</FieldRow>
+                </div>
+              ) : null}
+
+              {/* Hospital trail */}
+              {incident.medicalAttentionReceived ||
+              incident.hospitalName ||
+              incident.hospitalArrivedAt ? (
+                <div className="mt-4 grid grid-cols-1 gap-3 rounded-md border border-sky-200 bg-sky-50/50 p-3 text-sm sm:grid-cols-2">
+                  <FieldRow label="Hospital">
+                    {incident.hospitalName ?? incident.treatedAtHospital ?? '—'}
+                  </FieldRow>
+                  <FieldRow label="City">{incident.treatedInCity ?? '—'}</FieldRow>
+                  <FieldRow label="Transportation">{incident.transportation ?? '—'}</FieldRow>
+                  <FieldRow label="Attending physician">
+                    {incident.attendingPhysician ?? '—'}
+                  </FieldRow>
+                  <FieldRow label="Hospital arrived">
+                    {incident.hospitalArrivedAt
+                      ? new Date(incident.hospitalArrivedAt).toLocaleString()
+                      : '—'}
+                  </FieldRow>
+                  <FieldRow label="Discharged">
+                    {incident.dischargedAt ? new Date(incident.dischargedAt).toLocaleString() : '—'}
+                  </FieldRow>
+                </div>
+              ) : null}
+
+              {/* MOL trail */}
+              {incident.ministryOfLabourNotified ||
+              incident.molNotifiedAt ||
+              incident.molReportNumber ? (
+                <div className="mt-4 grid grid-cols-1 gap-3 rounded-md border border-orange-200 bg-orange-50/50 p-3 text-sm sm:grid-cols-2">
+                  <FieldRow label="MOL notified at">
+                    {incident.molNotifiedAt
+                      ? new Date(incident.molNotifiedAt).toLocaleString()
+                      : '—'}
+                  </FieldRow>
+                  <FieldRow label="MOL report number">{incident.molReportNumber ?? '—'}</FieldRow>
+                </div>
+              ) : null}
+
+              {/* Police / insurance trail */}
+              {incident.policeNotified ||
+              incident.policeReportNumber ||
+              incident.insuranceClaimNumber ? (
+                <div className="mt-4 grid grid-cols-1 gap-3 rounded-md border border-indigo-200 bg-indigo-50/40 p-3 text-sm sm:grid-cols-2">
+                  <FieldRow label="Police report #">{incident.policeReportNumber ?? '—'}</FieldRow>
+                  <FieldRow label="Insurance claim #">
+                    {incident.insuranceClaimNumber ?? '—'}
+                  </FieldRow>
+                </div>
+              ) : null}
+
+              {/* Damage estimate (always visible if set) */}
+              {incident.damageEstimate ? (
+                <div className="mt-4 rounded-md border border-emerald-200 bg-emerald-50/50 p-3 text-sm">
+                  <FieldRow label="Damage estimate (USD)">
+                    ${Number(incident.damageEstimate).toLocaleString()}
+                  </FieldRow>
+                </div>
+              ) : null}
+
+              {/* Lost-time / modified-duty quick summary (full detail on the Lost time tab). */}
+              {incident.lostTime || incident.modifiedDuty ? (
+                <div className="mt-4 grid grid-cols-1 gap-3 rounded-md border border-slate-200 bg-slate-50/50 p-3 text-sm sm:grid-cols-2">
+                  {incident.lostTime ? (
+                    <>
+                      <FieldRow label="Lost time first day">
+                        {incident.lostTimeFirstDay ?? '—'}
+                      </FieldRow>
+                      <FieldRow label="Lost time last day">
+                        {incident.lostTimeLastDay ?? 'still ongoing'}
+                      </FieldRow>
+                      <FieldRow label="Total lost-time days">
+                        {incident.lostTimeDays ?? '—'}
+                      </FieldRow>
+                    </>
+                  ) : null}
+                  {incident.modifiedDuty ? (
+                    <>
+                      <FieldRow label="Modified duty first day">
+                        {incident.modifiedDutyFirstDay ?? '—'}
+                      </FieldRow>
+                      <FieldRow label="Modified duty last day">
+                        {incident.modifiedDutyLastDay ?? 'still ongoing'}
+                      </FieldRow>
+                      <FieldRow label="Total modified-duty days">
+                        {incident.modifiedDutyDays ?? '—'}
+                      </FieldRow>
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
+            </Section>
+
+            <Section title="Key Metrics" subtitle="Actual vs potential severity (1–5)">
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+                <SeverityRating label="Actual severity" value={incident.actualSeverity} />
+                <SeverityRating label="Potential severity" value={incident.potentialSeverity} />
+                <SeverityRating label="Severity rating" value={incident.severityRating} />
+              </div>
+            </Section>
+          </>
+        ) : null}
+
+        {active === 'injuries' ? (
+          <>
+            <Section title={`Injuries (${injuries.length})`} defaultOpen={injuries.length > 0}>
+              {injuries.length === 0 ? (
+                <p className="text-sm text-slate-500">No injuries recorded.</p>
               ) : (
-                <ul className="flex flex-wrap gap-2">
-                  {involved.map((row) => (
-                    <li key={row.link.id}>
-                      {row.person ? (
-                        <Link
-                          href={`/people/${row.person.id}`}
-                          className="rounded-full border border-slate-200 px-2 py-0.5 text-xs hover:bg-slate-50"
-                        >
-                          {row.person.firstName} {row.person.lastName}
-                        </Link>
-                      ) : (
-                        <span className="rounded-full border border-slate-200 px-2 py-0.5 text-xs">
-                          {row.link.personNameText}
-                        </span>
-                      )}
+                <ul className="divide-y divide-slate-100 text-sm">
+                  {injuries.map((row) => (
+                    <li key={row.injury.id} className="grid grid-cols-1 gap-2 py-3 sm:grid-cols-2">
+                      <div>
+                        <div className="font-medium">
+                          {row.person ? (
+                            <Link href={`/people/${row.person.id}`} className="hover:underline">
+                              {row.person.firstName} {row.person.lastName}
+                            </Link>
+                          ) : (
+                            (row.injury.personName ?? '—')
+                          )}
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          Body part(s): {row.injury.bodyParts.join(', ') || '—'}
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          Injury type(s): {row.injury.injuryTypes.join(', ') || '—'}
+                        </div>
+                      </div>
+                      <div className="text-xs text-slate-600">
+                        {row.injury.treatment ? <p>{row.injury.treatment}</p> : null}
+                        {row.injury.treatedAtFacility ? (
+                          <p className="text-slate-500">
+                            Treated at: {row.injury.treatedAtFacility}
+                          </p>
+                        ) : null}
+                        {typeof row.injury.workedHoursPriorTo === 'number' ? (
+                          <p className="text-slate-500">
+                            Hours worked prior: {row.injury.workedHoursPriorTo}
+                          </p>
+                        ) : null}
+                      </div>
                     </li>
                   ))}
                 </ul>
               )}
-            </TextBlock>
-            <TextBlock label="Witnesses">
-              {incident.witnesses ?? <span className="text-slate-500">—</span>}
-            </TextBlock>
-            <TextBlock label="External people involved">
-              {incident.externalPeopleInvolved ?? <span className="text-slate-500">—</span>}
-            </TextBlock>
-            <TextBlock label="Events leading up to the incident">
-              {incident.eventsLeadingUp ?? <span className="text-slate-500">—</span>}
-            </TextBlock>
-            <TextBlock label="Event details / cause">
-              {incident.description ?? <span className="text-slate-500">—</span>}
-            </TextBlock>
-            <TextBlock label="Immediate action taken">
-              {incident.immediateActionTaken ?? <span className="text-slate-500">—</span>}
-            </TextBlock>
-            <TextBlock label="PPE worn">
-              {incident.ppeWorn ?? <span className="text-slate-500">—</span>}
-            </TextBlock>
-          </div>
-        </Section>
-        ) : null}
-
-        {active === 'medical' ? (
-        <>
-        <Section
-          title="Medical"
-          subtitle="EMS, first aid, hospital, lost time / modified duty"
-        >
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <CheckIndicator checked={incident.criticalInjury} label="Critical injury" />
-            <CheckIndicator
-              checked={incident.ministryOfLabourNotified}
-              label="Ministry of Labour notified"
-            />
-            <CheckIndicator checked={incident.emsNotified || incident.emsCalled} label="EMS called" />
-            <CheckIndicator
-              checked={incident.firstAidReceived || incident.firstAidGiven}
-              label="First aid given"
-            />
-            <CheckIndicator
-              checked={incident.medicalAttentionReceived}
-              label="Medical attention received"
-            />
-            <CheckIndicator checked={incident.lostTime} label="Lost time" />
-            <CheckIndicator checked={incident.modifiedDuty} label="Modified duty" />
-            <CheckIndicator checked={incident.externallyReportable} label="Externally reportable" />
-            <CheckIndicator checked={incident.policeNotified} label="Police notified" />
-          </div>
-
-          {/* EMS trail */}
-          {incident.emsCalled || incident.emsNotified || incident.emsArrivedAt ? (
-            <div className="mt-4 grid grid-cols-1 gap-3 rounded-md border border-rose-200 bg-rose-50/40 p-3 text-sm sm:grid-cols-2">
-              <FieldRow label="EMS called">{yesNo(incident.emsCalled || incident.emsNotified)}</FieldRow>
-              <FieldRow label="EMS arrived at">
-                {incident.emsArrivedAt
-                  ? new Date(incident.emsArrivedAt).toLocaleString()
-                  : '—'}
-              </FieldRow>
-            </div>
-          ) : null}
-
-          {/* First-aid trail */}
-          {incident.firstAidGiven || incident.firstAidReceived ? (
-            <div className="mt-4 grid grid-cols-1 gap-3 rounded-md border border-amber-200 bg-amber-50/50 p-3 text-sm sm:grid-cols-2">
-              <FieldRow label="First aid provider">{incident.firstAidProvider ?? '—'}</FieldRow>
-              <FieldRow label="First aid notes">{incident.firstAidNotes ?? '—'}</FieldRow>
-            </div>
-          ) : null}
-
-          {/* Hospital trail */}
-          {incident.medicalAttentionReceived ||
-          incident.hospitalName ||
-          incident.hospitalArrivedAt ? (
-            <div className="mt-4 grid grid-cols-1 gap-3 rounded-md border border-sky-200 bg-sky-50/50 p-3 text-sm sm:grid-cols-2">
-              <FieldRow label="Hospital">
-                {incident.hospitalName ?? incident.treatedAtHospital ?? '—'}
-              </FieldRow>
-              <FieldRow label="City">{incident.treatedInCity ?? '—'}</FieldRow>
-              <FieldRow label="Transportation">{incident.transportation ?? '—'}</FieldRow>
-              <FieldRow label="Attending physician">
-                {incident.attendingPhysician ?? '—'}
-              </FieldRow>
-              <FieldRow label="Hospital arrived">
-                {incident.hospitalArrivedAt
-                  ? new Date(incident.hospitalArrivedAt).toLocaleString()
-                  : '—'}
-              </FieldRow>
-              <FieldRow label="Discharged">
-                {incident.dischargedAt
-                  ? new Date(incident.dischargedAt).toLocaleString()
-                  : '—'}
-              </FieldRow>
-            </div>
-          ) : null}
-
-          {/* MOL trail */}
-          {incident.ministryOfLabourNotified || incident.molNotifiedAt || incident.molReportNumber ? (
-            <div className="mt-4 grid grid-cols-1 gap-3 rounded-md border border-orange-200 bg-orange-50/50 p-3 text-sm sm:grid-cols-2">
-              <FieldRow label="MOL notified at">
-                {incident.molNotifiedAt
-                  ? new Date(incident.molNotifiedAt).toLocaleString()
-                  : '—'}
-              </FieldRow>
-              <FieldRow label="MOL report number">{incident.molReportNumber ?? '—'}</FieldRow>
-            </div>
-          ) : null}
-
-          {/* Police / insurance trail */}
-          {incident.policeNotified ||
-          incident.policeReportNumber ||
-          incident.insuranceClaimNumber ? (
-            <div className="mt-4 grid grid-cols-1 gap-3 rounded-md border border-indigo-200 bg-indigo-50/40 p-3 text-sm sm:grid-cols-2">
-              <FieldRow label="Police report #">{incident.policeReportNumber ?? '—'}</FieldRow>
-              <FieldRow label="Insurance claim #">
-                {incident.insuranceClaimNumber ?? '—'}
-              </FieldRow>
-            </div>
-          ) : null}
-
-          {/* Damage estimate (always visible if set) */}
-          {incident.damageEstimate ? (
-            <div className="mt-4 rounded-md border border-emerald-200 bg-emerald-50/50 p-3 text-sm">
-              <FieldRow label="Damage estimate (USD)">
-                ${Number(incident.damageEstimate).toLocaleString()}
-              </FieldRow>
-            </div>
-          ) : null}
-
-          {/* Lost-time / modified-duty quick summary (full detail on the Lost time tab). */}
-          {incident.lostTime || incident.modifiedDuty ? (
-            <div className="mt-4 grid grid-cols-1 gap-3 rounded-md border border-slate-200 bg-slate-50/50 p-3 text-sm sm:grid-cols-2">
-              {incident.lostTime ? (
-                <>
-                  <FieldRow label="Lost time first day">{incident.lostTimeFirstDay ?? '—'}</FieldRow>
-                  <FieldRow label="Lost time last day">{incident.lostTimeLastDay ?? 'still ongoing'}</FieldRow>
-                  <FieldRow label="Total lost-time days">{incident.lostTimeDays ?? '—'}</FieldRow>
-                </>
-              ) : null}
-              {incident.modifiedDuty ? (
-                <>
-                  <FieldRow label="Modified duty first day">{incident.modifiedDutyFirstDay ?? '—'}</FieldRow>
-                  <FieldRow label="Modified duty last day">{incident.modifiedDutyLastDay ?? 'still ongoing'}</FieldRow>
-                  <FieldRow label="Total modified-duty days">{incident.modifiedDutyDays ?? '—'}</FieldRow>
-                </>
-              ) : null}
-            </div>
-          ) : null}
-        </Section>
-
-        <Section title="Key Metrics" subtitle="Actual vs potential severity (1–5)">
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
-            <SeverityRating label="Actual severity" value={incident.actualSeverity} />
-            <SeverityRating label="Potential severity" value={incident.potentialSeverity} />
-            <SeverityRating label="Severity rating" value={incident.severityRating} />
-          </div>
-        </Section>
-        </>
-        ) : null}
-
-        {active === 'injuries' ? (
-        <>
-        <Section title={`Injuries (${injuries.length})`} defaultOpen={injuries.length > 0}>
-          {injuries.length === 0 ? (
-            <p className="text-sm text-slate-500">No injuries recorded.</p>
-          ) : (
-            <ul className="divide-y divide-slate-100 text-sm">
-              {injuries.map((row) => (
-                <li key={row.injury.id} className="grid grid-cols-1 gap-2 py-3 sm:grid-cols-2">
-                  <div>
-                    <div className="font-medium">
-                      {row.person ? (
-                        <Link href={`/people/${row.person.id}`} className="hover:underline">
-                          {row.person.firstName} {row.person.lastName}
-                        </Link>
-                      ) : (
-                        row.injury.personName ?? '—'
-                      )}
-                    </div>
-                    <div className="text-xs text-slate-500">
-                      Body part(s): {row.injury.bodyParts.join(', ') || '—'}
-                    </div>
-                    <div className="text-xs text-slate-500">
-                      Injury type(s): {row.injury.injuryTypes.join(', ') || '—'}
-                    </div>
-                  </div>
-                  <div className="text-xs text-slate-600">
-                    {row.injury.treatment ? <p>{row.injury.treatment}</p> : null}
-                    {row.injury.treatedAtFacility ? (
-                      <p className="text-slate-500">Treated at: {row.injury.treatedAtFacility}</p>
-                    ) : null}
-                    {typeof row.injury.workedHoursPriorTo === 'number' ? (
-                      <p className="text-slate-500">Hours worked prior: {row.injury.workedHoursPriorTo}</p>
-                    ) : null}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Section>
-
-        </>
+            </Section>
+          </>
         ) : null}
 
         {active === 'lost-time' ? (
-        <>
-        <Section
-          title={`Lost-time + modified-duty events (${lostTime.length})`}
-          subtitle="Off-work / restricted / full-duty transitions with explicit date windows. Used by the DART rate report."
-          defaultOpen={true}
-        >
-          {lostTime.length === 0 ? (
-            <p className="text-sm text-slate-500">
-              No lost-time tracking yet. Use the form below to record an off-work or restricted-duty window.
-            </p>
-          ) : (
-            <ul className="divide-y divide-slate-100 text-sm">
-              {lostTime.map((e) => (
-                <li
-                  key={e.id}
-                  className="flex items-center justify-between gap-3 py-2"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="font-medium text-slate-900">
-                      {e.status === 'off_work' ? (
-                        <Badge variant="destructive">Off work</Badge>
-                      ) : e.status === 'restricted_duty' ? (
-                        <Badge variant="warning">Restricted duty</Badge>
-                      ) : (
-                        <Badge variant="success">Full duty</Badge>
-                      )}
-                    </div>
-                    <div className="mt-0.5 text-xs text-slate-500">
-                      <span className="font-mono">{e.validFrom}</span>
-                      <span> → </span>
-                      <span className="font-mono">{e.validTo ?? 'present'}</span>
-                      {e.notes ? <span className="ml-2">· {e.notes}</span> : null}
-                    </div>
-                  </div>
-                  {!incident.locked ? (
-                    <form action={deleteLostTimeEvent} className="inline">
-                      <input type="hidden" name="id" value={e.id} />
-                      <input type="hidden" name="incidentId" value={id} />
-                      <button
-                        type="submit"
-                        className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700"
-                        title="Delete row"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </form>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          )}
-          {!incident.locked ? (
-            <div className="mt-4 border-t border-slate-100 pt-4">
-              <Link href={`/incidents/${id}?tab=lost-time&drawer=add-lost-time`}>
-                <Button size="sm">Add lost-time row</Button>
-              </Link>
-            </div>
-          ) : null}
-        </Section>
-        </>
-        ) : null}
-
-        {active === 'investigation' ? (
-        <>
-        {/* Step 2 — Event timeline */}
-        <Section
-          title={`Event timeline (${timelineEvents.length})`}
-          subtitle="Chronological log of what happened, in the order it happened."
-          actions={
-            !incident.locked ? (
-              <Link href={`/incidents/${id}?tab=investigation&drawer=new-event`}>
-                <Button size="sm" variant="outline">
-                  <Plus size={14} /> Add event
-                </Button>
-              </Link>
-            ) : null
-          }
-        >
-          {timelineEvents.length === 0 ? (
-            <EmptyState
-              title="No events logged yet"
-              description="Add a timeline entry to start reconstructing what happened."
-            />
-          ) : (
-            <ol className="relative space-y-3 border-l border-slate-200 pl-5 text-sm">
-              {timelineEvents.map((e) => (
-                <li key={e.id} className="group relative">
-                  <span className="absolute -left-[26px] top-1 h-2.5 w-2.5 rounded-full border-2 border-white bg-teal-500 shadow" />
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="font-mono text-xs text-slate-500">
-                        {new Date(e.occurredAt).toLocaleString()}
+          <>
+            <Section
+              title={`Lost-time + modified-duty events (${lostTime.length})`}
+              subtitle="Off-work / restricted / full-duty transitions with explicit date windows. Used by the DART rate report."
+              defaultOpen={true}
+            >
+              {lostTime.length === 0 ? (
+                <p className="text-sm text-slate-500">
+                  No lost-time tracking yet. Use the form below to record an off-work or
+                  restricted-duty window.
+                </p>
+              ) : (
+                <ul className="divide-y divide-slate-100 text-sm">
+                  {lostTime.map((e) => (
+                    <li key={e.id} className="flex items-center justify-between gap-3 py-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium text-slate-900">
+                          {e.status === 'off_work' ? (
+                            <Badge variant="destructive">Off work</Badge>
+                          ) : e.status === 'restricted_duty' ? (
+                            <Badge variant="warning">Restricted duty</Badge>
+                          ) : (
+                            <Badge variant="success">Full duty</Badge>
+                          )}
+                        </div>
+                        <div className="mt-0.5 text-xs text-slate-500">
+                          <span className="font-mono">{e.validFrom}</span>
+                          <span> → </span>
+                          <span className="font-mono">{e.validTo ?? 'present'}</span>
+                          {e.notes ? <span className="ml-2">· {e.notes}</span> : null}
+                        </div>
                       </div>
-                      <div className="mt-0.5 whitespace-pre-wrap text-slate-900">
-                        {e.description}
-                      </div>
-                    </div>
-                    {!incident.locked ? (
-                      <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                        <Link
-                          href={`/incidents/${id}?tab=investigation&drawer=edit-event&editId=${e.id}`}
-                          className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                          title="Edit event"
-                        >
-                          <Pencil size={14} />
-                        </Link>
-                        <form action={deleteEvent} className="inline">
+                      {!incident.locked ? (
+                        <form action={deleteLostTimeEvent} className="inline">
                           <input type="hidden" name="id" value={e.id} />
                           <input type="hidden" name="incidentId" value={id} />
                           <button
                             type="submit"
                             className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700"
-                            title="Delete event"
+                            title="Delete row"
                           >
                             <Trash2 size={14} />
                           </button>
                         </form>
-                      </div>
-                    ) : null}
-                  </div>
-                </li>
-              ))}
-            </ol>
-          )}
-        </Section>
-
-        {/* Step 3 — Cause analysis */}
-        <Section
-          title={`Cause analysis (${factors.length})`}
-          subtitle="Immediate causes / contributing factors, grouped by category."
-          actions={
-            !incident.locked ? (
-              <Link href={`/incidents/${id}?tab=investigation&drawer=new-factor`}>
-                <Button size="sm" variant="outline">
-                  <Plus size={14} /> Add factor
-                </Button>
-              </Link>
-            ) : null
-          }
-        >
-          {factors.length === 0 ? (
-            <EmptyState
-              title="No contributing factors recorded"
-              description="Capture the conditions, behaviours, or system gaps that led to the incident."
-            />
-          ) : (
-            <ul className="divide-y divide-slate-100 text-sm">
-              {factors.map((f) => (
-                <li key={f.id} className="group flex items-start justify-between gap-3 py-3">
-                  <div className="min-w-0 flex-1">
-                    <Badge variant="outline" className="mb-1 uppercase tracking-wide">
-                      {f.category}
-                    </Badge>
-                    <div className="whitespace-pre-wrap text-slate-900">{f.description}</div>
-                  </div>
-                  {!incident.locked ? (
-                    <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                      <Link
-                        href={`/incidents/${id}?tab=investigation&drawer=edit-factor&editId=${f.id}`}
-                        className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                        title="Edit factor"
-                      >
-                        <Pencil size={14} />
-                      </Link>
-                      <form action={deleteFactor} className="inline">
-                        <input type="hidden" name="id" value={f.id} />
-                        <input type="hidden" name="incidentId" value={id} />
-                        <button
-                          type="submit"
-                          className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700"
-                          title="Delete factor"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </form>
-                    </div>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          )}
-        </Section>
-
-        {/* Step 4 — Root cause analysis */}
-        <Section
-          title="Root cause analysis"
-          subtitle={`Free-form root cause plus an optional 5-whys chain (${whys.length}/5).`}
-          actions={
-            !incident.locked && whys.length < 5 ? (
-              <Link href={`/incidents/${id}?tab=investigation&drawer=new-why`}>
-                <Button size="sm" variant="outline">
-                  <Plus size={14} /> Add "why"
-                </Button>
-              </Link>
-            ) : null
-          }
-        >
-          <div className="space-y-5">
-            <form action={saveRootCause} className="space-y-2">
-              <input type="hidden" name="id" value={id} />
-              <Label htmlFor="root-cause-text">Root cause statement</Label>
-              <Textarea
-                id="root-cause-text"
-                name="rootCause"
-                defaultValue={incident.rootCause ?? ''}
-                rows={3}
-                placeholder="One- or two-sentence summary of why this happened."
-                disabled={incident.locked}
-              />
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              )}
               {!incident.locked ? (
-                <div className="flex justify-end">
-                  <Button type="submit" size="sm" variant="outline">
-                    Save root cause
-                  </Button>
+                <div className="mt-4 border-t border-slate-100 pt-4">
+                  <Link href={`/incidents/${id}?tab=lost-time&drawer=add-lost-time`}>
+                    <Button size="sm">Add lost-time row</Button>
+                  </Link>
                 </div>
               ) : null}
-            </form>
+            </Section>
+          </>
+        ) : null}
 
-            <div>
-              <div className="mb-2 text-xs uppercase tracking-wide text-slate-500">
-                5-Whys chain
-              </div>
-              {whys.length === 0 ? (
-                <p className="text-sm text-slate-500">
-                  Optional. Drill from the surface cause toward the root by asking "why" up to five
-                  times.
-                </p>
+        {active === 'investigation' ? (
+          <>
+            {/* Step 2 — Event timeline */}
+            <Section
+              title={`Event timeline (${timelineEvents.length})`}
+              subtitle="Chronological log of what happened, in the order it happened."
+              actions={
+                !incident.locked ? (
+                  <Link href={`/incidents/${id}?tab=investigation&drawer=new-event`}>
+                    <Button size="sm" variant="outline">
+                      <Plus size={14} /> Add event
+                    </Button>
+                  </Link>
+                ) : null
+              }
+            >
+              {timelineEvents.length === 0 ? (
+                <EmptyState
+                  title="No events logged yet"
+                  description="Add a timeline entry to start reconstructing what happened."
+                />
               ) : (
-                <ol className="space-y-2 text-sm">
-                  {whys.map((w) => (
-                    <li
-                      key={w.id}
-                      className="group flex items-start justify-between gap-3 rounded-md border border-slate-200 bg-slate-50/60 px-3 py-2"
-                    >
+                <ol className="relative space-y-3 border-l border-slate-200 pl-5 text-sm">
+                  {timelineEvents.map((e) => (
+                    <li key={e.id} className="group relative">
+                      <span className="absolute top-1 -left-[26px] h-2.5 w-2.5 rounded-full border-2 border-white bg-teal-500 shadow" />
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="font-mono text-xs text-slate-500">
+                            {new Date(e.occurredAt).toLocaleString()}
+                          </div>
+                          <div className="mt-0.5 whitespace-pre-wrap text-slate-900">
+                            {e.description}
+                          </div>
+                        </div>
+                        {!incident.locked ? (
+                          <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                            <Link
+                              href={`/incidents/${id}?tab=investigation&drawer=edit-event&editId=${e.id}`}
+                              className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                              title="Edit event"
+                            >
+                              <Pencil size={14} />
+                            </Link>
+                            <form action={deleteEvent} className="inline">
+                              <input type="hidden" name="id" value={e.id} />
+                              <input type="hidden" name="incidentId" value={id} />
+                              <button
+                                type="submit"
+                                className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700"
+                                title="Delete event"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </form>
+                          </div>
+                        ) : null}
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </Section>
+
+            {/* Step 3 — Cause analysis */}
+            <Section
+              title={`Cause analysis (${factors.length})`}
+              subtitle="Immediate causes / contributing factors, grouped by category."
+              actions={
+                !incident.locked ? (
+                  <Link href={`/incidents/${id}?tab=investigation&drawer=new-factor`}>
+                    <Button size="sm" variant="outline">
+                      <Plus size={14} /> Add factor
+                    </Button>
+                  </Link>
+                ) : null
+              }
+            >
+              {factors.length === 0 ? (
+                <EmptyState
+                  title="No contributing factors recorded"
+                  description="Capture the conditions, behaviours, or system gaps that led to the incident."
+                />
+              ) : (
+                <ul className="divide-y divide-slate-100 text-sm">
+                  {factors.map((f) => (
+                    <li key={f.id} className="group flex items-start justify-between gap-3 py-3">
                       <div className="min-w-0 flex-1">
-                        <span className="mr-2 inline-flex h-5 w-12 items-center justify-center rounded bg-teal-100 text-[10px] font-semibold uppercase tracking-wide text-teal-800">
-                          Why #{w.ordinal}
-                        </span>
-                        <span className="whitespace-pre-wrap text-slate-900">{w.whyText}</span>
+                        <Badge variant="outline" className="mb-1 tracking-wide uppercase">
+                          {f.category}
+                        </Badge>
+                        <div className="whitespace-pre-wrap text-slate-900">{f.description}</div>
                       </div>
                       {!incident.locked ? (
                         <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                           <Link
-                            href={`/incidents/${id}?tab=investigation&drawer=edit-why&editId=${w.id}`}
+                            href={`/incidents/${id}?tab=investigation&drawer=edit-factor&editId=${f.id}`}
                             className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                            title="Edit why step"
+                            title="Edit factor"
                           >
                             <Pencil size={14} />
                           </Link>
-                          <form action={deleteWhy} className="inline">
-                            <input type="hidden" name="id" value={w.id} />
+                          <form action={deleteFactor} className="inline">
+                            <input type="hidden" name="id" value={f.id} />
                             <input type="hidden" name="incidentId" value={id} />
                             <button
                               type="submit"
                               className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700"
-                              title="Delete why step"
+                              title="Delete factor"
                             >
                               <Trash2 size={14} />
                             </button>
@@ -1493,139 +1434,227 @@ export default async function IncidentDetailPage({
                       ) : null}
                     </li>
                   ))}
-                </ol>
+                </ul>
               )}
-            </div>
-          </div>
-        </Section>
+            </Section>
 
-        {/* Step 5 — Preventative steps */}
-        <Section
-          title={`Preventative steps (${prevSteps.length})`}
-          subtitle="What will be done so this doesn't happen again."
-          actions={
-            !incident.locked ? (
-              <Link href={`/incidents/${id}?tab=investigation&drawer=new-prev-step`}>
-                <Button size="sm" variant="outline">
-                  <Plus size={14} /> Add step
-                </Button>
-              </Link>
-            ) : null
-          }
-        >
-          {prevSteps.length === 0 ? (
-            <EmptyState
-              title="No preventative steps yet"
-              description="Capture what your team will change to prevent a repeat. Promote any of these to a full CAPA later."
-            />
-          ) : (
-            <ul className="divide-y divide-slate-100 text-sm">
-              {prevSteps.map((row) => (
-                <li
-                  key={row.step.id}
-                  className="group flex items-start justify-between gap-3 py-3"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <PrevStepStatusBadge status={row.step.status} />
-                      {row.step.targetDate ? (
-                        <span className="text-xs text-slate-500">
-                          due <span className="font-mono">{row.step.targetDate}</span>
-                        </span>
-                      ) : null}
-                      {row.owner ? (
-                        <span className="text-xs text-slate-500">
-                          owner:{' '}
-                          <Link
-                            href={`/people/${row.owner.id}`}
-                            className="text-teal-700 hover:underline"
-                          >
-                            {row.owner.firstName} {row.owner.lastName}
-                          </Link>
-                        </span>
-                      ) : null}
-                    </div>
-                    <div className="mt-1 whitespace-pre-wrap text-slate-900">
-                      {row.step.description}
-                    </div>
-                  </div>
+            {/* Step 4 — Root cause analysis */}
+            <Section
+              title="Root cause analysis"
+              subtitle={`Free-form root cause plus an optional 5-whys chain (${whys.length}/5).`}
+              actions={
+                !incident.locked && whys.length < 5 ? (
+                  <Link href={`/incidents/${id}?tab=investigation&drawer=new-why`}>
+                    <Button size="sm" variant="outline">
+                      <Plus size={14} /> Add "why"
+                    </Button>
+                  </Link>
+                ) : null
+              }
+            >
+              <div className="space-y-5">
+                <form action={saveRootCause} className="space-y-2">
+                  <input type="hidden" name="id" value={id} />
+                  <Label htmlFor="root-cause-text">Root cause statement</Label>
+                  <Textarea
+                    id="root-cause-text"
+                    name="rootCause"
+                    defaultValue={incident.rootCause ?? ''}
+                    rows={3}
+                    placeholder="One- or two-sentence summary of why this happened."
+                    disabled={incident.locked}
+                  />
                   {!incident.locked ? (
-                    <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                      <Link
-                        href={`/incidents/${id}?tab=investigation&drawer=edit-prev-step&editId=${row.step.id}`}
-                        className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                        title="Edit step"
-                      >
-                        <Pencil size={14} />
-                      </Link>
-                      <form action={deletePrevStep} className="inline">
-                        <input type="hidden" name="id" value={row.step.id} />
-                        <input type="hidden" name="incidentId" value={id} />
-                        <button
-                          type="submit"
-                          className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700"
-                          title="Delete step"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </form>
+                    <div className="flex justify-end">
+                      <Button type="submit" size="sm" variant="outline">
+                        Save root cause
+                      </Button>
                     </div>
                   ) : null}
-                </li>
-              ))}
-            </ul>
-          )}
-        </Section>
+                </form>
 
-        <Section title={`Linked corrective actions (${linkedCAs.length})`} defaultOpen={false}>
-          {linkedCAs.length === 0 ? (
-            <div className="flex items-center justify-between text-sm text-slate-500">
-              <span>No corrective actions linked yet.</span>
-              <Link
-                href={`/corrective-actions/new?sourceEntityType=incident&sourceEntityId=${id}`}
-                className="text-teal-700 hover:underline"
-              >
-                Create one →
-              </Link>
-            </div>
-          ) : (
-            <ul className="divide-y divide-slate-100 text-sm">
-              {linkedCAs.map((ca) => (
-                <li key={ca.id} className="flex items-center justify-between py-2">
-                  <Link href={`/corrective-actions/${ca.id}`} className="font-medium hover:underline">
-                    {ca.reference} · {ca.title}
+                <div>
+                  <div className="mb-2 text-xs tracking-wide text-slate-500 uppercase">
+                    5-Whys chain
+                  </div>
+                  {whys.length === 0 ? (
+                    <p className="text-sm text-slate-500">
+                      Optional. Drill from the surface cause toward the root by asking "why" up to
+                      five times.
+                    </p>
+                  ) : (
+                    <ol className="space-y-2 text-sm">
+                      {whys.map((w) => (
+                        <li
+                          key={w.id}
+                          className="group flex items-start justify-between gap-3 rounded-md border border-slate-200 bg-slate-50/60 px-3 py-2"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <span className="mr-2 inline-flex h-5 w-12 items-center justify-center rounded bg-teal-100 text-[10px] font-semibold tracking-wide text-teal-800 uppercase">
+                              Why #{w.ordinal}
+                            </span>
+                            <span className="whitespace-pre-wrap text-slate-900">{w.whyText}</span>
+                          </div>
+                          {!incident.locked ? (
+                            <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                              <Link
+                                href={`/incidents/${id}?tab=investigation&drawer=edit-why&editId=${w.id}`}
+                                className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                                title="Edit why step"
+                              >
+                                <Pencil size={14} />
+                              </Link>
+                              <form action={deleteWhy} className="inline">
+                                <input type="hidden" name="id" value={w.id} />
+                                <input type="hidden" name="incidentId" value={id} />
+                                <button
+                                  type="submit"
+                                  className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700"
+                                  title="Delete why step"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </form>
+                            </div>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                </div>
+              </div>
+            </Section>
+
+            {/* Step 5 — Preventative steps */}
+            <Section
+              title={`Preventative steps (${prevSteps.length})`}
+              subtitle="What will be done so this doesn't happen again."
+              actions={
+                !incident.locked ? (
+                  <Link href={`/incidents/${id}?tab=investigation&drawer=new-prev-step`}>
+                    <Button size="sm" variant="outline">
+                      <Plus size={14} /> Add step
+                    </Button>
                   </Link>
-                  <Badge variant={ca.status === 'closed' ? 'success' : 'warning'}>{ca.status}</Badge>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Section>
+                ) : null
+              }
+            >
+              {prevSteps.length === 0 ? (
+                <EmptyState
+                  title="No preventative steps yet"
+                  description="Capture what your team will change to prevent a repeat. Promote any of these to a full CAPA later."
+                />
+              ) : (
+                <ul className="divide-y divide-slate-100 text-sm">
+                  {prevSteps.map((row) => (
+                    <li
+                      key={row.step.id}
+                      className="group flex items-start justify-between gap-3 py-3"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <PrevStepStatusBadge status={row.step.status} />
+                          {row.step.targetDate ? (
+                            <span className="text-xs text-slate-500">
+                              due <span className="font-mono">{row.step.targetDate}</span>
+                            </span>
+                          ) : null}
+                          {row.owner ? (
+                            <span className="text-xs text-slate-500">
+                              owner:{' '}
+                              <Link
+                                href={`/people/${row.owner.id}`}
+                                className="text-teal-700 hover:underline"
+                              >
+                                {row.owner.firstName} {row.owner.lastName}
+                              </Link>
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="mt-1 whitespace-pre-wrap text-slate-900">
+                          {row.step.description}
+                        </div>
+                      </div>
+                      {!incident.locked ? (
+                        <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                          <Link
+                            href={`/incidents/${id}?tab=investigation&drawer=edit-prev-step&editId=${row.step.id}`}
+                            className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                            title="Edit step"
+                          >
+                            <Pencil size={14} />
+                          </Link>
+                          <form action={deletePrevStep} className="inline">
+                            <input type="hidden" name="id" value={row.step.id} />
+                            <input type="hidden" name="incidentId" value={id} />
+                            <button
+                              type="submit"
+                              className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700"
+                              title="Delete step"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </form>
+                        </div>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Section>
 
-        </>
+            <Section title={`Linked corrective actions (${linkedCAs.length})`} defaultOpen={false}>
+              {linkedCAs.length === 0 ? (
+                <div className="flex items-center justify-between text-sm text-slate-500">
+                  <span>No corrective actions linked yet.</span>
+                  <Link
+                    href={`/corrective-actions/new?sourceEntityType=incident&sourceEntityId=${id}`}
+                    className="text-teal-700 hover:underline"
+                  >
+                    Create one →
+                  </Link>
+                </div>
+              ) : (
+                <ul className="divide-y divide-slate-100 text-sm">
+                  {linkedCAs.map((ca) => (
+                    <li key={ca.id} className="flex items-center justify-between py-2">
+                      <Link
+                        href={`/corrective-actions/${ca.id}`}
+                        className="font-medium hover:underline"
+                      >
+                        {ca.reference} · {ca.title}
+                      </Link>
+                      <Badge variant={ca.status === 'closed' ? 'success' : 'warning'}>
+                        {ca.status}
+                      </Badge>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Section>
+          </>
         ) : null}
 
         {active === 'photos' ? (
-        <Section title={`Photos & files (${photos.length})`} defaultOpen={true}>
-          <div className="space-y-3">
-            <PhotoGallery photos={galleryPhotos} />
-            {!incident.locked ? (
-              <PhotoUploaderSection
-                attachAction={async (ids) => {
-                  'use server'
-                  await attachPhotos(id, ids)
-                }}
-              />
-            ) : null}
-          </div>
-        </Section>
-
+          <Section title={`Photos & files (${photos.length})`} defaultOpen={true}>
+            <div className="space-y-3">
+              <PhotoGallery photos={galleryPhotos} />
+              {!incident.locked ? (
+                <PhotoUploaderSection
+                  attachAction={async (ids) => {
+                    'use server'
+                    await attachPhotos(id, ids)
+                  }}
+                />
+              ) : null}
+            </div>
+          </Section>
         ) : null}
 
         {active === 'activity' ? (
-        <Section title={`Activity (${activity.length})`} defaultOpen={true}>
-          <ActivityFeed entries={activity} />
-        </Section>
+          <Section title={`Activity (${activity.length})`} defaultOpen={true}>
+            <ActivityFeed entries={activity} />
+          </Section>
         ) : null}
 
         <Card>
@@ -1681,7 +1710,7 @@ export default async function IncidentDetailPage({
             id: row.injury.id,
             label: row.person
               ? `${row.person.firstName} ${row.person.lastName}`
-              : row.injury.personName ?? 'Unknown',
+              : (row.injury.personName ?? 'Unknown'),
           }))}
         />
       </UrlDrawer>
@@ -1694,9 +1723,7 @@ export default async function IncidentDetailPage({
         size="md"
         footer={
           <>
-            <Link
-              href={`/incidents/${id}${active !== 'overview' ? `?tab=${active}` : ''}`}
-            >
+            <Link href={`/incidents/${id}${active !== 'overview' ? `?tab=${active}` : ''}`}>
               <Button type="button" variant="outline">
                 Cancel
               </Button>
@@ -1724,9 +1751,7 @@ export default async function IncidentDetailPage({
               defaultValue="Update"
               placeholder="Update / Action required / FYI"
             />
-            <p className="text-xs text-slate-500">
-              Prepended to the auto-generated subject.
-            </p>
+            <p className="text-xs text-slate-500">Prepended to the auto-generated subject.</p>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="inc-se-extra">Extra recipients</Label>
@@ -1796,9 +1821,7 @@ export default async function IncidentDetailPage({
             mode="create"
           />
           {(() => {
-            const editingEvent = editId
-              ? timelineEvents.find((e) => e.id === editId)
-              : undefined
+            const editingEvent = editId ? timelineEvents.find((e) => e.id === editId) : undefined
             return (
               <EventDrawer
                 open={drawer === 'edit-event' && !!editingEvent}
@@ -1888,9 +1911,7 @@ export default async function IncidentDetailPage({
             people={peopleList}
           />
           {(() => {
-            const editingPrevRow = editId
-              ? prevSteps.find((r) => r.step.id === editId)
-              : undefined
+            const editingPrevRow = editId ? prevSteps.find((r) => r.step.id === editId) : undefined
             const editingPrev = editingPrevRow?.step
             return (
               <PrevStepDrawer
@@ -1943,7 +1964,7 @@ function PrevStepStatusBadge({ status }: { status: PrevStepStatus }) {
 function TextBlock({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="text-xs uppercase tracking-wide text-slate-500">{label}</div>
+      <div className="text-xs tracking-wide text-slate-500 uppercase">{label}</div>
       <div className="mt-0.5 whitespace-pre-wrap text-slate-900">{children}</div>
     </div>
   )
@@ -1952,7 +1973,7 @@ function TextBlock({ label, children }: { label: string; children: React.ReactNo
 function FieldRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col">
-      <span className="text-xs uppercase tracking-wide text-slate-500">{label}</span>
+      <span className="text-xs tracking-wide text-slate-500 uppercase">{label}</span>
       <span className="text-sm text-slate-900">{children}</span>
     </div>
   )

@@ -33,9 +33,19 @@ type Action = {
 const ACTIONS: Action[] = [
   { href: '/incidents/new', label: 'Report incident', icon: AlertTriangle, tone: 'rose' },
   { href: '/hazid/new', label: 'Start JSHA', icon: HardHat, tone: 'amber' },
-  { href: '/forms/by-key/toolbox-talk/fill', label: 'Log toolbox talk', icon: ClipboardList, tone: 'sky' },
+  {
+    href: '/forms/by-key/toolbox-talk/fill',
+    label: 'Log toolbox talk',
+    icon: ClipboardList,
+    tone: 'sky',
+  },
   { href: '/corrective-actions/new', label: 'New CA', icon: ListChecks, tone: 'teal' },
-  { href: '/equipment/check-out', label: 'Check out equipment', icon: ClipboardCheck, tone: 'violet' },
+  {
+    href: '/equipment/check-out',
+    label: 'Check out equipment',
+    icon: ClipboardCheck,
+    tone: 'violet',
+  },
   { href: '/reports', label: 'Run report', icon: FileText, tone: 'slate' },
 ]
 
@@ -98,7 +108,7 @@ export function QuickActions() {
           >
             <Link
               href={a.href as any}
-              className={`group inline-flex items-center gap-2.5 rounded-full border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3.5 py-2 text-sm font-medium text-slate-800 dark:text-slate-100 shadow-sm transition-all ${t.ring} ${t.bg}`}
+              className={`group inline-flex items-center gap-2.5 rounded-full border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-800 shadow-sm transition-all dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100 ${t.ring} ${t.bg}`}
             >
               <span
                 className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-xs transition-colors ${t.chip}`}

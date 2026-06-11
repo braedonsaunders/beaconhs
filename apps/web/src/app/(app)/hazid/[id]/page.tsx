@@ -179,7 +179,10 @@ export default async function HazidAssessmentDetailPage({
       })
       .from(hazidAssessments)
       .leftJoin(orgUnits, eq(orgUnits.id, hazidAssessments.siteOrgUnitId))
-      .leftJoin(hazidAssessmentTypes, eq(hazidAssessmentTypes.id, hazidAssessments.assessmentTypeId))
+      .leftJoin(
+        hazidAssessmentTypes,
+        eq(hazidAssessmentTypes.id, hazidAssessments.assessmentTypeId),
+      )
       .leftJoin(people, eq(people.id, hazidAssessments.supervisorPersonId))
       .where(and(eq(hazidAssessments.id, id), isNull(hazidAssessments.deletedAt)))
       .limit(1)
@@ -231,7 +234,10 @@ export default async function HazidAssessmentDetailPage({
     const atmospheric = await tx
       .select({ row: hazidAssessmentCSAtmospheric, sensor: atmosphericSensors })
       .from(hazidAssessmentCSAtmospheric)
-      .leftJoin(atmosphericSensors, eq(atmosphericSensors.id, hazidAssessmentCSAtmospheric.atmosphericSensorId))
+      .leftJoin(
+        atmosphericSensors,
+        eq(atmosphericSensors.id, hazidAssessmentCSAtmospheric.atmosphericSensorId),
+      )
       .where(eq(hazidAssessmentCSAtmospheric.assessmentId, id))
       .orderBy(asc(hazidAssessmentCSAtmospheric.time))
     const entries = await tx
@@ -248,10 +254,7 @@ export default async function HazidAssessmentDetailPage({
       .leftJoin(hazidHazardTypes, eq(hazidHazardTypes.id, hazidHazards.hazardTypeId))
       .where(isNull(hazidHazards.deletedAt))
       .orderBy(asc(hazidHazards.name))
-    const hazardSets = await tx
-      .select()
-      .from(hazidHazardSets)
-      .orderBy(asc(hazidHazardSets.name))
+    const hazardSets = await tx.select().from(hazidHazardSets).orderBy(asc(hazidHazardSets.name))
     const taskLibrary = await tx
       .select({ id: hazidTasks.id, name: hazidTasks.name })
       .from(hazidTasks)
@@ -357,9 +360,7 @@ export default async function HazidAssessmentDetailPage({
   const editQuestionRow = editQuestionId
     ? questions.find((q) => q.id === editQuestionId)
     : undefined
-  const exitEntryRow = editEntryId
-    ? entries.find((e) => e.row.id === editEntryId)
-    : undefined
+  const exitEntryRow = editEntryId ? entries.find((e) => e.row.id === editEntryId) : undefined
 
   return (
     <DetailPageLayout
@@ -396,7 +397,9 @@ export default async function HazidAssessmentDetailPage({
                   </Button>
                 </Link>
                 <Link
-                  href={`/hazid/${id}?send=1${active !== 'overview' ? `&tab=${active}` : ''}` as any}
+                  href={
+                    `/hazid/${id}?send=1${active !== 'overview' ? `&tab=${active}` : ''}` as any
+                  }
                   scroll={false}
                 >
                   <Button variant="outline">
@@ -865,7 +868,7 @@ export default async function HazidAssessmentDetailPage({
                     updateAction={updateTextField}
                   />
                   <div>
-                    <div className="mb-1 text-xs uppercase tracking-wide text-slate-500">
+                    <div className="mb-1 text-xs tracking-wide text-slate-500 uppercase">
                       Space diagram
                     </div>
                     <CSDiagram
@@ -900,18 +903,28 @@ export default async function HazidAssessmentDetailPage({
                         className="grid grid-cols-1 gap-2 rounded-md border border-slate-200 bg-white p-3 sm:grid-cols-[1fr_auto]"
                       >
                         <div className="space-y-1">
-                          <div className="text-xs uppercase tracking-wide text-slate-500">
+                          <div className="text-xs tracking-wide text-slate-500 uppercase">
                             {new Date(r.row.time).toLocaleString()}
                             {r.sensor ? ` · ${r.sensor.identifier}` : ''}
                           </div>
                           <div className="flex flex-wrap gap-3 text-xs text-slate-700">
                             {r.row.sensor1Reading ? <span>O₂: {r.row.sensor1Reading}%</span> : null}
-                            {r.row.sensor2Reading ? <span>LEL: {r.row.sensor2Reading}%</span> : null}
-                            {r.row.sensor3Reading ? <span>CO: {r.row.sensor3Reading} ppm</span> : null}
-                            {r.row.sensor4Reading ? <span>H₂S: {r.row.sensor4Reading} ppm</span> : null}
+                            {r.row.sensor2Reading ? (
+                              <span>LEL: {r.row.sensor2Reading}%</span>
+                            ) : null}
+                            {r.row.sensor3Reading ? (
+                              <span>CO: {r.row.sensor3Reading} ppm</span>
+                            ) : null}
+                            {r.row.sensor4Reading ? (
+                              <span>H₂S: {r.row.sensor4Reading} ppm</span>
+                            ) : null}
                           </div>
-                          {r.row.distance ? <div className="text-xs text-slate-500">{r.row.distance}</div> : null}
-                          {r.row.notes ? <div className="text-xs text-slate-500">{r.row.notes}</div> : null}
+                          {r.row.distance ? (
+                            <div className="text-xs text-slate-500">{r.row.distance}</div>
+                          ) : null}
+                          {r.row.notes ? (
+                            <div className="text-xs text-slate-500">{r.row.notes}</div>
+                          ) : null}
                         </div>
                         {locked ? null : (
                           <form action={deleteCSAtmospheric}>
@@ -947,7 +960,7 @@ export default async function HazidAssessmentDetailPage({
                     {entries.map((r) => {
                       const personLabel = r.person
                         ? `${r.person.firstName} ${r.person.lastName}`
-                        : r.row.externalName ?? 'Unknown'
+                        : (r.row.externalName ?? 'Unknown')
                       return (
                         <li
                           key={r.row.id}
@@ -963,9 +976,7 @@ export default async function HazidAssessmentDetailPage({
                             </div>
                           </div>
                           {!r.row.timeOut && !locked ? (
-                            <Link
-                              href={drawerHref('exit-cs-entry', { entryId: r.row.id }) as any}
-                            >
+                            <Link href={drawerHref('exit-cs-entry', { entryId: r.row.id }) as any}>
                               <Button type="button" size="sm">
                                 Sign out
                               </Button>
@@ -1090,8 +1101,8 @@ export default async function HazidAssessmentDetailPage({
                         <div className="font-medium text-slate-900">
                           {s.person
                             ? `${s.person.firstName} ${s.person.lastName}`
-                            : s.row.externalName ?? 'Unknown'}
-                          <span className="ml-2 text-xs uppercase text-slate-500">
+                            : (s.row.externalName ?? 'Unknown')}
+                          <span className="ml-2 text-xs text-slate-500 uppercase">
                             {s.row.signatureType}
                           </span>
                         </div>
@@ -1236,11 +1247,7 @@ export default async function HazidAssessmentDetailPage({
         title="Add ad-hoc hazard"
         size="md"
       >
-        <AddHazardDrawerBody
-          assessmentId={id}
-          closeHref={tabHref}
-          addAction={addHazard}
-        />
+        <AddHazardDrawerBody assessmentId={id} closeHref={tabHref} addAction={addHazard} />
       </UrlDrawer>
       <UrlDrawer
         open={drawerKey === 'edit-hazard' && !!editHazardRow}
@@ -1260,17 +1267,8 @@ export default async function HazidAssessmentDetailPage({
       </UrlDrawer>
 
       {/* PPE */}
-      <UrlDrawer
-        open={drawerKey === 'add-ppe'}
-        closeHref={tabHref}
-        title="Add PPE"
-        size="md"
-      >
-        <AddPPEDrawerBody
-          assessmentId={id}
-          closeHref={tabHref}
-          addAction={addPPE}
-        />
+      <UrlDrawer open={drawerKey === 'add-ppe'} closeHref={tabHref} title="Add PPE" size="md">
+        <AddPPEDrawerBody assessmentId={id} closeHref={tabHref} addAction={addPPE} />
       </UrlDrawer>
       <UrlDrawer
         open={drawerKey === 'edit-ppe' && !!editPPERow}
@@ -1295,11 +1293,7 @@ export default async function HazidAssessmentDetailPage({
         title="Add question"
         size="md"
       >
-        <AddQuestionDrawerBody
-          assessmentId={id}
-          closeHref={tabHref}
-          addAction={addQuestion}
-        />
+        <AddQuestionDrawerBody assessmentId={id} closeHref={tabHref} addAction={addQuestion} />
       </UrlDrawer>
       <UrlDrawer
         open={drawerKey === 'edit-question' && !!editQuestionRow}
@@ -1313,10 +1307,7 @@ export default async function HazidAssessmentDetailPage({
             closeHref={tabHref}
             row={{
               ...editQuestionRow,
-              questionType: editQuestionRow.questionType as
-                | 'yes_no'
-                | 'text'
-                | 'multi_select',
+              questionType: editQuestionRow.questionType as 'yes_no' | 'text' | 'multi_select',
             }}
             updateAction={updateQuestion}
           />
@@ -1366,7 +1357,7 @@ export default async function HazidAssessmentDetailPage({
             personLabel={
               exitEntryRow.person
                 ? `${exitEntryRow.person.firstName} ${exitEntryRow.person.lastName}`
-                : exitEntryRow.row.externalName ?? 'Unknown'
+                : (exitEntryRow.row.externalName ?? 'Unknown')
             }
             exitAction={exitCSEntry}
           />
@@ -1408,15 +1399,35 @@ export default async function HazidAssessmentDetailPage({
 // CSA Z462 reference rows — copied from the legacy view for parity.
 function ArcFlashReferenceTable() {
   const rows = [
-    { hrc: 'HRC 0', energy: '< 1.2 cal/cm²', ppe: 'Untreated cotton (long sleeves + pants). Safety glasses. Hearing.' },
-    { hrc: 'HRC 1', energy: '4 cal/cm²', ppe: 'Arc-rated FR shirt/pants or coverall. Arc-rated face shield + balaclava. Hard hat.' },
-    { hrc: 'HRC 2', energy: '8 cal/cm²', ppe: 'Arc-rated FR shirt/pants/coverall. Arc-rated face shield + balaclava OR arc-flash suit hood. Hard hat. Leather gloves.' },
-    { hrc: 'HRC 3', energy: '25 cal/cm²', ppe: 'Arc-flash suit (40 cal/cm² rated). Arc-flash hood. Insulated rubber gloves with leather protectors. Hearing.' },
-    { hrc: 'HRC 4', energy: '40 cal/cm²', ppe: 'Arc-flash suit (40 cal/cm² rated). Arc-flash hood. Insulated rubber gloves with leather protectors. Hearing. Additional layers as needed.' },
+    {
+      hrc: 'HRC 0',
+      energy: '< 1.2 cal/cm²',
+      ppe: 'Untreated cotton (long sleeves + pants). Safety glasses. Hearing.',
+    },
+    {
+      hrc: 'HRC 1',
+      energy: '4 cal/cm²',
+      ppe: 'Arc-rated FR shirt/pants or coverall. Arc-rated face shield + balaclava. Hard hat.',
+    },
+    {
+      hrc: 'HRC 2',
+      energy: '8 cal/cm²',
+      ppe: 'Arc-rated FR shirt/pants/coverall. Arc-rated face shield + balaclava OR arc-flash suit hood. Hard hat. Leather gloves.',
+    },
+    {
+      hrc: 'HRC 3',
+      energy: '25 cal/cm²',
+      ppe: 'Arc-flash suit (40 cal/cm² rated). Arc-flash hood. Insulated rubber gloves with leather protectors. Hearing.',
+    },
+    {
+      hrc: 'HRC 4',
+      energy: '40 cal/cm²',
+      ppe: 'Arc-flash suit (40 cal/cm² rated). Arc-flash hood. Insulated rubber gloves with leather protectors. Hearing. Additional layers as needed.',
+    },
   ]
   return (
     <table className="w-full divide-y divide-slate-200 text-sm">
-      <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+      <thead className="bg-slate-50 text-xs tracking-wide text-slate-500 uppercase">
         <tr>
           <th className="px-3 py-2 text-left">Category</th>
           <th className="px-3 py-2 text-left">Incident energy</th>

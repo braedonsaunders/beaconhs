@@ -48,15 +48,17 @@ export async function recentActivityForEntity(
   entityType: string,
   entityId: string,
   limit = 25,
-): Promise<{
-  id: string
-  action: string
-  summary: string | null
-  actor: string | null
-  occurredAt: Date
-  before: Record<string, unknown> | null
-  after: Record<string, unknown> | null
-}[]> {
+): Promise<
+  {
+    id: string
+    action: string
+    summary: string | null
+    actor: string | null
+    occurredAt: Date
+    before: Record<string, unknown> | null
+    after: Record<string, unknown> | null
+  }[]
+> {
   return ctx.db(async (tx) => {
     const rows = await tx
       .select({ log: auditLog, actor: user })

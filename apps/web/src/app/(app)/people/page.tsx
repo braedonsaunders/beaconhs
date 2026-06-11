@@ -1,11 +1,7 @@
 import Link from 'next/link'
 import { Users } from 'lucide-react'
 import { and, asc, count, desc, eq, ilike, isNull, or, type SQL } from 'drizzle-orm'
-import {
-  Button,
-  EmptyState,
-  PageHeader,
-} from '@beaconhs/ui'
+import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
 import { departments, people, trades } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { buildExportHref, parseListParams } from '@/lib/list-params'

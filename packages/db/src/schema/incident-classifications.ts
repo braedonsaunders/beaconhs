@@ -73,10 +73,9 @@ export const incidentClassifications = pgTable(
     // Soft archive — keep historic incidents linked but hide from new-record
     // pickers.
     isActive: integer('is_active').default(1).notNull(),
-    createdByTenantUserId: uuid('created_by_tenant_user_id').references(
-      () => tenantUsers.id,
-      { onDelete: 'set null' },
-    ),
+    createdByTenantUserId: uuid('created_by_tenant_user_id').references(() => tenantUsers.id, {
+      onDelete: 'set null',
+    }),
     ...timestamps,
     ...softDelete,
   },
@@ -128,10 +127,9 @@ export const incidentInjuryTypes = pgTable(
     oshaCode: text('osha_code'),
     sortOrder: integer('sort_order'),
     isActive: integer('is_active').default(1).notNull(),
-    createdByTenantUserId: uuid('created_by_tenant_user_id').references(
-      () => tenantUsers.id,
-      { onDelete: 'set null' },
-    ),
+    createdByTenantUserId: uuid('created_by_tenant_user_id').references(() => tenantUsers.id, {
+      onDelete: 'set null',
+    }),
     ...timestamps,
     ...softDelete,
   },
@@ -178,20 +176,15 @@ export const incidentHoursPeriods = pgTable(
     totalHours: numeric('total_hours', { precision: 14, scale: 2 }).notNull(),
     employeeCount: integer('employee_count').notNull(),
     notes: text('notes'),
-    enteredByTenantUserId: uuid('entered_by_tenant_user_id').references(
-      () => tenantUsers.id,
-      { onDelete: 'set null' },
-    ),
+    enteredByTenantUserId: uuid('entered_by_tenant_user_id').references(() => tenantUsers.id, {
+      onDelete: 'set null',
+    }),
     ...timestamps,
     ...softDelete,
   },
   (t) => ({
     tenantIdx: index('incident_hours_periods_tenant_idx').on(t.tenantId),
-    rangeIdx: index('incident_hours_periods_range_idx').on(
-      t.tenantId,
-      t.periodStart,
-      t.periodEnd,
-    ),
+    rangeIdx: index('incident_hours_periods_range_idx').on(t.tenantId, t.periodStart, t.periodEnd),
     siteIdx: index('incident_hours_periods_site_idx').on(t.tenantId, t.siteOrgUnitId),
   }),
 )

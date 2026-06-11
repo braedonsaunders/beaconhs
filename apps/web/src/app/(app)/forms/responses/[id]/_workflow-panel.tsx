@@ -24,11 +24,7 @@ import { useMemo, useState, useTransition } from 'react'
 import { CheckCircle2, ChevronRight, Circle, XCircle } from 'lucide-react'
 import { Badge, Button, Textarea } from '@beaconhs/ui'
 import { SignaturePad } from '@/components/signature-pad'
-import {
-  advanceWorkflowStep,
-  rejectWorkflowStep,
-  signWorkflowStep,
-} from './_actions'
+import { advanceWorkflowStep, rejectWorkflowStep, signWorkflowStep } from './_actions'
 
 // Mirror of @beaconhs/db/schema FormWorkflowStep + workflow-step-state shape,
 // but client-friendly (no Date instances). The page passes already-serialised
@@ -72,11 +68,7 @@ export function WorkflowPanel({
   }, [currentStepKey, steps])
 
   if (steps.length === 0) {
-    return (
-      <p className="text-sm text-slate-500">
-        No workflow configured for this template.
-      </p>
-    )
+    return <p className="text-sm text-slate-500">No workflow configured for this template.</p>
   }
 
   // Terminal states block further actions even on the "current" step.
@@ -87,7 +79,9 @@ export function WorkflowPanel({
       {steps.map((step) => {
         const isCurrent = step.key === resolvedCurrent
         const isFuture =
-          !isCurrent && step.status === 'pending' && step.sequence > (steps.find((s) => s.key === resolvedCurrent)?.sequence ?? -1)
+          !isCurrent &&
+          step.status === 'pending' &&
+          step.sequence > (steps.find((s) => s.key === resolvedCurrent)?.sequence ?? -1)
         return (
           <li key={step.key}>
             <WorkflowStepCard
@@ -154,12 +148,10 @@ function WorkflowStepCard({
     >
       <header className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-xs uppercase tracking-wide text-slate-500">
+          <div className="text-xs tracking-wide text-slate-500 uppercase">
             Step {step.sequence + 1} of {totalSteps}
           </div>
-          <div className="text-sm font-medium text-slate-900">
-            {step.title}
-          </div>
+          <div className="text-sm font-medium text-slate-900">{step.title}</div>
           <div className="mt-0.5 text-xs text-slate-500">
             Assignee:{' '}
             <span className="font-mono">
@@ -182,12 +174,7 @@ function WorkflowStepCard({
         <div className="mt-3 space-y-2 text-sm">
           <div className="text-slate-700">
             Signed by <strong>{step.signedBy ?? '—'}</strong>
-            {step.signedAt ? (
-              <>
-                {' '}
-                · {new Date(step.signedAt).toLocaleString()}
-              </>
-            ) : null}
+            {step.signedAt ? <> · {new Date(step.signedAt).toLocaleString()}</> : null}
           </div>
           {step.signatureDataUrl ? (
             <div className="rounded border border-slate-200 bg-white p-1.5">
@@ -199,9 +186,7 @@ function WorkflowStepCard({
               />
             </div>
           ) : null}
-          {step.comment ? (
-            <div className="text-xs text-slate-500">Note: {step.comment}</div>
-          ) : null}
+          {step.comment ? <div className="text-xs text-slate-500">Note: {step.comment}</div> : null}
         </div>
       ) : null}
 
@@ -213,7 +198,7 @@ function WorkflowStepCard({
             {step.rejectedAt ? <> · {new Date(step.rejectedAt).toLocaleString()}</> : null}
           </div>
           <div className="text-slate-700">
-            <span className="text-xs uppercase tracking-wide text-slate-500">Reason:</span>{' '}
+            <span className="text-xs tracking-wide text-slate-500 uppercase">Reason:</span>{' '}
             {step.rejectionReason}
           </div>
           {canAct ? (
@@ -225,9 +210,7 @@ function WorkflowStepCard({
       ) : null}
 
       {/* Future / pending non-current: leave header-only */}
-      {isFuture ? (
-        <p className="mt-2 text-xs italic text-slate-500">Awaits earlier step.</p>
-      ) : null}
+      {isFuture ? <p className="mt-2 text-xs text-slate-500 italic">Awaits earlier step.</p> : null}
 
       {/* Action affordances live only on the active step + when the actor can act */}
       {canAct ? (
@@ -391,7 +374,7 @@ function ActiveStepActions({
   return (
     <div className="mt-3 space-y-3">
       {showResign ? (
-        <div className="text-xs uppercase tracking-wide text-slate-500">Re-sign</div>
+        <div className="text-xs tracking-wide text-slate-500 uppercase">Re-sign</div>
       ) : null}
       {/* SIGN sub-form */}
       {mode === 'sign' ? (

@@ -229,10 +229,7 @@ function NewSensorDrawer({
           </Select>
         </Field>
         <Field label="Status" required>
-          <Select
-            value={status}
-            onChange={(e) => setStatus(e.currentTarget.value as SensorStatus)}
-          >
+          <Select value={status} onChange={(e) => setStatus(e.currentTarget.value as SensorStatus)}>
             {STATUSES.map((s) => (
               <option key={s.value} value={s.value}>
                 {s.label}
@@ -369,10 +366,7 @@ function EditSensorDrawer({
           />
         </Field>
         <Field label="Serial #">
-          <Input
-            value={serialNumber}
-            onChange={(e) => setSerialNumber(e.currentTarget.value)}
-          />
+          <Input value={serialNumber} onChange={(e) => setSerialNumber(e.currentTarget.value)} />
         </Field>
         <Field label="Make">
           <Input value={make} onChange={(e) => setMake(e.currentTarget.value)} />
@@ -390,10 +384,7 @@ function EditSensorDrawer({
           </Select>
         </Field>
         <Field label="Status" required>
-          <Select
-            value={status}
-            onChange={(e) => setStatus(e.currentTarget.value as SensorStatus)}
-          >
+          <Select value={status} onChange={(e) => setStatus(e.currentTarget.value as SensorStatus)}>
             {STATUSES.map((s) => (
               <option key={s.value} value={s.value}>
                 {s.label}

@@ -151,9 +151,7 @@ async function moveBank(formData: FormData) {
             : gt(inspectionTypeBanks.sequence, current.sequence),
         ),
       )
-      .orderBy(
-        direction === 'up' ? sql`sequence desc` : sql`sequence asc`,
-      )
+      .orderBy(direction === 'up' ? sql`sequence desc` : sql`sequence asc`)
       .limit(1)
     const swap = neighbour[0]
     if (!swap) return
@@ -207,7 +205,11 @@ export default async function InspectionTypeDetailPage({
       .orderBy(asc(inspectionTypeBanks.sequence))
     const linkedBankIds = new Set(links.map((l) => l.bank.id))
     const availableBanks = await tx
-      .select({ id: inspectionBanks.id, name: inspectionBanks.name, category: inspectionBanks.category })
+      .select({
+        id: inspectionBanks.id,
+        name: inspectionBanks.name,
+        category: inspectionBanks.category,
+      })
       .from(inspectionBanks)
       .where(eq(inspectionBanks.isPublished, true))
       .orderBy(asc(inspectionBanks.name))
@@ -220,7 +222,8 @@ export default async function InspectionTypeDetailPage({
   if (!data) notFound()
   const { type, links, availableBanks } = data
   const totalCriteria = links.reduce((s, l) => s + Number(l.criteriaCount ?? 0), 0)
-  const activity = active === 'activity' ? await recentActivityForEntity(ctx, 'inspection_type', id, 50) : []
+  const activity =
+    active === 'activity' ? await recentActivityForEntity(ctx, 'inspection_type', id, 50) : []
   const basePath = `/inspections/types/${id}`
 
   return (
@@ -314,7 +317,7 @@ export default async function InspectionTypeDetailPage({
             />
             {type.description ? (
               <div className="mt-4 text-sm text-slate-700">
-                <div className="text-xs uppercase tracking-wide text-slate-500">Description</div>
+                <div className="text-xs tracking-wide text-slate-500 uppercase">Description</div>
                 <p className="mt-1 whitespace-pre-wrap">{type.description}</p>
               </div>
             ) : null}
@@ -322,19 +325,28 @@ export default async function InspectionTypeDetailPage({
           <Section title="Next steps">
             <ul className="list-disc space-y-1 pl-5 text-sm text-slate-700">
               <li>
-                <Link href={`/inspections/types/${id}?tab=banks`} className="text-teal-700 hover:underline">
+                <Link
+                  href={`/inspections/types/${id}?tab=banks`}
+                  className="text-teal-700 hover:underline"
+                >
                   Attach one or more question banks
                 </Link>{' '}
                 so inspectors have something to check.
               </li>
               <li>
-                <Link href={`/inspections/records/new?typeId=${id}`} className="text-teal-700 hover:underline">
+                <Link
+                  href={`/inspections/records/new?typeId=${id}`}
+                  className="text-teal-700 hover:underline"
+                >
                   Start an inspection
                 </Link>{' '}
                 using this type.
               </li>
               <li>
-                <Link href={`/compliance/obligations/new?kind=inspection`} className="text-teal-700 hover:underline">
+                <Link
+                  href={`/compliance/obligations/new?kind=inspection`}
+                  className="text-teal-700 hover:underline"
+                >
                   Assign on a recurring cadence
                 </Link>{' '}
                 to make sure people don't skip it.
@@ -385,10 +397,10 @@ export default async function InspectionTypeDetailPage({
                               {row.bank.name}
                             </Link>
                           </TableCell>
-                          <TableCell className="text-slate-600 text-xs">
+                          <TableCell className="text-xs text-slate-600">
                             {row.bank.category?.replace(/_/g, ' ') ?? '—'}
                           </TableCell>
-                          <TableCell className="tabular-nums text-slate-600">
+                          <TableCell className="text-slate-600 tabular-nums">
                             {Number(row.criteriaCount ?? 0)}
                           </TableCell>
                           <TableCell>

@@ -1,12 +1,5 @@
 import Link from 'next/link'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  PageHeader,
-} from '@beaconhs/ui'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, PageHeader } from '@beaconhs/ui'
 import { count } from 'drizzle-orm'
 import {
   atmosphericSensors,

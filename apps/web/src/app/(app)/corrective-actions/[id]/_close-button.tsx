@@ -24,12 +24,7 @@ export function CloseButton({
   const blocked = verificationRequired && !verifiedAt
   if (blocked) {
     return (
-      <Button
-        variant="default"
-        type="button"
-        disabled
-        title="Complete verification before closing"
-      >
+      <Button variant="default" type="button" disabled title="Complete verification before closing">
         <CheckCircle2 size={14} />
         Close + lock
       </Button>
@@ -96,8 +91,8 @@ export function CloseBody({
     >
       <Alert variant="warning">
         <AlertDescription>
-          Closing will lock the record. Photos, work notes, and verification
-          fields become read-only.
+          Closing will lock the record. Photos, work notes, and verification fields become
+          read-only.
         </AlertDescription>
       </Alert>
       <div className="space-y-1.5">
@@ -110,8 +105,7 @@ export function CloseBody({
           disabled={pending}
         />
         <p className="text-xs text-slate-500">
-          Used by the "By source" and aging reports to roll up financial
-          exposure.
+          Used by the "By source" and aging reports to roll up financial exposure.
         </p>
       </div>
       <div className="space-y-1.5">

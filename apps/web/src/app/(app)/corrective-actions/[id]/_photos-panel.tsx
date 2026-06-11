@@ -6,11 +6,7 @@ import { Trash2 } from 'lucide-react'
 import { Button, Input } from '@beaconhs/ui'
 import { PhotoGallery, type GalleryPhoto } from '@/components/photo-gallery'
 import { PhotoUploaderSection } from '@/components/photo-uploader-section'
-import {
-  attachCaPhotos,
-  deleteCaPhoto,
-  updateCaPhotoCaption,
-} from '../_actions'
+import { attachCaPhotos, deleteCaPhoto, updateCaPhotoCaption } from '../_actions'
 
 export type CaPhotoRow = GalleryPhoto
 
@@ -36,17 +32,12 @@ export function PhotosPanel({
           <PhotoGallery photos={photos} />
           {!locked ? (
             <div className="rounded-md border border-slate-200 bg-white">
-              <div className="border-b border-slate-200 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <div className="border-b border-slate-200 px-3 py-2 text-xs font-semibold tracking-wide text-slate-500 uppercase">
                 Captions
               </div>
               <ul className="divide-y divide-slate-100">
                 {photos.map((p) => (
-                  <PhotoRow
-                    key={p.id}
-                    caId={caId}
-                    photo={p}
-                    onChanged={() => router.refresh()}
-                  />
+                  <PhotoRow key={p.id} caId={caId} photo={p} onChanged={() => router.refresh()} />
                 ))}
               </ul>
             </div>

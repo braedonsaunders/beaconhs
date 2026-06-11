@@ -105,10 +105,7 @@ async function recordInspection(formData: FormData) {
   let highestSeverityFailQuestion: { question: string; severity: 'high' | 'critical' } | null = null
   let anyFail = false
   for (const c of criteria) {
-    const answer = String(formData.get(`criterion_${c.id}`) ?? 'n_a') as
-      | 'pass'
-      | 'fail'
-      | 'n_a'
+    const answer = String(formData.get(`criterion_${c.id}`) ?? 'n_a') as 'pass' | 'fail' | 'n_a'
     if (answer === 'fail') {
       anyFail = true
       if (
@@ -392,62 +389,56 @@ export default async function PpeDetailPage({
       .limit(1)
     if (!row) return null
 
-    const [
-      inspections,
-      issuesLog,
-      issueReports,
-      annualRecords,
-      peopleList,
-      relatedCAs,
-    ] = await Promise.all([
-      tx
-        .select({
-          insp: ppeInspections,
-          insp_by: people,
-        })
-        .from(ppeInspections)
-        .leftJoin(people, eq(people.id, ppeInspections.inspectedByTenantUserId))
-        .where(eq(ppeInspections.itemId, id))
-        .orderBy(desc(ppeInspections.inspectedOn)),
-      tx
-        .select({ issue: ppeIssues, person: people })
-        .from(ppeIssues)
-        .leftJoin(people, eq(people.id, ppeIssues.personId))
-        .where(eq(ppeIssues.itemId, id))
-        .orderBy(desc(ppeIssues.occurredAt)),
-      tx
-        .select()
-        .from(ppeIssueReports)
-        .where(eq(ppeIssueReports.itemId, id))
-        .orderBy(desc(ppeIssueReports.reportedAt)),
-      tx
-        .select({
-          rec: ppeAnnualRecords,
-          person: people,
-          cert: attachments,
-        })
-        .from(ppeAnnualRecords)
-        .leftJoin(people, eq(people.id, ppeAnnualRecords.inspectedByPersonId))
-        .leftJoin(attachments, eq(attachments.id, ppeAnnualRecords.certificateAttachmentId))
-        .where(eq(ppeAnnualRecords.itemId, id))
-        .orderBy(desc(ppeAnnualRecords.inspectedOn)),
-      tx
-        .select({ id: people.id, firstName: people.firstName, lastName: people.lastName })
-        .from(people)
-        .orderBy(asc(people.lastName), asc(people.firstName))
-        .limit(500),
-      tx
-        .select()
-        .from(correctiveActions)
-        .where(
-          and(
-            eq(correctiveActions.sourceEntityType, 'ppe_inspection'),
-            // matches any inspection row that belongs to this item; we filter
-            // client-side because the inspection ids set is small
-          ),
-        )
-        .limit(50),
-    ])
+    const [inspections, issuesLog, issueReports, annualRecords, peopleList, relatedCAs] =
+      await Promise.all([
+        tx
+          .select({
+            insp: ppeInspections,
+            insp_by: people,
+          })
+          .from(ppeInspections)
+          .leftJoin(people, eq(people.id, ppeInspections.inspectedByTenantUserId))
+          .where(eq(ppeInspections.itemId, id))
+          .orderBy(desc(ppeInspections.inspectedOn)),
+        tx
+          .select({ issue: ppeIssues, person: people })
+          .from(ppeIssues)
+          .leftJoin(people, eq(people.id, ppeIssues.personId))
+          .where(eq(ppeIssues.itemId, id))
+          .orderBy(desc(ppeIssues.occurredAt)),
+        tx
+          .select()
+          .from(ppeIssueReports)
+          .where(eq(ppeIssueReports.itemId, id))
+          .orderBy(desc(ppeIssueReports.reportedAt)),
+        tx
+          .select({
+            rec: ppeAnnualRecords,
+            person: people,
+            cert: attachments,
+          })
+          .from(ppeAnnualRecords)
+          .leftJoin(people, eq(people.id, ppeAnnualRecords.inspectedByPersonId))
+          .leftJoin(attachments, eq(attachments.id, ppeAnnualRecords.certificateAttachmentId))
+          .where(eq(ppeAnnualRecords.itemId, id))
+          .orderBy(desc(ppeAnnualRecords.inspectedOn)),
+        tx
+          .select({ id: people.id, firstName: people.firstName, lastName: people.lastName })
+          .from(people)
+          .orderBy(asc(people.lastName), asc(people.firstName))
+          .limit(500),
+        tx
+          .select()
+          .from(correctiveActions)
+          .where(
+            and(
+              eq(correctiveActions.sourceEntityType, 'ppe_inspection'),
+              // matches any inspection row that belongs to this item; we filter
+              // client-side because the inspection ids set is small
+            ),
+          )
+          .limit(50),
+      ])
 
     // Pre-load the criteria for the next inspection form (we render two
     // toggles — one for pre_use, one for annual; default pre_use).
@@ -561,8 +552,8 @@ export default async function PpeDetailPage({
             <Alert variant="destructive">
               <AlertTitle>Inspection overdue</AlertTitle>
               <AlertDescription>
-                The pre-use inspection was due on {item.nextInspectionDue}. Record a new
-                one from the Inspections tab.
+                The pre-use inspection was due on {item.nextInspectionDue}. Record a new one from
+                the Inspections tab.
               </AlertDescription>
             </Alert>
           ) : null}
@@ -597,16 +588,20 @@ export default async function PpeDetailPage({
           <Section title="General">
             <DetailGrid
               rows={[
-                { label: 'Type', value: <Link href={`/ppe/types/${type.id}`} className="text-teal-700 hover:underline">{type.name}</Link> },
+                {
+                  label: 'Type',
+                  value: (
+                    <Link href={`/ppe/types/${type.id}`} className="text-teal-700 hover:underline">
+                      {type.name}
+                    </Link>
+                  ),
+                },
                 { label: 'Serial #', value: item.serialNumber ?? '—' },
                 { label: 'Size', value: item.size ?? '—' },
                 {
                   label: 'Currently with',
                   value: holder ? (
-                    <Link
-                      href={`/people/${holder.id}`}
-                      className="text-teal-700 hover:underline"
-                    >
+                    <Link href={`/people/${holder.id}`} className="text-teal-700 hover:underline">
                       {holder.firstName} {holder.lastName}
                     </Link>
                   ) : (
@@ -641,9 +636,7 @@ export default async function PpeDetailPage({
                   value: item.nextInspectionDue ? (
                     <span
                       className={
-                        inspectionDueIn !== null && inspectionDueIn < 0
-                          ? 'text-red-700'
-                          : ''
+                        inspectionDueIn !== null && inspectionDueIn < 0 ? 'text-red-700' : ''
                       }
                     >
                       {item.nextInspectionDue}
@@ -656,11 +649,7 @@ export default async function PpeDetailPage({
                 {
                   label: 'Next annual due',
                   value: item.nextAnnualInspectionDue ? (
-                    <span
-                      className={
-                        annualDueIn !== null && annualDueIn < 0 ? 'text-red-700' : ''
-                      }
-                    >
+                    <span className={annualDueIn !== null && annualDueIn < 0 ? 'text-red-700' : ''}>
                       {item.nextAnnualInspectionDue}
                     </span>
                   ) : (
@@ -689,9 +678,7 @@ export default async function PpeDetailPage({
                     </Button>
                   </Link>
                   <Link
-                    href={
-                      `${basePath}?tab=inspections&drawer=record-inspection&kind=annual` as any
-                    }
+                    href={`${basePath}?tab=inspections&drawer=record-inspection&kind=annual` as any}
                   >
                     <Button size="sm" variant="outline">
                       <ShieldCheck size={14} /> Annual
@@ -749,9 +736,7 @@ export default async function PpeDetailPage({
                             </Badge>
                           </TableCell>
                           <TableCell>{row.insp.nextDueOn ?? '—'}</TableCell>
-                          <TableCell className="text-slate-600">
-                            {row.insp.notes ?? '—'}
-                          </TableCell>
+                          <TableCell className="text-slate-600">{row.insp.notes ?? '—'}</TableCell>
                           <TableCell>
                             {ca ? (
                               <Link
@@ -947,9 +932,7 @@ export default async function PpeDetailPage({
                 <TableBody>
                   {issuesLog.map((row) => (
                     <TableRow key={row.issue.id}>
-                      <TableCell>
-                        {new Date(row.issue.occurredAt).toLocaleDateString()}
-                      </TableCell>
+                      <TableCell>{new Date(row.issue.occurredAt).toLocaleDateString()}</TableCell>
                       <TableCell>
                         <Badge
                           variant={
@@ -1008,10 +991,7 @@ export default async function PpeDetailPage({
                   <>
                     {' '}
                     held by{' '}
-                    <Link
-                      href={`/people/${holder.id}`}
-                      className="text-teal-700 hover:underline"
-                    >
+                    <Link href={`/people/${holder.id}`} className="text-teal-700 hover:underline">
                       {holder.firstName} {holder.lastName}
                     </Link>
                   </>
@@ -1031,9 +1011,9 @@ export default async function PpeDetailPage({
                 </Link>
               </div>
               <p className="text-xs text-slate-500">
-                Issuing this item prompts for a holder and inserts a ledger row in the
-                issues / returns history. Marking returned clears the holder. The other
-                statuses behave like simple state flips and are audited.
+                Issuing this item prompts for a holder and inserts a ledger row in the issues /
+                returns history. Marking returned clears the holder. The other statuses behave like
+                simple state flips and are audited.
               </p>
             </CardContent>
           </Card>
@@ -1080,9 +1060,7 @@ export default async function PpeDetailPage({
           formId="ppe-record-inspection-form"
           itemId={id}
           typeId={type.id}
-          defaultKind={
-            pickString(sp.kind) === 'annual' ? 'annual' : 'pre_use'
-          }
+          defaultKind={pickString(sp.kind) === 'annual' ? 'annual' : 'pre_use'}
           preUseCriteria={preUseCriteria}
           annualCriteria={annualCriteria}
           action={recordInspection}
@@ -1127,11 +1105,7 @@ export default async function PpeDetailPage({
           </Button>
         }
       >
-        <form
-          id="ppe-issue-to-person-form"
-          action={setStatus}
-          className="space-y-3"
-        >
+        <form id="ppe-issue-to-person-form" action={setStatus} className="space-y-3">
           <input type="hidden" name="itemId" value={id} />
           <input type="hidden" name="status" value="issued" />
           <div className="space-y-1.5">
@@ -1168,11 +1142,7 @@ export default async function PpeDetailPage({
           </Button>
         }
       >
-        <form
-          id="ppe-change-status-form"
-          action={setStatus}
-          className="space-y-3"
-        >
+        <form id="ppe-change-status-form" action={setStatus} className="space-y-3">
           <input type="hidden" name="itemId" value={id} />
           <div className="space-y-1.5">
             <Label>New status</Label>
@@ -1261,10 +1231,7 @@ export default async function PpeDetailPage({
           </div>
           <div className="space-y-1.5 sm:col-span-2">
             <Label>Certificate attachment ID</Label>
-            <Input
-              name="certificateAttachmentId"
-              placeholder="UUID from /api/attachments"
-            />
+            <Input name="certificateAttachmentId" placeholder="UUID from /api/attachments" />
             <p className="text-xs text-slate-500">
               Upload via the file uploader elsewhere then paste the attachment id here.
             </p>

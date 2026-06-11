@@ -132,11 +132,16 @@ export default async function AdminOrgPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <OrgTree units={allUnits} onDelete={deleteOrgUnit} />
-              <form action={addOrgUnit} className="grid grid-cols-1 gap-2 rounded-md border border-dashed border-slate-300 bg-slate-50/50 p-3 sm:grid-cols-4">
+              <form
+                action={addOrgUnit}
+                className="grid grid-cols-1 gap-2 rounded-md border border-dashed border-slate-300 bg-slate-50/50 p-3 sm:grid-cols-4"
+              >
                 <Field label="Level">
                   <Select name="level" defaultValue="site">
                     {LEVELS.map((l) => (
-                      <option key={l} value={l}>{l}</option>
+                      <option key={l} value={l}>
+                        {l}
+                      </option>
                     ))}
                   </Select>
                 </Field>
@@ -144,7 +149,9 @@ export default async function AdminOrgPage() {
                   <Select name="parentId" defaultValue="">
                     <option value="">— top-level —</option>
                     {allUnits.map((u) => (
-                      <option key={u.id} value={u.id}>{u.level}: {u.name}</option>
+                      <option key={u.id} value={u.id}>
+                        {u.level}: {u.name}
+                      </option>
                     ))}
                   </Select>
                 </Field>
@@ -190,7 +197,7 @@ function OrgTree({
   units,
   onDelete,
 }: {
-  units: typeof orgUnits.$inferSelect[]
+  units: (typeof orgUnits.$inferSelect)[]
   onDelete: (fd: FormData) => Promise<void>
 }) {
   const byParent = new Map<string | null, typeof units>()
@@ -215,7 +222,12 @@ function OrgTree({
               </div>
               <form action={onDelete} className="inline">
                 <input type="hidden" name="id" value={u.id} />
-                <Button type="submit" variant="ghost" size="sm" className="text-red-500 hover:text-red-700">
+                <Button
+                  type="submit"
+                  variant="ghost"
+                  size="sm"
+                  className="text-red-500 hover:text-red-700"
+                >
                   <Trash2 size={12} />
                 </Button>
               </form>
@@ -247,7 +259,9 @@ function NameListCard({
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">{title} ({items.length})</CardTitle>
+        <CardTitle className="text-base">
+          {title} ({items.length})
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
         {items.length === 0 ? (
@@ -255,11 +269,19 @@ function NameListCard({
         ) : (
           <ul className="space-y-1 text-sm">
             {items.map((i) => (
-              <li key={i.id} className="flex items-center justify-between rounded px-2 py-1 hover:bg-slate-50">
+              <li
+                key={i.id}
+                className="flex items-center justify-between rounded px-2 py-1 hover:bg-slate-50"
+              >
                 <span>{i.name}</span>
                 <form action={deleteAction} className="inline">
                   <input type="hidden" name="id" value={i.id} />
-                  <Button type="submit" variant="ghost" size="sm" className="text-red-500 hover:text-red-700">
+                  <Button
+                    type="submit"
+                    variant="ghost"
+                    size="sm"
+                    className="text-red-500 hover:text-red-700"
+                  >
                     <Trash2 size={12} />
                   </Button>
                 </form>
@@ -278,7 +300,15 @@ function NameListCard({
   )
 }
 
-function Field({ label, className, children }: { label: string; className?: string; children: React.ReactNode }) {
+function Field({
+  label,
+  className,
+  children,
+}: {
+  label: string
+  className?: string
+  children: React.ReactNode
+}) {
   return (
     <div className={`space-y-1.5 ${className ?? ''}`}>
       <Label className="text-xs">{label}</Label>

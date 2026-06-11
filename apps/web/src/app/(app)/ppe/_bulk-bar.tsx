@@ -2,20 +2,9 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import {
-  CheckSquare,
-  Download,
-  HandHelping,
-  Square,
-  Trash2,
-  X,
-} from 'lucide-react'
+import { CheckSquare, Download, HandHelping, Square, Trash2, X } from 'lucide-react'
 import { Button, Select } from '@beaconhs/ui'
-import {
-  bulkDiscardPpe,
-  bulkExportPpeCsv,
-  bulkIssuePpeToPerson,
-} from './_actions'
+import { bulkDiscardPpe, bulkExportPpeCsv, bulkIssuePpeToPerson } from './_actions'
 
 export type PpeHolderOption = {
   id: string
@@ -163,21 +152,19 @@ export function BulkPpeBar({
         ) : null}
 
         <Button size="sm" onClick={go} disabled={pending}>
-          {pending
-            ? 'Working…'
-            : action === 'discard'
-              ? (
-                <span className="inline-flex items-center gap-1">
-                  <Trash2 size={14} /> Discard
-                </span>
-              )
-              : action === 'export'
-                ? (
-                  <span className="inline-flex items-center gap-1">
-                    <Download size={14} /> Export
-                  </span>
-                )
-                : 'Issue'}
+          {pending ? (
+            'Working…'
+          ) : action === 'discard' ? (
+            <span className="inline-flex items-center gap-1">
+              <Trash2 size={14} /> Discard
+            </span>
+          ) : action === 'export' ? (
+            <span className="inline-flex items-center gap-1">
+              <Download size={14} /> Export
+            </span>
+          ) : (
+            'Issue'
+          )}
         </Button>
         {error ? <span className="text-xs text-red-600">{error}</span> : null}
         {info ? <span className="text-xs text-emerald-700">{info}</span> : null}
@@ -205,11 +192,7 @@ export function SelectionCheckbox({
       aria-pressed={selected}
       className="inline-flex items-center justify-center rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
     >
-      {selected ? (
-        <CheckSquare size={16} className="text-teal-700" />
-      ) : (
-        <Square size={16} />
-      )}
+      {selected ? <CheckSquare size={16} className="text-teal-700" /> : <Square size={16} />}
     </button>
   )
 }
@@ -228,11 +211,7 @@ export function HeaderSelectAll({
       aria-pressed={allSelected}
       className="inline-flex items-center justify-center rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
     >
-      {allSelected ? (
-        <CheckSquare size={16} className="text-teal-700" />
-      ) : (
-        <Square size={16} />
-      )}
+      {allSelected ? <CheckSquare size={16} className="text-teal-700" /> : <Square size={16} />}
     </button>
   )
 }

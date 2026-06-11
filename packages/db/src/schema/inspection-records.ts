@@ -95,10 +95,7 @@ export const inspectionRecords = pgTable(
     statusIdx: index('inspection_records_status_idx').on(t.tenantId, t.status),
     occurredIdx: index('inspection_records_occurred_idx').on(t.tenantId, t.occurredAt),
     siteIdx: index('inspection_records_site_idx').on(t.tenantId, t.siteOrgUnitId),
-    inspectorIdx: index('inspection_records_inspector_idx').on(
-      t.tenantId,
-      t.inspectorTenantUserId,
-    ),
+    inspectorIdx: index('inspection_records_inspector_idx').on(t.tenantId, t.inspectorTenantUserId),
   }),
 )
 

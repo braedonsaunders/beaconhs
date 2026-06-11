@@ -82,10 +82,7 @@ async function updateType(formData: FormData): Promise<void> {
   const color = String(formData.get('color') ?? '').trim() || null
   if (!id || !name) return
   await ctx.db((tx) =>
-    tx
-      .update(documentTypes)
-      .set({ name, description, color })
-      .where(eq(documentTypes.id, id)),
+    tx.update(documentTypes).set({ name, description, color }).where(eq(documentTypes.id, id)),
   )
   await recordAudit(ctx, {
     entityType: 'document_type',
@@ -170,7 +167,7 @@ export default async function DocumentTypesPage() {
                 <Label htmlFor="description">Description</Label>
                 <Textarea id="description" name="description" rows={2} />
               </div>
-              <div className="sm:col-span-2 flex justify-end">
+              <div className="flex justify-end sm:col-span-2">
                 <Button type="submit">Add type</Button>
               </div>
             </form>
@@ -210,16 +207,12 @@ export default async function DocumentTypesPage() {
                             className="flex flex-col gap-2 sm:flex-row sm:items-center"
                           >
                             <input type="hidden" name="id" value={t.id} />
-                            <Input
-                              name="name"
-                              defaultValue={t.name}
-                              className="min-w-0 max-w-xs"
-                            />
+                            <Input name="name" defaultValue={t.name} className="max-w-xs min-w-0" />
                             <Input
                               name="description"
                               defaultValue={t.description ?? ''}
                               placeholder="description"
-                              className="min-w-0 max-w-md"
+                              className="max-w-md min-w-0"
                             />
                             <Input
                               name="color"

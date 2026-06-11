@@ -122,7 +122,10 @@ export async function GET(req: Request): Promise<NextResponse> {
           ilike(incidents.description, term),
         )
         if (match) where.push(match)
-        return tx.select({ c: count() }).from(incidents).where(and(...where))
+        return tx
+          .select({ c: count() })
+          .from(incidents)
+          .where(and(...where))
       })(),
 
       // ---- corrective actions (reference + title) ------------------------
@@ -152,7 +155,10 @@ export async function GET(req: Request): Promise<NextResponse> {
           ilike(correctiveActions.title, term),
         )
         if (match) where.push(match)
-        return tx.select({ c: count() }).from(correctiveActions).where(and(...where))
+        return tx
+          .select({ c: count() })
+          .from(correctiveActions)
+          .where(and(...where))
       })(),
 
       // ---- people (firstName / lastName / employeeNo / email) -----------
@@ -191,7 +197,10 @@ export async function GET(req: Request): Promise<NextResponse> {
           ilike(sql<string>`(${people.firstName} || ' ' || ${people.lastName})`, term),
         )
         if (match) where.push(match)
-        return tx.select({ c: count() }).from(people).where(and(...where))
+        return tx
+          .select({ c: count() })
+          .from(people)
+          .where(and(...where))
       })(),
 
       // ---- equipment_items (assetTag / serialNumber / name) -------------
@@ -224,7 +233,10 @@ export async function GET(req: Request): Promise<NextResponse> {
           ilike(equipmentItems.name, term),
         )
         if (match) where.push(match)
-        return tx.select({ c: count() }).from(equipmentItems).where(and(...where))
+        return tx
+          .select({ c: count() })
+          .from(equipmentItems)
+          .where(and(...where))
       })(),
 
       // ---- documents (title + key) -------------------------------------
@@ -248,7 +260,10 @@ export async function GET(req: Request): Promise<NextResponse> {
         const where: SQL<unknown>[] = [isNull(documents.deletedAt)]
         const match = or(ilike(documents.title, term), ilike(documents.key, term))
         if (match) where.push(match)
-        return tx.select({ c: count() }).from(documents).where(and(...where))
+        return tx
+          .select({ c: count() })
+          .from(documents)
+          .where(and(...where))
       })(),
 
       // ---- hazid_assessments (reference) -------------------------------
@@ -272,9 +287,11 @@ export async function GET(req: Request): Promise<NextResponse> {
         const where: SQL<unknown>[] = [isNull(hazidAssessments.deletedAt)]
         const match = ilike(hazidAssessments.reference, term)
         if (match) where.push(match)
-        return tx.select({ c: count() }).from(hazidAssessments).where(and(...where))
+        return tx
+          .select({ c: count() })
+          .from(hazidAssessments)
+          .where(and(...where))
       })(),
-
     ])
 
     return {
@@ -328,7 +345,7 @@ export async function GET(req: Request): Promise<NextResponse> {
         label: `${r.firstName} ${r.lastName}`,
         sublabel: r.employeeNo
           ? `#${r.employeeNo}${r.jobTitle ? ` · ${r.jobTitle}` : ''}`
-          : r.jobTitle ?? undefined,
+          : (r.jobTitle ?? undefined),
         href: `/people/${r.id}`,
       })),
     })
@@ -364,7 +381,8 @@ export async function GET(req: Request): Promise<NextResponse> {
       items: data.hazidRows.map((r) => ({
         id: r.id,
         label: r.reference,
-        sublabel: r.jobScope ?? (r.occurredAt ? new Date(r.occurredAt).toLocaleDateString() : undefined),
+        sublabel:
+          r.jobScope ?? (r.occurredAt ? new Date(r.occurredAt).toLocaleDateString() : undefined),
         href: `/hazid/${r.id}`,
       })),
     })

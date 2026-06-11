@@ -69,22 +69,22 @@ export default async function EquipmentQrPage({ params }: { params: Promise<{ id
             </div>
             <div className="space-y-3">
               <div>
-                <div className="text-xs uppercase tracking-wide text-slate-500">Asset tag</div>
+                <div className="text-xs tracking-wide text-slate-500 uppercase">Asset tag</div>
                 <div className="font-mono text-2xl font-semibold">{row.item.assetTag}</div>
               </div>
               <div>
-                <div className="text-xs uppercase tracking-wide text-slate-500">Name</div>
+                <div className="text-xs tracking-wide text-slate-500 uppercase">Name</div>
                 <div className="text-lg">{row.item.name}</div>
               </div>
               {row.type ? (
                 <div>
-                  <div className="text-xs uppercase tracking-wide text-slate-500">Type</div>
+                  <div className="text-xs tracking-wide text-slate-500 uppercase">Type</div>
                   <div>{row.type.name}</div>
                 </div>
               ) : null}
               {row.item.serialNumber ? (
                 <div>
-                  <div className="text-xs uppercase tracking-wide text-slate-500">Serial</div>
+                  <div className="text-xs tracking-wide text-slate-500 uppercase">Serial</div>
                   <div className="font-mono text-sm">{row.item.serialNumber}</div>
                 </div>
               ) : null}
@@ -97,7 +97,7 @@ export default async function EquipmentQrPage({ params }: { params: Promise<{ id
 
         <div className="rounded-md border border-slate-200 bg-slate-50/50 p-4 text-sm text-slate-600">
           <div className="font-medium text-slate-800">Scan URL</div>
-          <div className="mt-1 break-all font-mono text-xs">{scanUrl}</div>
+          <div className="mt-1 font-mono text-xs break-all">{scanUrl}</div>
           <div className="mt-3">
             <Link href={scanUrl} className="text-teal-700 hover:underline">
               Try it

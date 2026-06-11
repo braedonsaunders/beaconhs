@@ -26,11 +26,7 @@ import { id, softDelete, timestamps } from './_helpers'
 import { tenants, tenantUsers, users } from './core'
 import { orgUnits, people } from './org'
 
-export const formTemplateStatus = pgEnum('form_template_status', [
-  'draft',
-  'published',
-  'archived',
-])
+export const formTemplateStatus = pgEnum('form_template_status', ['draft', 'published', 'archived'])
 
 // What KIND of artifact this template is — reuses the same field builder but
 // changes the builder panels + runtime shell. Additive; existing rows default
@@ -292,9 +288,7 @@ export const formResponses = pgTable(
     //   { steps: [{ stepKey, status, signedAt?, personId?, signatureDataUrl?,
     //               rejectionReason?, rejectedAt?, rejectedBy? }],
     //     lastActionAt?, lastActionByTenantUserId?, lastReason? }
-    workflowState: jsonb('workflow_state')
-      .$type<FormResponseWorkflowState | null>()
-      .default(null),
+    workflowState: jsonb('workflow_state').$type<FormResponseWorkflowState | null>().default(null),
     ...timestamps,
     ...softDelete,
   },
@@ -304,7 +298,11 @@ export const formResponses = pgTable(
     statusIdx: index('form_responses_status_idx').on(t.tenantId, t.status),
     siteIdx: index('form_responses_site_idx').on(t.tenantId, t.siteOrgUnitId),
     submittedIdx: index('form_responses_submitted_idx').on(t.tenantId, t.submittedAt),
-    sourceIdx: index('form_responses_source_idx').on(t.tenantId, t.sourceEntityType, t.sourceEntityId),
+    sourceIdx: index('form_responses_source_idx').on(
+      t.tenantId,
+      t.sourceEntityType,
+      t.sourceEntityId,
+    ),
   }),
 )
 

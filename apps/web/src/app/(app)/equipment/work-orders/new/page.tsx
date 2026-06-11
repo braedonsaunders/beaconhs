@@ -11,13 +11,7 @@ import {
   Select,
   Textarea,
 } from '@beaconhs/ui'
-import {
-  equipmentItems,
-  equipmentWorkOrders,
-  people,
-  tenantUsers,
-  user,
-} from '@beaconhs/db/schema'
+import { equipmentItems, equipmentWorkOrders, people, tenantUsers, user } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { pickString } from '@/lib/list-params'
@@ -35,10 +29,8 @@ async function createWorkOrder(formData: FormData) {
   const summary = String(formData.get('summary') ?? '').trim()
   const description = String(formData.get('description') ?? '').trim() || null
   const priority = String(formData.get('priority') ?? 'med') as (typeof PRIORITIES)[number]
-  const assignedToTenantUserId =
-    String(formData.get('assignedToTenantUserId') ?? '').trim() || null
-  const reportedByPersonId =
-    String(formData.get('reportedByPersonId') ?? '').trim() || null
+  const assignedToTenantUserId = String(formData.get('assignedToTenantUserId') ?? '').trim() || null
+  const reportedByPersonId = String(formData.get('reportedByPersonId') ?? '').trim() || null
   if (!itemId || !summary) throw new Error('Equipment and summary are required.')
   if (!PRIORITIES.includes(priority)) throw new Error('Invalid priority.')
 
@@ -99,7 +91,11 @@ export default async function NewWorkOrderPage({
   const { items, assignees, reporters } = await ctx.db(async (tx) => {
     const [i, a, r] = await Promise.all([
       tx
-        .select({ id: equipmentItems.id, assetTag: equipmentItems.assetTag, name: equipmentItems.name })
+        .select({
+          id: equipmentItems.id,
+          assetTag: equipmentItems.assetTag,
+          name: equipmentItems.name,
+        })
         .from(equipmentItems)
         .orderBy(asc(equipmentItems.assetTag))
         .limit(500),
@@ -145,11 +141,7 @@ export default async function NewWorkOrderPage({
                 </Select>
               </Field>
               <Field label="Summary" required>
-                <Input
-                  name="summary"
-                  required
-                  placeholder="e.g. Brake lights inoperative"
-                />
+                <Input name="summary" required placeholder="e.g. Brake lights inoperative" />
               </Field>
               <Field label="Description">
                 <Textarea

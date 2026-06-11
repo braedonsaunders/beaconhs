@@ -78,13 +78,17 @@ export default async function LocationsPage({
       // Walk via recursive CTE to count descendants where level='site'.
       // Drizzle's sql tag binds arrays as single params which Postgres
       // can't parse, so we expand the ID list via sql.join.
-      const siteRows = customerIds.length === 0
-        ? []
-        : await tx.execute<{ root_id: string; cnt: string }>(sql`
+      const siteRows =
+        customerIds.length === 0
+          ? []
+          : await tx.execute<{ root_id: string; cnt: string }>(sql`
             WITH RECURSIVE descendants AS (
               SELECT id, parent_id, id AS root_id, level
               FROM org_units
-              WHERE id IN (${sql.join(customerIds.map((id) => sql`${id}`), sql`, `)})
+              WHERE id IN (${sql.join(
+                customerIds.map((id) => sql`${id}`),
+                sql`, `,
+              )})
               UNION ALL
               SELECT o.id, o.parent_id, d.root_id, o.level
               FROM org_units o

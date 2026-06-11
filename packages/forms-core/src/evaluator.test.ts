@@ -39,31 +39,17 @@ describe('evaluateLogicRule', () => {
     it('in / notIn handle scalar AND array field values', () => {
       const ctxScalar = makeCtx({ values: { tier: 'gold' } })
       expect(
-        evaluateLogicRule(
-          { op: 'in', field: 'tier', value: ['silver', 'gold'] },
-          ctxScalar,
-        ),
+        evaluateLogicRule({ op: 'in', field: 'tier', value: ['silver', 'gold'] }, ctxScalar),
       ).toBe(true)
-      expect(
-        evaluateLogicRule(
-          { op: 'notIn', field: 'tier', value: ['silver'] },
-          ctxScalar,
-        ),
-      ).toBe(true)
+      expect(evaluateLogicRule({ op: 'notIn', field: 'tier', value: ['silver'] }, ctxScalar)).toBe(
+        true,
+      )
 
       const ctxArray = makeCtx({ values: { ppe: ['hard_hat', 'gloves'] } })
-      expect(
-        evaluateLogicRule(
-          { op: 'in', field: 'ppe', value: ['gloves'] },
-          ctxArray,
-        ),
-      ).toBe(true)
-      expect(
-        evaluateLogicRule(
-          { op: 'notIn', field: 'ppe', value: ['gloves'] },
-          ctxArray,
-        ),
-      ).toBe(false)
+      expect(evaluateLogicRule({ op: 'in', field: 'ppe', value: ['gloves'] }, ctxArray)).toBe(true)
+      expect(evaluateLogicRule({ op: 'notIn', field: 'ppe', value: ['gloves'] }, ctxArray)).toBe(
+        false,
+      )
     })
 
     it('isSet / isNotSet treat undefined, null, empty-string, empty-array as empty', () => {
@@ -114,12 +100,12 @@ describe('evaluateLogicRule', () => {
 
     it('not inverts the inner rule', () => {
       const ctx = makeCtx({ values: { a: 1 } })
-      expect(
-        evaluateLogicRule({ op: 'not', rule: { op: 'eq', field: 'a', value: 1 } }, ctx),
-      ).toBe(false)
-      expect(
-        evaluateLogicRule({ op: 'not', rule: { op: 'eq', field: 'a', value: 2 } }, ctx),
-      ).toBe(true)
+      expect(evaluateLogicRule({ op: 'not', rule: { op: 'eq', field: 'a', value: 1 } }, ctx)).toBe(
+        false,
+      )
+      expect(evaluateLogicRule({ op: 'not', rule: { op: 'eq', field: 'a', value: 2 } }, ctx)).toBe(
+        true,
+      )
     })
 
     it('nested and/or/not compositions work end-to-end', () => {
@@ -148,25 +134,15 @@ describe('evaluateLogicRule', () => {
 
 describe('evaluateFormulaTree', () => {
   it('literal returns the literal value', () => {
-    expect(
-      evaluateFormulaTree({ kind: 'literal', value: 42 }, makeCtx()),
-    ).toBe(42)
-    expect(
-      evaluateFormulaTree({ kind: 'literal', value: 'hi' }, makeCtx()),
-    ).toBe('hi')
+    expect(evaluateFormulaTree({ kind: 'literal', value: 42 }, makeCtx())).toBe(42)
+    expect(evaluateFormulaTree({ kind: 'literal', value: 'hi' }, makeCtx())).toBe('hi')
   })
 
   it('field_ref reads from values; null when missing', () => {
     const ctx = makeCtx({ values: { weight: 100, label: 'crate' } })
-    expect(
-      evaluateFormulaTree({ kind: 'field_ref', fieldKey: 'weight' }, ctx),
-    ).toBe(100)
-    expect(
-      evaluateFormulaTree({ kind: 'field_ref', fieldKey: 'label' }, ctx),
-    ).toBe('crate')
-    expect(
-      evaluateFormulaTree({ kind: 'field_ref', fieldKey: 'missing' }, ctx),
-    ).toBe(null)
+    expect(evaluateFormulaTree({ kind: 'field_ref', fieldKey: 'weight' }, ctx)).toBe(100)
+    expect(evaluateFormulaTree({ kind: 'field_ref', fieldKey: 'label' }, ctx)).toBe('crate')
+    expect(evaluateFormulaTree({ kind: 'field_ref', fieldKey: 'missing' }, ctx)).toBe(null)
   })
 
   it('sum + product across arrays', () => {
@@ -271,10 +247,7 @@ describe('evaluateFormulaTree', () => {
       },
     })
     expect(
-      evaluateFormulaTree(
-        { kind: 'sum_section', sectionKey: 'loads', rowFieldKey: 'weight' },
-        ctx,
-      ),
+      evaluateFormulaTree({ kind: 'sum_section', sectionKey: 'loads', rowFieldKey: 'weight' }, ctx),
     ).toBe(425)
     expect(
       evaluateFormulaTree(
@@ -282,17 +255,9 @@ describe('evaluateFormulaTree', () => {
         ctx,
       ),
     ).toBe(85)
+    expect(evaluateFormulaTree({ kind: 'count_section', sectionKey: 'loads' }, ctx)).toBe(3)
     expect(
-      evaluateFormulaTree(
-        { kind: 'count_section', sectionKey: 'loads' },
-        ctx,
-      ),
-    ).toBe(3)
-    expect(
-      evaluateFormulaTree(
-        { kind: 'sum_section', sectionKey: 'missing', rowFieldKey: 'x' },
-        ctx,
-      ),
+      evaluateFormulaTree({ kind: 'sum_section', sectionKey: 'missing', rowFieldKey: 'x' }, ctx),
     ).toBe(0)
   })
 
@@ -322,9 +287,7 @@ describe('evaluateFormulaTree', () => {
       else: { kind: 'literal', value: 0 },
     }
     expect(evaluateFormulaTree(formula, ctx)).toBe(100)
-    expect(
-      evaluateFormulaTree(formula, makeCtx({ values: { tier: 'silver' } })),
-    ).toBe(0)
+    expect(evaluateFormulaTree(formula, makeCtx({ values: { tier: 'silver' } }))).toBe(0)
   })
 
   it('composes the lift-plan total-weight formula', () => {
@@ -536,30 +499,22 @@ describe('evaluateFormulaTree', () => {
 
 describe('resolveDefaultValue', () => {
   it('literal passes through', () => {
-    expect(
-      resolveDefaultValue({ kind: 'literal', value: 'hello' }, makeCtx()),
-    ).toBe('hello')
+    expect(resolveDefaultValue({ kind: 'literal', value: 'hello' }, makeCtx())).toBe('hello')
     expect(resolveDefaultValue({ kind: 'literal', value: 7 }, makeCtx())).toBe(7)
   })
 
   it('today returns yyyy-mm-dd', () => {
     const fixed = new Date('2025-03-15T12:00:00Z')
     expect(
-      resolveDefaultValue(
-        { kind: 'today' },
-        makeCtx({ requestContext: { now: fixed } }),
-      ),
+      resolveDefaultValue({ kind: 'today' }, makeCtx({ requestContext: { now: fixed } })),
     ).toBe('2025-03-15')
   })
 
   it('now returns yyyy-mm-ddThh:mm', () => {
     const fixed = new Date('2025-03-15T14:25:00Z')
-    expect(
-      resolveDefaultValue(
-        { kind: 'now' },
-        makeCtx({ requestContext: { now: fixed } }),
-      ),
-    ).toBe('2025-03-15T14:25')
+    expect(resolveDefaultValue({ kind: 'now' }, makeCtx({ requestContext: { now: fixed } }))).toBe(
+      '2025-03-15T14:25',
+    )
   })
 
   it('current_user_person_id + current_user_name read from context', () => {

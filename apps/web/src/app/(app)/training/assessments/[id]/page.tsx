@@ -24,10 +24,7 @@ import {
 import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
 import { DetailGrid } from '@/components/detail-grid'
-import {
-  cancelAssessmentAttempt,
-  submitAssessmentAttempt,
-} from '../../_actions/assessments'
+import { cancelAssessmentAttempt, submitAssessmentAttempt } from '../../_actions/assessments'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,11 +48,7 @@ export default async function AssessmentAttemptDetailPage({
       .from(trainingAssessmentTypes)
       .where(eq(trainingAssessmentTypes.id, attempt.typeId))
       .limit(1)
-    const [person] = await tx
-      .select()
-      .from(people)
-      .where(eq(people.id, attempt.personId))
-      .limit(1)
+    const [person] = await tx.select().from(people).where(eq(people.id, attempt.personId)).limit(1)
     const [course] = attempt.courseId
       ? await tx
           .select()
@@ -84,9 +77,7 @@ export default async function AssessmentAttemptDetailPage({
         <DetailHeader
           back={{ href: '/training/assessments', label: 'Back to assessments' }}
           title={type?.name ?? 'Assessment'}
-          subtitle={
-            person ? `${person.firstName} ${person.lastName}` : 'Unknown person'
-          }
+          subtitle={person ? `${person.firstName} ${person.lastName}` : 'Unknown person'}
           badge={
             attempt.status === 'in_progress' ? (
               <Badge variant="secondary">In progress</Badge>
@@ -128,15 +119,11 @@ export default async function AssessmentAttemptDetailPage({
             },
             {
               label: 'Started',
-              value: attempt.startedAt
-                ? new Date(attempt.startedAt).toLocaleString()
-                : '—',
+              value: attempt.startedAt ? new Date(attempt.startedAt).toLocaleString() : '—',
             },
             {
               label: 'Completed',
-              value: attempt.completedAt
-                ? new Date(attempt.completedAt).toLocaleString()
-                : '—',
+              value: attempt.completedAt ? new Date(attempt.completedAt).toLocaleString() : '—',
             },
           ]}
         />
@@ -147,7 +134,7 @@ export default async function AssessmentAttemptDetailPage({
               <CardTitle>Instructions</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="whitespace-pre-wrap text-sm text-slate-700">
+              <p className="text-sm whitespace-pre-wrap text-slate-700">
                 {type.preAssessmentMessage}
               </p>
             </CardContent>
@@ -160,7 +147,7 @@ export default async function AssessmentAttemptDetailPage({
               <CardTitle>Result message</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="whitespace-pre-wrap text-sm text-slate-700">
+              <p className="text-sm whitespace-pre-wrap text-slate-700">
                 {type.postAssessmentMessage}
               </p>
             </CardContent>
@@ -180,13 +167,10 @@ export default async function AssessmentAttemptDetailPage({
                   {results.map((r, i) => {
                     const opts = parseSnapshotOptions(r.kindSnapshot)
                     return (
-                      <li
-                        key={r.id}
-                        className="rounded-lg border border-slate-200 bg-white p-4"
-                      >
+                      <li key={r.id} className="rounded-lg border border-slate-200 bg-white p-4">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0 flex-1">
-                            <div className="text-xs uppercase tracking-wide text-slate-500">
+                            <div className="text-xs tracking-wide text-slate-500 uppercase">
                               Q{i + 1} · {r.kindSnapshot.replace('_', ' ')} · {r.pointsPossible}
                               pt
                             </div>
@@ -242,10 +226,7 @@ export default async function AssessmentAttemptDetailPage({
                 ) : (
                   <div className="text-xs text-slate-500">
                     This attempt is locked. Submitted at{' '}
-                    {attempt.completedAt
-                      ? new Date(attempt.completedAt).toLocaleString()
-                      : '—'}
-                    .
+                    {attempt.completedAt ? new Date(attempt.completedAt).toLocaleString() : '—'}.
                   </div>
                 )}
               </form>
@@ -290,13 +271,7 @@ function AnswerInput({
   }
   if (kind === 'numeric') {
     return (
-      <Input
-        name={name}
-        type="number"
-        step="any"
-        defaultValue={answer ?? ''}
-        disabled={disabled}
-      />
+      <Input name={name} type="number" step="any" defaultValue={answer ?? ''} disabled={disabled} />
     )
   }
   if (kind === 'true_false') {
@@ -325,12 +300,7 @@ function AnswerInput({
   }
   // single_choice (and fallback)
   return (
-    <Input
-      name={name}
-      defaultValue={answer ?? ''}
-      disabled={disabled}
-      placeholder='e.g. "A"'
-    />
+    <Input name={name} defaultValue={answer ?? ''} disabled={disabled} placeholder='e.g. "A"' />
   )
 }
 

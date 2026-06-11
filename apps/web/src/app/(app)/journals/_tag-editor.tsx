@@ -157,7 +157,7 @@ export function TagEditor({
                 exit={{ opacity: 0, scale: 0.85 }}
                 transition={{ type: 'spring', stiffness: 520, damping: 34 }}
                 className={cn(
-                  'inline-flex items-center gap-1 rounded-full py-1 pl-2.5 pr-1 text-xs font-medium ring-1 ring-inset',
+                  'inline-flex items-center gap-1 rounded-full py-1 pr-1 pl-2.5 text-xs font-medium ring-1 ring-inset',
                   sw.chip,
                 )}
               >
@@ -208,7 +208,7 @@ export function TagEditor({
             // border-0 / focus:ring-0: this input is intentionally chromeless — the
             // rounded container is the visible frame. Without these it inherits the
             // @tailwindcss/forms base border (1px, square) and its own focus ring.
-            className="h-7 min-w-[9rem] flex-1 border-0 bg-transparent p-0 px-1 text-sm text-slate-800 outline-none focus:ring-0 placeholder:text-slate-400"
+            className="h-7 min-w-[9rem] flex-1 border-0 bg-transparent p-0 px-1 text-sm text-slate-800 outline-none placeholder:text-slate-400 focus:ring-0"
           />
         ) : tags.length === 0 ? (
           <span className="px-1 text-sm text-slate-400">No tags</span>
@@ -222,7 +222,7 @@ export function TagEditor({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.12 }}
-            className="absolute left-0 top-full z-50 mt-1.5 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl"
+            className="absolute top-full left-0 z-50 mt-1.5 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl"
           >
             <ul id={listId} role="listbox" className="max-h-60 overflow-auto p-1">
               {matches.map((m, i) => (

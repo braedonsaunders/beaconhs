@@ -147,9 +147,7 @@ export default async function SensorDetailPage({
 
   const today = new Date()
   const nextDue = sensor.nextCalibrationDue ? new Date(sensor.nextCalibrationDue) : null
-  const daysToDue = nextDue
-    ? Math.round((nextDue.getTime() - today.getTime()) / 86_400_000)
-    : null
+  const daysToDue = nextDue ? Math.round((nextDue.getTime() - today.getTime()) / 86_400_000) : null
   const overdue = daysToDue !== null && daysToDue < 0
   const soon = daysToDue !== null && daysToDue >= 0 && daysToDue <= 30
 
@@ -188,10 +186,7 @@ export default async function SensorDetailPage({
             </div>
           }
           actions={
-            <Link
-              href={`/confined-space/sensors?drawer=edit-sensor&id=${id}`}
-              scroll={false}
-            >
+            <Link href={`/confined-space/sensors?drawer=edit-sensor&id=${id}`} scroll={false}>
               <Button variant="outline">
                 <Pencil size={14} />
                 Edit

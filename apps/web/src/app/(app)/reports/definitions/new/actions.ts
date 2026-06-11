@@ -53,17 +53,17 @@ function validateCustomQuery(raw: unknown): ReportCustomQuery {
           {
             column: col,
             op: op as (typeof REPORT_FILTER_OPERATORS)[number],
-            value: (o.value as ReportCustomQuery['filters'] extends Array<infer X>
-              ? X extends { value?: infer V }
-                ? V
-                : never
-              : never) ?? null,
+            value:
+              (o.value as ReportCustomQuery['filters'] extends Array<infer X>
+                ? X extends { value?: infer V }
+                  ? V
+                  : never
+                : never) ?? null,
           },
         ]
       })
     : []
-  const groupBy =
-    typeof q.groupBy === 'string' && q.groupBy.length > 0 ? q.groupBy : null
+  const groupBy = typeof q.groupBy === 'string' && q.groupBy.length > 0 ? q.groupBy : null
   const sort =
     q.sort && typeof q.sort === 'object'
       ? (() => {
@@ -73,7 +73,9 @@ function validateCustomQuery(raw: unknown): ReportCustomQuery {
           return { column: s.column, direction: dir as 'asc' | 'desc' }
         })()
       : null
-  const limit = Number.isFinite(Number(q.limit)) ? Math.min(Math.max(Number(q.limit), 1), 10_000) : 1000
+  const limit = Number.isFinite(Number(q.limit))
+    ? Math.min(Math.max(Number(q.limit), 1), 10_000)
+    : 1000
   return { entity: entity as ReportCustomQuery['entity'], columns, filters, groupBy, sort, limit }
 }
 

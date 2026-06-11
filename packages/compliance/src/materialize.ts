@@ -37,7 +37,12 @@ export async function materializeObligation(
   const keys = result.rows.map((r) => r.key)
 
   for (const r of result.rows) {
-    const percent = r.status === 'completed' ? 100 : r.expected ? Math.round(((r.count ?? 0) / r.expected) * 100) : 0
+    const percent =
+      r.status === 'completed'
+        ? 100
+        : r.expected
+          ? Math.round(((r.count ?? 0) / r.expected) * 100)
+          : 0
     const values = {
       tenantId,
       obligationId: ob.id,

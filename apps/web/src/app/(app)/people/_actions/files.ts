@@ -128,10 +128,7 @@ export async function clearPersonSignature(formData: FormData): Promise<void> {
   if (!personId) return
 
   await ctx.db((tx) =>
-    tx
-      .update(people)
-      .set({ signatureAttachmentId: null })
-      .where(eq(people.id, personId)),
+    tx.update(people).set({ signatureAttachmentId: null }).where(eq(people.id, personId)),
   )
 
   await recordAudit(ctx, {

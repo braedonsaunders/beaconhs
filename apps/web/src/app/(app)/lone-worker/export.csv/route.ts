@@ -29,7 +29,11 @@ export async function GET(req: NextRequest) {
 
     const orderBy =
       params.sort === 'next_checkin_due_at'
-        ? [params.dir === 'asc' ? asc(lwSessions.nextCheckinDueAt) : desc(lwSessions.nextCheckinDueAt)]
+        ? [
+            params.dir === 'asc'
+              ? asc(lwSessions.nextCheckinDueAt)
+              : desc(lwSessions.nextCheckinDueAt),
+          ]
         : params.sort === 'status'
           ? [params.dir === 'asc' ? asc(lwSessions.status) : desc(lwSessions.status)]
           : [params.dir === 'asc' ? asc(lwSessions.startedAt) : desc(lwSessions.startedAt)]

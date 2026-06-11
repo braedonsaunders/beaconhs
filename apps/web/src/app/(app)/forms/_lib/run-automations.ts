@@ -49,7 +49,9 @@ import { analyzePhotoAttachments } from '@/app/(app)/forms/_lib/analyze-photos'
 function attachmentIdsFromValue(raw: unknown): string[] {
   const pick = (arr: unknown[]) =>
     arr
-      .map((x) => (x && typeof x === 'object' ? (x as { attachmentId?: string }).attachmentId : null))
+      .map((x) =>
+        x && typeof x === 'object' ? (x as { attachmentId?: string }).attachmentId : null,
+      )
       .filter((x): x is string => !!x)
   if (Array.isArray(raw)) return pick(raw)
   if (raw && typeof raw === 'object') {
@@ -102,7 +104,9 @@ export async function executeFlowPlan(
 
   // --- Lazy, cached resolvers --------------------------------------------
 
-  let submitter: { tenantUserId: string | null; email: string | null; userId: string | null } | undefined
+  let submitter:
+    | { tenantUserId: string | null; email: string | null; userId: string | null }
+    | undefined
   const getSubmitter = async () => {
     if (submitter) return submitter
     const [r] = await ctx.db((tx) =>
@@ -131,7 +135,10 @@ export async function executeFlowPlan(
     return submitter
   }
 
-  const roleCache = new Map<string, { userId: string; email: string | null; tenantUserId: string }[]>()
+  const roleCache = new Map<
+    string,
+    { userId: string; email: string | null; tenantUserId: string }[]
+  >()
   const getRoleUsers = async (roleKey: string) => {
     if (!roleKey) return []
     const cached = roleCache.get(roleKey)
@@ -341,7 +348,9 @@ export async function executeFlowPlan(
           if (action.storeInField) {
             const lines: string[] = [analysis.summary]
             if (analysis.hazards.length)
-              lines.push(`Hazards: ${analysis.hazards.map((h) => `${h.type} (${h.severity})`).join('; ')}`)
+              lines.push(
+                `Hazards: ${analysis.hazards.map((h) => `${h.type} (${h.severity})`).join('; ')}`,
+              )
             if (badPpe.length) lines.push(`PPE: ${badPpe.map((p) => p.item).join(', ')}`)
             const summary = lines.filter(Boolean).join('\n')
             fieldPatch[action.storeInField] = summary
@@ -471,7 +480,9 @@ export async function runOnSubmitAutomations(
     tx
       .select({ id: formAutomations.id, graph: formAutomations.graph })
       .from(formAutomations)
-      .where(and(eq(formAutomations.templateId, args.templateId), eq(formAutomations.enabled, true))),
+      .where(
+        and(eq(formAutomations.templateId, args.templateId), eq(formAutomations.enabled, true)),
+      ),
   )
   if (flows.length === 0) return
 
@@ -535,7 +546,9 @@ export async function runStatusChangeAutomations(
     tx
       .select({ id: formAutomations.id, graph: formAutomations.graph })
       .from(formAutomations)
-      .where(and(eq(formAutomations.templateId, args.templateId), eq(formAutomations.enabled, true))),
+      .where(
+        and(eq(formAutomations.templateId, args.templateId), eq(formAutomations.enabled, true)),
+      ),
   )
   if (flows.length === 0) return
 

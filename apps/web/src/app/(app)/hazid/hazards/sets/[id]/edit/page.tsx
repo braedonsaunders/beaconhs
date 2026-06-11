@@ -26,11 +26,7 @@ export default async function EditHazardSetPage({ params }: { params: Promise<{ 
   const { id } = await params
   const ctx = await requireModuleManage('hazid')
   const data = await ctx.db(async (tx) => {
-    const [row] = await tx
-      .select()
-      .from(hazidHazardSets)
-      .where(eq(hazidHazardSets.id, id))
-      .limit(1)
+    const [row] = await tx.select().from(hazidHazardSets).where(eq(hazidHazardSets.id, id)).limit(1)
     if (!row) return null
     const hazards = await tx
       .select({ id: hazidHazards.id, name: hazidHazards.name, typeName: hazidHazardTypes.name })
@@ -45,7 +41,10 @@ export default async function EditHazardSetPage({ params }: { params: Promise<{ 
   return (
     <PageContainer>
       <div className="max-w-2xl space-y-6">
-        <DetailHeader back={{ href: '/hazid/hazards/sets', label: 'Back' }} title="Edit hazard set" />
+        <DetailHeader
+          back={{ href: '/hazid/hazards/sets', label: 'Back' }}
+          title="Edit hazard set"
+        />
         <Card>
           <CardContent className="pt-6">
             <form action={update} className="space-y-4">
@@ -63,7 +62,11 @@ export default async function EditHazardSetPage({ params }: { params: Promise<{ 
                 <MultiPicker
                   name="hazardIds"
                   defaultSelected={row.hazardIds}
-                  options={hazards.map((h) => ({ value: h.id, label: h.name, sublabel: h.typeName ?? undefined }))}
+                  options={hazards.map((h) => ({
+                    value: h.id,
+                    label: h.name,
+                    sublabel: h.typeName ?? undefined,
+                  }))}
                 />
               </div>
               <div className="flex items-center justify-end">

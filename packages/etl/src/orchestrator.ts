@@ -13,14 +13,20 @@ import * as landing from './source/landing'
 export const H = {
   str: (v: unknown): string | null => (v == null || v === '' ? null : String(v).trim()),
   bool: (v: unknown): boolean => /^(1|y|yes|true|active|t|on)$/i.test(String(v ?? '').trim()),
-  num: (v: unknown): number | null => (v == null || v === '' || isNaN(Number(v)) ? null : Number(v)),
-  int: (v: unknown): number | null => (v == null || v === '' || isNaN(Number(v)) ? null : Math.trunc(Number(v))),
+  num: (v: unknown): number | null =>
+    v == null || v === '' || isNaN(Number(v)) ? null : Number(v),
+  int: (v: unknown): number | null =>
+    v == null || v === '' || isNaN(Number(v)) ? null : Math.trunc(Number(v)),
   // legacy datetimes are naive America/Toronto. Landing tables give Date objects; the mssql_* FDW
   // tables give MSSQL-formatted strings like "May 14 2026 12:00:00:AM" (note the ":AM" quirk).
   ts: (v: unknown): Date | null => {
     if (v == null || v === '') return null
     if (v instanceof Date) return isNaN(v.getTime()) ? null : v
-    const d = new Date(String(v).trim().replace(/:(AM|PM)\s*$/i, ' $1'))
+    const d = new Date(
+      String(v)
+        .trim()
+        .replace(/:(AM|PM)\s*$/i, ' $1'),
+    )
     return isNaN(d.getTime()) ? null : d
   },
   date: (v: unknown): string | null => {
@@ -36,7 +42,10 @@ export const H = {
       return { first: (first ?? '').trim(), last: (last ?? '').trim() }
     }
     const parts = s.split(/\s+/)
-    return { first: parts.slice(0, -1).join(' ') || parts[0]!, last: parts.length > 1 ? parts[parts.length - 1]! : '' }
+    return {
+      first: parts.slice(0, -1).join(' ') || parts[0]!,
+      last: parts.length > 1 ? parts[parts.length - 1]! : '',
+    }
   },
   // delimited "a, b\nc" -> ['a','b','c'] (also accepts JSON arrays)
   list: (v: unknown): string[] => {
@@ -59,7 +68,8 @@ export const H = {
 
 export function rowHash(row: Record<string, unknown>): string {
   const o: Record<string, unknown> = {}
-  for (const k of Object.keys(row).sort()) if (k !== 'created_at' && k !== 'updated_at') o[k] = row[k]
+  for (const k of Object.keys(row).sort())
+    if (k !== 'created_at' && k !== 'updated_at') o[k] = row[k]
   return createHash('sha1').update(JSON.stringify(o)).digest('hex')
 }
 
@@ -83,7 +93,10 @@ export type Loader = {
   where?: string
   /** runs once before the row loop; its result is passed to map() via ctx.prepared */
   prepare?: (env: Env, tenantId: string) => Promise<unknown>
-  map: (row: any, ctx: Ctx) => Promise<Record<string, unknown> | null> | Record<string, unknown> | null
+  map: (
+    row: any,
+    ctx: Ctx,
+  ) => Promise<Record<string, unknown> | null> | Record<string, unknown> | null
   /** custom loaders bypass the generic row loop (e.g. EAV pivots) */
   custom?: (env: Env, tenantId: string) => Promise<{ source: number; upserted: number }>
 }
@@ -177,7 +190,8 @@ function buildUpsertSet(target: any, sampleKeys: string[]) {
 }
 
 async function getWatermark(env: Env, sd: string, st: string): Promise<string | null> {
-  const r: any = await env.tsql`select watermark_value from etl.table_watermarks where source_db=${sd} and source_table=${st}`
+  const r: any =
+    await env.tsql`select watermark_value from etl.table_watermarks where source_db=${sd} and source_table=${st}`
   return r[0]?.watermark_value ?? null
 }
 async function setWatermark(env: Env, sd: string, st: string, val: string | null): Promise<void> {
@@ -188,7 +202,11 @@ async function setWatermark(env: Env, sd: string, st: string, val: string | null
 
 export type Mode = 'import' | 'sync'
 
-async function runGeneric(env: Env, loader: Loader, mode: Mode): Promise<{ source: number; upserted: number }> {
+async function runGeneric(
+  env: Env,
+  loader: Loader,
+  mode: Mode,
+): Promise<{ source: number; upserted: number }> {
   const tenantId = env.tenantIdBySlug[loader.tenant]!
   const pk = loader.pk ?? 'id'
   // Both import and sync read the local landing schema (clean Postgres types + fast + indexed).
@@ -205,7 +223,11 @@ async function runGeneric(env: Env, loader: Loader, mode: Mode): Promise<{ sourc
   let upserted = 0
   let maxU: string | null = wm
   const prepared = loader.prepare ? await loader.prepare(env, tenantId) : undefined
-  for await (const rows of landing.readBatches(readSchema, loader.srcTable, { pk, size: loader.batch ?? 1000, where })) {
+  for await (const rows of landing.readBatches(readSchema, loader.srcTable, {
+    pk,
+    size: loader.batch ?? 1000,
+    where,
+  })) {
     await withSuperAdmin(env.db, async (tx) => {
       const lookup = makeLookup(env, tx)
       source += rows.length
@@ -236,7 +258,10 @@ async function runGeneric(env: Env, loader: Loader, mode: Mode): Promise<{ sourc
         await tx
           .insert(loader.target)
           .values(out)
-          .onConflictDoUpdate({ target: loader.target.id, set: buildUpsertSet(loader.target, Object.keys(out[0]!)) })
+          .onConflictDoUpdate({
+            target: loader.target.id,
+            set: buildUpsertSet(loader.target, Object.keys(out[0]!)),
+          })
         upserted += out.length
       }
     })
@@ -270,13 +295,25 @@ export async function runImport(
         ? await loader.custom(env, env.tenantIdBySlug[loader.tenant]!)
         : await runGeneric(env, loader, mode)
       stats.push({ entity: loader.entity, ...r })
-      console.log(`src=${r.source} upserted=${r.upserted} (${((Date.now() - t0) / 1000).toFixed(1)}s)`)
+      console.log(
+        `src=${r.source} upserted=${r.upserted} (${((Date.now() - t0) / 1000).toFixed(1)}s)`,
+      )
     }
     console.log('\n=== reconciliation ===')
     console.table(stats)
-    await finishRun(tsql as any, runId, 'ok', { mode, totalUpserted: stats.reduce((a, s) => a + s.upserted, 0), entities: stats })
+    await finishRun(tsql as any, runId, 'ok', {
+      mode,
+      totalUpserted: stats.reduce((a, s) => a + s.upserted, 0),
+      entities: stats,
+    })
   } catch (e) {
-    await finishRun(tsql as any, runId, 'failed', { mode, entities: stats }, e instanceof Error ? e.message : String(e))
+    await finishRun(
+      tsql as any,
+      runId,
+      'failed',
+      { mode, entities: stats },
+      e instanceof Error ? e.message : String(e),
+    )
     throw e
   } finally {
     await tsql.end({ timeout: 5 })

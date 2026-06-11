@@ -48,7 +48,7 @@ export function DocumentMultiPicker({
     <div className="space-y-3 text-sm">
       <div className="flex items-end gap-2">
         <div className="flex-1 space-y-1">
-          <label className="text-xs uppercase tracking-wide text-slate-500">Add document</label>
+          <label className="text-xs tracking-wide text-slate-500 uppercase">Add document</label>
           <Select value={pendingValue} onChange={(e) => setPendingValue(e.target.value)}>
             <option value="">— pick —</option>
             {available
@@ -133,7 +133,7 @@ export function ActionItemsPicker({
     <div className="space-y-3 text-sm">
       <div className="flex items-end gap-2">
         <div className="flex-1 space-y-1">
-          <label className="text-xs uppercase tracking-wide text-slate-500">
+          <label className="text-xs tracking-wide text-slate-500 uppercase">
             Link a corrective action
           </label>
           <Select value={pendingValue} onChange={(e) => setPendingValue(e.target.value)}>
@@ -184,4 +184,3 @@ export function ActionItemsPicker({
     </div>
   )
 }
-

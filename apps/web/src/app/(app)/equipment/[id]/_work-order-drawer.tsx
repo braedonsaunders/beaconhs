@@ -132,9 +132,7 @@ export function NewWorkOrderDrawer({
             <Select
               id="wo-priority"
               value={priority}
-              onChange={(e) =>
-                setPriority(e.currentTarget.value as 'low' | 'med' | 'high')
-              }
+              onChange={(e) => setPriority(e.currentTarget.value as 'low' | 'med' | 'high')}
             >
               <option value="low">Low</option>
               <option value="med">Medium</option>

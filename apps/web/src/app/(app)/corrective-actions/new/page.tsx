@@ -24,7 +24,15 @@ import { PageContainer } from '@/components/page-layout'
 export const metadata = { title: 'New corrective action' }
 
 const SEVERITIES = ['low', 'medium', 'high', 'critical'] as const
-const SOURCES = ['inspection', 'incident', 'near_miss', 'observation', 'audit', 'jsha', 'other'] as const
+const SOURCES = [
+  'inspection',
+  'incident',
+  'near_miss',
+  'observation',
+  'audit',
+  'jsha',
+  'other',
+] as const
 
 async function createCA(formData: FormData) {
   'use server'
@@ -45,7 +53,9 @@ async function createCA(formData: FormData) {
     const [{ c } = { c: 0 }] = await tx
       .select({ c: count() })
       .from(correctiveActions)
-      .where(sql`extract(year from coalesce(${correctiveActions.assignedOn}, current_date)) = ${year}`)
+      .where(
+        sql`extract(year from coalesce(${correctiveActions.assignedOn}, current_date)) = ${year}`,
+      )
     const reference = `CA-${year}-${String(Number(c ?? 0) + 1).padStart(4, '0')}`
     return tx
       .insert(correctiveActions)
@@ -113,7 +123,10 @@ export default async function NewCAPage({
   return (
     <PageContainer>
       <div className="max-w-3xl space-y-6">
-        <DetailHeader back={{ href: '/corrective-actions', label: 'Back to corrective actions' }} title="New corrective action" />
+        <DetailHeader
+          back={{ href: '/corrective-actions', label: 'Back to corrective actions' }}
+          title="New corrective action"
+        />
         {sourceIncident ? (
           <Alert variant="info">
             <AlertTitle>Linked to incident</AlertTitle>
@@ -132,7 +145,11 @@ export default async function NewCAPage({
                   <Input name="title" required placeholder="What needs to be done?" />
                 </Field>
                 <Field label="Description" className="sm:col-span-2">
-                  <Textarea name="description" rows={3} placeholder="Context, scope, expected outcome" />
+                  <Textarea
+                    name="description"
+                    rows={3}
+                    placeholder="Context, scope, expected outcome"
+                  />
                 </Field>
                 <Field label="Severity" required>
                   <Select name="severity" defaultValue="medium">
@@ -177,7 +194,17 @@ export default async function NewCAPage({
   )
 }
 
-function Field({ label, required, className, children }: { label: string; required?: boolean; className?: string; children: React.ReactNode }) {
+function Field({
+  label,
+  required,
+  className,
+  children,
+}: {
+  label: string
+  required?: boolean
+  className?: string
+  children: React.ReactNode
+}) {
   return (
     <div className={`space-y-1.5 ${className ?? ''}`}>
       <Label>

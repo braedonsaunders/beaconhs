@@ -111,7 +111,13 @@ function displayFor(item: EItem, templatesById: Map<string, TemplateLite>): Disp
       missing: !t,
     }
   }
-  return { label: item.label, iconKey: item.iconKey ?? 'link', type: 'Link', sub: item.href, missing: false }
+  return {
+    label: item.label,
+    iconKey: item.iconKey ?? 'link',
+    type: 'Link',
+    sub: item.href,
+    missing: false,
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -152,12 +158,19 @@ export function NavEditor({
     mutate(
       groups.map((g) =>
         g.id === groupId
-          ? { ...g, items: g.items.map((it) => (it.uid === u ? ({ ...it, ...patch } as EItem) : it)) }
+          ? {
+              ...g,
+              items: g.items.map((it) => (it.uid === u ? ({ ...it, ...patch } as EItem) : it)),
+            }
           : g,
       ),
     )
   const removeItem = (groupId: string, u: string) =>
-    mutate(groups.map((g) => (g.id === groupId ? { ...g, items: g.items.filter((it) => it.uid !== u) } : g)))
+    mutate(
+      groups.map((g) =>
+        g.id === groupId ? { ...g, items: g.items.filter((it) => it.uid !== u) } : g,
+      ),
+    )
   const moveItem = (fromGroupId: string, u: string, toGroupId: string) => {
     if (fromGroupId === toGroupId) return
     const item = groups.find((g) => g.id === fromGroupId)?.items.find((it) => it.uid === u)
@@ -172,7 +185,11 @@ export function NavEditor({
     toast.success('Moved')
   }
   const addItem = (groupId: string, item: NavItemConfig) => {
-    mutate(groups.map((g) => (g.id === groupId ? { ...g, items: [...g.items, { ...item, uid: uid() }] } : g)))
+    mutate(
+      groups.map((g) =>
+        g.id === groupId ? { ...g, items: [...g.items, { ...item, uid: uid() }] } : g,
+      ),
+    )
     setAddTarget(null)
   }
 
@@ -225,7 +242,9 @@ export function NavEditor({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {dirty ? <span className="text-xs font-medium text-amber-600">Unsaved changes</span> : null}
+          {dirty ? (
+            <span className="text-xs font-medium text-amber-600">Unsaved changes</span>
+          ) : null}
           <Button variant="outline" onClick={reset} disabled={pending}>
             <RotateCcw size={14} /> Reset
           </Button>
@@ -244,13 +263,7 @@ export function NavEditor({
         </AlertDescription>
       </Alert>
 
-      <Reorder.Group
-        axis="y"
-        values={groups}
-        onReorder={mutate}
-        as="div"
-        className="space-y-4"
-      >
+      <Reorder.Group axis="y" values={groups} onReorder={mutate} as="div" className="space-y-4">
         {groups.map((group) => (
           <GroupCard
             key={group.id}
@@ -330,7 +343,7 @@ function GroupCard({
           value={group.label}
           onChange={(e) => onRenameGroup(e.target.value)}
           aria-label="Group name"
-          className="h-8 max-w-[18rem] border-transparent bg-transparent text-xs font-semibold uppercase tracking-wider text-slate-600 hover:border-slate-200 focus:border-slate-300"
+          className="h-8 max-w-[18rem] border-transparent bg-transparent text-xs font-semibold tracking-wider text-slate-600 uppercase hover:border-slate-200 focus:border-slate-300"
         />
         <Badge variant="secondary" className="text-[10px]">
           {group.items.length}

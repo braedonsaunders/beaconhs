@@ -33,7 +33,12 @@ export default async function ByPersonPage({
 
   const peopleOptions = await ctx.db((tx) =>
     tx
-      .select({ id: people.id, firstName: people.firstName, lastName: people.lastName, jobTitle: people.jobTitle })
+      .select({
+        id: people.id,
+        firstName: people.firstName,
+        lastName: people.lastName,
+        jobTitle: people.jobTitle,
+      })
       .from(people)
       .where(eq(people.status, 'active'))
       .orderBy(asc(people.lastName), asc(people.firstName))
@@ -54,7 +59,10 @@ export default async function ByPersonPage({
     <ListPageLayout
       header={
         <>
-          <PageHeader title="Compliance" description="Everything one person owes across every obligation kind." />
+          <PageHeader
+            title="Compliance"
+            description="Everything one person owes across every obligation kind."
+          />
           <ComplianceSubNav active="by-person" />
         </>
       }
@@ -62,12 +70,15 @@ export default async function ByPersonPage({
       <div className="space-y-6">
         <form method="get" className="flex flex-wrap items-end gap-3">
           <div className="min-w-[320px] flex-1">
-            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">Person</label>
+            <label className="mb-1 block text-xs font-medium tracking-wide text-slate-500 uppercase">
+              Person
+            </label>
             <Select name="person" defaultValue={personId ?? ''}>
               <option value="">— Select —</option>
               {peopleOptions.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {`${p.lastName ?? ''}${p.lastName ? ', ' : ''}${p.firstName ?? ''}`.trim() || '(unnamed)'}
+                  {`${p.lastName ?? ''}${p.lastName ? ', ' : ''}${p.firstName ?? ''}`.trim() ||
+                    '(unnamed)'}
                   {p.jobTitle ? ` — ${p.jobTitle}` : ''}
                 </option>
               ))}

@@ -49,10 +49,7 @@ export default async function HazardTypesPage({
     const filters: SQL<unknown>[] = []
     if (params.q) {
       const term = `%${params.q}%`
-      const cond = or(
-        ilike(hazidHazardTypes.name, term),
-        ilike(hazidHazardTypes.description, term),
-      )
+      const cond = or(ilike(hazidHazardTypes.name, term), ilike(hazidHazardTypes.description, term))
       if (cond) filters.push(cond)
     }
     const whereClause = filters.length > 0 ? and(...filters) : undefined
@@ -70,23 +67,17 @@ export default async function HazardTypesPage({
                 ? asc(sql`count(distinct ${hazidHazards.id})`)
                 : desc(sql`count(distinct ${hazidHazards.id})`),
             ]
-          : [
-              params.dir === 'asc'
-                ? asc(hazidHazardTypes.name)
-                : desc(hazidHazardTypes.name),
-            ]
+          : [params.dir === 'asc' ? asc(hazidHazardTypes.name) : desc(hazidHazardTypes.name)]
 
-    const [tot] = await tx
-      .select({ c: count() })
-      .from(hazidHazardTypes)
-      .where(whereClause)
+    const [tot] = await tx.select({ c: count() }).from(hazidHazardTypes).where(whereClause)
 
     const data = await tx
       .select({
         type: hazidHazardTypes,
-        hazardCount: sql<number>`count(distinct case when ${hazidHazards.deletedAt} is null then ${hazidHazards.id} end)`.mapWith(
-          Number,
-        ),
+        hazardCount:
+          sql<number>`count(distinct case when ${hazidHazards.deletedAt} is null then ${hazidHazards.id} end)`.mapWith(
+            Number,
+          ),
       })
       .from(hazidHazardTypes)
       .leftJoin(hazidHazards, eq(hazidHazards.hazardTypeId, hazidHazardTypes.id))
@@ -181,16 +172,14 @@ export default async function HazardTypesPage({
                       <span className="text-slate-400">—</span>
                     )}
                   </TableCell>
-                  <TableCell className="max-w-md text-slate-600 text-xs line-clamp-2">
+                  <TableCell className="line-clamp-2 max-w-md text-xs text-slate-600">
                     {type.description ?? '—'}
                   </TableCell>
                   <TableCell className="tabular-nums">
                     <Badge variant="secondary">{Number(hazardCount ?? 0)}</Badge>
                   </TableCell>
                   <TableCell className="text-xs text-slate-500 tabular-nums">
-                    {type.createdAt
-                      ? new Date(type.createdAt).toLocaleDateString()
-                      : '—'}
+                    {type.createdAt ? new Date(type.createdAt).toLocaleDateString() : '—'}
                   </TableCell>
                 </TableRow>
               ))}

@@ -123,14 +123,14 @@ export default async function EquipmentInspectionsPage() {
   const templatesByKey = new Map(templates.map((t) => [t.key, t]))
   const fallbackTemplate = templates[0] ?? null
 
-  function inspectionLink(item: typeof overduePreUse[number]['item']): string | null {
+  function inspectionLink(item: (typeof overduePreUse)[number]['item']): string | null {
     const key = item.preUseInspectionTemplateKey ?? null
     const tmpl = (key && templatesByKey.get(key)) || fallbackTemplate
     if (!tmpl) return null
     return `/forms/templates/${tmpl.id}/fill?sourceEntityType=equipment&sourceEntityId=${item.id}`
   }
 
-  function browseLink(item: typeof overdueAnnual[number]['item']): string {
+  function browseLink(item: (typeof overdueAnnual)[number]['item']): string {
     return `/forms?category=inspection&sourceEntityType=equipment&sourceEntityId=${item.id}`
   }
 
@@ -233,11 +233,15 @@ export default async function EquipmentInspectionsPage() {
           <section className="space-y-3">
             <div className="flex items-center gap-2">
               <AlertTriangle size={18} className="text-red-600" />
-              <h2 className="text-base font-semibold text-slate-900">Annual / monthly inspections due</h2>
+              <h2 className="text-base font-semibold text-slate-900">
+                Annual / monthly inspections due
+              </h2>
               <span className="text-xs text-slate-500">({overdueAnnual.length})</span>
             </div>
             {overdueAnnual.length === 0 ? (
-              <p className="text-sm text-slate-500">No annual or scheduled inspections outstanding.</p>
+              <p className="text-sm text-slate-500">
+                No annual or scheduled inspections outstanding.
+              </p>
             ) : (
               <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
                 <Table>
@@ -299,7 +303,9 @@ export default async function EquipmentInspectionsPage() {
           <section className="space-y-3">
             <div className="flex items-center gap-2">
               <ClipboardCheck size={18} className="text-teal-600" />
-              <h2 className="text-base font-semibold text-slate-900">Recent inspection completions</h2>
+              <h2 className="text-base font-semibold text-slate-900">
+                Recent inspection completions
+              </h2>
               <span className="text-xs text-slate-500">({recent.length})</span>
             </div>
             {recent.length === 0 ? (
@@ -323,7 +329,8 @@ export default async function EquipmentInspectionsPage() {
                         <TableCell className="text-slate-600">
                           {item ? (
                             <Link href={`/equipment/${item.id}`} className="hover:underline">
-                              <span className="font-mono text-xs">{item.assetTag}</span> · {item.name}
+                              <span className="font-mono text-xs">{item.assetTag}</span> ·{' '}
+                              {item.name}
                             </Link>
                           ) : (
                             '—'
@@ -341,7 +348,9 @@ export default async function EquipmentInspectionsPage() {
                           </Badge>
                         </TableCell>
                         <TableCell className="text-slate-600">
-                          {response.submittedAt ? new Date(response.submittedAt).toLocaleString() : '—'}
+                          {response.submittedAt
+                            ? new Date(response.submittedAt).toLocaleString()
+                            : '—'}
                         </TableCell>
                         <TableCell>
                           <Link

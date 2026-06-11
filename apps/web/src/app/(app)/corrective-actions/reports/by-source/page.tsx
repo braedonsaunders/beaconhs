@@ -2,10 +2,7 @@ import Link from 'next/link'
 import { LinkIcon, ListChecks } from 'lucide-react'
 import { and, asc, count, eq, inArray, isNotNull, sql, sum } from 'drizzle-orm'
 import { Badge, EmptyState, PageHeader } from '@beaconhs/ui'
-import {
-  correctiveActions,
-  incidents,
-} from '@beaconhs/db/schema'
+import { correctiveActions, incidents } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { ListPageLayout } from '@/components/page-layout'
 import { CorrectiveActionsSubNav } from '@/components/corrective-actions-sub-nav'
@@ -39,8 +36,13 @@ export default async function BySourceReport() {
         sourceEntityType: correctiveActions.sourceEntityType,
         sourceEntityId: correctiveActions.sourceEntityId,
         total: count().mapWith(Number),
-        open: sql<number>`SUM(CASE WHEN ${correctiveActions.status} IN ('open','in_progress','pending_verification') THEN 1 ELSE 0 END)`.mapWith(Number),
-        closed: sql<number>`SUM(CASE WHEN ${correctiveActions.status} = 'closed' THEN 1 ELSE 0 END)`.mapWith(Number),
+        open: sql<number>`SUM(CASE WHEN ${correctiveActions.status} IN ('open','in_progress','pending_verification') THEN 1 ELSE 0 END)`.mapWith(
+          Number,
+        ),
+        closed:
+          sql<number>`SUM(CASE WHEN ${correctiveActions.status} = 'closed' THEN 1 ELSE 0 END)`.mapWith(
+            Number,
+          ),
         costImpact: sql<string>`COALESCE(SUM(${correctiveActions.costImpact}), 0)`,
       })
       .from(correctiveActions)
@@ -69,7 +71,9 @@ export default async function BySourceReport() {
     const type = (g.sourceEntityType ?? '').replace(/_/g, ' ')
     if (g.sourceEntityType === 'incident' && g.sourceEntityId) {
       const inc = incidentLookup.get(g.sourceEntityId)
-      sourceLabel = inc ? `${inc.reference} · ${inc.title}` : `Incident ${g.sourceEntityId.slice(0, 8)}`
+      sourceLabel = inc
+        ? `${inc.reference} · ${inc.title}`
+        : `Incident ${g.sourceEntityId.slice(0, 8)}`
       sourceHref = `/incidents/${g.sourceEntityId}`
     } else if (g.sourceEntityId) {
       sourceLabel = `${type} ${g.sourceEntityId.slice(0, 8)}`
@@ -126,7 +130,7 @@ export default async function BySourceReport() {
         <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs uppercase tracking-wide text-slate-500">
+              <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase">
                 <th className="px-4 py-2">Source type</th>
                 <th className="px-4 py-2">Source</th>
                 <th className="px-4 py-2 text-right">Total</th>

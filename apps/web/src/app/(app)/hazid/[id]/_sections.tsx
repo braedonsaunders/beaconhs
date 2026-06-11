@@ -88,8 +88,7 @@ export function AddTaskDrawerBody({
             ))}
           </Select>
           <p className="text-xs text-slate-500">
-            Picking a library task pre-fills the controls and links any
-            associated hazards.
+            Picking a library task pre-fills the controls and links any associated hazards.
           </p>
         </div>
         <div className="space-y-1.5">
@@ -111,7 +110,12 @@ export function AddTaskDrawerBody({
         </div>
         {err ? <div className="text-sm text-red-600">{err}</div> : null}
       </div>
-      <DrawerSubmitHandle pending={pending} onSubmit={submit} closeHref={closeHref} submitLabel="Add task" />
+      <DrawerSubmitHandle
+        pending={pending}
+        onSubmit={submit}
+        closeHref={closeHref}
+        submitLabel="Add task"
+      />
     </>
   )
 }
@@ -158,9 +162,7 @@ export function EditTaskDrawerBody({
       <div className="space-y-4">
         {taskName ? (
           <div className="rounded-md bg-slate-50 px-3 py-2 text-sm">
-            <div className="text-xs uppercase tracking-wide text-slate-500">
-              From library
-            </div>
+            <div className="text-xs tracking-wide text-slate-500 uppercase">From library</div>
             <div className="font-medium text-slate-900">{taskName}</div>
           </div>
         ) : null}
@@ -183,16 +185,19 @@ export function EditTaskDrawerBody({
         </div>
         {row.hazardIds.length > 0 ? (
           <div className="rounded-md bg-slate-50 px-3 py-2 text-xs">
-            <div className="font-medium uppercase tracking-wide text-slate-500">
-              Linked hazards
-            </div>
+            <div className="font-medium tracking-wide text-slate-500 uppercase">Linked hazards</div>
             <div className="mt-1 text-slate-700">
               {row.hazardIds.map((id) => hazardLookup.get(id) ?? '?').join(', ')}
             </div>
           </div>
         ) : null}
       </div>
-      <DrawerSubmitHandle pending={pending} onSubmit={submit} closeHref={closeHref} submitLabel="Save" />
+      <DrawerSubmitHandle
+        pending={pending}
+        onSubmit={submit}
+        closeHref={closeHref}
+        submitLabel="Save"
+      />
     </>
   )
 }
@@ -232,13 +237,9 @@ export function TaskRow({
     <li className="space-y-2 rounded-md border border-slate-200 bg-white p-3">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="text-xs uppercase tracking-wide text-slate-500">
-            Task #{index + 1}
-          </div>
+          <div className="text-xs tracking-wide text-slate-500 uppercase">Task #{index + 1}</div>
           <div className="font-medium text-slate-900">
-            {taskName ?? row.description ?? (
-              <span className="text-slate-400">— untitled —</span>
-            )}
+            {taskName ?? row.description ?? <span className="text-slate-400">— untitled —</span>}
           </div>
           {row.description && taskName && row.description !== taskName ? (
             <div className="text-xs text-slate-500">Override: {row.description}</div>
@@ -249,17 +250,27 @@ export function TaskRow({
             <EditLinkButton
               href={`${basePath}?tab=${activeTab}&drawer=edit-task&taskId=${row.id}`}
             />
-            <MoveButton id={row.id} assessmentId={assessmentId} direction="up" disabled={index === 0} action={moveAction} />
-            <MoveButton id={row.id} assessmentId={assessmentId} direction="down" disabled={index >= totalCount - 1} action={moveAction} />
+            <MoveButton
+              id={row.id}
+              assessmentId={assessmentId}
+              direction="up"
+              disabled={index === 0}
+              action={moveAction}
+            />
+            <MoveButton
+              id={row.id}
+              assessmentId={assessmentId}
+              direction="down"
+              disabled={index >= totalCount - 1}
+              action={moveAction}
+            />
             <DeleteButton id={row.id} assessmentId={assessmentId} action={deleteAction} />
           </div>
         )}
       </div>
       {row.controls ? (
         <div className="rounded bg-slate-50 px-2 py-1 text-xs text-slate-700">
-          <span className="font-medium uppercase tracking-wide text-slate-500">
-            Controls:
-          </span>{' '}
+          <span className="font-medium tracking-wide text-slate-500 uppercase">Controls:</span>{' '}
           {row.controls}
         </div>
       ) : null}
@@ -299,10 +310,7 @@ export function AddHazardLibraryDrawerBody({
   const filtered = query.trim()
     ? hazardLibrary.filter((h) => {
         const q = query.toLowerCase()
-        return (
-          h.name.toLowerCase().includes(q) ||
-          (h.typeName ?? '').toLowerCase().includes(q)
-        )
+        return h.name.toLowerCase().includes(q) || (h.typeName ?? '').toLowerCase().includes(q)
       })
     : hazardLibrary
 
@@ -334,9 +342,7 @@ export function AddHazardLibraryDrawerBody({
         </div>
         <div className="-mx-1 max-h-[60vh] overflow-y-auto rounded-md border border-slate-200">
           {filtered.length === 0 ? (
-            <div className="px-3 py-6 text-center text-sm text-slate-500">
-              No hazards match.
-            </div>
+            <div className="px-3 py-6 text-center text-sm text-slate-500">No hazards match.</div>
           ) : (
             <ul className="divide-y divide-slate-100">
               {filtered.map((h) => (
@@ -366,7 +372,12 @@ export function AddHazardLibraryDrawerBody({
         </div>
         {err ? <div className="text-sm text-red-600">{err}</div> : null}
       </div>
-      <DrawerSubmitHandle pending={pending} onSubmit={submit} closeHref={closeHref} submitLabel="Add hazard" />
+      <DrawerSubmitHandle
+        pending={pending}
+        onSubmit={submit}
+        closeHref={closeHref}
+        submitLabel="Add hazard"
+      />
     </>
   )
 }
@@ -406,15 +417,15 @@ export function AddHazardSetDrawerBody({
     <>
       <div className="space-y-4">
         <p className="text-sm text-slate-600">
-          Hazard sets bulk-add a curated list of hazards in one shot. Existing
-          hazards on this assessment are not deduplicated.
+          Hazard sets bulk-add a curated list of hazards in one shot. Existing hazards on this
+          assessment are not deduplicated.
         </p>
         <div className="space-y-1.5">
           <Label>Hazard set</Label>
           {hazardSets.length === 0 ? (
             <div className="rounded-md bg-slate-50 px-3 py-3 text-sm text-slate-500">
-              No hazard sets configured for this tenant yet. Create one under
-              the HazID library admin.
+              No hazard sets configured for this tenant yet. Create one under the HazID library
+              admin.
             </div>
           ) : (
             <ul className="space-y-1.5">
@@ -444,7 +455,12 @@ export function AddHazardSetDrawerBody({
         </div>
         {err ? <div className="text-sm text-red-600">{err}</div> : null}
       </div>
-      <DrawerSubmitHandle pending={pending} onSubmit={submit} closeHref={closeHref} submitLabel="Add set" />
+      <DrawerSubmitHandle
+        pending={pending}
+        onSubmit={submit}
+        closeHref={closeHref}
+        submitLabel="Add set"
+      />
     </>
   )
 }
@@ -482,8 +498,8 @@ export function AddHazardDrawerBody({
     <>
       <div className="space-y-4">
         <p className="text-sm text-slate-600">
-          Add an ad-hoc hazard for this job only. To save it for future
-          assessments, add it to the hazard library instead.
+          Add an ad-hoc hazard for this job only. To save it for future assessments, add it to the
+          hazard library instead.
         </p>
         <div className="space-y-1.5">
           <Label>Hazard name</Label>
@@ -495,7 +511,12 @@ export function AddHazardDrawerBody({
         </div>
         {err ? <div className="text-sm text-red-600">{err}</div> : null}
       </div>
-      <DrawerSubmitHandle pending={pending} onSubmit={submit} closeHref={closeHref} submitLabel="Add hazard" />
+      <DrawerSubmitHandle
+        pending={pending}
+        onSubmit={submit}
+        closeHref={closeHref}
+        submitLabel="Add hazard"
+      />
     </>
   )
 }
@@ -576,9 +597,7 @@ export function EditHazardDrawerBody({
       <div className="space-y-4">
         {libraryName ? (
           <div className="rounded-md bg-slate-50 px-3 py-2 text-sm">
-            <div className="text-xs uppercase tracking-wide text-slate-500">
-              From library
-            </div>
+            <div className="text-xs tracking-wide text-slate-500 uppercase">From library</div>
             <div className="font-medium text-slate-900">{libraryName}</div>
           </div>
         ) : (
@@ -599,7 +618,7 @@ export function EditHazardDrawerBody({
         {/* they pick values.                                              */}
         {/* ---------------------------------------------------------------- */}
         <div className="space-y-3 rounded-md border border-slate-200 bg-slate-50/60 p-3">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+          <div className="text-xs font-semibold tracking-wide text-slate-600 uppercase">
             Pre-control risk (before mitigations)
           </div>
           <div className="grid grid-cols-[1fr_1fr_auto] items-end gap-3">
@@ -613,11 +632,7 @@ export function EditHazardDrawerBody({
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Severity (1–5)</Label>
-              <RiskRatingSelect
-                value={preSeverity}
-                onChange={setPreSeverity}
-                name="preSeverity"
-              />
+              <RiskRatingSelect value={preSeverity} onChange={setPreSeverity} name="preSeverity" />
             </div>
             <RiskScoreChip score={preScore} />
           </div>
@@ -634,7 +649,7 @@ export function EditHazardDrawerBody({
         </div>
 
         <div className="space-y-3 rounded-md border border-slate-200 bg-slate-50/60 p-3">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+          <div className="text-xs font-semibold tracking-wide text-slate-600 uppercase">
             Post-control risk (after mitigations)
           </div>
           <div className="grid grid-cols-[1fr_1fr_auto] items-end gap-3">
@@ -689,7 +704,12 @@ export function EditHazardDrawerBody({
           Applies to this job
         </label>
       </div>
-      <DrawerSubmitHandle pending={pending} onSubmit={submit} closeHref={closeHref} submitLabel="Save" />
+      <DrawerSubmitHandle
+        pending={pending}
+        onSubmit={submit}
+        closeHref={closeHref}
+        submitLabel="Save"
+      />
     </>
   )
 }
@@ -760,7 +780,7 @@ function RiskScoreChip({ score }: { score: number | null }) {
       title={`${label} risk · score ${score}`}
     >
       <span className="text-sm leading-none">{score}</span>
-      <span className="text-[9px] font-medium leading-none tracking-wide">{label}</span>
+      <span className="text-[9px] leading-none font-medium tracking-wide">{label}</span>
     </div>
   )
 }
@@ -810,11 +830,13 @@ export function HazardRow({
       ? row.postLikelihood * row.postSeverity
       : null
   return (
-    <li className={`space-y-2 rounded-md border border-slate-200 bg-white p-3 ${row.applicable ? '' : 'opacity-60'}`}>
+    <li
+      className={`space-y-2 rounded-md border border-slate-200 bg-white p-3 ${row.applicable ? '' : 'opacity-60'}`}
+    >
       {/* Header: index + name + row actions */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="text-xs uppercase tracking-wide text-slate-500">
+          <div className="text-xs tracking-wide text-slate-500 uppercase">
             Hazard #{index + 1}
             {row.applicable ? null : <span className="ml-2 text-slate-400">(not applicable)</span>}
           </div>
@@ -827,8 +849,20 @@ export function HazardRow({
             <EditLinkButton
               href={`${basePath}?tab=${activeTab}&drawer=edit-hazard&hazardId=${row.id}`}
             />
-            <MoveButton id={row.id} assessmentId={assessmentId} direction="up" disabled={index === 0} action={moveAction} />
-            <MoveButton id={row.id} assessmentId={assessmentId} direction="down" disabled={index >= totalCount - 1} action={moveAction} />
+            <MoveButton
+              id={row.id}
+              assessmentId={assessmentId}
+              direction="up"
+              disabled={index === 0}
+              action={moveAction}
+            />
+            <MoveButton
+              id={row.id}
+              assessmentId={assessmentId}
+              direction="down"
+              disabled={index >= totalCount - 1}
+              action={moveAction}
+            />
             <DeleteButton id={row.id} assessmentId={assessmentId} action={deleteAction} />
           </div>
         )}
@@ -837,7 +871,7 @@ export function HazardRow({
       {/* Risk-rating block: pre-risk chip · controls · post-risk chip */}
       <div className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[auto_1fr_auto]">
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+          <span className="text-[10px] font-semibold tracking-wide text-slate-500 uppercase">
             Pre
           </span>
           <RiskScoreChip score={preScore} />
@@ -845,17 +879,15 @@ export function HazardRow({
         <div className="min-w-0 rounded bg-slate-50 px-2 py-1 text-xs text-slate-700">
           {row.controls ? (
             <>
-              <span className="font-medium uppercase tracking-wide text-slate-500">
-                Controls:
-              </span>{' '}
+              <span className="font-medium tracking-wide text-slate-500 uppercase">Controls:</span>{' '}
               {row.controls}
             </>
           ) : (
-            <span className="italic text-slate-400">No controls captured yet.</span>
+            <span className="text-slate-400 italic">No controls captured yet.</span>
           )}
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+          <span className="text-[10px] font-semibold tracking-wide text-slate-500 uppercase">
             Post
           </span>
           <RiskScoreChip score={postScore} />
@@ -865,17 +897,13 @@ export function HazardRow({
       {/* Legacy standard/specific control snapshots — kept for parity. */}
       {row.standardControls ? (
         <div className="rounded bg-slate-50 px-2 py-1 text-xs text-slate-700">
-          <span className="font-medium uppercase tracking-wide text-slate-500">
-            Standard:
-          </span>{' '}
+          <span className="font-medium tracking-wide text-slate-500 uppercase">Standard:</span>{' '}
           {row.standardControls}
         </div>
       ) : null}
       {row.specificControls ? (
         <div className="rounded bg-amber-50 px-2 py-1 text-xs text-slate-700">
-          <span className="font-medium uppercase tracking-wide text-slate-500">
-            Specific:
-          </span>{' '}
+          <span className="font-medium tracking-wide text-slate-500 uppercase">Specific:</span>{' '}
           {row.specificControls}
         </div>
       ) : null}
@@ -950,7 +978,12 @@ export function AddPPEDrawerBody({
         </label>
         {err ? <div className="text-sm text-red-600">{err}</div> : null}
       </div>
-      <DrawerSubmitHandle pending={pending} onSubmit={submit} closeHref={closeHref} submitLabel="Add PPE" />
+      <DrawerSubmitHandle
+        pending={pending}
+        onSubmit={submit}
+        closeHref={closeHref}
+        submitLabel="Add PPE"
+      />
     </>
   )
 }
@@ -994,11 +1027,7 @@ export function EditPPEDrawerBody({
         </div>
         <div className="space-y-1.5">
           <Label>Description</Label>
-          <Textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={3}
-          />
+          <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
         </div>
         <label className="flex items-center gap-2 text-sm">
           <input
@@ -1009,7 +1038,12 @@ export function EditPPEDrawerBody({
           Required
         </label>
       </div>
-      <DrawerSubmitHandle pending={pending} onSubmit={submit} closeHref={closeHref} submitLabel="Save" />
+      <DrawerSubmitHandle
+        pending={pending}
+        onSubmit={submit}
+        closeHref={closeHref}
+        submitLabel="Save"
+      />
     </>
   )
 }
@@ -1026,7 +1060,13 @@ export function PPERow({
   moveAction,
   deleteAction,
 }: {
-  row: { id: string; name: string; description: string | null; required: boolean; answer: string | null }
+  row: {
+    id: string
+    name: string
+    description: string | null
+    required: boolean
+    answer: string | null
+  }
   assessmentId: string
   index: number
   totalCount: number
@@ -1053,14 +1093,10 @@ export function PPERow({
         <div className="font-medium text-slate-900">
           {row.name}
           {row.required ? (
-            <span className="ml-2 text-xs uppercase tracking-wide text-red-600">
-              required
-            </span>
+            <span className="ml-2 text-xs tracking-wide text-red-600 uppercase">required</span>
           ) : null}
         </div>
-        {row.description ? (
-          <div className="text-xs text-slate-500">{row.description}</div>
-        ) : null}
+        {row.description ? <div className="text-xs text-slate-500">{row.description}</div> : null}
       </div>
       <div className="flex items-center gap-1 text-xs">
         {(['yes', 'no', 'na'] as const).map((v) => (
@@ -1077,11 +1113,21 @@ export function PPERow({
       </div>
       {disabled ? null : (
         <div className="flex items-center gap-1">
-          <EditLinkButton
-            href={`${basePath}?tab=${activeTab}&drawer=edit-ppe&ppeId=${row.id}`}
+          <EditLinkButton href={`${basePath}?tab=${activeTab}&drawer=edit-ppe&ppeId=${row.id}`} />
+          <MoveButton
+            id={row.id}
+            assessmentId={assessmentId}
+            direction="up"
+            disabled={index === 0}
+            action={moveAction}
           />
-          <MoveButton id={row.id} assessmentId={assessmentId} direction="up" disabled={index === 0} action={moveAction} />
-          <MoveButton id={row.id} assessmentId={assessmentId} direction="down" disabled={index >= totalCount - 1} action={moveAction} />
+          <MoveButton
+            id={row.id}
+            assessmentId={assessmentId}
+            direction="down"
+            disabled={index >= totalCount - 1}
+            action={moveAction}
+          />
           <DeleteButton id={row.id} assessmentId={assessmentId} action={deleteAction} />
         </div>
       )}
@@ -1145,10 +1191,7 @@ export function AddQuestionDrawerBody({
         </div>
         <div className="space-y-1.5">
           <Label>Answer type</Label>
-          <Select
-            value={questionType}
-            onChange={(e) => setQuestionType(e.target.value as any)}
-          >
+          <Select value={questionType} onChange={(e) => setQuestionType(e.target.value as any)}>
             <option value="yes_no">Yes / No</option>
             <option value="text">Free text</option>
             <option value="multi_select">Multi-select</option>
@@ -1157,11 +1200,7 @@ export function AddQuestionDrawerBody({
         {questionType === 'multi_select' ? (
           <div className="space-y-1.5">
             <Label>Options (one per line)</Label>
-            <Textarea
-              value={answers}
-              onChange={(e) => setAnswers(e.target.value)}
-              rows={5}
-            />
+            <Textarea value={answers} onChange={(e) => setAnswers(e.target.value)} rows={5} />
           </div>
         ) : null}
         {questionType === 'yes_no' ? (
@@ -1176,7 +1215,12 @@ export function AddQuestionDrawerBody({
         ) : null}
         {err ? <div className="text-sm text-red-600">{err}</div> : null}
       </div>
-      <DrawerSubmitHandle pending={pending} onSubmit={submit} closeHref={closeHref} submitLabel="Add question" />
+      <DrawerSubmitHandle
+        pending={pending}
+        onSubmit={submit}
+        closeHref={closeHref}
+        submitLabel="Add question"
+      />
     </>
   )
 }
@@ -1223,20 +1267,15 @@ export function EditQuestionDrawerBody({
           <Input value={question} onChange={(e) => setQuestion(e.target.value)} />
         </div>
         <div className="rounded-md bg-slate-50 px-3 py-2 text-sm">
-          <div className="text-xs uppercase tracking-wide text-slate-500">
-            Answer type
-          </div>
+          <div className="text-xs tracking-wide text-slate-500 uppercase">Answer type</div>
           <div className="text-slate-900">{row.questionType.replace('_', ' ')}</div>
           <p className="mt-1 text-xs text-slate-500">
-            Changing the answer type would invalidate existing answers — delete
-            and re-add instead.
+            Changing the answer type would invalidate existing answers — delete and re-add instead.
           </p>
         </div>
         {row.questionType === 'multi_select' && row.answers.length > 0 ? (
           <div className="rounded-md bg-slate-50 px-3 py-2 text-sm">
-            <div className="text-xs uppercase tracking-wide text-slate-500">
-              Options
-            </div>
+            <div className="text-xs tracking-wide text-slate-500 uppercase">Options</div>
             <ul className="mt-1 list-inside list-disc text-slate-700">
               {row.answers.map((a) => (
                 <li key={a}>{a}</li>
@@ -1255,7 +1294,12 @@ export function EditQuestionDrawerBody({
           </label>
         ) : null}
       </div>
-      <DrawerSubmitHandle pending={pending} onSubmit={submit} closeHref={closeHref} submitLabel="Save" />
+      <DrawerSubmitHandle
+        pending={pending}
+        onSubmit={submit}
+        closeHref={closeHref}
+        submitLabel="Save"
+      />
     </>
   )
 }
@@ -1318,8 +1362,20 @@ export function QuestionRow({
             <EditLinkButton
               href={`${basePath}?tab=${activeTab}&drawer=edit-question&questionId=${row.id}`}
             />
-            <MoveButton id={row.id} assessmentId={assessmentId} direction="up" disabled={index === 0} action={moveAction} />
-            <MoveButton id={row.id} assessmentId={assessmentId} direction="down" disabled={index >= totalCount - 1} action={moveAction} />
+            <MoveButton
+              id={row.id}
+              assessmentId={assessmentId}
+              direction="up"
+              disabled={index === 0}
+              action={moveAction}
+            />
+            <MoveButton
+              id={row.id}
+              assessmentId={assessmentId}
+              direction="down"
+              disabled={index >= totalCount - 1}
+              action={moveAction}
+            />
             <DeleteButton id={row.id} assessmentId={assessmentId} action={deleteAction} />
           </div>
         )}
@@ -1357,7 +1413,12 @@ export function QuestionRow({
           ))}
         </Select>
       ) : (
-        <Textarea value={answer} onChange={(e) => setAnswer(e.target.value)} rows={3} disabled={disabled} />
+        <Textarea
+          value={answer}
+          onChange={(e) => setAnswer(e.target.value)}
+          rows={3}
+          disabled={disabled}
+        />
       )}
       {row.questionType !== 'yes_no' && !disabled ? (
         <div className="flex items-center justify-end">
@@ -1436,11 +1497,7 @@ export function AddAtmosphericDrawerBody({
           </div>
           <div className="space-y-1.5">
             <Label>Time</Label>
-            <Input
-              type="datetime-local"
-              value={time}
-              onChange={(e) => setTime(e.target.value)}
-            />
+            <Input type="datetime-local" value={time} onChange={(e) => setTime(e.target.value)} />
           </div>
         </div>
         <div className="grid grid-cols-2 gap-3">
@@ -1471,15 +1528,16 @@ export function AddAtmosphericDrawerBody({
         </div>
         <div className="space-y-1.5">
           <Label>Notes</Label>
-          <Textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            rows={2}
-          />
+          <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
         </div>
         {err ? <div className="text-sm text-red-600">{err}</div> : null}
       </div>
-      <DrawerSubmitHandle pending={pending} onSubmit={submit} closeHref={closeHref} submitLabel="Add reading" />
+      <DrawerSubmitHandle
+        pending={pending}
+        onSubmit={submit}
+        closeHref={closeHref}
+        submitLabel="Add reading"
+      />
     </>
   )
 }
@@ -1527,8 +1585,8 @@ export function AddEntryDrawerBody({
     <>
       <div className="space-y-4">
         <p className="text-sm text-slate-600">
-          Log a person entering the confined space. Use "Sign out" on the row
-          afterward to record their exit.
+          Log a person entering the confined space. Use "Sign out" on the row afterward to record
+          their exit.
         </p>
         <div className="space-y-1.5">
           <Label>Internal person</Label>
@@ -1551,15 +1609,16 @@ export function AddEntryDrawerBody({
         </div>
         <div className="space-y-1.5">
           <Label>Time in</Label>
-          <Input
-            type="datetime-local"
-            value={timeIn}
-            onChange={(e) => setTimeIn(e.target.value)}
-          />
+          <Input type="datetime-local" value={timeIn} onChange={(e) => setTimeIn(e.target.value)} />
         </div>
         {err ? <div className="text-sm text-red-600">{err}</div> : null}
       </div>
-      <DrawerSubmitHandle pending={pending} onSubmit={submit} closeHref={closeHref} submitLabel="Log entry" />
+      <DrawerSubmitHandle
+        pending={pending}
+        onSubmit={submit}
+        closeHref={closeHref}
+        submitLabel="Log entry"
+      />
     </>
   )
 }
@@ -1594,19 +1653,22 @@ export function ExitEntryDrawerBody({
     <>
       <div className="space-y-4">
         <p className="text-sm text-slate-600">
-          Mark <span className="font-medium text-slate-900">{personLabel}</span>{' '}
-          as having exited the confined space. The current time is recorded.
+          Mark <span className="font-medium text-slate-900">{personLabel}</span> as having exited
+          the confined space. The current time is recorded.
         </p>
         <div className="rounded-md bg-slate-50 px-3 py-2 text-sm">
-          <div className="text-xs uppercase tracking-wide text-slate-500">
-            Time in
-          </div>
+          <div className="text-xs tracking-wide text-slate-500 uppercase">Time in</div>
           <div className="text-slate-900">
             {row.timeIn ? new Date(row.timeIn).toLocaleString() : '—'}
           </div>
         </div>
       </div>
-      <DrawerSubmitHandle pending={pending} onSubmit={submit} closeHref={closeHref} submitLabel="Mark exited" />
+      <DrawerSubmitHandle
+        pending={pending}
+        onSubmit={submit}
+        closeHref={closeHref}
+        submitLabel="Mark exited"
+      />
     </>
   )
 }
@@ -1767,7 +1829,7 @@ export function DrawerSubmitHandle({
   submitLabel: string
 }) {
   return (
-    <div className="sticky bottom-0 -mx-6 -mb-5 mt-6 flex items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-6 py-3">
+    <div className="sticky bottom-0 -mx-6 mt-6 -mb-5 flex items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-6 py-3">
       <Link href={closeHref as any}>
         <Button type="button" variant="outline">
           Cancel

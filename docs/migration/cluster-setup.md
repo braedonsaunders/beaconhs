@@ -2,14 +2,14 @@
 
 Target for the migration + the local-dev database (one DB serves both; there is no separate prod yet).
 
-| | |
-|---|---|
-| Host | `10.0.0.85:5432` |
-| Superuser | `postgres` |
-| Other roles | `replicator`, `rewind_user`, `admin` |
-| Speaks SSL? | **No** — server has SSL disabled; connect with `sslmode=disable` / `ssl:false` |
-| App database | `beaconhs` (to be created — see `scripts/cluster/provision.sql`) |
-| Maintenance DB in the conn string | `rassaun` (existing; holds FDW user-mappings + pgstudio meta) |
+|                                   |                                                                                |
+| --------------------------------- | ------------------------------------------------------------------------------ |
+| Host                              | `10.0.0.85:5432`                                                               |
+| Superuser                         | `postgres`                                                                     |
+| Other roles                       | `replicator`, `rewind_user`, `admin`                                           |
+| Speaks SSL?                       | **No** — server has SSL disabled; connect with `sslmode=disable` / `ssl:false` |
+| App database                      | `beaconhs` (to be created — see `scripts/cluster/provision.sql`)               |
+| Maintenance DB in the conn string | `rassaun` (existing; holds FDW user-mappings + pgstudio meta)                  |
 
 ## Blocker: pg_hba.conf does not allow this Mac
 
@@ -35,6 +35,7 @@ host that is already whitelisted (e.g. `ssh -L 5432:10.0.0.85:5432 user@<lan-hos
 `DATABASE_URL` at `localhost:5432`).
 
 Verify once allowed:
+
 ```bash
 pnpm --filter @beaconhs/etl etl cluster-check     # expects: OK connected
 ```

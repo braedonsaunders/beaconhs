@@ -24,12 +24,29 @@ import {
 type ChatMsg = DocAiMessage & { streaming?: boolean }
 
 const QUICK_PROMPTS: { label: string; text: string; fill?: boolean }[] = [
-  { label: 'Draft a policy…', text: 'Draft a complete, well-structured policy document on ', fill: true },
-  { label: 'Improve writing', text: 'Improve the clarity, flow, and professionalism of this document. Return the full revised document.' },
-  { label: 'Make more formal', text: 'Rewrite this document in a more formal, professional tone suitable for a regulated workplace. Return the full revised document.' },
+  {
+    label: 'Draft a policy…',
+    text: 'Draft a complete, well-structured policy document on ',
+    fill: true,
+  },
+  {
+    label: 'Improve writing',
+    text: 'Improve the clarity, flow, and professionalism of this document. Return the full revised document.',
+  },
+  {
+    label: 'Make more formal',
+    text: 'Rewrite this document in a more formal, professional tone suitable for a regulated workplace. Return the full revised document.',
+  },
   { label: 'Summarize', text: 'Summarize this document in a short, clear paragraph.' },
-  { label: 'Add a section…', text: 'Suggest and write an additional section that would strengthen this document: ', fill: true },
-  { label: 'Find compliance gaps', text: 'Review this document and list any compliance gaps, missing elements, or risks I should address.' },
+  {
+    label: 'Add a section…',
+    text: 'Suggest and write an additional section that would strengthen this document: ',
+    fill: true,
+  },
+  {
+    label: 'Find compliance gaps',
+    text: 'Review this document and list any compliance gaps, missing elements, or risks I should address.',
+  },
 ]
 
 function looksLikeHtml(s: string): boolean {
@@ -217,7 +234,7 @@ export function AiPanel({
                   type="button"
                   disabled={busy || !aiEnabled}
                   onClick={() => onPickPrompt(p)}
-                  className="rounded-full border border-slate-200 dark:border-slate-800 px-2.5 py-1 text-[11px] text-slate-600 dark:text-slate-300 transition-colors hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700 disabled:opacity-50"
+                  className="rounded-full border border-slate-200 px-2.5 py-1 text-[11px] text-slate-600 transition-colors hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700 disabled:opacity-50 dark:border-slate-800 dark:text-slate-300"
                 >
                   {p.label}
                 </button>
@@ -226,7 +243,7 @@ export function AiPanel({
                 type="button"
                 onClick={startNewChat}
                 disabled={busy}
-                className="ml-auto inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50"
+                className="ml-auto inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] text-slate-500 hover:bg-slate-100 disabled:opacity-50 dark:text-slate-400 dark:hover:bg-slate-800"
               >
                 <Plus size={12} /> New chat
               </button>
@@ -250,9 +267,11 @@ export function AiPanel({
                 }
               }}
               rows={2}
-              placeholder={aiEnabled ? 'Ask AI to draft or edit…  (Enter to send)' : 'AI is not configured'}
+              placeholder={
+                aiEnabled ? 'Ask AI to draft or edit…  (Enter to send)' : 'AI is not configured'
+              }
               disabled={!aiEnabled || busy}
-              className="max-h-40 min-h-[2.5rem] flex-1 resize-none rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-800 dark:text-slate-100 outline-none placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-violet-400 disabled:bg-slate-100 dark:disabled:bg-slate-800"
+              className="max-h-40 min-h-[2.5rem] flex-1 resize-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none placeholder:text-slate-400 focus:border-violet-400 disabled:bg-slate-100 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 dark:disabled:bg-slate-800"
             />
             <button
               type="submit"
@@ -322,7 +341,7 @@ function Intro({
             key={p.label}
             type="button"
             onClick={() => onPick(p)}
-            className="flex items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-800 px-3 py-2 text-left text-sm text-slate-700 dark:text-slate-200 transition-colors hover:border-violet-300 hover:bg-violet-50"
+            className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-left text-sm text-slate-700 transition-colors hover:border-violet-300 hover:bg-violet-50 dark:border-slate-800 dark:text-slate-200"
           >
             <SquarePen size={14} className="shrink-0 text-violet-500" />
             {p.label}
@@ -333,17 +352,11 @@ function Intro({
   )
 }
 
-function Bubble({
-  m,
-  onApply,
-}: {
-  m: ChatMsg
-  onApply: (html: string, replace: boolean) => void
-}) {
+function Bubble({ m, onApply }: { m: ChatMsg; onApply: (html: string, replace: boolean) => void }) {
   if (m.role === 'user') {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-teal-600 px-3 py-2 text-sm text-white">
+        <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-teal-600 px-3 py-2 text-sm whitespace-pre-wrap text-white">
           {m.content}
         </div>
       </div>
@@ -353,10 +366,10 @@ function Bubble({
   const isHtml = looksLikeHtml(m.content)
   return (
     <div className="flex justify-start">
-      <div className="max-w-[92%] rounded-2xl rounded-bl-sm border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 px-3 py-2 text-sm text-slate-800 dark:text-slate-100">
+      <div className="max-w-[92%] rounded-2xl rounded-bl-sm border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
         {isHtml ? (
           <>
-            <div className="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-violet-500">
+            <div className="mb-1 flex items-center gap-1 text-[10px] font-semibold tracking-wide text-violet-500 uppercase">
               <Sparkles size={11} /> Generated document
             </div>
             <div
@@ -375,7 +388,7 @@ function Bubble({
                 <button
                   type="button"
                   onClick={() => onApply(m.content, true)}
-                  className="inline-flex items-center gap-1 rounded-md border border-slate-300 dark:border-slate-700 px-2.5 py-1 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
                 >
                   <SquarePen size={12} /> Replace document
                 </button>

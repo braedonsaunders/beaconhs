@@ -5,13 +5,7 @@
 // email queue keeps payloads small.)
 
 import { and, desc, eq, sql } from 'drizzle-orm'
-import {
-  attachments,
-  documentVersions,
-  documents,
-  tenantUsers,
-  users,
-} from '@beaconhs/db/schema'
+import { attachments, documentVersions, documents, tenantUsers, users } from '@beaconhs/db/schema'
 import { publicUrl } from '@beaconhs/storage'
 import { sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import type { RequestContext } from '@beaconhs/tenant'
@@ -28,11 +22,7 @@ export async function sendDocumentEmail(
   },
 ): Promise<{ recipientCount: number } | null> {
   const data = await ctx.db(async (tx) => {
-    const [row] = await tx
-      .select()
-      .from(documents)
-      .where(eq(documents.id, documentId))
-      .limit(1)
+    const [row] = await tx.select().from(documents).where(eq(documents.id, documentId)).limit(1)
     if (!row) return null
 
     const [publishedVersion] = await tx
@@ -77,8 +67,7 @@ export async function sendDocumentEmail(
     : null
 
   const subject =
-    (options?.subjectPrefix ? `${options.subjectPrefix} · ` : '') +
-    `Document: ${data.doc.title}`
+    (options?.subjectPrefix ? `${options.subjectPrefix} · ` : '') + `Document: ${data.doc.title}`
 
   const text = [
     `DOCUMENT`,
@@ -86,7 +75,9 @@ export async function sendDocumentEmail(
     ``,
     `Status: ${data.doc.status}`,
     `Category: ${data.doc.category ?? '—'}`,
-    data.publishedVersion ? `Published version: v${data.publishedVersion.v.version}` : 'No published version yet.',
+    data.publishedVersion
+      ? `Published version: v${data.publishedVersion.v.version}`
+      : 'No published version yet.',
     data.doc.nextReviewOn ? `Next review: ${data.doc.nextReviewOn}` : '',
     ``,
     options?.messageOverride ? `Note: ${options.messageOverride}\n` : '',
@@ -111,20 +102,28 @@ export async function sendDocumentEmail(
         ${escapeHtml(data.doc.status)}
         ${data.publishedVersion ? ` · v${data.publishedVersion.v.version}` : ''}
       </div>
-      ${options?.messageOverride
-        ? `<div style="border-left:3px solid #0f766e;padding:8px 12px;background:#ecfdf5;margin-bottom:12px;font-size:13px;">${escapeHtml(options.messageOverride)}</div>`
-        : ''}
-      ${data.doc.description
-        ? `<div style="font-size:13px;white-space:pre-wrap;margin-bottom:12px;">${escapeHtml(data.doc.description)}</div>`
-        : ''}
-      ${data.publishedVersion?.v.contentMarkdown
-        ? `<div style="font-size:13px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px;margin-bottom:12px;">${sanitizeDocumentHtml(data.publishedVersion.v.contentMarkdown)}</div>`
-        : ''}
+      ${
+        options?.messageOverride
+          ? `<div style="border-left:3px solid #0f766e;padding:8px 12px;background:#ecfdf5;margin-bottom:12px;font-size:13px;">${escapeHtml(options.messageOverride)}</div>`
+          : ''
+      }
+      ${
+        data.doc.description
+          ? `<div style="font-size:13px;white-space:pre-wrap;margin-bottom:12px;">${escapeHtml(data.doc.description)}</div>`
+          : ''
+      }
+      ${
+        data.publishedVersion?.v.contentMarkdown
+          ? `<div style="font-size:13px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px;margin-bottom:12px;">${sanitizeDocumentHtml(data.publishedVersion.v.contentMarkdown)}</div>`
+          : ''
+      }
       <p style="margin:18px 0 4px;font-size:13px;">
         <a href="${escapeHtml(docUrl)}" style="background:#0f766e;color:#fff;padding:8px 14px;border-radius:6px;text-decoration:none;font-weight:600">Open in app</a>
-        ${attachmentUrl
-          ? ` <a href="${escapeHtml(attachmentUrl)}" style="margin-left:8px;color:#0f766e;text-decoration:underline;">Download attachment</a>`
-          : ''}
+        ${
+          attachmentUrl
+            ? ` <a href="${escapeHtml(attachmentUrl)}" style="margin-left:8px;color:#0f766e;text-decoration:underline;">Download attachment</a>`
+            : ''
+        }
       </p>
     </div>
   `

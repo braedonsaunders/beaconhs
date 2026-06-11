@@ -85,10 +85,7 @@ export default async function TruckLogPage({
       .select()
       .from(truckLogEntries)
       .where(
-        and(
-          gte(truckLogEntries.entryDate, firstDay),
-          lt(truckLogEntries.entryDate, nextFirst),
-        ),
+        and(gte(truckLogEntries.entryDate, firstDay), lt(truckLogEntries.entryDate, nextFirst)),
       )
       .orderBy(asc(truckLogEntries.entryDate))
     return { trucks: t, entries: e }
@@ -96,7 +93,9 @@ export default async function TruckLogPage({
 
   // Prefer vehicles (by type category), but fall back to all if none flagged.
   const vehicleTrucks = trucks.filter(
-    (t) => (t.category ?? '').toLowerCase().includes('vehicle') || (t.typeName ?? '').toLowerCase().includes('truck'),
+    (t) =>
+      (t.category ?? '').toLowerCase().includes('vehicle') ||
+      (t.typeName ?? '').toLowerCase().includes('truck'),
   )
   const displayTrucks = vehicleTrucks.length > 0 ? vehicleTrucks : trucks
 
@@ -104,7 +103,8 @@ export default async function TruckLogPage({
   const grid = new Map<string, Map<number, { id: string; km: number | null }>>()
   for (const e of entries) {
     const day = Number(e.entryDate.slice(8, 10))
-    const inner = grid.get(e.equipmentItemId) ?? new Map<number, { id: string; km: number | null }>()
+    const inner =
+      grid.get(e.equipmentItemId) ?? new Map<number, { id: string; km: number | null }>()
     inner.set(day, { id: e.id, km: e.kmDriven ?? null })
     grid.set(e.equipmentItemId, inner)
   }
@@ -190,7 +190,7 @@ export default async function TruckLogPage({
                 const total = totalsByTruck.get(t.id) ?? 0
                 return (
                   <TableRow key={t.id}>
-                    <TableCell className="sticky left-0 z-10 whitespace-nowrap bg-white">
+                    <TableCell className="sticky left-0 z-10 bg-white whitespace-nowrap">
                       <Link href={`/equipment/${t.id}`} className="hover:underline">
                         <div className="font-mono text-xs text-slate-500">{t.assetTag}</div>
                         <div className="text-sm font-medium text-slate-900">{t.name}</div>
@@ -203,9 +203,7 @@ export default async function TruckLogPage({
                         return (
                           <TableCell key={d} className="px-1 text-center align-middle">
                             <Link
-                              href={
-                                `/equipment/truck-log/new?truckId=${t.id}&date=${date}` as any
-                              }
+                              href={`/equipment/truck-log/new?truckId=${t.id}&date=${date}` as any}
                               className="block py-1 text-[11px] text-slate-300 hover:text-teal-700"
                             >
                               ·

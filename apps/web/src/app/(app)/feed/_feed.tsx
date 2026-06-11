@@ -23,10 +23,30 @@ import { fetchFeedPage } from './_actions'
 import type { FeedEvent, FeedKind, FeedPage } from './_types'
 
 const KIND: Record<FeedKind, { label: string; Icon: LucideIcon; dot: string; chip: string }> = {
-  journal: { label: 'Journal', Icon: NotebookPen, dot: 'bg-teal-500', chip: 'bg-teal-50 text-teal-700 ring-teal-600/20' },
-  incident: { label: 'Incident', Icon: AlertTriangle, dot: 'bg-rose-500', chip: 'bg-rose-50 text-rose-700 ring-rose-600/20' },
-  corrective_action: { label: 'Corrective action', Icon: ListChecks, dot: 'bg-amber-500', chip: 'bg-amber-50 text-amber-700 ring-amber-600/20' },
-  form: { label: 'Form', Icon: ClipboardCheck, dot: 'bg-violet-500', chip: 'bg-violet-50 text-violet-700 ring-violet-600/20' },
+  journal: {
+    label: 'Journal',
+    Icon: NotebookPen,
+    dot: 'bg-teal-500',
+    chip: 'bg-teal-50 text-teal-700 ring-teal-600/20',
+  },
+  incident: {
+    label: 'Incident',
+    Icon: AlertTriangle,
+    dot: 'bg-rose-500',
+    chip: 'bg-rose-50 text-rose-700 ring-rose-600/20',
+  },
+  corrective_action: {
+    label: 'Corrective action',
+    Icon: ListChecks,
+    dot: 'bg-amber-500',
+    chip: 'bg-amber-50 text-amber-700 ring-amber-600/20',
+  },
+  form: {
+    label: 'Form',
+    Icon: ClipboardCheck,
+    dot: 'bg-violet-500',
+    chip: 'bg-violet-50 text-violet-700 ring-violet-600/20',
+  },
 }
 
 export function FeedTimeline({ initial }: { initial: FeedPage }) {
@@ -149,7 +169,9 @@ function FeedCard({ event }: { event: FeedEvent }) {
             {event.title}
           </Link>
           {event.snippet ? (
-            <p className="mt-1 text-sm leading-relaxed text-slate-600 line-clamp-3">{event.snippet}</p>
+            <p className="mt-1 line-clamp-3 text-sm leading-relaxed text-slate-600">
+              {event.snippet}
+            </p>
           ) : null}
 
           {event.tags && event.tags.length > 0 ? (
@@ -159,7 +181,10 @@ function FeedCard({ event }: { event: FeedEvent }) {
                 return (
                   <span
                     key={t.name}
-                    className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset', sw.chip)}
+                    className={cn(
+                      'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset',
+                      sw.chip,
+                    )}
                   >
                     <span className={cn('h-1.5 w-1.5 rounded-full', sw.dot)} />
                     {t.name}
@@ -225,12 +250,20 @@ const AVATAR_COLORS = [
 
 function Avatar({ name }: { name: string }) {
   const parts = name.trim().split(/\s+/)
-  const init = ((parts[0]?.[0] ?? '') + (parts.length > 1 ? (parts[parts.length - 1]![0] ?? '') : '')).toUpperCase() || '•'
+  const init =
+    (
+      (parts[0]?.[0] ?? '') + (parts.length > 1 ? (parts[parts.length - 1]![0] ?? '') : '')
+    ).toUpperCase() || '•'
   let h = 0
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0
   const color = AVATAR_COLORS[h % AVATAR_COLORS.length]
   return (
-    <span className={cn('grid h-10 w-10 shrink-0 place-items-center rounded-full text-sm font-semibold text-white', color)}>
+    <span
+      className={cn(
+        'grid h-10 w-10 shrink-0 place-items-center rounded-full text-sm font-semibold text-white',
+        color,
+      )}
+    >
       {init}
     </span>
   )

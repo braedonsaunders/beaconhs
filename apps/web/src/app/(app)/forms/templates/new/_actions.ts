@@ -26,9 +26,24 @@ function slugify(s: string): string {
     .slice(0, 60)
 }
 
-const txt = (id: string, label: string) => ({ id, type: 'text' as const, label: { en: label }, required: false })
-const long = (id: string, label: string) => ({ id, type: 'long_text' as const, label: { en: label }, required: false })
-const yesno = (id: string, label: string) => ({ id, type: 'yes_no_comment' as const, label: { en: label }, required: false })
+const txt = (id: string, label: string) => ({
+  id,
+  type: 'text' as const,
+  label: { en: label },
+  required: false,
+})
+const long = (id: string, label: string) => ({
+  id,
+  type: 'long_text' as const,
+  label: { en: label },
+  required: false,
+})
+const yesno = (id: string, label: string) => ({
+  id,
+  type: 'yes_no_comment' as const,
+  label: { en: label },
+  required: false,
+})
 const submitterStep = (key: string, title: string) => ({
   key,
   title: { en: title },
@@ -48,8 +63,18 @@ function starterSchema(kind: AppKind, name: string, description: string | null):
       return {
         ...base,
         sections: [
-          { id: 'sec_step1', title: { en: 'Step 1' }, step: 'step_1', fields: [txt('field_a', 'First field')] },
-          { id: 'sec_step2', title: { en: 'Step 2' }, step: 'step_2', fields: [txt('field_b', 'Second field')] },
+          {
+            id: 'sec_step1',
+            title: { en: 'Step 1' },
+            step: 'step_1',
+            fields: [txt('field_a', 'First field')],
+          },
+          {
+            id: 'sec_step2',
+            title: { en: 'Step 2' },
+            step: 'step_2',
+            fields: [txt('field_b', 'Second field')],
+          },
           {
             id: 'sec_review',
             title: { en: 'Review & submit' },
@@ -133,7 +158,12 @@ function starterSchema(kind: AppKind, name: string, description: string | null):
               ],
             },
             fields: [
-              { id: 'w_title', type: 'heading' as const, label: { en: 'Welcome to your app' }, required: false },
+              {
+                id: 'w_title',
+                type: 'heading' as const,
+                label: { en: 'Welcome to your app' },
+                required: false,
+              },
               txt('field_a', 'Field A'),
               txt('field_b', 'Field B'),
               long('field_notes', 'Notes'),

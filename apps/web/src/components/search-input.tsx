@@ -37,7 +37,10 @@ export function SearchInput({
 
   return (
     <div className="relative w-full sm:w-72">
-      <Search className="pointer-events-none absolute top-2 left-2.5 text-slate-400 dark:text-slate-500" size={16} />
+      <Search
+        className="pointer-events-none absolute top-2 left-2.5 text-slate-400 dark:text-slate-500"
+        size={16}
+      />
       <Input
         type="search"
         placeholder={placeholder}
@@ -50,7 +53,7 @@ export function SearchInput({
           type="button"
           aria-label="Clear search"
           onClick={() => setValue('')}
-          className="absolute top-2 right-2.5 text-slate-400 dark:text-slate-500 hover:text-slate-600"
+          className="absolute top-2 right-2.5 text-slate-400 hover:text-slate-600 dark:text-slate-500"
         >
           <X size={16} />
         </button>

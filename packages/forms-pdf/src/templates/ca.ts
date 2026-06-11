@@ -207,9 +207,7 @@ export function renderCaHtml(input: CaRenderInput): string {
 }
 
 function formatStepKind(kind: string): string {
-  return kind
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, (m) => m.toUpperCase())
+  return kind.replace(/_/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase())
 }
 
 function formatMoney(n: string | null | undefined): string {

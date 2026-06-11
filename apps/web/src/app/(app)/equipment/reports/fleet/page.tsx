@@ -7,18 +7,8 @@
 import Link from 'next/link'
 import { AlertTriangle, MapPin, Search, Truck, Wrench } from 'lucide-react'
 import { and, asc, count, desc, eq, isNotNull, isNull, lt, sql } from 'drizzle-orm'
-import {
-  Badge,
-  Button,
-  EmptyState,
-  PageHeader,
-} from '@beaconhs/ui'
-import {
-  equipmentItems,
-  equipmentTypes,
-  equipmentWorkOrders,
-  orgUnits,
-} from '@beaconhs/db/schema'
+import { Badge, Button, EmptyState, PageHeader } from '@beaconhs/ui'
+import { equipmentItems, equipmentTypes, equipmentWorkOrders, orgUnits } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { buildExportHref } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
@@ -136,9 +126,7 @@ export default async function FleetReport() {
     const [openWoAgg] = await tx
       .select({ c: count() })
       .from(equipmentWorkOrders)
-      .where(
-        sql`${equipmentWorkOrders.status} NOT IN ('closed', 'cancelled')`,
-      )
+      .where(sql`${equipmentWorkOrders.status} NOT IN ('closed', 'cancelled')`)
     const openWorkOrders = Number(openWoAgg?.c ?? 0)
 
     const [overdueAgg] = await tx
@@ -254,7 +242,11 @@ export default async function FleetReport() {
         />
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">
-          <Card title="By status" icon={Truck} caption={`${totalItems} assets across ${statusBuckets.filter((b) => b.count > 0).length} buckets`}>
+          <Card
+            title="By status"
+            icon={Truck}
+            caption={`${totalItems} assets across ${statusBuckets.filter((b) => b.count > 0).length} buckets`}
+          >
             <BarList buckets={statusBuckets} max={statusMax} tone="status" />
           </Card>
           <Card title="By type" icon={Wrench} caption="Top 10">
@@ -271,13 +263,20 @@ export default async function FleetReport() {
               <BarList buckets={topSites} max={sitesMax} />
             )}
           </Card>
-          <Card title="Needs attention" icon={AlertTriangle} caption={`${needsAttention.length} item${needsAttention.length === 1 ? '' : 's'}`}>
+          <Card
+            title="Needs attention"
+            icon={AlertTriangle}
+            caption={`${needsAttention.length} item${needsAttention.length === 1 ? '' : 's'}`}
+          >
             {needsAttention.length === 0 ? (
               <Empty>Nothing flagged. Quiet on the front.</Empty>
             ) : (
-              <ul className="space-y-1.5 px-4 pb-3 pt-1">
+              <ul className="space-y-1.5 px-4 pt-1 pb-3">
                 {needsAttention.map((item) => {
-                  const reasons: { label: string; tone: 'destructive' | 'warning' | 'secondary' }[] = []
+                  const reasons: {
+                    label: string
+                    tone: 'destructive' | 'warning' | 'secondary'
+                  }[] = []
                   if (item.isMissing) reasons.push({ label: 'missing', tone: 'destructive' })
                   if (
                     item.nextAnnualInspectionDue !== null &&
@@ -343,14 +342,12 @@ function Card({
   return (
     <div className="flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       <div className="flex items-center gap-2.5 border-b border-slate-100 px-4 py-3">
-        <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200">
+        <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600 ring-1 ring-slate-200 ring-inset">
           <Icon size={14} />
         </span>
         <div className="min-w-0">
           <h3 className="truncate text-sm font-semibold text-slate-900">{title}</h3>
-          {caption ? (
-            <p className="truncate text-[11px] text-slate-500">{caption}</p>
-          ) : null}
+          {caption ? <p className="truncate text-[11px] text-slate-500">{caption}</p> : null}
         </div>
       </div>
       <div className="min-h-0 flex-1">{children}</div>
@@ -373,7 +370,7 @@ function BarList({
         const pct = (b.count / max) * 100
         const barTone =
           tone === 'status'
-            ? STATUS_TONES[b.key] ?? 'teal'
+            ? (STATUS_TONES[b.key] ?? 'teal')
             : pct > 75
               ? 'rose'
               : pct > 40
@@ -383,7 +380,7 @@ function BarList({
           <li key={b.key}>
             <div className="flex items-center justify-between gap-3 text-xs">
               <span className="truncate text-slate-700">{b.label}</span>
-              <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-slate-700">
+              <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700 tabular-nums">
                 {b.count}
               </span>
             </div>

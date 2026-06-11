@@ -18,11 +18,7 @@ import {
   TableRow,
   Textarea,
 } from '@beaconhs/ui'
-import {
-  equipmentCategories,
-  equipmentItems,
-  equipmentTypes,
-} from '@beaconhs/db/schema'
+import { equipmentCategories, equipmentItems, equipmentTypes } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { requireModuleManage, assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
@@ -221,9 +217,7 @@ export default async function EquipmentTypesPage() {
                             '—'
                           )}
                         </TableCell>
-                        <TableCell className="text-slate-600">
-                          {sched?.everyDays ?? '—'}
-                        </TableCell>
+                        <TableCell className="text-slate-600">{sched?.everyDays ?? '—'}</TableCell>
                         <TableCell className="text-slate-600">
                           {type.defaultOilChangeIntervalMonths ?? '—'}
                         </TableCell>
@@ -233,7 +227,7 @@ export default async function EquipmentTypesPage() {
                         <TableCell>
                           <div className="flex justify-end gap-2">
                             <details className="relative">
-                              <summary className="list-none cursor-pointer text-xs text-teal-700 hover:underline">
+                              <summary className="cursor-pointer list-none text-xs text-teal-700 hover:underline">
                                 Edit
                               </summary>
                               <div className="absolute right-0 z-10 mt-1 w-[28rem] rounded-md border border-slate-200 bg-white p-4 shadow-lg">
@@ -242,11 +236,7 @@ export default async function EquipmentTypesPage() {
                                   <div className="grid grid-cols-2 gap-3">
                                     <div className="space-y-1.5">
                                       <Label>Name</Label>
-                                      <Input
-                                        name="name"
-                                        defaultValue={type.name}
-                                        required
-                                      />
+                                      <Input name="name" defaultValue={type.name} required />
                                     </div>
                                     <div className="space-y-1.5">
                                       <Label>Category</Label>
@@ -277,9 +267,7 @@ export default async function EquipmentTypesPage() {
                                         name="oilMonths"
                                         type="number"
                                         min={1}
-                                        defaultValue={
-                                          type.defaultOilChangeIntervalMonths ?? ''
-                                        }
+                                        defaultValue={type.defaultOilChangeIntervalMonths ?? ''}
                                       />
                                     </div>
                                     <div className="col-span-2 space-y-1.5">
@@ -366,7 +354,7 @@ export default async function EquipmentTypesPage() {
               <Label>Description</Label>
               <Textarea name="description" rows={2} />
             </div>
-            <div className="sm:col-span-2 flex justify-end">
+            <div className="flex justify-end sm:col-span-2">
               <Button type="submit">Add type</Button>
             </div>
           </form>

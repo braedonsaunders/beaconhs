@@ -43,7 +43,10 @@ export type NavGroupLabel = (typeof NAV_GROUP_ORDER)[number]
 
 // Stable, url-ish ids for the default groups (used as React keys / reorder ids).
 export function defaultGroupId(label: string): string {
-  return label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+  return label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
 }
 
 // Every built-in module. Extracted from the previous static NAV_GROUPS in
@@ -55,46 +58,130 @@ export const NAV_MODULES: NavModule[] = [
   { key: 'dashboard', href: '/dashboard', label: 'Dashboard', iconKey: 'gauge', group: 'Overview' },
   { key: 'feed', href: '/feed', label: 'Feed', iconKey: 'rss', group: 'Overview' },
   { key: 'my', href: '/my', label: 'Workspace', iconKey: 'circle-user', group: 'Overview' },
-  { key: 'notifications', href: '/notifications', label: 'Inbox', iconKey: 'bell', group: 'Overview' },
+  {
+    key: 'notifications',
+    href: '/notifications',
+    label: 'Inbox',
+    iconKey: 'bell',
+    group: 'Overview',
+  },
 
   // Frontline
-  { key: 'inspections', href: '/inspections', label: 'Inspections', iconKey: 'clipboard', group: 'Frontline' },
+  {
+    key: 'inspections',
+    href: '/inspections',
+    label: 'Inspections',
+    iconKey: 'clipboard',
+    group: 'Frontline',
+  },
   { key: 'hazid', href: '/hazid', label: 'JSHA / HazID', iconKey: 'radiation', group: 'Frontline' },
   { key: 'journals', href: '/journals', label: 'Journals', iconKey: 'journal', group: 'Frontline' },
-  { key: 'incidents', href: '/incidents', label: 'Incidents', iconKey: 'alert', group: 'Frontline' },
-  { key: 'corrective-actions', href: '/corrective-actions', label: 'Corrective Actions', iconKey: 'list-checks', group: 'Frontline' },
+  {
+    key: 'incidents',
+    href: '/incidents',
+    label: 'Incidents',
+    iconKey: 'alert',
+    group: 'Frontline',
+  },
+  {
+    key: 'corrective-actions',
+    href: '/corrective-actions',
+    label: 'Corrective Actions',
+    iconKey: 'list-checks',
+    group: 'Frontline',
+  },
   // Field tools (safe-distance calc, etc.) sit with the crew workflows by default.
   { key: 'tools', href: '/tools', label: 'Tools', iconKey: 'wrench', group: 'Frontline' },
 
   // Programs
   { key: 'training', href: '/training', label: 'Training', iconKey: 'grad', group: 'Programs' },
   { key: 'documents', href: '/documents', label: 'Documents', iconKey: 'book', group: 'Programs' },
-  { key: 'confined-space', href: '/confined-space', label: 'Confined Space', iconKey: 'shield', requiredPermission: 'cs.permit.open', group: 'Programs' },
-  { key: 'lone-worker', href: '/lone-worker', label: 'Lone Worker', iconKey: 'timer', group: 'Programs' },
+  {
+    key: 'confined-space',
+    href: '/confined-space',
+    label: 'Confined Space',
+    iconKey: 'shield',
+    requiredPermission: 'cs.permit.open',
+    group: 'Programs',
+  },
+  {
+    key: 'lone-worker',
+    href: '/lone-worker',
+    label: 'Lone Worker',
+    iconKey: 'timer',
+    group: 'Programs',
+  },
 
   // Assets & people
   { key: 'people', href: '/people', label: 'People', iconKey: 'users', group: 'Assets & people' },
-  { key: 'locations', href: '/locations', label: 'Locations', iconKey: 'pin', group: 'Assets & people' },
-  { key: 'equipment', href: '/equipment', label: 'Equipment', iconKey: 'wrench', group: 'Assets & people' },
+  {
+    key: 'locations',
+    href: '/locations',
+    label: 'Locations',
+    iconKey: 'pin',
+    group: 'Assets & people',
+  },
+  {
+    key: 'equipment',
+    href: '/equipment',
+    label: 'Equipment',
+    iconKey: 'wrench',
+    group: 'Assets & people',
+  },
   { key: 'ppe', href: '/ppe', label: 'PPE', iconKey: 'hard-hat', group: 'Assets & people' },
 
   // Compliance — the unified obligations hub (viewing + management). Its own group
   // and its own gate: it owns writes now, so it must not inherit the read-only
   // reports.read audience.
-  { key: 'compliance', href: '/compliance', label: 'Compliance', iconKey: 'check', requiredPermission: 'compliance.read', group: 'Compliance' },
+  {
+    key: 'compliance',
+    href: '/compliance',
+    label: 'Compliance',
+    iconKey: 'check',
+    requiredPermission: 'compliance.read',
+    group: 'Compliance',
+  },
 
   // Insight
-  { key: 'insights', href: '/insights', label: 'Insights', iconKey: 'gauge', requiredPermission: 'reports.read', group: 'Insight' },
-  { key: 'reports', href: '/reports', label: 'Reports', iconKey: 'file', requiredPermission: 'reports.read', group: 'Insight' },
+  {
+    key: 'insights',
+    href: '/insights',
+    label: 'Insights',
+    iconKey: 'gauge',
+    requiredPermission: 'reports.read',
+    group: 'Insight',
+  },
+  {
+    key: 'reports',
+    href: '/reports',
+    label: 'Reports',
+    iconKey: 'file',
+    requiredPermission: 'reports.read',
+    group: 'Insight',
+  },
 
   // Settings
   // Library & catalogues and Navigation are intentionally NOT sidebar modules —
   // they're surfaced as tiles on the /admin landing page to keep the sidebar lean.
-  { key: 'admin', href: '/admin', label: 'Admin', iconKey: 'settings', requiredPermission: 'admin.settings.manage', group: 'Settings' },
+  {
+    key: 'admin',
+    href: '/admin',
+    label: 'Admin',
+    iconKey: 'settings',
+    requiredPermission: 'admin.settings.manage',
+    group: 'Settings',
+  },
   // Forms = the template library + designer; a build/admin task, so it lives in
   // Settings. Crews don't need the library — they fill forms via assignments,
   // the module pages (inspections/JSHA/…), and pinned forms.
-  { key: 'forms', href: '/forms', label: 'Builder', iconKey: 'clipboard-check', requiredPermission: 'forms.template.read', group: 'Settings' },
+  {
+    key: 'forms',
+    href: '/forms',
+    label: 'Builder',
+    iconKey: 'clipboard-check',
+    requiredPermission: 'forms.template.read',
+    group: 'Settings',
+  },
   { key: 'utilities', href: '/utilities', label: 'Utilities', iconKey: 'gauge', group: 'Settings' },
 ]
 

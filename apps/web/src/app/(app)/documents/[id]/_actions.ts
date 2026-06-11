@@ -128,7 +128,11 @@ export async function getImageUrl(
   const ctx = await requireRequestContext()
   if (!attachmentId) return { ok: false, error: 'Missing attachment id' }
   const [row] = await ctx.db((tx) =>
-    tx.select({ key: attachments.r2Key }).from(attachments).where(eq(attachments.id, attachmentId)).limit(1),
+    tx
+      .select({ key: attachments.r2Key })
+      .from(attachments)
+      .where(eq(attachments.id, attachmentId))
+      .limit(1),
   )
   if (!row) return { ok: false, error: 'Attachment not found' }
   return { ok: true, url: publicUrl(row.key) }
@@ -205,18 +209,24 @@ export async function importDocxIntoDocument(input: {
   if (!input.documentId || !input.attachmentId) return { ok: false, error: 'Missing fields' }
   const [att] = await ctx.db((tx) =>
     tx
-      .select({ key: attachments.r2Key, contentType: attachments.contentType, filename: attachments.filename })
+      .select({
+        key: attachments.r2Key,
+        contentType: attachments.contentType,
+        filename: attachments.filename,
+      })
       .from(attachments)
       .where(eq(attachments.id, input.attachmentId))
       .limit(1),
   )
   if (!att) return { ok: false, error: 'File not found' }
   const isDocx =
-    att.contentType.includes('wordprocessingml') || (att.filename ?? '').toLowerCase().endsWith('.docx')
+    att.contentType.includes('wordprocessingml') ||
+    (att.filename ?? '').toLowerCase().endsWith('.docx')
   if (!isDocx) return { ok: false, error: 'Please upload a Word (.docx) file' }
 
   let html = ''
-  const imageUploads: { key: string; contentType: string; sizeBytes: number; filename: string }[] = []
+  const imageUploads: { key: string; contentType: string; sizeBytes: number; filename: string }[] =
+    []
   try {
     const buffer = await getObject({ key: att.key })
     const result = await mammoth.convertToHtml(
@@ -226,9 +236,18 @@ export async function importDocxIntoDocument(input: {
           const imgBuf = await image.read()
           const ct = image.contentType || 'image/png'
           const ext = (ct.split('/')[1] || 'png').replace('+xml', '')
-          const imgKey = newAttachmentKey({ tenantId: ctx.tenantId, kind: 'image', filename: `import.${ext}` })
+          const imgKey = newAttachmentKey({
+            tenantId: ctx.tenantId,
+            kind: 'image',
+            filename: `import.${ext}`,
+          })
           await putObject({ key: imgKey, body: imgBuf, contentType: ct })
-          imageUploads.push({ key: imgKey, contentType: ct, sizeBytes: imgBuf.length, filename: `import.${ext}` })
+          imageUploads.push({
+            key: imgKey,
+            contentType: ct,
+            sizeBytes: imgBuf.length,
+            filename: `import.${ext}`,
+          })
           return { src: publicUrl(imgKey) }
         }),
       },
@@ -250,7 +269,12 @@ export async function importDocxIntoDocument(input: {
       })
       .onConflictDoUpdate({
         target: documentDrafts.documentId,
-        set: { contentHtml: html, contentJson: null, updatedByTenantUserId: ctx.membership?.id ?? null, updatedAt: new Date() },
+        set: {
+          contentHtml: html,
+          contentJson: null,
+          updatedByTenantUserId: ctx.membership?.id ?? null,
+          updatedAt: new Date(),
+        },
       })
     for (const img of imageUploads) {
       await tx.insert(attachments).values({
@@ -367,7 +391,11 @@ export async function publishDraft(input: {
         .limit(1)
 
       const [latest] = await tx
-        .select({ id: documentVersions.id, version: documentVersions.version, publishedAt: documentVersions.publishedAt })
+        .select({
+          id: documentVersions.id,
+          version: documentVersions.version,
+          publishedAt: documentVersions.publishedAt,
+        })
         .from(documentVersions)
         .where(eq(documentVersions.documentId, documentId))
         .orderBy(desc(documentVersions.version))

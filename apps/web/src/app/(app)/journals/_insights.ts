@@ -26,7 +26,9 @@ export async function getInsights(ctx: RequestContext): Promise<Insights> {
   const scope = journalScopeWhere(ctx, authorPersonId)
   const notDeleted = isNull(journalEntries.deletedAt)
   const base = (extra?: SQL): SQL =>
-    extra ? and(notDeleted, ...(scope ? [scope] : []), extra)! : and(notDeleted, ...(scope ? [scope] : []))!
+    extra
+      ? and(notDeleted, ...(scope ? [scope] : []), extra)!
+      : and(notDeleted, ...(scope ? [scope] : []))!
 
   return ctx.db(async (tx) => {
     const [tot] = await tx

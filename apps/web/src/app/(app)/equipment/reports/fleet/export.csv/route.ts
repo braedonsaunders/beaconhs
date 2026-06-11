@@ -80,7 +80,9 @@ export async function GET() {
       Number(expensesYtd).toFixed(2),
       item.lastAnnualInspectionOn ?? '',
       item.nextAnnualInspectionDue ?? '',
-      item.lastPreUseInspectionAt ? new Date(item.lastPreUseInspectionAt).toISOString().slice(0, 10) : '',
+      item.lastPreUseInspectionAt
+        ? new Date(item.lastPreUseInspectionAt).toISOString().slice(0, 10)
+        : '',
       item.lastOilChangeOn ?? '',
       item.nextOilChangeDue ?? '',
     ]),

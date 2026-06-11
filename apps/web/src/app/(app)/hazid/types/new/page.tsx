@@ -51,7 +51,9 @@ export default async function NewAssessmentTypePage() {
                 <Label>Style</Label>
                 <Select name="style" defaultValue="task_based">
                   <option value="task_based">Task-based (tasks first, then hazards)</option>
-                  <option value="hazard_based">Hazard-based (hazards first, with job-scope summary)</option>
+                  <option value="hazard_based">
+                    Hazard-based (hazards first, with job-scope summary)
+                  </option>
                 </Select>
               </div>
               <div className="space-y-1.5">
@@ -66,7 +68,9 @@ export default async function NewAssessmentTypePage() {
                 </Select>
               </div>
               <fieldset className="space-y-2 rounded-md border border-slate-200 p-3">
-                <legend className="px-1 text-xs font-medium text-slate-500">Enable sub-sections</legend>
+                <legend className="px-1 text-xs font-medium text-slate-500">
+                  Enable sub-sections
+                </legend>
                 <CheckRow name="hasTasks" label="Tasks" defaultChecked />
                 <CheckRow name="hasHazards" label="Hazards" defaultChecked />
                 <CheckRow name="hasPPE" label="PPE" defaultChecked />
@@ -86,7 +90,15 @@ export default async function NewAssessmentTypePage() {
   )
 }
 
-function CheckRow({ name, label, defaultChecked }: { name: string; label: string; defaultChecked?: boolean }) {
+function CheckRow({
+  name,
+  label,
+  defaultChecked,
+}: {
+  name: string
+  label: string
+  defaultChecked?: boolean
+}) {
   return (
     <label className="flex items-center gap-2 text-sm">
       <input

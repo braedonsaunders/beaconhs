@@ -94,7 +94,20 @@ import { CanvasEditor, defaultBox } from './_canvas-editor'
 import { FlowsCanvas, type FlowSummary } from '../flows/_flows-canvas'
 import { AiAssistant } from '@/components/ai-assistant'
 import { runAppBuilderChat } from '../../../_ai-actions'
-import { BarChart3, Bold, Database, LayoutGrid, ListOrdered, MapPinned, PanelLeft, ScanLine, Send, SlidersHorizontal, Sparkles, Workflow as WorkflowIcon } from 'lucide-react'
+import {
+  BarChart3,
+  Bold,
+  Database,
+  LayoutGrid,
+  ListOrdered,
+  MapPinned,
+  PanelLeft,
+  ScanLine,
+  Send,
+  SlidersHorizontal,
+  Sparkles,
+  Workflow as WorkflowIcon,
+} from 'lucide-react'
 import { listDataSources, type DataSourceSummary } from '../../../_lib/data-sources'
 
 // --- Palette ---------------------------------------------------------------
@@ -159,13 +172,55 @@ const FIELD_ICONS: Partial<Record<FieldType, React.ComponentType<{ size?: number
 // placement at the top; rare ones live in "More" further down.
 type PaletteGroup = { label: string; types: FieldType[] }
 const PALETTE_PRIMARY: PaletteGroup[] = [
-  { label: 'Common', types: ['text', 'long_text', 'number', 'slider', 'date', 'table', 'select', 'checkbox_group', 'pass_fail_na', 'signature', 'photo', 'file', 'person_picker', 'formula'] },
+  {
+    label: 'Common',
+    types: [
+      'text',
+      'long_text',
+      'number',
+      'slider',
+      'date',
+      'table',
+      'select',
+      'checkbox_group',
+      'pass_fail_na',
+      'signature',
+      'photo',
+      'file',
+      'person_picker',
+      'formula',
+    ],
+  },
 ]
 const PALETTE_MORE: PaletteGroup[] = [
-  { label: 'Standard', types: ['textarea', 'datetime', 'time', 'gps', 'email', 'phone', 'url', 'rich_text', 'address', 'qr_scanner'] },
+  {
+    label: 'Standard',
+    types: [
+      'textarea',
+      'datetime',
+      'time',
+      'gps',
+      'email',
+      'phone',
+      'url',
+      'rich_text',
+      'address',
+      'qr_scanner',
+    ],
+  },
   { label: 'Choice', types: ['radio', 'multi_select', 'ranking'] },
   { label: 'Scoring', types: ['rating', 'matrix', 'yes_no_comment', 'traffic_light'] },
-  { label: 'Pickers', types: ['multi_person_picker', 'site_picker', 'equipment_picker', 'ppe_picker', 'document_picker', 'course_picker'] },
+  {
+    label: 'Pickers',
+    types: [
+      'multi_person_picker',
+      'site_picker',
+      'equipment_picker',
+      'ppe_picker',
+      'document_picker',
+      'course_picker',
+    ],
+  },
   { label: 'Media', types: ['photo_ai', 'photo_annotated', 'video', 'audio'] },
   { label: 'Identity', types: ['typed_attestation'] },
   { label: 'Computed', types: ['calc', 'risk_matrix'] },
@@ -241,7 +296,9 @@ export function FormDesigner({
   const [schema, setSchema] = useState<FormSchemaV1>(initialSchema)
   const [appName, setAppName] = useState(templateName)
   // Unified editor: left rail tab + right surface.
-  const [leftTab, setLeftTab] = useState<'overview' | 'build' | 'assignments' | 'permissions'>('build')
+  const [leftTab, setLeftTab] = useState<'overview' | 'build' | 'assignments' | 'permissions'>(
+    'build',
+  )
   const [surface, setSurface] = useState<'build' | 'flows'>(initialSurface)
   const [designerTab, setDesignerTab] = useState<string>(() => initialSchema.tabs?.[0]?.id ?? '')
   const [showAiAssistant, setShowAiAssistant] = useState(false)
@@ -356,9 +413,8 @@ export function FormDesigner({
       draft.tabs = remaining.length ? remaining : undefined
       return draft
     })
-    setDesignerTab((cur) => (cur === id ? schema.tabs?.find((t) => t.id !== id)?.id ?? '' : cur))
+    setDesignerTab((cur) => (cur === id ? (schema.tabs?.find((t) => t.id !== id)?.id ?? '') : cur))
   }
-
 
   function addField(sectionId: string, type: FieldType) {
     const f = emptyField(type)
@@ -373,7 +429,10 @@ export function FormDesigner({
         const bottomY = sec.canvas.items.reduce((m, it) => Math.max(m, it.y + it.h), 0)
         sec.canvas = {
           ...sec.canvas,
-          items: [...sec.canvas.items, { i: f.id, x: 0, y: bottomY, w: Math.min(box.w * 2, 12), h: box.h }],
+          items: [
+            ...sec.canvas.items,
+            { i: f.id, x: 0, y: bottomY, w: Math.min(box.w * 2, 12), h: box.h },
+          ],
         }
       }
       return draft
@@ -387,7 +446,8 @@ export function FormDesigner({
       if (!sec) return draft
       sec.fields = sec.fields.filter((f) => f.id !== fieldId)
       // Keep the canvas layout in sync — drop the deleted field's box.
-      if (sec.canvas) sec.canvas = { ...sec.canvas, items: sec.canvas.items.filter((it) => it.i !== fieldId) }
+      if (sec.canvas)
+        sec.canvas = { ...sec.canvas, items: sec.canvas.items.filter((it) => it.i !== fieldId) }
       return draft
     })
     if (selection.kind === 'field' && selection.fieldId === fieldId) {
@@ -557,7 +617,7 @@ export function FormDesigner({
             <div className="flex items-center gap-2">
               <span className="truncate text-sm font-semibold">{appName}</span>
               <span
-                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${KIND_META[templateKind].cls}`}
+                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase ${KIND_META[templateKind].cls}`}
               >
                 {KIND_META[templateKind].label}
               </span>
@@ -610,54 +670,79 @@ export function FormDesigner({
         {/* LEFT 1/3 — Overview / Build / Assignments / Permissions */}
         <aside className="flex w-72 shrink-0 flex-col border-r border-slate-200 bg-white">
           <div className="flex shrink-0 items-center gap-0.5 border-b border-slate-200 px-2 py-1.5">
-            <LeftTab active={leftTab === 'overview'} onClick={() => setLeftTab('overview')} icon={<SlidersHorizontal size={16} />} label="Overview" />
-            <LeftTab active={leftTab === 'build'} onClick={() => setLeftTab('build')} icon={<PanelLeft size={16} />} label="Build" />
-            <LeftTab active={leftTab === 'assignments'} onClick={() => setLeftTab('assignments')} icon={<Send size={16} />} label="Assign" />
-            <LeftTab active={leftTab === 'permissions'} onClick={() => setLeftTab('permissions')} icon={<ShieldCheck size={16} />} label="Access" />
+            <LeftTab
+              active={leftTab === 'overview'}
+              onClick={() => setLeftTab('overview')}
+              icon={<SlidersHorizontal size={16} />}
+              label="Overview"
+            />
+            <LeftTab
+              active={leftTab === 'build'}
+              onClick={() => setLeftTab('build')}
+              icon={<PanelLeft size={16} />}
+              label="Build"
+            />
+            <LeftTab
+              active={leftTab === 'assignments'}
+              onClick={() => setLeftTab('assignments')}
+              icon={<Send size={16} />}
+              label="Assign"
+            />
+            <LeftTab
+              active={leftTab === 'permissions'}
+              onClick={() => setLeftTab('permissions')}
+              icon={<ShieldCheck size={16} />}
+              label="Access"
+            />
           </div>
           <div className="app-scroll min-h-0 flex-1 overflow-y-auto p-3">
             {leftTab === 'overview' ? (
-              <OverviewPanel templateId={templateId} name={appName} overview={overview} onSaved={setAppName} />
+              <OverviewPanel
+                templateId={templateId}
+                name={appName}
+                overview={overview}
+                onSaved={setAppName}
+              />
             ) : leftTab === 'assignments' ? (
               <AssignmentsPanel templateId={templateId} />
             ) : leftTab === 'permissions' ? (
               <PermissionsPanel templateId={templateId} roles={roles} initial={allowedRoles} />
             ) : (
               <>
-          <button
-            type="button"
-            onClick={openWorkflow}
-            className={`mb-3 block w-full rounded px-2 py-1 text-left text-xs font-semibold ${
-              selection.kind === 'workflow'
-                ? 'bg-teal-50 text-teal-900'
-                : 'text-slate-700 hover:bg-slate-50'
-            }`}
-          >
-            Workflow steps ({stepsCount})
-          </button>
+                <button
+                  type="button"
+                  onClick={openWorkflow}
+                  className={`mb-3 block w-full rounded px-2 py-1 text-left text-xs font-semibold ${
+                    selection.kind === 'workflow'
+                      ? 'bg-teal-50 text-teal-900'
+                      : 'text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  Workflow steps ({stepsCount})
+                </button>
 
-          <h3 className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-            Add an element
-          </h3>
-          <p className="mb-2 text-[10px] text-slate-500">
-            Drag onto the canvas, or click to add to the selected section.
-          </p>
-          {[...PALETTE_PRIMARY, ...PALETTE_MORE].map((group) => (
-            <FieldPaletteGroup
-              key={group.label}
-              group={group}
-              onDragType={(t) => {
-                dragElementRef.current = t
-              }}
-              onAdd={(t) => {
-                const targetSection =
-                  selection.kind === 'section' || selection.kind === 'field'
-                    ? selection.sectionId
-                    : schema.sections[schema.sections.length - 1]?.id
-                if (targetSection) addField(targetSection, t)
-              }}
-            />
-          ))}
+                <h3 className="mb-1 text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
+                  Add an element
+                </h3>
+                <p className="mb-2 text-[10px] text-slate-500">
+                  Drag onto the canvas, or click to add to the selected section.
+                </p>
+                {[...PALETTE_PRIMARY, ...PALETTE_MORE].map((group) => (
+                  <FieldPaletteGroup
+                    key={group.label}
+                    group={group}
+                    onDragType={(t) => {
+                      dragElementRef.current = t
+                    }}
+                    onAdd={(t) => {
+                      const targetSection =
+                        selection.kind === 'section' || selection.kind === 'field'
+                          ? selection.sectionId
+                          : schema.sections[schema.sections.length - 1]?.id
+                      if (targetSection) addField(targetSection, t)
+                    }}
+                  />
+                ))}
               </>
             )}
           </div>
@@ -666,12 +751,22 @@ export function FormDesigner({
         {/* RIGHT 2/3 — build surface ⟷ flows */}
         <div className="flex min-w-0 flex-1 flex-col bg-slate-50">
           <div className="flex shrink-0 items-center gap-1 border-b border-slate-200 bg-white px-3 py-1.5">
-            <SurfaceTab active={surface === 'build'} onClick={() => setSurface('build')} icon={<LayoutGrid size={13} />} label="Build surface" />
-            <SurfaceTab active={surface === 'flows'} onClick={() => setSurface('flows')} icon={<WorkflowIcon size={13} />} label="Flows" />
+            <SurfaceTab
+              active={surface === 'build'}
+              onClick={() => setSurface('build')}
+              icon={<LayoutGrid size={13} />}
+              label="Build surface"
+            />
+            <SurfaceTab
+              active={surface === 'flows'}
+              onClick={() => setSurface('flows')}
+              icon={<WorkflowIcon size={13} />}
+              label="Flows"
+            />
             {surface === 'build' ? (
               <div className="ml-auto flex items-center gap-2">
                 <span
-                  className="hidden text-[10px] font-semibold uppercase tracking-wider text-slate-400 sm:block"
+                  className="hidden text-[10px] font-semibold tracking-wider text-slate-400 uppercase sm:block"
                   title="Advanced layout — position widgets freely on a grid (Appsmith / WordPress style)"
                 >
                   Advanced layout
@@ -712,145 +807,169 @@ export function FormDesigner({
               />
             </div>
           ) : (
-        <div className="app-scroll min-h-0 flex-1 overflow-y-auto p-4 lg:p-6">
-          <div className="w-full">
-            <div className="space-y-3">
-              {selection.kind === 'workflow' ? (
-                <WorkflowEditor
-                  schema={schema}
-                  onChange={(steps) =>
-                    setSchema((s) => ({ ...s, workflow: { steps } }))
-                  }
-                />
-              ) : null}
+            <div className="app-scroll min-h-0 flex-1 overflow-y-auto p-4 lg:p-6">
+              <div className="w-full">
+                <div className="space-y-3">
+                  {selection.kind === 'workflow' ? (
+                    <WorkflowEditor
+                      schema={schema}
+                      onChange={(steps) => setSchema((s) => ({ ...s, workflow: { steps } }))}
+                    />
+                  ) : null}
 
-              {/* Tabs — presentational pages for the fill experience. */}
-              <div className="flex flex-wrap items-center gap-1 rounded-lg border border-slate-200 bg-white p-1.5">
-                {appTabs.map((t) => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => setDesignerTab(t.id)}
-                    onDoubleClick={() => {
-                      const next = window.prompt('Rename tab', t.title?.en ?? '')
-                      if (next != null) renameTab(t.id, next.trim() || 'Tab')
-                    }}
-                    title="Click to open · double-click to rename"
-                    className={`group flex items-center gap-1 rounded-md px-3 py-1 text-xs font-medium transition ${
-                      designerTab === t.id ? 'bg-teal-600 text-white' : 'text-slate-600 hover:bg-slate-100'
-                    }`}
-                  >
-                    {t.title?.en ?? 'Tab'}
-                    {appTabs.length > 1 ? (
-                      <Trash2
-                        size={11}
-                        className={designerTab === t.id ? 'text-white/70 hover:text-white' : 'text-slate-300 hover:text-rose-500'}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          deleteTab(t.id)
-                        }}
-                      />
-                    ) : null}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  onClick={addTab}
-                  className="flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium text-teal-700 hover:bg-teal-50"
-                  title={appTabs.length === 0 ? 'Split this app into tabs' : 'Add a tab'}
-                >
-                  <Plus size={12} /> {appTabs.length === 0 ? 'Add tabs' : 'Tab'}
-                </button>
-              </div>
-
-              {visibleSections.map((sec, i) => {
-                const active = selection.kind === 'section' && selection.sectionId === sec.id
-                return (
-                  <Card
-                    key={sec.id}
-                    className={`border ${active ? 'border-teal-500 ring-1 ring-teal-500' : 'border-slate-200'}`}
-                  >
-                    <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+                  {/* Tabs — presentational pages for the fill experience. */}
+                  <div className="flex flex-wrap items-center gap-1 rounded-lg border border-slate-200 bg-white p-1.5">
+                    {appTabs.map((t) => (
                       <button
+                        key={t.id}
                         type="button"
-                        onClick={() => selectSection(sec.id)}
-                        className="flex-1 text-left"
+                        onClick={() => setDesignerTab(t.id)}
+                        onDoubleClick={() => {
+                          const next = window.prompt('Rename tab', t.title?.en ?? '')
+                          if (next != null) renameTab(t.id, next.trim() || 'Tab')
+                        }}
+                        title="Click to open · double-click to rename"
+                        className={`group flex items-center gap-1 rounded-md px-3 py-1 text-xs font-medium transition ${
+                          designerTab === t.id
+                            ? 'bg-teal-600 text-white'
+                            : 'text-slate-600 hover:bg-slate-100'
+                        }`}
                       >
-                        <CardTitle className="text-base">
-                          {sec.title?.en ?? 'Untitled section'}{' '}
-                          {sec.repeating ? <Badge variant="secondary">repeating</Badge> : null}
-                          {sec.showIf ? <Badge variant="outline" className="text-[10px]">conditional</Badge> : null}
-                          {sec.step ? (
-                            <Badge variant="outline" className="text-[10px]">step · {stepLabel(schema, sec.step)}</Badge>
-                          ) : null}
-                        </CardTitle>
+                        {t.title?.en ?? 'Tab'}
+                        {appTabs.length > 1 ? (
+                          <Trash2
+                            size={11}
+                            className={
+                              designerTab === t.id
+                                ? 'text-white/70 hover:text-white'
+                                : 'text-slate-300 hover:text-rose-500'
+                            }
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              deleteTab(t.id)
+                            }}
+                          />
+                        ) : null}
                       </button>
-                      <div className="flex items-center gap-1">
-                        <IconButton title="Move up" onClick={() => moveSection(sec.id, -1)} disabled={i === 0}>
-                          <ArrowUp size={14} />
-                        </IconButton>
-                        <IconButton
-                          title="Move down"
-                          onClick={() => moveSection(sec.id, 1)}
-                          disabled={i === visibleSections.length - 1}
-                        >
-                          <ArrowDown size={14} />
-                        </IconButton>
-                        <IconButton title="Delete section" onClick={() => deleteSection(sec.id)}>
-                          <Trash2 size={14} className="text-red-500" />
-                        </IconButton>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="pt-0">
-                      {sec.canvas ? (
-                        <CanvasEditor
-                          section={sec}
-                          selectedFieldId={selection.kind === 'field' && selection.sectionId === sec.id ? selection.fieldId : null}
-                          dragTypeRef={dragElementRef}
-                          onLayout={(items) => setCanvasItems(sec.id, items)}
-                          onAddWidget={(type, box) => addWidgetToCanvas(sec.id, type, box)}
-                          onSelect={(fieldId) => selectField(sec.id, fieldId)}
-                          onDelete={(fieldId) => deleteField(sec.id, fieldId)}
-                        />
-                      ) : sec.fields.length === 0 ? (
-                        <div className="rounded-md border border-dashed border-slate-300 p-4 text-center text-xs text-slate-400">
-                          No elements yet. Drag one from the left panel, or click an element to add it here.
-                        </div>
-                      ) : (
-                        <Reorder.Group
-                          axis="y"
-                          values={sec.fields}
-                          onReorder={(fields) => reorderFields(sec.id, fields as FormField[])}
-                          as="ul"
-                          className="divide-y divide-slate-100"
-                        >
-                          {sec.fields.map((f, j) => (
-                            <FieldRow
-                              key={f.id}
-                              field={f}
-                              isSelected={selection.kind === 'field' && selection.fieldId === f.id}
-                              typeLabel={FIELD_TYPES[f.type]?.label ?? f.type}
-                              onSelect={() => selectField(sec.id, f.id)}
-                              onMoveUp={() => moveField(sec.id, f.id, -1)}
-                              onMoveDown={() => moveField(sec.id, f.id, 1)}
-                              onDelete={() => deleteField(sec.id, f.id)}
-                              canUp={j > 0}
-                              canDown={j < sec.fields.length - 1}
+                    ))}
+                    <button
+                      type="button"
+                      onClick={addTab}
+                      className="flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium text-teal-700 hover:bg-teal-50"
+                      title={appTabs.length === 0 ? 'Split this app into tabs' : 'Add a tab'}
+                    >
+                      <Plus size={12} /> {appTabs.length === 0 ? 'Add tabs' : 'Tab'}
+                    </button>
+                  </div>
+
+                  {visibleSections.map((sec, i) => {
+                    const active = selection.kind === 'section' && selection.sectionId === sec.id
+                    return (
+                      <Card
+                        key={sec.id}
+                        className={`border ${active ? 'border-teal-500 ring-1 ring-teal-500' : 'border-slate-200'}`}
+                      >
+                        <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+                          <button
+                            type="button"
+                            onClick={() => selectSection(sec.id)}
+                            className="flex-1 text-left"
+                          >
+                            <CardTitle className="text-base">
+                              {sec.title?.en ?? 'Untitled section'}{' '}
+                              {sec.repeating ? <Badge variant="secondary">repeating</Badge> : null}
+                              {sec.showIf ? (
+                                <Badge variant="outline" className="text-[10px]">
+                                  conditional
+                                </Badge>
+                              ) : null}
+                              {sec.step ? (
+                                <Badge variant="outline" className="text-[10px]">
+                                  step · {stepLabel(schema, sec.step)}
+                                </Badge>
+                              ) : null}
+                            </CardTitle>
+                          </button>
+                          <div className="flex items-center gap-1">
+                            <IconButton
+                              title="Move up"
+                              onClick={() => moveSection(sec.id, -1)}
+                              disabled={i === 0}
+                            >
+                              <ArrowUp size={14} />
+                            </IconButton>
+                            <IconButton
+                              title="Move down"
+                              onClick={() => moveSection(sec.id, 1)}
+                              disabled={i === visibleSections.length - 1}
+                            >
+                              <ArrowDown size={14} />
+                            </IconButton>
+                            <IconButton
+                              title="Delete section"
+                              onClick={() => deleteSection(sec.id)}
+                            >
+                              <Trash2 size={14} className="text-red-500" />
+                            </IconButton>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="pt-0">
+                          {sec.canvas ? (
+                            <CanvasEditor
+                              section={sec}
+                              selectedFieldId={
+                                selection.kind === 'field' && selection.sectionId === sec.id
+                                  ? selection.fieldId
+                                  : null
+                              }
+                              dragTypeRef={dragElementRef}
+                              onLayout={(items) => setCanvasItems(sec.id, items)}
+                              onAddWidget={(type, box) => addWidgetToCanvas(sec.id, type, box)}
+                              onSelect={(fieldId) => selectField(sec.id, fieldId)}
+                              onDelete={(fieldId) => deleteField(sec.id, fieldId)}
                             />
-                          ))}
-                        </Reorder.Group>
-                      )}
-                    </CardContent>
-                  </Card>
-                )
-              })}
-              <Button variant="outline" onClick={addSection} className="w-full">
-                <Plus size={14} />
-                Add section
-              </Button>
+                          ) : sec.fields.length === 0 ? (
+                            <div className="rounded-md border border-dashed border-slate-300 p-4 text-center text-xs text-slate-400">
+                              No elements yet. Drag one from the left panel, or click an element to
+                              add it here.
+                            </div>
+                          ) : (
+                            <Reorder.Group
+                              axis="y"
+                              values={sec.fields}
+                              onReorder={(fields) => reorderFields(sec.id, fields as FormField[])}
+                              as="ul"
+                              className="divide-y divide-slate-100"
+                            >
+                              {sec.fields.map((f, j) => (
+                                <FieldRow
+                                  key={f.id}
+                                  field={f}
+                                  isSelected={
+                                    selection.kind === 'field' && selection.fieldId === f.id
+                                  }
+                                  typeLabel={FIELD_TYPES[f.type]?.label ?? f.type}
+                                  onSelect={() => selectField(sec.id, f.id)}
+                                  onMoveUp={() => moveField(sec.id, f.id, -1)}
+                                  onMoveDown={() => moveField(sec.id, f.id, 1)}
+                                  onDelete={() => deleteField(sec.id, f.id)}
+                                  canUp={j > 0}
+                                  canDown={j < sec.fields.length - 1}
+                                />
+                              ))}
+                            </Reorder.Group>
+                          )}
+                        </CardContent>
+                      </Card>
+                    )
+                  })}
+                  <Button variant="outline" onClick={addSection} className="w-full">
+                    <Plus size={14} />
+                    Add section
+                  </Button>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
           )}
         </div>
       </div>
@@ -962,7 +1081,12 @@ export function FormDesigner({
           'Make a daily pre-start vehicle inspection checklist',
         ]}
         onSend={async (conversationId, prompt) => {
-          const r = await runAppBuilderChat({ conversationId, templateId, currentSchema: schema, prompt })
+          const r = await runAppBuilderChat({
+            conversationId,
+            templateId,
+            currentSchema: schema,
+            prompt,
+          })
           return { ok: r.ok, conversationId: r.conversationId, error: r.error }
         }}
         onApply={(data) => {
@@ -994,7 +1118,7 @@ function FieldPaletteGroup({
 }) {
   return (
     <div className="mb-3">
-      <div className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+      <div className="px-1 pb-1 text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
         {group.label}
       </div>
       <div className="grid grid-cols-1 gap-1">
@@ -1153,7 +1277,9 @@ function FormProperties({
           value={schema.description?.en ?? ''}
           onChange={(e) =>
             onChange({
-              description: e.target.value ? { ...(schema.description ?? {}), en: e.target.value } : undefined,
+              description: e.target.value
+                ? { ...(schema.description ?? {}), en: e.target.value }
+                : undefined,
             })
           }
         />
@@ -1201,8 +1327,8 @@ function WorkflowEditor({
       </CardHeader>
       <CardContent className="space-y-2">
         <p className="text-xs text-slate-500">
-          A step is one stage of the form (e.g. "Submit", "Supervisor sign", "Manager review").
-          Bind each section to a step in the section properties.
+          A step is one stage of the form (e.g. "Submit", "Supervisor sign", "Manager review"). Bind
+          each section to a step in the section properties.
         </p>
         <ul className="space-y-2">
           {steps.map((s, i) => (
@@ -1384,12 +1510,8 @@ function FieldProperties({
           ))}
       </div>
 
-      {tab === 'basic' ? (
-        <FieldBasicTab field={field} schema={schema} onChange={onChange} />
-      ) : null}
-      {tab === 'validation' ? (
-        <FieldValidationTab field={field} onChange={onChange} />
-      ) : null}
+      {tab === 'basic' ? <FieldBasicTab field={field} schema={schema} onChange={onChange} /> : null}
+      {tab === 'validation' ? <FieldValidationTab field={field} onChange={onChange} /> : null}
       {tab === 'logic' ? (
         <div className="space-y-1">
           <Label className="text-xs">Show when (showIf)</Label>
@@ -1403,9 +1525,7 @@ function FieldProperties({
           />
         </div>
       ) : null}
-      {tab === 'default' ? (
-        <FieldDefaultTab field={field} onChange={onChange} />
-      ) : null}
+      {tab === 'default' ? <FieldDefaultTab field={field} onChange={onChange} /> : null}
       {tab === 'calc' && isCalcField ? (
         <div className="space-y-1">
           <Label className="text-xs">Formula</Label>
@@ -1459,7 +1579,9 @@ function FieldBasicTab({
           value={field.helpText?.en ?? ''}
           onChange={(e) =>
             onChange({
-              helpText: e.target.value ? { ...(field.helpText ?? {}), en: e.target.value } : undefined,
+              helpText: e.target.value
+                ? { ...(field.helpText ?? {}), en: e.target.value }
+                : undefined,
             })
           }
         />
@@ -1496,15 +1618,9 @@ function FieldBasicTab({
       field.type === 'ranking' ? (
         <ChoiceOptionsEditor field={field} onChange={onChange} />
       ) : null}
-      {field.type === 'table' ? (
-        <TableConfigEditor field={field} onChange={onChange} />
-      ) : null}
-      {field.type === 'slider' ? (
-        <SliderConfigEditor field={field} onChange={onChange} />
-      ) : null}
-      {field.type === 'matrix' ? (
-        <MatrixConfigEditor field={field} onChange={onChange} />
-      ) : null}
+      {field.type === 'table' ? <TableConfigEditor field={field} onChange={onChange} /> : null}
+      {field.type === 'slider' ? <SliderConfigEditor field={field} onChange={onChange} /> : null}
+      {field.type === 'matrix' ? <MatrixConfigEditor field={field} onChange={onChange} /> : null}
       {field.type === 'lookup' || field.type === 'data_table' || field.type === 'metric' ? (
         <DataBindingEditor field={field} otherFields={otherFields} onChange={onChange} />
       ) : null}
@@ -1523,24 +1639,40 @@ function SliderConfigEditor({
   const set = (patch: Partial<typeof c>) => onChange({ config: { ...field.config, ...patch } })
   return (
     <div className="space-y-2 rounded-md border border-slate-200 p-2">
-      <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Range</div>
+      <div className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">Range</div>
       <div className="grid grid-cols-3 gap-2">
         <div className="space-y-1">
           <Label className="text-xs">Min</Label>
-          <Input type="number" value={c.min ?? 0} onChange={(e) => set({ min: Number(e.target.value) })} />
+          <Input
+            type="number"
+            value={c.min ?? 0}
+            onChange={(e) => set({ min: Number(e.target.value) })}
+          />
         </div>
         <div className="space-y-1">
           <Label className="text-xs">Max</Label>
-          <Input type="number" value={c.max ?? 10} onChange={(e) => set({ max: Number(e.target.value) })} />
+          <Input
+            type="number"
+            value={c.max ?? 10}
+            onChange={(e) => set({ max: Number(e.target.value) })}
+          />
         </div>
         <div className="space-y-1">
           <Label className="text-xs">Step</Label>
-          <Input type="number" value={c.step ?? 1} onChange={(e) => set({ step: Number(e.target.value) })} />
+          <Input
+            type="number"
+            value={c.step ?? 1}
+            onChange={(e) => set({ step: Number(e.target.value) })}
+          />
         </div>
       </div>
       <div className="space-y-1">
         <Label className="text-xs">Unit (optional)</Label>
-        <Input value={c.unit ?? ''} placeholder="e.g. %, m, °C" onChange={(e) => set({ unit: e.target.value })} />
+        <Input
+          value={c.unit ?? ''}
+          placeholder="e.g. %, m, °C"
+          onChange={(e) => set({ unit: e.target.value })}
+        />
       </div>
     </div>
   )
@@ -1565,11 +1697,15 @@ function MatrixConfigEditor({
     <div className="space-y-3 rounded-md border border-slate-200 p-2">
       <div>
         <div className="mb-1 flex items-center justify-between">
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Rows</span>
+          <span className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
+            Rows
+          </span>
           <button
             type="button"
             className="text-xs text-teal-700 hover:underline"
-            onClick={() => setRows([...rows, { key: newId('row'), label: `Row ${rows.length + 1}` }])}
+            onClick={() =>
+              setRows([...rows, { key: newId('row'), label: `Row ${rows.length + 1}` }])
+            }
           >
             + Row
           </button>
@@ -1579,9 +1715,14 @@ function MatrixConfigEditor({
             <div key={r.key} className="flex items-center gap-1">
               <Input
                 value={r.label}
-                onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))}
+                onChange={(e) =>
+                  setRows(rows.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))
+                }
               />
-              <IconButton title="Remove row" onClick={() => setRows(rows.filter((_, j) => j !== i))}>
+              <IconButton
+                title="Remove row"
+                onClick={() => setRows(rows.filter((_, j) => j !== i))}
+              >
                 <Trash2 size={13} className="text-red-500" />
               </IconButton>
             </div>
@@ -1590,11 +1731,18 @@ function MatrixConfigEditor({
       </div>
       <div>
         <div className="mb-1 flex items-center justify-between">
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Scale</span>
+          <span className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
+            Scale
+          </span>
           <button
             type="button"
             className="text-xs text-teal-700 hover:underline"
-            onClick={() => setScale([...scale, { value: String(scale.length + 1), label: String(scale.length + 1) }])}
+            onClick={() =>
+              setScale([
+                ...scale,
+                { value: String(scale.length + 1), label: String(scale.length + 1) },
+              ])
+            }
           >
             + Point
           </button>
@@ -1605,13 +1753,20 @@ function MatrixConfigEditor({
               <Input
                 className="w-16 font-mono text-xs"
                 value={s.value}
-                onChange={(e) => setScale(scale.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))}
+                onChange={(e) =>
+                  setScale(scale.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))
+                }
               />
               <Input
                 value={s.label}
-                onChange={(e) => setScale(scale.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))}
+                onChange={(e) =>
+                  setScale(scale.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))
+                }
               />
-              <IconButton title="Remove point" onClick={() => setScale(scale.filter((_, j) => j !== i))}>
+              <IconButton
+                title="Remove point"
+                onClick={() => setScale(scale.filter((_, j) => j !== i))}
+              >
                 <Trash2 size={13} className="text-red-500" />
               </IconButton>
             </div>
@@ -1680,7 +1835,7 @@ function DataBindingEditor({
   return (
     <div className="space-y-2.5 rounded-md border border-violet-200 bg-violet-50/30 p-2">
       <div className="flex items-center justify-between">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-violet-500">
+        <span className="text-[10px] font-semibold tracking-wider text-violet-500 uppercase">
           Data binding
         </span>
         <a
@@ -1777,7 +1932,7 @@ function LookupBindingFields({
       </div>
 
       <div className="space-y-1.5 rounded border border-slate-200 bg-white p-2">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+        <div className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
           Cascade (optional)
         </div>
         <div className="grid grid-cols-2 gap-2">
@@ -1820,7 +1975,7 @@ function LookupBindingFields({
 
       <div className="space-y-1.5 rounded border border-slate-200 bg-white p-2">
         <div className="flex items-center justify-between">
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+          <span className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
             Auto-fill on select
           </span>
           <button
@@ -1850,7 +2005,9 @@ function LookupBindingFields({
                 value={m.column}
                 onChange={(e) =>
                   patch({
-                    autofill: autofill.map((x, j) => (j === i ? { ...x, column: e.target.value } : x)),
+                    autofill: autofill.map((x, j) =>
+                      j === i ? { ...x, column: e.target.value } : x,
+                    ),
                   })
                 }
               >
@@ -2056,7 +2213,8 @@ function FieldValidationTab({
     const next = { ...v, ...patch }
     // Strip undefineds so the JSON stays tight.
     for (const k of Object.keys(next) as (keyof typeof next)[]) {
-      if (next[k] === undefined || next[k] === '') delete (next as Record<string, unknown>)[k as string]
+      if (next[k] === undefined || next[k] === '')
+        delete (next as Record<string, unknown>)[k as string]
     }
     onChange({ validation: Object.keys(next).length ? next : undefined })
   }
@@ -2085,7 +2243,9 @@ function FieldValidationTab({
             <Input
               type="number"
               value={v.min ?? ''}
-              onChange={(e) => set({ min: e.target.value === '' ? undefined : Number(e.target.value) })}
+              onChange={(e) =>
+                set({ min: e.target.value === '' ? undefined : Number(e.target.value) })
+              }
             />
           </div>
           <div className="space-y-1">
@@ -2093,7 +2253,9 @@ function FieldValidationTab({
             <Input
               type="number"
               value={v.max ?? ''}
-              onChange={(e) => set({ max: e.target.value === '' ? undefined : Number(e.target.value) })}
+              onChange={(e) =>
+                set({ max: e.target.value === '' ? undefined : Number(e.target.value) })
+              }
             />
           </div>
         </div>
@@ -2105,7 +2267,9 @@ function FieldValidationTab({
             <Input
               type="number"
               value={v.minLength ?? ''}
-              onChange={(e) => set({ minLength: e.target.value === '' ? undefined : Number(e.target.value) })}
+              onChange={(e) =>
+                set({ minLength: e.target.value === '' ? undefined : Number(e.target.value) })
+              }
             />
           </div>
           <div className="space-y-1">
@@ -2113,7 +2277,9 @@ function FieldValidationTab({
             <Input
               type="number"
               value={v.maxLength ?? ''}
-              onChange={(e) => set({ maxLength: e.target.value === '' ? undefined : Number(e.target.value) })}
+              onChange={(e) =>
+                set({ maxLength: e.target.value === '' ? undefined : Number(e.target.value) })
+              }
             />
           </div>
         </div>
@@ -2171,9 +2337,7 @@ function FieldDefaultTab({
   }
   return (
     <div className="space-y-3">
-      <p className="text-xs text-slate-500">
-        Applied on first render when this field is empty.
-      </p>
+      <p className="text-xs text-slate-500">Applied on first render when this field is empty.</p>
       <Select className="h-8 text-xs" value={kind} onChange={(e) => setKind(e.target.value)}>
         <option value="">— No default —</option>
         <option value="literal">Literal value</option>
@@ -2245,7 +2409,9 @@ function ChoiceOptionsEditor({
       <Button
         size="sm"
         variant="outline"
-        onClick={() => update([...options, { value: `opt_${options.length + 1}`, label: { en: 'New option' } }])}
+        onClick={() =>
+          update([...options, { value: `opt_${options.length + 1}`, label: { en: 'New option' } }])
+        }
       >
         <Plus size={12} />
         Add option
@@ -2318,7 +2484,9 @@ function TableConfigEditor({
       ) : null}
 
       <div className="space-y-2">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Columns</div>
+        <div className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
+          Columns
+        </div>
         {columns.length === 0 ? (
           <p className="text-xs text-slate-500">No columns yet.</p>
         ) : (
@@ -2331,7 +2499,9 @@ function TableConfigEditor({
                     value={c.label}
                     placeholder="Column label"
                     onChange={(e) =>
-                      setColumns(columns.map((x, idx) => (idx === i ? { ...x, label: e.target.value } : x)))
+                      setColumns(
+                        columns.map((x, idx) => (idx === i ? { ...x, label: e.target.value } : x)),
+                      )
                     }
                   />
                   <Select
@@ -2398,7 +2568,7 @@ function TableConfigEditor({
 
       {rowMode === 'fixed' ? (
         <div className="space-y-2">
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+          <div className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
             Predefined rows
           </div>
           {fixedRows.length === 0 ? (
@@ -2412,7 +2582,9 @@ function TableConfigEditor({
                     value={r.label}
                     placeholder="Row label"
                     onChange={(e) =>
-                      setRows(fixedRows.map((x, idx) => (idx === i ? { label: e.target.value } : x)))
+                      setRows(
+                        fixedRows.map((x, idx) => (idx === i ? { label: e.target.value } : x)),
+                      )
                     }
                   />
                   <button
@@ -2449,7 +2621,9 @@ function TableColumnOptions({
 }) {
   return (
     <div className="space-y-1 rounded border border-slate-100 bg-slate-50 p-1.5">
-      <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Options</div>
+      <div className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
+        Options
+      </div>
       {options.map((o, i) => (
         <div key={i} className="flex items-center gap-1">
           <Input
@@ -2544,7 +2718,9 @@ function SectionProperties({
           value={section.description?.en ?? ''}
           onChange={(e) =>
             onChange({
-              description: e.target.value ? { ...(section.description ?? {}), en: e.target.value } : undefined,
+              description: e.target.value
+                ? { ...(section.description ?? {}), en: e.target.value }
+                : undefined,
             })
           }
         />
@@ -2620,12 +2796,11 @@ function SectionProperties({
             <Input
               value={section.rowLabelTemplate ?? ''}
               placeholder="e.g. Load #{index+1}"
-              onChange={(e) =>
-                onChange({ rowLabelTemplate: e.target.value || undefined })
-              }
+              onChange={(e) => onChange({ rowLabelTemplate: e.target.value || undefined })}
             />
             <p className="text-[10px] text-slate-500">
-              Supports {`{index}`}, {`{index+1}`}, and {`{<fieldKey>}`} interpolation from the row's values.
+              Supports {`{index}`}, {`{index+1}`}, and {`{<fieldKey>}`} interpolation from the row's
+              values.
             </p>
           </div>
         </div>
@@ -2663,8 +2838,8 @@ function Preview({ schema }: { schema: FormSchemaV1 }) {
       <CardHeader>
         <CardTitle className="text-base">Preview · {schema.title?.en}</CardTitle>
         <p className="text-xs text-slate-500">
-          Live render of how the filler will see the form. Conditional logic is shown as
-          chips; live filler runtime resolves them dynamically.
+          Live render of how the filler will see the form. Conditional logic is shown as chips; live
+          filler runtime resolves them dynamically.
         </p>
       </CardHeader>
       <CardContent className="space-y-4 text-sm">
@@ -2817,7 +2992,9 @@ function LeftTab({
       title={label}
       aria-label={label}
       className={`flex flex-1 items-center justify-center rounded-md px-1.5 py-2 transition ${
-        active ? 'bg-teal-50 text-teal-700' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
+        active
+          ? 'bg-teal-50 text-teal-700'
+          : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
       }`}
     >
       {icon}
@@ -2969,7 +3146,9 @@ function PermissionsPanel({
             : 'border-emerald-200 bg-emerald-50 text-emerald-800'
         }`}
       >
-        {restricted ? `Restricted to ${sel.size} role${sel.size === 1 ? '' : 's'}` : 'Visible to everyone'}
+        {restricted
+          ? `Restricted to ${sel.size} role${sel.size === 1 ? '' : 's'}`
+          : 'Visible to everyone'}
       </div>
       {roles.length === 0 ? (
         <p className="text-xs text-slate-400">No roles defined for this tenant.</p>

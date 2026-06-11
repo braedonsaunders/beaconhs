@@ -42,25 +42,25 @@ tab on the login form — the link will arrive in Mailpit at
 
 ## What's wired vs scaffolded
 
-| Area | State |
-|---|---|
-| Monorepo + Turbo + pnpm workspaces | ✅ |
-| Postgres + Drizzle schema for every module | ✅ |
-| Row-level security policies | ✅ (applied by `db:migrate`) |
-| Better-Auth (email/password + magic link) | ✅ |
-| Tenant context + permission catalogue + built-in roles | ✅ |
-| Forms core (schema, validators, scoring, formula evaluator) | ✅ |
-| Auto-PDF renderer via Puppeteer | ✅ (call-site stub) |
-| BullMQ queues (emails, pdfs, notifications, scheduled ticks) | ✅ |
-| Worker process with handlers | ✅ |
-| Plugin SDK + manifest shape | ✅ |
-| Web app shell + login + module list pages | ✅ |
-| **Form designer UI** | 🟡 stub — Phase 1 build |
-| **Form renderer UI** | 🟡 stub — Phase 1 build |
-| **Module CRUD screens (incidents, training, etc.)** | 🟡 stubs — Phase 2–3 |
-| Dashboard widget builder | 🟡 default tiles only — Phase 4 |
-| Report builder | 🟡 — Phase 4 |
-| First-party plugins (NetSuite, adminapp2-sync) | 🟡 — Phase 5 |
-| Migration ETL from beaconhs SQL Server | 🟡 — Phase 5 |
+| Area                                                         | State                           |
+| ------------------------------------------------------------ | ------------------------------- |
+| Monorepo + Turbo + pnpm workspaces                           | ✅                              |
+| Postgres + Drizzle schema for every module                   | ✅                              |
+| Row-level security policies                                  | ✅ (applied by `db:migrate`)    |
+| Better-Auth (email/password + magic link)                    | ✅                              |
+| Tenant context + permission catalogue + built-in roles       | ✅                              |
+| Forms core (schema, validators, scoring, formula evaluator)  | ✅                              |
+| Auto-PDF renderer via Puppeteer                              | ✅ (call-site stub)             |
+| BullMQ queues (emails, pdfs, notifications, scheduled ticks) | ✅                              |
+| Worker process with handlers                                 | ✅                              |
+| Plugin SDK + manifest shape                                  | ✅                              |
+| Web app shell + login + module list pages                    | ✅                              |
+| **Form designer UI**                                         | 🟡 stub — Phase 1 build         |
+| **Form renderer UI**                                         | 🟡 stub — Phase 1 build         |
+| **Module CRUD screens (incidents, training, etc.)**          | 🟡 stubs — Phase 2–3            |
+| Dashboard widget builder                                     | 🟡 default tiles only — Phase 4 |
+| Report builder                                               | 🟡 — Phase 4                    |
+| First-party plugins (NetSuite, adminapp2-sync)               | 🟡 — Phase 5                    |
+| Migration ETL from beaconhs SQL Server                       | 🟡 — Phase 5                    |
 
 See [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) for the full phased plan.

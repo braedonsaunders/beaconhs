@@ -8,15 +8,7 @@
 // automatically — same behaviour as the legacy app's "fail = WO" rule.
 
 import { relations } from 'drizzle-orm'
-import {
-  boolean,
-  index,
-  integer,
-  pgEnum,
-  pgTable,
-  text,
-  uuid,
-} from 'drizzle-orm/pg-core'
+import { boolean, index, integer, pgEnum, pgTable, text, uuid } from 'drizzle-orm/pg-core'
 import { id, timestamps } from './_helpers'
 import { tenants } from './core'
 import { equipmentTypes } from './equipment'

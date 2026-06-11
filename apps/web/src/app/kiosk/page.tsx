@@ -32,8 +32,7 @@ export default async function KioskPage({
             .
           </p>
           <p className="mt-1 text-xs text-slate-500">
-            Example:{' '}
-            <code className="font-mono text-slate-300">/kiosk?t=acme-construction</code>
+            Example: <code className="font-mono text-slate-300">/kiosk?t=acme-construction</code>
           </p>
         </div>
       </div>

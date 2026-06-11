@@ -31,8 +31,8 @@ export const dynamic = 'force-dynamic'
 export default async function PpeInspectionCriteriaPage() {
   const ctx = await requireModuleManage('ppe')
 
-  const { rows, typeCount, criterionCount, withPhotoCount, highSevCount } =
-    await ctx.db(async (tx) => {
+  const { rows, typeCount, criterionCount, withPhotoCount, highSevCount } = await ctx.db(
+    async (tx) => {
       const data = await tx
         .select({
           crit: ppeTypeInspectionCriteria,
@@ -40,7 +40,11 @@ export default async function PpeInspectionCriteriaPage() {
         })
         .from(ppeTypeInspectionCriteria)
         .innerJoin(ppeTypes, eq(ppeTypes.id, ppeTypeInspectionCriteria.ppeTypeId))
-        .orderBy(asc(ppeTypes.name), asc(ppeTypeInspectionCriteria.inspectionKind), asc(ppeTypeInspectionCriteria.entityOrder))
+        .orderBy(
+          asc(ppeTypes.name),
+          asc(ppeTypeInspectionCriteria.inspectionKind),
+          asc(ppeTypeInspectionCriteria.entityOrder),
+        )
       const [tc] = await tx.select({ c: count() }).from(ppeTypes)
       const [cc] = await tx.select({ c: count() }).from(ppeTypeInspectionCriteria)
       const photoRows = data.filter((r) => r.crit.requiresPhoto)
@@ -54,7 +58,8 @@ export default async function PpeInspectionCriteriaPage() {
         withPhotoCount: photoRows.length,
         highSevCount: highRows.length,
       }
-    })
+    },
+  )
 
   const byType = new Map<string, typeof rows>()
   for (const r of rows) {
@@ -153,9 +158,7 @@ export default async function PpeInspectionCriteriaPage() {
                             {r.crit.severity}
                           </Badge>
                         </TableCell>
-                        <TableCell>
-                          {r.crit.requiresPhoto ? <Camera size={14} /> : '—'}
-                        </TableCell>
+                        <TableCell>{r.crit.requiresPhoto ? <Camera size={14} /> : '—'}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

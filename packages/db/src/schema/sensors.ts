@@ -66,10 +66,7 @@ export const atmosphericCalibrations = pgTable(
   },
   (t) => ({
     tenantIdx: index('atmospheric_calibrations_tenant_idx').on(t.tenantId),
-    sensorDateIdx: index('atmospheric_calibrations_sensor_date_idx').on(
-      t.sensorId,
-      t.calibratedOn,
-    ),
+    sensorDateIdx: index('atmospheric_calibrations_sensor_date_idx').on(t.sensorId, t.calibratedOn),
   }),
 )
 

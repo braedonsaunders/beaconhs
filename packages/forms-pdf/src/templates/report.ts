@@ -48,9 +48,7 @@ export function renderReportHtml(input: ReportRenderInput): string {
           <div class="empty">No data.</div>
         </section>`
       }
-      const head = g.columns
-        .map((c) => `<th>${escapeHtml(c)}</th>`)
-        .join('')
+      const head = g.columns.map((c) => `<th>${escapeHtml(c)}</th>`).join('')
       const body = g.rows
         .map(
           (r) =>

@@ -42,11 +42,32 @@ import type {
 } from './_types'
 
 const MONTHS = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
 ]
 const MONTHS_ABBR = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
 ]
 const authorPerson = alias(people, 'journal_author')
 
@@ -96,7 +117,8 @@ function entryWhere(
   }
   if (filters.mine && authorPersonId) {
     const mineConds: SQL[] = [eq(journalEntries.personId, authorPersonId)]
-    if (ctx.membership?.id) mineConds.push(eq(journalEntries.createdByTenantUserId, ctx.membership.id))
+    if (ctx.membership?.id)
+      mineConds.push(eq(journalEntries.createdByTenantUserId, ctx.membership.id))
     conds.push(mineConds.length === 1 ? mineConds[0]! : or(...mineConds)!)
   }
   return conds.length === 0 ? undefined : and(...conds)
@@ -195,21 +217,23 @@ export async function listEntries(
     const thumbs = await firstPhotoThumbs(tx, ids)
     const photoCounts = await photoCountsByEntry(tx, ids)
 
-    return rows.map((r): JournalListItem => ({
-      id: r.e.id,
-      reference: r.e.reference,
-      title: r.e.title,
-      snippet: snippetOf(htmlToText(r.e.bodyText)),
-      entryDate: r.e.entryDate,
-      status: r.e.status,
-      definition: r.e.definition,
-      siteName: r.siteName ?? null,
-      authorName: r.firstName ? `${r.firstName} ${r.lastName ?? ''}`.trim() : null,
-      tags: r.e.tagsCache ?? [],
-      photoCount: photoCounts[r.e.id] ?? 0,
-      thumbUrl: thumbs[r.e.id] ?? null,
-      updatedAt: r.e.updatedAt.toISOString(),
-    }))
+    return rows.map(
+      (r): JournalListItem => ({
+        id: r.e.id,
+        reference: r.e.reference,
+        title: r.e.title,
+        snippet: snippetOf(htmlToText(r.e.bodyText)),
+        entryDate: r.e.entryDate,
+        status: r.e.status,
+        definition: r.e.definition,
+        siteName: r.siteName ?? null,
+        authorName: r.firstName ? `${r.firstName} ${r.lastName ?? ''}`.trim() : null,
+        tags: r.e.tagsCache ?? [],
+        photoCount: photoCounts[r.e.id] ?? 0,
+        thumbUrl: thumbs[r.e.id] ?? null,
+        updatedAt: r.e.updatedAt.toISOString(),
+      }),
+    )
   })
 }
 
@@ -503,10 +527,7 @@ async function heatmap(ctx: RequestContext, where: SQL | undefined): Promise<Hea
   })
 }
 
-async function onThisDay(
-  ctx: RequestContext,
-  where: SQL | undefined,
-): Promise<OnThisDayItem[]> {
+async function onThisDay(ctx: RequestContext, where: SQL | undefined): Promise<OnThisDayItem[]> {
   return ctx.db(async (tx) => {
     const cond = sql`to_char(${journalEntries.entryDate}, 'MM-DD') = to_char(current_date, 'MM-DD') and extract(year from ${journalEntries.entryDate}) < extract(year from current_date)`
     const rows = await tx
@@ -599,8 +620,10 @@ export async function getOrCreateEntryForDate(
     const mineToday: SQL[] = [eq(journalEntries.entryDate, today)]
     const ownership: SQL[] = []
     if (authorPersonId) ownership.push(eq(journalEntries.personId, authorPersonId))
-    if (ctx.membership?.id) ownership.push(eq(journalEntries.createdByTenantUserId, ctx.membership.id))
-    if (ownership.length > 0) mineToday.push(ownership.length === 1 ? ownership[0]! : or(...ownership)!)
+    if (ctx.membership?.id)
+      ownership.push(eq(journalEntries.createdByTenantUserId, ctx.membership.id))
+    if (ownership.length > 0)
+      mineToday.push(ownership.length === 1 ? ownership[0]! : or(...ownership)!)
 
     const [existing] = await tx
       .select({ id: journalEntries.id })

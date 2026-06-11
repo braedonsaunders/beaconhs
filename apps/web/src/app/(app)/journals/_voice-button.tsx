@@ -13,7 +13,13 @@ type SR = {
   lang: string
   start: () => void
   stop: () => void
-  onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }> & { isFinal: boolean }> & { length: number } }) => void) | null
+  onresult:
+    | ((e: {
+        results: ArrayLike<ArrayLike<{ transcript: string }> & { isFinal: boolean }> & {
+          length: number
+        }
+      }) => void)
+    | null
   onend: (() => void) | null
   onerror: (() => void) | null
 }

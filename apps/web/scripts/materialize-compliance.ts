@@ -16,15 +16,22 @@ async function main() {
   const slug = process.argv[2] ?? 'rassaun'
   const { db, sql: pg } = createClient({ url: process.env.DATABASE_URL, max: 1 })
 
-  const [tenant] = await db.select({ id: s.tenants.id }).from(s.tenants).where(eq(s.tenants.slug, slug)).limit(1)
+  const [tenant] = await db
+    .select({ id: s.tenants.id })
+    .from(s.tenants)
+    .where(eq(s.tenants.slug, slug))
+    .limit(1)
   if (!tenant) throw new Error(`tenant '${slug}' not found`)
 
   const out = await withTenant(db, tenant.id, (tx) => materializeTenant(tx, tenant.id))
   console.log(`tenant ${slug} (${tenant.id}) — materialised ${out.length} active obligations\n`)
 
-  const bySubject = (r: (typeof out)[number]['result']) => `${r.totals.completed}/${r.totals.total} ok · ${r.totals.overdue} overdue · ${r.percent}%`
+  const bySubject = (r: (typeof out)[number]['result']) =>
+    `${r.totals.completed}/${r.totals.total} ok · ${r.totals.overdue} overdue · ${r.percent}%`
   for (const { obligation, result } of out.sort((a, b) => a.result.percent - b.result.percent)) {
-    console.log(`  [${obligation.sourceModule}] ${obligation.title.padEnd(42)} ${bySubject(result)}`)
+    console.log(
+      `  [${obligation.sourceModule}] ${obligation.title.padEnd(42)} ${bySubject(result)}`,
+    )
   }
   await pg.end()
 }

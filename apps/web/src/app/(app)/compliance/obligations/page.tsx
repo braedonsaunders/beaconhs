@@ -66,7 +66,11 @@ export default async function ObligationsPage({
       {rows.length === 0 ? (
         <EmptyState
           icon={<ListChecks size={32} />}
-          title={kindFilter ? `No ${kindLabel(kindFilter).toLowerCase()} obligations yet` : 'No obligations yet'}
+          title={
+            kindFilter
+              ? `No ${kindLabel(kindFilter).toLowerCase()} obligations yet`
+              : 'No obligations yet'
+          }
           description="Create a recurring obligation so the right people complete the right thing on cadence."
           action={
             <Link href="/compliance/obligations/new">

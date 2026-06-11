@@ -7,10 +7,7 @@
 // runtime refresh.
 
 import 'server-only'
-import {
-  loadEntitiesForFormPickers,
-  type EntitiesByField,
-} from '@beaconhs/db'
+import { loadEntitiesForFormPickers, type EntitiesByField } from '@beaconhs/db'
 import {
   ENTITY_ATTRS,
   entityKindForPicker,
@@ -32,9 +29,7 @@ export async function loadEntitiesForPickers(
   schema: FormSchemaV1,
   values: Record<string, unknown>,
 ): Promise<EntitiesByField> {
-  return await ctx.db(async (tx) =>
-    loadEntitiesForFormPickers(tx, schema, values),
-  )
+  return await ctx.db(async (tx) => loadEntitiesForFormPickers(tx, schema, values))
 }
 
 /**

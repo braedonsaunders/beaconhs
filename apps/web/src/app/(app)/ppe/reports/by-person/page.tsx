@@ -114,16 +114,12 @@ export default async function PpeByPersonReport() {
                             {type.name}
                           </Link>
                         </TableCell>
-                        <TableCell className="text-slate-600">
-                          {item.serialNumber ?? '—'}
-                        </TableCell>
+                        <TableCell className="text-slate-600">{item.serialNumber ?? '—'}</TableCell>
                         <TableCell className="text-slate-600">{item.size ?? '—'}</TableCell>
                         <TableCell className="text-slate-600">
                           {item.nextInspectionDue ?? '—'}
                         </TableCell>
-                        <TableCell className="text-slate-600">
-                          {item.expiresOn ?? '—'}
-                        </TableCell>
+                        <TableCell className="text-slate-600">{item.expiresOn ?? '—'}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

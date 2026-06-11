@@ -117,10 +117,7 @@ export default async function AuthorityDetailPage({
       .select()
       .from(trainingExtraFields)
       .where(
-        and(
-          eq(trainingExtraFields.ownerType, 'authority'),
-          eq(trainingExtraFields.ownerId, id),
-        ),
+        and(eq(trainingExtraFields.ownerType, 'authority'), eq(trainingExtraFields.ownerId, id)),
       )
       .orderBy(asc(trainingExtraFields.sortOrder), asc(trainingExtraFields.createdAt))
     return { authority, skillTypes, extras }
@@ -180,8 +177,8 @@ export default async function AuthorityDetailPage({
             />
             {authority.notes ? (
               <div className="mt-4">
-                <div className="text-xs uppercase tracking-wide text-slate-500">Notes</div>
-                <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{authority.notes}</p>
+                <div className="text-xs tracking-wide text-slate-500 uppercase">Notes</div>
+                <p className="mt-1 text-sm whitespace-pre-wrap text-slate-700">{authority.notes}</p>
               </div>
             ) : null}
           </CardContent>

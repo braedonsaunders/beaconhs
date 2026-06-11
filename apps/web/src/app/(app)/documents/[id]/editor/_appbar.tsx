@@ -81,11 +81,11 @@ export function EditorAppbar({
   publishing: boolean
 }) {
   return (
-    <header className="flex h-14 shrink-0 items-center gap-3 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3">
+    <header className="flex h-14 shrink-0 items-center gap-3 border-b border-slate-200 bg-white px-3 dark:border-slate-800 dark:bg-slate-900">
       {embedded ? (
         <Link
           href={`/documents/${documentId}/editor`}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
           title="Open full-screen editor"
         >
           <Maximize2 size={15} />
@@ -93,7 +93,7 @@ export function EditorAppbar({
       ) : (
         <Link
           href={`/documents/${documentId}`}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
           title="Back to document"
         >
           <ArrowLeft size={16} />
@@ -112,11 +112,13 @@ export function EditorAppbar({
             value={title}
             onChange={(e) => onTitleChange(e.currentTarget.value)}
             placeholder="Untitled document"
-            className="min-w-0 max-w-md flex-1 truncate rounded-md border border-transparent px-2 py-1 text-sm font-semibold text-slate-900 dark:text-slate-100 outline-none hover:border-slate-200 dark:hover:border-slate-800 focus:border-teal-400"
+            className="max-w-md min-w-0 flex-1 truncate rounded-md border border-transparent px-2 py-1 text-sm font-semibold text-slate-900 outline-none hover:border-slate-200 focus:border-teal-400 dark:text-slate-100 dark:hover:border-slate-800"
           />
         )}
         <SaveBadge state={saveState} />
-        <span className="hidden text-[11px] tabular-nums text-slate-400 dark:text-slate-500 md:inline">{words} words</span>
+        <span className="hidden text-[11px] text-slate-400 tabular-nums md:inline dark:text-slate-500">
+          {words} words
+        </span>
       </div>
 
       <div className="flex items-center gap-1.5">
@@ -142,8 +144,8 @@ export function EditorAppbar({
           className={cn(
             'inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors',
             suggesting
-              ? 'border-amber-300 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300'
-              : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60',
+              ? 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-300'
+              : 'border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/60',
           )}
         >
           <PencilRuler size={14} />
@@ -157,8 +159,8 @@ export function EditorAppbar({
           className={cn(
             'inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors',
             commentsOpen
-              ? 'border-teal-300 dark:border-teal-800/60 bg-teal-50 dark:bg-teal-950/50 text-teal-800 dark:text-teal-300'
-              : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60',
+              ? 'border-teal-300 bg-teal-50 text-teal-800 dark:border-teal-800/60 dark:bg-teal-950/50 dark:text-teal-300'
+              : 'border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/60',
           )}
         >
           <MessageSquare size={14} />
@@ -213,7 +215,7 @@ function ZoomSelect({ zoom, onZoomChange }: { zoom: number; onZoomChange: (z: nu
       title="Zoom"
       value={zoom}
       onChange={(e) => onZoomChange(Number(e.currentTarget.value))}
-      className="doc-select h-8 rounded-md border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-2 text-xs text-slate-600 dark:text-slate-300 outline-none hover:border-slate-300 dark:hover:border-slate-700"
+      className="doc-select h-8 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-600 outline-none hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-slate-700"
     >
       {ZOOM_PRESETS.map((z) => (
         <option key={z} value={z}>
@@ -230,8 +232,8 @@ function FileMenu({ documentId }: { documentId: string }) {
     <Menu trigger={<FileUp size={15} />} title="File — import / export" widthClass="w-64">
       {(close) => (
         <div className="text-sm text-slate-700 dark:text-slate-200">
-          <div className="border-b border-slate-100 dark:border-slate-800 p-2">
-            <p className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+          <div className="border-b border-slate-100 p-2 dark:border-slate-800">
+            <p className="px-1 pb-1 text-[10px] font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500">
               Import
             </p>
             <FileUploader
@@ -243,7 +245,10 @@ function FileMenu({ documentId }: { documentId: string }) {
               label="Replace from a Word (.docx) file"
               onUploaded={(f) =>
                 void (async () => {
-                  const res = await importDocxIntoDocument({ documentId, attachmentId: f.attachmentId })
+                  const res = await importDocxIntoDocument({
+                    documentId,
+                    attachmentId: f.attachmentId,
+                  })
                   if (res.ok) {
                     toast.success('Word file imported.')
                     close()
@@ -303,11 +308,13 @@ function PageSetupMenu({
       {() => (
         <div className="space-y-3 p-3 text-xs text-slate-700 dark:text-slate-200">
           <label className="block">
-            <span className="mb-1 block font-medium text-slate-500 dark:text-slate-400">Page size</span>
+            <span className="mb-1 block font-medium text-slate-500 dark:text-slate-400">
+              Page size
+            </span>
             <select
               value={layout.pageSize}
               onChange={(e) => onLayoutChange({ pageSize: e.currentTarget.value as PageSizeKey })}
-              className="doc-select h-8 w-full rounded border border-slate-200 dark:border-slate-800 px-2"
+              className="doc-select h-8 w-full rounded border border-slate-200 px-2 dark:border-slate-800"
             >
               {Object.entries(PAGE_SIZES).map(([k, v]) => (
                 <option key={k} value={k}>
@@ -329,11 +336,13 @@ function PageSetupMenu({
               value={layout.headerText}
               onChange={(e) => onLayoutChange({ headerText: e.currentTarget.value })}
               placeholder="Header text (optional)"
-              className="h-8 w-full rounded border border-slate-200 dark:border-slate-800 px-2"
+              className="h-8 w-full rounded border border-slate-200 px-2 dark:border-slate-800"
             />
           ) : null}
           <label className="flex items-center justify-between">
-            <span className="font-medium text-slate-500 dark:text-slate-400">Print footer + page #</span>
+            <span className="font-medium text-slate-500 dark:text-slate-400">
+              Print footer + page #
+            </span>
             <input
               type="checkbox"
               checked={layout.printFooter}
@@ -345,7 +354,7 @@ function PageSetupMenu({
               value={layout.footerText}
               onChange={(e) => onLayoutChange({ footerText: e.currentTarget.value })}
               placeholder="Footer text (optional)"
-              className="h-8 w-full rounded border border-slate-200 dark:border-slate-800 px-2"
+              className="h-8 w-full rounded border border-slate-200 px-2 dark:border-slate-800"
             />
           ) : null}
           <p className="text-[10px] leading-snug text-slate-400 dark:text-slate-500">
@@ -385,7 +394,7 @@ function Menu({
         title={title}
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          'inline-flex h-8 items-center gap-0.5 rounded-md border border-slate-200 dark:border-slate-800 px-2 text-slate-600 dark:text-slate-300 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60',
+          'inline-flex h-8 items-center gap-0.5 rounded-md border border-slate-200 px-2 text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/60',
           open && 'bg-slate-50 dark:bg-slate-800/60',
         )}
       >
@@ -395,7 +404,7 @@ function Menu({
       {open ? (
         <div
           className={cn(
-            'absolute right-0 top-10 z-40 overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-lg',
+            'absolute top-10 right-0 z-40 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-800 dark:bg-slate-900',
             widthClass,
           )}
         >

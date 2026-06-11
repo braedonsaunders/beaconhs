@@ -62,7 +62,16 @@ export async function GET(req: NextRequest) {
 
   return csvResponse({
     filename: csvFilename('ppe'),
-    headers: ['Type', 'Serial #', 'Size', 'Status', 'Holder', 'Purchase date', 'Expires on', 'Next inspection'],
+    headers: [
+      'Type',
+      'Serial #',
+      'Size',
+      'Status',
+      'Holder',
+      'Purchase date',
+      'Expires on',
+      'Next inspection',
+    ],
     rows: rows.map(({ item, type, holder }) => [
       type.name,
       item.serialNumber ?? '',

@@ -20,11 +20,7 @@ const TYPE_OPTIONS = Object.entries(SAFE_DISTANCE_TYPE_LABELS).map(([v, l]) => (
   label: l,
 }))
 
-export function NewSafeDistanceForm({
-  initialType = 'electrical',
-}: {
-  initialType?: string
-}) {
+export function NewSafeDistanceForm({ initialType = 'electrical' }: { initialType?: string }) {
   const startType = (TYPE_OPTIONS.find((o) => o.value === initialType)?.value ??
     'electrical') as SafeDistanceType
   const [type, setType] = useState<SafeDistanceType>(startType)
@@ -124,8 +120,7 @@ export function NewSafeDistanceForm({
             />
             {inferredVoltage !== null && !voltage.trim() ? (
               <p className="text-xs text-slate-500">
-                Inferred from description: <strong>{inferredVoltage} kV</strong>. Type to
-                override.
+                Inferred from description: <strong>{inferredVoltage} kV</strong>. Type to override.
               </p>
             ) : null}
           </div>

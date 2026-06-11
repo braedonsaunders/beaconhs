@@ -14,19 +14,11 @@ import {
   Label,
   Textarea,
 } from '@beaconhs/ui'
-import {
-  people,
-  personGroupMemberships,
-  personGroups,
-} from '@beaconhs/db/schema'
+import { people, personGroupMemberships, personGroups } from '@beaconhs/db/schema'
 import { PageContainer } from '@/components/page-layout'
 import { requireModuleManage } from '@/lib/module-admin/guard'
 import { MemberPicker } from '../../_components/member-picker'
-import {
-  deleteGroup,
-  setGroupMembership,
-  updateGroup,
-} from '../../_actions/groups'
+import { deleteGroup, setGroupMembership, updateGroup } from '../../_actions/groups'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,19 +27,11 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   return { title: `Group · ${id.slice(0, 8)}` }
 }
 
-export default async function GroupDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>
-}) {
+export default async function GroupDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const ctx = await requireModuleManage('people')
   const data = await ctx.db(async (tx) => {
-    const [row] = await tx
-      .select()
-      .from(personGroups)
-      .where(eq(personGroups.id, id))
-      .limit(1)
+    const [row] = await tx.select().from(personGroups).where(eq(personGroups.id, id)).limit(1)
     if (!row) return null
     const candidates = await tx
       .select({
@@ -174,7 +158,7 @@ export default async function GroupDetailPage({
                     <li key={c.id}>
                       <Link
                         href={`/people/${c.id}`}
-                        className="rounded border border-slate-200 px-3 py-2 hover:border-teal-400 hover:bg-teal-50 block"
+                        className="block rounded border border-slate-200 px-3 py-2 hover:border-teal-400 hover:bg-teal-50"
                       >
                         <div className="font-medium">
                           {c.lastName}, {c.firstName}

@@ -242,9 +242,7 @@ export const fieldValidationSchema = z
     maxLength: z.number().int().nonnegative().optional(),
     pattern: z.string().optional(),
     message: z.string().optional(),
-    options: z
-      .array(z.object({ value: z.string(), label: i18nStringSchema }))
-      .optional(),
+    options: z.array(z.object({ value: z.string(), label: i18nStringSchema })).optional(),
     allowOther: z.boolean().optional(),
   })
   .partial()
@@ -279,9 +277,7 @@ export const dataBindingSchema = z.object({
   filterColumn: z.string().optional(),
   // Lookup auto-fill: when a row is selected, copy these source columns into the
   // named target fields of the same response.
-  autofill: z
-    .array(z.object({ column: z.string(), targetFieldId: z.string() }))
-    .optional(),
+  autofill: z.array(z.object({ column: z.string(), targetFieldId: z.string() })).optional(),
   // Static equality filters applied to every query (column === value).
   where: z.array(z.object({ column: z.string(), value: z.unknown() })).optional(),
   // data_table: which columns to show (default = all source columns) + whether
@@ -441,9 +437,7 @@ export const formSchemaV1 = z.object({
   // Presentational tabs for the FILL experience (purely navigation — NOT
   // sign-off, unlike workflow.steps). When ≥2 tabs exist on a single-step app,
   // the filler shows a tab bar and each section appears under section.tabId.
-  tabs: z
-    .array(z.object({ id: z.string().min(1), title: i18nStringSchema }))
-    .optional(),
+  tabs: z.array(z.object({ id: z.string().min(1), title: i18nStringSchema })).optional(),
   workflow: z.object({
     steps: z.array(formWorkflowStepSchema).min(1),
     scoreRouting: scoreRoutingSchema.optional(),

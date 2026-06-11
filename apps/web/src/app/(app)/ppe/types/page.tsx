@@ -22,16 +22,9 @@ import {
   TableHeader,
   TableRow,
 } from '@beaconhs/ui'
-import {
-  ppeItems,
-  ppeTypeInspectionCriteria,
-  ppeTypes,
-} from '@beaconhs/db/schema'
+import { ppeItems, ppeTypeInspectionCriteria, ppeTypes } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
-import {
-  assertCanManageModule,
-  requireModuleManage,
-} from '@/lib/module-admin/guard'
+import { assertCanManageModule, requireModuleManage } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 import { ListPageLayout } from '@/components/page-layout'
 import { PpeSubNav } from '@/components/ppe-sub-nav'
@@ -70,9 +63,7 @@ export default async function PpeTypesPage() {
     return {
       types: t,
       itemCounts: Object.fromEntries(itemTally.map((x) => [x.typeId, Number(x.c)])),
-      criteriaCounts: Object.fromEntries(
-        critTally.map((x) => [x.ppeTypeId, Number(x.c)]),
-      ),
+      criteriaCounts: Object.fromEntries(critTally.map((x) => [x.ppeTypeId, Number(x.c)])),
     }
   })
 

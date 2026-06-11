@@ -172,10 +172,7 @@ async function querySafetyKpiSummary(
       title: 'Incident severity breakdown',
       subtitle: range.label,
       columns: ['Severity', 'Count'],
-      rows:
-        incRows.length === 0
-          ? []
-          : incRows.map((r) => [formatLabel(r.severity), Number(r.c)]),
+      rows: incRows.length === 0 ? [] : incRows.map((r) => [formatLabel(r.severity), Number(r.c)]),
       isEmpty: incRows.length === 0,
     })
 
@@ -365,12 +362,7 @@ async function queryOverdueRollup(
       .from(trainingRecords)
       .innerJoin(people, eq(people.id, trainingRecords.personId))
       .innerJoin(trainingCourses, eq(trainingCourses.id, trainingRecords.courseId))
-      .where(
-        and(
-          isNotNull(trainingRecords.expiresOn),
-          lte(trainingRecords.expiresOn, today),
-        ),
-      )
+      .where(and(isNotNull(trainingRecords.expiresOn), lte(trainingRecords.expiresOn, today)))
       .orderBy(asc(trainingRecords.expiresOn))
 
     // Overdue documents (next-review past)
@@ -465,8 +457,7 @@ async function queryOverdueRollup(
       isEmpty: ppeRows.length === 0,
     })
 
-    const total =
-      caRows.length + trgRows.length + docRows.length + eqRows.length + ppeRows.length
+    const total = caRows.length + trgRows.length + docRows.length + eqRows.length + ppeRows.length
 
     return {
       groups,
@@ -890,16 +881,14 @@ async function runCustomQuery(
   customQuery: unknown,
   _range: Range,
 ): Promise<RunResult> {
-  const q = customQuery as
-    | {
-        entity?: string
-        columns?: string[]
-        filters?: { column: string; op: string; value?: unknown }[]
-        groupBy?: string | null
-        sort?: { column: string; direction: 'asc' | 'desc' } | null
-        limit?: number | null
-      }
-    | null
+  const q = customQuery as {
+    entity?: string
+    columns?: string[]
+    filters?: { column: string; op: string; value?: unknown }[]
+    groupBy?: string | null
+    sort?: { column: string; direction: 'asc' | 'desc' } | null
+    limit?: number | null
+  } | null
   if (!q || !q.entity || !CUSTOM_ENTITY_TABLE[q.entity]) {
     throw new Error('Custom query missing or has unknown entity')
   }
@@ -970,20 +959,13 @@ async function runCustomQuery(
 
   return await withTenant(db, tenantId, async (tx) => {
     const selectList = sql.raw(
-      requestedColumns
-        .map((c) => `"${table}"."${whitelist[c]}" AS "${c}"`)
-        .join(', '),
+      requestedColumns.map((c) => `"${table}"."${whitelist[c]}" AS "${c}"`).join(', '),
     )
     const whereSql =
       where.length === 0
         ? sql``
-        : sql.join(
-            [sql.raw('WHERE'), sql.join(where, sql.raw(' AND '))],
-            sql.raw(' '),
-          )
-    const orderSql = sortCol
-      ? sql.raw(`ORDER BY "${table}"."${sortCol}" ${sortDir}`)
-      : sql.raw('')
+        : sql.join([sql.raw('WHERE'), sql.join(where, sql.raw(' AND '))], sql.raw(' '))
+    const orderSql = sortCol ? sql.raw(`ORDER BY "${table}"."${sortCol}" ${sortDir}`) : sql.raw('')
 
     const queryText = sql.join(
       [
@@ -1022,9 +1004,7 @@ async function runCustomQuery(
             title: `${formatLabel(q.groupBy!)}: ${k}`,
             subtitle: `${list.length} row(s)`,
             columns: requestedColumns.map(formatLabel),
-            rows: list.map((row) =>
-              requestedColumns.map((c) => formatCustomValue(row[c])),
-            ),
+            rows: list.map((row) => requestedColumns.map((c) => formatCustomValue(row[c]))),
           })
         }
       }
@@ -1033,9 +1013,7 @@ async function runCustomQuery(
         title: 'Results',
         subtitle: `${dataRows.length} row(s)`,
         columns: requestedColumns.map(formatLabel),
-        rows: dataRows.map((row) =>
-          requestedColumns.map((c) => formatCustomValue(row[c])),
-        ),
+        rows: dataRows.map((row) => requestedColumns.map((c) => formatCustomValue(row[c]))),
         isEmpty: dataRows.length === 0,
       })
     }
@@ -1067,4 +1045,3 @@ function extractRows(result: unknown): Record<string, unknown>[] {
   }
   return []
 }
-

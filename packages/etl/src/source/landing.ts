@@ -22,7 +22,9 @@ export async function readAll<T = any>(schema: string, table: string, where = ''
 }
 
 export async function count(schema: string, table: string, where = ''): Promise<number> {
-  const r = (await source().unsafe(`select count(*)::int n from ${rel(schema, table)} ${where}`)) as any[]
+  const r = (await source().unsafe(
+    `select count(*)::int n from ${rel(schema, table)} ${where}`,
+  )) as any[]
   return Number(r[0]?.n ?? 0)
 }
 
@@ -37,7 +39,9 @@ export async function* readBatches<T = any>(
   const s = source()
   let last: number | null = null
   for (;;) {
-    const filt = [opts.where, last == null ? '' : `${ident(pk)} > ${Number(last)}`].filter(Boolean).join(' and ')
+    const filt = [opts.where, last == null ? '' : `${ident(pk)} > ${Number(last)}`]
+      .filter(Boolean)
+      .join(' and ')
     const rows = (await s.unsafe(
       `select * from ${rel(schema, table)} ${filt ? 'where ' + filt : ''} order by ${ident(pk)} asc limit ${size}`,
     )) as any[]
@@ -48,7 +52,12 @@ export async function* readBatches<T = any>(
   }
 }
 
-export async function distinct<T = any>(schema: string, table: string, col: string, where = ''): Promise<T[]> {
+export async function distinct<T = any>(
+  schema: string,
+  table: string,
+  col: string,
+  where = '',
+): Promise<T[]> {
   const r = (await source().unsafe(
     `select distinct ${ident(col)} v from ${rel(schema, table)} ${where} where ${ident(col)} is not null`.replace(
       /\)\s+where/,

@@ -177,8 +177,8 @@ export default async function DataSourcesPage() {
           </div>
           <p className="max-w-2xl text-sm text-slate-500">
             Reusable lists + live data that your apps bind to — for lookup auto-fill, cascading
-            dropdowns, data tables and KPI / chart blocks. Build a <strong>reference</strong> list by
-            hand, or surface an app&apos;s <strong>responses</strong> as live data.
+            dropdowns, data tables and KPI / chart blocks. Build a <strong>reference</strong> list
+            by hand, or surface an app&apos;s <strong>responses</strong> as live data.
           </p>
         </header>
 
@@ -216,7 +216,11 @@ export default async function DataSourcesPage() {
                             <Table2 size={12} />
                             {(s.columns as DataSourceColumn[])?.length ?? 0} columns
                           </span>
-                          {s.kind === 'reference' ? <span>{s.rowCount} rows</span> : <span>live</span>}
+                          {s.kind === 'reference' ? (
+                            <span>{s.rowCount} rows</span>
+                          ) : (
+                            <span>live</span>
+                          )}
                           <span className="inline-flex items-center gap-0.5 text-teal-600 opacity-0 transition group-hover:opacity-100">
                             Manage <ArrowUpRight size={12} />
                           </span>
@@ -268,8 +272,8 @@ export default async function DataSourcesPage() {
                       ))}
                     </Select>
                     <p className="text-xs text-slate-400">
-                      Only used for the <em>Live</em> kind. Columns are snapshotted from the app&apos;s
-                      fields.
+                      Only used for the <em>Live</em> kind. Columns are snapshotted from the
+                      app&apos;s fields.
                     </p>
                   </div>
                   <div className="space-y-1.5">

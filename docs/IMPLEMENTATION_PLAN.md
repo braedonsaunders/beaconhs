@@ -17,6 +17,7 @@
 Updated as work lands. `✅` = done, `🟡` = in progress / stub, `⬜` = not yet started.
 
 ### Phase 0 — Foundations
+
 - ✅ Monorepo (Turbo + pnpm), **Next.js 16.2 (Turbopack) + React 19.2 + Drizzle 0.45 + Better-Auth 1.6 + Tailwind 3 + TypeScript 5.6**, Docker compose (Postgres/Redis/MinIO/Mailpit), CI workflow
 - ✅ Drizzle schema for every module + RLS policies installed on all tenant-scoped tables
 - ✅ Tenants + Better-Auth (email/password + magic-link via Mailpit) + tenant memberships + 4 built-in roles
@@ -31,6 +32,7 @@ Updated as work lands. `✅` = done, `🟡` = in progress / stub, `⬜` = not ye
 - ✅ **Notifications worker wired into module events**: `@beaconhs/events` package with `emit*` functions for incident.reported / incident.statusChanged / ca.assigned / ca.completed / ca.overdue / training.expiring / training.expired / document.reviewDue / loneWorker.overdue / csPermit.expiring. Audience resolution: tenant-overridable via `tenant_notification_recipients`, falls back to safety_manager + tenant_admin roles. Scheduled-tick worker actually emits now (incl. a new hourly CA-overdue scan). Each event fan-outs to in-app + push (via notify queue) **and** a properly-templated email (subject + body + Open-in-app button)
 
 ### Phase 1 — Form builder
+
 - ✅ Schema + Zod validation (`FormSchemaV1`, every field type, conditional logic, multi-step workflow)
 - ✅ Field-type registry (40+ types), conditional-logic evaluator, scoring extractor, formula evaluator (with tests)
 - ✅ Form template list + detail page (schema browser, version history, assignments, recent responses, raw-JSON debug)
@@ -44,30 +46,33 @@ Updated as work lands. `✅` = done, `🟡` = in progress / stub, `⬜` = not ye
 - ⬜ Assignment dispatcher (scheduled / event-triggered tick consumer)
 
 ### Phase 2 — Form-driven modules
+
 Every list has search + sort + pagination + filter chips. Every row clicks through.
 
-| Module | List | Detail | Edit / actions |
-|---|---|---|---|
-| Incidents | ✅ | ✅ Full legacy parity: 7 accordion sections + **Photos & Files section with uploader + lightbox gallery** + activity feed + status workflow + lock/unlock + critical alert | ✅ Report form (auto-ref); ⬜ Edit form |
-| Corrective Actions | ✅ | ✅ General + Work form (audit-logged) + status workflow (audit-logged) + activity feed + source-link | ✅ New CA form (preserves source link via query) |
-| Inspections | ✅ | ✅ Lists form-template-driven inspection responses + per-template "new" entry points | (uses Forms designer + renderer) |
-| Toolbox talks | (uses Forms) | (uses Forms) | (uses Forms) |
-| Forms — Templates | ✅ | ✅ Overview + schema browser + versions + assignments + recent responses + raw JSON | ✅ **Designer** (three-pane) + ✅ **Filler** (stepper) |
-| Forms — Responses | ✅ | ✅ Schema-aware render with repeating sections + workflow steps | — |
+| Module             | List         | Detail                                                                                                                                                                     | Edit / actions                                         |
+| ------------------ | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| Incidents          | ✅           | ✅ Full legacy parity: 7 accordion sections + **Photos & Files section with uploader + lightbox gallery** + activity feed + status workflow + lock/unlock + critical alert | ✅ Report form (auto-ref); ⬜ Edit form                |
+| Corrective Actions | ✅           | ✅ General + Work form (audit-logged) + status workflow (audit-logged) + activity feed + source-link                                                                       | ✅ New CA form (preserves source link via query)       |
+| Inspections        | ✅           | ✅ Lists form-template-driven inspection responses + per-template "new" entry points                                                                                       | (uses Forms designer + renderer)                       |
+| Toolbox talks      | (uses Forms) | (uses Forms)                                                                                                                                                               | (uses Forms)                                           |
+| Forms — Templates  | ✅           | ✅ Overview + schema browser + versions + assignments + recent responses + raw JSON                                                                                        | ✅ **Designer** (three-pane) + ✅ **Filler** (stepper) |
+| Forms — Responses  | ✅           | ✅ Schema-aware render with repeating sections + workflow steps                                                                                                            | —                                                      |
 
 ### Phase 3 — Specialty modules
-| Module | List | Detail | Notes |
-|---|---|---|---|
-| People | ✅ | ✅ 5-tab profile + sidebar profile card + emergency contact + notes; **Edit tab is now the embedded inline form** | ✅ Add + ✅ Edit (full form with audit-log; also at `/people/[id]/edit`) |
-| Training — Courses | ✅ (within /training) | ✅ Course details + records list + classes | — |
-| Training — Records | ✅ (within /training) | ✅ Record detail + cert verify info | ⬜ PDF generators wired |
-| Equipment | ✅ | ✅ 4-tab detail (Maintenance / Work orders / Location / Edit) + sidebar asset card + report-missing/found | ✅ **Edit** (full form with audit-log); ⬜ QR label generator |
-| PPE | ✅ | ✅ Inspection log + new-inspection form + issue-report form + issuance log + status changer | — |
-| Documents | ✅ | ✅ 4-tab detail (Overview / Versions / Acknowledgments / Reviews) + publish/unpublish | ⬜ Acknowledge action wired; ⬜ Versioning editor |
-| **Confined Space** | ✅ | ✅ Permit detail + atmospheric-readings table + new-reading form + out-of-spec alarm + activate/close actions | ✅ New-permit form (auto-ref + hours-based expiry) |
-| **Lone Worker** | ✅ | ✅ Session detail + check-in log + manual check-in + end-session + overdue alert | ✅ Start-session form |
+
+| Module             | List                  | Detail                                                                                                            | Notes                                                                    |
+| ------------------ | --------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| People             | ✅                    | ✅ 5-tab profile + sidebar profile card + emergency contact + notes; **Edit tab is now the embedded inline form** | ✅ Add + ✅ Edit (full form with audit-log; also at `/people/[id]/edit`) |
+| Training — Courses | ✅ (within /training) | ✅ Course details + records list + classes                                                                        | —                                                                        |
+| Training — Records | ✅ (within /training) | ✅ Record detail + cert verify info                                                                               | ⬜ PDF generators wired                                                  |
+| Equipment          | ✅                    | ✅ 4-tab detail (Maintenance / Work orders / Location / Edit) + sidebar asset card + report-missing/found         | ✅ **Edit** (full form with audit-log); ⬜ QR label generator            |
+| PPE                | ✅                    | ✅ Inspection log + new-inspection form + issue-report form + issuance log + status changer                       | —                                                                        |
+| Documents          | ✅                    | ✅ 4-tab detail (Overview / Versions / Acknowledgments / Reviews) + publish/unpublish                             | ⬜ Acknowledge action wired; ⬜ Versioning editor                        |
+| **Confined Space** | ✅                    | ✅ Permit detail + atmospheric-readings table + new-reading form + out-of-spec alarm + activate/close actions     | ✅ New-permit form (auto-ref + hours-based expiry)                       |
+| **Lone Worker**    | ✅                    | ✅ Session detail + check-in log + manual check-in + end-session + overdue alert                                  | ✅ Start-session form                                                    |
 
 ### Phase 4 — Dashboards + reports + plugin framework
+
 - ✅ **Dashboard upgraded**: 8 KPI tiles with trend deltas, 4 list widgets (recent incidents, due CAs, expiring certs, inbox)
 - ⬜ Drag-drop widget builder
 - ⬜ Pre-built reports + custom report builder
@@ -75,11 +80,13 @@ Every list has search + sort + pagination + filter chips. Every row clicks throu
 - ⬜ Plugin SDK runtime + first-party plugins
 
 ### Phase 5 — Migration + cutover
+
 - ⬜ ETL from beaconhs SQL Server
 - ⬜ Validation harness
 - ⬜ Dry runs + cutover
 
 ### Admin
+
 - ✅ Admin landing page
 - ✅ /admin/tenants list + "View as"
 - ✅ /admin/users — every member with roles + status + joined date
@@ -90,6 +97,7 @@ Every list has search + sort + pagination + filter chips. Every row clicks throu
 - ✅ **/admin/plugins** — first-party plugin catalogue (NetSuite, adminapp2-sync, webhook-out) with enable/disable per tenant, capability chips, version display
 
 ### Cross-cutting
+
 - ✅ **Container-app shell**: AppShell is `h-screen overflow-hidden`. Pages choose `PageContainer` (whole-page scroll), `ListPageLayout` (sticky header + scrolling body), `DetailPageLayout` (sticky header + subtabs + scrolling body), `DetailSplitLayout` (sticky header + sticky sidebar + scrolling body), or `WizardLayout` (sticky header + scrolling body + sticky footer for forms).
 - ✅ **Horizontal subtabs everywhere**: Incident (Overview/Medical/Injuries/Investigation/Photos/Activity), Corrective Action (Overview/Work/Status/Activity), PPE (Overview/Inspections/Issues/History/Status), Confined Space (Overview/Atmospheric readings), Lone Worker (Overview/Check-ins), Document (Overview/Versions/Acknowledgments/Reviews), Forms Template (Overview/Schema/Assignments/Recent responses/Raw JSON), plus existing tabs on People, Equipment, Locations.
 - ✅ **Notifications inbox** at /notifications + bell-icon unread count in header + mark-read / mark-all-read actions
@@ -98,6 +106,7 @@ Every list has search + sort + pagination + filter chips. Every row clicks throu
 - ✅ `/manifest.webmanifest` + service worker for PWA install
 
 ### Newly added modules (Locations, Inspection Banks, Skill Authorities, Atmospheric Sensors, PDF rendering)
+
 - ✅ **Locations** (`/locations`): customer-level org_units list + adaptive detail (different tab strip for customer / project / site) + edit + new + child-project create. New `customer_contacts` table with inline add on the Contacts tab + standalone `/contacts/new` route.
 - ✅ **Inspection Banks** (`/inspections/banks`): reusable inspection-criteria templates with criteria CRUD, sequence reorder, response-type + photo/comment-required flags.
 - ✅ **Training Skill Authorities** (`/training/authorities`) and **Skill Types** (`/training/skills`): full competency hierarchy with skill assignments per person + expiry tracking.
@@ -130,6 +139,7 @@ audit-logged — matching the depth of the legacy Laravel modules.
 App-shell nav: Frontline now includes JSHA/HazID / Toolbox talks / Lift plans; Insight gains Compliance; Settings gains Tools + Utilities. Total **~160 DB tables** across **9 migrations**.
 
 ### Wave 2 modules (canonical form templates, Equipment work-orders/truck-log, Documents books/reference, Kiosk, Training classes)
+
 - ✅ **Canonical form templates** seeded: JSHA, Toolbox Talk, Critical Lift Plan, Working-at-Heights Rescue Plan. `/forms/templates/new` gives a "Start from template" gallery that clones one of the canonicals into the tenant. Lifts the legacy HazID / JSHA / Toolbox / Lift-Plan modules onto the form-builder runtime rather than porting bespoke surfaces.
 - ✅ **Equipment Work Orders** (`/equipment/work-orders`): list/detail/new with auto `WO-YYYY-NNNN` ref, priority enum, action-taken notes, status workflow, mark-complete action.
 - ✅ **Equipment Truck Log** (`/equipment/truck-log`): month calendar grid + entry form (km in/out, driver, manpower, site) + summary matrix with grand totals + CSV export.
@@ -143,6 +153,7 @@ App-shell nav: Frontline now includes JSHA/HazID / Toolbox talks / Lift plans; I
 - ✅ **Audit-log everywhere**: every server action across the new pages calls `recordAudit()` (incidents/new, CA/new, CS permit/new, lone-worker/new, people/new, every reports schedule action, every PPE action, every document workflow action).
 
 ### Stack
+
 - ✅ **Next.js 16.2.6 (Turbopack default)** — upgraded from 15.0.3
 - ✅ **React 19.2.6** — upgraded from 19.0.0 (View Transitions, `useEffectEvent`, Activity boundary now available)
 - ✅ **Drizzle 0.45 + drizzle-kit 0.31** — upgraded from 0.36 / 0.28
@@ -159,71 +170,71 @@ App-shell nav: Frontline now includes JSHA/HazID / Toolbox talks / Lift plans; I
 
 **Stack:** TypeScript / Node.js / Next.js (App Router) full-stack + React + PostgreSQL + BullMQ on Redis + Cloudflare R2 + Postgres full-text search.
 
-**Form builder is the centerpiece.** It powers custom forms standalone *and* underpins most of the new module implementations (Inspections, JSHAs, toolbox talks, document acknowledgment, PPE inspections, equipment inspections all render through it). A small number of specialty modules (Incidents, Training, Equipment, Documentation, Confined Space) keep first-class data models because their workflows or data shape don't fit a pure form.
+**Form builder is the centerpiece.** It powers custom forms standalone _and_ underpins most of the new module implementations (Inspections, JSHAs, toolbox talks, document acknowledgment, PPE inspections, equipment inspections all render through it). A small number of specialty modules (Incidents, Training, Equipment, Documentation, Confined Space) keep first-class data models because their workflows or data shape don't fit a pure form.
 
 ---
 
 ## 2. Decisions Locked In
 
-| Area | Decision |
-|---|---|
-| **Tenancy** | Multi-tenant SaaS, every org is a tenant, no billing on day one |
-| **Tenant routing** | Single domain, tenant resolved at login (no subdomains in v1) |
-| **Tenant onboarding** | Admin-invite only (super-admin creates tenants) |
-| **Stack** | Next.js (App Router) + React + TypeScript |
-| **DB** | PostgreSQL with row-level security for tenant isolation |
-| **Auth** | Email + password and magic-link; no MFA in v1 (architect for it) |
-| **Worker login** | Email/magic link — every worker has email, no SMS/PIN flow |
-| **Hosting** | Self-host on own infra (Docker Swarm continuity) |
-| **Residency** | Canada-only |
-| **Scale target** | < 50 tenants / < 5k users / < 1M records (year 1–2) |
-| **File storage** | Cloudflare R2 (S3-compatible, no egress) |
-| **Search** | Postgres full-text + trigram |
-| **Queue** | BullMQ on Redis |
-| **i18n** | Tenant-configurable language list, bilingual form/PDF content |
-| **PWA** | Installable, online-only, with continuous form draft auto-save for spotty signal |
-| **Conflict policy** | Last-write-wins with warning banner |
-| **Native** | PWA only (no Capacitor in v1) |
-| **Data migration** | Hard cutover, 100% historical |
-| **Form builder authors** | Tenant admins / safety managers only |
-| **Form versioning** | Immutable versions on publish |
-| **Form drafts** | Continuous auto-save |
-| **Form assignment** | On-demand + scheduled + event-triggered + manually-assigned |
-| **Form workflows** | Multi-step with handoffs |
-| **Form PDF** | Auto-rendered from schema, admin can customize CSS per template |
-| **Photos** | Annotation + geotag + multi-photo per field |
-| **Signatures** | Visual signature only (drawn) |
-| **Attachments** | Documents, video, audio, voice-to-text |
-| **Risk matrix** | Fully configurable per tenant (none, 3×3, 5×5, custom) |
-| **JSHA module** | Implemented as a configured form template + risk matrix (no bespoke module) |
-| **Confined Space** | First-class specialty module (atmospheric + permit lifecycle) |
-| **Incidents** | First-class module with full taxonomy, simple linear investigation |
-| **Training** | First-class module — instructor-led, self-paced, evaluator skills, external cert |
-| **Cert expiry** | Reminders at 90/30/7/1 days + overdue flag, no auto-blocking |
-| **Cert output** | PDF + QR-verifiable public page |
-| **Equipment** | Asset registry + QR + location history + inspections + work orders. No financials. |
-| **PPE** | Issue + return/replacement/discard + scheduled inspections |
-| **Documentation** | Versioned library + acknowledgments + periodic review + management review books |
-| **Corrective actions** | Standalone records, linkable to any source |
-| **Permissions** | Built-in roles + custom roles per tenant |
-| **Data scoping** | Site/project + crew + self-only + tenant-wide (configurable per tenant) |
-| **Field-level perms** | Yes, configurable per form template |
-| **Audit log** | Every write with before/after diffs |
-| **Dashboard** | Drag-drop widget builder |
-| **Reports** | Pre-built + simple custom builder |
-| **Scheduled reports** | Subscriptions + admin-to-list + event-triggered |
-| **Exports** | PDF + Excel |
-| **Notification channels** | Email + in-app inbox + Web Push + SMS for critical only |
-| **Notification prefs** | Per-channel + per-category, user-controlled |
-| **Digest** | None — each notification immediate |
-| **Critical alerts** | New incident |
-| **Plugin framework** | First-party plugins, can sync in/out, render UI panels, define form-builder field types |
-| **adminapp2** | Stays separate; new app reads internal master data from it |
-| **External APIs** | Public REST API with per-tenant keys |
-| **Calendar** | In-app calendar only (no Google/Outlook sync in v1) |
-| **Starter content** | Curated starter library shipped to every new tenant |
-| **Lone-worker** | Timer-based check-in with auto-escalation (first-class feature) |
-| **Bulk import** | CSV for people/sites/equipment + UI for historical bulk upload |
+| Area                      | Decision                                                                                |
+| ------------------------- | --------------------------------------------------------------------------------------- |
+| **Tenancy**               | Multi-tenant SaaS, every org is a tenant, no billing on day one                         |
+| **Tenant routing**        | Single domain, tenant resolved at login (no subdomains in v1)                           |
+| **Tenant onboarding**     | Admin-invite only (super-admin creates tenants)                                         |
+| **Stack**                 | Next.js (App Router) + React + TypeScript                                               |
+| **DB**                    | PostgreSQL with row-level security for tenant isolation                                 |
+| **Auth**                  | Email + password and magic-link; no MFA in v1 (architect for it)                        |
+| **Worker login**          | Email/magic link — every worker has email, no SMS/PIN flow                              |
+| **Hosting**               | Self-host on own infra (Docker Swarm continuity)                                        |
+| **Residency**             | Canada-only                                                                             |
+| **Scale target**          | < 50 tenants / < 5k users / < 1M records (year 1–2)                                     |
+| **File storage**          | Cloudflare R2 (S3-compatible, no egress)                                                |
+| **Search**                | Postgres full-text + trigram                                                            |
+| **Queue**                 | BullMQ on Redis                                                                         |
+| **i18n**                  | Tenant-configurable language list, bilingual form/PDF content                           |
+| **PWA**                   | Installable, online-only, with continuous form draft auto-save for spotty signal        |
+| **Conflict policy**       | Last-write-wins with warning banner                                                     |
+| **Native**                | PWA only (no Capacitor in v1)                                                           |
+| **Data migration**        | Hard cutover, 100% historical                                                           |
+| **Form builder authors**  | Tenant admins / safety managers only                                                    |
+| **Form versioning**       | Immutable versions on publish                                                           |
+| **Form drafts**           | Continuous auto-save                                                                    |
+| **Form assignment**       | On-demand + scheduled + event-triggered + manually-assigned                             |
+| **Form workflows**        | Multi-step with handoffs                                                                |
+| **Form PDF**              | Auto-rendered from schema, admin can customize CSS per template                         |
+| **Photos**                | Annotation + geotag + multi-photo per field                                             |
+| **Signatures**            | Visual signature only (drawn)                                                           |
+| **Attachments**           | Documents, video, audio, voice-to-text                                                  |
+| **Risk matrix**           | Fully configurable per tenant (none, 3×3, 5×5, custom)                                  |
+| **JSHA module**           | Implemented as a configured form template + risk matrix (no bespoke module)             |
+| **Confined Space**        | First-class specialty module (atmospheric + permit lifecycle)                           |
+| **Incidents**             | First-class module with full taxonomy, simple linear investigation                      |
+| **Training**              | First-class module — instructor-led, self-paced, evaluator skills, external cert        |
+| **Cert expiry**           | Reminders at 90/30/7/1 days + overdue flag, no auto-blocking                            |
+| **Cert output**           | PDF + QR-verifiable public page                                                         |
+| **Equipment**             | Asset registry + QR + location history + inspections + work orders. No financials.      |
+| **PPE**                   | Issue + return/replacement/discard + scheduled inspections                              |
+| **Documentation**         | Versioned library + acknowledgments + periodic review + management review books         |
+| **Corrective actions**    | Standalone records, linkable to any source                                              |
+| **Permissions**           | Built-in roles + custom roles per tenant                                                |
+| **Data scoping**          | Site/project + crew + self-only + tenant-wide (configurable per tenant)                 |
+| **Field-level perms**     | Yes, configurable per form template                                                     |
+| **Audit log**             | Every write with before/after diffs                                                     |
+| **Dashboard**             | Drag-drop widget builder                                                                |
+| **Reports**               | Pre-built + simple custom builder                                                       |
+| **Scheduled reports**     | Subscriptions + admin-to-list + event-triggered                                         |
+| **Exports**               | PDF + Excel                                                                             |
+| **Notification channels** | Email + in-app inbox + Web Push + SMS for critical only                                 |
+| **Notification prefs**    | Per-channel + per-category, user-controlled                                             |
+| **Digest**                | None — each notification immediate                                                      |
+| **Critical alerts**       | New incident                                                                            |
+| **Plugin framework**      | First-party plugins, can sync in/out, render UI panels, define form-builder field types |
+| **adminapp2**             | Stays separate; new app reads internal master data from it                              |
+| **External APIs**         | Public REST API with per-tenant keys                                                    |
+| **Calendar**              | In-app calendar only (no Google/Outlook sync in v1)                                     |
+| **Starter content**       | Curated starter library shipped to every new tenant                                     |
+| **Lone-worker**           | Timer-based check-in with auto-escalation (first-class feature)                         |
+| **Bulk import**           | CSV for people/sites/equipment + UI for historical bulk upload                          |
 
 ---
 
@@ -282,7 +293,7 @@ Monorepo with Turborepo. Single deploy target (Next.js) for v1.
 - Every tenant-owned table has `tenant_id uuid NOT NULL` and an RLS policy: `tenant_id = current_setting('app.tenant_id')::uuid`.
 - Application sets `SET LOCAL app.tenant_id = '...'` on each request after auth resolution.
 - Belt-and-braces: ORM-level scoping helpers (`db.tenant(t).select(...)`) so RLS is the last line of defense, not the only one.
-- `users` and `tenants` and `tenant_users` (membership) are *cross-tenant* tables, but `tenant_users` rows are filtered by the requesting user's identity.
+- `users` and `tenants` and `tenant_users` (membership) are _cross-tenant_ tables, but `tenant_users` rows are filtered by the requesting user's identity.
 - Super-admin bypass: a `super_admin` session flag toggles a different RLS policy. Heavily logged.
 
 ### 3.4 Configurable org hierarchy
@@ -296,12 +307,14 @@ Sites carry lat/long + geofence radius for the GPS auto-suggest feature.
 ## 4. Data Model — High Level
 
 ### 4.1 Cross-tenant tables
+
 - `tenants` — id, name, slug, region, language_default, languages_enabled, settings (JSONB), branding (JSONB)
 - `users` — id, email, password_hash, name, locale, mfa_secret (later), created_at
 - `tenant_users` — tenant_id, user_id, status (active/invited/suspended), display_name
 - `sessions` — by Auth library
 
 ### 4.2 Tenant-scoped core
+
 - `roles` — built-in + custom (id, tenant_id, name, permissions JSONB)
 - `role_assignments` — tenant_user_id, role_id, scope (JSONB: sites/crews/self)
 - `org_units` — id, tenant_id, parent_id, level, name, geometry
@@ -313,6 +326,7 @@ Sites carry lat/long + geofence radius for the GPS auto-suggest feature.
 - `attachments` — id, tenant_id, kind (image/doc/video/audio), r2_key, mime, size, exif JSONB, geo POINT, captured_at
 
 ### 4.3 Form builder
+
 - `form_templates` — id, tenant_id, key (slug, stable across versions), name, category, status
 - `form_template_versions` — template_id, version, schema JSONB (sections, fields, logic, layout), published_at, published_by
 - `form_assignments` — template_id, scope (people/role/site/all), schedule (cron-ish), trigger_event (nullable), due_offset
@@ -334,6 +348,7 @@ JSONB for response data (flexible across template versions). Selected indexed co
 - **Lone Worker** — `lw_sessions`, `lw_checkins`, escalation policy per tenant.
 
 ### 4.5 Plugin / integration
+
 - `plugins` — id, key, name, version, manifest JSONB
 - `tenant_plugins` — tenant_id, plugin_id, enabled, config JSONB (encrypted), secrets (separate row in `tenant_plugin_secrets` with envelope encryption)
 - `plugin_events` — outbound event log (audit + retry)
@@ -345,7 +360,9 @@ JSONB for response data (flexible across template versions). Selected indexed co
 The form builder is the largest single piece of the system. Treat it as a sub-product.
 
 ### 5.1 Schema model
+
 A form template version's schema is a JSON document:
+
 ```jsonc
 {
   "version": 3,
@@ -390,6 +407,7 @@ A form template version's schema is a JSON document:
 ```
 
 ### 5.2 Field types (v1)
+
 **Standard:** text, textarea, number, date, datetime, time, email, phone, url
 **Choice:** radio, checkbox-group, select (single/multi), button-group, dropdown with "Other (specify)"
 **Compliance scoring:** Pass/Fail/N/A, rating-1-to-N, Yes/No+comment, traffic-light
@@ -403,12 +421,14 @@ A form template version's schema is a JSON document:
 Each field has: `id`, `type`, `label` (i18n), `helpText` (i18n), `required`, `validation`, `showIf`, `permissions`, type-specific config.
 
 ### 5.3 Conditional logic (v1)
+
 - Field-level `showIf` rules: `{ "field": "f1", "op": "equals", "value": "Yes" }` and AND/OR composition.
 - Section-level `showIf` (same rule shape).
 - Validate showIf rules at design-time (no cycles, references valid).
 - v2: section-level "required if", cross-field validators.
 
 ### 5.4 Form designer UX (admin)
+
 - Split-pane: palette of field types ↔ canvas ↔ properties.
 - Per-field i18n editor (one tab per enabled language for the tenant).
 - Logic builder: visual "if this then show that".
@@ -417,6 +437,7 @@ Each field has: `id`, `type`, `label` (i18n), `helpText` (i18n), `required`, `va
 - Version diff view (what changed since v2).
 
 ### 5.5 Form renderer (worker)
+
 - Mobile-first single-page. One section visible at a time on mobile; full layout on desktop.
 - Continuous auto-save (every field change → debounced server write of the response draft).
 - Voice-to-text button on every text field (Web Speech API).
@@ -426,12 +447,14 @@ Each field has: `id`, `type`, `label` (i18n), `helpText` (i18n), `required`, `va
 - Geotag stamped at capture time + visible on PDF.
 
 ### 5.6 PDF auto-render
+
 - Server-side React-to-PDF using Puppeteer.
 - One generic template renders any form: tenant branding header, form title, metadata (submitter, site, timestamps), sections, field-type-specific renderers (photo gallery, signature image, attendees grid, table for repeating sections), signature block.
 - Admin can supply custom CSS / custom header HTML / footer HTML per template.
 - PDF generation is a queued job (BullMQ) — returns a presigned R2 URL.
 
 ### 5.7 Assignment & workflow
+
 - Assignment shapes:
   - **On-demand:** worker browses "Available forms" list, scoped to their role and site.
   - **Scheduled:** repeats on a cadence (daily / weekly / monthly / cron). Creates an assignment row that's "due" today, surfaces in the worker's inbox, generates overdue notification if missed.
@@ -445,12 +468,14 @@ Each field has: `id`, `type`, `label` (i18n), `helpText` (i18n), `required`, `va
 ## 6. Module-by-Module Specs
 
 ### 6.1 Incidents
+
 - First-class data model (classification, severity/recordability, body part + injury type, lost-time events).
 - Investigation = a form template assigned to the investigator. Linked to the parent Incident.
 - Reporting from mobile is one-tap from any screen ("Report Incident"). GPS-stamped, photos in-line.
 - KPIs: TRIR, LTIFR, incident counts by type/site/period, rolling 30/90/365 day windows.
 
 ### 6.2 HazID / JSHA
+
 - A configured form template (no special module beyond the matrix engine).
 - Tenant configures their risk matrix (none / 3×3 / 5×5 / custom labels + colors) in settings.
 - Form designer can drop a `risk-matrix` field which references the tenant's configured matrix.
@@ -458,6 +483,7 @@ Each field has: `id`, `type`, `label` (i18n), `helpText` (i18n), `required`, `va
 - Goal: today's BeaconHS JSHA reproducible by template configuration alone.
 
 ### 6.3 Confined Space (specialty)
+
 - First-class because of permit lifecycle + atmospheric readings (live data ingestion future).
 - `cs_permits` with open/closed/expired states + max duration.
 - Atmospheric readings (manual entry for v1; sensor ingestion later as a plugin).
@@ -465,6 +491,7 @@ Each field has: `id`, `type`, `label` (i18n), `helpText` (i18n), `required`, `va
 - Rescue plan as a sub-document.
 
 ### 6.4 Training
+
 - Course catalogue (per-tenant; later: shared catalogue across tenants is a v2 question).
 - Classroom classes (scheduling, attendance roster, instructor sign-off).
 - Self-paced courses (slides/video/PDF + post-quiz).
@@ -475,6 +502,7 @@ Each field has: `id`, `type`, `label` (i18n), `helpText` (i18n), `required`, `va
 - Issued certificates: PDF with QR linking to a public verify URL (`/verify/<token>` → valid/expired/revoked).
 
 ### 6.5 Equipment
+
 - Asset registry with QR code labels (printable label sheets).
 - Location history (current site + holder + history rows).
 - Inspections: pre-use (worker scans QR → form opens) + scheduled inspections.
@@ -482,12 +510,14 @@ Each field has: `id`, `type`, `label` (i18n), `helpText` (i18n), `required`, `va
 - **Out of scope:** rental rates, financials. Belongs in adminapp2 or equivalent.
 
 ### 6.6 PPE
+
 - Separate from Equipment to preserve issue/return/discard lifecycle as first-class.
 - `ppe_items` with serial + size + type.
 - Issue to person (worker signs receipt); return when role/site changes or item is damaged; replacement issuance; discard with reason.
 - Scheduled inspections for items that need them (harness, lifeline, gas detector — configurable per PPE type).
 
 ### 6.7 Documentation
+
 - Versioned document library (SDS, policies, procedures).
 - Full-text search via Postgres tsvector.
 - Read-and-acknowledge workflow: required reading per role; worker's inbox shows unacknowledged; one click + signature acknowledges.
@@ -495,12 +525,14 @@ Each field has: `id`, `type`, `label` (i18n), `helpText` (i18n), `required`, `va
 - Management review books: curated bundles of documents; one signoff applies to the bundle.
 
 ### 6.8 Corrective Actions
+
 - Standalone, optionally linked to a source (incident / inspection / audit finding / form response).
 - Owner, due date, severity, status (open/in_progress/verified/closed).
 - "My CA inbox" view per user.
 - Verification step: a CA isn't closed until a verifier (different from the owner) confirms.
 
 ### 6.9 Lone Worker
+
 - Worker starts a session: site, expected end, check-in interval (15 / 30 / 60 min).
 - App prompts at interval; missed check-in escalates after grace period (push + SMS to supervisor + 911-back-up phone tree if tenant enables).
 - Background Web Push wakes the PWA on Android; iOS PWA limitations documented.
@@ -524,6 +556,7 @@ Each field has: `id`, `type`, `label` (i18n), `helpText` (i18n), `required`, `va
 ## 8. Dashboards & Reports
 
 ### 8.1 Dashboards
+
 - Drag-drop widget builder.
 - Widget types: KPI tile, line/bar/pie chart, list, calendar, heatmap, map.
 - Each widget = a saved report + viz config.
@@ -531,12 +564,14 @@ Each field has: `id`, `type`, `label` (i18n), `helpText` (i18n), `required`, `va
 - Mobile rendering: stack widgets vertically; only "essential" widgets shown by tenant config.
 
 ### 8.2 Reports
+
 - Pre-built canned reports per module (Incident summary, Inspection compliance, Training matrix, CA aging, PPE coverage).
 - Custom report builder: pick entity → pick fields → filters → group-bys → export.
 - Backed by Postgres views + tenant_id-scoped queries.
 - Exports: PDF (via Puppeteer) and Excel (via ExcelJS).
 
 ### 8.3 Scheduled reports
+
 - User-initiated subscription: save report → schedule (daily / weekly / monthly / cron) → channel (email or in-app).
 - Admin-defined distribution: admin schedules a report to a fixed list (role or specific emails).
 - Event-triggered: hook a report to an event (e.g. `incident.closed` → send a summary report to a defined audience).
@@ -547,11 +582,13 @@ Each field has: `id`, `type`, `label` (i18n), `helpText` (i18n), `required`, `va
 ## 9. Plugin / Integration Framework
 
 ### 9.1 Goals
+
 - First-party plugins only on day one (your team ships them).
 - Capabilities: sync data in, sync data out, render UI panels, contribute new form-builder field types or report types.
-- Architected so third-party plugins are *possible* later (manifest + permission scopes + sandbox).
+- Architected so third-party plugins are _possible_ later (manifest + permission scopes + sandbox).
 
 ### 9.2 Plugin SDK (TypeScript package)
+
 ```ts
 import { definePlugin } from '@beaconhs/plugin-sdk'
 
@@ -581,16 +618,19 @@ export default definePlugin({
 ```
 
 ### 9.3 Runtime
+
 - v1: plugins ship as packages in the monorepo. Loaded in-process at boot. No sandbox.
 - v2: third-party plugins run in a separate worker process with capability gates (Realm-style or Deno-sandbox).
 - Plugin config + secrets stored per tenant (`tenant_plugins`, `tenant_plugin_secrets` with envelope encryption — KMS-backed).
 
 ### 9.4 Day-one first-party plugins
+
 - `netsuite-sync` — pull employees, customers, projects.
 - `adminapp2-sync` — read internal master data from your existing adminapp2.
 - `webhook-out` — generic outbound webhooks for any event.
 
 ### 9.5 Public REST API
+
 - Separate from the plugin framework. Per-tenant API keys.
 - OpenAPI spec generated from Zod schemas.
 - Rate-limited (Redis token bucket).
@@ -602,24 +642,29 @@ export default definePlugin({
 ## 10. Permissions Model
 
 ### 10.1 Roles
+
 - Built-in roles: `worker`, `foreman`, `safety_manager`, `tenant_admin`, `super_admin`.
 - Each has a permission set encoded in `roles.permissions` (JSONB, action keys).
 - Tenant admins can create custom roles by toggling permission flags.
 
 ### 10.2 Permission shape
+
 - `module.action[.qualifier]` keys, e.g. `incidents.create`, `incidents.read.all`, `incidents.read.site`, `forms.publish`.
 - Permission grants resolved at request time. Cached per session.
 
 ### 10.3 Scoping
-- Each role assignment carries a *scope* (sites / crews / "self" / tenant-wide).
+
+- Each role assignment carries a _scope_ (sites / crews / "self" / tenant-wide).
 - A user can have multiple role assignments (e.g. Foreman on Site A, Worker on Site B).
 - Queries filter by scope after RLS. Helpers wrap this so app code says `db.forUser(u).incidents.findMany(...)`.
 
 ### 10.4 Field-level visibility
+
 - Form templates declare per-field role visibility.
 - Renderer hides fields the current user shouldn't see; server enforces on read/write.
 
 ### 10.5 Audit log
+
 - Every create/update/delete writes to `audit_log` with before/after diff.
 - Diffs computed by Drizzle middleware.
 - Searchable in admin UI by actor / entity / date.
@@ -630,6 +675,7 @@ export default definePlugin({
 ## 11. Migration Plan
 
 ### 11.1 Source systems
+
 - `beaconhs` SQL Server (primary)
 - `peopleapp` SQL Server (HR — replaced by adminapp2 sync + initial seed)
 - `toolcrib` SQL Server (folded into Equipment)
@@ -637,6 +683,7 @@ export default definePlugin({
 - `adminapp2` (kept; new app reads from it ongoing)
 
 ### 11.2 ETL architecture
+
 - Standalone Node migration project (`/migrations` in the monorepo, but doesn't ship in the app image).
 - Reads from SQL Server via `mssql` driver.
 - Writes to the new Postgres via Drizzle.
@@ -645,11 +692,13 @@ export default definePlugin({
 - Each migrator writes a `migration_report` row (source_id, new_id, status, warnings).
 
 ### 11.3 Tenant split at migration time
+
 - `Rassaun Services Inc` tenant gets all internal beaconhs records.
 - `Rassaun External Training` tenant gets the externaltraining records.
 - Personnel split by source database with optional manual reconciliation for shared individuals (their answer was "isolated tenants, no sharing" — confirm at migration time).
 
 ### 11.4 Migration order (each must succeed before the next runs)
+
 1. Tenants + super-admin users
 2. Org units (Customer/Project/Site)
 3. People + departments + roles/trades
@@ -665,12 +714,14 @@ export default definePlugin({
 13. Audit log seeded with cutover summary
 
 ### 11.5 Validation harness
+
 - Per-entity counts comparison (beaconhs row count vs new app).
 - Random-sample diffing — pick N records from beaconhs, render them in both systems, eyeball match.
 - Critical-path smoke tests: a sample worker can log in, see their training, see assigned forms, submit one; admin can run a key report and match it to the legacy report.
 - Dry runs scheduled twice before cutover (T-21, T-7).
 
 ### 11.6 Cutover plan
+
 - Communicate cutover date to all users.
 - Cutover window (weekend):
   - Freeze beaconhs writes (read-only banner).
@@ -688,6 +739,7 @@ export default definePlugin({
 A realistic phasing assuming a small focused team (1–3 engineers). Each phase is "demoable" — you can run real workflows at the end of each.
 
 ### Phase 0 — Foundations (4–6 weeks)
+
 - Monorepo scaffold, Next.js app, Drizzle schema starter, BullMQ worker, R2 storage, email sending.
 - Tenants + users + memberships + sessions + magic-link login.
 - Tenant-scoped RLS + middleware + super-admin bypass.
@@ -699,6 +751,7 @@ A realistic phasing assuming a small focused team (1–3 engineers). Each phase 
 - Observability scaffolded.
 
 ### Phase 1 — Form Builder (6–8 weeks)
+
 - Schema model + version table.
 - Form designer UI (palette, canvas, properties, logic builder, i18n editor).
 - Form renderer UI (mobile + desktop, auto-save).
@@ -709,6 +762,7 @@ A realistic phasing assuming a small focused team (1–3 engineers). Each phase 
 - Field-level visibility.
 
 ### Phase 2 — Form-driven modules (6–8 weeks)
+
 - Inspections (uses form builder, type-aware listing).
 - HazID / JSHA (configurable risk matrix + template).
 - Toolbox talks / journals (uses form builder, attendee picker).
@@ -718,6 +772,7 @@ A realistic phasing assuming a small focused team (1–3 engineers). Each phase 
 - Photo capture pipeline with annotation + geotag.
 
 ### Phase 3 — Specialty modules (6–8 weeks)
+
 - Incidents (first-class taxonomy + investigation form).
 - Training (courses, classes, assessments, skills, certs, matrix).
 - Equipment registry + work orders + QR labels.
@@ -726,6 +781,7 @@ A realistic phasing assuming a small focused team (1–3 engineers). Each phase 
 - Lone Worker check-in.
 
 ### Phase 4 — Dashboards + Reports + Plugin Framework (4–6 weeks)
+
 - Dashboard widget builder.
 - Pre-built reports + custom report builder.
 - Scheduled reports (subscriptions + admin lists + event-triggered).
@@ -733,6 +789,7 @@ A realistic phasing assuming a small focused team (1–3 engineers). Each phase 
 - Public REST API + per-tenant API keys + rate limiting.
 
 ### Phase 5 — Migration + Cutover (4–6 weeks of overlap)
+
 - ETL build + dry runs.
 - Validation harness.
 - Beta with internal Rassaun tenant on staging.
@@ -745,6 +802,7 @@ A realistic phasing assuming a small focused team (1–3 engineers). Each phase 
 ## 13. Risks & Open Questions
 
 ### High-risk items
+
 1. **Form builder ambition vs delivery time.** Versioned, multi-step, repeating sections, formulas, conditional logic, custom PDF — this is a product on its own. If a phase slips, this is the one. Consider feature-flagging formula fields + multi-step for v1.1 if time gets tight.
 2. **Auto-PDF rendering quality.** The 48 hand-built Blade templates exist because each had bespoke formatting needs. Auto-rendering will look generic by default. Tenant admins must be able to tune CSS, otherwise compliance teams will reject the output. Build a strong custom-CSS escape hatch from day one.
 3. **Plugin framework scope creep.** First-party in-process plugins are fine. The capability to "define new form-builder field types" via plugin is the riskiest part — adds a public interface to the form-builder internals. Lock that interface early or defer.
@@ -753,6 +811,7 @@ A realistic phasing assuming a small focused team (1–3 engineers). Each phase 
 6. **Self-hosted ops on Docker Swarm.** Modern Postgres + Redis + R2-egress + worker fleet is more moving parts than the current setup. Document the runbook from day one or operations becomes brittle.
 
 ### Open questions to resolve before/during build
+
 1. **Should the externaltraining tenant and Rassaun internal tenant be able to share a course catalogue?** You answered "fully isolated"; revisit if it bites at launch.
 2. **What exactly lives in adminapp2 today vs what the new app should own?** Need a working session with whoever owns adminapp2 to draw the line. Particularly: customers, projects, employees — which is canonical where?
 3. **How is the existing externaltraining codebase implemented?** I couldn't see it in this worktree. Need to scan it before finalizing the Training module's feature set. Likely surfaces some training workflow we'd miss otherwise.

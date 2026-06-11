@@ -12,12 +12,7 @@ import {
   Label,
   Select,
 } from '@beaconhs/ui'
-import {
-  hazidAssessmentTypes,
-  hazidAssessments,
-  orgUnits,
-  people,
-} from '@beaconhs/db/schema'
+import { hazidAssessmentTypes, hazidAssessments, orgUnits, people } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
 import { deleteAssessment, updateGeneral } from '../../_actions'
@@ -83,7 +78,10 @@ export default async function EditHazidAssessmentPage({
   return (
     <PageContainer>
       <div className="max-w-3xl space-y-6">
-        <DetailHeader back={{ href: `/hazid/${id}`, label: 'Back to assessment' }} title="Edit assessment" />
+        <DetailHeader
+          back={{ href: `/hazid/${id}`, label: 'Back to assessment' }}
+          title="Edit assessment"
+        />
         {a.locked ? (
           <Alert variant="warning">
             <AlertTitle>This assessment is locked</AlertTitle>
@@ -98,7 +96,11 @@ export default async function EditHazidAssessmentPage({
               <input type="hidden" name="id" value={id} />
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Field label="Assessment type">
-                  <Select name="assessmentTypeId" defaultValue={a.assessmentTypeId ?? ''} disabled={a.locked}>
+                  <Select
+                    name="assessmentTypeId"
+                    defaultValue={a.assessmentTypeId ?? ''}
+                    disabled={a.locked}
+                  >
                     <option value="">—</option>
                     {types.map((t) => (
                       <option key={t.id} value={t.id}>
@@ -108,10 +110,20 @@ export default async function EditHazidAssessmentPage({
                   </Select>
                 </Field>
                 <Field label="Occurred at" required>
-                  <Input name="occurredAt" type="datetime-local" defaultValue={occurredLocal} disabled={a.locked} required />
+                  <Input
+                    name="occurredAt"
+                    type="datetime-local"
+                    defaultValue={occurredLocal}
+                    disabled={a.locked}
+                    required
+                  />
                 </Field>
                 <Field label="Site">
-                  <Select name="siteOrgUnitId" defaultValue={a.siteOrgUnitId ?? ''} disabled={a.locked}>
+                  <Select
+                    name="siteOrgUnitId"
+                    defaultValue={a.siteOrgUnitId ?? ''}
+                    disabled={a.locked}
+                  >
                     <option value="">—</option>
                     {sites.map((s) => (
                       <option key={s.id} value={s.id}>
@@ -121,7 +133,11 @@ export default async function EditHazidAssessmentPage({
                   </Select>
                 </Field>
                 <Field label="Project">
-                  <Select name="projectOrgUnitId" defaultValue={a.projectOrgUnitId ?? ''} disabled={a.locked}>
+                  <Select
+                    name="projectOrgUnitId"
+                    defaultValue={a.projectOrgUnitId ?? ''}
+                    disabled={a.locked}
+                  >
                     <option value="">—</option>
                     {projects.map((p) => (
                       <option key={p.id} value={p.id}>
@@ -131,10 +147,18 @@ export default async function EditHazidAssessmentPage({
                   </Select>
                 </Field>
                 <Field label="Location on site" className="sm:col-span-2">
-                  <Input name="locationOnSite" defaultValue={a.locationOnSite ?? ''} disabled={a.locked} />
+                  <Input
+                    name="locationOnSite"
+                    defaultValue={a.locationOnSite ?? ''}
+                    disabled={a.locked}
+                  />
                 </Field>
                 <Field label="Supervisor">
-                  <Select name="supervisorPersonId" defaultValue={a.supervisorPersonId ?? ''} disabled={a.locked}>
+                  <Select
+                    name="supervisorPersonId"
+                    defaultValue={a.supervisorPersonId ?? ''}
+                    disabled={a.locked}
+                  >
                     <option value="">—</option>
                     {supervisors.map((p) => (
                       <option key={p.id} value={p.id}>

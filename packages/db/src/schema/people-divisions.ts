@@ -23,10 +23,9 @@ export const personDivisions = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    parentDivisionId: uuid('parent_division_id').references(
-      (): any => personDivisions.id,
-      { onDelete: 'set null' },
-    ),
+    parentDivisionId: uuid('parent_division_id').references((): any => personDivisions.id, {
+      onDelete: 'set null',
+    }),
     name: text('name').notNull(),
     description: text('description'),
     code: text('code'),

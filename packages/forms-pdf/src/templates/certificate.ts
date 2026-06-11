@@ -229,16 +229,24 @@ export function renderCertificateHtml(input: CertificateRenderInput): string {
             <div class="label">Completed on</div>
             <div class="value">${esc(formatDate(input.completedOn))}</div>
           </div>
-          ${input.expiresOn ? `
+          ${
+            input.expiresOn
+              ? `
           <div>
             <div class="label">Expires on</div>
             <div class="value">${esc(formatDate(input.expiresOn))}</div>
-          </div>` : ''}
-          ${input.grade != null ? `
+          </div>`
+              : ''
+          }
+          ${
+            input.grade != null
+              ? `
           <div>
             <div class="label">Grade</div>
             <div class="value">${input.grade}%</div>
-          </div>` : ''}
+          </div>`
+              : ''
+          }
         </div>
       </div>
 

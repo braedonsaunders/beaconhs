@@ -124,7 +124,9 @@ export async function assignTitleToPerson(formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
   const titleId = String(formData.get('titleId') ?? '')
   const personId = String(formData.get('personId') ?? '')
-  const isPrimary = String(formData.get('isPrimary') ?? '') === 'on' || String(formData.get('isPrimary') ?? '') === 'true'
+  const isPrimary =
+    String(formData.get('isPrimary') ?? '') === 'on' ||
+    String(formData.get('isPrimary') ?? '') === 'true'
   if (!titleId || !personId) return
   await ctx.db(async (tx) => {
     if (isPrimary) {
@@ -359,10 +361,7 @@ export async function acknowledgeTitleTask(formData: FormData): Promise<void> {
         notes,
       })
       .onConflictDoUpdate({
-        target: [
-          jobTitleTaskAcknowledgments.taskId,
-          jobTitleTaskAcknowledgments.personId,
-        ],
+        target: [jobTitleTaskAcknowledgments.taskId, jobTitleTaskAcknowledgments.personId],
         set: {
           acknowledgedAt: new Date(),
           signatureDataUrl,
@@ -413,11 +412,7 @@ export async function revokeTitleTaskAck(formData: FormData): Promise<void> {
 
 // ---------- cache refresh ------------------------------------------------
 
-async function refreshTitleCache(
-  tx: any,
-  tenantId: string,
-  personIds: string[],
-): Promise<void> {
+async function refreshTitleCache(tx: any, tenantId: string, personIds: string[]): Promise<void> {
   if (personIds.length === 0) return
   await tx.execute(sql`
     UPDATE people
@@ -426,8 +421,10 @@ async function refreshTitleCache(
       FROM person_title_assignments
       WHERE person_id = people.id AND tenant_id = ${tenantId}
     ), '[]'::jsonb)
-    WHERE id IN (${sql.join(personIds.map((id) => sql`${id}::uuid`), sql`, `)})
+    WHERE id IN (${sql.join(
+      personIds.map((id) => sql`${id}::uuid`),
+      sql`, `,
+    )})
       AND tenant_id = ${tenantId}
   `)
 }
-

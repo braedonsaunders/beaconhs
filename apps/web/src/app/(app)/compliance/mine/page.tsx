@@ -48,7 +48,10 @@ export default async function MyCompliancePage() {
     <ListPageLayout
       header={
         <>
-          <PageHeader title="My compliance" description="Everything you owe — obligations assigned to you, plus your due and expiring items." />
+          <PageHeader
+            title="My compliance"
+            description="Everything you owe — obligations assigned to you, plus your due and expiring items."
+          />
           <ComplianceSubNav active="mine" />
         </>
       }
@@ -120,7 +123,9 @@ export default async function MyCompliancePage() {
                         <TableCell className="text-slate-700">{sig.dueOn ?? '—'}</TableCell>
                         <TableCell>
                           {sig.status === 'overdue' || sig.status === 'expired' ? (
-                            <Badge variant="destructive">{sig.status === 'expired' ? 'Expired' : 'Overdue'}</Badge>
+                            <Badge variant="destructive">
+                              {sig.status === 'expired' ? 'Expired' : 'Overdue'}
+                            </Badge>
                           ) : sig.status === 'due_soon' ? (
                             <Badge variant="warning">Due soon</Badge>
                           ) : (

@@ -26,10 +26,7 @@ export async function GET(req: NextRequest) {
     const filters: SQL<unknown>[] = []
     if (params.q) {
       const term = `%${params.q}%`
-      const cond = or(
-        ilike(trainingCourses.name, term),
-        ilike(trainingCourses.code, term),
-      )
+      const cond = or(ilike(trainingCourses.name, term), ilike(trainingCourses.code, term))
       if (cond) filters.push(cond)
     }
     if (deliveryFilter) filters.push(eq(trainingCourses.deliveryType, deliveryFilter as any))
@@ -69,7 +66,15 @@ export async function GET(req: NextRequest) {
 
   return csvResponse({
     filename: csvFilename('training-courses'),
-    headers: ['Name', 'Code', 'Delivery type', 'Duration (min)', 'Validity (months)', 'Requires evaluator', 'Description'],
+    headers: [
+      'Name',
+      'Code',
+      'Delivery type',
+      'Duration (min)',
+      'Validity (months)',
+      'Requires evaluator',
+      'Description',
+    ],
     rows: rows.map((c) => [
       c.name,
       c.code,

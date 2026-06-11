@@ -6,9 +6,7 @@ import { z } from 'zod'
 import { getModel, type AiConfig } from './client'
 
 export const photoInsightSchema = z.object({
-  caption: z
-    .string()
-    .describe('One factual sentence describing what the jobsite photo shows'),
+  caption: z.string().describe('One factual sentence describing what the jobsite photo shows'),
 })
 
 export type PhotoInsight = z.infer<typeof photoInsightSchema>
@@ -56,7 +54,9 @@ export type VisionSeverity = z.infer<typeof visionSeverity>
 export const safetyVisionSchema = z.object({
   summary: z
     .string()
-    .describe('One or two factual sentences describing the photo from a health & safety standpoint'),
+    .describe(
+      'One or two factual sentences describing the photo from a health & safety standpoint',
+    ),
   overallRisk: z
     .enum(['none', 'low', 'medium', 'high'])
     .describe('Overall risk level visible in the photo — "none" if nothing of concern is visible'),
@@ -65,24 +65,32 @@ export const safetyVisionSchema = z.object({
       z.object({
         item: z
           .string()
-          .describe('PPE item, e.g. "hard hat", "hi-vis vest", "eye protection", "gloves", "fall harness"'),
+          .describe(
+            'PPE item, e.g. "hard hat", "hi-vis vest", "eye protection", "gloves", "fall harness"',
+          ),
         status: z
           .enum(['present', 'missing', 'incorrect'])
           .describe('Whether this PPE is correctly worn, missing, or worn incorrectly'),
         detail: z
           .string()
           .nullable()
-          .describe('Short note locating the observation, e.g. "worker on the right has no hard hat"'),
+          .describe(
+            'Short note locating the observation, e.g. "worker on the right has no hard hat"',
+          ),
       }),
     )
     .max(12)
-    .describe('PPE observations for people visible in the photo. Empty when no people are visible.'),
+    .describe(
+      'PPE observations for people visible in the photo. Empty when no people are visible.',
+    ),
   hazards: z
     .array(
       z.object({
         type: z
           .string()
-          .describe('Hazard category, e.g. "working at height", "trip hazard", "exposed edge", "electrical", "housekeeping"'),
+          .describe(
+            'Hazard category, e.g. "working at height", "trip hazard", "exposed edge", "electrical", "housekeeping"',
+          ),
         severity: visionSeverity,
         detail: z.string().describe('What was observed and where in the photo'),
       }),

@@ -188,8 +188,7 @@ export default async function CorrectiveActionPrintPage({
             <h2>Verification</h2>
             {verified ? (
               <p className="pca-text">
-                Signed off on {verified}.
-                {ca.verificationNotes ? `\n\n${ca.verificationNotes}` : ''}
+                Signed off on {verified}.{ca.verificationNotes ? `\n\n${ca.verificationNotes}` : ''}
               </p>
             ) : (
               <p className="pca-text">Verification required but not yet signed.</p>
@@ -227,9 +226,7 @@ export default async function CorrectiveActionPrintPage({
                       {s.step.completedAt.toLocaleString()} · {name}
                     </span>
                   </div>
-                  {s.step.description ? (
-                    <div className="desc">{s.step.description}</div>
-                  ) : null}
+                  {s.step.description ? <div className="desc">{s.step.description}</div> : null}
                   {s.step.signatureDataUrl ? (
                     <img className="sig" src={s.step.signatureDataUrl} alt="Signature" />
                   ) : null}

@@ -14,10 +14,7 @@
 
 import { NextResponse } from 'next/server'
 import { getRequestContext } from '@/lib/auth'
-import {
-  persistDraft,
-  type SaveDraftInput,
-} from '@/app/(app)/forms/templates/[id]/fill/actions'
+import { persistDraft, type SaveDraftInput } from '@/app/(app)/forms/templates/[id]/fill/actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,10 +31,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   try {
     body = await req.json()
   } catch {
-    return NextResponse.json(
-      { ok: false, error: 'invalid JSON body' },
-      { status: 400 },
-    )
+    return NextResponse.json({ ok: false, error: 'invalid JSON body' }, { status: 400 })
   }
 
   // persistDraft runs the same Zod validation as the Server Action — if the

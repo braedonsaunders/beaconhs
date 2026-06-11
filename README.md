@@ -45,7 +45,7 @@ it, extend it, or run it as the backbone of your safety program.
   tool onto hard-coded screens. BeaconHS inverts that — a single, serious form
   engine (conditional logic, formulas, repeating sections, entity lookups,
   scoring, drawn signatures, multi-step workflows) is powerful enough that
-  job-specific paperwork like lift plans are *just templates*, seeded per tenant
+  job-specific paperwork like lift plans are _just templates_, seeded per tenant
   and fully editable. Native modules are reserved for things every HSE program
   needs.
 - **Multi-tenant from the first line.** Postgres row-level security on every
@@ -60,6 +60,7 @@ it, extend it, or run it as the backbone of your safety program.
 ## Features
 
 ### Frontline
+
 - **Forms** — world-class designer + filler: conditional `show-when` logic,
   calculated/formula fields, per-field validation, default values, repeating
   sections, multi-step workflows with progress, drawn-signature canvas,
@@ -72,7 +73,7 @@ it, extend it, or run it as the backbone of your safety program.
   signature, and assignment compliance roll-ups.
 - **JSHA / HazID** — task → hazard → control risk assessments with pre- and
   post-control likelihood × severity ratings, PPE requirements, signatures by
-  role, confined-space and arc-flash sections, and one-click *copy assessment*.
+  role, confined-space and arc-flash sections, and one-click _copy assessment_.
 - **Toolbox talks** — attendee sign-on with signatures, photos, assignment
   cadence, and per-person attendance transcripts.
 - **Incidents** — full taxonomy plus a real investigation workflow (event
@@ -82,6 +83,7 @@ it, extend it, or run it as the backbone of your safety program.
   step before close, aging reports, photo evidence, bulk reassignment.
 
 ### Programs
+
 - **Training** — courses, scheduled classes with a calendar view, certificates
   (PDF + QR-verifiable), skills & certifying authorities, a person × course
   compliance matrix, transcripts, and course file attachments.
@@ -93,6 +95,7 @@ it, extend it, or run it as the backbone of your safety program.
 - **Lone Worker** — timed check-in sessions with escalation.
 
 ### Assets & people
+
 - **Equipment** — asset registry, QR labels (single + bulk), check-in/out,
   location history, work orders, expenses & rates, truck logs, fleet summary
   and ROI reports, and report-missing/found.
@@ -103,6 +106,7 @@ it, extend it, or run it as the backbone of your safety program.
   signatures.
 
 ### Insight & platform
+
 - **Role-aware dashboards** — a drag-resize widget grid with per-role defaults
   (super-admin / tenant-admin / safety-manager / foreman / worker) that each
   user can customize from a widget palette.
@@ -116,18 +120,18 @@ it, extend it, or run it as the backbone of your safety program.
 
 ## Tech stack
 
-| Layer | Choice |
-|---|---|
-| Framework | Next.js 16 (App Router, Turbopack) + React 19 |
-| Language | TypeScript 5 |
-| Database | PostgreSQL with row-level security |
-| ORM | Drizzle |
-| Auth | Better-Auth (email/password + magic link) |
-| Styling | Tailwind CSS + a shared component library |
-| Jobs | BullMQ on Redis |
-| Storage | S3-compatible (MinIO in dev, Cloudflare R2 in prod) |
-| PDF | Puppeteer render pipeline |
-| Monorepo | Turborepo + pnpm workspaces |
+| Layer     | Choice                                              |
+| --------- | --------------------------------------------------- |
+| Framework | Next.js 16 (App Router, Turbopack) + React 19       |
+| Language  | TypeScript 5                                        |
+| Database  | PostgreSQL with row-level security                  |
+| ORM       | Drizzle                                             |
+| Auth      | Better-Auth (email/password + magic link)           |
+| Styling   | Tailwind CSS + a shared component library           |
+| Jobs      | BullMQ on Redis                                     |
+| Storage   | S3-compatible (MinIO in dev, Cloudflare R2 in prod) |
+| PDF       | Puppeteer render pipeline                           |
+| Monorepo  | Turborepo + pnpm workspaces                         |
 
 ## Quick start
 
@@ -155,11 +159,11 @@ pnpm dev
 
 Then open:
 
-| Service | URL |
-|---|---|
-| App | http://localhost:3000 |
+| Service                          | URL                   |
+| -------------------------------- | --------------------- |
+| App                              | http://localhost:3000 |
 | Mailpit (catches outbound email) | http://localhost:8025 |
-| MinIO console | http://localhost:9001 |
+| MinIO console                    | http://localhost:9001 |
 
 Sign in as the seeded super-admin `admin@beaconhs.local` via the **Magic link**
 tab — the link arrives in Mailpit.

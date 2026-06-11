@@ -58,7 +58,12 @@ export function extractScores(schema: FormSchemaV1, values: Record<string, unkno
   return out
 }
 
-export function rollupScore(rows: ScoreRow[]): { pass: number; fail: number; na: number; pct: number } {
+export function rollupScore(rows: ScoreRow[]): {
+  pass: number
+  fail: number
+  na: number
+  pct: number
+} {
   let pass = 0
   let fail = 0
   let na = 0

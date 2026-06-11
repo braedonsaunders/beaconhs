@@ -110,14 +110,18 @@ export default async function EditEquipmentPage({ params }: { params: Promise<{ 
                   <Select name="typeId" defaultValue={item.typeId ?? ''}>
                     <option value="">—</option>
                     {types.map((t) => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
                     ))}
                   </Select>
                 </Field>
                 <Field label="Status">
                   <Select name="status" defaultValue={item.status}>
                     {['in_service', 'out_of_service', 'in_repair', 'lost', 'retired'].map((s) => (
-                      <option key={s} value={s}>{s.replace('_', ' ')}</option>
+                      <option key={s} value={s}>
+                        {s.replace('_', ' ')}
+                      </option>
                     ))}
                   </Select>
                 </Field>
@@ -125,18 +129,28 @@ export default async function EditEquipmentPage({ params }: { params: Promise<{ 
                   <Input name="billingRateCategory" defaultValue={item.billingRateCategory ?? ''} />
                 </Field>
                 <Field label="Current site">
-                  <Select name="currentSiteOrgUnitId" defaultValue={item.currentSiteOrgUnitId ?? ''}>
+                  <Select
+                    name="currentSiteOrgUnitId"
+                    defaultValue={item.currentSiteOrgUnitId ?? ''}
+                  >
                     <option value="">—</option>
                     {sites.map((s) => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
                     ))}
                   </Select>
                 </Field>
                 <Field label="Current holder">
-                  <Select name="currentHolderPersonId" defaultValue={item.currentHolderPersonId ?? ''}>
+                  <Select
+                    name="currentHolderPersonId"
+                    defaultValue={item.currentHolderPersonId ?? ''}
+                  >
                     <option value="">—</option>
                     {allPeople.map((p) => (
-                      <option key={p.id} value={p.id}>{p.lastName}, {p.firstName}</option>
+                      <option key={p.id} value={p.id}>
+                        {p.lastName}, {p.firstName}
+                      </option>
                     ))}
                   </Select>
                 </Field>
@@ -144,7 +158,11 @@ export default async function EditEquipmentPage({ params }: { params: Promise<{ 
                   <Input name="purchaseDate" type="date" defaultValue={item.purchaseDate ?? ''} />
                 </Field>
                 <Field label="Warranty expires">
-                  <Input name="warrantyExpiresOn" type="date" defaultValue={item.warrantyExpiresOn ?? ''} />
+                  <Input
+                    name="warrantyExpiresOn"
+                    type="date"
+                    defaultValue={item.warrantyExpiresOn ?? ''}
+                  />
                 </Field>
                 <Field label="Description" className="sm:col-span-2">
                   <Textarea name="description" rows={3} defaultValue={item.description ?? ''} />

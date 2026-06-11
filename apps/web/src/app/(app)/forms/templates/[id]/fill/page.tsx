@@ -29,8 +29,7 @@ export default async function FillTemplatePage({
 }) {
   const { id } = await params
   const sp = await searchParams
-  const responseIdParam =
-    typeof sp.responseId === 'string' ? sp.responseId : null
+  const responseIdParam = typeof sp.responseId === 'string' ? sp.responseId : null
 
   const ctx = await requireRequestContext()
   const data = await ctx.db(async (tx) => {
@@ -64,12 +63,7 @@ export default async function FillTemplatePage({
           templateId: formResponses.templateId,
         })
         .from(formResponses)
-        .where(
-          and(
-            eq(formResponses.id, responseIdParam),
-            eq(formResponses.tenantId, ctx.tenantId),
-          ),
-        )
+        .where(and(eq(formResponses.id, responseIdParam), eq(formResponses.tenantId, ctx.tenantId)))
         .limit(1)
       if (row && row.templateId === id) {
         draftResponse = {
@@ -82,7 +76,11 @@ export default async function FillTemplatePage({
     }
 
     const [sites, allPeople, currentPerson] = await Promise.all([
-      tx.select({ id: orgUnits.id, name: orgUnits.name }).from(orgUnits).where(eq(orgUnits.level, 'site')).orderBy(asc(orgUnits.name)),
+      tx
+        .select({ id: orgUnits.id, name: orgUnits.name })
+        .from(orgUnits)
+        .where(eq(orgUnits.level, 'site'))
+        .orderBy(asc(orgUnits.name)),
       tx
         .select({ id: people.id, firstName: people.firstName, lastName: people.lastName })
         .from(people)
@@ -118,28 +116,21 @@ export default async function FillTemplatePage({
   const resumeOk =
     data.draftResponse !== null &&
     data.draftResponse.draftData !== null &&
-    (data.draftResponse.status === 'draft' ||
-      data.draftResponse.status === 'in_progress')
+    (data.draftResponse.status === 'draft' || data.draftResponse.status === 'in_progress')
   const initialValues: Record<string, unknown> = resumeOk
     ? (data.draftResponse!.draftData!.values ?? {})
     : {}
   const initialRows: Record<string, Array<Record<string, unknown>>> = resumeOk
     ? (data.draftResponse!.draftData!.rows ?? {})
     : {}
-  const initialStepIndex = resumeOk
-    ? (data.draftResponse!.draftStepIndex ?? 0)
-    : 0
+  const initialStepIndex = resumeOk ? (data.draftResponse!.draftStepIndex ?? 0) : 0
   const initialResponseId = data.draftResponse?.id ?? null
 
   // Resolve picker-bound entity attributes. We pass the resumed values map
   // (or {}) so any picker selections in the draft rehydrate with their
   // entity-attr cache populated. On a brand-new response there's nothing
   // selected yet, so this returns picker → null entries.
-  const entitiesByField = await loadEntitiesForPickers(
-    ctx,
-    data.version.schema,
-    initialValues,
-  )
+  const entitiesByField = await loadEntitiesForPickers(ctx, data.version.schema, initialValues)
 
   return (
     <FormRenderer
@@ -152,10 +143,9 @@ export default async function FillTemplatePage({
       entitiesByField={entitiesByField}
       currentUser={{
         personId: data.currentPerson?.id ?? null,
-        name:
-          data.currentPerson
-            ? `${data.currentPerson.firstName} ${data.currentPerson.lastName}`
-            : ctx.membership?.displayName ?? null,
+        name: data.currentPerson
+          ? `${data.currentPerson.firstName} ${data.currentPerson.lastName}`
+          : (ctx.membership?.displayName ?? null),
       }}
       initialResponseId={initialResponseId}
       initialValues={initialValues}

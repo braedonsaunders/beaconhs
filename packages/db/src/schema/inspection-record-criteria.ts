@@ -110,32 +110,29 @@ export const inspectionRecordCriteria = pgTable(
   }),
 )
 
-export const inspectionRecordCriteriaRelations = relations(
-  inspectionRecordCriteria,
-  ({ one }) => ({
-    tenant: one(tenants, {
-      fields: [inspectionRecordCriteria.tenantId],
-      references: [tenants.id],
-    }),
-    record: one(inspectionRecords, {
-      fields: [inspectionRecordCriteria.recordId],
-      references: [inspectionRecords.id],
-    }),
-    criterion: one(inspectionBankCriteria, {
-      fields: [inspectionRecordCriteria.criterionId],
-      references: [inspectionBankCriteria.id],
-    }),
-    correctiveAction: one(correctiveActions, {
-      fields: [inspectionRecordCriteria.correctiveActionId],
-      references: [correctiveActions.id],
-    }),
-    assignedToPerson: one(people, {
-      fields: [inspectionRecordCriteria.assignedToPersonId],
-      references: [people.id],
-    }),
-    assignedToTenantUser: one(tenantUsers, {
-      fields: [inspectionRecordCriteria.assignedToTenantUserId],
-      references: [tenantUsers.id],
-    }),
+export const inspectionRecordCriteriaRelations = relations(inspectionRecordCriteria, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [inspectionRecordCriteria.tenantId],
+    references: [tenants.id],
   }),
-)
+  record: one(inspectionRecords, {
+    fields: [inspectionRecordCriteria.recordId],
+    references: [inspectionRecords.id],
+  }),
+  criterion: one(inspectionBankCriteria, {
+    fields: [inspectionRecordCriteria.criterionId],
+    references: [inspectionBankCriteria.id],
+  }),
+  correctiveAction: one(correctiveActions, {
+    fields: [inspectionRecordCriteria.correctiveActionId],
+    references: [correctiveActions.id],
+  }),
+  assignedToPerson: one(people, {
+    fields: [inspectionRecordCriteria.assignedToPersonId],
+    references: [people.id],
+  }),
+  assignedToTenantUser: one(tenantUsers, {
+    fields: [inspectionRecordCriteria.assignedToTenantUserId],
+    references: [tenantUsers.id],
+  }),
+}))

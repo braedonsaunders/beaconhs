@@ -218,7 +218,7 @@ export default async function TruckLogSummaryPage({
                 const totals = truckTotals.get(t.id) ?? { km: 0, hours: 0, manpower: 0, days: 0 }
                 return (
                   <TableRow key={t.id}>
-                    <TableCell className="sticky left-0 z-10 whitespace-nowrap bg-white">
+                    <TableCell className="sticky left-0 z-10 bg-white whitespace-nowrap">
                       <Link href={`/equipment/${t.id}`} className="hover:underline">
                         <div className="font-mono text-xs text-slate-500">{t.assetTag}</div>
                         <div className="text-sm font-medium text-slate-900">{t.name}</div>
@@ -226,7 +226,12 @@ export default async function TruckLogSummaryPage({
                     </TableCell>
                     {MONTHS.map((_, i) => {
                       const m = months.get(i + 1)
-                      if (!m) return <TableCell key={i} className="text-center text-xs text-slate-300">—</TableCell>
+                      if (!m)
+                        return (
+                          <TableCell key={i} className="text-center text-xs text-slate-300">
+                            —
+                          </TableCell>
+                        )
                       return (
                         <TableCell key={i} className="text-center align-top">
                           <Link
@@ -249,7 +254,9 @@ export default async function TruckLogSummaryPage({
                 )
               })}
               <TableRow>
-                <TableCell className="sticky left-0 z-10 bg-slate-50 font-semibold">Totals</TableCell>
+                <TableCell className="sticky left-0 z-10 bg-slate-50 font-semibold">
+                  Totals
+                </TableCell>
                 {monthTotals.map((m, i) => (
                   <TableCell key={i} className="bg-slate-50 text-center align-top">
                     <div className="text-xs font-medium text-slate-900">{m.km} km</div>

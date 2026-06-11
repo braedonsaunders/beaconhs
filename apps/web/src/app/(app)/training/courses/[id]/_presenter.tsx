@@ -22,7 +22,11 @@ import { SlideView } from '../../_components/slide-view'
 import { blocksToHtml } from '../../_editor/legacy'
 import type { LessonLite, ModuleLite } from './_workspace'
 
-export type AttachmentMeta = { url: string | null; contentType: string | null; filename: string | null }
+export type AttachmentMeta = {
+  url: string | null
+  contentType: string | null
+  filename: string | null
+}
 export type ItemContent = {
   kind: string
   contentHtml: string | null
@@ -80,8 +84,8 @@ export function CoursePresenter({
           moduleTitle: mod.title,
           kind: item ? item.kind : lesson.kind,
           contentHtml: item ? item.contentHtml : lesson.contentHtml,
-          blocks: item ? item.contentBlocks ?? [] : lesson.contentBlocks ?? [],
-          slides: item ? item.slides ?? [] : lesson.slides ?? [],
+          blocks: item ? (item.contentBlocks ?? []) : (lesson.contentBlocks ?? []),
+          slides: item ? (item.slides ?? []) : (lesson.slides ?? []),
           embedUrl: item ? item.embedUrl : lesson.embedUrl,
           attachmentId: item ? item.attachmentId : lesson.attachmentId,
         }
@@ -100,7 +104,10 @@ export function CoursePresenter({
   const step = steps[Math.min(idx, total - 1)] ?? null
   const containerRef = useRef<HTMLDivElement>(null)
 
-  const go = useCallback((d: number) => setIdx((c) => Math.max(0, Math.min(total - 1, c + d))), [total])
+  const go = useCallback(
+    (d: number) => setIdx((c) => Math.max(0, Math.min(total - 1, c + d))),
+    [total],
+  )
 
   useEffect(() => {
     containerRef.current?.focus()
@@ -156,27 +163,58 @@ export function CoursePresenter({
       </div>
 
       {/* stage */}
-      <div className="relative flex min-h-0 flex-1 items-center justify-center px-14 pb-14 pt-2">
-        <Stage eff={eff} slideIndex={slideIndex} attachmentUrls={attachmentUrls} attachmentMeta={attachmentMeta} quizQuestions={quizQuestions} />
+      <div className="relative flex min-h-0 flex-1 items-center justify-center px-14 pt-2 pb-14">
+        <Stage
+          eff={eff}
+          slideIndex={slideIndex}
+          attachmentUrls={attachmentUrls}
+          attachmentMeta={attachmentMeta}
+          quizQuestions={quizQuestions}
+        />
 
         {/* click zones */}
-        <button type="button" aria-label="Previous" onClick={() => go(-1)} className="absolute inset-y-0 left-0 w-12 cursor-w-resize opacity-0" />
-        <button type="button" aria-label="Next" onClick={() => go(1)} className="absolute inset-y-0 right-0 w-12 cursor-e-resize opacity-0" />
+        <button
+          type="button"
+          aria-label="Previous"
+          onClick={() => go(-1)}
+          className="absolute inset-y-0 left-0 w-12 cursor-w-resize opacity-0"
+        />
+        <button
+          type="button"
+          aria-label="Next"
+          onClick={() => go(1)}
+          className="absolute inset-y-0 right-0 w-12 cursor-e-resize opacity-0"
+        />
       </div>
 
       {/* bottom bar */}
       <div className="absolute inset-x-0 bottom-0 flex items-center gap-3 px-4 pb-3">
         <div className="h-0.5 flex-1 overflow-hidden rounded-full bg-white/10">
-          <div className="h-full bg-teal-400 transition-all duration-300" style={{ width: `${((idx + 1) / total) * 100}%` }} />
+          <div
+            className="h-full bg-teal-400 transition-all duration-300"
+            style={{ width: `${((idx + 1) / total) * 100}%` }}
+          />
         </div>
         <div className="flex items-center gap-1 text-white/80">
-          <button type="button" onClick={() => go(-1)} disabled={idx === 0} aria-label="Previous" className="grid h-8 w-8 place-items-center rounded-md hover:bg-white/10 disabled:opacity-30">
+          <button
+            type="button"
+            onClick={() => go(-1)}
+            disabled={idx === 0}
+            aria-label="Previous"
+            className="grid h-8 w-8 place-items-center rounded-md hover:bg-white/10 disabled:opacity-30"
+          >
             <ChevronLeft size={17} />
           </button>
           <span className="text-xs tabular-nums">
             {idx + 1} / {total}
           </span>
-          <button type="button" onClick={() => go(1)} disabled={idx >= total - 1} aria-label="Next" className="grid h-8 w-8 place-items-center rounded-md hover:bg-white/10 disabled:opacity-30">
+          <button
+            type="button"
+            onClick={() => go(1)}
+            disabled={idx >= total - 1}
+            aria-label="Next"
+            className="grid h-8 w-8 place-items-center rounded-md hover:bg-white/10 disabled:opacity-30"
+          >
             <ChevronRight size={17} />
           </button>
         </div>
@@ -188,7 +226,12 @@ export function CoursePresenter({
 function Overlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-[80] grid place-items-center bg-slate-950">
-      <button type="button" onClick={onClose} aria-label="Close" className="absolute right-4 top-4 grid h-9 w-9 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20">
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Close"
+        className="absolute top-4 right-4 grid h-9 w-9 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20"
+      >
         <X size={17} />
       </button>
       {children}
@@ -215,7 +258,11 @@ function Stage({
     if (!slide) return <EmptyCard label="No slides in this slideshow yet." />
     return (
       <div className="max-h-full w-full max-w-[160vh]">
-        <SlideView slide={slide} attachmentUrls={attachmentUrls} className="rounded-lg shadow-2xl" />
+        <SlideView
+          slide={slide}
+          attachmentUrls={attachmentUrls}
+          className="rounded-lg shadow-2xl"
+        />
       </div>
     )
   }
@@ -239,7 +286,9 @@ function Stage({
         )}
         {eff.kind === 'practical' && eff.lesson.practicalCriteria.length > 0 ? (
           <div className="mt-6 border-t border-slate-200 pt-4">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Sign-off criteria</p>
+            <p className="mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase">
+              Sign-off criteria
+            </p>
             <ol className="list-decimal space-y-1 pl-5 text-sm text-slate-700">
               {eff.lesson.practicalCriteria.map((c) => (
                 <li key={c.id}>{c.text}</li>
@@ -260,7 +309,12 @@ function Stage({
     return (
       <div className="aspect-video w-full max-w-[160vh] overflow-hidden rounded-lg shadow-2xl">
         {hosted ? (
-          <iframe src={toEmbedUrl(url)} className="h-full w-full" allowFullScreen title={eff.lesson.title} />
+          <iframe
+            src={toEmbedUrl(url)}
+            className="h-full w-full"
+            allowFullScreen
+            title={eff.lesson.title}
+          />
         ) : (
           <video src={url} controls autoPlay className="h-full w-full bg-black" />
         )}
@@ -272,14 +326,28 @@ function Stage({
   if (eff.kind === 'file') {
     const meta = eff.attachmentId ? attachmentMeta[eff.attachmentId] : null
     if (!meta?.url) return <EmptyCard label="No file attached." />
-    const isPdf = (meta.contentType ?? '').includes('pdf') || (meta.filename ?? '').toLowerCase().endsWith('.pdf')
+    const isPdf =
+      (meta.contentType ?? '').includes('pdf') ||
+      (meta.filename ?? '').toLowerCase().endsWith('.pdf')
     const isImage = (meta.contentType ?? '').startsWith('image/')
     if (isPdf) {
-      return <iframe src={meta.url} className="h-full w-full max-w-5xl rounded-lg bg-white shadow-2xl" title={eff.lesson.title} />
+      return (
+        <iframe
+          src={meta.url}
+          className="h-full w-full max-w-5xl rounded-lg bg-white shadow-2xl"
+          title={eff.lesson.title}
+        />
+      )
     }
     if (isImage) {
       // eslint-disable-next-line @next/next/no-img-element
-      return <img src={meta.url} alt={eff.lesson.title} className="max-h-full max-w-full rounded-lg object-contain shadow-2xl" />
+      return (
+        <img
+          src={meta.url}
+          alt={eff.lesson.title}
+          className="max-h-full max-w-full rounded-lg object-contain shadow-2xl"
+        />
+      )
     }
     return (
       <a
@@ -297,12 +365,18 @@ function Stage({
   // Embedded page.
   if (eff.kind === 'embed') {
     if (!eff.embedUrl) return <EmptyCard label="No URL configured." />
-    return <iframe src={toEmbedUrl(eff.embedUrl)} className="h-full w-full max-w-[160vh] rounded-lg bg-white shadow-2xl" title={eff.lesson.title} />
+    return (
+      <iframe
+        src={toEmbedUrl(eff.embedUrl)}
+        className="h-full w-full max-w-[160vh] rounded-lg bg-white shadow-2xl"
+        title={eff.lesson.title}
+      />
+    )
   }
 
   // Quiz — read-only question walkthrough.
   if (eff.kind === 'quiz') {
-    const qs = eff.lesson.assessmentTypeId ? quizQuestions[eff.lesson.assessmentTypeId] ?? [] : []
+    const qs = eff.lesson.assessmentTypeId ? (quizQuestions[eff.lesson.assessmentTypeId] ?? []) : []
     return (
       <div className="app-scroll max-h-full w-full max-w-3xl overflow-y-auto rounded-lg bg-white px-10 py-8 shadow-2xl">
         <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-800">
@@ -350,7 +424,9 @@ function Stage({
       <div className="rounded-lg bg-white px-10 py-8 text-center shadow-2xl">
         <GraduationCap size={28} className="mx-auto text-teal-700" />
         <p className="mt-2 font-semibold text-slate-900">{eff.lesson.title}</p>
-        <p className="text-sm text-slate-500">In-person session — completed by attending the scheduled class.</p>
+        <p className="text-sm text-slate-500">
+          In-person session — completed by attending the scheduled class.
+        </p>
       </div>
     )
   }

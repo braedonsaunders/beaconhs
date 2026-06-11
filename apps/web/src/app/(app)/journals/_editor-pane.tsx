@@ -19,7 +19,14 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@beaconhs/ui'
-import { deleteEntry, emailEntry, runEntryAI, setEntryTags, submitEntry, updateEntry } from './_actions'
+import {
+  deleteEntry,
+  emailEntry,
+  runEntryAI,
+  setEntryTags,
+  submitEntry,
+  updateEntry,
+} from './_actions'
 import { JournalEditor } from './_editor'
 import { MetadataBar } from './_metadata-bar'
 import { Photos } from './_photos'
@@ -87,7 +94,9 @@ export function EditorPane({
     timer.current = setTimeout(flush, delay)
   }
 
-  function onMeta(patch: Parameters<typeof MetadataBar>[0]['onPatch'] extends (p: infer P) => void ? P : never) {
+  function onMeta(
+    patch: Parameters<typeof MetadataBar>[0]['onPatch'] extends (p: infer P) => void ? P : never,
+  ) {
     onLocalPatch(patch as Partial<JournalEntryDetail>)
     queue(patch, 250)
   }
@@ -175,7 +184,12 @@ export function EditorPane({
             <h1 className="truncate text-base font-semibold text-slate-900">
               {entry.authorName ?? 'Unassigned'}
             </h1>
-            <span className={cn('rounded-full px-2 py-px text-[10px] font-medium ring-1 ring-inset', status.className)}>
+            <span
+              className={cn(
+                'rounded-full px-2 py-px text-[10px] font-medium ring-1 ring-inset',
+                status.className,
+              )}
+            >
               {status.label}
             </span>
           </div>
@@ -228,7 +242,7 @@ export function EditorPane({
               <MoreHorizontal size={15} />
             </button>
             {menuOpen ? (
-              <div className="absolute right-0 top-9 z-30 w-44 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+              <div className="absolute top-9 right-0 z-30 w-44 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
                 <a
                   href={`/journals/${entry.id}/print`}
                   target="_blank"
@@ -326,14 +340,19 @@ function AuthorAvatar({ name }: { name: string | null }) {
   const label = name?.trim() || 'Unassigned'
   const parts = label.split(/\s+/)
   const init =
-    ((parts[0]?.[0] ?? '') + (parts.length > 1 ? (parts[parts.length - 1]![0] ?? '') : '')).toUpperCase() || '?'
+    (
+      (parts[0]?.[0] ?? '') + (parts.length > 1 ? (parts[parts.length - 1]![0] ?? '') : '')
+    ).toUpperCase() || '?'
   let h = 0
   for (let i = 0; i < label.length; i++) h = (h * 31 + label.charCodeAt(i)) >>> 0
   const color = name ? AVATAR_COLORS[h % AVATAR_COLORS.length] : 'bg-slate-300'
   return (
     <span
       title={label}
-      className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-full text-xs font-semibold text-white', color)}
+      className={cn(
+        'grid h-9 w-9 shrink-0 place-items-center rounded-full text-xs font-semibold text-white',
+        color,
+      )}
     >
       {init}
     </span>

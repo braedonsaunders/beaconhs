@@ -57,10 +57,11 @@ export default async function SeverityReportPage({
   const overallHours = await hoursInRange(ctx, startYmd, endYmd)
   const overallDart = await dartCountsInRange(ctx, startYmd, endYmd)
   const overallRate = trir(overallDart.dartCount, overallHours.totalHours)
-  const severityRate = overallHours.totalHours > 0
-    ? ((overallDart.daysAway + overallDart.daysRestricted) * OSHA_MULTIPLIER) /
-      overallHours.totalHours
-    : null
+  const severityRate =
+    overallHours.totalHours > 0
+      ? ((overallDart.daysAway + overallDart.daysRestricted) * OSHA_MULTIPLIER) /
+        overallHours.totalHours
+      : null
 
   const rows = await Promise.all(
     buckets.map(async (b) => {
@@ -136,14 +137,14 @@ export default async function SeverityReportPage({
                   {rows.map((r) => (
                     <TableRow key={r.key}>
                       <TableCell className="font-medium">{r.label}</TableCell>
-                      <TableCell className="text-right tabular-nums text-slate-600">
+                      <TableCell className="text-right text-slate-600 tabular-nums">
                         {r.hours > 0 ? r.hours.toLocaleString() : '—'}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">{r.dart}</TableCell>
-                      <TableCell className="text-right tabular-nums text-slate-600">
+                      <TableCell className="text-right text-slate-600 tabular-nums">
                         {r.daysAway}
                       </TableCell>
-                      <TableCell className="text-right tabular-nums text-slate-600">
+                      <TableCell className="text-right text-slate-600 tabular-nums">
                         {r.daysRestricted}
                       </TableCell>
                       <TableCell className="text-right">
@@ -171,11 +172,7 @@ export default async function SeverityReportPage({
               <Kpi label="DART events" value={overallDart.dartCount.toLocaleString()} />
               <Kpi label="Days away" value={overallDart.daysAway.toLocaleString()} />
               <Kpi label="Days restricted" value={overallDart.daysRestricted.toLocaleString()} />
-              <Kpi
-                label="DART rate (range)"
-                value={fmtRate(overallRate)}
-                sub="Benchmark ≈ 1.5"
-              />
+              <Kpi label="DART rate (range)" value={fmtRate(overallRate)} sub="Benchmark ≈ 1.5" />
               <Kpi
                 label="Severity rate"
                 value={fmtRate(severityRate)}
@@ -199,10 +196,10 @@ function Kpi({ label, value, sub }: { label: string; value: string; sub?: string
   return (
     <div className="flex items-center justify-between border-b border-slate-100 pb-2 last:border-b-0 last:pb-0">
       <div>
-        <div className="text-xs uppercase tracking-wide text-slate-500">{label}</div>
+        <div className="text-xs tracking-wide text-slate-500 uppercase">{label}</div>
         {sub ? <div className="text-xs text-slate-400">{sub}</div> : null}
       </div>
-      <div className="text-lg font-semibold tabular-nums text-slate-900">{value}</div>
+      <div className="text-lg font-semibold text-slate-900 tabular-nums">{value}</div>
     </div>
   )
 }

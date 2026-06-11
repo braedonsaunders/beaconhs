@@ -1,19 +1,7 @@
 // Dashboard KPI queries. Centralised so the page stays readable and so we
 // can re-use them from /reports/dashboard previews later.
 
-import {
-  and,
-  asc,
-  count,
-  desc,
-  eq,
-  gte,
-  inArray,
-  isNotNull,
-  isNull,
-  lte,
-  sql,
-} from 'drizzle-orm'
+import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lte, sql } from 'drizzle-orm'
 import type { RequestContext } from '@beaconhs/tenant'
 import {
   correctiveActions,
@@ -208,12 +196,7 @@ export async function loadDashboardMetrics(
       tx
         .select({ c: count() })
         .from(trainingRecords)
-        .where(
-          and(
-            isNotNull(trainingRecords.expiresOn),
-            lte(trainingRecords.expiresOn, ninetyIso),
-          ),
-        )
+        .where(and(isNotNull(trainingRecords.expiresOn), lte(trainingRecords.expiresOn, ninetyIso)))
         .then((r) => r[0]),
       tx
         .select({ c: count() })
@@ -288,21 +271,14 @@ export async function loadDashboardMetrics(
         c: count(),
       })
       .from(incidents)
-      .where(
-        and(
-          gte(incidents.occurredAt, twentyFourMonthsAgo),
-          eq(incidents.lostTime, true),
-        ),
-      )
+      .where(and(gte(incidents.occurredAt, twentyFourMonthsAgo), eq(incidents.lostTime, true)))
       .groupBy(sql`to_char(${incidents.occurredAt}, 'YYYY-MM')`)
 
     // Build month-key list for the last 24 months, oldest -> newest. `YYYY-MM`.
     const monthKeys: string[] = []
     for (let i = 23; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-      monthKeys.push(
-        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
-      )
+      monthKeys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
     }
 
     const recordableByMonth = new Map<string, number>()
@@ -321,14 +297,11 @@ export async function loadDashboardMetrics(
 
     const recordableCount = recordable12
     const dartCount = dart12
-    const trir =
-      hours12mo > 0 ? Number(((recordableCount * 200_000) / hours12mo).toFixed(2)) : null
-    const dart =
-      hours12mo > 0 ? Number(((dartCount * 200_000) / hours12mo).toFixed(2)) : null
+    const trir = hours12mo > 0 ? Number(((recordableCount * 200_000) / hours12mo).toFixed(2)) : null
+    const dart = hours12mo > 0 ? Number(((dartCount * 200_000) / hours12mo).toFixed(2)) : null
     const trirPrev =
       hours12mo > 0 ? Number(((recordablePrev12 * 200_000) / hours12mo).toFixed(2)) : null
-    const dartPrev =
-      hours12mo > 0 ? Number(((dartPrev12 * 200_000) / hours12mo).toFixed(2)) : null
+    const dartPrev = hours12mo > 0 ? Number(((dartPrev12 * 200_000) / hours12mo).toFixed(2)) : null
 
     // Per-month rates for the sparkline (last 12 months only).
     // Monthly hours = headcount * 2000 / 12 -> use 200,000/hoursMonth for rate.
@@ -449,9 +422,7 @@ export async function loadDashboardMetrics(
       }
     }
     const documentCompliancePct =
-      documentExpected === 0
-        ? null
-        : Math.round((documentAcked / documentExpected) * 100)
+      documentExpected === 0 ? null : Math.round((documentAcked / documentExpected) * 100)
 
     // --- Synthetic compliance trends -------------------------------------
     // We don't snapshot historical compliance %, so ease from a baseline 10
@@ -562,16 +533,12 @@ export async function loadDashboardMetrics(
     const [nmRow] = await tx
       .select({ n: count() })
       .from(incidents)
-      .where(
-        and(gte(incidents.occurredAt, twelveMonthsAgo), eq(incidents.type, 'near_miss')),
-      )
+      .where(and(gte(incidents.occurredAt, twelveMonthsAgo), eq(incidents.type, 'near_miss')))
     severityDistribution.nearMiss = Number(nmRow?.n ?? 0)
     const [pdRow] = await tx
       .select({ n: count() })
       .from(incidents)
-      .where(
-        and(gte(incidents.occurredAt, twelveMonthsAgo), eq(incidents.type, 'property_damage')),
-      )
+      .where(and(gte(incidents.occurredAt, twelveMonthsAgo), eq(incidents.type, 'property_damage')))
     severityDistribution.propertyDamage = Number(pdRow?.n ?? 0)
 
     // --- List widgets ----------------------------------------------------
@@ -643,9 +610,7 @@ export async function loadDashboardMetrics(
       .limit(5)
     const topOverdueCAs = topOverdueRaw.map((r) => {
       const dayMs = 86_400_000
-      const days = r.dueOn
-        ? Math.round((today.getTime() - new Date(r.dueOn).getTime()) / dayMs)
-        : 0
+      const days = r.dueOn ? Math.round((today.getTime() - new Date(r.dueOn).getTime()) / dayMs) : 0
       return {
         id: r.id,
         reference: r.reference,

@@ -60,7 +60,9 @@ export async function processScheduledTick(job: Job<ScheduledTick>): Promise<voi
       return
     }
     case 'report_run':
-      console.log('[scheduled] report_run tick is a no-op (per-run dispatch handled by reports queue)')
+      console.log(
+        '[scheduled] report_run tick is a no-op (per-run dispatch handled by reports queue)',
+      )
       return
     case 'etl_mssql_sync': {
       if (!process.env.ETL_SOURCE_URL) {
@@ -69,7 +71,9 @@ export async function processScheduledTick(job: Job<ScheduledTick>): Promise<voi
       }
       const stats = await runImport(ALL_LOADERS, { mode: 'sync' })
       const total = stats.reduce((a, s) => a + s.upserted, 0)
-      console.log(`[scheduled] etl_mssql_sync: ${total} rows upserted across ${stats.length} entities`)
+      console.log(
+        `[scheduled] etl_mssql_sync: ${total} rows upserted across ${stats.length} entities`,
+      )
       return
     }
   }
@@ -113,12 +117,7 @@ async function scanCsPermitExpiry(): Promise<void> {
     const expiringSoon = await tx
       .select({ id: csPermits.id, tenantId: csPermits.tenantId, expiresAt: csPermits.expiresAt })
       .from(csPermits)
-      .where(
-        and(
-          eq(csPermits.status, 'active'),
-          lte(csPermits.expiresAt, in24h),
-        ),
-      )
+      .where(and(eq(csPermits.status, 'active'), lte(csPermits.expiresAt, in24h)))
     for (const p of expiringSoon) {
       if (p.expiresAt > now) {
         await emitCsPermitExpiring(p.tenantId, p.id)

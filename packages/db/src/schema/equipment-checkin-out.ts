@@ -54,9 +54,7 @@ export const equipmentCheckouts = pgTable(
     checkedOutByTenantUserId: uuid('checked_out_by_tenant_user_id').references(
       () => tenantUsers.id,
     ),
-    checkedInByTenantUserId: uuid('checked_in_by_tenant_user_id').references(
-      () => tenantUsers.id,
-    ),
+    checkedInByTenantUserId: uuid('checked_in_by_tenant_user_id').references(() => tenantUsers.id),
     ...timestamps,
   },
   (t) => ({

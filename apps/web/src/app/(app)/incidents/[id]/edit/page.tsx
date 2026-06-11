@@ -2,14 +2,7 @@ import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { asc, eq } from 'drizzle-orm'
-import {
-  Button,
-  Input,
-  Label,
-  PageHeader,
-  Select,
-  Textarea,
-} from '@beaconhs/ui'
+import { Button, Input, Label, PageHeader, Select, Textarea } from '@beaconhs/ui'
 import { incidents, orgUnits } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
@@ -17,7 +10,15 @@ import { PageContainer } from '@/components/page-layout'
 
 export const dynamic = 'force-dynamic'
 
-const TYPES = ['injury', 'illness', 'near_miss', 'property_damage', 'environmental', 'security', 'other'] as const
+const TYPES = [
+  'injury',
+  'illness',
+  'near_miss',
+  'property_damage',
+  'environmental',
+  'security',
+  'other',
+] as const
 const SEVERITIES = ['first_aid_only', 'medical_aid', 'lost_time', 'fatality', 'no_injury'] as const
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
@@ -40,11 +41,9 @@ async function updateIncident(formData: FormData): Promise<void> {
   const location = String(formData.get('location') ?? '').trim() || null
   const weather = String(formData.get('weather') ?? '').trim() || null
   const witnesses = String(formData.get('witnesses') ?? '').trim() || null
-  const externalPeopleInvolved =
-    String(formData.get('externalPeopleInvolved') ?? '').trim() || null
+  const externalPeopleInvolved = String(formData.get('externalPeopleInvolved') ?? '').trim() || null
   const eventsLeadingUp = String(formData.get('eventsLeadingUp') ?? '').trim() || null
-  const immediateActionTaken =
-    String(formData.get('immediateActionTaken') ?? '').trim() || null
+  const immediateActionTaken = String(formData.get('immediateActionTaken') ?? '').trim() || null
   const ppeWorn = String(formData.get('ppeWorn') ?? '').trim() || null
 
   if (!TYPES.includes(type)) return
@@ -173,7 +172,11 @@ export default async function EditIncidentPage({ params }: { params: Promise<{ i
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="siteOrgUnitId">Site</Label>
-              <Select id="siteOrgUnitId" name="siteOrgUnitId" defaultValue={inc.siteOrgUnitId ?? ''}>
+              <Select
+                id="siteOrgUnitId"
+                name="siteOrgUnitId"
+                defaultValue={inc.siteOrgUnitId ?? ''}
+              >
                 <option value="">— None —</option>
                 {sites.map((s) => (
                   <option key={s.id} value={s.id}>
@@ -203,7 +206,12 @@ export default async function EditIncidentPage({ params }: { params: Promise<{ i
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="witnesses">Witnesses</Label>
-              <Textarea id="witnesses" name="witnesses" rows={2} defaultValue={inc.witnesses ?? ''} />
+              <Textarea
+                id="witnesses"
+                name="witnesses"
+                rows={2}
+                defaultValue={inc.witnesses ?? ''}
+              />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="externalPeopleInvolved">External people involved</Label>

@@ -76,17 +76,10 @@ export default async function OshaLogPage({
         cls: incidentClassifications,
       })
       .from(incidents)
-      .leftJoin(
-        incidentClassifications,
-        eq(incidentClassifications.id, incidents.classificationId),
-      )
+      .leftJoin(incidentClassifications, eq(incidentClassifications.id, incidents.classificationId))
       .where(
         and(
-          between(
-            sql`date(${incidents.occurredAt})` as any,
-            startYmd as any,
-            endYmd as any,
-          ),
+          between(sql`date(${incidents.occurredAt})` as any, startYmd as any, endYmd as any),
           // Either explicitly recordable, or unclassified-with-injury (heuristic
           // fallback matches what the frequency report uses).
           sql`(
@@ -111,13 +104,16 @@ export default async function OshaLogPage({
         })
         .from(incidentInjuries)
         .leftJoin(people, eq(people.id, incidentInjuries.personId))
-        .where(sql`${incidentInjuries.incidentId} in (${sql.join(incidentIds.map((id) => sql`${id}`), sql`, `)})`)
+        .where(
+          sql`${incidentInjuries.incidentId} in (${sql.join(
+            incidentIds.map((id) => sql`${id}`),
+            sql`, `,
+          )})`,
+        )
         .orderBy(asc(incidentInjuries.createdAt))
       for (const r of injRows) {
         if (!injuryByIncident.has(r.inj.incidentId)) {
-          const name = r.person
-            ? `${r.person.lastName}, ${r.person.firstName}`
-            : r.inj.personName
+          const name = r.person ? `${r.person.lastName}, ${r.person.firstName}` : r.inj.personName
           injuryByIncident.set(r.inj.incidentId, {
             personName: name,
             jobTitle: r.person?.jobTitle ?? null,
@@ -136,13 +132,13 @@ export default async function OshaLogPage({
         })
         .from(incidentLostTimeEvents)
         .where(
-          sql`${incidentLostTimeEvents.incidentId} in (${sql.join(incidentIds.map((id) => sql`${id}`), sql`, `)})`,
+          sql`${incidentLostTimeEvents.incidentId} in (${sql.join(
+            incidentIds.map((id) => sql`${id}`),
+            sql`, `,
+          )})`,
         )
 
-      const lostByIncident = new Map<
-        string,
-        { daysAway: number; daysRestricted: number }
-      >()
+      const lostByIncident = new Map<string, { daysAway: number; daysRestricted: number }>()
       for (const r of ltRows) {
         const acc = lostByIncident.get(r.incidentId) ?? { daysAway: 0, daysRestricted: 0 }
         if (r.status === 'off_work') acc.daysAway += Number(r.days)
@@ -195,15 +191,14 @@ export default async function OshaLogPage({
     { cases: 0, daysAway: 0, daysRestricted: 0 },
   )
 
-  const printHref =
-    `/incidents/reports/osha-log?print=1&start=${encodeURIComponent(startYmd)}&end=${encodeURIComponent(endYmd)}`
+  const printHref = `/incidents/reports/osha-log?print=1&start=${encodeURIComponent(startYmd)}&end=${encodeURIComponent(endYmd)}`
   const isPrint = pickString(sp.print) === '1'
 
   if (isPrint) {
     return (
       <div className="bg-white p-8 text-xs text-slate-900 print:p-0">
         <header className="mb-6 border-b border-slate-300 pb-3">
-          <h1 className="text-lg font-bold uppercase tracking-wide">
+          <h1 className="text-lg font-bold tracking-wide uppercase">
             OSHA Form 300A — Summary of Work-Related Injuries and Illnesses
           </h1>
           <div className="mt-1 text-xs text-slate-600">
@@ -243,9 +238,7 @@ export default async function OshaLogPage({
                 <td className="border border-slate-300 px-2 py-1 text-right tabular-nums">
                   {r.daysRestricted}
                 </td>
-                <td className="border border-slate-300 px-2 py-1">
-                  {outcomeLabel(r.outcome)}
-                </td>
+                <td className="border border-slate-300 px-2 py-1">{outcomeLabel(r.outcome)}</td>
               </tr>
             ))}
           </tbody>
@@ -379,9 +372,7 @@ export default async function OshaLogPage({
                         {r.description}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">{r.daysAway}</TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {r.daysRestricted}
-                      </TableCell>
+                      <TableCell className="text-right tabular-nums">{r.daysRestricted}</TableCell>
                       <TableCell>
                         <OutcomeBadge outcome={r.outcome} />
                       </TableCell>
@@ -410,8 +401,8 @@ function SummaryCard({
     <div
       className={`rounded-lg border bg-white px-4 py-3 ${tone === 'destructive' && value > 0 ? 'border-red-300 bg-red-50' : 'border-slate-200'} `}
     >
-      <div className="text-xs uppercase tracking-wide text-slate-500">{label}</div>
-      <div className="mt-0.5 text-2xl font-semibold tabular-nums text-slate-900">
+      <div className="text-xs tracking-wide text-slate-500 uppercase">{label}</div>
+      <div className="mt-0.5 text-2xl font-semibold text-slate-900 tabular-nums">
         {value.toLocaleString()}
       </div>
     </div>

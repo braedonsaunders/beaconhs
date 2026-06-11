@@ -92,7 +92,10 @@ export async function saveDashboardLayout(input: {
   if (!parsed.success) return { ok: false, error: 'Invalid layout.' }
   const widgets = parsed.data.widgets.filter((w) => INSIGHT_WIDGET_MAP.has(w.id))
   await ctx.db((tx) =>
-    tx.update(insightDashboards).set({ layout: { widgets } }).where(eq(insightDashboards.id, input.id)),
+    tx
+      .update(insightDashboards)
+      .set({ layout: { widgets } })
+      .where(eq(insightDashboards.id, input.id)),
   )
   revalidatePath('/insights')
   return { ok: true }

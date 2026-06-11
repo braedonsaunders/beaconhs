@@ -42,10 +42,9 @@ import { resetDashboardLayout, saveDashboardLayout } from './actions'
 import { toast } from '@/lib/toast'
 
 // react-grid-layout's ResponsiveGridLayout is purely client (DOM-measured).
-const Responsive = dynamic(
-  () => import('react-grid-layout').then((m) => m.Responsive),
-  { ssr: false },
-) as unknown as React.ComponentType<any>
+const Responsive = dynamic(() => import('react-grid-layout').then((m) => m.Responsive), {
+  ssr: false,
+}) as unknown as React.ComponentType<any>
 
 const COLS = { lg: 12, md: 12, sm: 6, xs: 4, xxs: 2 }
 const BREAKPOINTS = { lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }
@@ -157,7 +156,8 @@ export function DashboardGrid({
   }, [layout, router])
 
   const handleReset = useCallback(async () => {
-    if (!confirm('Reset to the default layout for your role? Your customisations will be lost.')) return
+    if (!confirm('Reset to the default layout for your role? Your customisations will be lost.'))
+      return
     setResetting(true)
     try {
       await resetDashboardLayout()
@@ -241,19 +241,19 @@ export function DashboardGrid({
                   <div className="relative h-full w-full">
                     {mode === 'edit' ? (
                       <>
-                        <div className="pointer-events-none absolute inset-0 z-10 rounded-xl ring-1 ring-dashed ring-teal-300/0 transition group-hover/cell:ring-teal-400/80" />
+                        <div className="ring-dashed pointer-events-none absolute inset-0 z-10 rounded-xl ring-1 ring-teal-300/0 transition group-hover/cell:ring-teal-400/80" />
                         <button
                           type="button"
                           onClick={() => handleRemove(w.id)}
                           aria-label="Remove widget"
-                          className="no-drag absolute -right-2 -top-2 z-20 inline-flex h-6 w-6 items-center justify-center rounded-full border border-rose-200 dark:border-rose-800/60 bg-white dark:bg-slate-900 text-rose-600 opacity-0 shadow-sm transition hover:bg-rose-50 dark:hover:bg-rose-950/40 group-hover/cell:opacity-100"
+                          className="no-drag absolute -top-2 -right-2 z-20 inline-flex h-6 w-6 items-center justify-center rounded-full border border-rose-200 bg-white text-rose-600 opacity-0 shadow-sm transition group-hover/cell:opacity-100 hover:bg-rose-50 dark:border-rose-800/60 dark:bg-slate-900 dark:hover:bg-rose-950/40"
                         >
                           <X size={12} />
                         </button>
                       </>
                     ) : null}
                     {node ?? (
-                      <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 text-xs text-slate-500 dark:text-slate-400">
+                      <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-400">
                         Widget "{w.id}" not available
                       </div>
                     )}
@@ -296,12 +296,14 @@ function EditToolbar({
       initial={{ opacity: 0, y: -6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25 }}
-      className="sticky top-0 z-40 flex items-center justify-between gap-3 rounded-xl border border-teal-200 dark:border-teal-800/60 bg-teal-50/70 dark:bg-teal-950/50 px-4 py-2.5 backdrop-blur"
+      className="sticky top-0 z-40 flex items-center justify-between gap-3 rounded-xl border border-teal-200 bg-teal-50/70 px-4 py-2.5 backdrop-blur dark:border-teal-800/60 dark:bg-teal-950/50"
     >
       <div className="flex items-center gap-2 text-sm">
         <Settings size={14} className="text-teal-700 dark:text-teal-300" />
-        <span className="font-semibold text-teal-900 dark:text-teal-300">Customising your dashboard</span>
-        <span className="hidden text-xs text-teal-700/80 dark:text-teal-300/80 sm:inline">
+        <span className="font-semibold text-teal-900 dark:text-teal-300">
+          Customising your dashboard
+        </span>
+        <span className="hidden text-xs text-teal-700/80 sm:inline dark:text-teal-300/80">
           Drag tiles to reorder, drag the bottom-right corner to resize, click ✕ to remove.
         </span>
       </div>
@@ -361,18 +363,18 @@ function WidgetPalette({
       initial={{ opacity: 0, x: 12 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.3 }}
-      className="app-scroll sticky top-16 max-h-[calc(100vh-160px)] overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 shadow-sm"
+      className="app-scroll sticky top-16 max-h-[calc(100vh-160px)] overflow-y-auto rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900"
     >
       <div className="mb-2 flex items-center justify-between">
         <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Widget library</h3>
-        <span className="text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500">
+        <span className="text-[10px] tracking-wider text-slate-400 uppercase dark:text-slate-500">
           {visible.length} available
         </span>
       </div>
       <div className="space-y-3">
         {[...byCategory.entries()].map(([cat, widgets]) => (
           <div key={cat}>
-            <h4 className="mb-1 px-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+            <h4 className="mb-1 px-1 text-[10px] font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
               {CATEGORY_LABELS[cat]}
             </h4>
             <ul className="space-y-1">
@@ -386,16 +388,22 @@ function WidgetPalette({
                       disabled={present}
                       className={`flex w-full items-start justify-between gap-2 rounded-lg border border-transparent px-2 py-1.5 text-left transition ${
                         present
-                          ? 'cursor-not-allowed bg-slate-50 dark:bg-slate-900 text-slate-400 dark:text-slate-500'
-                          : 'hover:border-teal-200 dark:hover:border-teal-800/60 hover:bg-teal-50/50 dark:hover:bg-teal-950/40'
+                          ? 'cursor-not-allowed bg-slate-50 text-slate-400 dark:bg-slate-900 dark:text-slate-500'
+                          : 'hover:border-teal-200 hover:bg-teal-50/50 dark:hover:border-teal-800/60 dark:hover:bg-teal-950/40'
                       }`}
                     >
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-xs font-medium text-slate-800 dark:text-slate-100">{w.label}</div>
-                        <div className="line-clamp-2 text-[10px] text-slate-500 dark:text-slate-400">{w.description}</div>
+                        <div className="truncate text-xs font-medium text-slate-800 dark:text-slate-100">
+                          {w.label}
+                        </div>
+                        <div className="line-clamp-2 text-[10px] text-slate-500 dark:text-slate-400">
+                          {w.description}
+                        </div>
                       </div>
                       {present ? (
-                        <span className="shrink-0 text-[10px] text-slate-400 dark:text-slate-500">added</span>
+                        <span className="shrink-0 text-[10px] text-slate-400 dark:text-slate-500">
+                          added
+                        </span>
                       ) : (
                         <Plus size={13} className="shrink-0 text-teal-600" />
                       )}

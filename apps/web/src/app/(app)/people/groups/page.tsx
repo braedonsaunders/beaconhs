@@ -13,10 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from '@beaconhs/ui'
-import {
-  personGroupMemberships,
-  personGroups,
-} from '@beaconhs/db/schema'
+import { personGroupMemberships, personGroups } from '@beaconhs/db/schema'
 import { requireModuleManage } from '@/lib/module-admin/guard'
 import { ListPageLayout } from '@/components/page-layout'
 import { PeopleSubNav } from '../_components/people-sub-nav'
@@ -98,11 +95,7 @@ export default async function GroupsPage() {
                   </div>
                 </TableCell>
                 <TableCell className="text-slate-600">
-                  {g.description ? (
-                    <span className="line-clamp-2">{g.description}</span>
-                  ) : (
-                    '—'
-                  )}
+                  {g.description ? <span className="line-clamp-2">{g.description}</span> : '—'}
                 </TableCell>
                 <TableCell>
                   <Badge variant="secondary">{g.memberCount}</Badge>

@@ -57,7 +57,12 @@ export default async function BulkQrPrintPage({
       await tx
         .update(equipmentItems)
         .set({ bulkQrToken: bulkToken, bulkQrGeneratedAt: new Date() })
-        .where(inArray(equipmentItems.id, rows.map((r) => r.id)))
+        .where(
+          inArray(
+            equipmentItems.id,
+            rows.map((r) => r.id),
+          ),
+        )
     }
     return rows
   })

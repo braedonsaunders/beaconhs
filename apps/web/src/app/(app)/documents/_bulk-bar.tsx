@@ -4,11 +4,7 @@ import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Archive, BookOpen, CheckSquare, Send, Square, X } from 'lucide-react'
 import { Button, Select } from '@beaconhs/ui'
-import {
-  bulkAddDocumentsToBook,
-  bulkArchiveDocuments,
-  bulkPublishDocuments,
-} from './_actions'
+import { bulkAddDocumentsToBook, bulkArchiveDocuments, bulkPublishDocuments } from './_actions'
 
 export type DocumentBookOption = { id: string; label: string }
 
@@ -129,25 +125,21 @@ export function BulkDocumentsBar({
         ) : null}
 
         <Button size="sm" onClick={go} disabled={pending}>
-          {pending
-            ? 'Working…'
-            : action === 'publish'
-              ? (
-                <span className="inline-flex items-center gap-1">
-                  <Send size={14} /> Publish
-                </span>
-              )
-              : action === 'archive'
-                ? (
-                  <span className="inline-flex items-center gap-1">
-                    <Archive size={14} /> Archive
-                  </span>
-                )
-                : (
-                  <span className="inline-flex items-center gap-1">
-                    <BookOpen size={14} /> Add
-                  </span>
-                )}
+          {pending ? (
+            'Working…'
+          ) : action === 'publish' ? (
+            <span className="inline-flex items-center gap-1">
+              <Send size={14} /> Publish
+            </span>
+          ) : action === 'archive' ? (
+            <span className="inline-flex items-center gap-1">
+              <Archive size={14} /> Archive
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1">
+              <BookOpen size={14} /> Add
+            </span>
+          )}
         </Button>
         {error ? <span className="text-xs text-red-600">{error}</span> : null}
         {info ? <span className="text-xs text-emerald-700">{info}</span> : null}
@@ -175,11 +167,7 @@ export function SelectionCheckbox({
       aria-pressed={selected}
       className="inline-flex items-center justify-center rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
     >
-      {selected ? (
-        <CheckSquare size={16} className="text-teal-700" />
-      ) : (
-        <Square size={16} />
-      )}
+      {selected ? <CheckSquare size={16} className="text-teal-700" /> : <Square size={16} />}
     </button>
   )
 }
@@ -198,11 +186,7 @@ export function HeaderSelectAll({
       aria-pressed={allSelected}
       className="inline-flex items-center justify-center rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
     >
-      {allSelected ? (
-        <CheckSquare size={16} className="text-teal-700" />
-      ) : (
-        <Square size={16} />
-      )}
+      {allSelected ? <CheckSquare size={16} className="text-teal-700" /> : <Square size={16} />}
     </button>
   )
 }

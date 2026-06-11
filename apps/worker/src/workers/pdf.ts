@@ -12,12 +12,7 @@
 
 import type { Job } from 'bullmq'
 import { and, asc, desc, eq } from 'drizzle-orm'
-import {
-  db,
-  loadEntitiesForFormPickers,
-  withTenant,
-  type Database,
-} from '@beaconhs/db'
+import { db, loadEntitiesForFormPickers, withTenant, type Database } from '@beaconhs/db'
 import {
   atmosphericSensors,
   attachments,
@@ -319,13 +314,13 @@ async function renderIncident(tenantId: string, incidentId: string): Promise<voi
     involved: result.involved.map((row) => ({
       name: row.person
         ? `${row.person.firstName} ${row.person.lastName}`
-        : row.link.personNameText ?? 'Unknown',
+        : (row.link.personNameText ?? 'Unknown'),
       role: row.link.role,
     })),
     injuries: result.injuries.map((row) => ({
       personName: row.person
         ? `${row.person.firstName} ${row.person.lastName}`
-        : row.injury.personName ?? 'Unknown',
+        : (row.injury.personName ?? 'Unknown'),
       bodyParts: row.injury.bodyParts ?? [],
       injuryTypes: row.injury.injuryTypes ?? [],
       treatment: row.injury.treatment,
@@ -799,7 +794,7 @@ function toHazidRenderInput(data: HazidLoadedAssessment): HazidRenderInput {
       applicable: h.row.applicable,
     })),
     signatures: data.signatures.map((s) => ({
-      name: s.person ? personName(s.person)! : s.row.externalName ?? 'Unknown',
+      name: s.person ? personName(s.person)! : (s.row.externalName ?? 'Unknown'),
       signatureType: s.row.signatureType,
       csEntrant: s.row.csEntrant,
       csAttendant: s.row.csAttendant,
@@ -822,7 +817,7 @@ function toHazidRenderInput(data: HazidLoadedAssessment): HazidRenderInput {
       notes: r.row.notes,
     })),
     entries: data.entries.map((e) => ({
-      name: e.person ? personName(e.person)! : e.row.externalName ?? 'Unknown',
+      name: e.person ? personName(e.person)! : (e.row.externalName ?? 'Unknown'),
       timeIn: e.row.timeIn,
       timeOut: e.row.timeOut,
     })),
@@ -912,11 +907,7 @@ async function renderHazidSignedReport(tenantId: string, reportId: string): Prom
     // 3. Load tenant + each assessment payload. We also resolve the builder's
     // display name from tenantUsers + user for the cover page.
     const loaded = await withTenant(db, tenantId, async (tx) => {
-      const [tenantRow] = await tx
-        .select()
-        .from(tenants)
-        .where(eq(tenants.id, tenantId))
-        .limit(1)
+      const [tenantRow] = await tx.select().from(tenants).where(eq(tenants.id, tenantId)).limit(1)
       if (!tenantRow) return null
 
       let builtByName: string | null = null
@@ -1021,9 +1012,7 @@ async function renderHazidSignedReport(tenantId: string, reportId: string): Prom
       })
     })
 
-    console.log(
-      `[pdf] hazid_signed_report ${reportId} rendered (${pdf.length} bytes) → ${r2Key}`,
-    )
+    console.log(`[pdf] hazid_signed_report ${reportId} rendered (${pdf.length} bytes) → ${r2Key}`)
 
     // 7. If the builder captured recipients, send them an email with a signed
     // link to the freshly-rendered PDF. We enqueue rather than send inline so
@@ -1076,10 +1065,7 @@ async function markReportFailed(
     })
   } catch (writeErr) {
     // Don't let bookkeeping errors hide the original failure.
-    console.error(
-      `[pdf] failed to mark signed-report ${reportId} as failed:`,
-      writeErr,
-    )
+    console.error(`[pdf] failed to mark signed-report ${reportId} as failed:`, writeErr)
   }
 }
 
@@ -1482,10 +1468,7 @@ async function renderDocumentBook(tenantId: string, bookId: string): Promise<voi
 
 // --- equipment_workorder ---------------------------------------------------
 
-async function renderEquipmentWorkOrder(
-  tenantId: string,
-  workOrderId: string,
-): Promise<void> {
+async function renderEquipmentWorkOrder(tenantId: string, workOrderId: string): Promise<void> {
   const data = await withTenant(db, tenantId, async (tx) => {
     const [row] = await tx
       .select({

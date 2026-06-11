@@ -6,7 +6,20 @@
 
 import Link from 'next/link'
 import { Star } from 'lucide-react'
-import { and, asc, count, desc, eq, gt, ilike, isNotNull, isNull, lte, or, type SQL } from 'drizzle-orm'
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gt,
+  ilike,
+  isNotNull,
+  isNull,
+  lte,
+  or,
+  type SQL,
+} from 'drizzle-orm'
 import { Badge, EmptyState, PageHeader } from '@beaconhs/ui'
 import {
   people,
@@ -118,7 +131,10 @@ export default async function SkillsPage({
         person: people,
       })
       .from(trainingSkillAssignments)
-      .innerJoin(trainingSkillTypes, eq(trainingSkillTypes.id, trainingSkillAssignments.skillTypeId))
+      .innerJoin(
+        trainingSkillTypes,
+        eq(trainingSkillTypes.id, trainingSkillAssignments.skillTypeId),
+      )
       .innerJoin(
         trainingSkillAuthorities,
         eq(trainingSkillAuthorities.id, trainingSkillTypes.authorityId),
@@ -128,7 +144,10 @@ export default async function SkillsPage({
     const [tot] = await tx
       .select({ c: count() })
       .from(trainingSkillAssignments)
-      .innerJoin(trainingSkillTypes, eq(trainingSkillTypes.id, trainingSkillAssignments.skillTypeId))
+      .innerJoin(
+        trainingSkillTypes,
+        eq(trainingSkillTypes.id, trainingSkillAssignments.skillTypeId),
+      )
       .innerJoin(
         trainingSkillAuthorities,
         eq(trainingSkillAuthorities.id, trainingSkillTypes.authorityId),
@@ -195,19 +214,49 @@ export default async function SkillsPage({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <SortableTh basePath="/training/skills" currentParams={sp} column="person" active={params.sort === 'person'} dir={params.dir}>
+                  <SortableTh
+                    basePath="/training/skills"
+                    currentParams={sp}
+                    column="person"
+                    active={params.sort === 'person'}
+                    dir={params.dir}
+                  >
                     Person
                   </SortableTh>
-                  <SortableTh basePath="/training/skills" currentParams={sp} column="skill" active={params.sort === 'skill'} dir={params.dir}>
+                  <SortableTh
+                    basePath="/training/skills"
+                    currentParams={sp}
+                    column="skill"
+                    active={params.sort === 'skill'}
+                    dir={params.dir}
+                  >
                     Skill / certification
                   </SortableTh>
-                  <SortableTh basePath="/training/skills" currentParams={sp} column="authority" active={params.sort === 'authority'} dir={params.dir}>
+                  <SortableTh
+                    basePath="/training/skills"
+                    currentParams={sp}
+                    column="authority"
+                    active={params.sort === 'authority'}
+                    dir={params.dir}
+                  >
                     Authority
                   </SortableTh>
-                  <SortableTh basePath="/training/skills" currentParams={sp} column="granted_on" active={params.sort === 'granted_on'} dir={params.dir}>
+                  <SortableTh
+                    basePath="/training/skills"
+                    currentParams={sp}
+                    column="granted_on"
+                    active={params.sort === 'granted_on'}
+                    dir={params.dir}
+                  >
                     Granted
                   </SortableTh>
-                  <SortableTh basePath="/training/skills" currentParams={sp} column="expires_on" active={params.sort === 'expires_on'} dir={params.dir}>
+                  <SortableTh
+                    basePath="/training/skills"
+                    currentParams={sp}
+                    column="expires_on"
+                    active={params.sort === 'expires_on'}
+                    dir={params.dir}
+                  >
                     Expires
                   </SortableTh>
                   <TableHead>Status</TableHead>
@@ -237,16 +286,18 @@ export default async function SkillsPage({
                           href={`/training/skills/types/${type.id}`}
                           className="text-slate-700 hover:underline"
                         >
-                          {type.code ? <span className="font-mono text-xs">{type.code}</span> : null}
+                          {type.code ? (
+                            <span className="font-mono text-xs">{type.code}</span>
+                          ) : null}
                           {type.code ? ' · ' : ''}
                           {type.name}
                         </Link>
                       </TableCell>
                       <TableCell className="text-slate-600">{authority.name}</TableCell>
-                      <TableCell className="tabular-nums text-slate-600">
+                      <TableCell className="text-slate-600 tabular-nums">
                         {assignment.grantedOn}
                       </TableCell>
-                      <TableCell className="tabular-nums text-slate-600">
+                      <TableCell className="text-slate-600 tabular-nums">
                         {exp ?? <span className="text-slate-400">Never</span>}
                       </TableCell>
                       <TableCell>

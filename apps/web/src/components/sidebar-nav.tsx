@@ -105,9 +105,12 @@ export function SidebarNav({
       {groups.map((group) => (
         <div key={group.label} className="mb-3">
           {collapsed ? (
-            <div className="mx-2 mb-1 border-t border-slate-100 dark:border-slate-800" aria-hidden />
+            <div
+              className="mx-2 mb-1 border-t border-slate-100 dark:border-slate-800"
+              aria-hidden
+            />
           ) : (
-            <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+            <div className="px-2 pb-1 text-[10px] font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
               {group.label}
             </div>
           )}
@@ -124,12 +127,12 @@ export function SidebarNav({
                   'group relative flex items-center rounded-md py-1.5 text-sm',
                   'transition-colors duration-150 ease-out',
                   collapsed ? 'justify-center px-2' : 'gap-2.5 px-2',
-                  'before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-5 before:w-[2px] before:rounded-full',
+                  'before:absolute before:top-1/2 before:left-0 before:h-5 before:w-[2px] before:-translate-y-1/2 before:rounded-full',
                   'before:transition-all before:duration-150 before:ease-out',
                   active
                     ? 'bg-teal-50 text-teal-900 before:h-6 before:bg-teal-700 dark:bg-teal-950/50 dark:text-teal-100 dark:before:bg-teal-400'
                     : 'text-slate-700 before:bg-transparent hover:bg-slate-100 hover:text-slate-900 hover:before:bg-slate-300 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100 dark:hover:before:bg-slate-600',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/40',
+                  'focus-visible:ring-2 focus-visible:ring-teal-500/40 focus-visible:outline-none',
                 )}
               >
                 <Icon

@@ -1,16 +1,8 @@
 import Link from 'next/link'
 import { ChevronRight, Layers } from 'lucide-react'
 import { asc, count } from 'drizzle-orm'
-import {
-  Badge,
-  Button,
-  EmptyState,
-  PageHeader,
-} from '@beaconhs/ui'
-import {
-  personDivisionMemberships,
-  personDivisions,
-} from '@beaconhs/db/schema'
+import { Badge, Button, EmptyState, PageHeader } from '@beaconhs/ui'
+import { personDivisionMemberships, personDivisions } from '@beaconhs/db/schema'
 import { requireModuleManage } from '@/lib/module-admin/guard'
 import { ListPageLayout } from '@/components/page-layout'
 import { PeopleSubNav } from '../_components/people-sub-nav'
@@ -82,7 +74,7 @@ function DivisionTree({ rows }: { rows: DivisionRow[] }) {
     const children = byParent.get(parentId) ?? []
     if (children.length === 0) return null
     return (
-      <ul className={depth === 0 ? 'space-y-1' : 'ml-5 border-l border-slate-200 pl-3 space-y-1'}>
+      <ul className={depth === 0 ? 'space-y-1' : 'ml-5 space-y-1 border-l border-slate-200 pl-3'}>
         {children.map((d) => (
           <li key={d.id}>
             <Link
@@ -92,9 +84,7 @@ function DivisionTree({ rows }: { rows: DivisionRow[] }) {
               <span className="flex items-center gap-2">
                 <ChevronRight size={14} className="text-slate-400" />
                 <span className="font-medium text-slate-900">{d.name}</span>
-                {d.code ? (
-                  <span className="font-mono text-xs text-slate-500">{d.code}</span>
-                ) : null}
+                {d.code ? <span className="font-mono text-xs text-slate-500">{d.code}</span> : null}
               </span>
               <span className="flex items-center gap-3 text-xs text-slate-500">
                 {d.description ? (

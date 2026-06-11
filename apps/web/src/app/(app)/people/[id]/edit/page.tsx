@@ -116,7 +116,9 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
                   <Select name="departmentId" defaultValue={person.departmentId ?? ''}>
                     <option value="">—</option>
                     {depts.map((d) => (
-                      <option key={d.id} value={d.id}>{d.name}</option>
+                      <option key={d.id} value={d.id}>
+                        {d.name}
+                      </option>
                     ))}
                   </Select>
                 </Field>
@@ -124,7 +126,9 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
                   <Select name="tradeId" defaultValue={person.tradeId ?? ''}>
                     <option value="">—</option>
                     {allTrades.map((t) => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
                     ))}
                   </Select>
                 </Field>
@@ -132,7 +136,9 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
                   <Select name="crewId" defaultValue={person.crewId ?? ''}>
                     <option value="">—</option>
                     {allCrews.map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
                     ))}
                   </Select>
                 </Field>
@@ -144,10 +150,17 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
                   </Select>
                 </Field>
                 <Field label="Emergency contact name">
-                  <Input name="emergencyContactName" defaultValue={person.emergencyContactName ?? ''} />
+                  <Input
+                    name="emergencyContactName"
+                    defaultValue={person.emergencyContactName ?? ''}
+                  />
                 </Field>
                 <Field label="Emergency contact phone">
-                  <Input name="emergencyContactPhone" type="tel" defaultValue={person.emergencyContactPhone ?? ''} />
+                  <Input
+                    name="emergencyContactPhone"
+                    type="tel"
+                    defaultValue={person.emergencyContactPhone ?? ''}
+                  />
                 </Field>
                 <Field label="Notes" className="sm:col-span-2">
                   <Textarea name="notes" rows={3} defaultValue={person.notes ?? ''} />

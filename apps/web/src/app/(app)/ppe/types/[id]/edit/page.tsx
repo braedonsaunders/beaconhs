@@ -65,11 +65,7 @@ async function updateType(formData: FormData) {
   redirect(`/ppe/types/${id}`)
 }
 
-export default async function EditPpeTypePage({
-  params,
-}: {
-  params: Promise<{ id: string }>
-}) {
+export default async function EditPpeTypePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const ctx = await requireModuleManage('ppe')
   const [type] = await ctx.db((tx) =>

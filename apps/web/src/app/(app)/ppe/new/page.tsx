@@ -2,14 +2,7 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import Link from 'next/link'
 import { asc } from 'drizzle-orm'
-import {
-  Button,
-  Input,
-  Label,
-  PageHeader,
-  Select,
-  Textarea,
-} from '@beaconhs/ui'
+import { Button, Input, Label, PageHeader, Select, Textarea } from '@beaconhs/ui'
 import { ppeItems, ppeTypes } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
@@ -73,11 +66,14 @@ export default async function NewPpePage() {
         />
         {types.length === 0 ? (
           <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-            No PPE types defined yet. Add one in <strong>Admin → Tenant settings</strong> (or directly
-            insert via seed) before creating items.
+            No PPE types defined yet. Add one in <strong>Admin → Tenant settings</strong> (or
+            directly insert via seed) before creating items.
           </div>
         ) : null}
-        <form action={createPpe} className="mt-6 space-y-5 rounded-lg border border-slate-200 bg-white p-6">
+        <form
+          action={createPpe}
+          className="mt-6 space-y-5 rounded-lg border border-slate-200 bg-white p-6"
+        >
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="typeId">PPE type *</Label>
@@ -93,7 +89,11 @@ export default async function NewPpePage() {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="serialNumber">Serial number</Label>
-              <Input id="serialNumber" name="serialNumber" placeholder="manufacturer or in-house tag" />
+              <Input
+                id="serialNumber"
+                name="serialNumber"
+                placeholder="manufacturer or in-house tag"
+              />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="size">Size</Label>
@@ -110,7 +110,12 @@ export default async function NewPpePage() {
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="notes">Notes</Label>
-            <Textarea id="notes" name="notes" rows={3} placeholder="Anything reviewers should know." />
+            <Textarea
+              id="notes"
+              name="notes"
+              rows={3}
+              placeholder="Anything reviewers should know."
+            />
           </div>
           <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-4">
             <Link href="/ppe">

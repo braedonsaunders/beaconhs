@@ -51,7 +51,9 @@ export function MultiPicker({
               />
               <div className="min-w-0">
                 <div className="truncate">{o.label}</div>
-                {o.sublabel ? <div className="truncate text-xs text-slate-500">{o.sublabel}</div> : null}
+                {o.sublabel ? (
+                  <div className="truncate text-xs text-slate-500">{o.sublabel}</div>
+                ) : null}
               </div>
             </label>
           ))

@@ -125,16 +125,8 @@ function renderTree(
               style={{ width: `${depth * 16}px` }}
               aria-hidden
             />
-            <Input
-              name="name"
-              defaultValue={node.name}
-              className="min-w-0 max-w-xs"
-            />
-            <Select
-              name="parentId"
-              defaultValue={node.parentId ?? ''}
-              className="min-w-0 max-w-xs"
-            >
+            <Input name="name" defaultValue={node.name} className="max-w-xs min-w-0" />
+            <Select name="parentId" defaultValue={node.parentId ?? ''} className="max-w-xs min-w-0">
               <option value="">— top level —</option>
               {all
                 .filter((o) => o.id !== node.id)
@@ -148,7 +140,7 @@ function renderTree(
               name="description"
               defaultValue={node.description ?? ''}
               placeholder="description"
-              className="min-w-0 max-w-sm"
+              className="max-w-sm min-w-0"
             />
             <Button type="submit" size="sm" variant="outline">
               Save
@@ -238,7 +230,7 @@ export default async function DocumentCategoriesPage() {
                 <Label htmlFor="description">Description</Label>
                 <Textarea id="description" name="description" rows={2} />
               </div>
-              <div className="sm:col-span-2 flex justify-end">
+              <div className="flex justify-end sm:col-span-2">
                 <Button type="submit">Add category</Button>
               </div>
             </form>

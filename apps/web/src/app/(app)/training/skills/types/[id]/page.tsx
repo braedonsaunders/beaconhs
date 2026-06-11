@@ -75,10 +75,7 @@ export default async function SkillTypeDetailPage({
       .select()
       .from(trainingExtraFields)
       .where(
-        and(
-          eq(trainingExtraFields.ownerType, 'skill_type'),
-          eq(trainingExtraFields.ownerId, id),
-        ),
+        and(eq(trainingExtraFields.ownerType, 'skill_type'), eq(trainingExtraFields.ownerId, id)),
       )
       .orderBy(asc(trainingExtraFields.sortOrder), asc(trainingExtraFields.createdAt))
     return { ...row, holders, extras }
@@ -166,26 +163,21 @@ export default async function SkillTypeDetailPage({
                 { label: 'Holders', value: holders.length },
                 {
                   label: 'Expiring (30d)',
-                  value: expiringCount > 0 ? (
-                    <Badge variant="warning">{expiringCount}</Badge>
-                  ) : (
-                    '0'
-                  ),
+                  value: expiringCount > 0 ? <Badge variant="warning">{expiringCount}</Badge> : '0',
                 },
                 {
                   label: 'Expired',
-                  value: expiredCount > 0 ? (
-                    <Badge variant="destructive">{expiredCount}</Badge>
-                  ) : (
-                    '0'
-                  ),
+                  value:
+                    expiredCount > 0 ? <Badge variant="destructive">{expiredCount}</Badge> : '0',
                 },
               ]}
             />
             {type.description ? (
               <div className="mt-4">
-                <div className="text-xs uppercase tracking-wide text-slate-500">Description</div>
-                <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{type.description}</p>
+                <div className="text-xs tracking-wide text-slate-500 uppercase">Description</div>
+                <p className="mt-1 text-sm whitespace-pre-wrap text-slate-700">
+                  {type.description}
+                </p>
               </div>
             ) : null}
           </CardContent>

@@ -64,8 +64,9 @@ export function magicLinkEmail(args: { url: string; appName: string }): {
 // HTML escape — applied to every user-controlled value rendered in template HTML.
 function esc(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return ''
-  return String(value).replace(/[&<>"']/g, (c) =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!),
+  return String(value).replace(
+    /[&<>"']/g,
+    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!,
   )
 }
 

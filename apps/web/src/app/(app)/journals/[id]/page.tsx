@@ -7,11 +7,7 @@ import { JournalWorkspace } from '../_workspace'
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Journal entry' }
 
-export default async function JournalEntryPage({
-  params,
-}: {
-  params: Promise<{ id: string }>
-}) {
+export default async function JournalEntryPage({ params }: { params: Promise<{ id: string }> }) {
   const ctx = await requireRequestContext()
   const { id } = await params
   if (!isUuid(id)) notFound()
@@ -22,7 +18,8 @@ export default async function JournalEntryPage({
     getEntry(ctx, id),
   ])
   const initialEntry =
-    deepEntry ?? (await listEntries(ctx, {}, { limit: 1 }).then((r) => (r[0] ? getEntry(ctx, r[0].id) : null)))
+    deepEntry ??
+    (await listEntries(ctx, {}, { limit: 1 }).then((r) => (r[0] ? getEntry(ctx, r[0].id) : null)))
 
   return (
     <JournalWorkspace initialData={data} initialEntry={initialEntry} initialGroupBy={groupBy} />

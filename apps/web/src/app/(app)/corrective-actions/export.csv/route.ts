@@ -40,16 +40,36 @@ export async function GET(req: NextRequest) {
 
     const orderBy =
       params.sort === 'reference'
-        ? [params.dir === 'asc' ? asc(correctiveActions.reference) : desc(correctiveActions.reference)]
+        ? [
+            params.dir === 'asc'
+              ? asc(correctiveActions.reference)
+              : desc(correctiveActions.reference),
+          ]
         : params.sort === 'title'
           ? [params.dir === 'asc' ? asc(correctiveActions.title) : desc(correctiveActions.title)]
           : params.sort === 'severity'
-            ? [params.dir === 'asc' ? asc(correctiveActions.severity) : desc(correctiveActions.severity)]
+            ? [
+                params.dir === 'asc'
+                  ? asc(correctiveActions.severity)
+                  : desc(correctiveActions.severity),
+              ]
             : params.sort === 'status'
-              ? [params.dir === 'asc' ? asc(correctiveActions.status) : desc(correctiveActions.status)]
+              ? [
+                  params.dir === 'asc'
+                    ? asc(correctiveActions.status)
+                    : desc(correctiveActions.status),
+                ]
               : params.sort === 'assigned_on'
-                ? [params.dir === 'asc' ? asc(correctiveActions.assignedOn) : desc(correctiveActions.assignedOn)]
-                : [params.dir === 'asc' ? asc(correctiveActions.dueOn) : desc(correctiveActions.dueOn)]
+                ? [
+                    params.dir === 'asc'
+                      ? asc(correctiveActions.assignedOn)
+                      : desc(correctiveActions.assignedOn),
+                  ]
+                : [
+                    params.dir === 'asc'
+                      ? asc(correctiveActions.dueOn)
+                      : desc(correctiveActions.dueOn),
+                  ]
 
     return tx
       .select({ ca: correctiveActions, site: orgUnits })
@@ -72,7 +92,17 @@ export async function GET(req: NextRequest) {
 
   return csvResponse({
     filename: csvFilename('corrective-actions'),
-    headers: ['Reference', 'Title', 'Severity', 'Status', 'Assigned on', 'Due on', 'Closed on', 'Site', 'Description'],
+    headers: [
+      'Reference',
+      'Title',
+      'Severity',
+      'Status',
+      'Assigned on',
+      'Due on',
+      'Closed on',
+      'Site',
+      'Description',
+    ],
     rows: rows.map(({ ca, site }) => [
       ca.reference,
       ca.title,

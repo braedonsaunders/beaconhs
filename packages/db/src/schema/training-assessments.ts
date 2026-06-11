@@ -62,10 +62,7 @@ export const trainingAssessmentTypes = pgTable(
   },
   (t) => ({
     tenantIdx: index('training_assessment_types_tenant_idx').on(t.tenantId),
-    tenantActiveIdx: index('training_assessment_types_tenant_active_idx').on(
-      t.tenantId,
-      t.active,
-    ),
+    tenantActiveIdx: index('training_assessment_types_tenant_active_idx').on(t.tenantId, t.active),
     courseIdx: index('training_assessment_types_course_idx').on(t.courseId),
   }),
 )
@@ -161,10 +158,7 @@ export const trainingAssessments = pgTable(
     personIdx: index('training_assessments_person_idx').on(t.tenantId, t.personId),
     typeIdx: index('training_assessments_type_idx').on(t.typeId),
     statusIdx: index('training_assessments_status_idx').on(t.tenantId, t.status),
-    completedIdx: index('training_assessments_completed_idx').on(
-      t.tenantId,
-      t.completedAt,
-    ),
+    completedIdx: index('training_assessments_completed_idx').on(t.tenantId, t.completedAt),
   }),
 )
 
@@ -234,28 +228,25 @@ export const trainingAssessmentTypeQuestionsRelations = relations(
   }),
 )
 
-export const trainingAssessmentsRelations = relations(
-  trainingAssessments,
-  ({ one, many }) => ({
-    tenant: one(tenants, {
-      fields: [trainingAssessments.tenantId],
-      references: [tenants.id],
-    }),
-    type: one(trainingAssessmentTypes, {
-      fields: [trainingAssessments.typeId],
-      references: [trainingAssessmentTypes.id],
-    }),
-    person: one(people, {
-      fields: [trainingAssessments.personId],
-      references: [people.id],
-    }),
-    course: one(trainingCourses, {
-      fields: [trainingAssessments.courseId],
-      references: [trainingCourses.id],
-    }),
-    results: many(trainingAssessmentResults),
+export const trainingAssessmentsRelations = relations(trainingAssessments, ({ one, many }) => ({
+  tenant: one(tenants, {
+    fields: [trainingAssessments.tenantId],
+    references: [tenants.id],
   }),
-)
+  type: one(trainingAssessmentTypes, {
+    fields: [trainingAssessments.typeId],
+    references: [trainingAssessmentTypes.id],
+  }),
+  person: one(people, {
+    fields: [trainingAssessments.personId],
+    references: [people.id],
+  }),
+  course: one(trainingCourses, {
+    fields: [trainingAssessments.courseId],
+    references: [trainingCourses.id],
+  }),
+  results: many(trainingAssessmentResults),
+}))
 
 export const trainingAssessmentResultsRelations = relations(
   trainingAssessmentResults,

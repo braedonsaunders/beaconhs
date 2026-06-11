@@ -48,9 +48,8 @@ async function createType(formData: FormData) {
         .filter(Boolean)
     : null
 
-  const inspectionSchedule = isInspectable && everyDaysRaw
-    ? { everyDays: Number(everyDaysRaw) }
-    : null
+  const inspectionSchedule =
+    isInspectable && everyDaysRaw ? { everyDays: Number(everyDaysRaw) } : null
 
   const typeId = await ctx.db(async (tx) => {
     const [row] = await tx
@@ -117,11 +116,7 @@ export default async function NewPpeTypePage() {
             </div>
             <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="sizingScheme">Sizing scheme</Label>
-              <Input
-                id="sizingScheme"
-                name="sizingScheme"
-                placeholder="S, M, L, XL"
-              />
+              <Input id="sizingScheme" name="sizingScheme" placeholder="S, M, L, XL" />
               <p className="text-xs text-slate-500">
                 Comma-separated list of valid sizes for this type.
               </p>

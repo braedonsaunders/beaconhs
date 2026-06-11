@@ -106,8 +106,18 @@ const jshaSchema: FormSchemaV1 = {
       id: 'sign_off',
       title: { en: 'Sign-off' },
       fields: [
-        { id: 'supervisor_signature', type: 'signature', label: { en: 'Supervisor signature' }, required: true },
-        { id: 'worker_signature', type: 'signature', label: { en: 'Worker signature' }, required: true },
+        {
+          id: 'supervisor_signature',
+          type: 'signature',
+          label: { en: 'Supervisor signature' },
+          required: true,
+        },
+        {
+          id: 'worker_signature',
+          type: 'signature',
+          label: { en: 'Worker signature' },
+          required: true,
+        },
         { id: 'signed_date', type: 'date', label: { en: 'Signed date' }, required: true },
       ],
     },
@@ -137,7 +147,12 @@ const toolboxSchema: FormSchemaV1 = {
       id: 'discussion',
       title: { en: 'Discussion' },
       fields: [
-        { id: 'discussion_notes', type: 'long_text', label: { en: 'Discussion notes' }, required: true },
+        {
+          id: 'discussion_notes',
+          type: 'long_text',
+          label: { en: 'Discussion notes' },
+          required: true,
+        },
         { id: 'questions_raised', type: 'long_text', label: { en: 'Questions raised' } },
         { id: 'action_items', type: 'long_text', label: { en: 'Action items' } },
       ],
@@ -178,17 +193,32 @@ const wahRescueSchema: FormSchemaV1 = {
         { id: 'task_description', type: 'text', label: { en: 'Task description' }, required: true },
         { id: 'site', type: 'site_picker', label: { en: 'Site' }, required: true },
         { id: 'work_date', type: 'date', label: { en: 'Work date' }, required: true },
-        { id: 'height_above_ground_m', type: 'number', label: { en: 'Height above grade (m)' }, required: true },
+        {
+          id: 'height_above_ground_m',
+          type: 'number',
+          label: { en: 'Height above grade (m)' },
+          required: true,
+        },
         { id: 'duration_hours', type: 'number', label: { en: 'Expected duration (hours)' } },
         { id: 'supervisor', type: 'person_picker', label: { en: 'Supervisor' }, required: true },
-        { id: 'workers', type: 'multi_person_picker', label: { en: 'Workers at height' }, required: true },
+        {
+          id: 'workers',
+          type: 'multi_person_picker',
+          label: { en: 'Workers at height' },
+          required: true,
+        },
       ],
     },
     {
       id: 'fall_hazards',
       title: { en: 'Fall hazards' },
       fields: [
-        { id: 'fall_hazards', type: 'long_text', label: { en: 'Fall hazards identified' }, required: true },
+        {
+          id: 'fall_hazards',
+          type: 'long_text',
+          label: { en: 'Fall hazards identified' },
+          required: true,
+        },
         {
           id: 'fall_arrest_method',
           type: 'select',
@@ -204,14 +234,21 @@ const wahRescueSchema: FormSchemaV1 = {
             ],
           },
         },
-        { id: 'anchor_points', type: 'long_text', label: { en: 'Anchor points (location + rating)' }, required: true },
+        {
+          id: 'anchor_points',
+          type: 'long_text',
+          label: { en: 'Anchor points (location + rating)' },
+          required: true,
+        },
         { id: 'controls', type: 'long_text', label: { en: 'Controls in place' }, required: true },
       ],
     },
     {
       id: 'rescue_equipment',
       title: { en: 'Rescue equipment' },
-      description: { en: 'List every piece of equipment available on-site for self-rescue / assisted rescue.' },
+      description: {
+        en: 'List every piece of equipment available on-site for self-rescue / assisted rescue.',
+      },
       repeating: true,
       fields: [
         { id: 'equipment_name', type: 'text', label: { en: 'Equipment' }, required: true },
@@ -223,7 +260,9 @@ const wahRescueSchema: FormSchemaV1 = {
     {
       id: 'rescue_team',
       title: { en: 'Rescue team' },
-      description: { en: 'Who does what when a rescue is required. Every role assigned to a competent person.' },
+      description: {
+        en: 'Who does what when a rescue is required. Every role assigned to a competent person.',
+      },
       repeating: true,
       fields: [
         {
@@ -242,15 +281,30 @@ const wahRescueSchema: FormSchemaV1 = {
           },
         },
         { id: 'assigned_to', type: 'person_picker', label: { en: 'Assigned to' }, required: true },
-        { id: 'training_current', type: 'yes_no_comment', label: { en: 'Training current?' }, required: true },
+        {
+          id: 'training_current',
+          type: 'yes_no_comment',
+          label: { en: 'Training current?' },
+          required: true,
+        },
       ],
     },
     {
       id: 'sign_off',
       title: { en: 'Sign-off' },
       fields: [
-        { id: 'supervisor_signature', type: 'signature', label: { en: 'Supervisor signature' }, required: true },
-        { id: 'worker_signature', type: 'signature', label: { en: 'Worker signature' }, required: true },
+        {
+          id: 'supervisor_signature',
+          type: 'signature',
+          label: { en: 'Supervisor signature' },
+          required: true,
+        },
+        {
+          id: 'worker_signature',
+          type: 'signature',
+          label: { en: 'Worker signature' },
+          required: true,
+        },
         { id: 'signed_date', type: 'date', label: { en: 'Signed date' }, required: true },
       ],
     },

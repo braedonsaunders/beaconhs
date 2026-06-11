@@ -59,8 +59,9 @@ export const equipmentTypes = pgTable(
       onDelete: 'set null',
     }),
     description: text('description'),
-    requiresPreUseInspection: jsonb('requires_pre_use_inspection')
-      .$type<{ templateKey?: string } | null>(),
+    requiresPreUseInspection: jsonb('requires_pre_use_inspection').$type<{
+      templateKey?: string
+    } | null>(),
     inspectionSchedule: jsonb('inspection_schedule').$type<{
       cron?: string
       everyDays?: number

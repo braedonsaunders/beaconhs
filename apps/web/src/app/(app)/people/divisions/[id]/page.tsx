@@ -15,19 +15,11 @@ import {
   Select,
   Textarea,
 } from '@beaconhs/ui'
-import {
-  people,
-  personDivisionMemberships,
-  personDivisions,
-} from '@beaconhs/db/schema'
+import { people, personDivisionMemberships, personDivisions } from '@beaconhs/db/schema'
 import { PageContainer } from '@/components/page-layout'
 import { requireModuleManage } from '@/lib/module-admin/guard'
 import { MemberPicker } from '../../_components/member-picker'
-import {
-  deleteDivision,
-  setDivisionMembership,
-  updateDivision,
-} from '../../_actions/divisions'
+import { deleteDivision, setDivisionMembership, updateDivision } from '../../_actions/divisions'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,24 +28,13 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   return { title: `Division · ${id.slice(0, 8)}` }
 }
 
-export default async function DivisionDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>
-}) {
+export default async function DivisionDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const ctx = await requireModuleManage('people')
   const data = await ctx.db(async (tx) => {
-    const [row] = await tx
-      .select()
-      .from(personDivisions)
-      .where(eq(personDivisions.id, id))
-      .limit(1)
+    const [row] = await tx.select().from(personDivisions).where(eq(personDivisions.id, id)).limit(1)
     if (!row) return null
-    const allDivisions = await tx
-      .select()
-      .from(personDivisions)
-      .orderBy(asc(personDivisions.name))
+    const allDivisions = await tx.select().from(personDivisions).orderBy(asc(personDivisions.name))
     const candidates = await tx
       .select({
         id: people.id,
@@ -69,7 +50,7 @@ export default async function DivisionDetailPage({
       .from(personDivisionMemberships)
       .where(eq(personDivisionMemberships.divisionId, id))
     const parent = row.parentDivisionId
-      ? allDivisions.find((d) => d.id === row.parentDivisionId) ?? null
+      ? (allDivisions.find((d) => d.id === row.parentDivisionId) ?? null)
       : null
     return {
       row,
@@ -188,9 +169,7 @@ export default async function DivisionDetailPage({
                         >
                           <span className="font-medium">{c.name}</span>
                           {c.code ? (
-                            <span className="font-mono text-xs text-slate-500">
-                              {c.code}
-                            </span>
+                            <span className="font-mono text-xs text-slate-500">{c.code}</span>
                           ) : null}
                         </Link>
                       </li>

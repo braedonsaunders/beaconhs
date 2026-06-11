@@ -128,7 +128,11 @@ async function markClassComplete(formData: FormData) {
   }
 
   await ctx.db(async (tx) => {
-    const [cls] = await tx.select().from(trainingClasses).where(eq(trainingClasses.id, classId)).limit(1)
+    const [cls] = await tx
+      .select()
+      .from(trainingClasses)
+      .where(eq(trainingClasses.id, classId))
+      .limit(1)
     if (!cls) return
     const [course] = await tx
       .select()
@@ -243,9 +247,7 @@ export default async function TrainingClassPage({
               jobTitle: people.jobTitle,
             })
             .from(people)
-            .where(
-              and(eq(people.status, 'active'), notInArray(people.id, memberIds)),
-            )
+            .where(and(eq(people.status, 'active'), notInArray(people.id, memberIds)))
             .orderBy(asc(people.lastName), asc(people.firstName))
             .limit(500)
         : await tx
@@ -346,10 +348,7 @@ export default async function TrainingClassPage({
                 ) : (
                   <ul className="divide-y divide-slate-100 text-sm">
                     {attendees.map((row) => (
-                      <li
-                        key={row.att.id}
-                        className="flex items-center justify-between gap-3 py-2"
-                      >
+                      <li key={row.att.id} className="flex items-center justify-between gap-3 py-2">
                         <div className="min-w-0">
                           <Link
                             href={`/people/${row.person.id}`}
@@ -404,8 +403,7 @@ export default async function TrainingClassPage({
                         </option>
                         {availablePeople.map((p) => (
                           <option key={p.id} value={p.id}>
-                            {p.lastName}, {p.firstName}{' '}
-                            {p.jobTitle ? `· ${p.jobTitle}` : ''}
+                            {p.lastName}, {p.firstName} {p.jobTitle ? `· ${p.jobTitle}` : ''}
                           </option>
                         ))}
                       </Select>
@@ -443,10 +441,10 @@ export default async function TrainingClassPage({
                   <div className="overflow-hidden rounded-md border border-slate-200">
                     <table className="w-full text-sm">
                       <thead className="bg-slate-50">
-                        <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
+                        <tr className="text-left text-xs tracking-wide text-slate-500 uppercase">
                           <th className="px-3 py-2">Person</th>
-                          <th className="px-3 py-2 w-24">Grade %</th>
-                          <th className="px-3 py-2 w-20 text-center">Passed</th>
+                          <th className="w-24 px-3 py-2">Grade %</th>
+                          <th className="w-20 px-3 py-2 text-center">Passed</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 bg-white">

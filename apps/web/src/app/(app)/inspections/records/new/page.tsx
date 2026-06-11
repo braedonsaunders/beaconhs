@@ -19,10 +19,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { pickString } from '@/lib/list-params'
 import { PageContainer } from '@/components/page-layout'
-import {
-  materialiseCriteriaForRecord,
-  nextInspectionReference,
-} from '../../_lib'
+import { materialiseCriteriaForRecord, nextInspectionReference } from '../../_lib'
 
 export const metadata = { title: 'New inspection' }
 
@@ -131,8 +128,7 @@ export default async function NewInspectionRecordPage({
   })
 
   const nowLocal = new Date().toISOString().slice(0, 16)
-  const defaultType =
-    types.find((t) => t.id === presetTypeId) ?? types[0] ?? null
+  const defaultType = types.find((t) => t.id === presetTypeId) ?? types[0] ?? null
 
   return (
     <PageContainer>
@@ -169,8 +165,8 @@ export default async function NewInspectionRecordPage({
               {defaultType.requiresCustomerSignature ? (
                 <>
                   <br />
-                  <strong>Customer signature is required</strong> — capture it on the Signature
-                  tab before closing.
+                  <strong>Customer signature is required</strong> — capture it on the Signature tab
+                  before closing.
                 </>
               ) : null}
             </AlertDescription>
@@ -195,12 +191,7 @@ export default async function NewInspectionRecordPage({
                   </Select>
                 </Field>
                 <Field label="Occurred at" required>
-                  <Input
-                    name="occurredAt"
-                    type="datetime-local"
-                    required
-                    defaultValue={nowLocal}
-                  />
+                  <Input name="occurredAt" type="datetime-local" required defaultValue={nowLocal} />
                 </Field>
                 <Field label="Site">
                   <Select name="siteOrgUnitId" defaultValue="">
@@ -223,7 +214,10 @@ export default async function NewInspectionRecordPage({
                   />
                 </Field>
                 {defaultType?.requiresCustomerSignature ? (
-                  <Field label="Customer signer (name to print under signature)" className="sm:col-span-2">
+                  <Field
+                    label="Customer signer (name to print under signature)"
+                    className="sm:col-span-2"
+                  >
                     <Input name="customerSignerName" placeholder="Customer rep on site" />
                   </Field>
                 ) : null}

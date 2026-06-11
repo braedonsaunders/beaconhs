@@ -149,9 +149,7 @@ export async function sendFormResponseRecapEmail(
   if (to.length === 0) return 0
 
   const { row, parts, schema, siteName } = data
-  const date = row.response.submittedAt
-    ? row.response.submittedAt.toISOString().slice(0, 10)
-    : ''
+  const date = row.response.submittedAt ? row.response.submittedAt.toISOString().slice(0, 10) : ''
   const subject = `${row.templateName}${date ? ` · ${date}` : ''}`
   const signedCount = parts.filter((p) => p.signed).length
 

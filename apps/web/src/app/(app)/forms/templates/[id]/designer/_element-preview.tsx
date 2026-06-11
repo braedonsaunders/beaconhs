@@ -18,11 +18,17 @@ function optionLabels(field: FormField): string[] {
     (cfg(field).options as { value: string; label: unknown }[] | undefined) ??
     []
   return opts.map((o) =>
-    typeof o.label === 'string' ? o.label : (o.label as { en?: string })?.en ?? o.value,
+    typeof o.label === 'string' ? o.label : ((o.label as { en?: string })?.en ?? o.value),
   )
 }
 
-export function ElementPreview({ field, compact = false }: { field: FormField; compact?: boolean }) {
+export function ElementPreview({
+  field,
+  compact = false,
+}: {
+  field: FormField
+  compact?: boolean
+}) {
   const label = field.label?.en ?? field.id
   const t = field.type
 
@@ -49,7 +55,9 @@ export function ElementPreview({ field, compact = false }: { field: FormField; c
         {field.required ? <span className="text-rose-500"> *</span> : null}
       </div>
       <ElementInput field={field} compact={compact} />
-      {field.helpText?.en ? <p className="text-[10px] text-slate-400">{field.helpText.en}</p> : null}
+      {field.helpText?.en ? (
+        <p className="text-[10px] text-slate-400">{field.helpText.en}</p>
+      ) : null}
     </div>
   )
 }
@@ -115,7 +123,10 @@ function ElementInput({ field, compact }: { field: FormField; compact?: boolean 
       return (
         <div className="flex gap-2">
           {['Yes', 'No'].map((v) => (
-            <span key={v} className="rounded-md border border-slate-200 px-3 py-1 text-xs text-slate-500">
+            <span
+              key={v}
+              className="rounded-md border border-slate-200 px-3 py-1 text-xs text-slate-500"
+            >
               {v}
             </span>
           ))}
@@ -125,7 +136,10 @@ function ElementInput({ field, compact }: { field: FormField; compact?: boolean 
       return (
         <div className="flex gap-1">
           {['PASS', 'FAIL', 'N/A'].map((v) => (
-            <span key={v} className="rounded border border-slate-200 px-2 py-1 text-[10px] text-slate-500">
+            <span
+              key={v}
+              className="rounded border border-slate-200 px-2 py-1 text-[10px] text-slate-500"
+            >
               {v}
             </span>
           ))}
@@ -149,7 +163,7 @@ function ElementInput({ field, compact }: { field: FormField; compact?: boolean 
       )
     case 'signature':
       return (
-        <div className="flex h-16 items-center justify-center rounded border border-dashed border-slate-300 bg-slate-50 text-xs italic text-slate-400">
+        <div className="flex h-16 items-center justify-center rounded border border-dashed border-slate-300 bg-slate-50 text-xs text-slate-400 italic">
           sign here
         </div>
       )
@@ -253,7 +267,13 @@ function ElementInput({ field, compact }: { field: FormField; compact?: boolean 
           {Array.from({ length: 25 }).map((_, i) => {
             const sev = (i % 5) + Math.floor(i / 5)
             const tone =
-              sev >= 6 ? 'bg-red-400' : sev >= 4 ? 'bg-amber-300' : sev >= 2 ? 'bg-yellow-200' : 'bg-emerald-200'
+              sev >= 6
+                ? 'bg-red-400'
+                : sev >= 4
+                  ? 'bg-amber-300'
+                  : sev >= 2
+                    ? 'bg-yellow-200'
+                    : 'bg-emerald-200'
             return <span key={i} className={`h-3.5 w-3.5 rounded-sm ${tone}`} />
           })}
         </div>
@@ -263,10 +283,10 @@ function ElementInput({ field, compact }: { field: FormField; compact?: boolean 
         <div className="space-y-1">
           <div className="relative flex h-24 items-center justify-center rounded border border-dashed border-slate-300 bg-slate-50 text-xs text-slate-400">
             + photo
-            <span className="absolute left-1/3 top-1/3 flex h-5 w-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-rose-600 text-[10px] font-bold text-white ring-2 ring-white">
+            <span className="absolute top-1/3 left-1/3 flex h-5 w-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-rose-600 text-[10px] font-bold text-white ring-2 ring-white">
               1
             </span>
-            <span className="absolute left-2/3 top-1/2 flex h-5 w-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-rose-600 text-[10px] font-bold text-white ring-2 ring-white">
+            <span className="absolute top-1/2 left-2/3 flex h-5 w-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-rose-600 text-[10px] font-bold text-white ring-2 ring-white">
               2
             </span>
           </div>
@@ -381,7 +401,8 @@ function ElementInput({ field, compact }: { field: FormField; compact?: boolean 
     }
     case 'metric': {
       const agg = field.binding?.aggregate
-      const grouped = !!agg?.groupBy || (!!field.binding?.display && field.binding.display !== 'number')
+      const grouped =
+        !!agg?.groupBy || (!!field.binding?.display && field.binding.display !== 'number')
       if (grouped) {
         return (
           <div className="flex h-14 items-end gap-1">
@@ -395,8 +416,8 @@ function ElementInput({ field, compact }: { field: FormField; compact?: boolean 
         <div className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
           <BarChart3 size={18} className="text-teal-500" />
           <div>
-            <div className="text-2xl font-semibold leading-none text-slate-800">—</div>
-            <div className="mt-0.5 text-[10px] uppercase tracking-wide text-slate-400">
+            <div className="text-2xl leading-none font-semibold text-slate-800">—</div>
+            <div className="mt-0.5 text-[10px] tracking-wide text-slate-400 uppercase">
               {agg?.fn ?? 'count'}
               {agg?.column ? ` · ${agg.column}` : ''}
             </div>
@@ -434,7 +455,10 @@ function MiniTable({ field }: { field: FormField }) {
       {[0, 1].map((r) => (
         <div key={r} className="flex border-t border-slate-100">
           {shown.map((c) => (
-            <div key={c.key} className="flex-1 border-r border-slate-100 px-1.5 py-1 text-slate-300 last:border-0">
+            <div
+              key={c.key}
+              className="flex-1 border-r border-slate-100 px-1.5 py-1 text-slate-300 last:border-0"
+            >
               —
             </div>
           ))}

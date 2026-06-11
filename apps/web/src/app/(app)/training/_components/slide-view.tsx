@@ -63,11 +63,13 @@ export function SlideView({
 
       {slide.layout === 'title' ? (
         <div className="flex h-full flex-col items-center justify-center gap-3 px-[8%] text-center">
-          <h1 className="text-[clamp(1.4rem,4.5cqw,3rem)] font-bold leading-tight">
+          <h1 className="text-[clamp(1.4rem,4.5cqw,3rem)] leading-tight font-bold">
             {slide.title || 'Title slide'}
           </h1>
           {slide.subtitle ? (
-            <p className={`text-[clamp(0.85rem,2.2cqw,1.4rem)] ${isDark ? 'text-white/70' : 'text-slate-500'}`}>
+            <p
+              className={`text-[clamp(0.85rem,2.2cqw,1.4rem)] ${isDark ? 'text-white/70' : 'text-slate-500'}`}
+            >
               {slide.subtitle}
             </p>
           ) : null}
@@ -76,7 +78,7 @@ export function SlideView({
 
       {slide.layout === 'title-content' ? (
         <div className="flex h-full flex-col gap-4 px-[7%] py-[6%]">
-          <h2 className="shrink-0 text-[clamp(1.1rem,3cqw,2rem)] font-bold leading-tight">
+          <h2 className="shrink-0 text-[clamp(1.1rem,3cqw,2rem)] leading-tight font-bold">
             {slide.title || 'Slide title'}
           </h2>
           <div className={`min-h-0 flex-1 overflow-hidden ${regionCls}`}>
@@ -88,7 +90,7 @@ export function SlideView({
       {slide.layout === 'two-col' ? (
         <div className="flex h-full flex-col gap-4 px-[7%] py-[6%]">
           {slide.title ? (
-            <h2 className="shrink-0 text-[clamp(1.1rem,3cqw,2rem)] font-bold leading-tight">
+            <h2 className="shrink-0 text-[clamp(1.1rem,3cqw,2rem)] leading-tight font-bold">
               {slide.title}
             </h2>
           ) : null}
@@ -113,7 +115,7 @@ export function SlideView({
           </div>
           <div className="flex h-full flex-col gap-3 overflow-hidden px-[8%] py-[8%]">
             {slide.title ? (
-              <h2 className="shrink-0 text-[clamp(1rem,2.6cqw,1.7rem)] font-bold leading-tight">
+              <h2 className="shrink-0 text-[clamp(1rem,2.6cqw,1.7rem)] leading-tight font-bold">
                 {slide.title}
               </h2>
             ) : null}
@@ -135,12 +137,14 @@ export function SlideView({
             </div>
           )}
           {slide.title ? (
-            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-[7%] pb-[5%] pt-[10%]">
-              <h2 className="text-[clamp(1rem,3cqw,2rem)] font-bold leading-tight text-white">
+            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-[7%] pt-[10%] pb-[5%]">
+              <h2 className="text-[clamp(1rem,3cqw,2rem)] leading-tight font-bold text-white">
                 {slide.title}
               </h2>
               {slide.subtitle ? (
-                <p className="text-[clamp(0.75rem,1.8cqw,1.1rem)] text-white/80">{slide.subtitle}</p>
+                <p className="text-[clamp(0.75rem,1.8cqw,1.1rem)] text-white/80">
+                  {slide.subtitle}
+                </p>
               ) : null}
             </div>
           ) : null}
@@ -175,7 +179,7 @@ export function SlideThumb({
         )
       ) : (
         <div className="flex h-full flex-col justify-center gap-0.5 px-2">
-          <span className="truncate text-[8px] font-bold leading-tight">
+          <span className="truncate text-[8px] leading-tight font-bold">
             {slide.title || (slide.layout === 'title' ? 'Title' : 'Slide')}
           </span>
           <span className="block h-0.5 w-2/3 rounded bg-current opacity-20" />

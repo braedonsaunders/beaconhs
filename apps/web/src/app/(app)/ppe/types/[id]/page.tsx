@@ -30,11 +30,7 @@ import {
   TableRow,
   Textarea,
 } from '@beaconhs/ui'
-import {
-  ppeItems,
-  ppeTypeInspectionCriteria,
-  ppeTypes,
-} from '@beaconhs/db/schema'
+import { ppeItems, ppeTypeInspectionCriteria, ppeTypes } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule, requireModuleManage } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
@@ -62,9 +58,7 @@ async function addCriterion(formData: FormData) {
   const ppeTypeId = String(formData.get('ppeTypeId') ?? '').trim()
   const question = String(formData.get('question') ?? '').trim()
   const description = String(formData.get('description') ?? '').trim() || null
-  const inspectionKind = String(formData.get('inspectionKind') ?? 'pre_use') as
-    | 'pre_use'
-    | 'annual'
+  const inspectionKind = String(formData.get('inspectionKind') ?? 'pre_use') as 'pre_use' | 'annual'
   const severity = String(formData.get('severity') ?? 'medium') as
     | 'low'
     | 'medium'
@@ -188,8 +182,7 @@ async function moveCriterion(formData: FormData) {
       .orderBy(asc(ppeTypeInspectionCriteria.entityOrder))
     const idx = peers.findIndex((p) => p.id === id)
     if (idx < 0) return
-    const swapWith =
-      direction === 'up' ? peers[idx - 1] : peers[idx + 1]
+    const swapWith = direction === 'up' ? peers[idx - 1] : peers[idx + 1]
     if (!swapWith) return
     const oldOrder = target.entityOrder
     await tx
@@ -248,11 +241,7 @@ export default async function PpeTypeDetailPage({
   const ctx = await requireModuleManage('ppe')
 
   const data = await ctx.db(async (tx) => {
-    const [t] = await tx
-      .select()
-      .from(ppeTypes)
-      .where(eq(ppeTypes.id, id))
-      .limit(1)
+    const [t] = await tx.select().from(ppeTypes).where(eq(ppeTypes.id, id)).limit(1)
     if (!t) return null
     const criteria = await tx
       .select()
@@ -288,7 +277,9 @@ export default async function PpeTypeDetailPage({
               ) : (
                 <Badge variant="secondary">Not inspectable</Badge>
               )}
-              <Badge variant="secondary">{itemCount} item{itemCount === 1 ? '' : 's'}</Badge>
+              <Badge variant="secondary">
+                {itemCount} item{itemCount === 1 ? '' : 's'}
+              </Badge>
             </div>
           }
           actions={
@@ -400,7 +391,11 @@ export default async function PpeTypeDetailPage({
                 </div>
                 <div className="space-y-1.5 sm:col-span-3">
                   <Label>Description</Label>
-                  <Textarea name="description" rows={2} placeholder="Optional guidance shown to the inspector." />
+                  <Textarea
+                    name="description"
+                    rows={2}
+                    placeholder="Optional guidance shown to the inspector."
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label>Kind</Label>
@@ -429,7 +424,7 @@ export default async function PpeTypeDetailPage({
                     Requires photo
                   </Label>
                 </div>
-                <div className="sm:col-span-3 flex justify-end">
+                <div className="flex justify-end sm:col-span-3">
                   <Button type="submit">
                     <Plus size={14} /> Add criterion
                   </Button>
@@ -462,8 +457,8 @@ export default async function PpeTypeDetailPage({
               </div>
             </form>
             <p className="mt-3 text-xs text-slate-500">
-              The sizing scheme is used by the New PPE item form as a dropdown so size
-              entries stay consistent. Leaving it blank lets users free-type a size.
+              The sizing scheme is used by the New PPE item form as a dropdown so size entries stay
+              consistent. Leaving it blank lets users free-type a size.
             </p>
           </Section>
         ) : null}
@@ -524,7 +519,10 @@ function CriteriaTable({
                   <summary className="cursor-pointer text-sm font-medium text-slate-900">
                     {r.question}
                   </summary>
-                  <form action={updateCriterion} className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-4">
+                  <form
+                    action={updateCriterion}
+                    className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-4"
+                  >
                     <input type="hidden" name="id" value={r.id} />
                     <input type="hidden" name="ppeTypeId" value={ppeTypeId} />
                     <div className="space-y-1 sm:col-span-4">
@@ -533,11 +531,7 @@ function CriteriaTable({
                     </div>
                     <div className="space-y-1 sm:col-span-4">
                       <Label className="text-xs">Description</Label>
-                      <Textarea
-                        name="description"
-                        rows={2}
-                        defaultValue={r.description ?? ''}
-                      />
+                      <Textarea name="description" rows={2} defaultValue={r.description ?? ''} />
                     </div>
                     <div className="space-y-1 sm:col-span-2">
                       <Label className="text-xs">Severity</Label>
@@ -560,7 +554,7 @@ function CriteriaTable({
                         <Camera size={12} className="inline" /> Requires photo
                       </Label>
                     </div>
-                    <div className="sm:col-span-4 flex justify-end">
+                    <div className="flex justify-end sm:col-span-4">
                       <Button type="submit" size="sm">
                         Save
                       </Button>

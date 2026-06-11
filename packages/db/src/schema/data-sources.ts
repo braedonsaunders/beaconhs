@@ -14,7 +14,16 @@
 // is RLS-bound; the browser only ever authors bindings — it never queries
 // directly across tenants.
 
-import { index, integer, jsonb, pgEnum, pgTable, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
+import {
+  index,
+  integer,
+  jsonb,
+  pgEnum,
+  pgTable,
+  text,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 import { id, timestamps, softDelete } from './_helpers'
 import { tenants, tenantUsers } from './core'

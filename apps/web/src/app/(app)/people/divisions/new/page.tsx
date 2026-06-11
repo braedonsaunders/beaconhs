@@ -44,12 +44,7 @@ export default async function NewDivisionPage({
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5 sm:col-span-2">
                   <Label htmlFor="name">Name *</Label>
-                  <Input
-                    id="name"
-                    name="name"
-                    required
-                    placeholder="e.g. Mechanical"
-                  />
+                  <Input id="name" name="name" required placeholder="e.g. Mechanical" />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="code">Short code</Label>

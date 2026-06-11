@@ -41,11 +41,7 @@ import { ActivityFeed } from '@/components/activity-feed'
 import { DetailGrid } from '@/components/detail-grid'
 import { DetailPageLayout } from '@/components/page-layout'
 import { Section } from '@/components/section'
-import {
-  deleteSignedReport,
-  resendSignedReportEmail,
-  retrySignedReport,
-} from '../../../_actions'
+import { deleteSignedReport, resendSignedReportEmail, retrySignedReport } from '../../../_actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -110,8 +106,7 @@ export default async function SignedReportDetailPage({
   const r = reportRow.report
   const activity = await recentActivityForEntity(ctx, 'hazid_signed_report', id, 50)
 
-  const builderName =
-    reportRow.builderUser?.name ?? reportRow.builderMember?.displayName ?? null
+  const builderName = reportRow.builderUser?.name ?? reportRow.builderMember?.displayName ?? null
 
   const statusVariant = statusBadgeVariant(r.status)
   const isCompleted = r.status === 'completed' || r.status === 'ready'
@@ -125,8 +120,7 @@ export default async function SignedReportDetailPage({
     <DetailPageLayout
       header={
         <>
-          <div className="mb-2">
-          </div>
+          <div className="mb-2"></div>
           <DetailHeader
             back={{ href: '/hazid/reports/signed', label: 'Back to signed-report bundles' }}
             title={r.title}
@@ -175,8 +169,8 @@ export default async function SignedReportDetailPage({
             <Alert variant="info">
               <AlertTitle>Waiting for render</AlertTitle>
               <AlertDescription>
-                This bundle is queued for rendering. If it stays pending for more than a minute,
-                the worker may be down — try re-enqueueing.
+                This bundle is queued for rendering. If it stays pending for more than a minute, the
+                worker may be down — try re-enqueueing.
               </AlertDescription>
             </Alert>
           ) : null}
@@ -184,7 +178,9 @@ export default async function SignedReportDetailPage({
             <Alert variant="destructive">
               <AlertTitle>Render failed</AlertTitle>
               <AlertDescription>
-                {r.errorMessage ? r.errorMessage : 'Worker reported an error — check the audit log.'}
+                {r.errorMessage
+                  ? r.errorMessage
+                  : 'Worker reported an error — check the audit log.'}
               </AlertDescription>
             </Alert>
           ) : null}
@@ -207,7 +203,12 @@ export default async function SignedReportDetailPage({
                 label: 'Completed at',
                 value: r.completedAt ? new Date(r.completedAt).toLocaleString() : '—',
               },
-              { label: 'PDF size', value: reportRow.pdfAttachment ? `${formatBytes(reportRow.pdfAttachment.sizeBytes)}` : '—' },
+              {
+                label: 'PDF size',
+                value: reportRow.pdfAttachment
+                  ? `${formatBytes(reportRow.pdfAttachment.sizeBytes)}`
+                  : '—',
+              },
               {
                 label: 'Recipients on file',
                 value: r.recipientEmails.length > 0 ? r.recipientEmails.join(', ') : '—',
@@ -289,10 +290,12 @@ export default async function SignedReportDetailPage({
         <Section title="Email distribution" defaultOpen>
           <div className="space-y-3">
             <div className="rounded-md border border-slate-200 bg-white p-4">
-              <div className="text-xs uppercase tracking-wide text-slate-500">Recipients on file</div>
+              <div className="text-xs tracking-wide text-slate-500 uppercase">
+                Recipients on file
+              </div>
               <div className="mt-1 text-sm">
                 {r.recipientEmails.length === 0 ? (
-                  <span className="italic text-slate-500">
+                  <span className="text-slate-500 italic">
                     No recipients were captured when this bundle was built.
                   </span>
                 ) : (
@@ -312,7 +315,7 @@ export default async function SignedReportDetailPage({
 
             <form
               action={resendSignedReportEmail}
-              className="rounded-md border border-slate-200 bg-white p-4 space-y-3"
+              className="space-y-3 rounded-md border border-slate-200 bg-white p-4"
             >
               <input type="hidden" name="id" value={id} />
               <div className="space-y-1.5">
@@ -356,9 +359,7 @@ export default async function SignedReportDetailPage({
 
 // Shared badge variant map for the wave-7 + legacy status strings so the
 // detail header matches the listing row.
-function statusBadgeVariant(
-  status: string,
-): 'success' | 'secondary' | 'warning' | 'destructive' {
+function statusBadgeVariant(status: string): 'success' | 'secondary' | 'warning' | 'destructive' {
   switch (status) {
     case 'completed':
     case 'ready':

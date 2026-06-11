@@ -69,11 +69,7 @@ export function OverviewEditor({
           </div>
           <div className="space-y-1.5">
             <Label>Period end</Label>
-            <Input
-              type="date"
-              value={periodEnd}
-              onChange={(e) => setPeriodEnd(e.target.value)}
-            />
+            <Input type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} />
           </div>
           <div className="space-y-1.5">
             <Label>Next review on</Label>
@@ -85,11 +81,7 @@ export function OverviewEditor({
           </div>
         </div>
 
-        <ParticipantsEditor
-          members={members}
-          value={participants}
-          onChange={setParticipants}
-        />
+        <ParticipantsEditor members={members} value={participants} onChange={setParticipants} />
 
         <div className="space-y-1.5">
           <Label>Discussion notes</Label>
@@ -101,11 +93,7 @@ export function OverviewEditor({
         </div>
         <div className="space-y-1.5">
           <Label>Decisions / outcomes</Label>
-          <Textarea
-            rows={4}
-            value={decisions}
-            onChange={(e) => setDecisions(e.target.value)}
-          />
+          <Textarea rows={4} value={decisions} onChange={(e) => setDecisions(e.target.value)} />
         </div>
 
         <div className="flex justify-end">

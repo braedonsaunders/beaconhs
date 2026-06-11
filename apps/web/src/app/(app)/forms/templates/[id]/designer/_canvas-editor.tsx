@@ -25,7 +25,12 @@ import 'react-grid-layout/css/styles.css'
 // turns "push neighbour away" into "snap back", fixing both.
 const FREE_COMPACTOR = { ...noCompactor, preventCollision: true }
 import { GripVertical, Trash2 } from 'lucide-react'
-import { FIELD_TYPES, type CanvasItem, type FieldType, type FormSection } from '@beaconhs/forms-core'
+import {
+  FIELD_TYPES,
+  type CanvasItem,
+  type FieldType,
+  type FormSection,
+} from '@beaconhs/forms-core'
 import { ElementPreview } from './_element-preview'
 
 // Curated widget palette with sensible default boxes (in grid units, 12 cols).
@@ -140,63 +145,65 @@ export function CanvasEditor({
             if (t && item) onAddWidget(t, { x: item.x, y: item.y, ...defaultBox(t) })
             dragTypeRef.current = null
           }}
-            onLayoutChange={(l) => {
-              const next = fromLayout(l)
-              if (!sameItems(items, next)) onLayout(next)
-            }}
-          >
-            {items.map((it) => {
-              const f = fieldById.get(it.i)!
-              const sel = f.id === selectedFieldId
-              return (
-                <div
-                  key={it.i}
-                  onPointerDown={(e) => {
-                    pressRef.current = { x: e.clientX, y: e.clientY }
-                  }}
-                  onClick={(e) => {
-                    const d = pressRef.current
-                    pressRef.current = null
-                    // The click that ends a drag/resize lands far from the press —
-                    // only a near-stationary click selects, so moving an element no
-                    // longer opens the properties panel.
-                    if (d && Math.hypot(e.clientX - d.x, e.clientY - d.y) > 5) return
-                    onSelect(f.id)
-                  }}
-                  title={FIELD_TYPES[f.type]?.label ?? f.type}
-                  className={`group relative flex h-full cursor-pointer flex-col overflow-hidden rounded-lg border bg-white shadow-sm transition ${
-                    sel ? 'border-teal-500 ring-1 ring-teal-500' : 'border-slate-200 hover:border-slate-300 hover:shadow'
-                  }`}
-                >
-                  {/* Hover toolbar: drag handle + remove. The card body is a live
+          onLayoutChange={(l) => {
+            const next = fromLayout(l)
+            if (!sameItems(items, next)) onLayout(next)
+          }}
+        >
+          {items.map((it) => {
+            const f = fieldById.get(it.i)!
+            const sel = f.id === selectedFieldId
+            return (
+              <div
+                key={it.i}
+                onPointerDown={(e) => {
+                  pressRef.current = { x: e.clientX, y: e.clientY }
+                }}
+                onClick={(e) => {
+                  const d = pressRef.current
+                  pressRef.current = null
+                  // The click that ends a drag/resize lands far from the press —
+                  // only a near-stationary click selects, so moving an element no
+                  // longer opens the properties panel.
+                  if (d && Math.hypot(e.clientX - d.x, e.clientY - d.y) > 5) return
+                  onSelect(f.id)
+                }}
+                title={FIELD_TYPES[f.type]?.label ?? f.type}
+                className={`group relative flex h-full cursor-pointer flex-col overflow-hidden rounded-lg border bg-white shadow-sm transition ${
+                  sel
+                    ? 'border-teal-500 ring-1 ring-teal-500'
+                    : 'border-slate-200 hover:border-slate-300 hover:shadow'
+                }`}
+              >
+                {/* Hover toolbar: drag handle + remove. The card body is a live
                       preview of the element as it ships. */}
-                  <div className="absolute right-1 top-1 z-10 flex items-center gap-0.5 opacity-0 transition group-hover:opacity-100">
-                    <span
-                      className="cv-drag flex h-5 w-5 cursor-grab items-center justify-center rounded bg-white/90 text-slate-400 shadow-sm ring-1 ring-slate-200 hover:text-slate-600 active:cursor-grabbing"
-                      title="Drag to move"
-                    >
-                      <GripVertical size={11} />
-                    </span>
-                    <button
-                      type="button"
-                      title="Remove element"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onDelete(f.id)
-                      }}
-                      className="flex h-5 w-5 items-center justify-center rounded bg-white/90 text-slate-400 shadow-sm ring-1 ring-slate-200 hover:text-rose-500"
-                    >
-                      <Trash2 size={11} />
-                    </button>
-                  </div>
-                  <div className="app-scroll min-h-0 flex-1 overflow-auto p-2.5">
-                    <ElementPreview field={f} compact />
-                  </div>
+                <div className="absolute top-1 right-1 z-10 flex items-center gap-0.5 opacity-0 transition group-hover:opacity-100">
+                  <span
+                    className="cv-drag flex h-5 w-5 cursor-grab items-center justify-center rounded bg-white/90 text-slate-400 shadow-sm ring-1 ring-slate-200 hover:text-slate-600 active:cursor-grabbing"
+                    title="Drag to move"
+                  >
+                    <GripVertical size={11} />
+                  </span>
+                  <button
+                    type="button"
+                    title="Remove element"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onDelete(f.id)
+                    }}
+                    className="flex h-5 w-5 items-center justify-center rounded bg-white/90 text-slate-400 shadow-sm ring-1 ring-slate-200 hover:text-rose-500"
+                  >
+                    <Trash2 size={11} />
+                  </button>
                 </div>
-              )
-            })}
-          </GridLayout>
-        ) : null}
+                <div className="app-scroll min-h-0 flex-1 overflow-auto p-2.5">
+                  <ElementPreview field={f} compact />
+                </div>
+              </div>
+            )
+          })}
+        </GridLayout>
+      ) : null}
     </div>
   )
 }

@@ -8,16 +8,7 @@
 // (fuel, repairs, insurance, registration, …) tied to a specific asset.
 
 import { relations } from 'drizzle-orm'
-import {
-  date,
-  index,
-  jsonb,
-  numeric,
-  pgTable,
-  text,
-  uniqueIndex,
-  uuid,
-} from 'drizzle-orm/pg-core'
+import { date, index, jsonb, numeric, pgTable, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
 import { id, timestamps } from './_helpers'
 import { attachments } from './attachments'
 import { tenants, tenantUsers } from './core'

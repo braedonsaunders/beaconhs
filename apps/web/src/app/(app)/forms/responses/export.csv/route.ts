@@ -37,7 +37,11 @@ export async function GET(req: NextRequest) {
         ? [params.dir === 'asc' ? asc(formResponses.status) : desc(formResponses.status)]
         : params.sort === 'created_at'
           ? [params.dir === 'asc' ? asc(formResponses.createdAt) : desc(formResponses.createdAt)]
-          : [params.dir === 'asc' ? asc(formResponses.submittedAt) : desc(formResponses.submittedAt)]
+          : [
+              params.dir === 'asc'
+                ? asc(formResponses.submittedAt)
+                : desc(formResponses.submittedAt),
+            ]
 
     return tx
       .select({ response: formResponses, template: formTemplates, site: orgUnits })

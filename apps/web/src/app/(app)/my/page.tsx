@@ -77,10 +77,7 @@ export default async function MyLandingPage() {
           .select({ c: count() })
           .from(incidents)
           .where(
-            and(
-              eq(incidents.reportedByTenantUserId, membershipId),
-              isNull(incidents.deletedAt),
-            ),
+            and(eq(incidents.reportedByTenantUserId, membershipId), isNull(incidents.deletedAt)),
           )
           .then((r) => Number(r[0]?.c ?? 0))
       : Promise.resolve(0)
@@ -126,9 +123,7 @@ export default async function MyLandingPage() {
       ? tx
           .select({ c: count() })
           .from(trainingRecords)
-          .where(
-            and(eq(trainingRecords.personId, personId), isNull(trainingRecords.deletedAt)),
-          )
+          .where(and(eq(trainingRecords.personId, personId), isNull(trainingRecords.deletedAt)))
           .then((r) => Number(r[0]?.c ?? 0))
       : Promise.resolve(0)
 
@@ -177,7 +172,6 @@ export default async function MyLandingPage() {
           )
           .then((r) => Number(r[0]?.c ?? 0))
       : Promise.resolve(0)
-
 
     // ---- documents acknowledged / outstanding ----------------------------
     // We surface "outstanding documents" rather than total — this is what
@@ -257,10 +251,7 @@ export default async function MyLandingPage() {
       label: 'My acknowledgments',
       description: 'Documents you have read & signed.',
       icon: CheckCircle2,
-      hint:
-        counts.docsOutstanding > 0
-          ? `${counts.docsOutstanding} outstanding`
-          : 'All caught up',
+      hint: counts.docsOutstanding > 0 ? `${counts.docsOutstanding} outstanding` : 'All caught up',
       accent: counts.docsOutstanding > 0 ? 'amber' : 'teal',
     },
   ]
@@ -312,7 +303,7 @@ export default async function MyLandingPage() {
                 <CardContent className="pt-1">
                   <div className="flex items-baseline gap-2">
                     {typeof tile.count === 'number' ? (
-                      <span className="text-2xl font-semibold tabular-nums text-slate-900">
+                      <span className="text-2xl font-semibold text-slate-900 tabular-nums">
                         {tile.count}
                       </span>
                     ) : null}
@@ -360,4 +351,3 @@ export default async function MyLandingPage() {
     </PageContainer>
   )
 }
-

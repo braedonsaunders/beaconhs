@@ -164,10 +164,7 @@ export const hazidAssessmentTasks = pgTable(
     ...timestamps,
   },
   (t) => ({
-    assessmentIdx: index('hazid_assessment_tasks_assessment_idx').on(
-      t.assessmentId,
-      t.entityOrder,
-    ),
+    assessmentIdx: index('hazid_assessment_tasks_assessment_idx').on(t.assessmentId, t.entityOrder),
     tenantIdx: index('hazid_assessment_tasks_tenant_idx').on(t.tenantId),
   }),
 )
@@ -545,19 +542,16 @@ export const hazidAssessmentPPERelations = relations(hazidAssessmentPPE, ({ one 
   }),
 }))
 
-export const hazidAssessmentQuestionsRelations = relations(
-  hazidAssessmentQuestions,
-  ({ one }) => ({
-    tenant: one(tenants, {
-      fields: [hazidAssessmentQuestions.tenantId],
-      references: [tenants.id],
-    }),
-    assessment: one(hazidAssessments, {
-      fields: [hazidAssessmentQuestions.assessmentId],
-      references: [hazidAssessments.id],
-    }),
+export const hazidAssessmentQuestionsRelations = relations(hazidAssessmentQuestions, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [hazidAssessmentQuestions.tenantId],
+    references: [tenants.id],
   }),
-)
+  assessment: one(hazidAssessments, {
+    fields: [hazidAssessmentQuestions.assessmentId],
+    references: [hazidAssessments.id],
+  }),
+}))
 
 export const hazidAssessmentPhotosRelations = relations(hazidAssessmentPhotos, ({ one }) => ({
   tenant: one(tenants, { fields: [hazidAssessmentPhotos.tenantId], references: [tenants.id] }),
@@ -589,23 +583,20 @@ export const hazidAssessmentCSAtmosphericRelations = relations(
   }),
 )
 
-export const hazidAssessmentCSEntriesRelations = relations(
-  hazidAssessmentCSEntries,
-  ({ one }) => ({
-    tenant: one(tenants, {
-      fields: [hazidAssessmentCSEntries.tenantId],
-      references: [tenants.id],
-    }),
-    assessment: one(hazidAssessments, {
-      fields: [hazidAssessmentCSEntries.assessmentId],
-      references: [hazidAssessments.id],
-    }),
-    person: one(people, {
-      fields: [hazidAssessmentCSEntries.personId],
-      references: [people.id],
-    }),
+export const hazidAssessmentCSEntriesRelations = relations(hazidAssessmentCSEntries, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [hazidAssessmentCSEntries.tenantId],
+    references: [tenants.id],
   }),
-)
+  assessment: one(hazidAssessments, {
+    fields: [hazidAssessmentCSEntries.assessmentId],
+    references: [hazidAssessments.id],
+  }),
+  person: one(people, {
+    fields: [hazidAssessmentCSEntries.personId],
+    references: [people.id],
+  }),
+}))
 
 export const hazidSignedReportsRelations = relations(hazidSignedReports, ({ one }) => ({
   tenant: one(tenants, { fields: [hazidSignedReports.tenantId], references: [tenants.id] }),

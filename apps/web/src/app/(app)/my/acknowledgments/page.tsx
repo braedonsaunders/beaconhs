@@ -26,12 +26,7 @@ import {
   TableHeader,
   TableRow,
 } from '@beaconhs/ui'
-import {
-  documentAcknowledgments,
-  documentVersions,
-  documents,
-  people,
-} from '@beaconhs/db/schema'
+import { documentAcknowledgments, documentVersions, documents, people } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { ListPageLayout } from '@/components/page-layout'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
@@ -132,10 +127,7 @@ export default async function MyAcknowledgmentsPage({
       .where(sql`${documentVersions.documentId} = ANY(${docIds})`)
       .orderBy(desc(documentVersions.version))
 
-    const latestByDoc = new Map<
-      string,
-      { id: string; version: number; publishedAt: Date | null }
-    >()
+    const latestByDoc = new Map<string, { id: string; version: number; publishedAt: Date | null }>()
     for (const v of versions) {
       const cur = latestByDoc.get(v.documentId)
       if (!cur) {
@@ -202,10 +194,7 @@ export default async function MyAcknowledgmentsPage({
     return (
       <ListPageLayout
         header={
-          <PageHeader
-            title="My acknowledgments"
-            description="Documents you've read & signed."
-          />
+          <PageHeader title="My acknowledgments" description="Documents you've read & signed." />
         }
       >
         <EmptyState
@@ -282,7 +271,8 @@ export default async function MyAcknowledgmentsPage({
           </TableHeader>
           <TableBody>
             {active.map((r) => {
-              const isStale = tab === 'outstanding' && r.myAckVersionId && r.myAckVersionId !== r.latestVersionId
+              const isStale =
+                tab === 'outstanding' && r.myAckVersionId && r.myAckVersionId !== r.latestVersionId
               return (
                 <TableRow key={r.docId}>
                   <TableCell>

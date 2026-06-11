@@ -83,13 +83,7 @@ export default async function TrendsPage({
       })
       .from(incidents)
       .where(
-        and(
-          between(
-            sql`date(${incidents.occurredAt})` as any,
-            startYmd as any,
-            endYmd as any,
-          ),
-        ),
+        and(between(sql`date(${incidents.occurredAt})` as any, startYmd as any, endYmd as any)),
       )
       .groupBy(sql`to_char(${incidents.occurredAt}, 'YYYY-MM')`, groupCol)
       .orderBy(sql`to_char(${incidents.occurredAt}, 'YYYY-MM')`),
@@ -98,9 +92,7 @@ export default async function TrendsPage({
   // Pivot to a per-bucket map: { 'YYYY-MM': { injury: 3, illness: 0, … } }.
   const palette = splitBy === 'severity' ? SEVERITY_COLORS : TYPE_COLORS
   const seriesKeys =
-    splitBy === 'severity'
-      ? Object.keys(SEVERITY_COLORS)
-      : (TYPES_ORDER as readonly string[])
+    splitBy === 'severity' ? Object.keys(SEVERITY_COLORS) : (TYPES_ORDER as readonly string[])
 
   const monthMap = new Map<string, Record<string, number>>()
   for (const b of buckets) monthMap.set(b.key, {})
@@ -193,7 +185,7 @@ export default async function TrendsPage({
                     style={{ backgroundColor: palette[k] ?? '#94a3b8' }}
                   />
                   <span className="text-slate-600">{k.replace(/_/g, ' ')}</span>
-                  <span className="font-medium tabular-nums text-slate-900">
+                  <span className="font-medium text-slate-900 tabular-nums">
                     {(seriesTotals[k] ?? 0).toLocaleString()}
                   </span>
                 </div>
@@ -234,7 +226,7 @@ export default async function TrendsPage({
                           {cell[k] ?? 0}
                         </TableCell>
                       ))}
-                      <TableCell className="text-right tabular-nums font-medium">
+                      <TableCell className="text-right font-medium tabular-nums">
                         {rowTotal}
                       </TableCell>
                     </TableRow>
@@ -272,7 +264,9 @@ function StackedBarChart({
   const yScale = (n: number) => innerH - (n / maxStack) * innerH
 
   const yTicks = 4
-  const tickValues = Array.from({ length: yTicks + 1 }, (_, i) => Math.round((maxStack * i) / yTicks))
+  const tickValues = Array.from({ length: yTicks + 1 }, (_, i) =>
+    Math.round((maxStack * i) / yTicks),
+  )
 
   return (
     <div className="w-full overflow-x-auto">

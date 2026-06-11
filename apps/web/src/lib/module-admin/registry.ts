@@ -249,7 +249,11 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
     tabs: [
       { key: 'documents', label: 'Documents', href: '/documents' },
       { key: 'books', label: 'Books', href: '/documents/books' },
-      { key: 'management-reviews', label: 'Management reviews', href: '/documents/management-reviews' },
+      {
+        key: 'management-reviews',
+        label: 'Management reviews',
+        href: '/documents/management-reviews',
+      },
     ],
     sections: [
       {

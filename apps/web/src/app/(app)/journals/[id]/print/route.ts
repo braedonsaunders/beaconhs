@@ -30,13 +30,18 @@ export async function GET(
     .map(
       (p) =>
         `<figure style="margin:0;break-inside:avoid"><img src="${esc(p.url)}" style="width:100%;border-radius:6px;border:1px solid #e2e8f0"/>${
-          p.caption ? `<figcaption style="font-size:11px;color:#64748b;margin-top:4px">${esc(p.caption)}</figcaption>` : ''
+          p.caption
+            ? `<figcaption style="font-size:11px;color:#64748b;margin-top:4px">${esc(p.caption)}</figcaption>`
+            : ''
         }</figure>`,
     )
     .join('')
 
   const tags = entry.tags
-    .map((t) => `<span style="background:#f1f5f9;border-radius:9999px;padding:2px 8px;font-size:11px;color:#475569">${esc(t)}</span>`)
+    .map(
+      (t) =>
+        `<span style="background:#f1f5f9;border-radius:9999px;padding:2px 8px;font-size:11px;color:#475569">${esc(t)}</span>`,
+    )
     .join(' ')
 
   const html = `<!doctype html><html><head><meta charset="utf-8"/>

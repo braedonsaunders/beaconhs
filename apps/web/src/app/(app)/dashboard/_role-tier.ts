@@ -6,12 +6,7 @@ import { and, eq } from 'drizzle-orm'
 import { roleAssignments, roles } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 
-export type RoleTier =
-  | 'super_admin'
-  | 'tenant_admin'
-  | 'safety_manager'
-  | 'foreman'
-  | 'worker'
+export type RoleTier = 'super_admin' | 'tenant_admin' | 'safety_manager' | 'foreman' | 'worker'
 
 export const ROLE_TIERS: readonly RoleTier[] = [
   'super_admin',
@@ -60,12 +55,7 @@ export async function getUserRoleTier(ctx: RequestContext): Promise<RoleTier> {
       .select({ key: roles.key })
       .from(roleAssignments)
       .innerJoin(roles, eq(roles.id, roleAssignments.roleId))
-      .where(
-        and(
-          eq(roleAssignments.tenantUserId, ctx.membership!.id),
-          eq(roles.isBuiltIn, true),
-        ),
-      ),
+      .where(and(eq(roleAssignments.tenantUserId, ctx.membership!.id), eq(roles.isBuiltIn, true))),
   )
 
   let best: RoleTier | null = null

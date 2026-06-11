@@ -54,17 +54,12 @@ export async function bulkArchiveIncidents(args: {
       .from(incidents)
       .where(inArray(incidents.id, ids))
 
-    const editable = rows
-      .filter((r) => !r.locked && r.deletedAt === null)
-      .map((r) => r.id)
+    const editable = rows.filter((r) => !r.locked && r.deletedAt === null).map((r) => r.id)
     const skipped = rows.length - editable.length
 
     if (editable.length === 0) return { updated: 0, skipped }
 
-    await tx
-      .update(incidents)
-      .set({ deletedAt: new Date() })
-      .where(inArray(incidents.id, editable))
+    await tx.update(incidents).set({ deletedAt: new Date() }).where(inArray(incidents.id, editable))
 
     return { updated: editable.length, skipped, editable }
   })
@@ -127,9 +122,7 @@ export async function bulkSetIncidentClassification(args: {
       })
       .from(incidents)
       .where(inArray(incidents.id, ids))
-    const editable = rows
-      .filter((r) => !r.locked && r.deletedAt === null)
-      .map((r) => r.id)
+    const editable = rows.filter((r) => !r.locked && r.deletedAt === null).map((r) => r.id)
     const skipped = rows.length - editable.length
 
     if (editable.length === 0) return { updated: 0, skipped }
@@ -261,10 +254,7 @@ export async function listIncidentClassifications(): Promise<
       })
       .from(incidentClassifications)
       .where(
-        and(
-          isNull(incidentClassifications.deletedAt),
-          eq(incidentClassifications.isActive, 1),
-        ),
+        and(isNull(incidentClassifications.deletedAt), eq(incidentClassifications.isActive, 1)),
       )
       .orderBy(asc(incidentClassifications.name)),
   )

@@ -74,7 +74,12 @@ export async function runAppBuilderChat(args: {
   const reply = `Done. The app now has ${gen.value.sections.length} section${
     gen.value.sections.length === 1 ? '' : 's'
   } and ${fieldCount} field${fieldCount === 1 ? '' : 's'}. Review it and hit Apply to load it into the builder.`
-  await appendMessage({ conversationId, role: 'assistant', content: reply, data: { schema: gen.value } })
+  await appendMessage({
+    conversationId,
+    role: 'assistant',
+    content: reply,
+    data: { schema: gen.value },
+  })
 
   await recordAudit(ctx, {
     entityType: 'form_template',
@@ -93,10 +98,12 @@ export async function generateAppDraft(
   const ctx = await requireRequestContext()
   assertCan(ctx, 'forms.ai.generate')
   const trimmed = (prompt ?? '').trim()
-  if (trimmed.length < 4) return { ok: false, error: 'Describe the app you want in a sentence or two.' }
+  if (trimmed.length < 4)
+    return { ok: false, error: 'Describe the app you want in a sentence or two.' }
 
   const aiConfig = await getTenantAiConfig(ctx)
-  if (!aiConfig) return { ok: false, error: 'AI is not configured. Set a provider + key under Admin → AI.' }
+  if (!aiConfig)
+    return { ok: false, error: 'AI is not configured. Set a provider + key under Admin → AI.' }
 
   const gen = await generateAppFromPrompt(aiConfig, trimmed)
   if (!gen.ok) return { ok: false, error: gen.error }
@@ -141,14 +148,20 @@ export async function generateAppDraft(
 export async function generateFlowDraft(
   flowId: string,
   prompt: string,
-): Promise<{ ok: boolean; error?: string; warnings?: string[]; graph?: import('@beaconhs/forms-core').AutomationGraph }> {
+): Promise<{
+  ok: boolean
+  error?: string
+  warnings?: string[]
+  graph?: import('@beaconhs/forms-core').AutomationGraph
+}> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'forms.ai.generate')
   const trimmed = (prompt ?? '').trim()
   if (!flowId || trimmed.length < 4) return { ok: false, error: 'Describe the flow you want.' }
 
   const aiConfig = await getTenantAiConfig(ctx)
-  if (!aiConfig) return { ok: false, error: 'AI is not configured. Set a provider + key under Admin → AI.' }
+  if (!aiConfig)
+    return { ok: false, error: 'AI is not configured. Set a provider + key under Admin → AI.' }
 
   // Resolve the flow → its template → field ids (power condition/field refs).
   const fieldIds = await ctx.db(async (tx) => {

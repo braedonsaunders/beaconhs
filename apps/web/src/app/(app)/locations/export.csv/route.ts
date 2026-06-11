@@ -52,7 +52,16 @@ export async function GET(req: NextRequest) {
 
   return csvResponse({
     filename: csvFilename('locations'),
-    headers: ['Name', 'Code', 'Level', 'Address line 1', 'City', 'Region', 'Postal code', 'Country'],
+    headers: [
+      'Name',
+      'Code',
+      'Level',
+      'Address line 1',
+      'City',
+      'Region',
+      'Postal code',
+      'Country',
+    ],
     rows: rows.map((u) => {
       const addr = u.address ?? {}
       return [

@@ -31,11 +31,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { ListPageLayout } from '@/components/page-layout'
 import { Section } from '@/components/section'
 import { HazidSubNav } from '../../_subnav'
-import {
-  buildSignedReport,
-  deleteSignedReport,
-  markSignedReportReady,
-} from '../../_actions'
+import { buildSignedReport, deleteSignedReport, markSignedReportReady } from '../../_actions'
 import { SignedReportBuilder } from './_builder'
 
 export const metadata = { title: 'Signed-report bundles' }
@@ -73,7 +69,10 @@ export default async function SignedReportsPage({
       .from(hazidAssessments)
       .leftJoin(orgUnits, eq(orgUnits.id, hazidAssessments.siteOrgUnitId))
       .leftJoin(people, eq(people.id, hazidAssessments.supervisorPersonId))
-      .leftJoin(hazidAssessmentTypes, eq(hazidAssessmentTypes.id, hazidAssessments.assessmentTypeId))
+      .leftJoin(
+        hazidAssessmentTypes,
+        eq(hazidAssessmentTypes.id, hazidAssessments.assessmentTypeId),
+      )
       .where(and(...filters))
       .orderBy(desc(hazidAssessments.occurredAt))
       .limit(200)
@@ -177,7 +176,9 @@ export default async function SignedReportsPage({
                   occurredAt: row.a.occurredAt.toISOString(),
                   typeName: row.type?.name ?? '',
                   siteName: row.site?.name ?? '',
-                  supervisorName: row.supervisor ? `${row.supervisor.firstName} ${row.supervisor.lastName}` : '',
+                  supervisorName: row.supervisor
+                    ? `${row.supervisor.firstName} ${row.supervisor.lastName}`
+                    : '',
                   signedCount: sigs.signed,
                   totalSignatures: sigs.total,
                 }
@@ -205,7 +206,10 @@ export default async function SignedReportsPage({
                 {bundles.map((b) => (
                   <TableRow key={b.id}>
                     <TableCell className="font-medium text-slate-900">
-                      <Link href={`/hazid/reports/signed/${b.id}` as any} className="hover:underline">
+                      <Link
+                        href={`/hazid/reports/signed/${b.id}` as any}
+                        className="hover:underline"
+                      >
                         {b.title}
                       </Link>
                     </TableCell>
@@ -261,9 +265,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 // Shared badge variant map for the wave-7 + legacy status strings so the
 // listing row and the detail header agree on color.
-function statusBadgeVariant(
-  status: string,
-): 'success' | 'secondary' | 'warning' | 'destructive' {
+function statusBadgeVariant(status: string): 'success' | 'secondary' | 'warning' | 'destructive' {
   switch (status) {
     case 'completed':
     case 'ready':

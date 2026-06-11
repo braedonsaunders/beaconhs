@@ -77,7 +77,10 @@ async function updateCategory(formData: FormData) {
   const sortOrder = Number(String(formData.get('sortOrder') ?? '0')) || 0
   if (!id || !name) return
   await ctx.db((tx) =>
-    tx.update(equipmentCategories).set({ name, description, sortOrder }).where(eq(equipmentCategories.id, id)),
+    tx
+      .update(equipmentCategories)
+      .set({ name, description, sortOrder })
+      .where(eq(equipmentCategories.id, id)),
   )
   await recordAudit(ctx, {
     entityType: 'equipment_category',
@@ -168,11 +171,7 @@ export default async function EquipmentCategoriesPage() {
                           <form action={updateCategory} className="flex items-center gap-2">
                             <input type="hidden" name="id" value={c.id} />
                             <input type="hidden" name="sortOrder" value={c.sortOrder} />
-                            <Input
-                              name="name"
-                              defaultValue={c.name}
-                              className="h-8 max-w-xs"
-                            />
+                            <Input name="name" defaultValue={c.name} className="h-8 max-w-xs" />
                             <input
                               type="hidden"
                               name="description"
@@ -183,9 +182,7 @@ export default async function EquipmentCategoriesPage() {
                             </Button>
                           </form>
                         </TableCell>
-                        <TableCell className="text-xs font-mono text-slate-500">
-                          {c.slug}
-                        </TableCell>
+                        <TableCell className="font-mono text-xs text-slate-500">{c.slug}</TableCell>
                         <TableCell className="max-w-xs truncate text-sm text-slate-600">
                           {c.description ?? '—'}
                         </TableCell>
@@ -234,7 +231,7 @@ export default async function EquipmentCategoriesPage() {
               <Label>Description</Label>
               <Textarea name="description" rows={2} />
             </div>
-            <div className="sm:col-span-3 flex justify-end">
+            <div className="flex justify-end sm:col-span-3">
               <Button type="submit">Add category</Button>
             </div>
           </form>

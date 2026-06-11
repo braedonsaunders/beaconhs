@@ -7,7 +7,8 @@ import { createClient, withSuperAdmin, schema, CANONICAL_TEMPLATES } from '@beac
 import { ensureEtlSchema } from './crosswalk'
 import { targetUrl } from './config'
 
-const { tenants, user, tenantUsers, roles, formTemplates, formTemplateVersions, BUILTIN_ROLES } = schema
+const { tenants, user, tenantUsers, roles, formTemplates, formTemplateVersions, BUILTIN_ROLES } =
+  schema
 
 const ADMIN = { email: 'bsaunders@rassaun.com', name: 'Braedon Saunders' }
 const TENANTS = [
@@ -46,7 +47,13 @@ export async function bootstrap(): Promise<void> {
         admin = (
           await tx
             .insert(user)
-            .values({ id: randomUUID(), email: ADMIN.email, name: ADMIN.name, emailVerified: true, isSuperAdmin: true })
+            .values({
+              id: randomUUID(),
+              email: ADMIN.email,
+              name: ADMIN.name,
+              emailVerified: true,
+              isSuperAdmin: true,
+            })
             .returning()
         )[0]!
         console.log(`  + user ${ADMIN.email}`)

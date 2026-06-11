@@ -184,9 +184,10 @@ Download PDF: ${pdfLink}`
 function computeRangeFor(queryKind: string, filters: Record<string, unknown>): Range {
   const now = new Date()
   const f = filters as { days?: number; rangeDays?: number; lookaheadDays?: number }
-  const lookback = (queryKind === 'training_expiring' || queryKind === 'documents_overdue_review')
-    ? null
-    : (f.rangeDays ?? f.days ?? defaultLookbackDays(queryKind))
+  const lookback =
+    queryKind === 'training_expiring' || queryKind === 'documents_overdue_review'
+      ? null
+      : (f.rangeDays ?? f.days ?? defaultLookbackDays(queryKind))
   const lookahead = queryKind === 'training_expiring' ? (f.lookaheadDays ?? f.days ?? 30) : null
 
   if (lookback !== null) {
@@ -230,7 +231,11 @@ async function runReportQuery(
   filters: Record<string, unknown>,
   range: Range,
   customQuery?: unknown,
-): Promise<{ groups: ReportGroup[]; summary: { label: string; value: string | number }[]; rowCount: number }> {
+): Promise<{
+  groups: ReportGroup[]
+  summary: { label: string; value: string | number }[]
+  rowCount: number
+}> {
   switch (queryKind) {
     case 'incidents_summary':
       return queryIncidentsSummary(tenantId, filters, range)
@@ -402,10 +407,7 @@ async function queryTrainingExpiring(
   })
 }
 
-async function queryCorrectiveActionsOpen(
-  tenantId: string,
-  filters: Record<string, unknown>,
-) {
+async function queryCorrectiveActionsOpen(tenantId: string, filters: Record<string, unknown>) {
   return await withTenant(db, tenantId, async (tx) => {
     const rows = await tx
       .select({
@@ -537,10 +539,7 @@ async function queryInspectionsCompleted(
   })
 }
 
-async function queryDocumentsOverdueReview(
-  tenantId: string,
-  filters: Record<string, unknown>,
-) {
+async function queryDocumentsOverdueReview(tenantId: string, filters: Record<string, unknown>) {
   return await withTenant(db, tenantId, async (tx) => {
     const today = isoDate(new Date())
     const rows = await tx
@@ -632,5 +631,8 @@ function pickUuid(v: unknown): string | null {
 }
 
 function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!))
+  return s.replace(
+    /[&<>"']/g,
+    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!,
+  )
 }

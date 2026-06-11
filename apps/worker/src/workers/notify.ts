@@ -15,7 +15,11 @@ import { sendSms, smsConfigured } from '../lib/twilio'
 const vapidPub = process.env.VAPID_PUBLIC_KEY
 const vapidPriv = process.env.VAPID_PRIVATE_KEY
 if (vapidPub && vapidPriv) {
-  webpush.setVapidDetails(process.env.VAPID_SUBJECT ?? 'mailto:ops@beaconhs.app', vapidPub, vapidPriv)
+  webpush.setVapidDetails(
+    process.env.VAPID_SUBJECT ?? 'mailto:ops@beaconhs.app',
+    vapidPub,
+    vapidPriv,
+  )
 }
 
 export async function processNotification(job: Job<NotifyJobData>): Promise<void> {
@@ -85,7 +89,9 @@ export async function processNotification(job: Job<NotifyJobData>): Promise<void
       // SMS only for critical + channel selected.
       if (d.isCritical && d.channels?.includes('sms')) {
         if (!smsConfigured()) {
-          console.log(`[sms] skipped: TWILIO_* not configured (would send to ${t.user.email}: ${d.title})`)
+          console.log(
+            `[sms] skipped: TWILIO_* not configured (would send to ${t.user.email}: ${d.title})`,
+          )
         } else {
           const [person] = await tx
             .select({ phone: people.phone })
@@ -111,5 +117,8 @@ export async function processNotification(job: Job<NotifyJobData>): Promise<void
 }
 
 function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!))
+  return s.replace(
+    /[&<>"']/g,
+    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!,
+  )
 }

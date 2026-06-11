@@ -27,8 +27,7 @@ async function main() {
     } catch (err) {
       // drizzle wraps the underlying postgres error in err.cause.
       // policy may already exist; safe to ignore on idempotent re-runs.
-      const causeMsg =
-        err instanceof Error && err.cause instanceof Error ? err.cause.message : ''
+      const causeMsg = err instanceof Error && err.cause instanceof Error ? err.cause.message : ''
       const topMsg = err instanceof Error ? err.message : String(err)
       const combined = `${topMsg} | ${causeMsg}`
       if (/already exists/.test(combined)) {

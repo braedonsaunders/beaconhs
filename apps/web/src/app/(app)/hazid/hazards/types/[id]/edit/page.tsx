@@ -31,7 +31,10 @@ export default async function EditHazardTypePage({ params }: { params: Promise<{
   return (
     <PageContainer>
       <div className="max-w-xl space-y-6">
-        <DetailHeader back={{ href: '/hazid/hazards/types', label: 'Back' }} title="Edit hazard type" />
+        <DetailHeader
+          back={{ href: '/hazid/hazards/types', label: 'Back' }}
+          title="Edit hazard type"
+        />
         <Card>
           <CardContent className="pt-6">
             <form action={update} className="space-y-4">

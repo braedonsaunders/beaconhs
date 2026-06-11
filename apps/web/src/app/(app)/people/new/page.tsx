@@ -137,8 +137,8 @@ export default async function NewPersonPage() {
               <Alert variant="info">
                 <AlertTitle>HRIS sync</AlertTitle>
                 <AlertDescription>
-                  For ongoing tenants this list is typically synced from NetSuite or BambooHR via the
-                  plugin framework. Manual adds are for one-offs.
+                  For ongoing tenants this list is typically synced from NetSuite or BambooHR via
+                  the plugin framework. Manual adds are for one-offs.
                 </AlertDescription>
               </Alert>
               <div className="flex items-center justify-end gap-2">

@@ -89,8 +89,7 @@ export function SendEmailBody({
           disabled={pending}
         />
         <p className="text-xs text-slate-500">
-          Comma-separate multiple addresses. A link to the CA is included
-          automatically.
+          Comma-separate multiple addresses. A link to the CA is included automatically.
         </p>
       </div>
       <div className="space-y-1.5">

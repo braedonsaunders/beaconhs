@@ -58,7 +58,9 @@ export function AiAssistant({
   const threadRef = useRef<HTMLDivElement>(null)
 
   const refreshConversations = useCallback(() => {
-    listConversations(scope, scopeRefId).then(setConversations).catch(() => {})
+    listConversations(scope, scopeRefId)
+      .then(setConversations)
+      .catch(() => {})
   }, [scope, scopeRefId])
 
   useEffect(() => {
@@ -72,7 +74,9 @@ export function AiAssistant({
   const loadConversation = (id: string) => {
     setConversationId(id)
     setShowHistory(false)
-    getConversationMessages(id).then(setMessages).catch(() => setMessages([]))
+    getConversationMessages(id)
+      .then(setMessages)
+      .catch(() => setMessages([]))
   }
 
   const newChat = () => {
@@ -128,7 +132,7 @@ export function AiAssistant({
     >
       <div className="flex h-full min-h-0 flex-col">
         {/* Toolbar */}
-        <div className="flex shrink-0 items-center gap-1.5 border-b border-slate-200 dark:border-slate-800 pb-2">
+        <div className="flex shrink-0 items-center gap-1.5 border-b border-slate-200 pb-2 dark:border-slate-800">
           <Button variant="outline" size="sm" onClick={newChat}>
             <Plus size={14} /> New chat
           </Button>
@@ -139,19 +143,25 @@ export function AiAssistant({
           >
             <History size={14} /> History
           </Button>
-          {pending ? <Loader2 size={14} className="ml-1 animate-spin text-slate-400 dark:text-slate-500" /> : null}
+          {pending ? (
+            <Loader2 size={14} className="ml-1 animate-spin text-slate-400 dark:text-slate-500" />
+          ) : null}
         </div>
 
         {showHistory ? (
           <div className="app-scroll min-h-0 flex-1 space-y-1 overflow-y-auto py-2">
             {conversations.length === 0 ? (
-              <p className="px-1 py-4 text-center text-xs text-slate-400 dark:text-slate-500">No conversations yet.</p>
+              <p className="px-1 py-4 text-center text-xs text-slate-400 dark:text-slate-500">
+                No conversations yet.
+              </p>
             ) : (
               conversations.map((c) => (
                 <div
                   key={c.id}
                   className={`group flex items-center gap-2 rounded-md px-2 py-1.5 text-sm ${
-                    c.id === conversationId ? 'bg-violet-50' : 'hover:bg-slate-50 dark:hover:bg-slate-800/60'
+                    c.id === conversationId
+                      ? 'bg-violet-50'
+                      : 'hover:bg-slate-50 dark:hover:bg-slate-800/60'
                   }`}
                 >
                   <button
@@ -168,7 +178,10 @@ export function AiAssistant({
                     className="opacity-0 transition group-hover:opacity-100"
                     title="Delete conversation"
                   >
-                    <Trash2 size={13} className="text-slate-400 dark:text-slate-500 hover:text-rose-500" />
+                    <Trash2
+                      size={13}
+                      className="text-slate-400 hover:text-rose-500 dark:text-slate-500"
+                    />
                   </button>
                 </div>
               ))
@@ -176,7 +189,10 @@ export function AiAssistant({
           </div>
         ) : (
           <>
-            <div ref={threadRef} className="app-scroll min-h-0 flex-1 space-y-3 overflow-y-auto py-3">
+            <div
+              ref={threadRef}
+              className="app-scroll min-h-0 flex-1 space-y-3 overflow-y-auto py-3"
+            >
               {messages.length === 0 ? (
                 <div className="space-y-2 px-1 pt-2">
                   <p className="text-sm text-slate-500 dark:text-slate-400">
@@ -187,7 +203,7 @@ export function AiAssistant({
                       key={s}
                       type="button"
                       onClick={() => send(s)}
-                      className="block w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2 text-left text-xs text-slate-600 dark:text-slate-300 hover:border-violet-300 hover:bg-violet-50/40"
+                      className="block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-xs text-slate-600 hover:border-violet-300 hover:bg-violet-50/40 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"
                     >
                       {s}
                     </button>
@@ -203,7 +219,7 @@ export function AiAssistant({
                       className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm ${
                         m.role === 'user'
                           ? 'bg-teal-600 text-white'
-                          : 'border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200'
+                          : 'border border-slate-200 bg-white text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200'
                       }`}
                     >
                       <p className="whitespace-pre-wrap">{m.content}</p>
@@ -225,7 +241,7 @@ export function AiAssistant({
               )}
             </div>
 
-            <div className="flex shrink-0 items-end gap-2 border-t border-slate-200 dark:border-slate-800 pt-2">
+            <div className="flex shrink-0 items-end gap-2 border-t border-slate-200 pt-2 dark:border-slate-800">
               <Textarea
                 rows={2}
                 value={input}

@@ -143,8 +143,8 @@ export default async function BulkQrPage({
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
             <div className="text-slate-600">
-              Selections become a printable 4×3 grid (12 labels per page) sized for adhesive
-              vinyl asset tags.
+              Selections become a printable 4×3 grid (12 labels per page) sized for adhesive vinyl
+              asset tags.
             </div>
             <div className="flex items-center gap-2">
               <Link href="/equipment">

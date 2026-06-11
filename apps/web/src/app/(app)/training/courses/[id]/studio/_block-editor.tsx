@@ -121,7 +121,13 @@ export function BlockEditor({
       <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 p-2">
         <span className="px-1 text-xs font-medium text-slate-500">Add block:</span>
         {ADD_MENU.map((m) => (
-          <Button key={m.type} type="button" variant="outline" size="sm" onClick={() => add(m.type)}>
+          <Button
+            key={m.type}
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => add(m.type)}
+          >
             {m.icon}
             <span className="ml-1">{m.label}</span>
           </Button>
@@ -137,17 +143,37 @@ export function BlockEditor({
           {blocks.map((b, i) => (
             <div key={b.id} className="rounded-lg border border-slate-200 bg-white">
               <div className="flex items-center justify-between border-b border-slate-100 px-3 py-1.5">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                <span className="text-xs font-semibold tracking-wide text-slate-400 uppercase">
                   {b.type}
                 </span>
                 <div className="flex items-center gap-0.5">
-                  <Button type="button" variant="ghost" size="sm" disabled={i === 0} onClick={() => move(b.id, -1)} aria-label="Move up">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={i === 0}
+                    onClick={() => move(b.id, -1)}
+                    aria-label="Move up"
+                  >
                     <ArrowUp size={14} />
                   </Button>
-                  <Button type="button" variant="ghost" size="sm" disabled={i === blocks.length - 1} onClick={() => move(b.id, 1)} aria-label="Move down">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={i === blocks.length - 1}
+                    onClick={() => move(b.id, 1)}
+                    aria-label="Move down"
+                  >
                     <ArrowDown size={14} />
                   </Button>
-                  <Button type="button" variant="ghost" size="sm" onClick={() => remove(b.id)} aria-label="Delete block">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => remove(b.id)}
+                    aria-label="Delete block"
+                  >
                     <Trash2 size={14} className="text-rose-500" />
                   </Button>
                 </div>
@@ -186,7 +212,9 @@ function BlockBody({
         <div className="flex gap-2">
           <Select
             value={String(block.level)}
-            onChange={(e) => update(block.id, { level: Number(e.currentTarget.value) as 1 | 2 | 3 })}
+            onChange={(e) =>
+              update(block.id, { level: Number(e.currentTarget.value) as 1 | 2 | 3 })
+            }
             className="w-24"
           >
             <option value="1">H1</option>
@@ -208,7 +236,9 @@ function BlockBody({
           <Select
             value={block.tone}
             onChange={(e) =>
-              update(block.id, { tone: e.currentTarget.value as 'info' | 'warning' | 'success' | 'danger' })
+              update(block.id, {
+                tone: e.currentTarget.value as 'info' | 'warning' | 'success' | 'danger',
+              })
             }
             className="w-40"
           >
@@ -224,7 +254,9 @@ function BlockBody({
       return (
         <div className="space-y-2">
           {block.attachmentId ? (
-            <p className="text-xs text-emerald-700">Image uploaded ✓ (replace by uploading again)</p>
+            <p className="text-xs text-emerald-700">
+              Image uploaded ✓ (replace by uploading again)
+            </p>
           ) : null}
           <FileUploader
             requestUploadAction={requestUpload}
@@ -251,7 +283,9 @@ function BlockBody({
         <div className="space-y-2">
           <Input
             value={block.url ?? ''}
-            onChange={(e) => update(block.id, { url: e.currentTarget.value, attachmentId: undefined })}
+            onChange={(e) =>
+              update(block.id, { url: e.currentTarget.value, attachmentId: undefined })
+            }
             placeholder="YouTube / Vimeo / MP4 URL"
           />
           <p className="text-center text-xs text-slate-400">— or upload —</p>
@@ -326,16 +360,40 @@ function MarkdownField({ value, onChange }: { value: string; onChange: (v: strin
   return (
     <div className="space-y-1.5">
       <div className="flex items-center gap-1">
-        <Button type="button" variant="ghost" size="sm" onClick={() => wrap('**')} aria-label="Bold">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => wrap('**')}
+          aria-label="Bold"
+        >
           <Bold size={14} />
         </Button>
-        <Button type="button" variant="ghost" size="sm" onClick={() => wrap('*')} aria-label="Italic">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => wrap('*')}
+          aria-label="Italic"
+        >
           <Italic size={14} />
         </Button>
-        <Button type="button" variant="ghost" size="sm" onClick={() => prefixLine('- ')} aria-label="Bullet list">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => prefixLine('- ')}
+          aria-label="Bullet list"
+        >
           <List size={14} />
         </Button>
-        <Button type="button" variant="ghost" size="sm" onClick={() => wrap('[', '](https://)')} aria-label="Link">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => wrap('[', '](https://)')}
+          aria-label="Link"
+        >
           <Link2 size={14} />
         </Button>
         <button

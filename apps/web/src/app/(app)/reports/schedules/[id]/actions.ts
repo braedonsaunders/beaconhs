@@ -12,10 +12,7 @@ import { enqueueReportRun } from '@beaconhs/jobs'
 export async function setActive(scheduleId: string, active: boolean): Promise<void> {
   const ctx = await requireRequestContext()
   await ctx.db(async (tx) => {
-    await tx
-      .update(reportSchedules)
-      .set({ active })
-      .where(eq(reportSchedules.id, scheduleId))
+    await tx.update(reportSchedules).set({ active }).where(eq(reportSchedules.id, scheduleId))
   })
   await recordAudit(ctx, {
     entityType: 'report_schedule',
@@ -121,7 +118,17 @@ export async function updateSchedule(scheduleId: string, formData: FormData): Pr
     entityId: scheduleId,
     action: 'update',
     summary: `Updated report schedule "${name}"`,
-    after: { name, cadence, dayOfWeek, dayOfMonth, hour, minute, timezone, recipientEmails, recipientUserIds },
+    after: {
+      name,
+      cadence,
+      dayOfWeek,
+      dayOfMonth,
+      hour,
+      minute,
+      timezone,
+      recipientEmails,
+      recipientUserIds,
+    },
   })
 
   revalidatePath(`/reports/schedules/${scheduleId}`)

@@ -192,16 +192,10 @@ export function evaluateFormulaTree(
     }
 
     case 'sum':
-      return expr.of.reduce<number>(
-        (acc, e) => acc + coerceNumber(evaluateFormulaTree(e, ctx)),
-        0,
-      )
+      return expr.of.reduce<number>((acc, e) => acc + coerceNumber(evaluateFormulaTree(e, ctx)), 0)
 
     case 'product':
-      return expr.of.reduce<number>(
-        (acc, e) => acc * coerceNumber(evaluateFormulaTree(e, ctx)),
-        1,
-      )
+      return expr.of.reduce<number>((acc, e) => acc * coerceNumber(evaluateFormulaTree(e, ctx)), 1)
 
     case 'subtract':
       return (
@@ -241,12 +235,16 @@ export function evaluateFormulaTree(
     }
 
     case 'min_section': {
-      const nums = (ctx.rows[expr.sectionKey] ?? []).map((row) => coerceNumber(row[expr.rowFieldKey]))
+      const nums = (ctx.rows[expr.sectionKey] ?? []).map((row) =>
+        coerceNumber(row[expr.rowFieldKey]),
+      )
       return nums.length === 0 ? null : Math.min(...nums)
     }
 
     case 'max_section': {
-      const nums = (ctx.rows[expr.sectionKey] ?? []).map((row) => coerceNumber(row[expr.rowFieldKey]))
+      const nums = (ctx.rows[expr.sectionKey] ?? []).map((row) =>
+        coerceNumber(row[expr.rowFieldKey]),
+      )
       return nums.length === 0 ? null : Math.max(...nums)
     }
 
@@ -316,10 +314,7 @@ export function evaluateFormulaTree(
  * of a field. Returns `undefined` if no default applies (e.g. expression
  * evaluates to null).
  */
-export function resolveDefaultValue(
-  expr: DefaultValueExpression,
-  ctx: EvalContext,
-): unknown {
+export function resolveDefaultValue(expr: DefaultValueExpression, ctx: EvalContext): unknown {
   const now = ctx.requestContext?.now ?? new Date()
   switch (expr.kind) {
     case 'literal':

@@ -24,10 +24,7 @@ import { DetailGrid } from '@/components/detail-grid'
 import { Section } from '@/components/section'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { DetailPageLayout } from '@/components/page-layout'
-import {
-  ActionItemsPicker,
-  DocumentMultiPicker,
-} from './_components/document-multi-picker'
+import { ActionItemsPicker, DocumentMultiPicker } from './_components/document-multi-picker'
 import { OverviewEditor } from './_components/overview-editor'
 import { deleteManagementReview } from './actions'
 
@@ -247,10 +244,7 @@ export default async function ManagementReviewDetailPage({
                         key={d.id}
                         className="flex items-center justify-between rounded-md border border-slate-100 bg-slate-50/40 px-3 py-1.5"
                       >
-                        <Link
-                          href={`/documents/${d.id}`}
-                          className="text-teal-700 hover:underline"
-                        >
+                        <Link href={`/documents/${d.id}`} className="text-teal-700 hover:underline">
                           {d.title}
                         </Link>
                         <Badge variant="outline">{d.status}</Badge>
@@ -332,7 +326,7 @@ function DecisionsView({
       <div>
         <Label>Discussion notes</Label>
         {discussionNotes ? (
-          <pre className="mt-1 whitespace-pre-wrap rounded-md border border-slate-200 bg-slate-50/50 p-3 text-sm text-slate-800">
+          <pre className="mt-1 rounded-md border border-slate-200 bg-slate-50/50 p-3 text-sm whitespace-pre-wrap text-slate-800">
             {discussionNotes}
           </pre>
         ) : (
@@ -342,7 +336,7 @@ function DecisionsView({
       <div>
         <Label>Decisions / outcomes</Label>
         {decisions ? (
-          <pre className="mt-1 whitespace-pre-wrap rounded-md border border-slate-200 bg-slate-50/50 p-3 text-sm text-slate-800">
+          <pre className="mt-1 rounded-md border border-slate-200 bg-slate-50/50 p-3 text-sm whitespace-pre-wrap text-slate-800">
             {decisions}
           </pre>
         ) : (

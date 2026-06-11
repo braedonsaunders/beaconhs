@@ -29,7 +29,10 @@ export default async function NewHazardSetPage() {
   return (
     <PageContainer>
       <div className="max-w-2xl space-y-6">
-        <DetailHeader back={{ href: '/hazid/hazards/sets', label: 'Back' }} title="New hazard set" />
+        <DetailHeader
+          back={{ href: '/hazid/hazards/sets', label: 'Back' }}
+          title="New hazard set"
+        />
         <Card>
           <CardContent className="pt-6">
             <form action={submit} className="space-y-4">
@@ -45,7 +48,11 @@ export default async function NewHazardSetPage() {
                 <Label>Hazards in set</Label>
                 <MultiPicker
                   name="hazardIds"
-                  options={hazards.map((h) => ({ value: h.id, label: h.name, sublabel: h.typeName ?? undefined }))}
+                  options={hazards.map((h) => ({
+                    value: h.id,
+                    label: h.name,
+                    sublabel: h.typeName ?? undefined,
+                  }))}
                   placeholder="Search hazards…"
                 />
               </div>

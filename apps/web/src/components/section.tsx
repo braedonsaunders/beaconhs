@@ -23,7 +23,7 @@ export function Section({
 }) {
   const [open, setOpen] = useState(defaultOpen)
   return (
-    <section className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+    <section className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -32,14 +32,24 @@ export function Section({
       >
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-base font-semibold text-slate-900 dark:text-slate-100">
-            <ChevronDown size={16} className={cn('text-slate-400 dark:text-slate-500 transition-transform', open ? '' : '-rotate-90')} />
+            <ChevronDown
+              size={16}
+              className={cn(
+                'text-slate-400 transition-transform dark:text-slate-500',
+                open ? '' : '-rotate-90',
+              )}
+            />
             {title}
           </div>
-          {subtitle ? <div className="ml-6 text-xs text-slate-500 dark:text-slate-400">{subtitle}</div> : null}
+          {subtitle ? (
+            <div className="ml-6 text-xs text-slate-500 dark:text-slate-400">{subtitle}</div>
+          ) : null}
         </div>
         {actions ? <div onClick={(e) => e.stopPropagation()}>{actions}</div> : null}
       </button>
-      {open ? <div className="border-t border-slate-100 dark:border-slate-800 px-5 py-4">{children}</div> : null}
+      {open ? (
+        <div className="border-t border-slate-100 px-5 py-4 dark:border-slate-800">{children}</div>
+      ) : null}
     </section>
   )
 }

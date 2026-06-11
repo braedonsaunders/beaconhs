@@ -54,10 +54,7 @@ export const personGroupMemberships = pgTable(
     tenantIdx: index('person_group_memberships_tenant_idx').on(t.tenantId),
     groupIdx: index('person_group_memberships_group_idx').on(t.groupId),
     personIdx: index('person_group_memberships_person_idx').on(t.personId),
-    uniqueMembership: uniqueIndex('person_group_memberships_unique_ux').on(
-      t.groupId,
-      t.personId,
-    ),
+    uniqueMembership: uniqueIndex('person_group_memberships_unique_ux').on(t.groupId, t.personId),
   }),
 )
 
@@ -66,20 +63,17 @@ export const personGroupsRelations = relations(personGroups, ({ one, many }) => 
   memberships: many(personGroupMemberships),
 }))
 
-export const personGroupMembershipsRelations = relations(
-  personGroupMemberships,
-  ({ one }) => ({
-    tenant: one(tenants, {
-      fields: [personGroupMemberships.tenantId],
-      references: [tenants.id],
-    }),
-    group: one(personGroups, {
-      fields: [personGroupMemberships.groupId],
-      references: [personGroups.id],
-    }),
-    person: one(people, {
-      fields: [personGroupMemberships.personId],
-      references: [people.id],
-    }),
+export const personGroupMembershipsRelations = relations(personGroupMemberships, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [personGroupMemberships.tenantId],
+    references: [tenants.id],
   }),
-)
+  group: one(personGroups, {
+    fields: [personGroupMemberships.groupId],
+    references: [personGroups.id],
+  }),
+  person: one(people, {
+    fields: [personGroupMemberships.personId],
+    references: [people.id],
+  }),
+}))

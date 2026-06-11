@@ -9,7 +9,9 @@ export async function GET(req: NextRequest) {
   const sp = Object.fromEntries(req.nextUrl.searchParams.entries())
   const days = Number(pickString(sp.days) ?? '30')
   const horizon = new Date()
-  horizon.setDate(horizon.getDate() + (Number.isFinite(days) ? Math.max(1, Math.min(180, days)) : 30))
+  horizon.setDate(
+    horizon.getDate() + (Number.isFinite(days) ? Math.max(1, Math.min(180, days)) : 30),
+  )
   const horizonIso = horizon.toISOString().slice(0, 10)
   const today = new Date().toISOString().slice(0, 10)
 

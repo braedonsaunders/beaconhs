@@ -31,11 +31,7 @@ import {
   trades,
   trainingCourses,
 } from './schema'
-import {
-  entityKindForPicker,
-  type EntityKind,
-  type FormSchemaV1,
-} from '@beaconhs/forms-core'
+import { entityKindForPicker, type EntityKind, type FormSchemaV1 } from '@beaconhs/forms-core'
 
 export type EntitiesByField = Record<string, Record<string, unknown> | null>
 
@@ -122,9 +118,7 @@ export async function loadEntitiesForFormPickers(
       .from(people)
       .where(inArray(people.id, [...personIds]))
 
-    const managerIds = rows
-      .map((r) => r.managerPersonId)
-      .filter((x): x is string => !!x)
+    const managerIds = rows.map((r) => r.managerPersonId).filter((x): x is string => !!x)
     const deptIds = rows.map((r) => r.departmentId).filter((x): x is string => !!x)
     const tradeIds = rows.map((r) => r.tradeId).filter((x): x is string => !!x)
     const crewIds = rows.map((r) => r.crewId).filter((x): x is string => !!x)
@@ -176,10 +170,10 @@ export async function loadEntitiesForFormPickers(
         phone: r.phone ?? null,
         status: r.status,
         hireDate: r.hireDate ?? null,
-        managerName: r.managerPersonId ? managerById.get(r.managerPersonId) ?? null : null,
-        departmentName: r.departmentId ? deptById.get(r.departmentId) ?? null : null,
-        tradeName: r.tradeId ? tradeById.get(r.tradeId) ?? null : null,
-        crewName: r.crewId ? crewById.get(r.crewId) ?? null : null,
+        managerName: r.managerPersonId ? (managerById.get(r.managerPersonId) ?? null) : null,
+        departmentName: r.departmentId ? (deptById.get(r.departmentId) ?? null) : null,
+        tradeName: r.tradeId ? (tradeById.get(r.tradeId) ?? null) : null,
+        crewName: r.crewId ? (crewById.get(r.crewId) ?? null) : null,
       })
     }
   }
@@ -210,12 +204,8 @@ export async function loadEntitiesForFormPickers(
       .where(inArray(equipmentItems.id, [...equipmentIds]))
 
     const typeIds = rows.map((r) => r.typeId).filter((x): x is string => !!x)
-    const siteIds = rows
-      .map((r) => r.currentSiteOrgUnitId)
-      .filter((x): x is string => !!x)
-    const holderIds = rows
-      .map((r) => r.currentHolderPersonId)
-      .filter((x): x is string => !!x)
+    const siteIds = rows.map((r) => r.currentSiteOrgUnitId).filter((x): x is string => !!x)
+    const holderIds = rows.map((r) => r.currentHolderPersonId).filter((x): x is string => !!x)
 
     const [types, sites, holders] = await Promise.all([
       typeIds.length > 0
@@ -244,9 +234,7 @@ export async function loadEntitiesForFormPickers(
 
     const typeNameById = new Map(types.map((t) => [t.id, t.name]))
     const siteNameById = new Map(sites.map((s) => [s.id, s.name]))
-    const holderNameById = new Map(
-      holders.map((h) => [h.id, `${h.firstName} ${h.lastName}`]),
-    )
+    const holderNameById = new Map(holders.map((h) => [h.id, `${h.firstName} ${h.lastName}`]))
 
     for (const r of rows) {
       result.equipment.set(r.id, {
@@ -254,12 +242,12 @@ export async function loadEntitiesForFormPickers(
         assetTag: r.assetTag,
         serialNumber: r.serialNumber ?? null,
         status: r.status,
-        typeName: r.typeId ? typeNameById.get(r.typeId) ?? null : null,
+        typeName: r.typeId ? (typeNameById.get(r.typeId) ?? null) : null,
         currentSiteName: r.currentSiteOrgUnitId
-          ? siteNameById.get(r.currentSiteOrgUnitId) ?? null
+          ? (siteNameById.get(r.currentSiteOrgUnitId) ?? null)
           : null,
         currentHolderName: r.currentHolderPersonId
-          ? holderNameById.get(r.currentHolderPersonId) ?? null
+          ? (holderNameById.get(r.currentHolderPersonId) ?? null)
           : null,
         lastSeenAt: r.lastSeenAt ?? null,
         lastPreUseInspectionAt: r.lastPreUseInspectionAt ?? null,
@@ -336,9 +324,7 @@ export async function loadEntitiesForFormPickers(
       .where(inArray(ppeItems.id, [...ppeIds]))
 
     const typeIds = rows.map((r) => r.typeId).filter((x): x is string => !!x)
-    const holderIds = rows
-      .map((r) => r.currentHolderPersonId)
-      .filter((x): x is string => !!x)
+    const holderIds = rows.map((r) => r.currentHolderPersonId).filter((x): x is string => !!x)
     const [types, holders] = await Promise.all([
       typeIds.length > 0
         ? db
@@ -349,9 +335,7 @@ export async function loadEntitiesForFormPickers(
             })
             .from(ppeTypes)
             .where(inArray(ppeTypes.id, typeIds))
-        : Promise.resolve(
-            [] as { id: string; name: string; category: string | null }[],
-          ),
+        : Promise.resolve([] as { id: string; name: string; category: string | null }[]),
       holderIds.length > 0
         ? db
             .select({
@@ -364,9 +348,7 @@ export async function loadEntitiesForFormPickers(
         : Promise.resolve([] as { id: string; firstName: string; lastName: string }[]),
     ])
     const typeById = new Map(types.map((t) => [t.id, t]))
-    const holderNameById = new Map(
-      holders.map((h) => [h.id, `${h.firstName} ${h.lastName}`]),
-    )
+    const holderNameById = new Map(holders.map((h) => [h.id, `${h.firstName} ${h.lastName}`]))
     for (const r of rows) {
       const tp = r.typeId ? typeById.get(r.typeId) : undefined
       result.ppe.set(r.id, {
@@ -376,7 +358,7 @@ export async function loadEntitiesForFormPickers(
         typeName: tp?.name ?? null,
         category: tp?.category ?? null,
         currentHolderName: r.currentHolderPersonId
-          ? holderNameById.get(r.currentHolderPersonId) ?? null
+          ? (holderNameById.get(r.currentHolderPersonId) ?? null)
           : null,
         expiresOn: r.expiresOn ?? null,
         lastInspectionOn: r.lastInspectionOn ?? null,

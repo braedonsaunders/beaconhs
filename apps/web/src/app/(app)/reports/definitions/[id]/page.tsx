@@ -16,11 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from '@beaconhs/ui'
-import {
-  reportRuns,
-  reportSchedules,
-  type ReportCustomQuery,
-} from '@beaconhs/db/schema'
+import { reportRuns, reportSchedules, type ReportCustomQuery } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
 import { loadDefinitionById } from '../../_definitions'
@@ -43,10 +39,7 @@ export default async function DefinitionDetailPage({
 
   // Recent schedules / runs that point at this definition.
   const [scheduleRows, runRows] = await ctx.db(async (tx) => {
-    const s = await tx
-      .select()
-      .from(reportSchedules)
-      .where(eq(reportSchedules.definitionId, id))
+    const s = await tx.select().from(reportSchedules).where(eq(reportSchedules.definitionId, id))
     if (s.length === 0) return [s, []] as const
     const scheduleIds = s.map((row) => row.id)
     const r = await tx
@@ -115,16 +108,12 @@ export default async function DefinitionDetailPage({
               <Detail label="Query kind">
                 <span className="font-mono text-xs">{definition.queryKind}</span>
               </Detail>
-              <Detail label="Created">
-                {new Date(definition.createdAt).toLocaleString()}
-              </Detail>
-              <Detail label="Updated">
-                {new Date(definition.updatedAt).toLocaleString()}
-              </Detail>
+              <Detail label="Created">{new Date(definition.createdAt).toLocaleString()}</Detail>
+              <Detail label="Updated">{new Date(definition.updatedAt).toLocaleString()}</Detail>
             </dl>
             {isCustom ? (
               <div className="mt-4 space-y-2">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <h3 className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
                   Custom query plan
                 </h3>
                 <CustomQuerySummary q={definition.customQuery ?? null} />
@@ -135,9 +124,7 @@ export default async function DefinitionDetailPage({
 
         <Card>
           <CardHeader>
-            <CardTitle>
-              Subscriptions ({scheduleRows.length}) and recent runs
-            </CardTitle>
+            <CardTitle>Subscriptions ({scheduleRows.length}) and recent runs</CardTitle>
           </CardHeader>
           <CardContent>
             {scheduleRows.length === 0 ? (
@@ -166,10 +153,7 @@ export default async function DefinitionDetailPage({
                     {scheduleRows.map((s) => (
                       <TableRow key={s.id}>
                         <TableCell>
-                          <Link
-                            href={`/reports/schedules/${s.id}`}
-                            className="hover:underline"
-                          >
+                          <Link href={`/reports/schedules/${s.id}`} className="hover:underline">
                             {s.name}
                           </Link>
                         </TableCell>
@@ -194,7 +178,7 @@ export default async function DefinitionDetailPage({
 
                 {runRows.length > 0 ? (
                   <div>
-                    <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    <h4 className="mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase">
                       Recent runs (latest schedule)
                     </h4>
                     <Table>
@@ -219,9 +203,7 @@ export default async function DefinitionDetailPage({
                             <TableCell>
                               <StatusBadge status={r.status} />
                             </TableCell>
-                            <TableCell className="text-slate-600">
-                              {r.rowCount ?? '—'}
-                            </TableCell>
+                            <TableCell className="text-slate-600">{r.rowCount ?? '—'}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -240,7 +222,7 @@ export default async function DefinitionDetailPage({
 function Detail({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <dt className="text-xs uppercase tracking-wide text-slate-500">{label}</dt>
+      <dt className="text-xs tracking-wide text-slate-500 uppercase">{label}</dt>
       <dd className="mt-0.5 text-slate-900">{children}</dd>
     </div>
   )
@@ -265,9 +247,7 @@ function CustomQuerySummary({ q }: { q: ReportCustomQuery | null }) {
             {q.filters.map((f, i) => (
               <li key={i} className="font-mono">
                 {f.column} {f.op}{' '}
-                {f.value !== null && typeof f.value !== 'undefined'
-                  ? JSON.stringify(f.value)
-                  : ''}
+                {f.value !== null && typeof f.value !== 'undefined' ? JSON.stringify(f.value) : ''}
               </li>
             ))}
           </ul>

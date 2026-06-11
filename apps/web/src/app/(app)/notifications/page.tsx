@@ -82,7 +82,11 @@ export default async function InboxPage() {
         />
 
         {rows.length === 0 ? (
-          <EmptyState icon={<Bell size={32} />} title="Inbox zero" description="You're all caught up." />
+          <EmptyState
+            icon={<Bell size={32} />}
+            title="Inbox zero"
+            description="You're all caught up."
+          />
         ) : (
           <Table>
             <TableHeader>

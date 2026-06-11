@@ -39,11 +39,7 @@ export default async function ReportsPage() {
       .from(reportSchedules)
       .innerJoin(reportDefinitions, eq(reportDefinitions.id, reportSchedules.definitionId))
       .orderBy(asc(reportSchedules.name))
-    const r = await tx
-      .select()
-      .from(reportRuns)
-      .orderBy(desc(reportRuns.startedAt))
-      .limit(10)
+    const r = await tx.select().from(reportRuns).orderBy(desc(reportRuns.startedAt)).limit(10)
     return [s, r] as const
   })
 
@@ -188,10 +184,7 @@ export default async function ReportsPage() {
             ) : (
               <ul className="divide-y divide-slate-100 text-sm">
                 {definitions.map((d) => (
-                  <li
-                    key={d.id}
-                    className="flex items-start justify-between gap-4 py-3"
-                  >
+                  <li key={d.id} className="flex items-start justify-between gap-4 py-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <Link
@@ -203,9 +196,7 @@ export default async function ReportsPage() {
                         {d.category ? (
                           <Badge variant="outline">{d.category.replace(/_/g, ' ')}</Badge>
                         ) : null}
-                        {d.kind === 'custom' ? (
-                          <Badge variant="secondary">custom</Badge>
-                        ) : null}
+                        {d.kind === 'custom' ? <Badge variant="secondary">custom</Badge> : null}
                       </div>
                       {d.description ? (
                         <p className="mt-0.5 text-xs text-slate-500">{d.description}</p>
@@ -298,7 +289,7 @@ function StatCard({
       <Card className="transition-shadow hover:shadow-md">
         <CardContent className="space-y-2 p-4">
           <div className="flex items-center justify-between text-xs text-slate-500">
-            <span className="uppercase tracking-wide">{label}</span>
+            <span className="tracking-wide uppercase">{label}</span>
             <span className="text-slate-400">{icon}</span>
           </div>
           <div className="text-2xl font-semibold tabular-nums">{value}</div>

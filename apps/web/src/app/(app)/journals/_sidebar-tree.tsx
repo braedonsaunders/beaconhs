@@ -7,7 +7,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { CalendarClock, ChevronRight, Plus, Search, Sparkles, X } from 'lucide-react'
 import { cn } from '@beaconhs/ui'
-import { GROUP_BY_OPTIONS, type GroupBy, type JournalFilters, type TreeNode, type WorkspaceData } from './_types'
+import {
+  GROUP_BY_OPTIONS,
+  type GroupBy,
+  type JournalFilters,
+  type TreeNode,
+  type WorkspaceData,
+} from './_types'
 import { Heatmap } from './_heatmap'
 
 function pathTo(nodes: TreeNode[], id: string | null, acc: string[] = []): string[] | null {
@@ -99,9 +105,9 @@ export function SidebarTree({
   const activeQuick = filters.status === 'draft' ? 'drafts' : 'all'
 
   return (
-    <div className="flex h-full w-full min-h-0 min-w-0 flex-col bg-white">
+    <div className="flex h-full min-h-0 w-full min-w-0 flex-col bg-white">
       {/* Header */}
-      <div className="space-y-2.5 border-b border-slate-200 px-3 pb-3 pt-3">
+      <div className="space-y-2.5 border-b border-slate-200 px-3 pt-3 pb-3">
         <button
           type="button"
           onClick={onNewEntry}
@@ -111,18 +117,18 @@ export function SidebarTree({
         </button>
 
         <div className="relative">
-          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Search size={14} className="absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400" />
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search journals…"
-            className="h-8 w-full rounded-md border border-slate-300 bg-white pl-8 pr-7 text-sm outline-none transition-shadow placeholder:text-slate-400 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/30"
+            className="h-8 w-full rounded-md border border-slate-300 bg-white pr-7 pl-8 text-sm transition-shadow outline-none placeholder:text-slate-400 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/30"
           />
           {q ? (
             <button
               type="button"
               onClick={() => setQ('')}
-              className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-slate-400 hover:text-slate-700"
+              className="absolute top-1/2 right-1.5 -translate-y-1/2 rounded p-0.5 text-slate-400 hover:text-slate-700"
             >
               <X size={13} />
             </button>
@@ -131,10 +137,16 @@ export function SidebarTree({
 
         {/* Quick filters */}
         <div className="flex flex-wrap gap-1">
-          <Chip active={activeQuick === 'all'} onClick={() => onFiltersChange({ mine: undefined, status: undefined })}>
+          <Chip
+            active={activeQuick === 'all'}
+            onClick={() => onFiltersChange({ mine: undefined, status: undefined })}
+          >
             All {data.counts.total ? <Count>{data.counts.total}</Count> : null}
           </Chip>
-          <Chip active={activeQuick === 'drafts'} onClick={() => onFiltersChange({ status: 'draft', mine: undefined })}>
+          <Chip
+            active={activeQuick === 'drafts'}
+            onClick={() => onFiltersChange({ status: 'draft', mine: undefined })}
+          >
             Drafts {data.counts.drafts ? <Count>{data.counts.drafts}</Count> : null}
           </Chip>
         </div>
@@ -163,7 +175,7 @@ export function SidebarTree({
       <div className="app-scroll min-h-0 flex-1 overflow-y-auto px-1.5 py-2">
         {data.onThisDay.length > 0 ? (
           <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50/60 p-2">
-            <div className="mb-1 flex items-center gap-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-amber-700">
+            <div className="mb-1 flex items-center gap-1.5 px-1 text-[11px] font-semibold tracking-wide text-amber-700 uppercase">
               <CalendarClock size={12} /> On this day
             </div>
             {data.onThisDay.slice(0, 3).map((m) => (
@@ -188,12 +200,17 @@ export function SidebarTree({
         {loading ? (
           <div className="space-y-1.5 px-2 py-4">
             {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="h-6 animate-pulse rounded bg-slate-100" style={{ width: `${90 - i * 8}%` }} />
+              <div
+                key={i}
+                className="h-6 animate-pulse rounded bg-slate-100"
+                style={{ width: `${90 - i * 8}%` }}
+              />
             ))}
           </div>
         ) : data.tree.length === 0 ? (
           <div className="px-3 py-10 text-center text-xs text-slate-400">
-            No entries yet. Hit <span className="font-medium text-slate-600">New entry</span> to start today’s journal.
+            No entries yet. Hit <span className="font-medium text-slate-600">New entry</span> to
+            start today’s journal.
           </div>
         ) : (
           <div className="space-y-px">
@@ -214,7 +231,7 @@ export function SidebarTree({
 
       {/* Heatmap footer */}
       <div className="border-t border-slate-200 px-3 py-2.5">
-        <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold tracking-wide text-slate-400 uppercase">
           <Sparkles size={11} /> Activity
         </div>
         <Heatmap data={data.heatmap} onPick={onPickDate} />
@@ -282,7 +299,9 @@ function TreeRow({
           className={cn('shrink-0 text-slate-400 transition-transform', isOpen && 'rotate-90')}
         />
         <span className="truncate">{node.label}</span>
-        <span className="ml-auto shrink-0 text-[11px] tabular-nums text-slate-400">{node.count}</span>
+        <span className="ml-auto shrink-0 text-[11px] text-slate-400 tabular-nums">
+          {node.count}
+        </span>
       </button>
       {isBranch && isOpen ? (
         <div className="space-y-px">

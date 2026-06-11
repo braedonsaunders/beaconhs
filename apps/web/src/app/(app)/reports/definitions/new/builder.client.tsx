@@ -34,10 +34,7 @@ export function CustomReportBuilder({
       ? initialEntityKey
       : entities[0]!.key,
   )
-  const entity = useMemo(
-    () => entities.find((e) => e.key === entityKey)!,
-    [entities, entityKey],
-  )
+  const entity = useMemo(() => entities.find((e) => e.key === entityKey)!, [entities, entityKey])
 
   const [name, setName] = useState<string>('')
   const [description, setDescription] = useState<string>('')
@@ -47,9 +44,7 @@ export function CustomReportBuilder({
   const [filters, setFilters] = useState<Filter[]>([])
   const [groupBy, setGroupBy] = useState<string>('')
   const [sortCol, setSortCol] = useState<string>(entity.defaultSort?.column ?? '')
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>(
-    entity.defaultSort?.direction ?? 'desc',
-  )
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>(entity.defaultSort?.direction ?? 'desc')
   const [limit, setLimit] = useState<number>(1000)
 
   function changeEntity(newKey: string) {
@@ -114,11 +109,7 @@ export function CustomReportBuilder({
   return (
     <form action={action} className="space-y-5">
       <input type="hidden" name="customQuery" value={JSON.stringify(customQuery)} />
-      <input
-        type="hidden"
-        name="cloneFromId"
-        value={cloneFromId ?? ''}
-      />
+      <input type="hidden" name="cloneFromId" value={cloneFromId ?? ''} />
 
       <div className="space-y-1.5">
         <Label>
@@ -206,8 +197,8 @@ export function CustomReportBuilder({
         </div>
         {filters.length === 0 ? (
           <p className="rounded border border-dashed border-slate-200 p-3 text-xs text-slate-500">
-            No filters. The report will return all rows for the selected entity (within
-            the row limit).
+            No filters. The report will return all rows for the selected entity (within the row
+            limit).
           </p>
         ) : (
           <ul className="space-y-2">
@@ -252,9 +243,7 @@ export function CustomReportBuilder({
                       onChange={(e) => updateFilter(f.id, { value: e.target.value })}
                     />
                   ) : (
-                    <span className="flex-1 text-xs text-slate-500">
-                      (no value needed)
-                    </span>
+                    <span className="flex-1 text-xs text-slate-500">(no value needed)</span>
                   )}
                   <Button
                     type="button"
@@ -296,10 +285,7 @@ export function CustomReportBuilder({
         </div>
         <div className="space-y-1.5">
           <Label>Direction</Label>
-          <Select
-            value={sortDir}
-            onChange={(e) => setSortDir(e.target.value as 'asc' | 'desc')}
-          >
+          <Select value={sortDir} onChange={(e) => setSortDir(e.target.value as 'asc' | 'desc')}>
             <option value="asc">Ascending</option>
             <option value="desc">Descending</option>
           </Select>
@@ -307,10 +293,8 @@ export function CustomReportBuilder({
       </div>
 
       <details className="rounded border border-slate-200 bg-slate-50 p-3 text-xs">
-        <summary className="cursor-pointer font-medium text-slate-700">
-          View query JSON
-        </summary>
-        <pre className="mt-2 overflow-x-auto whitespace-pre text-[11px] leading-snug text-slate-700">
+        <summary className="cursor-pointer font-medium text-slate-700">View query JSON</summary>
+        <pre className="mt-2 overflow-x-auto text-[11px] leading-snug whitespace-pre text-slate-700">
           {JSON.stringify(customQuery, null, 2)}
         </pre>
       </details>

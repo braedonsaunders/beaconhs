@@ -12,15 +12,24 @@ import { formatLongDate, statusMeta } from '../_format'
 import type { JournalEntryDetail } from '../_types'
 
 const AVATAR_COLORS = [
-  'bg-rose-500', 'bg-orange-500', 'bg-amber-500', 'bg-emerald-500', 'bg-teal-500',
-  'bg-sky-500', 'bg-indigo-500', 'bg-violet-500', 'bg-pink-500',
+  'bg-rose-500',
+  'bg-orange-500',
+  'bg-amber-500',
+  'bg-emerald-500',
+  'bg-teal-500',
+  'bg-sky-500',
+  'bg-indigo-500',
+  'bg-violet-500',
+  'bg-pink-500',
 ]
 
 export function Avatar({ name, size = 36 }: { name: string | null; size?: number }) {
   const label = name?.trim() || 'Unassigned'
   const parts = label.split(/\s+/)
   const init =
-    ((parts[0]?.[0] ?? '') + (parts.length > 1 ? (parts[parts.length - 1]![0] ?? '') : '')).toUpperCase() || '?'
+    (
+      (parts[0]?.[0] ?? '') + (parts.length > 1 ? (parts[parts.length - 1]![0] ?? '') : '')
+    ).toUpperCase() || '?'
   let h = 0
   for (let i = 0; i < label.length; i++) h = (h * 31 + label.charCodeAt(i)) >>> 0
   const color = name ? AVATAR_COLORS[h % AVATAR_COLORS.length] : 'bg-slate-300'
@@ -28,7 +37,10 @@ export function Avatar({ name, size = 36 }: { name: string | null; size?: number
     <span
       title={label}
       style={{ width: size, height: size, fontSize: Math.round(size * 0.34) }}
-      className={cn('grid shrink-0 place-items-center rounded-full font-semibold text-white', color)}
+      className={cn(
+        'grid shrink-0 place-items-center rounded-full font-semibold text-white',
+        color,
+      )}
     >
       {init}
     </span>
@@ -69,8 +81,15 @@ export function RecordReader({
         <Avatar name={entry.authorName} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <h2 className="truncate text-sm font-semibold text-slate-900">{entry.authorName ?? 'Unassigned'}</h2>
-            <span className={cn('rounded-full px-2 py-px text-[10px] font-medium ring-1 ring-inset', status.className)}>
+            <h2 className="truncate text-sm font-semibold text-slate-900">
+              {entry.authorName ?? 'Unassigned'}
+            </h2>
+            <span
+              className={cn(
+                'rounded-full px-2 py-px text-[10px] font-medium ring-1 ring-inset',
+                status.className,
+              )}
+            >
               {status.label}
             </span>
           </div>
@@ -120,7 +139,10 @@ export function RecordReader({
               return (
                 <span
                   key={t}
-                  className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset', sw.chip)}
+                  className={cn(
+                    'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset',
+                    sw.chip,
+                  )}
                 >
                   <span className={cn('h-1.5 w-1.5 rounded-full', sw.dot)} />
                   {t}
@@ -131,14 +153,23 @@ export function RecordReader({
         ) : null}
 
         {/* eslint-disable-next-line react/no-danger */}
-        <div className="prose prose-slate max-w-none text-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: html }} />
+        <div
+          className="prose prose-slate max-w-none text-sm leading-relaxed"
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
 
         {entry.photos.length > 0 ? (
           <div className="mt-4 grid grid-cols-2 gap-1.5 sm:grid-cols-3">
             {entry.photos.map((p) =>
               p.url ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img key={p.id} src={p.url} alt={p.caption ?? ''} loading="lazy" className="h-28 w-full rounded-lg object-cover" />
+                <img
+                  key={p.id}
+                  src={p.url}
+                  alt={p.caption ?? ''}
+                  loading="lazy"
+                  className="h-28 w-full rounded-lg object-cover"
+                />
               ) : null,
             )}
           </div>

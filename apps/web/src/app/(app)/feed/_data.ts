@@ -142,7 +142,9 @@ export async function getFeed(
           snippet: r.summary || snippetOf(htmlToText(r.bodyText), 220) || null,
           badge: null,
           href: `/journals/${r.id}`,
-          tags: (r.tags ?? []).slice(0, 6).map((t): FeedTag => ({ name: t, color: colors.get(t) ?? null })),
+          tags: (r.tags ?? [])
+            .slice(0, 6)
+            .map((t): FeedTag => ({ name: t, color: colors.get(t) ?? null })),
           photoUrls: ph?.urls ?? [],
           photoCount: ph?.count ?? 0,
         })
@@ -151,7 +153,12 @@ export async function getFeed(
 
     // ---- Incidents (reported) ----
     {
-      const scope = moduleScope(ctx, 'incidents.read', incidents.siteOrgUnitId, incidents.reportedByTenantUserId)
+      const scope = moduleScope(
+        ctx,
+        'incidents.read',
+        incidents.siteOrgUnitId,
+        incidents.reportedByTenantUserId,
+      )
       if (scope !== 'none') {
         const reporter = alias(tenantUsers, 'feed_incident_reporter')
         const rows = await tx
@@ -166,7 +173,13 @@ export async function getFeed(
           .from(incidents)
           .leftJoin(reporter, eq(reporter.id, incidents.reportedByTenantUserId))
           .leftJoin(orgUnits, eq(orgUnits.id, incidents.siteOrgUnitId))
-          .where(whereAll(isNull(incidents.deletedAt), scope, cursor ? lt(incidents.createdAt, cursor) : undefined))
+          .where(
+            whereAll(
+              isNull(incidents.deletedAt),
+              scope,
+              cursor ? lt(incidents.createdAt, cursor) : undefined,
+            ),
+          )
           .orderBy(desc(incidents.createdAt))
           .limit(limit)
         for (const r of rows)
@@ -187,7 +200,12 @@ export async function getFeed(
 
     // ---- Corrective actions (raised) ----
     {
-      const scope = moduleScope(ctx, 'ca.read', correctiveActions.siteOrgUnitId, correctiveActions.ownerTenantUserId)
+      const scope = moduleScope(
+        ctx,
+        'ca.read',
+        correctiveActions.siteOrgUnitId,
+        correctiveActions.ownerTenantUserId,
+      )
       if (scope !== 'none') {
         const owner = alias(tenantUsers, 'feed_ca_owner')
         const rows = await tx
@@ -203,7 +221,11 @@ export async function getFeed(
           .leftJoin(owner, eq(owner.id, correctiveActions.ownerTenantUserId))
           .leftJoin(orgUnits, eq(orgUnits.id, correctiveActions.siteOrgUnitId))
           .where(
-            whereAll(isNull(correctiveActions.deletedAt), scope, cursor ? lt(correctiveActions.createdAt, cursor) : undefined),
+            whereAll(
+              isNull(correctiveActions.deletedAt),
+              scope,
+              cursor ? lt(correctiveActions.createdAt, cursor) : undefined,
+            ),
           )
           .orderBy(desc(correctiveActions.createdAt))
           .limit(limit)
@@ -225,7 +247,12 @@ export async function getFeed(
 
     // ---- Form responses (submitted) ----
     {
-      const scope = moduleScope(ctx, 'forms.response.read', formResponses.siteOrgUnitId, formResponses.submittedBy)
+      const scope = moduleScope(
+        ctx,
+        'forms.response.read',
+        formResponses.siteOrgUnitId,
+        formResponses.submittedBy,
+      )
       if (scope !== 'none') {
         const submitter = alias(tenantUsers, 'feed_form_submitter')
         const rows = await tx
@@ -278,7 +305,10 @@ export async function getFeed(
   return { events: page, nextCursor }
 }
 
-async function journalPhotos(tx: Database, ids: string[]): Promise<Map<string, { urls: string[]; count: number }>> {
+async function journalPhotos(
+  tx: Database,
+  ids: string[],
+): Promise<Map<string, { urls: string[]; count: number }>> {
   const map = new Map<string, { urls: string[]; count: number }>()
   if (ids.length === 0) return map
   const rows = await tx

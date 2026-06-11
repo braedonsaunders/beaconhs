@@ -37,7 +37,9 @@ export function HazidPhotoUploader({
       <FileUpload variant="photo" value={staged} onChange={setStaged} />
       {staged.length > 0 ? (
         <Button onClick={attach} disabled={pending}>
-          {pending ? 'Attaching…' : `Attach ${staged.length} photo${staged.length === 1 ? '' : 's'}`}
+          {pending
+            ? 'Attaching…'
+            : `Attach ${staged.length} photo${staged.length === 1 ? '' : 's'}`}
         </Button>
       ) : null}
     </div>

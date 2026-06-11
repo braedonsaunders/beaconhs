@@ -35,7 +35,10 @@ export default async function NewHazardPage() {
   return (
     <PageContainer>
       <div className="max-w-2xl space-y-6">
-        <DetailHeader back={{ href: '/hazid/hazards', label: 'Back to hazards' }} title="New hazard" />
+        <DetailHeader
+          back={{ href: '/hazid/hazards', label: 'Back to hazards' }}
+          title="New hazard"
+        />
         <Card>
           <CardContent className="pt-6">
             <form action={submit} className="space-y-4">
@@ -60,7 +63,11 @@ export default async function NewHazardPage() {
               </div>
               <div className="space-y-1.5">
                 <Label>Standard controls (canonical wording)</Label>
-                <Textarea name="standardControls" rows={4} placeholder="What is the default mitigation?" />
+                <Textarea
+                  name="standardControls"
+                  rows={4}
+                  placeholder="What is the default mitigation?"
+                />
               </div>
               <div className="space-y-1.5">
                 <Label>Risks (what could go wrong)</Label>

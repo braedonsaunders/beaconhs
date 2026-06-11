@@ -43,8 +43,7 @@ async function checkOut(formData: FormData) {
   const ctx = await requireRequestContext()
   const itemId = String(formData.get('equipmentItemId') ?? '').trim()
   const holderPersonId = String(formData.get('holderPersonId') ?? '').trim() || null
-  const destinationOrgUnitId =
-    String(formData.get('destinationOrgUnitId') ?? '').trim() || null
+  const destinationOrgUnitId = String(formData.get('destinationOrgUnitId') ?? '').trim() || null
   const expectedReturnOn = String(formData.get('expectedReturnOn') ?? '').trim() || null
   const notes = String(formData.get('notes') ?? '').trim() || null
   if (!itemId) return
@@ -163,8 +162,8 @@ export default async function CheckInOutPage() {
   const ctx = await requireRequestContext()
   const today = new Date().toISOString().slice(0, 10)
 
-  const { available, openCheckouts, sites, peopleList, openCount, overdueCount } =
-    await ctx.db(async (tx) => {
+  const { available, openCheckouts, sites, peopleList, openCount, overdueCount } = await ctx.db(
+    async (tx) => {
       const av = await tx
         .select({
           item: equipmentItems,
@@ -224,7 +223,8 @@ export default async function CheckInOutPage() {
         openCount: Number(openC?.c ?? 0),
         overdueCount: Number(overC?.c ?? 0),
       }
-    })
+    },
+  )
 
   return (
     <ListPageLayout
@@ -254,8 +254,8 @@ export default async function CheckInOutPage() {
               <Clock size={14} className="mr-1 inline" /> Overdue returns
             </AlertTitle>
             <AlertDescription>
-              {overdueCount} item{overdueCount === 1 ? '' : 's'} past their expected return
-              date. Reach out to the holder or update the expected return.
+              {overdueCount} item{overdueCount === 1 ? '' : 's'} past their expected return date.
+              Reach out to the holder or update the expected return.
             </AlertDescription>
           </Alert>
         ) : null}
@@ -286,8 +286,7 @@ export default async function CheckInOutPage() {
                 </TableHeader>
                 <TableBody>
                   {openCheckouts.map(({ co, item, type, holder, dest }) => {
-                    const overdue =
-                      co.expectedReturnOn !== null && co.expectedReturnOn <= today
+                    const overdue = co.expectedReturnOn !== null && co.expectedReturnOn <= today
                     return (
                       <TableRow key={co.id}>
                         <TableCell>
@@ -333,11 +332,7 @@ export default async function CheckInOutPage() {
                               <option value="damaged">Damaged</option>
                               <option value="unusable">Unusable</option>
                             </Select>
-                            <Input
-                              name="returnedNotes"
-                              placeholder="notes…"
-                              className="h-8 w-40"
-                            />
+                            <Input name="returnedNotes" placeholder="notes…" className="h-8 w-40" />
                             <Button type="submit" size="sm">
                               <LogIn size={12} /> Check in
                             </Button>
@@ -404,7 +399,7 @@ export default async function CheckInOutPage() {
                 placeholder="Context for the checkout (purpose, accessories, etc)"
               />
             </div>
-            <div className="sm:col-span-3 flex justify-end">
+            <div className="flex justify-end sm:col-span-3">
               <Button type="submit">
                 <LogOut size={12} /> Check out
               </Button>

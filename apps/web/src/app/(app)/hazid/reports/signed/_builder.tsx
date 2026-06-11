@@ -63,15 +63,27 @@ export function SignedReportBuilder({
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>Bundle title *</Label>
-              <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Week of 2026-05-11 — Refinery JSHA pack" />
+              <Input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="e.g. Week of 2026-05-11 — Refinery JSHA pack"
+              />
             </div>
             <div className="space-y-1.5">
               <Label>Recipient emails (comma separated)</Label>
-              <Input value={emails} onChange={(e) => setEmails(e.target.value)} placeholder="ops-mgr@…, safety@…" />
+              <Input
+                value={emails}
+                onChange={(e) => setEmails(e.target.value)}
+                placeholder="ops-mgr@…, safety@…"
+              />
             </div>
             <div className="space-y-1.5 sm:col-span-2">
               <Label>Description</Label>
-              <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
+              <Textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={2}
+              />
             </div>
           </div>
           {err ? <div className="text-xs text-red-600">{err}</div> : null}
@@ -86,7 +98,7 @@ export function SignedReportBuilder({
 
       <div className="overflow-hidden rounded-md border border-slate-200 bg-white">
         <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+          <thead className="bg-slate-50 text-xs tracking-wide text-slate-500 uppercase">
             <tr>
               <th className="w-8 px-2 py-2"></th>
               <th className="px-2 py-2 text-left">Ref</th>

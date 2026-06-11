@@ -267,10 +267,7 @@ export async function signWorkflowStep(args: {
       .select()
       .from(formResponseSteps)
       .where(
-        and(
-          eq(formResponseSteps.responseId, responseId),
-          eq(formResponseSteps.stepKey, stepKey),
-        ),
+        and(eq(formResponseSteps.responseId, responseId), eq(formResponseSteps.stepKey, stepKey)),
       )
       .limit(1)
     return r ?? null
@@ -301,10 +298,7 @@ export async function signWorkflowStep(args: {
   // chain advanceWorkflowStep() to move forward. (Separating sign + advance
   // lets a multi-signer step model be added later without breaking the API.)
   await ctx.db((tx) =>
-    tx
-      .update(formResponses)
-      .set({ currentStep: stepKey })
-      .where(eq(formResponses.id, responseId)),
+    tx.update(formResponses).set({ currentStep: stepKey }).where(eq(formResponses.id, responseId)),
   )
 
   await rebuildWorkflowState(ctx, {
@@ -332,11 +326,14 @@ export async function signWorkflowStep(args: {
 export async function advanceWorkflowStep(args: {
   responseId: string
   currentStepKey: string
-}): Promise<{ ok: true; nextStepKey: string | null; closed: boolean } | { ok: false; error: string }> {
+}): Promise<
+  { ok: true; nextStepKey: string | null; closed: boolean } | { ok: false; error: string }
+> {
   const ctx = await requireRequestContext()
   if (!ctx.tenantId) return { ok: false, error: 'Active tenant required' }
   const { responseId, currentStepKey } = args
-  if (!responseId || !currentStepKey) return { ok: false, error: 'Missing responseId or currentStepKey' }
+  if (!responseId || !currentStepKey)
+    return { ok: false, error: 'Missing responseId or currentStepKey' }
 
   const { response, workflowSteps, stepsByKey } = await loadResponseWithWorkflow(ctx, responseId)
   const meta = stepsByKey.get(currentStepKey)
@@ -459,7 +456,8 @@ export async function rejectWorkflowStep(args: {
   const ctx = await requireRequestContext()
   if (!ctx.tenantId) return { ok: false, error: 'Active tenant required' }
   const { responseId, currentStepKey, reason } = args
-  if (!responseId || !currentStepKey) return { ok: false, error: 'Missing responseId or currentStepKey' }
+  if (!responseId || !currentStepKey)
+    return { ok: false, error: 'Missing responseId or currentStepKey' }
   const trimmed = (reason ?? '').trim()
   if (trimmed.length === 0) return { ok: false, error: 'A rejection reason is required' }
   if (trimmed.length > 4000) return { ok: false, error: 'Reason is too long (max 4000 chars)' }

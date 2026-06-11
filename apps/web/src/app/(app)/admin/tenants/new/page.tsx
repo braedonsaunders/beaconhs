@@ -2,14 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { sql } from 'drizzle-orm'
-import {
-  Button,
-  Input,
-  Label,
-  PageHeader,
-  Select,
-  Textarea,
-} from '@beaconhs/ui'
+import { Button, Input, Label, PageHeader, Select, Textarea } from '@beaconhs/ui'
 import { db } from '@beaconhs/db'
 import { auditLog, tenants } from '@beaconhs/db/schema'
 import { seedLiftPlanTemplate } from '@beaconhs/db/seed/lift-plan-template'
@@ -97,7 +90,10 @@ export default function NewTenantPage() {
             description="Super-admin only. Creates an empty tenant — you'll add an admin user from the users page after."
           />
         </div>
-        <form action={createTenant} className="mt-6 space-y-5 rounded-lg border border-slate-200 bg-white p-6">
+        <form
+          action={createTenant}
+          className="mt-6 space-y-5 rounded-lg border border-slate-200 bg-white p-6"
+        >
           <div className="space-y-1.5">
             <Label htmlFor="name">Tenant name *</Label>
             <Input id="name" name="name" required placeholder="e.g. Rassaun Services Inc" />
@@ -130,7 +126,9 @@ export default function NewTenantPage() {
           <div className="space-y-1.5">
             <Label htmlFor="enabledLanguages">Enabled languages</Label>
             <Input id="enabledLanguages" name="enabledLanguages" defaultValue="en" />
-            <p className="text-xs text-slate-500">Comma-separated ISO codes, e.g. <code>en,fr</code></p>
+            <p className="text-xs text-slate-500">
+              Comma-separated ISO codes, e.g. <code>en,fr</code>
+            </p>
           </div>
           <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-4">
             <Link href="/admin/tenants">

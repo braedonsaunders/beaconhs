@@ -3,7 +3,13 @@
 import { eq, sql } from 'drizzle-orm'
 import { Card, CardContent } from '@beaconhs/ui'
 import { db } from '@beaconhs/db'
-import { people, tenants, trainingCertificates, trainingCourses, trainingRecords } from '@beaconhs/db/schema'
+import {
+  people,
+  tenants,
+  trainingCertificates,
+  trainingCourses,
+  trainingRecords,
+} from '@beaconhs/db/schema'
 
 export const dynamic = 'force-dynamic'
 
@@ -48,11 +54,15 @@ export default async function VerifyPage({ params }: { params: Promise<{ token: 
 
   return (
     <main className="grid min-h-screen place-items-center bg-slate-50 p-6">
-      <Card className="max-w-md w-full">
+      <Card className="w-full max-w-md">
         <CardContent className="space-y-3 pt-6 text-center">
           <div
             className={`inline-block rounded-full px-3 py-1 text-xs font-semibold ${
-              revoked ? 'bg-red-100 text-red-800' : expired ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-800'
+              revoked
+                ? 'bg-red-100 text-red-800'
+                : expired
+                  ? 'bg-amber-100 text-amber-800'
+                  : 'bg-green-100 text-green-800'
             }`}
           >
             {revoked ? 'REVOKED' : expired ? 'EXPIRED' : 'VALID'}

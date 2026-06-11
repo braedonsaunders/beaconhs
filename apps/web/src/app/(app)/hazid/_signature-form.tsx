@@ -73,10 +73,7 @@ export function AddSignatureDrawerBody({
       <div className="space-y-4">
         <div className="space-y-1.5">
           <Label>Signer type</Label>
-          <Select
-            value={type}
-            onChange={(e) => setType(e.target.value as 'internal' | 'external')}
-          >
+          <Select value={type} onChange={(e) => setType(e.target.value as 'internal' | 'external')}>
             <option value="internal">Internal (employee)</option>
             <option value="external">External (visitor / contractor)</option>
           </Select>
@@ -140,7 +137,7 @@ export function AddSignatureDrawerBody({
         </div>
         {err ? <div className="text-sm text-red-600">{err}</div> : null}
       </div>
-      <div className="sticky bottom-0 -mx-6 -mb-5 mt-6 flex items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-6 py-3">
+      <div className="sticky bottom-0 -mx-6 mt-6 -mb-5 flex items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-6 py-3">
         <Link href={closeHref as any}>
           <Button type="button" variant="outline">
             Cancel

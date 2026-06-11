@@ -108,7 +108,18 @@ export async function createSchedule(formData: FormData): Promise<void> {
       entityId: row.id,
       action: 'create',
       summary: `Created report schedule "${name}" (${cadence})`,
-      after: { name, definitionId, cadence, dayOfWeek, dayOfMonth, hour, minute, timezone, recipientEmails, recipientUserIds },
+      after: {
+        name,
+        definitionId,
+        cadence,
+        dayOfWeek,
+        dayOfMonth,
+        hour,
+        minute,
+        timezone,
+        recipientEmails,
+        recipientUserIds,
+      },
     })
   }
 

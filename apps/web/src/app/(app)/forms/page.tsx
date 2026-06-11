@@ -71,7 +71,12 @@ export default async function FormsPage({
   const canGenerate = can(ctx, 'forms.ai.generate')
 
   const userRoleKeys = await getUserRoleKeys(ctx)
-  const { templates: allTemplates, counts, stats, pinnedIds } = await ctx.db(async (tx) => {
+  const {
+    templates: allTemplates,
+    counts,
+    stats,
+    pinnedIds,
+  } = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = [isNull(formTemplates.deletedAt)]
     if (categoryFilter) filters.push(eq(formTemplates.category, categoryFilter))
     if (q) filters.push(ilike(formTemplates.name, `%${q}%`))
@@ -141,9 +146,15 @@ export default async function FormsPage({
                 and pin the ones your crews use most to the sidebar.
               </p>
               <div className="flex flex-wrap items-center gap-4 pt-1 text-xs text-slate-500">
-                <span><strong className="text-slate-800">{stats.templates}</strong> templates</span>
-                <span><strong className="text-slate-800">{stats.published}</strong> published</span>
-                <span><strong className="text-slate-800">{stats.responses}</strong> responses</span>
+                <span>
+                  <strong className="text-slate-800">{stats.templates}</strong> templates
+                </span>
+                <span>
+                  <strong className="text-slate-800">{stats.published}</strong> published
+                </span>
+                <span>
+                  <strong className="text-slate-800">{stats.responses}</strong> responses
+                </span>
                 <Link href="/forms/responses" className="text-teal-700 hover:underline">
                   Browse responses →
                 </Link>
@@ -235,7 +246,9 @@ export default async function FormsPage({
                         {t.status}
                       </Badge>
                       {t.kind && t.kind !== 'form' ? (
-                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${KIND_BADGE[t.kind] ?? 'bg-slate-100 text-slate-600'}`}>
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase ${KIND_BADGE[t.kind] ?? 'bg-slate-100 text-slate-600'}`}
+                        >
                           {t.kind === 'mini_app' ? 'mini-app' : t.kind}
                         </span>
                       ) : null}

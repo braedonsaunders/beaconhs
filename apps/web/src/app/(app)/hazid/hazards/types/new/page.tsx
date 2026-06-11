@@ -17,7 +17,10 @@ export default async function NewHazardTypePage() {
   return (
     <PageContainer>
       <div className="max-w-xl space-y-6">
-        <DetailHeader back={{ href: '/hazid/hazards/types', label: 'Back' }} title="New hazard type" />
+        <DetailHeader
+          back={{ href: '/hazid/hazards/types', label: 'Back' }}
+          title="New hazard type"
+        />
         <Card>
           <CardContent className="pt-6">
             <form action={submit} className="space-y-4">

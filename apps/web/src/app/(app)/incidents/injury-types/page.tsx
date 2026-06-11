@@ -140,10 +140,7 @@ async function deleteInjuryType(formData: FormData): Promise<void> {
   )
   if (Number(usage ?? 0) > 0) {
     await ctx.db((tx) =>
-      tx
-        .update(incidentInjuryTypes)
-        .set({ isActive: 0 })
-        .where(eq(incidentInjuryTypes.id, id)),
+      tx.update(incidentInjuryTypes).set({ isActive: 0 }).where(eq(incidentInjuryTypes.id, id)),
     )
     await recordAudit(ctx, {
       entityType: 'incident_injury_type',
@@ -152,9 +149,7 @@ async function deleteInjuryType(formData: FormData): Promise<void> {
       summary: 'Archived (referenced by existing injuries — hard delete refused)',
     })
   } else {
-    await ctx.db((tx) =>
-      tx.delete(incidentInjuryTypes).where(eq(incidentInjuryTypes.id, id)),
-    )
+    await ctx.db((tx) => tx.delete(incidentInjuryTypes).where(eq(incidentInjuryTypes.id, id)))
     await recordAudit(ctx, {
       entityType: 'incident_injury_type',
       entityId: id,
@@ -176,10 +171,7 @@ export default async function InjuryTypesPage({
   const ctx = await requireModuleManage('incidents')
 
   const { rows, usageById } = await ctx.db(async (tx) => {
-    const all = await tx
-      .select()
-      .from(incidentInjuryTypes)
-      .orderBy(asc(incidentInjuryTypes.name))
+    const all = await tx.select().from(incidentInjuryTypes).orderBy(asc(incidentInjuryTypes.name))
     const usage = await tx
       .select({ id: incidentInjuries.injuryTypeId, c: count() })
       .from(incidentInjuries)
@@ -236,7 +228,11 @@ export default async function InjuryTypesPage({
                               placeholder="OSHA code"
                             />
                           </div>
-                          <Textarea name="description" rows={2} defaultValue={r.description ?? ''} />
+                          <Textarea
+                            name="description"
+                            rows={2}
+                            defaultValue={r.description ?? ''}
+                          />
                           <div className="flex items-center gap-2">
                             <Button type="submit" size="sm">
                               Save
@@ -340,7 +336,12 @@ export default async function InjuryTypesPage({
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="oshaCode">OSHA code</Label>
-                  <Input id="oshaCode" name="oshaCode" placeholder="Optional, e.g. CUT" maxLength={8} />
+                  <Input
+                    id="oshaCode"
+                    name="oshaCode"
+                    placeholder="Optional, e.g. CUT"
+                    maxLength={8}
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="description">Description</Label>

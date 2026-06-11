@@ -78,7 +78,13 @@ export function WidgetView({ id, data }: { id: string; data: InsightsData }) {
     case 'kpi-open-cas':
       return <Kpi label="Open corrective actions" value={data.kpi.openCAs} />
     case 'kpi-overdue-cas':
-      return <Kpi label="Overdue CAs" value={data.kpi.overdueCAs} tone={data.kpi.overdueCAs > 0 ? 'red' : 'teal'} />
+      return (
+        <Kpi
+          label="Overdue CAs"
+          value={data.kpi.overdueCAs}
+          tone={data.kpi.overdueCAs > 0 ? 'red' : 'teal'}
+        />
+      )
     case 'chart-trir':
       return (
         <Shell title="TRIR" subtitle={`now ${fmtRate(data.trir.value)} · recordables / 12 mo`}>
@@ -138,7 +144,9 @@ export function WidgetView({ id, data }: { id: string; data: InsightsData }) {
     default:
       return (
         <Shell title="Widget">
-          <div className="grid h-full place-items-center text-xs text-slate-400">No view for “{id}”.</div>
+          <div className="grid h-full place-items-center text-xs text-slate-400">
+            No view for “{id}”.
+          </div>
         </Shell>
       )
   }
@@ -182,7 +190,7 @@ function Kpi({
   const good = delta == null ? null : lowerIsBetter ? delta <= 0 : delta >= 0
   return (
     <div className="flex h-full flex-col justify-between rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm">
-      <span className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</span>
+      <span className="text-xs font-medium tracking-wide text-slate-400 uppercase">{label}</span>
       <div className="flex items-end gap-2">
         <span
           className={cn(
@@ -213,9 +221,9 @@ function Progress({ label, pct }: { label: string; pct: number | null }) {
   const tone = v >= 80 ? 'bg-teal-500' : v >= 50 ? 'bg-amber-500' : 'bg-red-500'
   return (
     <div className="flex h-full flex-col justify-between rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm">
-      <span className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</span>
+      <span className="text-xs font-medium tracking-wide text-slate-400 uppercase">{label}</span>
       <div>
-        <div className="mb-1.5 text-3xl font-bold tabular-nums text-slate-900">
+        <div className="mb-1.5 text-3xl font-bold text-slate-900 tabular-nums">
           {pct == null ? '—' : `${Math.round(v)}%`}
         </div>
         <div className="h-2 overflow-hidden rounded-full bg-slate-100">
@@ -249,8 +257,19 @@ function AreaViz({ data }: { data: Pt[] }) {
           </linearGradient>
         </defs>
         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-        <XAxis dataKey="x" tick={{ fontSize: 10, fill: '#94a3b8' }} tickLine={false} axisLine={false} />
-        <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} tickLine={false} axisLine={false} allowDecimals={false} width={28} />
+        <XAxis
+          dataKey="x"
+          tick={{ fontSize: 10, fill: '#94a3b8' }}
+          tickLine={false}
+          axisLine={false}
+        />
+        <YAxis
+          tick={{ fontSize: 10, fill: '#94a3b8' }}
+          tickLine={false}
+          axisLine={false}
+          allowDecimals={false}
+          width={28}
+        />
         <Tooltip {...tooltipStyle} />
         <Area type="monotone" dataKey="y" stroke={TEAL} strokeWidth={2} fill="url(#areaTeal)" />
       </AreaChart>
@@ -263,8 +282,19 @@ function LineViz({ data }: { data: Pt[] }) {
     <ResponsiveContainer width="100%" height="100%">
       <LineChart data={data} margin={{ top: 6, right: 6, left: -18, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-        <XAxis dataKey="x" tick={{ fontSize: 10, fill: '#94a3b8' }} tickLine={false} axisLine={false} />
-        <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} tickLine={false} axisLine={false} allowDecimals={false} width={28} />
+        <XAxis
+          dataKey="x"
+          tick={{ fontSize: 10, fill: '#94a3b8' }}
+          tickLine={false}
+          axisLine={false}
+        />
+        <YAxis
+          tick={{ fontSize: 10, fill: '#94a3b8' }}
+          tickLine={false}
+          axisLine={false}
+          allowDecimals={false}
+          width={28}
+        />
         <Tooltip {...tooltipStyle} />
         <Line type="monotone" dataKey="y" stroke={TEAL} strokeWidth={2} dot={false} connectNulls />
       </LineChart>
@@ -281,8 +311,21 @@ function BarViz({ data, horizontal }: { data: Pt[]; horizontal?: boolean }) {
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} layout="vertical" margin={{ top: 4, right: 10, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
-          <XAxis type="number" tick={{ fontSize: 10, fill: '#94a3b8' }} tickLine={false} axisLine={false} allowDecimals={false} />
-          <YAxis type="category" dataKey="x" tick={{ fontSize: 10, fill: '#64748b' }} tickLine={false} axisLine={false} width={92} />
+          <XAxis
+            type="number"
+            tick={{ fontSize: 10, fill: '#94a3b8' }}
+            tickLine={false}
+            axisLine={false}
+            allowDecimals={false}
+          />
+          <YAxis
+            type="category"
+            dataKey="x"
+            tick={{ fontSize: 10, fill: '#64748b' }}
+            tickLine={false}
+            axisLine={false}
+            width={92}
+          />
           <Tooltip {...tooltipStyle} cursor={{ fill: '#f8fafc' }} />
           <Bar dataKey="y" radius={[0, 4, 4, 0]} maxBarSize={20}>
             {data.map((_, i) => (
@@ -297,8 +340,19 @@ function BarViz({ data, horizontal }: { data: Pt[]; horizontal?: boolean }) {
     <ResponsiveContainer width="100%" height="100%">
       <BarChart data={data} margin={{ top: 6, right: 6, left: -18, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-        <XAxis dataKey="x" tick={{ fontSize: 10, fill: '#94a3b8' }} tickLine={false} axisLine={false} />
-        <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} tickLine={false} axisLine={false} allowDecimals={false} width={28} />
+        <XAxis
+          dataKey="x"
+          tick={{ fontSize: 10, fill: '#94a3b8' }}
+          tickLine={false}
+          axisLine={false}
+        />
+        <YAxis
+          tick={{ fontSize: 10, fill: '#94a3b8' }}
+          tickLine={false}
+          axisLine={false}
+          allowDecimals={false}
+          width={28}
+        />
         <Tooltip {...tooltipStyle} cursor={{ fill: '#f8fafc' }} />
         <Bar dataKey="y" radius={[4, 4, 0, 0]} fill={TEAL} maxBarSize={36} />
       </BarChart>

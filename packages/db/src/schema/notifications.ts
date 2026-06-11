@@ -15,7 +15,12 @@ import {
 import { id, timestamps } from './_helpers'
 import { tenants, users } from './core'
 
-export const notificationChannel = pgEnum('notification_channel', ['in_app', 'email', 'push', 'sms'])
+export const notificationChannel = pgEnum('notification_channel', [
+  'in_app',
+  'email',
+  'push',
+  'sms',
+])
 
 export const notifications = pgTable(
   'notifications',
@@ -60,7 +65,12 @@ export const notificationPreferences = pgTable(
     ...timestamps,
   },
   (t) => ({
-    uniq: uniqueIndex('notification_preferences_uniq').on(t.tenantId, t.userId, t.category, t.channel),
+    uniq: uniqueIndex('notification_preferences_uniq').on(
+      t.tenantId,
+      t.userId,
+      t.category,
+      t.channel,
+    ),
   }),
 )
 

@@ -35,7 +35,11 @@ export function BulkTrainingRecordsBar({
     setError(null)
     setInfo(null)
     if (action === 'renew') {
-      if (!confirm(`Renew ${selectedIds.length} record(s)? Each will mint a new training_records row dated today.`)) {
+      if (
+        !confirm(
+          `Renew ${selectedIds.length} record(s)? Each will mint a new training_records row dated today.`,
+        )
+      ) {
         return
       }
       start(async () => {
@@ -51,7 +55,11 @@ export function BulkTrainingRecordsBar({
       return
     }
     if (action === 'revoke') {
-      if (!confirm(`Revoke ${selectedIds.length} record(s)? They will no longer count toward the training matrix.`)) {
+      if (
+        !confirm(
+          `Revoke ${selectedIds.length} record(s)? They will no longer count toward the training matrix.`,
+        )
+      ) {
         return
       }
       start(async () => {
@@ -125,25 +133,21 @@ export function BulkTrainingRecordsBar({
         ) : null}
 
         <Button size="sm" onClick={go} disabled={pending}>
-          {pending
-            ? 'Working…'
-            : action === 'renew'
-              ? (
-                <span className="inline-flex items-center gap-1">
-                  <RotateCcw size={14} /> Renew
-                </span>
-              )
-              : action === 'revoke'
-                ? (
-                  <span className="inline-flex items-center gap-1">
-                    <ShieldOff size={14} /> Revoke
-                  </span>
-                )
-                : (
-                  <span className="inline-flex items-center gap-1">
-                    <Download size={14} /> Export
-                  </span>
-                )}
+          {pending ? (
+            'Working…'
+          ) : action === 'renew' ? (
+            <span className="inline-flex items-center gap-1">
+              <RotateCcw size={14} /> Renew
+            </span>
+          ) : action === 'revoke' ? (
+            <span className="inline-flex items-center gap-1">
+              <ShieldOff size={14} /> Revoke
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1">
+              <Download size={14} /> Export
+            </span>
+          )}
         </Button>
         {error ? <span className="text-xs text-red-600">{error}</span> : null}
         {info ? <span className="text-xs text-emerald-700">{info}</span> : null}
@@ -171,11 +175,7 @@ export function SelectionCheckbox({
       aria-pressed={selected}
       className="inline-flex items-center justify-center rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
     >
-      {selected ? (
-        <CheckSquare size={16} className="text-teal-700" />
-      ) : (
-        <Square size={16} />
-      )}
+      {selected ? <CheckSquare size={16} className="text-teal-700" /> : <Square size={16} />}
     </button>
   )
 }
@@ -194,11 +194,7 @@ export function HeaderSelectAll({
       aria-pressed={allSelected}
       className="inline-flex items-center justify-center rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
     >
-      {allSelected ? (
-        <CheckSquare size={16} className="text-teal-700" />
-      ) : (
-        <Square size={16} />
-      )}
+      {allSelected ? <CheckSquare size={16} className="text-teal-700" /> : <Square size={16} />}
     </button>
   )
 }

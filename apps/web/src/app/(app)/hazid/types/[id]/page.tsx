@@ -57,8 +57,7 @@ export default async function AssessmentTypeDetailPage({
     <DetailPageLayout
       header={
         <>
-          <div className="mb-2">
-          </div>
+          <div className="mb-2"></div>
           <DetailHeader
             back={{ href: '/hazid/types', label: 'Back' }}
             title={type.name}
@@ -96,7 +95,10 @@ export default async function AssessmentTypeDetailPage({
 
         <Section title={`Default PPE (${ppe.length})`} defaultOpen>
           <div className="space-y-3">
-            <form action={addTypePPE} className="grid grid-cols-1 gap-2 rounded-md border border-dashed border-slate-300 bg-slate-50/40 p-3 sm:grid-cols-3">
+            <form
+              action={addTypePPE}
+              className="grid grid-cols-1 gap-2 rounded-md border border-dashed border-slate-300 bg-slate-50/40 p-3 sm:grid-cols-3"
+            >
               <input type="hidden" name="typeId" value={id} />
               <div className="space-y-1.5">
                 <Label>Name</Label>
@@ -126,9 +128,13 @@ export default async function AssessmentTypeDetailPage({
                     <div>
                       <div className="font-medium text-slate-900">
                         {row.name}
-                        {row.required ? <span className="ml-2 text-xs uppercase text-red-600">required</span> : null}
+                        {row.required ? (
+                          <span className="ml-2 text-xs text-red-600 uppercase">required</span>
+                        ) : null}
                       </div>
-                      {row.description ? <div className="text-xs text-slate-500">{row.description}</div> : null}
+                      {row.description ? (
+                        <div className="text-xs text-slate-500">{row.description}</div>
+                      ) : null}
                     </div>
                     <span className="text-xs text-slate-500">#{row.entityOrder}</span>
                     <form action={deleteTypePPE}>
@@ -147,7 +153,10 @@ export default async function AssessmentTypeDetailPage({
 
         <Section title={`Default questions (${questions.length})`} defaultOpen>
           <div className="space-y-3">
-            <form action={addTypeQuestion} className="space-y-2 rounded-md border border-dashed border-slate-300 bg-slate-50/40 p-3">
+            <form
+              action={addTypeQuestion}
+              className="space-y-2 rounded-md border border-dashed border-slate-300 bg-slate-50/40 p-3"
+            >
               <input type="hidden" name="typeId" value={id} />
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                 <div className="space-y-1.5 sm:col-span-2">

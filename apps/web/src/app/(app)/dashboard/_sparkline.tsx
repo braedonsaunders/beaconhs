@@ -93,9 +93,7 @@ export function Sparkline({
       role="img"
       aria-label={ariaLabel ?? 'trend sparkline'}
     >
-      {showArea ? (
-        <path d={areaPath} fill={stroke} fillOpacity={0.18} stroke="none" />
-      ) : null}
+      {showArea ? <path d={areaPath} fill={stroke} fillOpacity={0.18} stroke="none" /> : null}
       <polyline
         points={linePoints}
         fill={fill}

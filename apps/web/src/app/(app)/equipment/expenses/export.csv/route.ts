@@ -1,11 +1,6 @@
 import type { NextRequest } from 'next/server'
 import { and, asc, desc, eq, gte, ilike, lte, or, type SQL } from 'drizzle-orm'
-import {
-  equipmentExpenses,
-  equipmentItems,
-  equipmentTypes,
-  orgUnits,
-} from '@beaconhs/db/schema'
+import { equipmentExpenses, equipmentItems, equipmentTypes, orgUnits } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { csvFilename, csvResponse } from '@/lib/csv'
 import { parseListParams, pickString } from '@/lib/list-params'
@@ -44,11 +39,19 @@ export async function GET(req: NextRequest) {
 
     const orderBy =
       params.sort === 'category'
-        ? [params.dir === 'asc' ? asc(equipmentExpenses.category) : desc(equipmentExpenses.category)]
+        ? [
+            params.dir === 'asc'
+              ? asc(equipmentExpenses.category)
+              : desc(equipmentExpenses.category),
+          ]
         : params.sort === 'amount'
           ? [params.dir === 'asc' ? asc(equipmentExpenses.amount) : desc(equipmentExpenses.amount)]
           : params.sort === 'vendor'
-            ? [params.dir === 'asc' ? asc(equipmentExpenses.vendor) : desc(equipmentExpenses.vendor)]
+            ? [
+                params.dir === 'asc'
+                  ? asc(equipmentExpenses.vendor)
+                  : desc(equipmentExpenses.vendor),
+              ]
             : [
                 params.dir === 'asc'
                   ? asc(equipmentExpenses.incurredOn)

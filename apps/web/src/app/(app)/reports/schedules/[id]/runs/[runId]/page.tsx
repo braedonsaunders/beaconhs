@@ -12,12 +12,7 @@ import {
   CardTitle,
   DetailHeader,
 } from '@beaconhs/ui'
-import {
-  attachments,
-  reportDefinitions,
-  reportRuns,
-  reportSchedules,
-} from '@beaconhs/db/schema'
+import { attachments, reportDefinitions, reportRuns, reportSchedules } from '@beaconhs/db/schema'
 import { db, withSuperAdmin } from '@beaconhs/db'
 import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
@@ -59,7 +54,9 @@ export default async function RunDetailPage({
 
   const duration =
     row.run.finishedAt && row.run.startedAt
-      ? Math.round((new Date(row.run.finishedAt).getTime() - new Date(row.run.startedAt).getTime()) / 1000)
+      ? Math.round(
+          (new Date(row.run.finishedAt).getTime() - new Date(row.run.startedAt).getTime()) / 1000,
+        )
       : null
 
   return (
@@ -86,7 +83,7 @@ export default async function RunDetailPage({
           <Alert variant="destructive">
             <AlertTitle>Run failed</AlertTitle>
             <AlertDescription>
-              <pre className="mt-2 whitespace-pre-wrap text-xs">{row.run.error}</pre>
+              <pre className="mt-2 text-xs whitespace-pre-wrap">{row.run.error}</pre>
             </AlertDescription>
           </Alert>
         ) : null}
@@ -164,7 +161,7 @@ export default async function RunDetailPage({
 function Detail({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <dt className="text-xs uppercase tracking-wide text-slate-500">{label}</dt>
+      <dt className="text-xs tracking-wide text-slate-500 uppercase">{label}</dt>
       <dd className="mt-0.5 text-slate-900">{children}</dd>
     </div>
   )

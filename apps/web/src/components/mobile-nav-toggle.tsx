@@ -58,7 +58,7 @@ export function MobileNavToggle({ groups }: { groups: SidebarNavGroup[] }) {
                     animate={{ x: 0 }}
                     exit={{ x: '-100%' }}
                     transition={{ type: 'spring', damping: 32, stiffness: 320, mass: 0.8 }}
-                    className="absolute left-0 top-0 flex h-full w-72 max-w-[86%] flex-col border-r border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900"
+                    className="absolute top-0 left-0 flex h-full w-72 max-w-[86%] flex-col border-r border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900"
                     onClickCapture={(e) => {
                       if ((e.target as HTMLElement).closest('a')) setOpen(false)
                     }}

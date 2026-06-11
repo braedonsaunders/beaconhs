@@ -30,8 +30,10 @@ export default async function AgingPage() {
   const rows = await agingFromStatus(ctx)
 
   const matrix = new Map<string, number>() // `${kind}::${bucket}` -> count
-  for (const r of rows) matrix.set(`${r.kind}::${r.bucket}`, (matrix.get(`${r.kind}::${r.bucket}`) ?? 0) + r.count)
-  const totalByKind = (kind: string) => BUCKETS.reduce((s, b) => s + (matrix.get(`${kind}::${b.key}`) ?? 0), 0)
+  for (const r of rows)
+    matrix.set(`${r.kind}::${r.bucket}`, (matrix.get(`${r.kind}::${r.bucket}`) ?? 0) + r.count)
+  const totalByKind = (kind: string) =>
+    BUCKETS.reduce((s, b) => s + (matrix.get(`${kind}::${b.key}`) ?? 0), 0)
   const kindsWithItems = OBLIGATION_KINDS.filter((k) => totalByKind(k) > 0)
   const grandTotal = OBLIGATION_KINDS.reduce((s, k) => s + totalByKind(k), 0)
 
@@ -39,7 +41,10 @@ export default async function AgingPage() {
     <ListPageLayout
       header={
         <>
-          <PageHeader title="Compliance" description="Every overdue or expiring subject across all obligation kinds, bucketed by age." />
+          <PageHeader
+            title="Compliance"
+            description="Every overdue or expiring subject across all obligation kinds, bucketed by age."
+          />
           <ComplianceSubNav active="aging" />
         </>
       }

@@ -44,10 +44,11 @@ export const correctiveActionSource = pgEnum('corrective_action_source', [
   'other',
 ])
 
-export const correctiveActionCompleteStepKind = pgEnum(
-  'corrective_action_complete_step_kind',
-  ['action_taken', 'verification', 'signature'],
-)
+export const correctiveActionCompleteStepKind = pgEnum('corrective_action_complete_step_kind', [
+  'action_taken',
+  'verification',
+  'signature',
+])
 
 export const correctiveActions = pgTable(
   'corrective_actions',
@@ -144,9 +145,7 @@ export const caCompleteSteps = pgTable(
       .references(() => correctiveActions.id, { onDelete: 'cascade' }),
     kind: correctiveActionCompleteStepKind('kind').notNull(),
     description: text('description'),
-    completedByTenantUserId: uuid('completed_by_tenant_user_id').references(
-      () => tenantUsers.id,
-    ),
+    completedByTenantUserId: uuid('completed_by_tenant_user_id').references(() => tenantUsers.id),
     completedAt: timestamp('completed_at', { withTimezone: true }).defaultNow().notNull(),
     signatureDataUrl: text('signature_data_url'),
     entityOrder: integer('entity_order').default(0).notNull(),

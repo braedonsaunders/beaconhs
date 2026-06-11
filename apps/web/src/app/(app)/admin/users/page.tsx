@@ -64,7 +64,8 @@ export default async function AdminUsersPage() {
             {rows.map(({ membership, account, roles }) => (
               <TableRow key={membership.id}>
                 <TableCell className="font-medium">
-                  {account.name} {account.isSuperAdmin ? <Badge variant="warning">super-admin</Badge> : null}
+                  {account.name}{' '}
+                  {account.isSuperAdmin ? <Badge variant="warning">super-admin</Badge> : null}
                 </TableCell>
                 <TableCell className="text-slate-600">{account.email}</TableCell>
                 <TableCell>

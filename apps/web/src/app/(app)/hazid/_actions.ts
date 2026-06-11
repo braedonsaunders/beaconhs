@@ -254,7 +254,9 @@ export async function createAssessment(formData: FormData): Promise<{ id: string
           .from(hazidAssessmentHazards)
           .where(eq(hazidAssessmentHazards.assessmentId, src.id))
         if (srcHaz.length > 0) {
-          await tx.delete(hazidAssessmentHazards).where(eq(hazidAssessmentHazards.assessmentId, row.id))
+          await tx
+            .delete(hazidAssessmentHazards)
+            .where(eq(hazidAssessmentHazards.assessmentId, row.id))
           await tx.insert(hazidAssessmentHazards).values(
             srcHaz.map((h) => ({
               tenantId: ctx.tenantId,
@@ -290,7 +292,9 @@ export async function createAssessment(formData: FormData): Promise<{ id: string
           .from(hazidAssessmentQuestions)
           .where(eq(hazidAssessmentQuestions.assessmentId, src.id))
         if (srcQ.length > 0) {
-          await tx.delete(hazidAssessmentQuestions).where(eq(hazidAssessmentQuestions.assessmentId, row.id))
+          await tx
+            .delete(hazidAssessmentQuestions)
+            .where(eq(hazidAssessmentQuestions.assessmentId, row.id))
           await tx.insert(hazidAssessmentQuestions).values(
             srcQ.map((q) => ({
               tenantId: ctx.tenantId,
@@ -476,10 +480,7 @@ export async function deleteAssessment(formData: FormData) {
   const ctx = await ctxWithTenant()
   const id = String(formData.get('id') ?? '')
   await ctx.db((tx) =>
-    tx
-      .update(hazidAssessments)
-      .set({ deletedAt: new Date() })
-      .where(eq(hazidAssessments.id, id)),
+    tx.update(hazidAssessments).set({ deletedAt: new Date() }).where(eq(hazidAssessments.id, id)),
   )
   await recordAudit(ctx, {
     entityType: 'hazid_assessment',
@@ -869,12 +870,16 @@ export async function updateHazard(formData: FormData) {
   const updates: Record<string, unknown> = { specificControls, applicable }
   if (standardControls !== undefined) updates.standardControls = standardControls
   if (name !== undefined) updates.name = name
-  if (formData.has('preLikelihood')) updates.preLikelihood = riskRating(formData.get('preLikelihood'))
+  if (formData.has('preLikelihood'))
+    updates.preLikelihood = riskRating(formData.get('preLikelihood'))
   if (formData.has('preSeverity')) updates.preSeverity = riskRating(formData.get('preSeverity'))
-  if (formData.has('postLikelihood')) updates.postLikelihood = riskRating(formData.get('postLikelihood'))
+  if (formData.has('postLikelihood'))
+    updates.postLikelihood = riskRating(formData.get('postLikelihood'))
   if (formData.has('postSeverity')) updates.postSeverity = riskRating(formData.get('postSeverity'))
   if (formData.has('controls')) updates.controls = nullable(formData.get('controls'))
-  await ctx.db((tx) => tx.update(hazidAssessmentHazards).set(updates).where(eq(hazidAssessmentHazards.id, id)))
+  await ctx.db((tx) =>
+    tx.update(hazidAssessmentHazards).set(updates).where(eq(hazidAssessmentHazards.id, id)),
+  )
   await recordAudit(ctx, {
     entityType: 'hazid_assessment_hazard',
     entityId: id,
@@ -963,7 +968,9 @@ export async function updatePPE(formData: FormData) {
   const required = formData.get('required') === 'on' || formData.get('required') === 'true'
   const updates: Record<string, unknown> = { description, required }
   if (name) updates.name = name
-  await ctx.db((tx) => tx.update(hazidAssessmentPPE).set(updates).where(eq(hazidAssessmentPPE.id, id)))
+  await ctx.db((tx) =>
+    tx.update(hazidAssessmentPPE).set(updates).where(eq(hazidAssessmentPPE.id, id)),
+  )
   await recordAudit(ctx, {
     entityType: 'hazid_assessment_ppe',
     entityId: id,
@@ -1033,7 +1040,10 @@ export async function addQuestion(formData: FormData) {
   const requiresYes = formData.get('requiresYes') === 'on' || formData.get('requiresYes') === 'true'
   const answersRaw = String(formData.get('answers') ?? '').trim()
   const answers = answersRaw
-    ? answersRaw.split('\n').map((s) => s.trim()).filter((s) => s.length > 0)
+    ? answersRaw
+        .split('\n')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0)
     : []
   await ctx.db(async (tx) => {
     const [maxOrder] = await tx
@@ -1065,10 +1075,7 @@ export async function answerQuestion(formData: FormData) {
   const assessmentId = String(formData.get('assessmentId') ?? '')
   const answer = nullable(formData.get('answer'))
   await ctx.db((tx) =>
-    tx
-      .update(hazidAssessmentQuestions)
-      .set({ answer })
-      .where(eq(hazidAssessmentQuestions.id, id)),
+    tx.update(hazidAssessmentQuestions).set({ answer }).where(eq(hazidAssessmentQuestions.id, id)),
   )
   await recordAudit(ctx, {
     entityType: 'hazid_assessment_question',
@@ -1088,10 +1095,7 @@ export async function updateQuestion(formData: FormData) {
   const updates: Record<string, unknown> = { requiresYes }
   if (question) updates.question = question
   await ctx.db((tx) =>
-    tx
-      .update(hazidAssessmentQuestions)
-      .set(updates)
-      .where(eq(hazidAssessmentQuestions.id, id)),
+    tx.update(hazidAssessmentQuestions).set(updates).where(eq(hazidAssessmentQuestions.id, id)),
   )
   await recordAudit(ctx, {
     entityType: 'hazid_assessment_question',
@@ -1106,7 +1110,9 @@ export async function deleteQuestion(formData: FormData) {
   const ctx = await ctxWithTenant()
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
-  await ctx.db((tx) => tx.delete(hazidAssessmentQuestions).where(eq(hazidAssessmentQuestions.id, id)))
+  await ctx.db((tx) =>
+    tx.delete(hazidAssessmentQuestions).where(eq(hazidAssessmentQuestions.id, id)),
+  )
   await recordAudit(ctx, {
     entityType: 'hazid_assessment_question',
     entityId: id,
@@ -1163,7 +1169,9 @@ export async function deleteCSAtmospheric(formData: FormData) {
   const ctx = await ctxWithTenant()
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
-  await ctx.db((tx) => tx.delete(hazidAssessmentCSAtmospheric).where(eq(hazidAssessmentCSAtmospheric.id, id)))
+  await ctx.db((tx) =>
+    tx.delete(hazidAssessmentCSAtmospheric).where(eq(hazidAssessmentCSAtmospheric.id, id)),
+  )
   await recordAudit(ctx, {
     entityType: 'hazid_assessment_cs_atmospheric',
     entityId: id,
@@ -1222,7 +1230,9 @@ export async function deleteCSEntry(formData: FormData) {
   const ctx = await ctxWithTenant()
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
-  await ctx.db((tx) => tx.delete(hazidAssessmentCSEntries).where(eq(hazidAssessmentCSEntries.id, id)))
+  await ctx.db((tx) =>
+    tx.delete(hazidAssessmentCSEntries).where(eq(hazidAssessmentCSEntries.id, id)),
+  )
   await recordAudit(ctx, {
     entityType: 'hazid_assessment_cs_entry',
     entityId: id,
@@ -1248,8 +1258,10 @@ export async function addSignature(formData: FormData) {
   const csAttendant = formData.get('csAttendant') === 'on' || formData.get('csAttendant') === 'true'
   const csRescue = formData.get('csRescue') === 'on' || formData.get('csRescue') === 'true'
   if (!assessmentId) throw new Error('Missing assessmentId')
-  if (signatureType === 'internal' && !personId) throw new Error('Internal signer requires a person')
-  if (signatureType === 'external' && !externalName) throw new Error('External signer requires a name')
+  if (signatureType === 'internal' && !personId)
+    throw new Error('Internal signer requires a person')
+  if (signatureType === 'external' && !externalName)
+    throw new Error('External signer requires a name')
 
   const [row] = await ctx.db((tx) =>
     tx
@@ -1311,7 +1323,9 @@ export async function updateSignature(formData: FormData) {
   if (csAttendant !== undefined) updates.csAttendant = csAttendant
   if (csRescue !== undefined) updates.csRescue = csRescue
 
-  await ctx.db((tx) => tx.update(hazidAssessmentSignatures).set(updates).where(eq(hazidAssessmentSignatures.id, id)))
+  await ctx.db((tx) =>
+    tx.update(hazidAssessmentSignatures).set(updates).where(eq(hazidAssessmentSignatures.id, id)),
+  )
   await recordAudit(ctx, {
     entityType: 'hazid_assessment_signature',
     entityId: id,
@@ -1325,7 +1339,9 @@ export async function deleteSignature(formData: FormData) {
   const ctx = await ctxWithTenant()
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
-  await ctx.db((tx) => tx.delete(hazidAssessmentSignatures).where(eq(hazidAssessmentSignatures.id, id)))
+  await ctx.db((tx) =>
+    tx.delete(hazidAssessmentSignatures).where(eq(hazidAssessmentSignatures.id, id)),
+  )
   await recordAudit(ctx, {
     entityType: 'hazid_assessment_signature',
     entityId: id,
@@ -1341,7 +1357,9 @@ export async function deleteSignature(formData: FormData) {
 export async function attachPhotos(formData: FormData) {
   const ctx = await ctxWithTenant()
   const assessmentId = String(formData.get('assessmentId') ?? '')
-  const ids = String(formData.get('attachmentIds') ?? '').split(',').filter(Boolean)
+  const ids = String(formData.get('attachmentIds') ?? '')
+    .split(',')
+    .filter(Boolean)
   if (!assessmentId || ids.length === 0) return
   await ctx.db((tx) =>
     tx.insert(hazidAssessmentPhotos).values(
@@ -1927,7 +1945,9 @@ export async function updateAssessmentType(formData: FormData) {
     hasArcFlash: flag('hasArcFlash'),
     defaultHazardSetId: nullable(formData.get('defaultHazardSetId')),
   }
-  await ctx.db((tx) => tx.update(hazidAssessmentTypes).set(updates).where(eq(hazidAssessmentTypes.id, id)))
+  await ctx.db((tx) =>
+    tx.update(hazidAssessmentTypes).set(updates).where(eq(hazidAssessmentTypes.id, id)),
+  )
   await recordAudit(ctx, {
     entityType: 'hazid_assessment_type',
     entityId: id,
@@ -1943,7 +1963,10 @@ export async function deleteAssessmentType(formData: FormData) {
   assertCanManageModule(ctx, 'hazid')
   const id = String(formData.get('id') ?? '')
   await ctx.db((tx) =>
-    tx.update(hazidAssessmentTypes).set({ deletedAt: new Date() }).where(eq(hazidAssessmentTypes.id, id)),
+    tx
+      .update(hazidAssessmentTypes)
+      .set({ deletedAt: new Date() })
+      .where(eq(hazidAssessmentTypes.id, id)),
   )
   await recordAudit(ctx, {
     entityType: 'hazid_assessment_type',
@@ -2001,7 +2024,10 @@ export async function addTypeQuestion(formData: FormData) {
   const requiresYes = formData.get('requiresYes') === 'on' || formData.get('requiresYes') === 'true'
   const answersRaw = String(formData.get('answers') ?? '').trim()
   const answers = answersRaw
-    ? answersRaw.split('\n').map((s) => s.trim()).filter((s) => s.length > 0)
+    ? answersRaw
+        .split('\n')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0)
     : []
   await ctx.db(async (tx) => {
     const [maxOrder] = await tx

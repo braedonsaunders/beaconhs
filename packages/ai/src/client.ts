@@ -219,7 +219,10 @@ export async function pingModel(
 ): Promise<{ ok: boolean; message: string }> {
   const model = getModel(config, 'fast')
   if (!model) {
-    return { ok: false, message: 'Not configured yet — check the provider, API key, model and base URL.' }
+    return {
+      ok: false,
+      message: 'Not configured yet — check the provider, API key, model and base URL.',
+    }
   }
   try {
     const { text } = await generateText({ model, prompt: 'Reply with the single word: ok' })

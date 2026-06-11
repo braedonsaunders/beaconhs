@@ -65,11 +65,7 @@ export default async function EditInspectionBankPage({
   const { id } = await params
   const ctx = await requireModuleManage('inspections')
   const bank = await ctx.db(async (tx) => {
-    const [row] = await tx
-      .select()
-      .from(inspectionBanks)
-      .where(eq(inspectionBanks.id, id))
-      .limit(1)
+    const [row] = await tx.select().from(inspectionBanks).where(eq(inspectionBanks.id, id)).limit(1)
     return row ?? null
   })
   if (!bank) notFound()

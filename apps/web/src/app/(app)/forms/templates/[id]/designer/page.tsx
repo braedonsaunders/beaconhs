@@ -27,9 +27,7 @@ function bootstrapSchema(name: string): FormSchemaV1 {
       {
         id: 'sec_intro',
         title: { en: 'Section 1' },
-        fields: [
-          { id: 'field_notes', type: 'long_text', label: { en: 'Notes' }, required: false },
-        ],
+        fields: [{ id: 'field_notes', type: 'long_text', label: { en: 'Notes' }, required: false }],
       },
     ],
     workflow: {

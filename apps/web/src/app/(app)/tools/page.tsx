@@ -1,13 +1,6 @@
 import Link from 'next/link'
 import { ChevronRight, QrCode, Ruler } from 'lucide-react'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  PageHeader,
-} from '@beaconhs/ui'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, PageHeader } from '@beaconhs/ui'
 import { PageContainer } from '@/components/page-layout'
 
 export const metadata = { title: 'Tools' }
@@ -45,11 +38,7 @@ export default function ToolsLandingPage() {
           {TOOLS.map((t) => {
             const Icon = t.icon
             return (
-              <Link
-                key={t.href}
-                href={t.href as any}
-                className="group block focus:outline-none"
-              >
+              <Link key={t.href} href={t.href as any} className="group block focus:outline-none">
                 <Card className="h-full transition-shadow group-hover:shadow-md group-focus-visible:ring-2 group-focus-visible:ring-teal-600">
                   <CardHeader>
                     <div className="flex items-center justify-between gap-3">

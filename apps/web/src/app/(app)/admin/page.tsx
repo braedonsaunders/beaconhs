@@ -73,36 +73,97 @@ const GROUPS: Group[] = [
     label: 'Organization',
     accent: 'teal',
     tiles: [
-      { href: '/admin/users', icon: Users, title: 'Users & roles', desc: 'Invite users, assign roles, manage scopes.' },
-      { href: '/admin/org', icon: Building2, title: 'Org hierarchy', desc: 'Customers, projects, sites, areas, crews.' },
-      { href: '/admin/tenants', icon: Boxes, title: 'Tenants', desc: 'List + view-as every tenant on this deployment.', badge: 'Super-admin' },
+      {
+        href: '/admin/users',
+        icon: Users,
+        title: 'Users & roles',
+        desc: 'Invite users, assign roles, manage scopes.',
+      },
+      {
+        href: '/admin/org',
+        icon: Building2,
+        title: 'Org hierarchy',
+        desc: 'Customers, projects, sites, areas, crews.',
+      },
+      {
+        href: '/admin/tenants',
+        icon: Boxes,
+        title: 'Tenants',
+        desc: 'List + view-as every tenant on this deployment.',
+        badge: 'Super-admin',
+      },
     ],
   },
   {
     label: 'Workspace',
     accent: 'violet',
     tiles: [
-      { href: '/admin/settings', icon: SlidersHorizontal, title: 'Tenant settings', desc: 'Branding, languages, risk matrix, hierarchy depth.' },
-      { href: '/admin/navigation', icon: PanelLeft, title: 'Navigation', desc: 'Reorder the sidebar, pin forms as native modules, hide unused sections.' },
-      { href: '/admin/data-sources', icon: Database, title: 'Data sources', desc: 'Reference lists + live data your apps bind to — lookups, cascades, KPIs.' },
-      { href: '/admin/library', icon: Library, title: 'Library & catalogues', desc: 'Inspection banks, skill authorities, skill types, atmospheric sensors.' },
+      {
+        href: '/admin/settings',
+        icon: SlidersHorizontal,
+        title: 'Tenant settings',
+        desc: 'Branding, languages, risk matrix, hierarchy depth.',
+      },
+      {
+        href: '/admin/navigation',
+        icon: PanelLeft,
+        title: 'Navigation',
+        desc: 'Reorder the sidebar, pin forms as native modules, hide unused sections.',
+      },
+      {
+        href: '/admin/data-sources',
+        icon: Database,
+        title: 'Data sources',
+        desc: 'Reference lists + live data your apps bind to — lookups, cascades, KPIs.',
+      },
+      {
+        href: '/admin/library',
+        icon: Library,
+        title: 'Library & catalogues',
+        desc: 'Inspection banks, skill authorities, skill types, atmospheric sensors.',
+      },
     ],
   },
   {
     label: 'Integrations',
     accent: 'amber',
     tiles: [
-      { href: '/admin/ai', icon: Sparkles, title: 'AI', desc: 'Provider, models and API key (encrypted) — powers journal AI.' },
-      { href: '/admin/plugins', icon: Blocks, title: 'Plugins', desc: 'Enable + configure first-party integrations.' },
-      { href: '/admin/api-keys', icon: KeyRound, title: 'API keys', desc: 'Manage public REST API credentials.' },
+      {
+        href: '/admin/ai',
+        icon: Sparkles,
+        title: 'AI',
+        desc: 'Provider, models and API key (encrypted) — powers journal AI.',
+      },
+      {
+        href: '/admin/plugins',
+        icon: Blocks,
+        title: 'Plugins',
+        desc: 'Enable + configure first-party integrations.',
+      },
+      {
+        href: '/admin/api-keys',
+        icon: KeyRound,
+        title: 'API keys',
+        desc: 'Manage public REST API credentials.',
+      },
     ],
   },
   {
     label: 'Activity',
     accent: 'sky',
     tiles: [
-      { href: '/admin/audit', icon: ScrollText, title: 'Audit log', desc: 'Every write captured with actor + diffs.' },
-      { href: '/admin/email-log', icon: Mail, title: 'Email log', desc: 'Every transactional + on-demand email the worker dispatched.' },
+      {
+        href: '/admin/audit',
+        icon: ScrollText,
+        title: 'Audit log',
+        desc: 'Every write captured with actor + diffs.',
+      },
+      {
+        href: '/admin/email-log',
+        icon: Mail,
+        title: 'Email log',
+        desc: 'Every transactional + on-demand email the worker dispatched.',
+      },
     ],
   },
 ]
@@ -111,13 +172,15 @@ export default async function AdminPage() {
   const ctx = await requireRequestContext()
   // Per-module administration, driven by the module-admin registry — one tile per
   // module the viewer may administer, linking to that module's Manage hub.
-  const moduleTiles = MODULE_ADMIN.filter((m) => ctx.isSuperAdmin || can(ctx, m.permission)).map((m) => ({
-    key: m.moduleKey,
-    label: m.label,
-    href: m.managePath,
-    iconKey: m.iconKey,
-    desc: `Records, taxonomies & settings for ${m.label.toLowerCase()}.`,
-  }))
+  const moduleTiles = MODULE_ADMIN.filter((m) => ctx.isSuperAdmin || can(ctx, m.permission)).map(
+    (m) => ({
+      key: m.moduleKey,
+      label: m.label,
+      href: m.managePath,
+      iconKey: m.iconKey,
+      desc: `Records, taxonomies & settings for ${m.label.toLowerCase()}.`,
+    }),
+  )
 
   return (
     <PageContainer>
@@ -125,14 +188,14 @@ export default async function AdminPage() {
         <header className="space-y-1">
           <h1 className="text-2xl font-semibold text-slate-900">Admin</h1>
           <p className="max-w-2xl text-sm text-slate-500">
-            Everything that configures this workspace — people, settings, integrations and the
-            audit trail. Pick a panel to get started.
+            Everything that configures this workspace — people, settings, integrations and the audit
+            trail. Pick a panel to get started.
           </p>
         </header>
 
         {moduleTiles.length > 0 ? (
           <section className="space-y-3">
-            <h2 className="px-0.5 text-xs font-semibold uppercase tracking-wider text-slate-400">
+            <h2 className="px-0.5 text-xs font-semibold tracking-wider text-slate-400 uppercase">
               Module administration
             </h2>
             <AdminTileGrid tiles={moduleTiles} />
@@ -143,7 +206,7 @@ export default async function AdminPage() {
           const accent = ACCENTS[group.accent]
           return (
             <section key={group.label} className="space-y-3">
-              <h2 className="px-0.5 text-xs font-semibold uppercase tracking-wider text-slate-400">
+              <h2 className="px-0.5 text-xs font-semibold tracking-wider text-slate-400 uppercase">
                 {group.label}
               </h2>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -164,7 +227,7 @@ export default async function AdminPage() {
                         aria-hidden
                         strokeWidth={1.25}
                         className={cn(
-                          'pointer-events-none absolute -bottom-5 -right-4 h-28 w-28 opacity-[0.07]',
+                          'pointer-events-none absolute -right-4 -bottom-5 h-28 w-28 opacity-[0.07]',
                           'transition-opacity duration-200 group-hover:opacity-[0.12]',
                           accent.glow,
                         )}

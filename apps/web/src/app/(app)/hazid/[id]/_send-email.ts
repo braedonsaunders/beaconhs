@@ -124,9 +124,7 @@ export async function sendHazidEmail(
     }),
     ``,
     `PPE required:`,
-    ...data.ppe
-      .filter((p) => p.answer === 'yes')
-      .map((p) => `  - ${p.name}`),
+    ...data.ppe.filter((p) => p.answer === 'yes').map((p) => `  - ${p.name}`),
     ``,
     `Signatures (${data.signatures.length}):`,
     ...data.signatures.map((s) => {
@@ -147,9 +145,11 @@ export async function sendHazidEmail(
         ${escapeHtml(data.a.occurredAt.toLocaleString())} ·
         ${data.a.locked ? 'locked / completed' : 'in progress'}
       </div>
-      ${options?.messageOverride
-        ? `<div style="border-left:3px solid #0f766e;padding:8px 12px;background:#ecfdf5;margin-bottom:12px;font-size:13px;">${escapeHtml(options.messageOverride)}</div>`
-        : ''}
+      ${
+        options?.messageOverride
+          ? `<div style="border-left:3px solid #0f766e;padding:8px 12px;background:#ecfdf5;margin-bottom:12px;font-size:13px;">${escapeHtml(options.messageOverride)}</div>`
+          : ''
+      }
       <table style="border-collapse:collapse;font-size:13px;margin-bottom:12px;">
         <tr><td style="padding:4px 12px 4px 0;color:#64748b;">Site</td>
             <td style="padding:4px 0;">${escapeHtml(data.site?.name ?? '—')}</td></tr>
@@ -161,36 +161,46 @@ export async function sendHazidEmail(
             <td style="padding:4px 0;">${escapeHtml(data.a.jobScope ?? '—')}</td></tr>
       </table>
       <h3 style="margin:18px 0 4px;font-size:14px;">Tasks (${data.tasks.length})</h3>
-      ${data.tasks.length === 0
-        ? '<div style="font-size:13px;color:#64748b;">None recorded.</div>'
-        : `<ul style="font-size:13px;margin:0 0 12px 18px;padding:0;">${data.tasks.map((t) => `<li>${escapeHtml(t.description ?? '—')}</li>`).join('')}</ul>`}
+      ${
+        data.tasks.length === 0
+          ? '<div style="font-size:13px;color:#64748b;">None recorded.</div>'
+          : `<ul style="font-size:13px;margin:0 0 12px 18px;padding:0;">${data.tasks.map((t) => `<li>${escapeHtml(t.description ?? '—')}</li>`).join('')}</ul>`
+      }
       <h3 style="margin:18px 0 4px;font-size:14px;">Hazards (${data.hazards.length})</h3>
-      ${data.hazards.length === 0
-        ? '<div style="font-size:13px;color:#64748b;">None recorded.</div>'
-        : `<ul style="font-size:13px;margin:0 0 12px 18px;padding:0;">${data.hazards
-            .map((h) => {
-              const controls = [h.standardControls, h.specificControls].filter(Boolean).join(' / ')
-              return `<li><strong>${escapeHtml(h.name ?? '—')}</strong>${controls ? `<br/><span style="color:#64748b">Controls: ${escapeHtml(controls)}</span>` : ''}</li>`
-            })
-            .join('')}</ul>`}
+      ${
+        data.hazards.length === 0
+          ? '<div style="font-size:13px;color:#64748b;">None recorded.</div>'
+          : `<ul style="font-size:13px;margin:0 0 12px 18px;padding:0;">${data.hazards
+              .map((h) => {
+                const controls = [h.standardControls, h.specificControls]
+                  .filter(Boolean)
+                  .join(' / ')
+                return `<li><strong>${escapeHtml(h.name ?? '—')}</strong>${controls ? `<br/><span style="color:#64748b">Controls: ${escapeHtml(controls)}</span>` : ''}</li>`
+              })
+              .join('')}</ul>`
+      }
       <h3 style="margin:18px 0 4px;font-size:14px;">PPE</h3>
-      ${data.ppe.filter((p) => p.answer === 'yes').length === 0
-        ? '<div style="font-size:13px;color:#64748b;">None required.</div>'
-        : `<ul style="font-size:13px;margin:0 0 12px 18px;padding:0;">${data.ppe
-            .filter((p) => p.answer === 'yes')
-            .map((p) => `<li>${escapeHtml(p.name)}</li>`)
-            .join('')}</ul>`}
+      ${
+        data.ppe.filter((p) => p.answer === 'yes').length === 0
+          ? '<div style="font-size:13px;color:#64748b;">None required.</div>'
+          : `<ul style="font-size:13px;margin:0 0 12px 18px;padding:0;">${data.ppe
+              .filter((p) => p.answer === 'yes')
+              .map((p) => `<li>${escapeHtml(p.name)}</li>`)
+              .join('')}</ul>`
+      }
       <h3 style="margin:18px 0 4px;font-size:14px;">Signatures (${data.signatures.length})</h3>
-      ${data.signatures.length === 0
-        ? '<div style="font-size:13px;color:#64748b;">None captured.</div>'
-        : `<ul style="font-size:13px;margin:0 0 12px 18px;padding:0;">${data.signatures
-            .map((s) => {
-              const name = s.person
-                ? `${escapeHtml(s.person.firstName)} ${escapeHtml(s.person.lastName)}`
-                : escapeHtml(s.row.externalName ?? 'Unknown')
-              return `<li>${name}${s.row.signedAt ? ` (signed ${escapeHtml(s.row.signedAt.toLocaleString())})` : ' (not signed)'}</li>`
-            })
-            .join('')}</ul>`}
+      ${
+        data.signatures.length === 0
+          ? '<div style="font-size:13px;color:#64748b;">None captured.</div>'
+          : `<ul style="font-size:13px;margin:0 0 12px 18px;padding:0;">${data.signatures
+              .map((s) => {
+                const name = s.person
+                  ? `${escapeHtml(s.person.firstName)} ${escapeHtml(s.person.lastName)}`
+                  : escapeHtml(s.row.externalName ?? 'Unknown')
+                return `<li>${name}${s.row.signedAt ? ` (signed ${escapeHtml(s.row.signedAt.toLocaleString())})` : ' (not signed)'}</li>`
+              })
+              .join('')}</ul>`
+      }
     </div>
   `
 

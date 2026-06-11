@@ -125,7 +125,7 @@ function defaultFooterHtml(input: RenderInput): string {
 function buildHtml(input: RenderInput): string {
   const locale = input.metadata.locale ?? 'en'
   const t = (k: { [lang: string]: string } | undefined, fallback = '') =>
-    k ? k[locale] ?? k['en'] ?? Object.values(k)[0] ?? fallback : fallback
+    k ? (k[locale] ?? k['en'] ?? Object.values(k)[0] ?? fallback) : fallback
 
   // Build the shared eval context for showIf + formula evaluation.
   // `input.values` carries the response payload — for repeating sections the
@@ -183,7 +183,11 @@ function buildHtml(input: RenderInput): string {
                     if ((f.type === 'formula' || f.type === 'calc') && f.formula) {
                       raw = evaluateFormulaTree(f.formula as FormulaExpression, rowCtx)
                     }
-                    const display = renderValue(f.type, raw, (f as { config?: Record<string, unknown> }).config)
+                    const display = renderValue(
+                      f.type,
+                      raw,
+                      (f as { config?: Record<string, unknown> }).config,
+                    )
                     if (display === null) return ''
                     return `<div class="field"><div class="lbl">${escapeHtml(label)}</div><div class="val">${display}</div></div>`
                   })
@@ -217,7 +221,11 @@ function buildHtml(input: RenderInput): string {
               if ((f.type === 'formula' || f.type === 'calc') && f.formula) {
                 raw = evaluateFormulaTree(f.formula as FormulaExpression, evalCtx)
               }
-              const display = renderValue(f.type, raw, (f as { config?: Record<string, unknown> }).config)
+              const display = renderValue(
+                f.type,
+                raw,
+                (f as { config?: Record<string, unknown> }).config,
+              )
               if (display === null) return ''
               const spanStyle = cols
                 ? ` style="grid-column:span ${Math.min(f.colSpan ?? cols, cols)}"`
@@ -312,11 +320,7 @@ function buildHtml(input: RenderInput): string {
 </body></html>`
 }
 
-function renderValue(
-  type: string,
-  raw: unknown,
-  config?: Record<string, unknown>,
-): string | null {
+function renderValue(type: string, raw: unknown, config?: Record<string, unknown>): string | null {
   if (raw === undefined || raw === null || raw === '') {
     // `metric` is a live aggregate with no stored value — omit from the PDF.
     if (['heading', 'paragraph', 'image', 'divider', 'metric'].includes(type)) return null
@@ -336,14 +340,17 @@ function renderValue(
       return '<em>see Signatures section</em>'
     case 'checkbox_group':
     case 'multi_select':
-      return Array.isArray(raw) ? raw.map((x) => escapeHtml(String(x))).join(', ') : escapeHtml(String(raw))
+      return Array.isArray(raw)
+        ? raw.map((x) => escapeHtml(String(x))).join(', ')
+        : escapeHtml(String(raw))
     case 'yes_no_comment': {
       const v = raw as { answer?: string; comment?: string }
       return `${escapeHtml(v.answer ?? '')}${v.comment ? ` <span style="color:#666">(${escapeHtml(v.comment)})</span>` : ''}`
     }
     case 'gps': {
       const v = raw as { lat?: number; lng?: number; accuracy?: number }
-      if (typeof v.lat !== 'number' || typeof v.lng !== 'number') return '<em style="color:#999">—</em>'
+      if (typeof v.lat !== 'number' || typeof v.lng !== 'number')
+        return '<em style="color:#999">—</em>'
       return `${v.lat.toFixed(5)}, ${v.lng.toFixed(5)}${v.accuracy ? ` <span style="color:#666">(±${Math.round(v.accuracy)}m)</span>` : ''}`
     }
     case 'matrix': {
@@ -360,14 +367,18 @@ function renderValue(
         : Object.entries(v)
       if (entries.length === 0) return '<em style="color:#999">—</em>'
       return entries
-        .map(([label, val]) => `${escapeHtml(label)}: <strong>${escapeHtml(scaleLabel(val))}</strong>`)
+        .map(
+          ([label, val]) => `${escapeHtml(label)}: <strong>${escapeHtml(scaleLabel(val))}</strong>`,
+        )
         .join('<br/>')
     }
     case 'lookup':
       return escapeHtml(String(raw))
     case 'data_table': {
       const ids = Array.isArray(raw) ? (raw as string[]) : []
-      return ids.length ? `${ids.length} record${ids.length === 1 ? '' : 's'} selected` : '<em style="color:#999">—</em>'
+      return ids.length
+        ? `${ids.length} record${ids.length === 1 ? '' : 's'} selected`
+        : '<em style="color:#999">—</em>'
     }
     case 'photo_ai': {
       const val = raw as {
@@ -382,10 +393,14 @@ function renderValue(
       const n = val.attachments?.length ?? 0
       const a = val.analysis
       if (!a) return `${n} photo${n === 1 ? '' : 's'}`
-      const parts = [`${n} photo${n === 1 ? '' : 's'} · risk <strong>${escapeHtml(a.overallRisk ?? '')}</strong>`]
+      const parts = [
+        `${n} photo${n === 1 ? '' : 's'} · risk <strong>${escapeHtml(a.overallRisk ?? '')}</strong>`,
+      ]
       if (a.summary) parts.push(escapeHtml(a.summary))
       if (a.hazards?.length)
-        parts.push(`Hazards: ${a.hazards.map((h) => escapeHtml(`${h.type} (${h.severity})`)).join(', ')}`)
+        parts.push(
+          `Hazards: ${a.hazards.map((h) => escapeHtml(`${h.type} (${h.severity})`)).join(', ')}`,
+        )
       const badPpe = (a.ppe ?? []).filter((p) => p.status !== 'present')
       if (badPpe.length) parts.push(`PPE: ${badPpe.map((p) => escapeHtml(p.item)).join(', ')}`)
       return parts.join('<br/>')
@@ -426,7 +441,9 @@ function renderValue(
       const markers = Array.isArray(val.markers) ? val.markers : []
       const head = `${n} photo${n === 1 ? '' : 's'}, ${markers.length} marker${markers.length === 1 ? '' : 's'}`
       return markers.length
-        ? head + '<br/>' + markers.map((m, i) => `${i + 1}. ${escapeHtml(m.label || '(no note)')}`).join('<br/>')
+        ? head +
+            '<br/>' +
+            markers.map((m, i) => `${i + 1}. ${escapeHtml(m.label || '(no note)')}`).join('<br/>')
         : escapeHtml(head)
     }
     case 'risk_matrix': {
@@ -435,7 +452,12 @@ function renderValue(
     }
     case 'table': {
       const cfg = (config ?? {}) as {
-        columns?: { key: string; label?: string; type?: string; options?: { value: string; label: string }[] }[]
+        columns?: {
+          key: string
+          label?: string
+          type?: string
+          options?: { value: string; label: string }[]
+        }[]
         rows?: { label: string }[]
         rowMode?: string
       }
@@ -446,7 +468,8 @@ function renderValue(
       const rows = fixed ? fixedRows.map((_, i) => stored[i] ?? {}) : stored
       if (columns.length === 0 || rows.length === 0) return '<em style="color:#999">—</em>'
       const cell = 'style="border:1px solid #ddd;padding:3px 5px;text-align:left"'
-      const head = 'style="border:1px solid #ddd;padding:3px 5px;text-align:left;background:#f8fafc"'
+      const head =
+        'style="border:1px solid #ddd;padding:3px 5px;text-align:left;background:#f8fafc"'
       const ths = `${fixed ? `<th ${head}></th>` : ''}${columns.map((c) => `<th ${head}>${escapeHtml(c.label || c.key)}</th>`).join('')}`
       const trs = rows
         .map((row, i) => {
@@ -459,7 +482,8 @@ function renderValue(
               let s = ''
               if (v === null || v === undefined || v === '') s = ''
               else if (c.type === 'checkbox') s = v ? '✓' : ''
-              else if (c.type === 'select') s = (c.options ?? []).find((o) => o.value === v)?.label ?? String(v)
+              else if (c.type === 'select')
+                s = (c.options ?? []).find((o) => o.value === v)?.label ?? String(v)
               else s = String(v)
               return `<td ${cell}>${escapeHtml(s)}</td>`
             })
@@ -690,9 +714,7 @@ export async function renderHazidSignedReportPdf(
       // the explicit page-break-after wrapper to keep puppeteer from running
       // pages together when an assessment is short.
       const sep =
-        i === 0
-          ? ''
-          : '<div style="page-break-after: always; height: 0; overflow: hidden;"></div>'
+        i === 0 ? '' : '<div style="page-break-after: always; height: 0; overflow: hidden;"></div>'
       return `${sep}<div class="bundled-assessment">${renderHazidHtml(a)}</div>`
     })
     .join('\n')

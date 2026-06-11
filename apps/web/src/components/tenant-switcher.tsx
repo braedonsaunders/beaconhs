@@ -58,7 +58,7 @@ export function TenantSwitcher({
           type="button"
           onClick={() => setOpen((v) => !v)}
           disabled={pending}
-          className="flex items-center gap-2 rounded-md border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-2.5 py-1 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/60"
+          className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800/60"
         >
           <Building2 size={14} />
           {pending ? 'Switching…' : current.name}
@@ -66,7 +66,7 @@ export function TenantSwitcher({
         </button>
       }
     >
-      <div className="border-b border-slate-100 dark:border-slate-800 px-3 py-2 text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
+      <div className="border-b border-slate-100 px-3 py-2 text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:text-slate-400">
         {isSuperAdmin ? `All tenants (${available.length})` : 'Your tenants'}
       </div>
       <ul className="max-h-72 overflow-y-auto py-1">
@@ -81,7 +81,9 @@ export function TenantSwitcher({
                 <span className="font-medium text-slate-900 dark:text-slate-100">{t.name}</span>
                 <span className="text-xs text-slate-500 dark:text-slate-400">{t.slug}</span>
               </span>
-              {t.id === current.id ? <Check size={14} className="text-teal-700 dark:text-teal-300" /> : null}
+              {t.id === current.id ? (
+                <Check size={14} className="text-teal-700 dark:text-teal-300" />
+              ) : null}
             </button>
           </li>
         ))}

@@ -162,7 +162,7 @@ export default async function TranscriptsListPage({
                       {person.lastName}, {person.firstName}
                     </Link>
                   </TableCell>
-                  <TableCell className="text-slate-600 font-mono text-xs">
+                  <TableCell className="font-mono text-xs text-slate-600">
                     {person.employeeNo ?? '—'}
                   </TableCell>
                   <TableCell className="tabular-nums">

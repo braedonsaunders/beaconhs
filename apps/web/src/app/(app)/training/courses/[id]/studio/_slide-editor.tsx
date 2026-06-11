@@ -6,15 +6,7 @@
 import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Reorder } from 'framer-motion'
-import {
-  Copy,
-  FileUp,
-  Loader2,
-  Play,
-  Plus,
-  Trash2,
-  X,
-} from 'lucide-react'
+import { Copy, FileUp, Loader2, Play, Plus, Trash2, X } from 'lucide-react'
 import { Button, FileUploader, Input, Label, Select, Textarea } from '@beaconhs/ui'
 import type { Slide } from '@beaconhs/db/schema'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
@@ -228,16 +220,23 @@ export function SlideEditor({
             className="app-scroll max-h-[60vh] space-y-2 overflow-y-auto pr-1"
           >
             {deck.map((s, i) => (
-              <Reorder.Item key={s.id} value={s} as="li" className="cursor-grab active:cursor-grabbing">
+              <Reorder.Item
+                key={s.id}
+                value={s}
+                as="li"
+                className="cursor-grab active:cursor-grabbing"
+              >
                 <button
                   type="button"
                   onClick={() => setSelectedId(s.id)}
                   className={`block w-full rounded-md p-0.5 text-left ${
-                    s.id === selectedId ? 'ring-2 ring-teal-500' : 'hover:ring-2 hover:ring-slate-300'
+                    s.id === selectedId
+                      ? 'ring-2 ring-teal-500'
+                      : 'hover:ring-2 hover:ring-slate-300'
                   }`}
                 >
                   <SlideThumb slide={s} attachmentUrls={urls} />
-                  <span className="mt-0.5 block px-1 text-[10px] tabular-nums text-slate-400">
+                  <span className="mt-0.5 block px-1 text-[10px] text-slate-400 tabular-nums">
                     {i + 1}
                   </span>
                 </button>
@@ -266,7 +265,9 @@ export function SlideEditor({
                 {selected.layout !== 'pptx' ? (
                   <Select
                     value={selected.layout}
-                    onChange={(e) => patchSelected({ layout: e.currentTarget.value as Slide['layout'] })}
+                    onChange={(e) =>
+                      patchSelected({ layout: e.currentTarget.value as Slide['layout'] })
+                    }
                     className="h-8 w-40"
                   >
                     {LAYOUTS.map((l) => (
@@ -289,7 +290,9 @@ export function SlideEditor({
                         title={b.label}
                         onClick={() => patchSelected({ bg: b.value })}
                         className={`h-6 w-6 rounded-full border ${b.swatch} ${
-                          (selected.bg ?? 'white') === b.value ? 'ring-2 ring-teal-500 ring-offset-1' : ''
+                          (selected.bg ?? 'white') === b.value
+                            ? 'ring-2 ring-teal-500 ring-offset-1'
+                            : ''
                         }`}
                       />
                     ))}
@@ -400,7 +403,7 @@ export function SlideEditor({
             type="button"
             onClick={() => setPresenting(false)}
             aria-label="Close presentation"
-            className="absolute right-3 top-3 z-20 grid h-9 w-9 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20"
+            className="absolute top-3 right-3 z-20 grid h-9 w-9 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20"
           >
             <X size={18} />
           </button>

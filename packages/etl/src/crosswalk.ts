@@ -71,7 +71,9 @@ export async function mapId(
 }
 
 export async function startRun(sql: Pg, mode: string): Promise<string> {
-  const r = await sql<{ id: string }[]>`insert into etl.sync_runs (mode) values (${mode}) returning id`
+  const r = await sql<
+    { id: string }[]
+  >`insert into etl.sync_runs (mode) values (${mode}) returning id`
   return r[0]!.id
 }
 

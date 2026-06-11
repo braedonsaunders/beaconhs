@@ -53,7 +53,9 @@ export function InsightsWorkspace({
     if (editing && dirty && active) {
       if (!window.confirm('Discard unsaved changes to this dashboard?')) return
       const base = baselines.current[active.id]
-      setBoards((bs) => bs.map((b) => (b.id === active.id ? { ...b, widgets: base ? JSON.parse(base) : [] } : b)))
+      setBoards((bs) =>
+        bs.map((b) => (b.id === active.id ? { ...b, widgets: base ? JSON.parse(base) : [] } : b)),
+      )
     }
     setActiveId(id)
     setEditing(false)
@@ -129,7 +131,7 @@ export function InsightsWorkspace({
               type="button"
               onClick={() => switchTab(b.id)}
               className={cn(
-                'shrink-0 whitespace-nowrap rounded-t-lg border-b-2 px-3 py-2 text-sm font-medium transition-colors',
+                'shrink-0 rounded-t-lg border-b-2 px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors',
                 b.id === activeId
                   ? 'border-teal-600 text-teal-700'
                   : 'border-transparent text-slate-500 hover:text-slate-800',
@@ -160,14 +162,33 @@ export function InsightsWorkspace({
               className="h-8 rounded-md border border-slate-300 px-2.5 text-sm font-medium outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/25"
             />
             <div className="ml-auto flex items-center gap-2">
-              <Button type="button" variant="ghost" onClick={() => setPaletteOpen((v) => !v)} className="h-8 text-xs">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setPaletteOpen((v) => !v)}
+                className="h-8 text-xs"
+              >
                 <Plus size={13} className="mr-1" /> {paletteOpen ? 'Hide widgets' : 'Add widgets'}
               </Button>
-              <Button type="button" variant="ghost" onClick={del} className="h-8 text-xs text-rose-700 hover:bg-rose-50">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={del}
+                className="h-8 text-xs text-rose-700 hover:bg-rose-50"
+              >
                 <Trash2 size={13} className="mr-1" /> Delete
               </Button>
-              <Button type="button" onClick={save} disabled={saving || !dirty} className="h-8 text-xs">
-                {saving ? <Loader2 size={13} className="mr-1 animate-spin" /> : <Save size={13} className="mr-1" />}
+              <Button
+                type="button"
+                onClick={save}
+                disabled={saving || !dirty}
+                className="h-8 text-xs"
+              >
+                {saving ? (
+                  <Loader2 size={13} className="mr-1 animate-spin" />
+                ) : (
+                  <Save size={13} className="mr-1" />
+                )}
                 Save
               </Button>
               <Button
@@ -189,7 +210,9 @@ export function InsightsWorkspace({
           </>
         ) : (
           <>
-            <span className="text-sm font-semibold text-slate-800">{active?.name ?? 'Insights'}</span>
+            <span className="text-sm font-semibold text-slate-800">
+              {active?.name ?? 'Insights'}
+            </span>
             <div className="ml-auto">
               <Button
                 type="button"

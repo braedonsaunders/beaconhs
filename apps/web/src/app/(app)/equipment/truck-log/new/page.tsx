@@ -11,12 +11,7 @@ import {
   Select,
   Textarea,
 } from '@beaconhs/ui'
-import {
-  equipmentItems,
-  orgUnits,
-  people,
-  truckLogEntries,
-} from '@beaconhs/db/schema'
+import { equipmentItems, orgUnits, people, truckLogEntries } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { pickString } from '@/lib/list-params'
@@ -55,7 +50,9 @@ async function createEntry(formData: FormData) {
   const notes = safeStr(formData.get('notes'))
 
   const kmDriven =
-    typeof startOdometer === 'number' && typeof endOdometer === 'number' && endOdometer >= startOdometer
+    typeof startOdometer === 'number' &&
+    typeof endOdometer === 'number' &&
+    endOdometer >= startOdometer
       ? endOdometer - startOdometer
       : null
 
@@ -103,7 +100,8 @@ export default async function NewTruckLogEntryPage({
   const presetTruckId = pickString(sp.truckId) ?? ''
   const presetDate = pickString(sp.date) ?? new Date().toISOString().slice(0, 10)
   const presetMonth = pickString(sp.month)
-  const initialDate = presetDate || (presetMonth ? `${presetMonth}-01` : new Date().toISOString().slice(0, 10))
+  const initialDate =
+    presetDate || (presetMonth ? `${presetMonth}-01` : new Date().toISOString().slice(0, 10))
   // If we already know the truck, prefer the drawer on the parent detail
   // page. The full-page route stays as a fallback when there is no item
   // context (e.g. linked from the truck-log calendar without a row click).
@@ -115,7 +113,11 @@ export default async function NewTruckLogEntryPage({
   const { trucks, sites, drivers } = await ctx.db(async (tx) => {
     const [t, s, d] = await Promise.all([
       tx
-        .select({ id: equipmentItems.id, assetTag: equipmentItems.assetTag, name: equipmentItems.name })
+        .select({
+          id: equipmentItems.id,
+          assetTag: equipmentItems.assetTag,
+          name: equipmentItems.name,
+        })
         .from(equipmentItems)
         .orderBy(asc(equipmentItems.assetTag))
         .limit(500),
@@ -186,14 +188,24 @@ export default async function NewTruckLogEntryPage({
                   <Input name="endOdometer" type="number" min="0" step="1" />
                 </Field>
                 <Field label="Hours on site">
-                  <Input name="hoursOnSite" type="number" min="0" step="0.25" placeholder="e.g. 8.5" />
+                  <Input
+                    name="hoursOnSite"
+                    type="number"
+                    min="0"
+                    step="0.25"
+                    placeholder="e.g. 8.5"
+                  />
                 </Field>
                 <Field label="Manpower count">
                   <Input name="manpowerCount" type="number" min="0" step="1" />
                 </Field>
               </div>
               <Field label="Notes">
-                <Textarea name="notes" rows={3} placeholder="Anything noteworthy for billing or maintenance." />
+                <Textarea
+                  name="notes"
+                  rows={3}
+                  placeholder="Anything noteworthy for billing or maintenance."
+                />
               </Field>
               <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-4">
                 <a href="/equipment/truck-log">

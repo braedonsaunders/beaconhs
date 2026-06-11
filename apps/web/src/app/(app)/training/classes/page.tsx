@@ -66,11 +66,7 @@ export default async function TrainingClassesPage({
         ? [params.dir === 'asc' ? asc(trainingCourses.name) : desc(trainingCourses.name)]
         : params.sort === 'title'
           ? [params.dir === 'asc' ? asc(trainingClasses.title) : desc(trainingClasses.title)]
-          : [
-              params.dir === 'asc'
-                ? asc(trainingClasses.startsAt)
-                : desc(trainingClasses.startsAt),
-            ]
+          : [params.dir === 'asc' ? asc(trainingClasses.startsAt) : desc(trainingClasses.startsAt)]
 
     const [tot] = await tx.select({ c: count() }).from(trainingClasses).where(whereClause)
     const data = await tx
@@ -102,14 +98,8 @@ export default async function TrainingClassesPage({
             .groupBy(trainingClassAttendees.classId)
 
     const [upcomingC, pastC, allC] = await Promise.all([
-      tx
-        .select({ c: count() })
-        .from(trainingClasses)
-        .where(gte(trainingClasses.startsAt, now)),
-      tx
-        .select({ c: count() })
-        .from(trainingClasses)
-        .where(lt(trainingClasses.startsAt, now)),
+      tx.select({ c: count() }).from(trainingClasses).where(gte(trainingClasses.startsAt, now)),
+      tx.select({ c: count() }).from(trainingClasses).where(lt(trainingClasses.startsAt, now)),
       tx.select({ c: count() }).from(trainingClasses),
     ])
 
@@ -177,11 +167,7 @@ export default async function TrainingClassesPage({
           <Table>
             <TableHeader>
               <TableRow>
-                <SortableTh
-                  {...sortProps}
-                  column="starts_at"
-                  active={params.sort === 'starts_at'}
-                >
+                <SortableTh {...sortProps} column="starts_at" active={params.sort === 'starts_at'}>
                   When
                 </SortableTh>
                 <SortableTh {...sortProps} column="title" active={params.sort === 'title'}>

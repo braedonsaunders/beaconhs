@@ -285,7 +285,8 @@ async function renderCustomer({
     loadEquipmentForUnits(ctx, descendantIds),
   ])
 
-  const activity = active === 'activity' ? await recentActivityForEntity(ctx, 'org_unit', id, 25) : []
+  const activity =
+    active === 'activity' ? await recentActivityForEntity(ctx, 'org_unit', id, 25) : []
 
   const projectParentName = (siteParentId: string | null): string | undefined => {
     if (!siteParentId) return undefined
@@ -373,7 +374,8 @@ async function renderProject({
     loadEquipmentForUnits(ctx, descendantIds),
   ])
 
-  const activity = active === 'activity' ? await recentActivityForEntity(ctx, 'org_unit', id, 25) : []
+  const activity =
+    active === 'activity' ? await recentActivityForEntity(ctx, 'org_unit', id, 25) : []
 
   const backHref = parent ? `/locations/${parent.id}?tab=projects` : '/locations'
   const backLabel = parent ? `Back to ${parent.name}` : 'Back to locations'
@@ -452,7 +454,8 @@ async function renderSite({
     loadEquipmentForUnits(ctx, [id]),
   ])
 
-  const activity = active === 'activity' ? await recentActivityForEntity(ctx, 'org_unit', id, 25) : []
+  const activity =
+    active === 'activity' ? await recentActivityForEntity(ctx, 'org_unit', id, 25) : []
 
   const backHref = parent ? `/locations/${parent.id}?tab=sites` : '/locations'
   const backLabel = parent ? `Back to ${parent.name}` : 'Back to locations'
@@ -616,7 +619,10 @@ function ProjectsTab({
                 </TableCell>
                 <TableCell className="font-mono text-xs text-slate-600">{p.code ?? '—'}</TableCell>
                 <TableCell className="text-right">
-                  <Link href={`/locations/${p.id}`} className="text-xs text-teal-700 hover:underline">
+                  <Link
+                    href={`/locations/${p.id}`}
+                    className="text-xs text-teal-700 hover:underline"
+                  >
                     View →
                   </Link>
                 </TableCell>
@@ -672,9 +678,7 @@ function SitesTab({
             ) : null}
             <TableCell className="font-mono text-xs text-slate-600">{s.code ?? '—'}</TableCell>
             <TableCell className="text-slate-600">
-              {s.lat != null && s.lng != null
-                ? `${s.lat.toFixed(4)}, ${s.lng.toFixed(4)}`
-                : '—'}
+              {s.lat != null && s.lng != null ? `${s.lat.toFixed(4)}, ${s.lng.toFixed(4)}` : '—'}
             </TableCell>
             <TableCell className="text-right">
               <Link href={`/locations/${s.id}`} className="text-xs text-teal-700 hover:underline">
@@ -915,10 +919,7 @@ function EquipmentTab({
             <TableCell className="text-slate-600">{row.type?.name ?? '—'}</TableCell>
             <TableCell className="text-slate-600">
               {row.holder ? (
-                <Link
-                  href={`/people/${row.holder.id}`}
-                  className="text-teal-700 hover:underline"
-                >
+                <Link href={`/people/${row.holder.id}`} className="text-teal-700 hover:underline">
                   {row.holder.firstName} {row.holder.lastName}
                 </Link>
               ) : (

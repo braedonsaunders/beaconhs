@@ -97,7 +97,10 @@ export function KioskClient({
   if (stage.kind === 'pin') {
     return (
       <div className="grid min-h-screen place-items-center bg-slate-900 p-6 text-white">
-        <form onSubmit={submitPin} className="w-full max-w-sm space-y-4 rounded-2xl bg-slate-800 p-8 shadow-2xl">
+        <form
+          onSubmit={submitPin}
+          className="w-full max-w-sm space-y-4 rounded-2xl bg-slate-800 p-8 shadow-2xl"
+        >
           <header className="text-center">
             <div className="mx-auto mb-2 grid h-12 w-12 place-items-center rounded-full bg-teal-500/20 text-teal-300">
               <LogIn size={24} />
@@ -112,7 +115,7 @@ export function KioskClient({
             value={pinInput}
             onChange={(e) => setPinInput(e.target.value)}
             placeholder="PIN"
-            className="w-full rounded-lg border-0 bg-slate-900 px-4 py-3 text-center text-2xl tracking-widest text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500"
+            className="w-full rounded-lg border-0 bg-slate-900 px-4 py-3 text-center text-2xl tracking-widest text-white placeholder-slate-500 focus:ring-2 focus:ring-teal-500 focus:outline-none"
           />
           {error ? <p className="text-center text-sm text-red-400">{error}</p> : null}
           <button
@@ -136,10 +139,10 @@ export function KioskClient({
               <h1 className="text-lg font-semibold text-slate-900">{tenantName}</h1>
               <p className="text-xs text-slate-500">Tap your name to sign in or out</p>
             </div>
-            <div className="relative flex-1 max-w-md">
+            <div className="relative max-w-md flex-1">
               <Search
                 size={16}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                className="absolute top-1/2 left-3 -translate-y-1/2 text-slate-400"
               />
               <input
                 type="search"
@@ -147,7 +150,7 @@ export function KioskClient({
                 autoFocus
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 bg-white py-3 pl-10 pr-3 text-base text-slate-900 placeholder-slate-400 focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
+                className="w-full rounded-lg border border-slate-300 bg-white py-3 pr-3 pl-10 text-base text-slate-900 placeholder-slate-400 focus:border-teal-500 focus:ring-1 focus:ring-teal-500 focus:outline-none"
               />
             </div>
           </div>
@@ -174,7 +177,7 @@ export function KioskClient({
                         <div className="text-xs text-slate-500">{p.jobTitle}</div>
                       ) : null}
                     </div>
-                    <span className="text-xs uppercase tracking-wide text-teal-700">Tap →</span>
+                    <span className="text-xs tracking-wide text-teal-700 uppercase">Tap →</span>
                   </button>
                 </li>
               ))}
@@ -217,7 +220,7 @@ export function KioskClient({
           <div className="mt-4 grid grid-cols-1 gap-3">
             {sites.length > 0 ? (
               <div>
-                <label className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                <label className="text-xs font-medium tracking-wide text-slate-500 uppercase">
                   Site (optional)
                 </label>
                 <select
@@ -236,7 +239,7 @@ export function KioskClient({
             ) : null}
             {crews.length > 0 ? (
               <div>
-                <label className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                <label className="text-xs font-medium tracking-wide text-slate-500 uppercase">
                   Crew (optional)
                 </label>
                 <select

@@ -17,12 +17,7 @@ import {
   Select,
   Textarea,
 } from '@beaconhs/ui'
-import {
-  orgUnits,
-  people,
-  safeDistanceRecords,
-  tenantUsers,
-} from '@beaconhs/db/schema'
+import { orgUnits, people, safeDistanceRecords, tenantUsers } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recentActivityForEntity } from '@/lib/audit'
 import { ActivityFeed } from '@/components/activity-feed'
@@ -274,7 +269,7 @@ export default async function SafeDistanceDetailPage({
 
           {row.notes ? (
             <Section title="Notes">
-              <p className="whitespace-pre-wrap text-sm text-slate-700">{row.notes}</p>
+              <p className="text-sm whitespace-pre-wrap text-slate-700">{row.notes}</p>
             </Section>
           ) : null}
         </div>
@@ -388,12 +383,7 @@ export default async function SafeDistanceDetailPage({
             </div>
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="notes">Notes</Label>
-              <Textarea
-                id="notes"
-                name="notes"
-                rows={3}
-                defaultValue={row.notes ?? ''}
-              />
+              <Textarea id="notes" name="notes" rows={3} defaultValue={row.notes ?? ''} />
             </div>
           </div>
 

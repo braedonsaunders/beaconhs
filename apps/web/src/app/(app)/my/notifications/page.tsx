@@ -14,11 +14,7 @@
 import { revalidatePath } from 'next/cache'
 import { Bell, BellOff } from 'lucide-react'
 import { and, eq } from 'drizzle-orm'
-import {
-  Badge,
-  Button,
-  PageHeader,
-} from '@beaconhs/ui'
+import { Badge, Button, PageHeader } from '@beaconhs/ui'
 import { notificationPreferences } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
@@ -178,13 +174,13 @@ export default async function NotificationPreferencesPage() {
         <form action={savePreferences} className="space-y-4">
           <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
             <table className="w-full text-sm">
-              <thead className="border-b border-slate-200 bg-slate-50/60 text-left text-xs uppercase tracking-wide text-slate-500">
+              <thead className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase">
                 <tr>
                   <th className="px-4 py-2 font-medium">Category</th>
                   {CHANNELS.map((c) => (
                     <th key={c.key} className="px-3 py-2 text-center font-medium">
                       <div>{c.label}</div>
-                      <div className="font-normal normal-case text-[10px] tracking-normal text-slate-400">
+                      <div className="text-[10px] font-normal tracking-normal text-slate-400 normal-case">
                         {c.hint}
                       </div>
                     </th>
@@ -248,8 +244,11 @@ export default async function NotificationPreferencesPage() {
 
         <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
           <strong>Tip:</strong> if you turn off in-app for a category, those notifications still
-          land in your <a className="underline" href="/notifications">inbox</a> — they just won't
-          raise the bell badge.
+          land in your{' '}
+          <a className="underline" href="/notifications">
+            inbox
+          </a>{' '}
+          — they just won't raise the bell badge.
         </div>
       </div>
     </PageContainer>

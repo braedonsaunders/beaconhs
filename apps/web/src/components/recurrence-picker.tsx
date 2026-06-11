@@ -153,7 +153,10 @@ export function RecurrencePicker({
                   value={value.compliantPercentage ?? 100}
                   onChange={(e) =>
                     set({
-                      compliantPercentage: Math.max(0, Math.min(100, Number(e.target.value) || 100)),
+                      compliantPercentage: Math.max(
+                        0,
+                        Math.min(100, Number(e.target.value) || 100),
+                      ),
                     })
                   }
                 />

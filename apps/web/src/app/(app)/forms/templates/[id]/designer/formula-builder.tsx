@@ -41,19 +41,54 @@ const OPS: OpDef[] = [
   { kind: 'field_ref', label: 'Field value', group: 'value', description: 'Read another field' },
   // Math
   { kind: 'sum', label: 'Sum (a + b + …)', group: 'math', description: 'Add a list of values' },
-  { kind: 'product', label: 'Product (a × b × …)', group: 'math', description: 'Multiply a list of values' },
+  {
+    kind: 'product',
+    label: 'Product (a × b × …)',
+    group: 'math',
+    description: 'Multiply a list of values',
+  },
   { kind: 'subtract', label: 'Subtract (a − b)', group: 'math', description: 'a minus b' },
   { kind: 'divide', label: 'Divide (a ÷ b)', group: 'math', description: 'a divided by b' },
   { kind: 'min', label: 'Minimum', group: 'math', description: 'Smallest of a list' },
   { kind: 'max', label: 'Maximum', group: 'math', description: 'Largest of a list' },
   // Section
-  { kind: 'sum_section', label: 'Sum field across rows', group: 'section', description: 'Sum a field across every row of a repeating section' },
-  { kind: 'count_section', label: 'Count rows in section', group: 'section', description: 'How many rows in a repeating section' },
-  { kind: 'avg_section', label: 'Average field across rows', group: 'section', description: 'Average a field across every row of a repeating section' },
-  { kind: 'min_section', label: 'Minimum field across rows', group: 'section', description: 'Smallest value of a field across the rows' },
-  { kind: 'max_section', label: 'Maximum field across rows', group: 'section', description: 'Largest value of a field across the rows' },
+  {
+    kind: 'sum_section',
+    label: 'Sum field across rows',
+    group: 'section',
+    description: 'Sum a field across every row of a repeating section',
+  },
+  {
+    kind: 'count_section',
+    label: 'Count rows in section',
+    group: 'section',
+    description: 'How many rows in a repeating section',
+  },
+  {
+    kind: 'avg_section',
+    label: 'Average field across rows',
+    group: 'section',
+    description: 'Average a field across every row of a repeating section',
+  },
+  {
+    kind: 'min_section',
+    label: 'Minimum field across rows',
+    group: 'section',
+    description: 'Smallest value of a field across the rows',
+  },
+  {
+    kind: 'max_section',
+    label: 'Maximum field across rows',
+    group: 'section',
+    description: 'Largest value of a field across the rows',
+  },
   // String
-  { kind: 'concat', label: 'Concatenate text', group: 'string', description: 'Join strings together' },
+  {
+    kind: 'concat',
+    label: 'Concatenate text',
+    group: 'string',
+    description: 'Join strings together',
+  },
   // Conditional
   { kind: 'if', label: 'If / else', group: 'cond', description: 'Branch on a condition' },
   // Entity
@@ -83,7 +118,10 @@ export function FormulaBuilder({
 }) {
   // The preview pane lets the user fill in example values for any field /
   // repeating-row field referenced in the formula and see what evaluates.
-  const [preview, setPreview] = useState<{ values: Record<string, string>; rowCounts: Record<string, number> }>({
+  const [preview, setPreview] = useState<{
+    values: Record<string, string>
+    rowCounts: Record<string, number>
+  }>({
     values: {},
     rowCounts: {},
   })
@@ -190,7 +228,10 @@ export function FormulaBuilder({
                       </div>
                     </div>
                     {Array.from({ length: rowCount }, (_, i) => (
-                      <div key={i} className="mt-1 grid grid-cols-2 gap-1 border-t border-slate-100 pt-1">
+                      <div
+                        key={i}
+                        className="mt-1 grid grid-cols-2 gap-1 border-t border-slate-100 pt-1"
+                      >
                         {sec.fields.map((f) => {
                           const k = `${sec.id}.${i}.${f.id}`
                           return (
@@ -413,9 +454,7 @@ function NodeBody({
           <Select
             className="h-7 text-xs"
             value={value.sectionKey}
-            onChange={(e) =>
-              onChange({ ...value, sectionKey: e.target.value, rowFieldKey: '' })
-            }
+            onChange={(e) => onChange({ ...value, sectionKey: e.target.value, rowFieldKey: '' })}
           >
             <option value="">— pick section —</option>
             {repeatingSections.map((s) => (
@@ -504,9 +543,9 @@ function NodeBody({
       return (
         <div className="space-y-1">
           {pickerFields.length === 0 ? (
-            <p className="text-[10px] italic text-slate-500">
-              No picker fields in this template. Add an equipment / person /
-              site / PPE / document / course picker first.
+            <p className="text-[10px] text-slate-500 italic">
+              No picker fields in this template. Add an equipment / person / site / PPE / document /
+              course picker first.
             </p>
           ) : (
             <Select

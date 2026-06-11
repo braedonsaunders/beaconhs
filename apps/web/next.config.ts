@@ -37,8 +37,16 @@ const nextConfig: NextConfig = {
   // list, filtered to the matching kind.
   async redirects() {
     const moved = (mod: string, kind: string) => [
-      { source: `/${mod}/assignments`, destination: `/compliance/obligations?kind=${kind}`, permanent: false },
-      { source: `/${mod}/assignments/:path*`, destination: `/compliance/obligations?kind=${kind}`, permanent: false },
+      {
+        source: `/${mod}/assignments`,
+        destination: `/compliance/obligations?kind=${kind}`,
+        permanent: false,
+      },
+      {
+        source: `/${mod}/assignments/:path*`,
+        destination: `/compliance/obligations?kind=${kind}`,
+        permanent: false,
+      },
     ]
     return [
       ...moved('journals', 'journal'),

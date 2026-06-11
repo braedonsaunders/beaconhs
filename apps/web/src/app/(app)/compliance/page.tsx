@@ -49,7 +49,11 @@ export default async function ComplianceOverviewPage() {
         <div className="grid gap-3 sm:grid-cols-4">
           <Kpi label="Obligations" value={rollup.length} />
           <Kpi label="Subjects tracked" value={totalSubjects.toLocaleString()} />
-          <Kpi label="Overdue / expiring" value={totalOverdue.toLocaleString()} tone={totalOverdue > 0 ? 'danger' : undefined} />
+          <Kpi
+            label="Overdue / expiring"
+            value={totalOverdue.toLocaleString()}
+            tone={totalOverdue > 0 ? 'danger' : undefined}
+          />
           <Kpi label="Overall compliance" value={`${overall}%`} />
         </div>
 
@@ -87,17 +91,27 @@ export default async function ComplianceOverviewPage() {
                       {r.title}
                     </Link>
                   </TableCell>
-                  <TableCell className="tabular-nums text-slate-700">{r.completed.toLocaleString()}</TableCell>
-                  <TableCell className="tabular-nums text-slate-700">{r.total.toLocaleString()}</TableCell>
+                  <TableCell className="text-slate-700 tabular-nums">
+                    {r.completed.toLocaleString()}
+                  </TableCell>
+                  <TableCell className="text-slate-700 tabular-nums">
+                    {r.total.toLocaleString()}
+                  </TableCell>
                   <TableCell className="tabular-nums">
-                    {r.overdue > 0 ? <Badge variant="destructive">{r.overdue}</Badge> : <span className="text-slate-400">—</span>}
+                    {r.overdue > 0 ? (
+                      <Badge variant="destructive">{r.overdue}</Badge>
+                    ) : (
+                      <span className="text-slate-400">—</span>
+                    )}
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
-                      <div className="flex-1 max-w-xs">
+                      <div className="max-w-xs flex-1">
                         <PercentBar percent={r.percent} />
                       </div>
-                      <span className="text-xs tabular-nums text-slate-600 min-w-[3rem] text-right">{r.percent}%</span>
+                      <span className="min-w-[3rem] text-right text-xs text-slate-600 tabular-nums">
+                        {r.percent}%
+                      </span>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -113,8 +127,10 @@ export default async function ComplianceOverviewPage() {
 function Kpi({ label, value, tone }: { label: string; value: string | number; tone?: 'danger' }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4">
-      <div className="text-xs uppercase tracking-wide text-slate-500">{label}</div>
-      <div className={`mt-1 text-2xl font-semibold ${tone === 'danger' ? 'text-red-700' : 'text-slate-900'}`}>
+      <div className="text-xs tracking-wide text-slate-500 uppercase">{label}</div>
+      <div
+        className={`mt-1 text-2xl font-semibold ${tone === 'danger' ? 'text-red-700' : 'text-slate-900'}`}
+      >
         {value}
       </div>
     </div>

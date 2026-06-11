@@ -46,8 +46,16 @@ export async function GET(req: NextRequest) {
             : params.sort === 'holder'
               ? [params.dir === 'asc' ? asc(people.lastName) : desc(people.lastName)]
               : params.sort === 'purchase_date'
-                ? [params.dir === 'asc' ? asc(equipmentItems.purchaseDate) : desc(equipmentItems.purchaseDate)]
-                : [params.dir === 'asc' ? asc(equipmentItems.assetTag) : desc(equipmentItems.assetTag)]
+                ? [
+                    params.dir === 'asc'
+                      ? asc(equipmentItems.purchaseDate)
+                      : desc(equipmentItems.purchaseDate),
+                  ]
+                : [
+                    params.dir === 'asc'
+                      ? asc(equipmentItems.assetTag)
+                      : desc(equipmentItems.assetTag),
+                  ]
 
     return tx
       .select({ item: equipmentItems, type: equipmentTypes, site: orgUnits, holder: people })

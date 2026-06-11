@@ -24,15 +24,13 @@ export default async function NewSchedulePage({
 }) {
   await requireRequestContext()
   const sp = await searchParams
-  const presetDefinitionId =
-    typeof sp.definitionId === 'string' ? sp.definitionId : undefined
+  const presetDefinitionId = typeof sp.definitionId === 'string' ? sp.definitionId : undefined
 
   const definitions = await withSuperAdmin(db, (tx) =>
     tx.select().from(reportDefinitions).orderBy(asc(reportDefinitions.name)),
   )
 
-  const defaultDef =
-    definitions.find((d) => d.id === presetDefinitionId) ?? definitions[0]
+  const defaultDef = definitions.find((d) => d.id === presetDefinitionId) ?? definitions[0]
 
   return (
     <PageContainer>
@@ -124,9 +122,8 @@ export default async function NewSchedulePage({
                   defaultValue="{}"
                 />
                 <p className="mt-1 text-xs text-slate-500">
-                  Optional. Filter shape depends on the report. Common keys:{' '}
-                  <code>rangeDays</code>, <code>lookaheadDays</code>, <code>departmentId</code>,{' '}
-                  <code>siteOrgUnitId</code>.
+                  Optional. Filter shape depends on the report. Common keys: <code>rangeDays</code>,{' '}
+                  <code>lookaheadDays</code>, <code>departmentId</code>, <code>siteOrgUnitId</code>.
                 </p>
               </Field>
 

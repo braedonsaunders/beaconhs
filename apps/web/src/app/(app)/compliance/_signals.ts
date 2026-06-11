@@ -194,7 +194,8 @@ export async function listDueSignals(
         .limit(500)
       for (const r of rows) {
         const due = isoDate(r.nextCheckinDueAt)
-        const overdue = r.status === 'missed' || r.status === 'escalated' || (due != null && due < today)
+        const overdue =
+          r.status === 'missed' || r.status === 'escalated' || (due != null && due < today)
         out.push({
           module: 'lone_worker',
           family: 'Check-in',
@@ -428,7 +429,12 @@ export async function listDueSignals(
         .where(
           and(
             eq(equipmentWorkOrders.tenantId, tid),
-            inArray(equipmentWorkOrders.status, ['open', 'assigned', 'in_progress', 'awaiting_parts']),
+            inArray(equipmentWorkOrders.status, [
+              'open',
+              'assigned',
+              'in_progress',
+              'awaiting_parts',
+            ]),
           ),
         )
         .orderBy(desc(equipmentWorkOrders.openedAt))

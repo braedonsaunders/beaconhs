@@ -65,7 +65,17 @@ export async function GET(req: NextRequest) {
 
   return csvResponse({
     filename: csvFilename('people'),
-    headers: ['Last name', 'First name', 'Employee #', 'Department', 'Trade', 'Hire date', 'Email', 'Phone', 'Status'],
+    headers: [
+      'Last name',
+      'First name',
+      'Employee #',
+      'Department',
+      'Trade',
+      'Hire date',
+      'Email',
+      'Phone',
+      'Status',
+    ],
     rows: rows.map((r) => [
       r.person.lastName,
       r.person.firstName,

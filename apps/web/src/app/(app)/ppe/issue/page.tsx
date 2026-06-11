@@ -23,12 +23,7 @@ import {
   TableRow,
   Textarea,
 } from '@beaconhs/ui'
-import {
-  people,
-  ppeIssues,
-  ppeItems,
-  ppeTypes,
-} from '@beaconhs/db/schema'
+import { people, ppeIssues, ppeItems, ppeTypes } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { ListPageLayout } from '@/components/page-layout'
 import { Section } from '@/components/section'
@@ -90,8 +85,8 @@ async function discardPpe(formData: FormData) {
 
 export default async function PpeIssuePage() {
   const ctx = await requireRequestContext()
-  const { inStock, issued, peopleList, recentLedger, issuedCount, inStockCount } =
-    await ctx.db(async (tx) => {
+  const { inStock, issued, peopleList, recentLedger, issuedCount, inStockCount } = await ctx.db(
+    async (tx) => {
       const stock = await tx
         .select({ item: ppeItems, type: ppeTypes })
         .from(ppeItems)
@@ -141,7 +136,8 @@ export default async function PpeIssuePage() {
         issuedCount: Number(issC?.c ?? 0),
         inStockCount: Number(stockC?.c ?? 0),
       }
-    })
+    },
+  )
 
   return (
     <ListPageLayout
@@ -262,22 +258,14 @@ export default async function PpeIssuePage() {
                         <div className="flex flex-wrap items-center gap-2">
                           <form action={returnPpe} className="flex items-center gap-1.5">
                             <input type="hidden" name="itemId" value={item.id} />
-                            <Input
-                              name="note"
-                              placeholder="return note…"
-                              className="h-8 w-36"
-                            />
+                            <Input name="note" placeholder="return note…" className="h-8 w-36" />
                             <Button type="submit" size="sm" variant="outline">
                               Return
                             </Button>
                           </form>
                           <form action={replacePpe} className="flex items-center gap-1.5">
                             <input type="hidden" name="itemId" value={item.id} />
-                            <Input
-                              name="note"
-                              placeholder="replace note…"
-                              className="h-8 w-36"
-                            />
+                            <Input name="note" placeholder="replace note…" className="h-8 w-36" />
                             <Button type="submit" size="sm" variant="outline">
                               <Wrench size={12} /> Replace
                             </Button>
@@ -298,7 +286,11 @@ export default async function PpeIssuePage() {
           )}
         </Section>
 
-        <Section title="Recent ledger" subtitle="Last 20 issue / return / replace / discard events." defaultOpen={false}>
+        <Section
+          title="Recent ledger"
+          subtitle="Last 20 issue / return / replace / discard events."
+          defaultOpen={false}
+        >
           {recentLedger.length === 0 ? (
             <p className="text-sm text-slate-500">No PPE activity yet.</p>
           ) : (
@@ -315,9 +307,7 @@ export default async function PpeIssuePage() {
               <TableBody>
                 {recentLedger.map((r) => (
                   <TableRow key={r.issue.id}>
-                    <TableCell>
-                      {new Date(r.issue.occurredAt).toLocaleString()}
-                    </TableCell>
+                    <TableCell>{new Date(r.issue.occurredAt).toLocaleString()}</TableCell>
                     <TableCell>
                       <Badge
                         variant={
@@ -340,9 +330,7 @@ export default async function PpeIssuePage() {
                     <TableCell>
                       {r.person ? `${r.person.firstName} ${r.person.lastName}` : '—'}
                     </TableCell>
-                    <TableCell className="text-slate-600">
-                      {r.issue.note ?? '—'}
-                    </TableCell>
+                    <TableCell className="text-slate-600">{r.issue.note ?? '—'}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

@@ -26,12 +26,14 @@ const dataAttrs = (kind: 'insertion' | 'deletion') => ({
   userName: {
     default: null as string | null,
     parseHTML: (el: HTMLElement) => el.getAttribute('data-user-name'),
-    renderHTML: (a: Record<string, unknown>) => (a.userName ? { 'data-user-name': a.userName } : {}),
+    renderHTML: (a: Record<string, unknown>) =>
+      a.userName ? { 'data-user-name': a.userName } : {},
   },
   createdAt: {
     default: null as string | null,
     parseHTML: (el: HTMLElement) => el.getAttribute('data-created-at'),
-    renderHTML: (a: Record<string, unknown>) => (a.createdAt ? { 'data-created-at': a.createdAt } : {}),
+    renderHTML: (a: Record<string, unknown>) =>
+      a.createdAt ? { 'data-created-at': a.createdAt } : {},
   },
   _kind: { default: kind, rendered: false },
 })
@@ -140,18 +142,14 @@ export const Suggestion = Extension.create({
 
   addCommands() {
     return {
-      setSuggesting:
-        (active) =>
-        () => {
-          this.storage.active = active
-          return true
-        },
-      setSuggestionUser:
-        (user) =>
-        () => {
-          this.storage.user = user
-          return true
-        },
+      setSuggesting: (active) => () => {
+        this.storage.active = active
+        return true
+      },
+      setSuggestionUser: (user) => () => {
+        this.storage.user = user
+        return true
+      },
       acceptAllSuggestions:
         () =>
         ({ state, dispatch, tr }) => {
@@ -300,25 +298,28 @@ function applyResolveAll(state: EditorState, tr: Transaction, mode: 'accept' | '
   const delRanges: [number, number][] = []
   state.doc.descendants((node, pos) => {
     if (!node.isText) return
-    if (insType && node.marks.some((m) => m.type === insType)) insRanges.push([pos, pos + node.nodeSize])
-    if (delType && node.marks.some((m) => m.type === delType)) delRanges.push([pos, pos + node.nodeSize])
+    if (insType && node.marks.some((m) => m.type === insType))
+      insRanges.push([pos, pos + node.nodeSize])
+    if (delType && node.marks.some((m) => m.type === delType))
+      delRanges.push([pos, pos + node.nodeSize])
   })
   if (mode === 'accept') {
     // insertions become permanent (drop mark); deletions are removed.
     insRanges.forEach(([f, t]) => insType && tr.removeMark(f, t, insType))
-    delRanges
-      .sort((a, b) => b[0] - a[0])
-      .forEach(([f, t]) => tr.delete(f, t))
+    delRanges.sort((a, b) => b[0] - a[0]).forEach(([f, t]) => tr.delete(f, t))
   } else {
     // insertions are removed; deletions revert (drop mark).
     delRanges.forEach(([f, t]) => delType && tr.removeMark(f, t, delType))
-    insRanges
-      .sort((a, b) => b[0] - a[0])
-      .forEach(([f, t]) => tr.delete(f, t))
+    insRanges.sort((a, b) => b[0] - a[0]).forEach(([f, t]) => tr.delete(f, t))
   }
 }
 
-function applyResolveAt(state: EditorState, tr: Transaction, pos: number, mode: 'accept' | 'reject'): boolean {
+function applyResolveAt(
+  state: EditorState,
+  tr: Transaction,
+  pos: number,
+  mode: 'accept' | 'reject',
+): boolean {
   const runs = collectSuggestionRuns(state)
   const run = runs.find((r) => pos >= r.from && pos <= r.to) ?? runs[0]
   if (!run) return false
@@ -348,7 +349,9 @@ function gotoSuggestion(
   else target = [...runs].reverse().find((r) => r.to < pos) ?? runs[runs.length - 1]
   if (!target) return false
   if (dispatch) {
-    const tr = state.tr.setSelection(TextSelection.create(state.doc, target.from, target.to)).scrollIntoView()
+    const tr = state.tr
+      .setSelection(TextSelection.create(state.doc, target.from, target.to))
+      .scrollIntoView()
     dispatch(tr)
   }
   return true

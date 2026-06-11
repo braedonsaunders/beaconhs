@@ -22,10 +22,7 @@ export type ActionResult = { ok: true } | { ok: false; error: string }
 
 const TYPES = ['electrical', 'drone', 'overhead_crane', 'vehicle', 'other'] as const
 
-async function loadRecord(
-  ctx: Awaited<ReturnType<typeof requireRequestContext>>,
-  id: string,
-) {
+async function loadRecord(ctx: Awaited<ReturnType<typeof requireRequestContext>>, id: string) {
   return ctx.db(async (tx) => {
     const [row] = await tx
       .select()
@@ -41,9 +38,7 @@ function assertNotLocked(rec: { locked: boolean }): ActionResult | null {
   return null
 }
 
-function safeTenantUserId(
-  ctx: Awaited<ReturnType<typeof requireRequestContext>>,
-): string | null {
+function safeTenantUserId(ctx: Awaited<ReturnType<typeof requireRequestContext>>): string | null {
   const id = ctx.membership?.id
   if (!id || id === 'super-admin') return null
   return id
@@ -94,8 +89,7 @@ export async function createSafeDistanceRecord(formData: FormData): Promise<void
 
   const siteOrgUnitId = String(formData.get('siteOrgUnitId') ?? '').trim() || null
   const sourceDescription = String(formData.get('sourceDescription') ?? '').trim() || null
-  const supervisorTenantUserId =
-    String(formData.get('supervisorTenantUserId') ?? '').trim() || null
+  const supervisorTenantUserId = String(formData.get('supervisorTenantUserId') ?? '').trim() || null
   const operatorPersonId = String(formData.get('operatorPersonId') ?? '').trim() || null
   const notes = String(formData.get('notes') ?? '').trim() || null
   const voltageKv = parseNumber(formData.get('sourceVoltageKv'))
@@ -174,8 +168,7 @@ export async function updateSafeDistanceRecord(formData: FormData): Promise<Acti
   if (lockErr) return lockErr
 
   const sourceDescription = String(formData.get('sourceDescription') ?? '').trim() || null
-  const supervisorTenantUserId =
-    String(formData.get('supervisorTenantUserId') ?? '').trim() || null
+  const supervisorTenantUserId = String(formData.get('supervisorTenantUserId') ?? '').trim() || null
   const operatorPersonId = String(formData.get('operatorPersonId') ?? '').trim() || null
   const siteOrgUnitId = String(formData.get('siteOrgUnitId') ?? '').trim() || null
   const notes = String(formData.get('notes') ?? '').trim() || null
@@ -245,10 +238,7 @@ export async function lockSafeDistanceRecord(id: string): Promise<ActionResult> 
   if (rec.locked) return { ok: true }
 
   await ctx.db((tx) =>
-    tx
-      .update(safeDistanceRecords)
-      .set({ locked: true })
-      .where(eq(safeDistanceRecords.id, id)),
+    tx.update(safeDistanceRecords).set({ locked: true }).where(eq(safeDistanceRecords.id, id)),
   )
   await recordAudit(ctx, {
     entityType: 'safe_distance_record',
@@ -269,10 +259,7 @@ export async function unlockSafeDistanceRecord(id: string): Promise<ActionResult
   if (!rec.locked) return { ok: true }
 
   await ctx.db((tx) =>
-    tx
-      .update(safeDistanceRecords)
-      .set({ locked: false })
-      .where(eq(safeDistanceRecords.id, id)),
+    tx.update(safeDistanceRecords).set({ locked: false }).where(eq(safeDistanceRecords.id, id)),
   )
   await recordAudit(ctx, {
     entityType: 'safe_distance_record',
@@ -312,9 +299,7 @@ export async function deleteSafeDistanceRecord(id: string): Promise<ActionResult
  * Form-action wrapper around delete + redirect, used by the detail page's
  * Delete button which needs a void-returning server action.
  */
-export async function deleteSafeDistanceRecordAndRedirect(
-  formData: FormData,
-): Promise<void> {
+export async function deleteSafeDistanceRecordAndRedirect(formData: FormData): Promise<void> {
   const id = String(formData.get('id') ?? '')
   if (!id) return
   await deleteSafeDistanceRecord(id)

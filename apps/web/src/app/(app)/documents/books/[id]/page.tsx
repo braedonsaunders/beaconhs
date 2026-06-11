@@ -17,7 +17,13 @@ import {
   Select,
   Textarea,
 } from '@beaconhs/ui'
-import { documentBookItems, documentBooks, documentCategories, documentTypes, documents } from '@beaconhs/db/schema'
+import {
+  documentBookItems,
+  documentBooks,
+  documentCategories,
+  documentTypes,
+  documents,
+} from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
@@ -162,8 +168,14 @@ async function moveItem(formData: FormData) {
     if (swapIdx < 0 || swapIdx >= items.length) return
     const a = items[idx]!
     const b = items[swapIdx]!
-    await tx.update(documentBookItems).set({ position: b.position }).where(eq(documentBookItems.id, a.id))
-    await tx.update(documentBookItems).set({ position: a.position }).where(eq(documentBookItems.id, b.id))
+    await tx
+      .update(documentBookItems)
+      .set({ position: b.position })
+      .where(eq(documentBookItems.id, a.id))
+    await tx
+      .update(documentBookItems)
+      .set({ position: a.position })
+      .where(eq(documentBookItems.id, b.id))
   })
   await recordAudit(ctx, {
     entityType: 'document_book',
@@ -530,7 +542,13 @@ export default async function DocumentBookPage({
                     </Select>
                   </Field>
                   <Field label="Review every (mo.)">
-                    <Input name="reviewFrequencyMonths" type="number" min="1" defaultValue={book.reviewFrequencyMonths ?? ''} placeholder="12" />
+                    <Input
+                      name="reviewFrequencyMonths"
+                      type="number"
+                      min="1"
+                      defaultValue={book.reviewFrequencyMonths ?? ''}
+                      placeholder="12"
+                    />
                   </Field>
                   <Field label="Next review">
                     <Input name="nextReviewOn" type="date" defaultValue={book.nextReviewOn ?? ''} />

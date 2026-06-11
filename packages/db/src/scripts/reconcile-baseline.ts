@@ -18,7 +18,9 @@ async function main() {
   const entry = journal.entries[0]
   if (!entry) throw new Error('no baseline journal entry')
   const when: number = entry.when
-  const hash = createHash('sha256').update(readFileSync('drizzle/0000_init.sql', 'utf8')).digest('hex')
+  const hash = createHash('sha256')
+    .update(readFileSync('drizzle/0000_init.sql', 'utf8'))
+    .digest('hex')
 
   const { db, sql: pg } = createClient({ url: process.env.DATABASE_URL, max: 1 })
   await db.execute(sql`create schema if not exists "drizzle"`)

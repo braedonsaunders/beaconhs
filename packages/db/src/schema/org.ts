@@ -34,7 +34,14 @@ export const orgUnits = pgTable(
     lat: doublePrecision('lat'),
     lng: doublePrecision('lng'),
     geofenceMeters: integer('geofence_meters'),
-    address: jsonb('address').$type<{ line1?: string; line2?: string; city?: string; region?: string; postal?: string; country?: string }>(),
+    address: jsonb('address').$type<{
+      line1?: string
+      line2?: string
+      city?: string
+      region?: string
+      postal?: string
+      country?: string
+    }>(),
     metadata: jsonb('metadata').$type<Record<string, unknown>>().default({}).notNull(),
     ...timestamps,
     ...softDelete,

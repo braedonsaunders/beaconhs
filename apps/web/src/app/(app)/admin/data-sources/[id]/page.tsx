@@ -55,7 +55,12 @@ async function updateSource(formData: FormData): Promise<void> {
   await ctx.db((tx) =>
     tx.update(dataSources).set({ name, description }).where(eq(dataSources.id, id)),
   )
-  await recordAudit(ctx, { entityType: 'data_source', entityId: id, action: 'update', summary: `Renamed to "${name}"` })
+  await recordAudit(ctx, {
+    entityType: 'data_source',
+    entityId: id,
+    action: 'update',
+    summary: `Renamed to "${name}"`,
+  })
   revalidatePath(`/admin/data-sources/${id}`)
 }
 
@@ -66,9 +71,11 @@ async function addColumn(formData: FormData): Promise<void> {
   const id = String(formData.get('id') ?? '')
   const label = String(formData.get('label') ?? '').trim()
   if (!id || !label) return
-  const type = (['text', 'number', 'date', 'boolean'].includes(String(formData.get('type')))
-    ? String(formData.get('type'))
-    : 'text') as DataSourceColumnType
+  const type = (
+    ['text', 'number', 'date', 'boolean'].includes(String(formData.get('type')))
+      ? String(formData.get('type'))
+      : 'text'
+  ) as DataSourceColumnType
   const key = slugify(String(formData.get('key') ?? '').trim() || label).replace(/-/g, '_')
 
   await ctx.db(async (tx) => {
@@ -236,11 +243,7 @@ export default async function DataSourceDetailPage({
   if (!ctx.isSuperAdmin && !can(ctx, 'admin.settings.manage')) redirect('/admin')
 
   const data = await ctx.db(async (tx) => {
-    const [src] = await tx
-      .select()
-      .from(dataSources)
-      .where(eq(dataSources.id, id))
-      .limit(1)
+    const [src] = await tx.select().from(dataSources).where(eq(dataSources.id, id)).limit(1)
     if (!src || src.deletedAt) return null
     const rows =
       src.kind === 'reference'
@@ -288,8 +291,16 @@ export default async function DataSourceDetailPage({
               </Badge>
             </div>
             <p className="text-sm text-slate-500">
-              Key <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs">{src.key}</code>
-              {!isReference && templateName ? <> · live from <strong>{templateName}</strong></> : null}
+              Key{' '}
+              <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs">
+                {src.key}
+              </code>
+              {!isReference && templateName ? (
+                <>
+                  {' '}
+                  · live from <strong>{templateName}</strong>
+                </>
+              ) : null}
             </p>
           </div>
         </header>
@@ -305,7 +316,9 @@ export default async function DataSourceDetailPage({
                 </CardHeader>
                 <CardContent>
                   {cols.length === 0 ? (
-                    <p className="text-sm text-slate-500">Add columns first (right) — then you can add rows.</p>
+                    <p className="text-sm text-slate-500">
+                      Add columns first (right) — then you can add rows.
+                    </p>
                   ) : (
                     <div className="space-y-3">
                       {/* Add-row form */}
@@ -335,14 +348,20 @@ export default async function DataSourceDetailPage({
                       </form>
 
                       {rows.length === 0 ? (
-                        <EmptyState icon={<Plus size={28} />} title="No rows yet" description="Use the form above to add your first row." />
+                        <EmptyState
+                          icon={<Plus size={28} />}
+                          title="No rows yet"
+                          description="Use the form above to add your first row."
+                        />
                       ) : (
                         <div className="overflow-x-auto">
                           <table className="w-full text-sm">
                             <thead>
-                              <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-400">
+                              <tr className="border-b border-slate-200 text-left text-xs tracking-wide text-slate-400 uppercase">
                                 {cols.map((c) => (
-                                  <th key={c.key} className="px-2 py-1.5 font-medium">{c.label}</th>
+                                  <th key={c.key} className="px-2 py-1.5 font-medium">
+                                    {c.label}
+                                  </th>
                                 ))}
                                 <th className="px-2 py-1.5" />
                               </tr>
@@ -353,14 +372,22 @@ export default async function DataSourceDetailPage({
                                 const isEditing = editingRow === r.id
                                 if (isEditing) {
                                   return (
-                                    <tr key={r.id} className="border-b border-slate-100 bg-teal-50/30">
+                                    <tr
+                                      key={r.id}
+                                      className="border-b border-slate-100 bg-teal-50/30"
+                                    >
                                       <td colSpan={cols.length + 1} className="px-2 py-2">
-                                        <form action={updateRow} className="flex flex-wrap items-end gap-2">
+                                        <form
+                                          action={updateRow}
+                                          className="flex flex-wrap items-end gap-2"
+                                        >
                                           <input type="hidden" name="id" value={src.id} />
                                           <input type="hidden" name="rowId" value={r.id} />
                                           {cols.map((c) => (
                                             <div key={c.key} className="space-y-1">
-                                              <Label className="text-[11px] text-slate-500">{c.label}</Label>
+                                              <Label className="text-[11px] text-slate-500">
+                                                {c.label}
+                                              </Label>
                                               {c.type === 'boolean' ? (
                                                 <input
                                                   type="checkbox"
@@ -373,12 +400,16 @@ export default async function DataSourceDetailPage({
                                                   name={`col__${c.key}`}
                                                   type={inputTypeFor(c.type)}
                                                   className="h-9 w-36"
-                                                  defaultValue={rd[c.key] == null ? '' : String(rd[c.key])}
+                                                  defaultValue={
+                                                    rd[c.key] == null ? '' : String(rd[c.key])
+                                                  }
                                                 />
                                               )}
                                             </div>
                                           ))}
-                                          <Button type="submit" size="sm">Save</Button>
+                                          <Button type="submit" size="sm">
+                                            Save
+                                          </Button>
                                           <Link
                                             href={`/admin/data-sources/${src.id}`}
                                             className="px-1 text-sm text-slate-500 hover:underline"
@@ -391,7 +422,10 @@ export default async function DataSourceDetailPage({
                                   )
                                 }
                                 return (
-                                  <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50/60">
+                                  <tr
+                                    key={r.id}
+                                    className="border-b border-slate-100 hover:bg-slate-50/60"
+                                  >
                                     {cols.map((c) => (
                                       <td key={c.key} className="px-2 py-1.5 text-slate-700">
                                         {c.type === 'boolean'
@@ -415,7 +449,7 @@ export default async function DataSourceDetailPage({
                                         <input type="hidden" name="rowId" value={r.id} />
                                         <button
                                           type="submit"
-                                          className="rounded p-1 text-slate-400 align-middle hover:bg-red-50 hover:text-red-700"
+                                          className="rounded p-1 align-middle text-slate-400 hover:bg-red-50 hover:text-red-700"
                                           title="Delete row"
                                         >
                                           <Trash2 size={13} />
@@ -440,9 +474,10 @@ export default async function DataSourceDetailPage({
                 </CardHeader>
                 <CardContent className="space-y-3 text-sm text-slate-600">
                   <p>
-                    Rows come live from {templateName ? <strong>{templateName}</strong> : 'the bound app'}
-                    &apos;s submitted responses — there&apos;s nothing to enter here. Each response is one
-                    row; columns mirror the app&apos;s fields.
+                    Rows come live from{' '}
+                    {templateName ? <strong>{templateName}</strong> : 'the bound app'}
+                    &apos;s submitted responses — there&apos;s nothing to enter here. Each response
+                    is one row; columns mirror the app&apos;s fields.
                   </p>
                   <form action={resyncColumns}>
                     <input type="hidden" name="id" value={src.id} />
@@ -470,10 +505,17 @@ export default async function DataSourceDetailPage({
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="description">Description</Label>
-                    <Textarea id="description" name="description" rows={2} defaultValue={src.description ?? ''} />
+                    <Textarea
+                      id="description"
+                      name="description"
+                      rows={2}
+                      defaultValue={src.description ?? ''}
+                    />
                   </div>
                   <div className="flex justify-end">
-                    <Button type="submit" size="sm">Save</Button>
+                    <Button type="submit" size="sm">
+                      Save
+                    </Button>
                   </div>
                 </form>
               </CardContent>
@@ -495,8 +537,12 @@ export default async function DataSourceDetailPage({
                       >
                         <span className="min-w-0">
                           <span className="font-medium text-slate-800">{c.label}</span>
-                          <code className="ml-1.5 font-mono text-[11px] text-slate-400">{c.key}</code>
-                          <Badge variant="outline" className="ml-1.5 text-[10px]">{c.type}</Badge>
+                          <code className="ml-1.5 font-mono text-[11px] text-slate-400">
+                            {c.key}
+                          </code>
+                          <Badge variant="outline" className="ml-1.5 text-[10px]">
+                            {c.type}
+                          </Badge>
                         </span>
                         {isReference ? (
                           <form action={deleteColumn} className="inline">

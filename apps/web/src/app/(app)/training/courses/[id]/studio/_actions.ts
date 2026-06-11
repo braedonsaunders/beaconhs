@@ -116,7 +116,7 @@ export async function createLesson(courseId: string, moduleId: string, formData:
   if (!ctx.tenantId) throw new Error('No active tenant')
   const tenantId = ctx.tenantId
   const title = String(formData.get('title') ?? '').trim() || 'Untitled lesson'
-  const kind = ((String(formData.get('kind') ?? 'rich').trim() || 'rich') as LessonKind)
+  const kind = (String(formData.get('kind') ?? 'rich').trim() || 'rich') as LessonKind
 
   const created = await ctx.db(async (tx) => {
     const existing = await tx
@@ -174,7 +174,10 @@ export async function createLessonOfKind(
         .select({ s: trainingCourseModules.sortOrder })
         .from(trainingCourseModules)
         .where(
-          and(eq(trainingCourseModules.courseId, courseId), isNull(trainingCourseModules.deletedAt)),
+          and(
+            eq(trainingCourseModules.courseId, courseId),
+            isNull(trainingCourseModules.deletedAt),
+          ),
         )
       const sortOrder = existing.reduce((m, r) => Math.max(m, r.s), -1) + 1
       const [mod] = await tx

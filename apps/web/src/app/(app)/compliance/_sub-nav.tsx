@@ -17,10 +17,7 @@ export type ComplianceTab = (typeof TABS)[number]['key']
 
 export function ComplianceSubNav({ active }: { active: ComplianceTab }) {
   return (
-    <nav
-      className="flex flex-wrap items-center gap-1 border-b border-slate-200"
-      role="tablist"
-    >
+    <nav className="flex flex-wrap items-center gap-1 border-b border-slate-200" role="tablist">
       {TABS.map((t) => {
         const isActive = t.key === active
         return (
@@ -32,7 +29,7 @@ export function ComplianceSubNav({ active }: { active: ComplianceTab }) {
             className={cn(
               '-mb-px inline-flex items-center gap-2 border-b-2 px-3 py-2 text-sm',
               'transition-[color,border-color,background-color] duration-150 ease-out',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/40 focus-visible:rounded-t-md',
+              'focus-visible:rounded-t-md focus-visible:ring-2 focus-visible:ring-teal-500/40 focus-visible:outline-none',
               isActive
                 ? 'border-teal-700 font-medium text-teal-700'
                 : 'border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-900',

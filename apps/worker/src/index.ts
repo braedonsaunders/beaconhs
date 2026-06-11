@@ -18,9 +18,7 @@ const workers = [
 
 for (const w of workers) {
   w.on('completed', (job) => console.log(`✔ ${w.name}#${job.id} ${job.name}`))
-  w.on('failed', (job, err) =>
-    console.error(`✗ ${w.name}#${job?.id} ${job?.name}: ${err.message}`),
-  )
+  w.on('failed', (job, err) => console.error(`✗ ${w.name}#${job?.id} ${job?.name}: ${err.message}`))
   w.on('error', (err) => console.error(`! ${w.name}: ${err.message}`))
 }
 

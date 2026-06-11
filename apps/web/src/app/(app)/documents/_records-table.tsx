@@ -56,7 +56,7 @@ export function DocumentsRecordsTable({
       <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs uppercase tracking-wide text-slate-500">
+            <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase">
               <th className="w-8 px-3 py-2">
                 <HeaderSelectAll allSelected={allSelected} onToggleAll={toggleAll} />
               </th>
@@ -71,16 +71,9 @@ export function DocumentsRecordsTable({
             {rows.map((r) => {
               const isSelected = selected.has(r.id)
               return (
-                <tr
-                  key={r.id}
-                  className={isSelected ? 'bg-teal-50/40' : 'hover:bg-slate-50/50'}
-                >
+                <tr key={r.id} className={isSelected ? 'bg-teal-50/40' : 'hover:bg-slate-50/50'}>
                   <td className="w-8 px-3 py-2">
-                    <SelectionCheckbox
-                      id={r.id}
-                      selected={isSelected}
-                      onToggle={toggleOne}
-                    />
+                    <SelectionCheckbox id={r.id} selected={isSelected} onToggle={toggleOne} />
                   </td>
                   <td className="px-3 py-2">
                     <Link
@@ -102,7 +95,10 @@ export function DocumentsRecordsTable({
                         }
                       >
                         {r.type.color ? (
-                          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: r.type.color }} />
+                          <span
+                            className="h-2 w-2 rounded-full"
+                            style={{ backgroundColor: r.type.color }}
+                          />
                         ) : null}
                         {r.type.name}
                       </span>
@@ -122,11 +118,7 @@ export function DocumentsRecordsTable({
           </tbody>
         </table>
       </div>
-      <BulkDocumentsBar
-        selectedIds={Array.from(selected)}
-        onClear={clear}
-        books={books}
-      />
+      <BulkDocumentsBar selectedIds={Array.from(selected)} onClear={clear} books={books} />
     </>
   )
 }

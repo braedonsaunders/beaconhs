@@ -28,13 +28,7 @@
 // **Adding a new attribute** is a 1-line addition here, plus a matching
 // column in the entity-loader's `select({ ... })` projection.
 
-export type EntityKind =
-  | 'person'
-  | 'equipment'
-  | 'site'
-  | 'ppe'
-  | 'document'
-  | 'course'
+export type EntityKind = 'person' | 'equipment' | 'site' | 'ppe' | 'document' | 'course'
 
 export type EntityAttrValueType = 'string' | 'number' | 'date' | 'boolean'
 
@@ -155,10 +149,7 @@ export function entityKindForPicker(fieldType: string): EntityKind | null {
  * (or null if the attribute isn't allowlisted). Used by the evaluator to
  * decide whether to surface a value at all.
  */
-export function getEntityAttrDef(
-  kind: EntityKind,
-  attrKey: string,
-): EntityAttrDef | null {
+export function getEntityAttrDef(kind: EntityKind, attrKey: string): EntityAttrDef | null {
   const list = ENTITY_ATTRS[kind]
   if (!list) return null
   return list.find((a) => a.key === attrKey) ?? null

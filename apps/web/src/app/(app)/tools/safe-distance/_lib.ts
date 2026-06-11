@@ -17,12 +17,7 @@
 // the actual measured distance and a 2 m default minimum is applied unless a
 // specific source description triggers an alternative path.
 
-export type SafeDistanceType =
-  | 'electrical'
-  | 'drone'
-  | 'overhead_crane'
-  | 'vehicle'
-  | 'other'
+export type SafeDistanceType = 'electrical' | 'drone' | 'overhead_crane' | 'vehicle' | 'other'
 
 export const SAFE_DISTANCE_TYPE_LABELS: Record<SafeDistanceType, string> = {
   electrical: 'Electrical proximity',

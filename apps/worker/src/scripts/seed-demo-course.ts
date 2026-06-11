@@ -271,7 +271,9 @@ async function main() {
         id: randomUUID(),
         layout: 'title-content',
         title: 'Today we cover',
-        body: rd('<ul><li>Hazard identification</li><li>Harness inspection</li><li>Anchor selection</li><li>Rescue planning</li></ul>'),
+        body: rd(
+          '<ul><li>Hazard identification</li><li>Harness inspection</li><li>Anchor selection</li><li>Rescue planning</li></ul>',
+        ),
         bg: 'white',
         notes: 'Run through the agenda quickly — detail comes later.',
       },
@@ -279,8 +281,12 @@ async function main() {
         id: randomUUID(),
         layout: 'two-col',
         title: 'Do / Don’t',
-        left: rd('<h3>Do</h3><ul><li>Tie off at 1.8 m+</li><li>Inspect daily</li><li>Use rated anchors</li></ul>'),
-        right: rd('<h3>Don’t</h3><ul><li>Use damaged gear</li><li>Anchor at your feet</li><li>Work alone at height</li></ul>'),
+        left: rd(
+          '<h3>Do</h3><ul><li>Tie off at 1.8 m+</li><li>Inspect daily</li><li>Use rated anchors</li></ul>',
+        ),
+        right: rd(
+          '<h3>Don’t</h3><ul><li>Use damaged gear</li><li>Anchor at your feet</li><li>Work alone at height</li></ul>',
+        ),
         bg: 'slate',
       },
       {
@@ -288,7 +294,9 @@ async function main() {
         layout: 'image-text',
         title: 'Anchor points',
         imageAttachmentId: siteImg.id,
-        body: rd('<p>Anchors must be rated for <strong>22 kN</strong> per person attached.</p><p>When in doubt, ask your supervisor.</p>'),
+        body: rd(
+          '<p>Anchors must be rated for <strong>22 kN</strong> per person attached.</p><p>When in doubt, ask your supervisor.</p>',
+        ),
         bg: 'white',
       },
       {
@@ -304,45 +312,88 @@ async function main() {
     const lessons: (typeof trainingLessons.$inferInsert)[] = [
       // Module 1 — Orientation
       {
-        tenantId, courseId: pick.id, moduleId: m1.id, sortOrder: 0,
-        title: 'Welcome & objectives', kind: 'rich', completionRule: 'view',
-        contentHtml: richHtml, durationMinutes: 5,
+        tenantId,
+        courseId: pick.id,
+        moduleId: m1.id,
+        sortOrder: 0,
+        title: 'Welcome & objectives',
+        kind: 'rich',
+        completionRule: 'view',
+        contentHtml: richHtml,
+        durationMinutes: 5,
       },
       {
-        tenantId, courseId: pick.id, moduleId: m1.id, sortOrder: 1,
-        title: 'Intro video', kind: 'video', completionRule: 'view',
-        embedUrl: 'https://www.youtube.com/watch?v=ysz5S6PUM-U', durationMinutes: 3,
+        tenantId,
+        courseId: pick.id,
+        moduleId: m1.id,
+        sortOrder: 1,
+        title: 'Intro video',
+        kind: 'video',
+        completionRule: 'view',
+        embedUrl: 'https://www.youtube.com/watch?v=ysz5S6PUM-U',
+        durationMinutes: 3,
       },
       {
-        tenantId, courseId: pick.id, moduleId: m1.id, sortOrder: 2,
-        title: 'Quick-reference handout (PDF)', kind: 'file', completionRule: 'acknowledge',
+        tenantId,
+        courseId: pick.id,
+        moduleId: m1.id,
+        sortOrder: 2,
+        title: 'Quick-reference handout (PDF)',
+        kind: 'file',
+        completionRule: 'acknowledge',
         attachmentId: pdf.id,
       },
       // Module 2 — Core Content
       {
-        tenantId, courseId: pick.id, moduleId: m2.id, sortOrder: 0,
-        title: 'Working at Height — slides', kind: 'slides', completionRule: 'view',
-        slides, durationMinutes: 10,
+        tenantId,
+        courseId: pick.id,
+        moduleId: m2.id,
+        sortOrder: 0,
+        title: 'Working at Height — slides',
+        kind: 'slides',
+        completionRule: 'view',
+        slides,
+        durationMinutes: 10,
       },
       {
-        tenantId, courseId: pick.id, moduleId: m2.id, sortOrder: 1,
-        title: 'Regulation reference (embedded page)', kind: 'embed', completionRule: 'view',
+        tenantId,
+        courseId: pick.id,
+        moduleId: m2.id,
+        sortOrder: 1,
+        title: 'Regulation reference (embedded page)',
+        kind: 'embed',
+        completionRule: 'view',
         embedUrl: 'https://example.com',
       },
       // Module 3 — Assessment & Sign-off
       {
-        tenantId, courseId: pick.id, moduleId: m3.id, sortOrder: 0,
-        title: 'Knowledge check', kind: 'quiz', completionRule: 'pass',
+        tenantId,
+        courseId: pick.id,
+        moduleId: m3.id,
+        sortOrder: 0,
+        title: 'Knowledge check',
+        kind: 'quiz',
+        completionRule: 'pass',
         assessmentTypeId: aType.id,
       },
       {
-        tenantId, courseId: pick.id, moduleId: m3.id, sortOrder: 1,
-        title: 'Hands-on session', kind: 'session', completionRule: 'view',
+        tenantId,
+        courseId: pick.id,
+        moduleId: m3.id,
+        sortOrder: 1,
+        title: 'Hands-on session',
+        kind: 'session',
+        completionRule: 'view',
         classId: klass.id,
       },
       {
-        tenantId, courseId: pick.id, moduleId: m3.id, sortOrder: 2,
-        title: 'Practical: don a harness', kind: 'practical', completionRule: 'evaluator',
+        tenantId,
+        courseId: pick.id,
+        moduleId: m3.id,
+        sortOrder: 2,
+        title: 'Practical: don a harness',
+        kind: 'practical',
+        completionRule: 'evaluator',
         contentHtml:
           '<h2>Practical test</h2><p>Demonstrate donning and adjusting a full-body harness, then attach to the demo anchor.</p><ul><li>5 minutes max</li><li>Evaluator observes silently</li></ul>',
         practicalCriteria: [
@@ -353,7 +404,9 @@ async function main() {
       },
     ]
     await tx.insert(trainingLessons).values(lessons)
-    console.log(`→ Seeded 3 modules, ${lessons.length} lessons, quiz (3 questions), class, practical`)
+    console.log(
+      `→ Seeded 3 modules, ${lessons.length} lessons, quiz (3 questions), class, practical`,
+    )
   })
 
   console.log('')

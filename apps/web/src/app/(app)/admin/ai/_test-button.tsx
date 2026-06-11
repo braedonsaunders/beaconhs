@@ -33,7 +33,11 @@ export function AiTestButton() {
               : 'border-red-200 bg-red-50 text-red-700',
           )}
         >
-          {result.ok ? <CheckCircle2 size={15} className="mt-px shrink-0" /> : <XCircle size={15} className="mt-px shrink-0" />}
+          {result.ok ? (
+            <CheckCircle2 size={15} className="mt-px shrink-0" />
+          ) : (
+            <XCircle size={15} className="mt-px shrink-0" />
+          )}
           <span>{result.message}</span>
         </div>
       ) : null}

@@ -94,9 +94,9 @@ export default async function NewPermitPage() {
         <Alert variant="info">
           <AlertTitle>About confined-space permits</AlertTitle>
           <AlertDescription>
-            The permit lifecycle is open → active → closed. Atmospheric readings out of spec (O₂ &lt;
-            19.5% or &gt; 23%, LEL ≥ 10%, H₂S ≥ 10 ppm, CO ≥ 25 ppm) raise a critical alarm on the
-            permit page.
+            The permit lifecycle is open → active → closed. Atmospheric readings out of spec (O₂
+            &lt; 19.5% or &gt; 23%, LEL ≥ 10%, H₂S ≥ 10 ppm, CO ≥ 25 ppm) raise a critical alarm on
+            the permit page.
           </AlertDescription>
         </Alert>
         <Card>

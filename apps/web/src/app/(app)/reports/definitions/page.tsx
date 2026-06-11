@@ -166,15 +166,7 @@ export default async function DefinitionsPage({
   )
 }
 
-function FilterChip({
-  href,
-  active,
-  label,
-}: {
-  href: string
-  active: boolean
-  label: string
-}) {
+function FilterChip({ href, active, label }: { href: string; active: boolean; label: string }) {
   return (
     <Link
       href={href as any}

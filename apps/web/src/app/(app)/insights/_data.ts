@@ -40,7 +40,11 @@ export async function loadDashboards(ctx: RequestContext): Promise<InsightDashbo
         sortOrder: 0,
         layout: DEFAULT_INSIGHT_LAYOUT,
       })
-      .returning({ id: insightDashboards.id, name: insightDashboards.name, layout: insightDashboards.layout }),
+      .returning({
+        id: insightDashboards.id,
+        name: insightDashboards.name,
+        layout: insightDashboards.layout,
+      }),
   )
   return created ? [{ id: created.id, name: created.name, layout: created.layout }] : []
 }

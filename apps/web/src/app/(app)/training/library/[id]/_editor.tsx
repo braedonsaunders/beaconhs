@@ -3,7 +3,17 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2, Trash2 } from 'lucide-react'
-import { Badge, Button, Card, CardContent, FileUploader, Input, Label, Select, Textarea } from '@beaconhs/ui'
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  FileUploader,
+  Input,
+  Label,
+  Select,
+  Textarea,
+} from '@beaconhs/ui'
 import type { LessonBlock, Slide } from '@beaconhs/db/schema'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
 import { toast } from '@/lib/toast'
@@ -165,7 +175,9 @@ export function ContentItemEditor({
                 }}
                 label="Drop a video or click to choose"
               />
-              {attachmentId ? <p className="text-xs text-emerald-700">Uploaded video attached ✓</p> : null}
+              {attachmentId ? (
+                <p className="text-xs text-emerald-700">Uploaded video attached ✓</p>
+              ) : null}
             </div>
           ) : null}
           {kind === 'file' ? (

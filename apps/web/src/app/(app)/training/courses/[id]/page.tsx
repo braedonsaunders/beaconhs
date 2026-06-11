@@ -199,7 +199,12 @@ export default async function CoursePage({ params }: { params: Promise<{ id: str
 
   const quizQuestions: Record<
     string,
-    { id: string; prompt: string; kind: string; options: { value: string; label: string }[] | null }[]
+    {
+      id: string
+      prompt: string
+      kind: string
+      options: { value: string; label: string }[] | null
+    }[]
   > = {}
   for (const q of questions) {
     ;(quizQuestions[q.typeId] ??= []).push({

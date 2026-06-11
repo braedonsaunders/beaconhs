@@ -23,11 +23,7 @@ export function LostTimeAddForm({
 }) {
   const [isPending, startTransition] = useTransition()
   return (
-    <form
-      id={formId}
-      action={(fd) => startTransition(() => addAction(fd))}
-      className="space-y-3"
-    >
+    <form id={formId} action={(fd) => startTransition(() => addAction(fd))} className="space-y-3">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="ltf-status">Status</Label>
@@ -66,13 +62,7 @@ export function LostTimeAddForm({
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="ltf-from">From *</Label>
-          <Input
-            id="ltf-from"
-            name="validFrom"
-            type="date"
-            required
-            disabled={isPending}
-          />
+          <Input id="ltf-from" name="validFrom" type="date" required disabled={isPending} />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="ltf-to">To</Label>

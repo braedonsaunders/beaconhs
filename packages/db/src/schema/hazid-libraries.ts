@@ -157,10 +157,7 @@ export const hazidLocationTasks = pgTable(
 // Assessment types
 // ----------------------------------------------------------------------------
 // Style determines whether tasks-first or hazards-first layout is used in PDFs.
-export const hazidAssessmentStyle = pgEnum('hazid_assessment_style', [
-  'task_based',
-  'hazard_based',
-])
+export const hazidAssessmentStyle = pgEnum('hazid_assessment_style', ['task_based', 'hazard_based'])
 
 export const hazidAssessmentTypes = pgTable(
   'hazid_assessment_types',
@@ -224,11 +221,7 @@ export const hazidAssessmentTypePPE = pgTable(
 // ----------------------------------------------------------------------------
 // Type-default Question rows
 // ----------------------------------------------------------------------------
-export const hazidQuestionType = pgEnum('hazid_question_type', [
-  'yes_no',
-  'text',
-  'multi_select',
-])
+export const hazidQuestionType = pgEnum('hazid_question_type', ['yes_no', 'text', 'multi_select'])
 
 export const hazidAssessmentTypeQuestions = pgTable(
   'hazid_assessment_type_questions',

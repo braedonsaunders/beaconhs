@@ -54,7 +54,8 @@ export async function saveTag(input: {
   const name = input.name.trim().toLowerCase()
   if (!name) return { ok: false, error: 'Tag name is required.' }
   if (name.length > 40) return { ok: false, error: 'Keep tag names under 40 characters.' }
-  if (/[,\n]/.test(name)) return { ok: false, error: 'Tag names can’t contain commas or line breaks.' }
+  if (/[,\n]/.test(name))
+    return { ok: false, error: 'Tag names can’t contain commas or line breaks.' }
 
   const original = input.originalName?.trim().toLowerCase()
   const renamed = !!original && original !== name
@@ -76,7 +77,10 @@ export async function saveTag(input: {
 }
 
 /** Fold one tag into another across every entry. */
-export async function mergeTag(input: { source: string; target: string }): Promise<TagActionResult> {
+export async function mergeTag(input: {
+  source: string
+  target: string
+}): Promise<TagActionResult> {
   const ctx = await gate()
   if (!ctx) return { ok: false, error: 'You don’t have permission to manage tags.' }
 

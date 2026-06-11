@@ -50,11 +50,16 @@ export function FilterChips({
           className={cn(
             'inline-flex h-8 max-w-[16rem] items-center gap-1.5 rounded-md border px-3 text-sm transition-colors',
             active
-              ? 'border-teal-300 bg-teal-50 dark:bg-teal-950/50 text-teal-800 dark:text-teal-300'
-              : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:border-slate-300 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800/60',
+              ? 'border-teal-300 bg-teal-50 text-teal-800 dark:bg-teal-950/50 dark:text-teal-300'
+              : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-800/60',
           )}
         >
-          <span className={cn('shrink-0', active ? 'text-teal-700/70 dark:text-teal-300' : 'text-slate-500 dark:text-slate-400')}>
+          <span
+            className={cn(
+              'shrink-0',
+              active ? 'text-teal-700/70 dark:text-teal-300' : 'text-slate-500 dark:text-slate-400',
+            )}
+          >
             {active ? `${label}:` : label}
           </span>
           {active ? <span className="truncate font-semibold">{active.label}</span> : null}
@@ -114,7 +119,9 @@ function FilterItem({
       aria-selected={active}
       className={cn(
         'flex items-center gap-2 rounded px-2 py-1.5 text-sm transition-colors',
-        active ? 'bg-teal-50 dark:bg-teal-950/50 font-medium text-teal-800 dark:text-teal-300' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/60',
+        active
+          ? 'bg-teal-50 font-medium text-teal-800 dark:bg-teal-950/50 dark:text-teal-300'
+          : 'text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800/60',
       )}
     >
       <Check size={14} className={cn('shrink-0', active ? 'text-teal-600' : 'text-transparent')} />

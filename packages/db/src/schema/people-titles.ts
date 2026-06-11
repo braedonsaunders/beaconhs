@@ -56,10 +56,7 @@ export const personTitleAssignments = pgTable(
     tenantIdx: index('person_title_assignments_tenant_idx').on(t.tenantId),
     titleIdx: index('person_title_assignments_title_idx').on(t.titleId),
     personIdx: index('person_title_assignments_person_idx').on(t.personId),
-    uniqueAssignment: uniqueIndex('person_title_assignments_unique_ux').on(
-      t.titleId,
-      t.personId,
-    ),
+    uniqueAssignment: uniqueIndex('person_title_assignments_unique_ux').on(t.titleId, t.personId),
   }),
 )
 
@@ -68,20 +65,17 @@ export const personTitlesRelations = relations(personTitles, ({ one, many }) => 
   assignments: many(personTitleAssignments),
 }))
 
-export const personTitleAssignmentsRelations = relations(
-  personTitleAssignments,
-  ({ one }) => ({
-    tenant: one(tenants, {
-      fields: [personTitleAssignments.tenantId],
-      references: [tenants.id],
-    }),
-    title: one(personTitles, {
-      fields: [personTitleAssignments.titleId],
-      references: [personTitles.id],
-    }),
-    person: one(people, {
-      fields: [personTitleAssignments.personId],
-      references: [people.id],
-    }),
+export const personTitleAssignmentsRelations = relations(personTitleAssignments, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [personTitleAssignments.tenantId],
+    references: [tenants.id],
   }),
-)
+  title: one(personTitles, {
+    fields: [personTitleAssignments.titleId],
+    references: [personTitles.id],
+  }),
+  person: one(people, {
+    fields: [personTitleAssignments.personId],
+    references: [people.id],
+  }),
+}))

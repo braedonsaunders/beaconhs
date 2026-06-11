@@ -92,9 +92,7 @@ export async function deleteExtraField(input: {
   })
   if (!existing) return { ok: false, error: 'Field not found' }
 
-  await ctx.db((tx) =>
-    tx.delete(trainingExtraFields).where(eq(trainingExtraFields.id, id)),
-  )
+  await ctx.db((tx) => tx.delete(trainingExtraFields).where(eq(trainingExtraFields.id, id)))
   await recordAudit(ctx, {
     entityType: AUDIT_ENTITY_FOR_OWNER[ownerType],
     entityId: ownerId,

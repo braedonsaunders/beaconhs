@@ -73,11 +73,19 @@ export async function GET(req: NextRequest) {
 
     const orderBy =
       params.sort === 'reference'
-        ? [params.dir === 'asc' ? asc(inspectionRecords.reference) : desc(inspectionRecords.reference)]
+        ? [
+            params.dir === 'asc'
+              ? asc(inspectionRecords.reference)
+              : desc(inspectionRecords.reference),
+          ]
         : params.sort === 'type'
           ? [params.dir === 'asc' ? asc(inspectionTypes.name) : desc(inspectionTypes.name)]
           : params.sort === 'status'
-            ? [params.dir === 'asc' ? asc(inspectionRecords.status) : desc(inspectionRecords.status)]
+            ? [
+                params.dir === 'asc'
+                  ? asc(inspectionRecords.status)
+                  : desc(inspectionRecords.status),
+              ]
             : [
                 params.dir === 'asc'
                   ? asc(inspectionRecords.occurredAt)
@@ -90,16 +98,28 @@ export async function GET(req: NextRequest) {
         type: inspectionTypes,
         site: orgUnits,
         inspectorName: user.name,
-        passCount: sql<number>`coalesce(sum(case when ${inspectionRecordCriteria.answer} = 'pass' then 1 else 0 end), 0)`.mapWith(Number),
-        failCount: sql<number>`coalesce(sum(case when ${inspectionRecordCriteria.answer} = 'fail' then 1 else 0 end), 0)`.mapWith(Number),
-        naCount: sql<number>`coalesce(sum(case when ${inspectionRecordCriteria.answer} = 'n_a' then 1 else 0 end), 0)`.mapWith(Number),
+        passCount:
+          sql<number>`coalesce(sum(case when ${inspectionRecordCriteria.answer} = 'pass' then 1 else 0 end), 0)`.mapWith(
+            Number,
+          ),
+        failCount:
+          sql<number>`coalesce(sum(case when ${inspectionRecordCriteria.answer} = 'fail' then 1 else 0 end), 0)`.mapWith(
+            Number,
+          ),
+        naCount:
+          sql<number>`coalesce(sum(case when ${inspectionRecordCriteria.answer} = 'n_a' then 1 else 0 end), 0)`.mapWith(
+            Number,
+          ),
       })
       .from(inspectionRecords)
       .innerJoin(inspectionTypes, eq(inspectionTypes.id, inspectionRecords.typeId))
       .leftJoin(orgUnits, eq(orgUnits.id, inspectionRecords.siteOrgUnitId))
       .leftJoin(tenantUsers, eq(tenantUsers.id, inspectionRecords.inspectorTenantUserId))
       .leftJoin(user, eq(user.id, tenantUsers.userId))
-      .leftJoin(inspectionRecordCriteria, eq(inspectionRecordCriteria.recordId, inspectionRecords.id))
+      .leftJoin(
+        inspectionRecordCriteria,
+        eq(inspectionRecordCriteria.recordId, inspectionRecords.id),
+      )
       .where(whereClause)
       .groupBy(inspectionRecords.id, inspectionTypes.id, orgUnits.id, user.id)
       .orderBy(...orderBy)

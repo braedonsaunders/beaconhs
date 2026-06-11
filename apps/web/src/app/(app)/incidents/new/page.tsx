@@ -22,7 +22,15 @@ import { PageContainer } from '@/components/page-layout'
 
 export const metadata = { title: 'Report incident' }
 
-const TYPES = ['injury', 'illness', 'near_miss', 'property_damage', 'environmental', 'security', 'other'] as const
+const TYPES = [
+  'injury',
+  'illness',
+  'near_miss',
+  'property_damage',
+  'environmental',
+  'security',
+  'other',
+] as const
 const SEVERITIES = ['first_aid_only', 'medical_aid', 'lost_time', 'fatality', 'no_injury'] as const
 
 async function reportIncident(formData: FormData) {
@@ -102,7 +110,10 @@ export default async function NewIncidentPage() {
   return (
     <PageContainer>
       <div className="max-w-3xl space-y-6">
-        <DetailHeader back={{ href: '/incidents', label: 'Back to incidents' }} title="Report incident" />
+        <DetailHeader
+          back={{ href: '/incidents', label: 'Back to incidents' }}
+          title="Report incident"
+        />
         <Alert variant="info">
           <AlertTitle>Quick report</AlertTitle>
           <AlertDescription>
@@ -146,10 +157,18 @@ export default async function NewIncidentPage() {
                   </Select>
                 </Field>
                 <Field label="Title" required className="sm:col-span-2">
-                  <Input name="title" required placeholder="Short summary, e.g. ‘Slip on wet floor near pump 3’" />
+                  <Input
+                    name="title"
+                    required
+                    placeholder="Short summary, e.g. ‘Slip on wet floor near pump 3’"
+                  />
                 </Field>
                 <Field label="Description" className="sm:col-span-2">
-                  <Textarea name="description" rows={4} placeholder="What happened? Witnesses? Equipment involved?" />
+                  <Textarea
+                    name="description"
+                    rows={4}
+                    placeholder="What happened? Witnesses? Equipment involved?"
+                  />
                 </Field>
                 <Field label="Specific location">
                   <Input name="location" placeholder="Building / area / coordinates" />

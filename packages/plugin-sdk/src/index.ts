@@ -2,7 +2,13 @@ import { z } from 'zod'
 
 // --- Capabilities ---------------------------------------------------------
 
-export const CAPABILITIES = ['sync.in', 'sync.out', 'ui.panel', 'field.type', 'report.type'] as const
+export const CAPABILITIES = [
+  'sync.in',
+  'sync.out',
+  'ui.panel',
+  'field.type',
+  'report.type',
+] as const
 export type Capability = (typeof CAPABILITIES)[number]
 
 // --- Hook events ----------------------------------------------------------
@@ -54,7 +60,10 @@ export type PluginContext = {
   pluginKey: string
   config: Record<string, unknown>
   secrets: Record<string, string>
-  logger: { info: (msg: string, ctx?: unknown) => void; error: (msg: string, ctx?: unknown) => void }
+  logger: {
+    info: (msg: string, ctx?: unknown) => void
+    error: (msg: string, ctx?: unknown) => void
+  }
   // Sandboxed DB access. In v1 this is the real DB scoped to the tenant.
   // In v2 (third-party plugins), it'll be a curated capability set.
   api: {
@@ -103,7 +112,15 @@ export type PluginDefinition<TConfig, TSecrets> = {
 export type PluginFieldType = {
   type: string // unique key like 'netsuite_customer'
   label: string
-  category: 'standard' | 'choice' | 'scoring' | 'picker' | 'media' | 'identity' | 'computed' | 'display'
+  category:
+    | 'standard'
+    | 'choice'
+    | 'scoring'
+    | 'picker'
+    | 'media'
+    | 'identity'
+    | 'computed'
+    | 'display'
   // URL or import path to the React component used in the form designer + renderer.
   // For first-party plugins, this is a static export from the plugin package.
   componentImport: string

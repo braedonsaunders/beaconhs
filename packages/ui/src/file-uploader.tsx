@@ -18,8 +18,7 @@ export type RequestUploadAction = (input: {
   contentType: string
   sizeBytes: number
 }) => Promise<
-  | { ok: true; key: string; putUrl: string; publicUrl: string }
-  | { ok: false; error: string }
+  { ok: true; key: string; putUrl: string; publicUrl: string } | { ok: false; error: string }
 >
 
 export type FinalizeUploadAction = (input: {
@@ -30,13 +29,7 @@ export type FinalizeUploadAction = (input: {
   sizeBytes: number
 }) => Promise<{ ok: true; attachmentId: string } | { ok: false; error: string }>
 
-export type AttachmentKind =
-  | 'image'
-  | 'document'
-  | 'video'
-  | 'audio'
-  | 'signature'
-  | 'other'
+export type AttachmentKind = 'image' | 'document' | 'video' | 'audio' | 'signature' | 'other'
 
 export type UploadedFile = {
   attachmentId: string
@@ -100,7 +93,10 @@ export function FileUploader({
         setItems((prev) => prev.map((i) => (i.id === id ? { ...i, ...patch } : i)))
 
       if (file.size > maxSize) {
-        updateItem({ status: 'error', error: `File exceeds ${Math.round(maxSize / 1024 / 1024)} MB limit` })
+        updateItem({
+          status: 'error',
+          error: `File exceeds ${Math.round(maxSize / 1024 / 1024)} MB limit`,
+        })
         return
       }
       updateItem({ status: 'uploading', progress: 0 })
@@ -207,8 +203,8 @@ export function FileUploader({
           'flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed text-center transition-colors',
           compact ? 'px-3 py-3' : 'px-4 py-6',
           dragOver
-            ? 'border-teal-400 bg-teal-50 dark:bg-teal-950/50 text-teal-900 dark:text-teal-300'
-            : 'border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:border-teal-300 hover:bg-teal-50/40 dark:hover:bg-teal-950/40',
+            ? 'border-teal-400 bg-teal-50 text-teal-900 dark:bg-teal-950/50 dark:text-teal-300'
+            : 'border-slate-300 bg-slate-50 text-slate-600 hover:border-teal-300 hover:bg-teal-50/40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-teal-950/40',
         )}
       >
         <span className={cn('font-medium', compact ? 'text-xs' : 'text-sm')}>{label}</span>
@@ -230,10 +226,12 @@ export function FileUploader({
           {items.map((item) => (
             <li
               key={item.id}
-              className="flex items-center justify-between gap-3 rounded-md border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs"
+              className="flex items-center justify-between gap-3 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs dark:border-slate-800 dark:bg-slate-900"
             >
               <div className="min-w-0 flex-1">
-                <div className="truncate font-medium text-slate-800 dark:text-slate-100">{item.file.name}</div>
+                <div className="truncate font-medium text-slate-800 dark:text-slate-100">
+                  {item.file.name}
+                </div>
                 {item.status === 'error' ? (
                   <div className="text-[11px] text-rose-600">{item.error}</div>
                 ) : item.status === 'done' ? (
@@ -259,9 +257,7 @@ export function FileUploader({
               {item.status === 'error' ? (
                 <button
                   type="button"
-                  onClick={() =>
-                    setItems((prev) => prev.filter((i) => i.id !== item.id))
-                  }
+                  onClick={() => setItems((prev) => prev.filter((i) => i.id !== item.id))}
                   className="rounded px-2 py-0.5 text-[11px] font-medium text-rose-700 hover:bg-rose-50"
                 >
                   Dismiss

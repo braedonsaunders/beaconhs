@@ -134,8 +134,7 @@ async function main() {
           slug: 'inspections_completed_weekly',
           kind: 'built_in',
           name: 'Inspections Completed (weekly)',
-          description:
-            'Completed inspections in the configured date range, grouped by template.',
+          description: 'Completed inspections in the configured date range, grouped by template.',
           category: 'inspections',
           queryKind: 'inspections_completed',
         },
@@ -306,57 +305,150 @@ async function main() {
       .values({ tenantId: tenant.id, name: 'Office' })
       .returning()
 
-    const [carp] = await tx.insert(trades).values({ tenantId: tenant.id, name: 'Carpenter' }).returning()
-    const [elec] = await tx.insert(trades).values({ tenantId: tenant.id, name: 'Electrician' }).returning()
-    const [weld] = await tx.insert(trades).values({ tenantId: tenant.id, name: 'Welder' }).returning()
-    const [supervisorTrade] = await tx.insert(trades).values({ tenantId: tenant.id, name: 'Supervisor' }).returning()
+    const [carp] = await tx
+      .insert(trades)
+      .values({ tenantId: tenant.id, name: 'Carpenter' })
+      .returning()
+    const [elec] = await tx
+      .insert(trades)
+      .values({ tenantId: tenant.id, name: 'Electrician' })
+      .returning()
+    const [weld] = await tx
+      .insert(trades)
+      .values({ tenantId: tenant.id, name: 'Welder' })
+      .returning()
+    const [supervisorTrade] = await tx
+      .insert(trades)
+      .values({ tenantId: tenant.id, name: 'Supervisor' })
+      .returning()
 
-    const [crewAlpha] = await tx.insert(crews).values({ tenantId: tenant.id, name: 'Crew Alpha' }).returning()
-    const [crewBravo] = await tx.insert(crews).values({ tenantId: tenant.id, name: 'Crew Bravo' }).returning()
+    const [crewAlpha] = await tx
+      .insert(crews)
+      .values({ tenantId: tenant.id, name: 'Crew Alpha' })
+      .returning()
+    const [crewBravo] = await tx
+      .insert(crews)
+      .values({ tenantId: tenant.id, name: 'Crew Bravo' })
+      .returning()
 
     // --- People ---------------------------------------------------------
     const peopleData = [
       {
-        firstName: 'John', lastName: 'Anderson', formalName: 'John D. Anderson',
-        jobTitle: 'Site Supervisor', employeeNo: 'E001',
-        tradeId: supervisorTrade!.id, crewId: crewAlpha!.id, dept: fieldOps!.id,
-        email: 'janderson@acme.example', phone: '+1-647-555-0101',
-        emergencyContactName: 'Mary Anderson', emergencyContactPhone: '+1-647-555-9001',
+        firstName: 'John',
+        lastName: 'Anderson',
+        formalName: 'John D. Anderson',
+        jobTitle: 'Site Supervisor',
+        employeeNo: 'E001',
+        tradeId: supervisorTrade!.id,
+        crewId: crewAlpha!.id,
+        dept: fieldOps!.id,
+        email: 'janderson@acme.example',
+        phone: '+1-647-555-0101',
+        emergencyContactName: 'Mary Anderson',
+        emergencyContactPhone: '+1-647-555-9001',
         notes: 'Lead supervisor for Tank Farm operations. 15 years on site.',
       },
       {
-        firstName: 'Sarah', lastName: 'Bell', formalName: 'Sarah J. Bell',
-        jobTitle: 'Lead Carpenter', employeeNo: 'E002',
-        tradeId: carp!.id, crewId: crewAlpha!.id, dept: fieldOps!.id,
-        email: 'sbell@acme.example', phone: '+1-647-555-0102',
-        emergencyContactName: 'Tom Bell', emergencyContactPhone: '+1-647-555-9002',
+        firstName: 'Sarah',
+        lastName: 'Bell',
+        formalName: 'Sarah J. Bell',
+        jobTitle: 'Lead Carpenter',
+        employeeNo: 'E002',
+        tradeId: carp!.id,
+        crewId: crewAlpha!.id,
+        dept: fieldOps!.id,
+        email: 'sbell@acme.example',
+        phone: '+1-647-555-0102',
+        emergencyContactName: 'Tom Bell',
+        emergencyContactPhone: '+1-647-555-9002',
       },
       {
-        firstName: 'Marcus', lastName: 'Chen', formalName: 'Marcus K. Chen',
-        jobTitle: 'Journeyman Electrician', employeeNo: 'E003',
-        tradeId: elec!.id, crewId: crewAlpha!.id, dept: fieldOps!.id,
-        email: 'mchen@acme.example', phone: '+1-647-555-0103',
-        emergencyContactName: 'Lisa Chen', emergencyContactPhone: '+1-647-555-9003',
+        firstName: 'Marcus',
+        lastName: 'Chen',
+        formalName: 'Marcus K. Chen',
+        jobTitle: 'Journeyman Electrician',
+        employeeNo: 'E003',
+        tradeId: elec!.id,
+        crewId: crewAlpha!.id,
+        dept: fieldOps!.id,
+        email: 'mchen@acme.example',
+        phone: '+1-647-555-0103',
+        emergencyContactName: 'Lisa Chen',
+        emergencyContactPhone: '+1-647-555-9003',
       },
       {
-        firstName: 'Priya', lastName: 'Desai', formalName: 'Priya N. Desai',
-        jobTitle: 'Pipe Welder', employeeNo: 'E004',
-        tradeId: weld!.id, crewId: crewAlpha!.id, dept: fieldOps!.id,
-        email: 'pdesai@acme.example', phone: '+1-647-555-0104',
-        emergencyContactName: 'Arjun Desai', emergencyContactPhone: '+1-647-555-9004',
+        firstName: 'Priya',
+        lastName: 'Desai',
+        formalName: 'Priya N. Desai',
+        jobTitle: 'Pipe Welder',
+        employeeNo: 'E004',
+        tradeId: weld!.id,
+        crewId: crewAlpha!.id,
+        dept: fieldOps!.id,
+        email: 'pdesai@acme.example',
+        phone: '+1-647-555-0104',
+        emergencyContactName: 'Arjun Desai',
+        emergencyContactPhone: '+1-647-555-9004',
       },
       {
-        firstName: 'Tom', lastName: 'Eaton', formalName: 'Thomas Eaton',
-        jobTitle: 'Site Supervisor', employeeNo: 'E005',
-        tradeId: supervisorTrade!.id, crewId: crewBravo!.id, dept: fieldOps!.id,
-        email: 'teaton@acme.example', phone: '+1-647-555-0105',
-        emergencyContactName: 'Jane Eaton', emergencyContactPhone: '+1-647-555-9005',
+        firstName: 'Tom',
+        lastName: 'Eaton',
+        formalName: 'Thomas Eaton',
+        jobTitle: 'Site Supervisor',
+        employeeNo: 'E005',
+        tradeId: supervisorTrade!.id,
+        crewId: crewBravo!.id,
+        dept: fieldOps!.id,
+        email: 'teaton@acme.example',
+        phone: '+1-647-555-0105',
+        emergencyContactName: 'Jane Eaton',
+        emergencyContactPhone: '+1-647-555-9005',
       },
-      { firstName: 'Maya', lastName: 'Foster', jobTitle: 'Apprentice Carpenter', employeeNo: 'E006', tradeId: carp!.id, crewId: crewBravo!.id, dept: fieldOps!.id },
-      { firstName: 'Daniel', lastName: 'Gonzales', jobTitle: 'Apprentice Electrician', employeeNo: 'E007', tradeId: elec!.id, crewId: crewBravo!.id, dept: fieldOps!.id },
-      { firstName: 'Aisha', lastName: 'Hamid', jobTitle: 'Welder', employeeNo: 'E008', tradeId: weld!.id, crewId: crewBravo!.id, dept: fieldOps!.id },
-      { firstName: 'Linda', lastName: 'Iverson', jobTitle: 'HSE Coordinator', employeeNo: 'E009', tradeId: null, crewId: null, dept: office!.id },
-      { firstName: 'Robert', lastName: 'Jensen', jobTitle: 'Project Manager', employeeNo: 'E010', tradeId: null, crewId: null, dept: office!.id },
+      {
+        firstName: 'Maya',
+        lastName: 'Foster',
+        jobTitle: 'Apprentice Carpenter',
+        employeeNo: 'E006',
+        tradeId: carp!.id,
+        crewId: crewBravo!.id,
+        dept: fieldOps!.id,
+      },
+      {
+        firstName: 'Daniel',
+        lastName: 'Gonzales',
+        jobTitle: 'Apprentice Electrician',
+        employeeNo: 'E007',
+        tradeId: elec!.id,
+        crewId: crewBravo!.id,
+        dept: fieldOps!.id,
+      },
+      {
+        firstName: 'Aisha',
+        lastName: 'Hamid',
+        jobTitle: 'Welder',
+        employeeNo: 'E008',
+        tradeId: weld!.id,
+        crewId: crewBravo!.id,
+        dept: fieldOps!.id,
+      },
+      {
+        firstName: 'Linda',
+        lastName: 'Iverson',
+        jobTitle: 'HSE Coordinator',
+        employeeNo: 'E009',
+        tradeId: null,
+        crewId: null,
+        dept: office!.id,
+      },
+      {
+        firstName: 'Robert',
+        lastName: 'Jensen',
+        jobTitle: 'Project Manager',
+        employeeNo: 'E010',
+        tradeId: null,
+        crewId: null,
+        dept: office!.id,
+      },
     ]
 
     const insertedPeople = await Promise.all(
@@ -389,11 +481,43 @@ async function main() {
 
     // --- Training courses + records -------------------------------------
     const courseDefs = [
-      { code: 'WHMIS', name: 'WHMIS 2015', deliveryType: 'self_paced' as const, valid: 36, description: 'Workplace Hazardous Materials Information System — federally mandated chemical hazard training.' },
-      { code: 'H2S', name: 'H2S Alive', deliveryType: 'classroom' as const, valid: 36, description: 'Hydrogen sulfide hazard recognition + SCBA familiarisation (ENFORM standard).' },
-      { code: 'FALL', name: 'Fall Protection', deliveryType: 'classroom' as const, valid: 36, description: 'Proper use of harness, lanyard, anchor points, rescue planning.' },
-      { code: 'CSE', name: 'Confined Space Entry', deliveryType: 'classroom' as const, valid: 12, description: 'Permit-required confined space awareness for entrants/attendants.' },
-      { code: 'FA', name: 'Standard First Aid', deliveryType: 'classroom' as const, valid: 36, description: 'Canadian Red Cross 16-hour SFA + CPR-C certification.' },
+      {
+        code: 'WHMIS',
+        name: 'WHMIS 2015',
+        deliveryType: 'self_paced' as const,
+        valid: 36,
+        description:
+          'Workplace Hazardous Materials Information System — federally mandated chemical hazard training.',
+      },
+      {
+        code: 'H2S',
+        name: 'H2S Alive',
+        deliveryType: 'classroom' as const,
+        valid: 36,
+        description:
+          'Hydrogen sulfide hazard recognition + SCBA familiarisation (ENFORM standard).',
+      },
+      {
+        code: 'FALL',
+        name: 'Fall Protection',
+        deliveryType: 'classroom' as const,
+        valid: 36,
+        description: 'Proper use of harness, lanyard, anchor points, rescue planning.',
+      },
+      {
+        code: 'CSE',
+        name: 'Confined Space Entry',
+        deliveryType: 'classroom' as const,
+        valid: 12,
+        description: 'Permit-required confined space awareness for entrants/attendants.',
+      },
+      {
+        code: 'FA',
+        name: 'Standard First Aid',
+        deliveryType: 'classroom' as const,
+        valid: 36,
+        description: 'Canadian Red Cross 16-hour SFA + CPR-C certification.',
+      },
     ]
     const courses = await Promise.all(
       courseDefs.map(async (c) => {
@@ -498,7 +622,9 @@ async function main() {
           requiresPreUseInspection: isTool ? true : true,
           requiresAnnualInspection: !isTool,
           lastAnnualInspectionOn: !isTool ? isoDate(new Date(today.getTime() - 120 * dayMs)) : null,
-          nextAnnualInspectionDue: !isTool ? isoDate(new Date(today.getTime() + 240 * dayMs)) : null,
+          nextAnnualInspectionDue: !isTool
+            ? isoDate(new Date(today.getTime() + 240 * dayMs))
+            : null,
           lastPreUseInspectionAt: new Date(today.getTime() - 2 * dayMs),
           billingRateCategory: isTool ? 'tools' : 'vehicles',
         })
@@ -672,14 +798,28 @@ async function main() {
           id: 'signoff',
           title: { en: 'Sign-off' },
           fields: [
-            { id: 'incidentsDiscussed', type: 'yes_no_comment', label: { en: 'Were recent incidents reviewed?' }, required: true },
-            { id: 'signature', type: 'signature', label: { en: 'Foreman signature' }, required: true },
+            {
+              id: 'incidentsDiscussed',
+              type: 'yes_no_comment',
+              label: { en: 'Were recent incidents reviewed?' },
+              required: true,
+            },
+            {
+              id: 'signature',
+              type: 'signature',
+              label: { en: 'Foreman signature' },
+              required: true,
+            },
           ],
         },
       ],
       workflow: {
         steps: [
-          { key: 'submit', title: { en: 'Submit' }, assignee: { type: 'expression', expr: '$submitter' } },
+          {
+            key: 'submit',
+            title: { en: 'Submit' },
+            assignee: { type: 'expression', expr: '$submitter' },
+          },
         ],
       },
     }
@@ -719,8 +859,14 @@ async function main() {
           foreman: john!.id,
           attendees: insertedPeople.slice(1, 4).map((p) => p.id),
           topics: [
-            { topic: 'Pinch points around tank manways', discussion: 'Always use spotters when handling >50lb lids.' },
-            { topic: 'Heat stress', discussion: 'Mandatory 15-min water breaks every hour above 28°C.' },
+            {
+              topic: 'Pinch points around tank manways',
+              discussion: 'Always use spotters when handling >50lb lids.',
+            },
+            {
+              topic: 'Heat stress',
+              discussion: 'Mandatory 15-min water breaks every hour above 28°C.',
+            },
           ],
           incidentsDiscussed: { answer: 'yes', comment: 'Reviewed near-miss INC-2026-0001.' },
         },
@@ -737,7 +883,8 @@ async function main() {
         severity: 'no_injury',
         status: 'closed',
         title: 'Hand tool dropped from scaffold',
-        description: '8" wrench fell from level-2 scaffold into a barricaded area below pump P-103. No personnel in the drop zone — caught by toe-boards.',
+        description:
+          '8" wrench fell from level-2 scaffold into a barricaded area below pump P-103. No personnel in the drop zone — caught by toe-boards.',
         occurredAt: new Date(today.getTime() - 14 * dayMs),
         reportedAt: new Date(today.getTime() - 14 * dayMs + 2 * 3600 * 1000),
         siteOrgUnitId: siteA.id,
@@ -747,12 +894,17 @@ async function main() {
         supervisorPersonId: john!.id,
         witnesses: 'M. Foster, D. Gonzales',
         ppeWorn: 'Hard hat, safety glasses, gloves, fall arrest',
-        eventsLeadingUp: 'Working at height removing valve packing. Tool was set down on scaffold deck instead of being tethered. A gust knocked it through the toe-board gap.',
-        immediateActionTaken: 'Work stopped. Area inspected. Toe-board gap shimmed. Tool tethering tailgate held immediately after.',
+        eventsLeadingUp:
+          'Working at height removing valve packing. Tool was set down on scaffold deck instead of being tethered. A gust knocked it through the toe-board gap.',
+        immediateActionTaken:
+          'Work stopped. Area inspected. Toe-board gap shimmed. Tool tethering tailgate held immediately after.',
         actualSeverity: 1,
         potentialSeverity: 4,
         rootCause: 'Tool not tethered when set down on scaffold deck.',
-        contributingFactors: ['Inadequate toe-board height', 'No tool-tethering policy enforcement'],
+        contributingFactors: [
+          'Inadequate toe-board height',
+          'No tool-tethering policy enforcement',
+        ],
         assignedInvestigatorTenantUserId: membership.id,
         inProgress: false,
         locked: true,
@@ -770,7 +922,8 @@ async function main() {
         severity: 'first_aid_only',
         status: 'closed',
         title: 'Cut on right hand while opening crate',
-        description: 'Box cutter slipped while opening valve crate. Small laceration to right thumb, treated on site.',
+        description:
+          'Box cutter slipped while opening valve crate. Small laceration to right thumb, treated on site.',
         occurredAt: new Date(today.getTime() - 9 * dayMs),
         siteOrgUnitId: siteA.id,
         location: 'Materials lay-down yard',
@@ -780,7 +933,8 @@ async function main() {
         firstAidProvider: 'L. Iverson (HSE Coordinator)',
         actualSeverity: 2,
         potentialSeverity: 2,
-        rootCause: 'Box cutter blade fully extended, no proper cut-resistant glove rating for this task.',
+        rootCause:
+          'Box cutter blade fully extended, no proper cut-resistant glove rating for this task.',
         inProgress: false,
         locked: true,
         closedAt: new Date(today.getTime() - 6 * dayMs),
@@ -813,15 +967,18 @@ async function main() {
         severity: 'medical_aid',
         status: 'under_investigation',
         title: 'Slip on wet floor in mechanical room',
-        description: 'Worker slipped after a hose was left dripping at the access point. Treated at walk-in clinic, x-rays clear.',
+        description:
+          'Worker slipped after a hose was left dripping at the access point. Treated at walk-in clinic, x-rays clear.',
         occurredAt: new Date(today.getTime() - 3 * dayMs),
         siteOrgUnitId: siteB.id,
         location: 'Mechanical Room 2A, near east entrance',
         supervisorPersonId: tom!.id,
         witnesses: 'Marcus Chen',
         externalPeopleInvolved: 'None',
-        eventsLeadingUp: 'Cleaning crew finished pressure-washing equipment and coiled the hose without draining it. Wet patch wasn\'t flagged with a cone.',
-        immediateActionTaken: 'Area mopped, cones placed, hose drained, worker driven to MedExpress clinic.',
+        eventsLeadingUp:
+          "Cleaning crew finished pressure-washing equipment and coiled the hose without draining it. Wet patch wasn't flagged with a cone.",
+        immediateActionTaken:
+          'Area mopped, cones placed, hose drained, worker driven to MedExpress clinic.',
         ppeWorn: 'Safety boots (SRC slip-resistant), high-vis vest, hard hat',
         actualSeverity: 3,
         potentialSeverity: 3,
@@ -838,7 +995,8 @@ async function main() {
         modifiedDutyFirstDay: isoDate(new Date(today.getTime() - 2 * dayMs)),
         modifiedDutyDays: 3,
         externallyReportable: false,
-        rootCause: 'Procedure for hose handling at clean-up did not require draining/coning. Cleaning subcontractor not briefed on site policy.',
+        rootCause:
+          'Procedure for hose handling at clean-up did not require draining/coning. Cleaning subcontractor not briefed on site policy.',
         contributingFactors: ['Subcontractor onboarding gap', 'No signage placement standard'],
         inProgress: true,
         locked: false,
@@ -880,12 +1038,14 @@ async function main() {
         severity: 'no_injury',
         status: 'reported',
         title: 'Forklift bumped overhead conduit',
-        description: 'Forklift forks struck low-hanging electrical conduit while turning. Conduit dented; circuit isolated as a precaution.',
+        description:
+          'Forklift forks struck low-hanging electrical conduit while turning. Conduit dented; circuit isolated as a precaution.',
         occurredAt: new Date(today.getTime() - 1 * dayMs),
         siteOrgUnitId: siteB.id,
         location: 'Warehouse aisle 3',
         supervisorPersonId: tom!.id,
-        immediateActionTaken: 'Forklift parked. Electrical isolated by qualified person. Conduit photographed and tagged.',
+        immediateActionTaken:
+          'Forklift parked. Electrical isolated by qualified person. Conduit photographed and tagged.',
         ppeWorn: 'Standard site PPE',
         actualSeverity: 1,
         potentialSeverity: 4,
@@ -904,7 +1064,8 @@ async function main() {
         daysToDue: 7,
         source: 'incident' as const,
         sourceEntityId: inc3!.id,
-        actionTaken: 'Drip pans ordered (ETA 3 days). Cone-placement SOP drafted; awaiting sign-off.',
+        actionTaken:
+          'Drip pans ordered (ETA 3 days). Cone-placement SOP drafted; awaiting sign-off.',
         rootCause: 'Subcontractor onboarding gap.',
       },
       {
@@ -935,7 +1096,8 @@ async function main() {
         daysToDue: 1,
         source: 'incident' as const,
         sourceEntityId: inc4!.id,
-        actionTaken: 'Conduit section replaced by qualified electrician. Awaiting verification by site safety.',
+        actionTaken:
+          'Conduit section replaced by qualified electrician. Awaiting verification by site safety.',
         rootCause: 'Forklift route clearance not validated against installed services.',
       },
     ]
@@ -961,9 +1123,27 @@ async function main() {
 
     // --- Documents ------------------------------------------------------
     const docDefs = [
-      { key: 'corporate-hs-policy', title: 'Corporate Health & Safety Policy', category: 'policy', reviewFreq: 12, body: '## Purpose\n\nAcme Industrial is committed to providing a safe and healthy workplace for all employees…' },
-      { key: 'sds-acetone', title: 'SDS — Acetone', category: 'sds', reviewFreq: 36, body: '## Acetone — Safety Data Sheet\n\n**Hazard class:** Flammable liquid, category 2…' },
-      { key: 'wah-procedure', title: 'Work at Height Procedure', category: 'procedure', reviewFreq: 24, body: '## Scope\n\nThis procedure applies to all work performed >3m above grade…' },
+      {
+        key: 'corporate-hs-policy',
+        title: 'Corporate Health & Safety Policy',
+        category: 'policy',
+        reviewFreq: 12,
+        body: '## Purpose\n\nAcme Industrial is committed to providing a safe and healthy workplace for all employees…',
+      },
+      {
+        key: 'sds-acetone',
+        title: 'SDS — Acetone',
+        category: 'sds',
+        reviewFreq: 36,
+        body: '## Acetone — Safety Data Sheet\n\n**Hazard class:** Flammable liquid, category 2…',
+      },
+      {
+        key: 'wah-procedure',
+        title: 'Work at Height Procedure',
+        category: 'procedure',
+        reviewFreq: 24,
+        body: '## Scope\n\nThis procedure applies to all work performed >3m above grade…',
+      },
     ]
     for (const d of docDefs) {
       const [doc] = await tx
@@ -1042,7 +1222,8 @@ async function main() {
         {
           key: 'adminapp2-sync',
           name: 'adminapp2 Master Data',
-          description: 'Reads internal master data (customers, projects, employees) from your internal admin app.',
+          description:
+            'Reads internal master data (customers, projects, employees) from your internal admin app.',
           version: '0.1.0',
           capabilities: ['sync.in'],
           manifest: {},
@@ -1050,7 +1231,8 @@ async function main() {
         {
           key: 'webhook-out',
           name: 'Outbound Webhooks',
-          description: 'POSTs incident/CA/training events to a configurable URL with HMAC-signed bodies.',
+          description:
+            'POSTs incident/CA/training events to a configurable URL with HMAC-signed bodies.',
           version: '0.1.0',
           capabilities: ['sync.out'],
           manifest: {},
@@ -1060,9 +1242,30 @@ async function main() {
 
     // --- Customer contacts ---
     await tx.insert(customerContacts).values([
-      { tenantId: tenant.id, orgUnitId: customer.id, name: 'Karen Whitaker', role: 'Site Operations Manager', email: 'kwhitaker@acmerefinery.com', phone: '+1-647-555-7001', isPrimary: true },
-      { tenantId: tenant.id, orgUnitId: customer.id, name: 'David Park', role: 'HSE Lead', email: 'dpark@acmerefinery.com', phone: '+1-647-555-7002' },
-      { tenantId: tenant.id, orgUnitId: siteA.id, name: 'Marco Rossi', role: 'Site Foreman', phone: '+1-647-555-7003' },
+      {
+        tenantId: tenant.id,
+        orgUnitId: customer.id,
+        name: 'Karen Whitaker',
+        role: 'Site Operations Manager',
+        email: 'kwhitaker@acmerefinery.com',
+        phone: '+1-647-555-7001',
+        isPrimary: true,
+      },
+      {
+        tenantId: tenant.id,
+        orgUnitId: customer.id,
+        name: 'David Park',
+        role: 'HSE Lead',
+        email: 'dpark@acmerefinery.com',
+        phone: '+1-647-555-7002',
+      },
+      {
+        tenantId: tenant.id,
+        orgUnitId: siteA.id,
+        name: 'Marco Rossi',
+        role: 'Site Foreman',
+        phone: '+1-647-555-7003',
+      },
     ])
 
     // --- Welcome notification --------------------
@@ -1082,7 +1285,8 @@ async function main() {
       .values({
         tenantId: tenant.id,
         name: 'Site Daily Walk-Through',
-        description: 'Routine site safety walk-through criteria used by site supervisors at start of shift.',
+        description:
+          'Routine site safety walk-through criteria used by site supervisors at start of shift.',
         category: 'site_inspection',
         isPublished: true,
         createdBy: admin.id,
@@ -1090,10 +1294,42 @@ async function main() {
       .returning()
     if (bank1) {
       await tx.insert(inspectionBankCriteria).values([
-        { tenantId: tenant.id, bankId: bank1.id, sequence: 1, text: 'Are walkways clear and unobstructed?', responseType: 'pass_fail_na', requiresPhoto: false, requiresComment: false },
-        { tenantId: tenant.id, bankId: bank1.id, sequence: 2, text: 'Is fire extinguisher signage visible from all working areas?', responseType: 'pass_fail_na', requiresPhoto: true, requiresComment: false },
-        { tenantId: tenant.id, bankId: bank1.id, sequence: 3, text: 'Are MSDS binders accessible at the chemical storage?', responseType: 'yes_no', requiresPhoto: false, requiresComment: true },
-        { tenantId: tenant.id, bankId: bank1.id, sequence: 4, text: 'Eyewash stations functional and unobstructed?', responseType: 'pass_fail_na', requiresPhoto: true, requiresComment: true },
+        {
+          tenantId: tenant.id,
+          bankId: bank1.id,
+          sequence: 1,
+          text: 'Are walkways clear and unobstructed?',
+          responseType: 'pass_fail_na',
+          requiresPhoto: false,
+          requiresComment: false,
+        },
+        {
+          tenantId: tenant.id,
+          bankId: bank1.id,
+          sequence: 2,
+          text: 'Is fire extinguisher signage visible from all working areas?',
+          responseType: 'pass_fail_na',
+          requiresPhoto: true,
+          requiresComment: false,
+        },
+        {
+          tenantId: tenant.id,
+          bankId: bank1.id,
+          sequence: 3,
+          text: 'Are MSDS binders accessible at the chemical storage?',
+          responseType: 'yes_no',
+          requiresPhoto: false,
+          requiresComment: true,
+        },
+        {
+          tenantId: tenant.id,
+          bankId: bank1.id,
+          sequence: 4,
+          text: 'Eyewash stations functional and unobstructed?',
+          responseType: 'pass_fail_na',
+          requiresPhoto: true,
+          requiresComment: true,
+        },
       ])
     }
     const [bank2] = await tx
@@ -1109,9 +1345,33 @@ async function main() {
       .returning()
     if (bank2) {
       await tx.insert(inspectionBankCriteria).values([
-        { tenantId: tenant.id, bankId: bank2.id, sequence: 1, text: 'Webbing free from cuts, frays, burns, or chemical damage?', responseType: 'pass_fail_na', requiresPhoto: true, requiresComment: false },
-        { tenantId: tenant.id, bankId: bank2.id, sequence: 2, text: 'D-rings free from cracks, sharp edges, or deformation?', responseType: 'pass_fail_na', requiresPhoto: false, requiresComment: false },
-        { tenantId: tenant.id, bankId: bank2.id, sequence: 3, text: 'Buckles function and lock correctly?', responseType: 'pass_fail_na', requiresPhoto: false, requiresComment: false },
+        {
+          tenantId: tenant.id,
+          bankId: bank2.id,
+          sequence: 1,
+          text: 'Webbing free from cuts, frays, burns, or chemical damage?',
+          responseType: 'pass_fail_na',
+          requiresPhoto: true,
+          requiresComment: false,
+        },
+        {
+          tenantId: tenant.id,
+          bankId: bank2.id,
+          sequence: 2,
+          text: 'D-rings free from cracks, sharp edges, or deformation?',
+          responseType: 'pass_fail_na',
+          requiresPhoto: false,
+          requiresComment: false,
+        },
+        {
+          tenantId: tenant.id,
+          bankId: bank2.id,
+          sequence: 3,
+          text: 'Buckles function and lock correctly?',
+          responseType: 'pass_fail_na',
+          requiresPhoto: false,
+          requiresComment: false,
+        },
       ])
     }
 
@@ -1251,7 +1511,6 @@ async function main() {
       })
     }
 
-
     // --- Inspection types (3 sample types reusing the seeded banks) -----
     await seedInspectionTypes(tx, tenant.id)
 
@@ -1286,7 +1545,9 @@ async function main() {
 
     console.log(`  · tenant: ${tenant.name} (${tenant.slug})`)
     console.log(`  · super-admin: ${admin.email}`)
-    console.log(`  · seeded: ${insertedPeople.length} people, ${courses.length} courses, 4 incidents (1 rich), ${caRows.length} CAs, ${docDefs.length} documents w/ versions+acks, 8 equipment, 6 harnesses w/ inspections, 5 toolbox talks`)
+    console.log(
+      `  · seeded: ${insertedPeople.length} people, ${courses.length} courses, 4 incidents (1 rich), ${caRows.length} CAs, ${docDefs.length} documents w/ versions+acks, 8 equipment, 6 harnesses w/ inspections, 5 toolbox talks`,
+    )
     console.log(`  · sign in via Magic link (Mailpit: http://localhost:8025)`)
   })
 
@@ -1317,17 +1578,39 @@ async function main() {
  * for the given tenant. Safe to re-run — uses ON CONFLICT for types
  * (unique on (tenant_id, key)), and name-existence checks for categories.
  */
-export async function seedDocumentTypesAndCategories(
-  tx: any,
-  tenantId: string,
-): Promise<void> {
+export async function seedDocumentTypesAndCategories(tx: any, tenantId: string): Promise<void> {
   // --- Document Types (5) ---------------------------------------------
   const docTypeRows = [
-    { key: 'policy', name: 'Policy', color: '#0f766e', description: 'Company-wide policies and stances.' },
-    { key: 'procedure', name: 'Procedure / SOP', color: '#2563eb', description: 'Step-by-step instructions for routine work.' },
-    { key: 'sds', name: 'SDS / MSDS', color: '#ea580c', description: 'Safety data sheets for hazardous materials.' },
-    { key: 'manual', name: 'Manual / handbook', color: '#7c3aed', description: 'Equipment manuals and reference handbooks.' },
-    { key: 'form', name: 'Form / template', color: '#0891b2', description: 'Blank forms and printable templates.' },
+    {
+      key: 'policy',
+      name: 'Policy',
+      color: '#0f766e',
+      description: 'Company-wide policies and stances.',
+    },
+    {
+      key: 'procedure',
+      name: 'Procedure / SOP',
+      color: '#2563eb',
+      description: 'Step-by-step instructions for routine work.',
+    },
+    {
+      key: 'sds',
+      name: 'SDS / MSDS',
+      color: '#ea580c',
+      description: 'Safety data sheets for hazardous materials.',
+    },
+    {
+      key: 'manual',
+      name: 'Manual / handbook',
+      color: '#7c3aed',
+      description: 'Equipment manuals and reference handbooks.',
+    },
+    {
+      key: 'form',
+      name: 'Form / template',
+      color: '#0891b2',
+      description: 'Blank forms and printable templates.',
+    },
   ]
   let typesInserted = 0
   for (const row of docTypeRows) {
@@ -1351,14 +1634,18 @@ export async function seedDocumentTypesAndCategories(
   const categoryDefs: { name: string; parent?: string; description?: string }[] = [
     { name: 'Safety', description: 'All safety-related policies and procedures.' },
     { name: 'PPE', parent: 'Safety', description: 'Personal protective equipment policies.' },
-    { name: 'Permits', parent: 'Safety', description: 'Hot work, confined-space, working-at-heights permits.' },
+    {
+      name: 'Permits',
+      parent: 'Safety',
+      description: 'Hot work, confined-space, working-at-heights permits.',
+    },
     { name: 'Working at Heights', parent: 'Safety', description: 'Fall-arrest and ladder safety.' },
     { name: 'Operations', description: 'Day-to-day operational SOPs.' },
   ]
   const insertedCats = new Map<string, string>()
   let catsInserted = 0
   for (const def of categoryDefs) {
-    const parentId = def.parent ? insertedCats.get(def.parent) ?? null : null
+    const parentId = def.parent ? (insertedCats.get(def.parent) ?? null) : null
     // Existence check by (tenant_id, name) since there's a unique index on
     // (tenant_id, name).
     const existing = await tx
@@ -1384,9 +1671,17 @@ export async function seedDocumentTypesAndCategories(
 
   // --- Reference Types (3) ---------------------------------------------
   const refTypeRows = [
-    { key: 'sds', name: 'Safety Data Sheet', description: 'SDS / MSDS pointer to vendor or governmental site.' },
+    {
+      key: 'sds',
+      name: 'Safety Data Sheet',
+      description: 'SDS / MSDS pointer to vendor or governmental site.',
+    },
     { key: 'manual', name: 'Equipment manual', description: 'Vendor manuals for owned equipment.' },
-    { key: 'standard', name: 'Standard / regulation', description: 'External standards (CSA, ANSI, OHS) referenced.' },
+    {
+      key: 'standard',
+      name: 'Standard / regulation',
+      description: 'External standards (CSA, ANSI, OHS) referenced.',
+    },
   ]
   let refTypesInserted = 0
   for (const row of refTypeRows) {
@@ -1411,7 +1706,7 @@ export async function seedDocumentTypesAndCategories(
   const insertedRefCats = new Map<string, string>()
   let refCatsInserted = 0
   for (const def of refCategoryDefs) {
-    const parentId = def.parent ? insertedRefCats.get(def.parent) ?? null : null
+    const parentId = def.parent ? (insertedRefCats.get(def.parent) ?? null) : null
     const existing = await tx
       .select({ id: documentReferenceCategories.id })
       .from(documentReferenceCategories)
@@ -1516,7 +1811,6 @@ async function seedCanonicalTemplates(db: ReturnType<typeof createClient>['db'])
   })
 }
 
-
 async function insertOrgUnit(
   tx: any,
   tenantId: string,
@@ -1579,9 +1873,7 @@ export async function seedInspectionTypes(tx: any, tenantId: string): Promise<vo
 
   const siteBank = banks.find((b: { category: string | null }) => b.category === 'site_inspection')
   const ppeBank = banks.find((b: { category: string | null }) => b.category === 'ppe_check')
-  const equipBank = banks.find(
-    (b: { category: string | null }) => b.category === 'equipment_check',
-  )
+  const equipBank = banks.find((b: { category: string | null }) => b.category === 'equipment_check')
 
   const samples = [
     {
@@ -1687,10 +1979,34 @@ async function seedEquipmentRatesAndExpenses(tx: any, tenantId: string): Promise
     .select({ id: equipmentTypes.id, name: equipmentTypes.name })
     .from(equipmentTypes)
     .where(eq(equipmentTypes.tenantId, tenantId))
-  const rateDefs: { match: RegExp; hourly: string; daily: string; weekly: string; monthly: string }[] = [
-    { match: /tool|drill|hammer/i, hourly: '5.00', daily: '40.00', weekly: '180.00', monthly: '600.00' },
-    { match: /vehicle|truck|pickup|van/i, hourly: '35.00', daily: '275.00', weekly: '1250.00', monthly: '4250.00' },
-    { match: /lift|scissor|aerial/i, hourly: '85.00', daily: '650.00', weekly: '2750.00', monthly: '8500.00' },
+  const rateDefs: {
+    match: RegExp
+    hourly: string
+    daily: string
+    weekly: string
+    monthly: string
+  }[] = [
+    {
+      match: /tool|drill|hammer/i,
+      hourly: '5.00',
+      daily: '40.00',
+      weekly: '180.00',
+      monthly: '600.00',
+    },
+    {
+      match: /vehicle|truck|pickup|van/i,
+      hourly: '35.00',
+      daily: '275.00',
+      weekly: '1250.00',
+      monthly: '4250.00',
+    },
+    {
+      match: /lift|scissor|aerial/i,
+      hourly: '85.00',
+      daily: '650.00',
+      weekly: '2750.00',
+      monthly: '8500.00',
+    },
   ]
   let ratesCreated = 0
   for (const t of types) {
@@ -1829,9 +2145,7 @@ export async function seedTrainingAssessmentTypes(tx: any, tenantId: string): Pr
     .where(eq(trainingAssessmentTypes.tenantId, tenantId))
     .limit(1)
   if (existing.length > 0) {
-    console.log(
-      `  · training assessment types: already seeded for tenant ${tenantId}, skipping`,
-    )
+    console.log(`  · training assessment types: already seeded for tenant ${tenantId}, skipping`)
     return
   }
 
@@ -1895,7 +2209,10 @@ export async function seedTrainingAssessmentTypes(tx: any, tenantId: string): Pr
         prompt: 'A workplace label is required when',
         kind: 'single_choice' as const,
         options: [
-          { value: 'A', label: 'A controlled product is decanted into another container at the workplace' },
+          {
+            value: 'A',
+            label: 'A controlled product is decanted into another container at the workplace',
+          },
           { value: 'B', label: 'A product is sold to another company' },
           { value: 'C', label: 'A product is stored unopened in original packaging' },
           { value: 'D', label: 'None of the above' },
@@ -1980,7 +2297,8 @@ export async function seedTrainingAssessmentTypes(tx: any, tenantId: string): Pr
         points: 1,
       },
       {
-        prompt: 'Hard hats must be worn whenever overhead work is occurring within a barricaded area.',
+        prompt:
+          'Hard hats must be worn whenever overhead work is occurring within a barricaded area.',
         kind: 'true_false' as const,
         options: null,
         correctAnswer: 'true',
@@ -2029,16 +2347,14 @@ export async function seedTrainingAssessmentTypes(tx: any, tenantId: string): Pr
         points: 1,
       },
       {
-        prompt:
-          'Lockout/tagout is required only when working on equipment that is more than 50 V.',
+        prompt: 'Lockout/tagout is required only when working on equipment that is more than 50 V.',
         kind: 'true_false' as const,
         options: null,
         correctAnswer: 'false',
         points: 1,
       },
       {
-        prompt:
-          'Briefly describe what "STOP work authority" means and when you would use it.',
+        prompt: 'Briefly describe what "STOP work authority" means and when you would use it.',
         kind: 'text' as const,
         options: null,
         correctAnswer: null,
@@ -2102,7 +2418,8 @@ export async function seedPpeTypesWithCriteria(
         {
           kind: 'pre_use',
           question: 'Shell free of cracks, gouges, or sun damage?',
-          description: 'Inspect the entire outer shell for stress cracks, deep gouges, or chalky UV degradation.',
+          description:
+            'Inspect the entire outer shell for stress cracks, deep gouges, or chalky UV degradation.',
           severity: 'high',
           requiresPhoto: true,
         },
@@ -2119,7 +2436,8 @@ export async function seedPpeTypesWithCriteria(
         {
           kind: 'pre_use',
           question: 'Date of manufacture within 5-year service life?',
-          description: 'Locate the inside-shell DOM stamp and confirm the helmet is still in service window.',
+          description:
+            'Locate the inside-shell DOM stamp and confirm the helmet is still in service window.',
           severity: 'critical',
         },
         {
@@ -2140,7 +2458,8 @@ export async function seedPpeTypesWithCriteria(
         {
           kind: 'pre_use',
           question: 'Webbing free of cuts, fraying, or burns?',
-          description: 'Flex the webbing into an inverted U and look for surface damage every 30 cm.',
+          description:
+            'Flex the webbing into an inverted U and look for surface damage every 30 cm.',
           severity: 'critical',
           requiresPhoto: true,
         },
@@ -2228,7 +2547,7 @@ export async function seedPpeTypesWithCriteria(
         },
         {
           kind: 'pre_use',
-          question: 'Cut rating (e.g. ANSI A4) appropriate for today\'s task?',
+          question: "Cut rating (e.g. ANSI A4) appropriate for today's task?",
           severity: 'high',
         },
         {
@@ -2272,9 +2591,7 @@ export async function seedPpeTypesWithCriteria(
       .select()
       .from(ppeTypeInspectionCriteria)
       .where(eq(ppeTypeInspectionCriteria.ppeTypeId, typeRow.id))
-    const seen = new Set(
-      existingCriteria.map((c: any) => `${c.inspectionKind}::${c.question}`),
-    )
+    const seen = new Set(existingCriteria.map((c: any) => `${c.inspectionKind}::${c.question}`))
 
     const byKindOrder = { pre_use: 1, annual: 1 }
     for (const c of t.criteria) {
@@ -2352,8 +2669,7 @@ export async function seedSafeDistanceRecords(tx: any, tenantId: string): Promis
       reference: 'SD-SEED-1',
       sourceVoltageKv: '13.8',
       heightM: null as string | null,
-      sourceDescription:
-        'Energised 13.8 kV overhead line crossing the south lay-down yard',
+      sourceDescription: 'Energised 13.8 kV overhead line crossing the south lay-down yard',
       requiredDistanceM: '3.05',
       actualDistanceM: '5.20',
       complies: true,
@@ -2366,7 +2682,7 @@ export async function seedSafeDistanceRecords(tx: any, tenantId: string): Promis
       reference: 'SD-SEED-2',
       sourceVoltageKv: null as string | null,
       heightM: '45.00',
-      sourceDescription: 'DJI Mavic 3 — bird\'s eye survey over the muster point',
+      sourceDescription: "DJI Mavic 3 — bird's eye survey over the muster point",
       requiredDistanceM: '30.00',
       actualDistanceM: '45.00',
       complies: true,
@@ -2442,7 +2758,12 @@ async function seedIncidentClassifications(tx: any, tenantId: string): Promise<v
       description: 'Damage to equipment, vehicle, or infrastructure.',
       isRecordable: 0,
     },
-    { name: 'Environmental', code: 'ENV', description: 'Spill / release / emission.', isRecordable: 0 },
+    {
+      name: 'Environmental',
+      code: 'ENV',
+      description: 'Spill / release / emission.',
+      isRecordable: 0,
+    },
     {
       name: 'Slip, trip & fall',
       code: 'STF',
@@ -2494,7 +2815,11 @@ async function seedIncidentClassifications(tx: any, tenantId: string): Promise<v
   // Injury types
   const injuryTypeSeed: { name: string; oshaCode: string; description: string }[] = [
     { name: 'Laceration', oshaCode: 'CUT', description: 'Cut or tear of skin.' },
-    { name: 'Contusion / bruise', oshaCode: 'CON', description: 'Blunt trauma without skin break.' },
+    {
+      name: 'Contusion / bruise',
+      oshaCode: 'CON',
+      description: 'Blunt trauma without skin break.',
+    },
     { name: 'Strain / sprain', oshaCode: 'STR', description: 'Soft-tissue stretch or tear.' },
     { name: 'Fracture', oshaCode: 'FRA', description: 'Bone break.' },
     { name: 'Burn — thermal', oshaCode: 'BRN', description: 'Heat-source burn.' },
@@ -2549,10 +2874,7 @@ async function seedIncidentClassifications(tx: any, tenantId: string): Promise<v
   for (const inc of seededIncidents) {
     const cId = mapByType[inc.type as keyof typeof mapByType]
     if (!cId) continue
-    await tx
-      .update(incidents)
-      .set({ classificationId: cId })
-      .where(eq(incidents.id, inc.id))
+    await tx.update(incidents).set({ classificationId: cId }).where(eq(incidents.id, inc.id))
   }
 
   console.log(
@@ -2568,10 +2890,7 @@ async function seedIncidentClassifications(tx: any, tenantId: string): Promise<v
  * Idempotent guard: skips entirely if any `person_titles` rows already exist
  * for the tenant.
  */
-export async function seedPeopleGroupsAndTitles(
-  tx: any,
-  tenantId: string,
-): Promise<void> {
+export async function seedPeopleGroupsAndTitles(tx: any, tenantId: string): Promise<void> {
   const [existing] = await tx
     .select({ id: personTitles.id })
     .from(personTitles)
@@ -2595,8 +2914,7 @@ export async function seedPeopleGroupsAndTitles(
     console.log('  · no people in tenant — skipping people taxonomy seed')
     return
   }
-  const findByName = (last: string) =>
-    peopleRows.find((p: any) => p.lastName === last)
+  const findByName = (last: string) => peopleRows.find((p: any) => p.lastName === last)
 
   // --- Groups (4) ----------------------------------------------------------
   const groupSeed = [
@@ -2629,16 +2947,16 @@ export async function seedPeopleGroupsAndTitles(
   // Distribute groups among the first ~half of the workforce
   const groupMembershipRows: { tenantId: string; groupId: string; personId: string }[] = []
   for (const [idx, g] of insertedGroups.entries()) {
-    const slice = peopleRows.filter((_: any, i: number) => i % insertedGroups.length === idx % insertedGroups.length || i < 3 + idx)
+    const slice = peopleRows.filter(
+      (_: any, i: number) =>
+        i % insertedGroups.length === idx % insertedGroups.length || i < 3 + idx,
+    )
     for (const p of slice.slice(0, 4)) {
       groupMembershipRows.push({ tenantId, groupId: g.id, personId: p.id })
     }
   }
   if (groupMembershipRows.length > 0) {
-    await tx
-      .insert(personGroupMemberships)
-      .values(groupMembershipRows)
-      .onConflictDoNothing()
+    await tx.insert(personGroupMemberships).values(groupMembershipRows).onConflictDoNothing()
   }
 
   // --- Divisions (3, hierarchical) ----------------------------------------
@@ -2678,23 +2996,18 @@ export async function seedPeopleGroupsAndTitles(
     personId: string
   }[] = []
   for (const [i, p] of peopleRows.entries()) {
-    const target =
-      i % 3 === 0 ? construction.id : i % 3 === 1 ? civil.id : operations.id
+    const target = i % 3 === 0 ? construction.id : i % 3 === 1 ? civil.id : operations.id
     divisionMembershipRows.push({ tenantId, divisionId: target, personId: p.id })
   }
   if (divisionMembershipRows.length > 0) {
-    await tx
-      .insert(personDivisionMemberships)
-      .values(divisionMembershipRows)
-      .onConflictDoNothing()
+    await tx.insert(personDivisionMemberships).values(divisionMembershipRows).onConflictDoNothing()
   }
 
   // --- Titles (6) ---------------------------------------------------------
   const titleSeed = [
     {
       name: 'Carpenter',
-      description:
-        'Performs rough and finish carpentry on structural and form-work assemblies.',
+      description: 'Performs rough and finish carpentry on structural and form-work assemblies.',
       responsibilities:
         '• Lay out, fabricate and install wood or metal stud framing\n• Construct concrete forms and falsework\n• Install doors, windows, trim and hardware\n• Maintain hand and power tools in safe condition',
       education:
@@ -2703,28 +3016,25 @@ export async function seedPeopleGroupsAndTitles(
     },
     {
       name: 'Welder',
-      description:
-        'Performs structural, pipe and fabrication welding to project specifications.',
+      description: 'Performs structural, pipe and fabrication welding to project specifications.',
       responsibilities:
         '• Read and interpret welding procedure specifications (WPS)\n• Perform SMAW / GMAW / GTAW welds in all positions\n• Verify fit-up and joint preparation\n• Conduct visual weld inspection and rework as required',
       education: 'CWB-certified welder ticket required. WHMIS + Fall Protection current.',
-      experience: 'Minimum 5 years pressure / structural welding. CWB qualification continuity required.',
+      experience:
+        'Minimum 5 years pressure / structural welding. CWB qualification continuity required.',
     },
     {
       name: 'Foreman',
-      description:
-        'Front-line supervisor responsible for crew productivity, safety and quality.',
+      description: 'Front-line supervisor responsible for crew productivity, safety and quality.',
       responsibilities:
         '• Plan daily work and assign tasks within scope\n• Conduct toolbox talks and pre-job hazard assessments\n• Enforce site safety rules and PPE compliance\n• Report incidents and near-misses immediately',
       education:
         'Trade ticket in crew discipline + Supervisor Health & Safety Awareness (Ontario MoL).',
-      experience:
-        'Minimum 8 years on tools + 2 years supervisory experience.',
+      experience: 'Minimum 8 years on tools + 2 years supervisory experience.',
     },
     {
       name: 'Apprentice',
-      description:
-        'Learner under journey-person supervision. Performs work as directed.',
+      description: 'Learner under journey-person supervision. Performs work as directed.',
       responsibilities:
         '• Assist journey-person in all assigned tasks\n• Maintain apprenticeship logbook\n• Attend scheduled trade school sessions\n• Ask for guidance — never improvise on unfamiliar tasks',
       education: 'Registered apprentice with provincial trades authority.',
@@ -2732,25 +3042,19 @@ export async function seedPeopleGroupsAndTitles(
     },
     {
       name: 'Project Manager',
-      description:
-        'End-to-end ownership of project schedule, budget and safety performance.',
+      description: 'End-to-end ownership of project schedule, budget and safety performance.',
       responsibilities:
         '• Build and maintain the master project schedule\n• Manage cost-to-complete and forecast variances\n• Lead client communication and change-order process\n• Chair monthly safety steering committee',
-      education:
-        'Engineering or Construction Management degree. PMP certification preferred.',
-      experience:
-        'Minimum 10 years construction industry, 5 years as PM on >$5M projects.',
+      education: 'Engineering or Construction Management degree. PMP certification preferred.',
+      experience: 'Minimum 10 years construction industry, 5 years as PM on >$5M projects.',
     },
     {
       name: 'Safety Officer',
-      description:
-        'Owns the site safety program. Reports independently to senior management.',
+      description: 'Owns the site safety program. Reports independently to senior management.',
       responsibilities:
         '• Conduct daily site walks and document findings\n• Investigate incidents and near-misses\n• Maintain training matrix and PPE registers\n• Liaise with regulators and host clients on compliance matters',
-      education:
-        'CRSP / NCSO designation. Standard First Aid + CPR-C current.',
-      experience:
-        'Minimum 5 years dedicated safety role on industrial construction sites.',
+      education: 'CRSP / NCSO designation. Standard First Aid + CPR-C current.',
+      experience: 'Minimum 5 years dedicated safety role on industrial construction sites.',
     },
   ] as const
 
@@ -2758,9 +3062,7 @@ export async function seedPeopleGroupsAndTitles(
     .insert(personTitles)
     .values(titleSeed.map((t) => ({ tenantId, ...t })))
     .returning()
-  const titleByName = new Map<string, any>(
-    insertedTitles.map((t: any) => [t.name as string, t]),
-  )
+  const titleByName = new Map<string, any>(insertedTitles.map((t: any) => [t.name as string, t]))
 
   // Assign primary titles to specific seed people (matching their jobTitle text)
   const titleAssignmentRows: {
@@ -2794,17 +3096,20 @@ export async function seedPeopleGroupsAndTitles(
     }
   }
   if (titleAssignmentRows.length > 0) {
-    await tx
-      .insert(personTitleAssignments)
-      .values(titleAssignmentRows)
-      .onConflictDoNothing()
+    await tx.insert(personTitleAssignments).values(titleAssignmentRows).onConflictDoNothing()
   }
 
   // --- Per-title task lists -----------------------------------------------
   const tasksByTitle: Record<string, { task: string; description?: string }[]> = {
     Carpenter: [
-      { task: 'Inspect personal hand tools before each shift', description: 'Check handles, edges, guards, electrical leads.' },
-      { task: 'Wear appropriate PPE for the task at hand', description: 'Minimum: hard hat, glasses, gloves, CSA boots.' },
+      {
+        task: 'Inspect personal hand tools before each shift',
+        description: 'Check handles, edges, guards, electrical leads.',
+      },
+      {
+        task: 'Wear appropriate PPE for the task at hand',
+        description: 'Minimum: hard hat, glasses, gloves, CSA boots.',
+      },
       { task: 'Perform daily harness inspection before fall-arrest work' },
       { task: 'Maintain housekeeping in active work area at all times' },
       { task: 'Report all incidents, injuries and near-misses to foreman' },
@@ -2812,12 +3117,18 @@ export async function seedPeopleGroupsAndTitles(
     Welder: [
       { task: 'Verify WPS is current and matches the joint specification' },
       { task: 'Inspect welding leads, ground clamps, and regulators each shift' },
-      { task: 'Conduct fire watch for required time after hot work', description: 'Minimum 30 minutes post-weld in non-confined areas.' },
+      {
+        task: 'Conduct fire watch for required time after hot work',
+        description: 'Minimum 30 minutes post-weld in non-confined areas.',
+      },
       { task: 'Wear full leathers, FR clothing, and shaded helmet during arc work' },
       { task: 'Perform visual inspection of each completed weld before moving on' },
     ],
     Foreman: [
-      { task: 'Lead daily toolbox talk and document attendance', description: 'Cover the JSHA for the day\'s work.' },
+      {
+        task: 'Lead daily toolbox talk and document attendance',
+        description: "Cover the JSHA for the day's work.",
+      },
       { task: 'Verify all workers have required training before assigning task' },
       { task: 'Perform pre-job hazard assessment with crew' },
       { task: 'Stop unsafe work immediately and escalate to safety officer' },
@@ -2883,10 +3194,7 @@ export async function seedPeopleGroupsAndTitles(
     }
   }
   if (ackRows.length > 0) {
-    await tx
-      .insert(jobTitleTaskAcknowledgments)
-      .values(ackRows)
-      .onConflictDoNothing()
+    await tx.insert(jobTitleTaskAcknowledgments).values(ackRows).onConflictDoNothing()
   }
 
   // --- Refresh denormalised caches on `people` ---------------------------
@@ -2914,7 +3222,6 @@ export async function seedPeopleGroupsAndTitles(
     `  · people taxonomy: ${insertedGroups.length} groups (${groupMembershipRows.length} memberships), 3 divisions (${divisionMembershipRows.length} memberships), ${insertedTitles.length} titles (${titleAssignmentRows.length} primary assignments, ${insertedTasks.length} job-description tasks, ${ackRows.length} sample acknowledgements)`,
   )
 }
-
 
 // HazID library seed — the build agent declared the call but forgot to ship
 // the function body. This adds 5 hazard types, 12 hazards, 3 hazard sets, 8
@@ -2947,18 +3254,78 @@ export async function seedHazidLibraries(tx: any, tenantId: string): Promise<voi
   const hazardRows = await tx
     .insert(hazidHazards)
     .values([
-      { tenantId, name: 'Slip / trip', hazardTypeId: byName['Physical'], standardControls: 'Housekeeping; remove debris; mark wet floors.' },
-      { tenantId, name: 'Falling object', hazardTypeId: byName['Physical'], standardControls: 'Toe-boards; hard hats; secure tools at height.' },
-      { tenantId, name: 'Pinch point', hazardTypeId: byName['Physical'], standardControls: 'LOTO; guard installed; awareness training.' },
-      { tenantId, name: 'Sharp edges', hazardTypeId: byName['Physical'], standardControls: 'Cut-resistant gloves; deburr; storage cages.' },
-      { tenantId, name: 'Solvent exposure', hazardTypeId: byName['Chemical'], standardControls: 'Local exhaust; respirator per SDS; eye-wash station.' },
-      { tenantId, name: 'Welding fumes', hazardTypeId: byName['Chemical'], standardControls: 'Fume extractor; PAPR for stainless/galv; SDS posted.' },
-      { tenantId, name: 'Biohazard (bodily fluid)', hazardTypeId: byName['Biological'], standardControls: 'Universal precautions; disposable nitrile; biohazard kit.' },
-      { tenantId, name: 'Heavy lifting', hazardTypeId: byName['Ergonomic'], standardControls: 'Mechanical aid; team lift > 25kg; rotation.' },
-      { tenantId, name: 'Repetitive motion', hazardTypeId: byName['Ergonomic'], standardControls: 'Job rotation; ergonomic tooling; stretching protocol.' },
-      { tenantId, name: 'Heat stress', hazardTypeId: byName['Environmental'], standardControls: 'Hydration station; mandated breaks; shaded rest area.' },
-      { tenantId, name: 'Cold exposure', hazardTypeId: byName['Environmental'], standardControls: 'Insulated PPE; warming hut; buddy system.' },
-      { tenantId, name: 'Noise > 85 dBA', hazardTypeId: byName['Physical'], standardControls: 'Hearing protection mandatory; audiometric testing.' },
+      {
+        tenantId,
+        name: 'Slip / trip',
+        hazardTypeId: byName['Physical'],
+        standardControls: 'Housekeeping; remove debris; mark wet floors.',
+      },
+      {
+        tenantId,
+        name: 'Falling object',
+        hazardTypeId: byName['Physical'],
+        standardControls: 'Toe-boards; hard hats; secure tools at height.',
+      },
+      {
+        tenantId,
+        name: 'Pinch point',
+        hazardTypeId: byName['Physical'],
+        standardControls: 'LOTO; guard installed; awareness training.',
+      },
+      {
+        tenantId,
+        name: 'Sharp edges',
+        hazardTypeId: byName['Physical'],
+        standardControls: 'Cut-resistant gloves; deburr; storage cages.',
+      },
+      {
+        tenantId,
+        name: 'Solvent exposure',
+        hazardTypeId: byName['Chemical'],
+        standardControls: 'Local exhaust; respirator per SDS; eye-wash station.',
+      },
+      {
+        tenantId,
+        name: 'Welding fumes',
+        hazardTypeId: byName['Chemical'],
+        standardControls: 'Fume extractor; PAPR for stainless/galv; SDS posted.',
+      },
+      {
+        tenantId,
+        name: 'Biohazard (bodily fluid)',
+        hazardTypeId: byName['Biological'],
+        standardControls: 'Universal precautions; disposable nitrile; biohazard kit.',
+      },
+      {
+        tenantId,
+        name: 'Heavy lifting',
+        hazardTypeId: byName['Ergonomic'],
+        standardControls: 'Mechanical aid; team lift > 25kg; rotation.',
+      },
+      {
+        tenantId,
+        name: 'Repetitive motion',
+        hazardTypeId: byName['Ergonomic'],
+        standardControls: 'Job rotation; ergonomic tooling; stretching protocol.',
+      },
+      {
+        tenantId,
+        name: 'Heat stress',
+        hazardTypeId: byName['Environmental'],
+        standardControls: 'Hydration station; mandated breaks; shaded rest area.',
+      },
+      {
+        tenantId,
+        name: 'Cold exposure',
+        hazardTypeId: byName['Environmental'],
+        standardControls: 'Insulated PPE; warming hut; buddy system.',
+      },
+      {
+        tenantId,
+        name: 'Noise > 85 dBA',
+        hazardTypeId: byName['Physical'],
+        standardControls: 'Hearing protection mandatory; audiometric testing.',
+      },
     ])
     .returning({ id: hazidHazards.id, name: hazidHazards.name })
 
@@ -2967,30 +3334,64 @@ export async function seedHazidLibraries(tx: any, tenantId: string): Promise<voi
     {
       tenantId,
       name: 'Confined space entry',
-      hazardIds: hazardRows.filter((h: any) => /slip|pinch|solvent|biohaz/i.test(h.name)).map((h: any) => h.id),
+      hazardIds: hazardRows
+        .filter((h: any) => /slip|pinch|solvent|biohaz/i.test(h.name))
+        .map((h: any) => h.id),
     },
     {
       tenantId,
       name: 'Outdoor work — summer',
-      hazardIds: hazardRows.filter((h: any) => /heat|slip|repetitive|fall/i.test(h.name)).map((h: any) => h.id),
+      hazardIds: hazardRows
+        .filter((h: any) => /heat|slip|repetitive|fall/i.test(h.name))
+        .map((h: any) => h.id),
     },
     {
       tenantId,
       name: 'Welding / hot work',
-      hazardIds: hazardRows.filter((h: any) => /weld|sharp|noise|fall/i.test(h.name)).map((h: any) => h.id),
+      hazardIds: hazardRows
+        .filter((h: any) => /weld|sharp|noise|fall/i.test(h.name))
+        .map((h: any) => h.id),
     },
   ])
 
   // Task library
   await tx.insert(hazidTasks).values([
-    { tenantId, name: 'Set up barricades', description: 'Establish barrier perimeter before work begins.' },
-    { tenantId, name: 'Lock out / tag out', description: 'Isolate energy sources, verify zero state.' },
-    { tenantId, name: 'Pre-use inspection', description: 'Visual + functional inspection of every tool/PPE.' },
+    {
+      tenantId,
+      name: 'Set up barricades',
+      description: 'Establish barrier perimeter before work begins.',
+    },
+    {
+      tenantId,
+      name: 'Lock out / tag out',
+      description: 'Isolate energy sources, verify zero state.',
+    },
+    {
+      tenantId,
+      name: 'Pre-use inspection',
+      description: 'Visual + functional inspection of every tool/PPE.',
+    },
     { tenantId, name: 'Atmospheric test', description: 'Verify O₂ / LEL / H₂S / CO before entry.' },
-    { tenantId, name: 'Rigging setup', description: 'Inspect slings, check WLL, verify anchor points.' },
-    { tenantId, name: 'Hot work permit', description: 'Verify fire watch + extinguisher + clear combustibles.' },
-    { tenantId, name: 'Don PPE', description: 'Confirm all crew has required PPE before entering zone.' },
-    { tenantId, name: 'Tailboard meeting', description: 'Review JSA with crew; confirm understanding.' },
+    {
+      tenantId,
+      name: 'Rigging setup',
+      description: 'Inspect slings, check WLL, verify anchor points.',
+    },
+    {
+      tenantId,
+      name: 'Hot work permit',
+      description: 'Verify fire watch + extinguisher + clear combustibles.',
+    },
+    {
+      tenantId,
+      name: 'Don PPE',
+      description: 'Confirm all crew has required PPE before entering zone.',
+    },
+    {
+      tenantId,
+      name: 'Tailboard meeting',
+      description: 'Review JSA with crew; confirm understanding.',
+    },
   ])
 
   // Assessment types (one full, one minimal)
@@ -3030,20 +3431,62 @@ export async function seedHazidLibraries(tx: any, tenantId: string): Promise<voi
     { tenantId, typeId: fullType.id, name: 'Safety glasses', required: true, entityOrder: 2 },
     { tenantId, typeId: fullType.id, name: 'Steel-toe boots', required: true, entityOrder: 3 },
     { tenantId, typeId: fullType.id, name: 'Hi-vis vest', required: true, entityOrder: 4 },
-    { tenantId, typeId: fullType.id, name: 'Gloves (task-specific)', required: false, entityOrder: 5 },
+    {
+      tenantId,
+      typeId: fullType.id,
+      name: 'Gloves (task-specific)',
+      required: false,
+      entityOrder: 5,
+    },
     { tenantId, typeId: fullType.id, name: 'Hearing protection', required: false, entityOrder: 6 },
-    { tenantId, typeId: fullType.id, name: 'Fall harness (if WAH)', required: false, entityOrder: 7 },
+    {
+      tenantId,
+      typeId: fullType.id,
+      name: 'Fall harness (if WAH)',
+      required: false,
+      entityOrder: 7,
+    },
   ])
 
   // Default Q&A for the full type
   await tx.insert(hazidAssessmentTypeQuestions).values([
-    { tenantId, typeId: fullType.id, question: 'Have all crew members reviewed this JSHA?', questionType: 'yes_no', requiresYes: true, entityOrder: 1 },
-    { tenantId, typeId: fullType.id, question: 'Have all hazards been assessed and controlled?', questionType: 'yes_no', requiresYes: true, entityOrder: 2 },
-    { tenantId, typeId: fullType.id, question: 'Is the work area clear and properly barricaded?', questionType: 'yes_no', requiresYes: true, entityOrder: 3 },
-    { tenantId, typeId: fullType.id, question: 'Are emergency procedures known to all crew?', questionType: 'yes_no', requiresYes: true, entityOrder: 4 },
+    {
+      tenantId,
+      typeId: fullType.id,
+      question: 'Have all crew members reviewed this JSHA?',
+      questionType: 'yes_no',
+      requiresYes: true,
+      entityOrder: 1,
+    },
+    {
+      tenantId,
+      typeId: fullType.id,
+      question: 'Have all hazards been assessed and controlled?',
+      questionType: 'yes_no',
+      requiresYes: true,
+      entityOrder: 2,
+    },
+    {
+      tenantId,
+      typeId: fullType.id,
+      question: 'Is the work area clear and properly barricaded?',
+      questionType: 'yes_no',
+      requiresYes: true,
+      entityOrder: 3,
+    },
+    {
+      tenantId,
+      typeId: fullType.id,
+      question: 'Are emergency procedures known to all crew?',
+      questionType: 'yes_no',
+      requiresYes: true,
+      entityOrder: 4,
+    },
   ])
 
-  console.log(`  · hazid libraries: ${typeRows.length} hazard types, ${hazardRows.length} hazards, 3 sets, 8 tasks, 2 assessment types`)
+  console.log(
+    `  · hazid libraries: ${typeRows.length} hazard types, ${hazardRows.length} hazards, 3 sets, 8 tasks, 2 assessment types`,
+  )
 }
 
 // Inspection records — 5 sample legacy-style inspections against the seeded
@@ -3052,7 +3495,9 @@ export async function seedInspectionRecords(tx: any, tenantId: string): Promise<
   const existing = await tx
     .select({ id: inspectionRecords.id })
     .from(inspectionRecords)
-    .where(sql`${inspectionRecords.tenantId} = ${tenantId} AND ${inspectionRecords.reference} LIKE 'INS-SEED-%'`)
+    .where(
+      sql`${inspectionRecords.tenantId} = ${tenantId} AND ${inspectionRecords.reference} LIKE 'INS-SEED-%'`,
+    )
   if (existing.length > 0) {
     console.log(`  · inspection records: ${existing.length} already present, skipping`)
     return
@@ -3112,7 +3557,12 @@ export async function seedInspectionRecords(tx: any, tenantId: string): Promise<
     const criteria = await tx
       .select({ id: inspectionBankCriteria.id, text: inspectionBankCriteria.text })
       .from(inspectionBankCriteria)
-      .where(sql`${inspectionBankCriteria.bankId} IN (${sql.join(bankIds.map((x: any) => sql`${x}`), sql`, `)})`)
+      .where(
+        sql`${inspectionBankCriteria.bankId} IN (${sql.join(
+          bankIds.map((x: any) => sql`${x}`),
+          sql`, `,
+        )})`,
+      )
     for (let j = 0; j < criteria.length; j++) {
       const answer = j === 0 && i === 1 ? 'fail' : j % 5 === 4 ? 'n_a' : 'pass'
       await tx.insert(inspectionRecordCriteria).values({
@@ -3123,7 +3573,8 @@ export async function seedInspectionRecords(tx: any, tenantId: string): Promise<
         sequence: j + 1,
         answer,
         severity: answer === 'fail' ? 'high' : null,
-        nonComplianceDescription: answer === 'fail' ? 'Latch loose on east door; tagged out for follow-up.' : null,
+        nonComplianceDescription:
+          answer === 'fail' ? 'Latch loose on east door; tagged out for follow-up.' : null,
       })
     }
   }

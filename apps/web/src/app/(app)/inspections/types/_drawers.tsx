@@ -197,11 +197,7 @@ function NewTypeDrawer({
               onChange={setAllowCompliantNotes}
               label="Allow compliant notes (per-criterion comments)"
             />
-            <Toggle
-              checked={isPublished}
-              onChange={setIsPublished}
-              label="Publish immediately"
-            />
+            <Toggle checked={isPublished} onChange={setIsPublished} label="Publish immediately" />
           </div>
         </div>
 

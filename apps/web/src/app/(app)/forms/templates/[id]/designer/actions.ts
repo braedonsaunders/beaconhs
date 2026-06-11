@@ -77,7 +77,9 @@ export async function updateAppOverview(args: {
         description: args.description?.trim() || null,
         // Only touch category / icon / emailOnSubmit when explicitly provided —
         // the Overview panel no longer edits them, so they must survive saves.
-        ...(args.category === undefined ? {} : { category: (args.category?.trim() || null) as never }),
+        ...(args.category === undefined
+          ? {}
+          : { category: (args.category?.trim() || null) as never }),
         ...(args.iconKey === undefined ? {} : { iconKey: args.iconKey?.trim() || null }),
         ...(args.emailOnSubmit === undefined ? {} : { emailOnSubmit: args.emailOnSubmit }),
         updatedAt: new Date(),

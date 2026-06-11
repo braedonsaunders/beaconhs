@@ -169,9 +169,11 @@ export function renderWalletHtml(input: WalletRenderInput): string {
   <div class="card front">
     <div class="bar"></div>
     <div class="left">
-      ${input.recipient.photoUrl
-        ? `<div class="photo"><img src="${esc(input.recipient.photoUrl)}" alt=""/></div>`
-        : `<div class="photo placeholder">Photo</div>`}
+      ${
+        input.recipient.photoUrl
+          ? `<div class="photo"><img src="${esc(input.recipient.photoUrl)}" alt=""/></div>`
+          : `<div class="photo placeholder">Photo</div>`
+      }
     </div>
     <div class="right">
       <div>

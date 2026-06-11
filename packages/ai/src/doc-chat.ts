@@ -34,9 +34,7 @@ export function streamDocChat(
   const result = streamText({
     model,
     system: DOC_SYSTEM + docContext,
-    messages: args.messages
-      .slice(-20)
-      .map((m) => ({ role: m.role, content: m.content })),
+    messages: args.messages.slice(-20).map((m) => ({ role: m.role, content: m.content })),
     temperature: 0.5,
   })
   return result.toTextStreamResponse()

@@ -113,7 +113,9 @@ export function LessonSurface({
 
   // --- slides deck (autosaved) ---
   const [deck, setDeck] = useState<Slide[]>(lesson.slides ?? [])
-  const [selectedSlideId, setSelectedSlideId] = useState<string | null>(lesson.slides?.[0]?.id ?? null)
+  const [selectedSlideId, setSelectedSlideId] = useState<string | null>(
+    lesson.slides?.[0]?.id ?? null,
+  )
   const deckDirtyRef = useRef(false)
   const [showImport, setShowImport] = useState(false)
   const [presenting, setPresenting] = useState(false)
@@ -144,8 +146,32 @@ export function LessonSurface({
     return () => Object.values(t).forEach(clearTimeout)
   }, [])
 
-  const metaRef = useRef({ title, kind, rule, required, assessmentTypeId, classId, attachmentId, embedUrl, contentItemId, duration, criteria })
-  metaRef.current = { title, kind, rule, required, assessmentTypeId, classId, attachmentId, embedUrl, contentItemId, duration, criteria }
+  const metaRef = useRef({
+    title,
+    kind,
+    rule,
+    required,
+    assessmentTypeId,
+    classId,
+    attachmentId,
+    embedUrl,
+    contentItemId,
+    duration,
+    criteria,
+  })
+  metaRef.current = {
+    title,
+    kind,
+    rule,
+    required,
+    assessmentTypeId,
+    classId,
+    attachmentId,
+    embedUrl,
+    contentItemId,
+    duration,
+    criteria,
+  }
 
   const saveMetaNow = useCallback(async () => {
     const m = metaRef.current
@@ -191,7 +217,9 @@ export function LessonSurface({
     if (!deckDirtyRef.current) {
       setDeck(lesson.slides ?? [])
       setSelectedSlideId((cur) =>
-        cur && (lesson.slides ?? []).some((s) => s.id === cur) ? cur : lesson.slides?.[0]?.id ?? null,
+        cur && (lesson.slides ?? []).some((s) => s.id === cur)
+          ? cur
+          : (lesson.slides?.[0]?.id ?? null),
       )
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -210,7 +238,8 @@ export function LessonSurface({
     timers.current = {}
     const flushes: Promise<void>[] = []
     if (pending.includes('meta')) flushes.push(saveMetaNow())
-    if (pending.includes('slides')) flushes.push(saveLessonSlides(lesson.id, courseId, deckRef.current).then(() => undefined))
+    if (pending.includes('slides'))
+      flushes.push(saveLessonSlides(lesson.id, courseId, deckRef.current).then(() => undefined))
     void Promise.all(flushes).finally(() => {
       router.refresh()
       onClose()
@@ -224,7 +253,8 @@ export function LessonSurface({
 
   const reusable =
     kind === 'rich' || kind === 'video' || kind === 'file' || kind === 'embed' || kind === 'slides'
-  const showRibbon = (kind === 'rich' || kind === 'practical' || kind === 'slides') && !contentItemId
+  const showRibbon =
+    (kind === 'rich' || kind === 'practical' || kind === 'slides') && !contentItemId
 
   // Slide ribbon controls
   const slideControls =
@@ -236,7 +266,9 @@ export function LessonSurface({
             const v = e.currentTarget.value as Slide['layout'] | ''
             if (!v) return
             const slide: Slide = { id: genId(), layout: v, bg: 'white' }
-            const i = selectedSlideId ? deck.findIndex((s) => s.id === selectedSlideId) : deck.length - 1
+            const i = selectedSlideId
+              ? deck.findIndex((s) => s.id === selectedSlideId)
+              : deck.length - 1
             const next = [...deck]
             next.splice(i + 1, 0, slide)
             touchDeck(next)
@@ -304,7 +336,13 @@ export function LessonSurface({
         <Button type="button" variant="outline" size="sm" onClick={() => setShowImport((v) => !v)}>
           <FileUp size={13} /> Import
         </Button>
-        <Button type="button" variant="outline" size="sm" disabled={deck.length === 0} onClick={() => setPresenting(true)}>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={deck.length === 0}
+          onClick={() => setPresenting(true)}
+        >
           <Play size={13} /> Present
         </Button>
         {importing ? (
@@ -312,7 +350,10 @@ export function LessonSurface({
             <Loader2 size={11} className="animate-spin" /> importing…
           </span>
         ) : lesson.importStatus === 'failed' ? (
-          <span className="inline-flex max-w-[14rem] items-center truncate rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-700" title={lesson.importError ?? undefined}>
+          <span
+            className="inline-flex max-w-[14rem] items-center truncate rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-700"
+            title={lesson.importError ?? undefined}
+          >
             import failed
           </span>
         ) : null}
@@ -476,7 +517,9 @@ export function LessonSurface({
                 >
                   <option value="">— inline content —</option>
                   {contentItems
-                    .filter((ci) => (kind === 'slides' ? ci.kind === 'slides' : ci.kind !== 'slides'))
+                    .filter((ci) =>
+                      kind === 'slides' ? ci.kind === 'slides' : ci.kind !== 'slides',
+                    )
                     .map((ci) => (
                       <option key={ci.id} value={ci.id}>
                         {ci.title} ({ci.kind})
@@ -525,17 +568,26 @@ export function LessonSurface({
                 className="app-scroll max-h-[70vh] space-y-2 overflow-y-auto pr-1"
               >
                 {deck.map((s, i) => (
-                  <Reorder.Item key={s.id} value={s} as="li" className="cursor-grab active:cursor-grabbing">
+                  <Reorder.Item
+                    key={s.id}
+                    value={s}
+                    as="li"
+                    className="cursor-grab active:cursor-grabbing"
+                  >
                     <button
                       type="button"
                       onClick={() => setSelectedSlideId(s.id)}
                       className={cn(
                         'block w-full rounded-md p-0.5 text-left',
-                        s.id === selectedSlideId ? 'ring-2 ring-teal-500' : 'hover:ring-2 hover:ring-slate-300',
+                        s.id === selectedSlideId
+                          ? 'ring-2 ring-teal-500'
+                          : 'hover:ring-2 hover:ring-slate-300',
                       )}
                     >
                       <SlideThumb slide={s} attachmentUrls={urls} />
-                      <span className="mt-0.5 block px-1 text-[10px] tabular-nums text-slate-400">{i + 1}</span>
+                      <span className="mt-0.5 block px-1 text-[10px] text-slate-400 tabular-nums">
+                        {i + 1}
+                      </span>
                     </button>
                   </Reorder.Item>
                 ))}
@@ -600,7 +652,9 @@ export function LessonSurface({
               <div className="space-y-1.5">
                 {criteria.map((c, i) => (
                   <div key={c.id} className="flex items-center gap-1.5">
-                    <span className="w-5 text-right text-xs tabular-nums text-slate-400">{i + 1}.</span>
+                    <span className="w-5 text-right text-xs text-slate-400 tabular-nums">
+                      {i + 1}.
+                    </span>
                     <Input
                       value={c.text}
                       onChange={(e) => {
@@ -639,7 +693,10 @@ export function LessonSurface({
               </Button>
               <p className="mt-2 text-[11px] text-slate-500">
                 Sign-offs happen under{' '}
-                <Link href={`/training/courses/${courseId}/evaluations`} className="text-teal-700 underline">
+                <Link
+                  href={`/training/courses/${courseId}/evaluations`}
+                  className="text-teal-700 underline"
+                >
                   Evaluations
                 </Link>
                 .
@@ -733,7 +790,9 @@ export function LessonSurface({
                   }}
                   label="Drop a video or click to choose"
                 />
-                {attachmentId ? <p className="text-xs text-emerald-700">Uploaded video attached ✓</p> : null}
+                {attachmentId ? (
+                  <p className="text-xs text-emerald-700">Uploaded video attached ✓</p>
+                ) : null}
               </div>
             ) : kind === 'file' ? (
               <div className="space-y-2">
@@ -764,7 +823,7 @@ export function LessonSurface({
             type="button"
             onClick={() => setPresenting(false)}
             aria-label="Close presentation"
-            className="absolute right-3 top-3 z-20 grid h-9 w-9 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20"
+            className="absolute top-3 right-3 z-20 grid h-9 w-9 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20"
           >
             <X size={18} />
           </button>
@@ -870,27 +929,41 @@ function SlideCanvas({
   )
 
   return (
-    <div className={cn('relative aspect-[16/9] w-full overflow-hidden rounded-lg border border-slate-200 shadow-sm', bg)}>
+    <div
+      className={cn(
+        'relative aspect-[16/9] w-full overflow-hidden rounded-lg border border-slate-200 shadow-sm',
+        bg,
+      )}
+    >
       {slide.layout === 'pptx' ? (
         imgUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={imgUrl} alt="" className="h-full w-full object-contain" />
         ) : (
-          <div className="grid h-full place-items-center text-xs text-slate-400">Slide image unavailable</div>
+          <div className="grid h-full place-items-center text-xs text-slate-400">
+            Slide image unavailable
+          </div>
         )
       ) : null}
 
       {slide.layout === 'title' ? (
         <div className="flex h-full flex-col items-center justify-center gap-3 px-[8%] text-center">
           {titleInput('text-center text-[clamp(1.4rem,4.5cqw,3rem)] font-bold leading-tight')}
-          {subtitleInput(cn('text-center text-[clamp(0.85rem,2.2cqw,1.4rem)]', isDark ? 'text-white/70' : 'text-slate-500'))}
+          {subtitleInput(
+            cn(
+              'text-center text-[clamp(0.85rem,2.2cqw,1.4rem)]',
+              isDark ? 'text-white/70' : 'text-slate-500',
+            ),
+          )}
         </div>
       ) : null}
 
       {slide.layout === 'title-content' ? (
         <div className="flex h-full flex-col gap-3 px-[7%] py-[6%]">
           {titleInput('text-[clamp(1.1rem,3cqw,2rem)] font-bold leading-tight')}
-          <div className="app-scroll min-h-0 flex-1 overflow-y-auto">{region('body', 'Add content…')}</div>
+          <div className="app-scroll min-h-0 flex-1 overflow-y-auto">
+            {region('body', 'Add content…')}
+          </div>
         </div>
       ) : null}
 
@@ -909,7 +982,9 @@ function SlideCanvas({
           <div className="relative h-full overflow-hidden">{imageRegion(true)}</div>
           <div className="flex h-full flex-col gap-2 overflow-hidden px-[8%] py-[8%]">
             {titleInput('text-[clamp(1rem,2.6cqw,1.7rem)] font-bold leading-tight')}
-            <div className="app-scroll min-h-0 flex-1 overflow-y-auto">{region('body', 'Add content…')}</div>
+            <div className="app-scroll min-h-0 flex-1 overflow-y-auto">
+              {region('body', 'Add content…')}
+            </div>
           </div>
         </div>
       ) : null}
@@ -917,9 +992,13 @@ function SlideCanvas({
       {slide.layout === 'image-full' ? (
         <>
           <div className="absolute inset-0">{imageRegion(true)}</div>
-          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-[7%] pb-[5%] pt-[10%]">
-            {titleInput('text-[clamp(1rem,3cqw,2rem)] font-bold leading-tight text-white placeholder:text-white/40')}
-            {subtitleInput('text-[clamp(0.75rem,1.8cqw,1.1rem)] text-white/80 placeholder:text-white/40')}
+          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-[7%] pt-[10%] pb-[5%]">
+            {titleInput(
+              'text-[clamp(1rem,3cqw,2rem)] font-bold leading-tight text-white placeholder:text-white/40',
+            )}
+            {subtitleInput(
+              'text-[clamp(0.75rem,1.8cqw,1.1rem)] text-white/80 placeholder:text-white/40',
+            )}
           </div>
         </>
       ) : null}
@@ -947,7 +1026,11 @@ function ImageDrop({
     >
       {url ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={url} alt="" className={cn('h-full w-full', cover ? 'object-cover' : 'object-contain')} />
+        <img
+          src={url}
+          alt=""
+          className={cn('h-full w-full', cover ? 'object-cover' : 'object-contain')}
+        />
       ) : (
         <span className="grid h-full w-full place-items-center bg-slate-200 text-xs text-slate-500">
           {busy ? <Loader2 size={16} className="animate-spin" /> : 'Click to add an image'}
@@ -975,7 +1058,11 @@ function ImageDrop({
               sizeBytes: file.size,
             })
             if (!req.ok) throw new Error(req.error)
-            await fetch(req.putUrl, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } })
+            await fetch(req.putUrl, {
+              method: 'PUT',
+              body: file,
+              headers: { 'Content-Type': file.type },
+            })
             const fin = await finalizeUpload({
               key: req.key,
               kind: 'image',

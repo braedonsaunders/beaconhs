@@ -18,7 +18,26 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import Link from 'next/link'
-import { AlertTriangle, Bold, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Cloud, CloudOff, Italic, Link as LinkIcon, List, MapPin, Plus, ScanLine, ShieldCheck, Sparkles, Trash2 } from 'lucide-react'
+import {
+  AlertTriangle,
+  Bold,
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  Cloud,
+  CloudOff,
+  Italic,
+  Link as LinkIcon,
+  List,
+  MapPin,
+  Plus,
+  ScanLine,
+  ShieldCheck,
+  Sparkles,
+  Trash2,
+} from 'lucide-react'
 import {
   Alert,
   AlertDescription,
@@ -123,7 +142,8 @@ export function FormRenderer({
   const appTabs = schema.tabs ?? []
   const [activeTabId, setActiveTabId] = useState(appTabs[0]?.id ?? '')
   const [values, setValues] = useState<Record<string, unknown>>(initialValues)
-  const [rowsByStep, setRowsByStep] = useState<Record<string, Record<string, unknown>[]>>(initialRows)
+  const [rowsByStep, setRowsByStep] =
+    useState<Record<string, Record<string, unknown>[]>>(initialRows)
   const [siteId, setSiteId] = useState<string | ''>('')
   const [errors, setErrors] = useState<Map<string, string>>(new Map())
   const [serverError, setServerError] = useState<string | null>(null)
@@ -139,9 +159,7 @@ export function FormRenderer({
   const [responseId, setResponseId] = useState<string | null>(initialResponseId)
   // 'idle' before any change; 'pending' during in-flight save; 'saved' on
   // success; 'error' on failure. Drives the indicator in the header.
-  const [saveStatus, setSaveStatus] = useState<
-    'idle' | 'pending' | 'saved' | 'error'
-  >('idle')
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'pending' | 'saved' | 'error'>('idle')
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
   // Tick state so "Saved Xs ago" updates without us calling render every
@@ -172,9 +190,7 @@ export function FormRenderer({
   // Per-picker entity attribute maps, fed into the evaluator on every render
   // so `entity_attr` formula fields stay live. Refreshed via the
   // fetchEntityAttrs server action whenever a picker's value changes.
-  const [entitiesByField, setEntitiesByField] = useState<EntityAttrsByField>(
-    initialEntitiesByField,
-  )
+  const [entitiesByField, setEntitiesByField] = useState<EntityAttrsByField>(initialEntitiesByField)
   // Picker field ids currently mid-flight to the fetchEntityAttrs action.
   // Drives the small "Looking up…" indicator next to the picker.
   const [pickerLoading, setPickerLoading] = useState<Set<string>>(new Set())
@@ -286,13 +302,11 @@ export function FormRenderer({
   // and the retry-on-click path all share one implementation. Returns true
   // on a successful save.
   const persistDraft = useCallback(
-    async (
-      args: {
-        values: Record<string, unknown>
-        rows: Record<string, Array<Record<string, unknown>>>
-        stepIndex: number
-      },
-    ): Promise<boolean> => {
+    async (args: {
+      values: Record<string, unknown>
+      rows: Record<string, Array<Record<string, unknown>>>
+      stepIndex: number
+    }): Promise<boolean> => {
       // Lazily create a draft row on the first save. If the create-call
       // races with another save, just wait it out by skipping this round —
       // the next debounce tick will hit the now-set responseId.
@@ -465,7 +479,10 @@ export function FormRenderer({
 
   function removeRow(section: FormSection, idx: number) {
     const rows = rowsByStep[section.id] ?? []
-    setRows(section.id, rows.filter((_, i) => i !== idx))
+    setRows(
+      section.id,
+      rows.filter((_, i) => i !== idx),
+    )
   }
 
   function updateRow(section: FormSection, idx: number, patch: Record<string, unknown>) {
@@ -495,7 +512,10 @@ export function FormRenderer({
       if (sec.repeating) {
         const rows = rowsByStep[sec.id] ?? []
         if (sec.minRows !== undefined && rows.length < sec.minRows) {
-          errs.set(`__section_${sec.id}`, `Add at least ${sec.minRows} row${sec.minRows === 1 ? '' : 's'}`)
+          errs.set(
+            `__section_${sec.id}`,
+            `Add at least ${sec.minRows} row${sec.minRows === 1 ? '' : 's'}`,
+          )
         }
         for (let i = 0; i < rows.length; i++) {
           for (const f of sec.fields) {
@@ -653,7 +673,7 @@ export function FormRenderer({
             ← Back to template
           </Link>
           <div className="flex items-center justify-between gap-2">
-            <h1 className="text-xl font-semibold truncate">{templateName}</h1>
+            <h1 className="truncate text-xl font-semibold">{templateName}</h1>
             <div className="flex items-center gap-2">
               <SaveStatus
                 status={saveStatus}
@@ -968,7 +988,7 @@ function RepeatingSection({
           return (
             <div key={i} className="rounded-md border border-slate-200 bg-slate-50/50 p-3">
               <div className="mb-2 flex items-center justify-between">
-                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <div className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
                   {formatRowLabel(section, i, row)}
                 </div>
                 <button
@@ -1002,11 +1022,7 @@ function RepeatingSection({
           )
         })
       )}
-      <Button
-        variant="outline"
-        onClick={onAdd}
-        disabled={max !== undefined && rows.length >= max}
-      >
+      <Button variant="outline" onClick={onAdd} disabled={max !== undefined && rows.length >= max}>
         <Plus size={14} />
         Add row
       </Button>
@@ -1016,11 +1032,7 @@ function RepeatingSection({
 
 // Format the section row header from the optional rowLabelTemplate.
 // Supports `{index}`, `{index+1}`, and `{<fieldKey>}` interpolation.
-function formatRowLabel(
-  section: FormSection,
-  index: number,
-  row: Record<string, unknown>,
-): string {
+function formatRowLabel(section: FormSection, index: number, row: Record<string, unknown>): string {
   const tmpl = section.rowLabelTemplate ?? `Row {index+1}`
   return tmpl
     .replace(/\{index\+1\}/g, String(index + 1))
@@ -1066,14 +1078,10 @@ function FieldRow({
           <span className="text-red-600"> *</span>
         ) : null}
         {loading ? (
-          <span className="ml-2 text-[10px] font-normal text-slate-400">
-            Looking up…
-          </span>
+          <span className="ml-2 text-[10px] font-normal text-slate-400">Looking up…</span>
         ) : null}
       </Label>
-      {field.helpText?.en ? (
-        <p className="text-xs text-slate-500">{field.helpText.en}</p>
-      ) : null}
+      {field.helpText?.en ? <p className="text-xs text-slate-500">{field.helpText.en}</p> : null}
       <FieldInput
         field={field}
         value={value}
@@ -1108,12 +1116,9 @@ function FieldInput({
   // the optional `field.config.defaultDisplay` placeholder or an em-dash.
   if ((field.type === 'formula' || field.type === 'calc') && field.formula) {
     const computed = evaluateFormulaTree(field.formula as FormulaExpression, evalCtx)
-    const fallback =
-      (field.config?.defaultDisplay as string | undefined) ?? '—'
+    const fallback = (field.config?.defaultDisplay as string | undefined) ?? '—'
     const display =
-      computed === null || computed === undefined || computed === ''
-        ? fallback
-        : String(computed)
+      computed === null || computed === undefined || computed === '' ? fallback : String(computed)
     return (
       <Input
         value={display}
@@ -1133,12 +1138,26 @@ function FieldInput({
         <Input
           value={(value as string) ?? ''}
           onChange={(e) => onChange(e.target.value)}
-          type={field.type === 'email' ? 'email' : field.type === 'phone' ? 'tel' : field.type === 'url' ? 'url' : 'text'}
+          type={
+            field.type === 'email'
+              ? 'email'
+              : field.type === 'phone'
+                ? 'tel'
+                : field.type === 'url'
+                  ? 'url'
+                  : 'text'
+          }
         />
       )
     case 'textarea':
     case 'long_text':
-      return <Textarea rows={3} value={(value as string) ?? ''} onChange={(e) => onChange(e.target.value)} />
+      return (
+        <Textarea
+          rows={3}
+          value={(value as string) ?? ''}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      )
     case 'number':
     case 'rating':
       return (
@@ -1165,7 +1184,7 @@ function FieldInput({
             onChange={(e) => onChange(Number(e.target.value))}
             className="h-2 flex-1 cursor-pointer appearance-none rounded-full bg-slate-200 accent-teal-600"
           />
-          <span className="w-12 text-right text-sm font-semibold tabular-nums text-slate-700">
+          <span className="w-12 text-right text-sm font-semibold text-slate-700 tabular-nums">
             {v}
             {c.unit ? ` ${c.unit}` : ''}
           </span>
@@ -1231,7 +1250,10 @@ function FieldInput({
               <tr>
                 <th className="p-1.5" />
                 {scale.map((s) => (
-                  <th key={s.value} className="p-1.5 text-center text-xs font-medium text-slate-500">
+                  <th
+                    key={s.value}
+                    className="p-1.5 text-center text-xs font-medium text-slate-500"
+                  >
                     {s.label}
                   </th>
                 ))}
@@ -1263,11 +1285,29 @@ function FieldInput({
       // No formula configured — fall back to a read-only blank.
       return <Input disabled placeholder="(no formula)" />
     case 'date':
-      return <Input type="date" value={(value as string) ?? ''} onChange={(e) => onChange(e.target.value)} />
+      return (
+        <Input
+          type="date"
+          value={(value as string) ?? ''}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      )
     case 'datetime':
-      return <Input type="datetime-local" value={(value as string) ?? ''} onChange={(e) => onChange(e.target.value)} />
+      return (
+        <Input
+          type="datetime-local"
+          value={(value as string) ?? ''}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      )
     case 'time':
-      return <Input type="time" value={(value as string) ?? ''} onChange={(e) => onChange(e.target.value)} />
+      return (
+        <Input
+          type="time"
+          value={(value as string) ?? ''}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      )
     case 'select':
     case 'radio': {
       const opts = field.validation?.options ?? []
@@ -1370,7 +1410,9 @@ function FieldInput({
               type="button"
               onClick={() => onChange(opt.v)}
               className={`flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-medium ${
-                value === opt.v ? 'border-teal-500 bg-teal-50' : 'border-slate-200 bg-white hover:bg-slate-50'
+                value === opt.v
+                  ? 'border-teal-500 bg-teal-50'
+                  : 'border-slate-200 bg-white hover:bg-slate-50'
               }`}
             >
               <span className={`inline-block h-3 w-3 rounded-full ${opt.tone}`} />
@@ -1393,7 +1435,7 @@ function FieldInput({
     case 'multi_person_picker': {
       const arr = Array.isArray(value) ? (value as string[]) : []
       return (
-        <div className="space-y-1 rounded-md border border-slate-200 bg-white p-2 max-h-48 overflow-y-auto">
+        <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border border-slate-200 bg-white p-2">
           {people.length === 0 ? (
             <p className="text-xs text-slate-500">No people available.</p>
           ) : (
@@ -1403,11 +1445,7 @@ function FieldInput({
                   type="checkbox"
                   checked={arr.includes(p.id)}
                   onChange={(e) =>
-                    onChange(
-                      e.target.checked
-                        ? [...arr, p.id]
-                        : arr.filter((v) => v !== p.id),
-                    )
+                    onChange(e.target.checked ? [...arr, p.id] : arr.filter((v) => v !== p.id))
                   }
                 />
                 {p.lastName}, {p.firstName}
@@ -1568,7 +1606,10 @@ function TableField({
         <tbody>
           {rows.length === 0 ? (
             <tr>
-              <td colSpan={columns.length + 1} className="px-2 py-3 text-center text-xs text-slate-400">
+              <td
+                colSpan={columns.length + 1}
+                className="px-2 py-3 text-center text-xs text-slate-400"
+              >
                 No rows yet — add one below.
               </td>
             </tr>
@@ -1576,13 +1617,17 @@ function TableField({
             rows.map((row, i) => (
               <tr key={i} className="border-b border-slate-100 last:border-b-0">
                 {rowMode === 'fixed' ? (
-                  <td className="whitespace-nowrap px-2 py-1 text-xs font-medium text-slate-700">
+                  <td className="px-2 py-1 text-xs font-medium whitespace-nowrap text-slate-700">
                     {fixedRows[i]?.label ?? `Row ${i + 1}`}
                   </td>
                 ) : null}
                 {columns.map((c) => (
                   <td key={c.key} className="px-1.5 py-1 align-top">
-                    <TableCell column={c} value={row[c.key]} onChange={(v) => setCell(i, c.key, v)} />
+                    <TableCell
+                      column={c}
+                      value={row[c.key]}
+                      onChange={(v) => setCell(i, c.key, v)}
+                    />
                   </td>
                 ))}
                 {rowMode === 'addable' ? (
@@ -1819,7 +1864,11 @@ function LookupInput({
   }
 
   return (
-    <Select value={(value as string) ?? ''} onChange={(e) => pick(e.target.value)} disabled={waitingParent}>
+    <Select
+      value={(value as string) ?? ''}
+      onChange={(e) => pick(e.target.value)}
+      disabled={waitingParent}
+    >
       <option value="">
         {loading ? 'Loading…' : waitingParent ? 'Select the previous field first…' : 'Select…'}
       </option>
@@ -1889,7 +1938,10 @@ function DataTableInput({
   const selected = Array.isArray(value) ? (value as string[]) : []
   const toggle = (rowId: string) => {
     if (selectable === 'single') onChange([rowId])
-    else onChange(selected.includes(rowId) ? selected.filter((x) => x !== rowId) : [...selected, rowId])
+    else
+      onChange(
+        selected.includes(rowId) ? selected.filter((x) => x !== rowId) : [...selected, rowId],
+      )
   }
 
   if (loading && res.rows.length === 0) return <p className="text-xs text-slate-400">Loading…</p>
@@ -1995,7 +2047,7 @@ function MetricBlock({ field, evalCtx }: { field: FormField; evalCtx: EvalContex
                   style={{ width: `${(g.value / total) * 100}%` }}
                 />
               </div>
-              <span className="w-10 text-right tabular-nums text-slate-500">{fmt(g.value)}</span>
+              <span className="w-10 text-right text-slate-500 tabular-nums">{fmt(g.value)}</span>
             </div>
           ))}
         </div>
@@ -2020,10 +2072,10 @@ function MetricBlock({ field, evalCtx }: { field: FormField; evalCtx: EvalContex
 
   return (
     <div className="inline-flex flex-col rounded-lg border border-slate-200 bg-white px-4 py-3">
-      <span className="text-3xl font-semibold tabular-nums text-slate-800">
+      <span className="text-3xl font-semibold text-slate-800 tabular-nums">
         {fmt(res?.value ?? null)}
       </span>
-      <span className="mt-0.5 text-[10px] uppercase tracking-wide text-slate-400">
+      <span className="mt-0.5 text-[10px] tracking-wide text-slate-400 uppercase">
         {agg?.fn ?? 'count'}
         {agg?.column ? ` · ${agg.column}` : ''}
         {res ? ` · ${res.total} rows` : ''}
@@ -2057,7 +2109,9 @@ type PhotoAiValue = {
 // compound value { attachments, analysis?, analyzedAt? }. Editing the photos
 // clears a stale analysis.
 function PhotoAiInput({ value, onChange }: { value: unknown; onChange: (v: unknown) => void }) {
-  const v = (value && typeof value === 'object' && !Array.isArray(value) ? value : {}) as PhotoAiValue
+  const v = (
+    value && typeof value === 'object' && !Array.isArray(value) ? value : {}
+  ) as PhotoAiValue
   const attachments = Array.isArray(v.attachments) ? v.attachments : []
   const [analyzing, setAnalyzing] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -2076,7 +2130,8 @@ function PhotoAiInput({ value, onChange }: { value: unknown; onChange: (v: unkno
     setAnalyzing(true)
     analyzePhotos({ attachmentIds: attachments.map((x) => x.attachmentId) })
       .then((res) => {
-        if (res.ok) onChange({ attachments, analysis: res.analysis, analyzedAt: new Date().toISOString() })
+        if (res.ok)
+          onChange({ attachments, analysis: res.analysis, analyzedAt: new Date().toISOString() })
         else setErr(res.error)
       })
       .catch(() => setErr('Analysis failed'))
@@ -2094,10 +2149,13 @@ function PhotoAiInput({ value, onChange }: { value: unknown; onChange: (v: unkno
           disabled={attachments.length === 0 || analyzing}
           onClick={analyze}
         >
-          <Sparkles size={14} /> {analyzing ? 'Analyzing…' : a ? 'Re-analyze' : 'Analyze for hazards'}
+          <Sparkles size={14} />{' '}
+          {analyzing ? 'Analyzing…' : a ? 'Re-analyze' : 'Analyze for hazards'}
         </Button>
         {a ? (
-          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${riskTone(a.overallRisk)}`}>
+          <span
+            className={`rounded-full px-2 py-0.5 text-xs font-medium ${riskTone(a.overallRisk)}`}
+          >
             {a.overallRisk === 'none' ? 'No concerns' : `${a.overallRisk} risk`}
           </span>
         ) : null}
@@ -2108,7 +2166,7 @@ function PhotoAiInput({ value, onChange }: { value: unknown; onChange: (v: unkno
           {a.summary ? <p className="text-slate-700">{a.summary}</p> : null}
           {a.ppe.length > 0 ? (
             <div>
-              <div className="mb-1 flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <div className="mb-1 flex items-center gap-1 text-xs font-semibold tracking-wide text-slate-400 uppercase">
                 <ShieldCheck size={12} /> PPE
               </div>
               <ul className="space-y-0.5">
@@ -2132,7 +2190,7 @@ function PhotoAiInput({ value, onChange }: { value: unknown; onChange: (v: unkno
           ) : null}
           {a.hazards.length > 0 ? (
             <div>
-              <div className="mb-1 flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <div className="mb-1 flex items-center gap-1 text-xs font-semibold tracking-wide text-slate-400 uppercase">
                 <AlertTriangle size={12} /> Hazards
               </div>
               <ul className="space-y-0.5">
@@ -2141,7 +2199,9 @@ function PhotoAiInput({ value, onChange }: { value: unknown; onChange: (v: unkno
                     <AlertTriangle size={13} className={`mt-0.5 shrink-0 ${sevTone(h.severity)}`} />
                     <span className="text-slate-700">
                       <strong className="capitalize">{h.type}</strong>{' '}
-                      <span className={`text-xs uppercase ${sevTone(h.severity)}`}>({h.severity})</span>
+                      <span className={`text-xs uppercase ${sevTone(h.severity)}`}>
+                        ({h.severity})
+                      </span>
                       <span className="text-slate-500"> — {h.detail}</span>
                     </span>
                   </li>
@@ -2164,8 +2224,16 @@ function PhotoAiInput({ value, onChange }: { value: unknown; onChange: (v: unkno
 type PhotoMarker = { id: string; x: number; y: number; label: string }
 type PhotoAnnotatedValue = { attachments?: AttachedFile[]; markers?: PhotoMarker[] }
 
-function PhotoAnnotateInput({ value, onChange }: { value: unknown; onChange: (v: unknown) => void }) {
-  const v = (value && typeof value === 'object' && !Array.isArray(value) ? value : {}) as PhotoAnnotatedValue
+function PhotoAnnotateInput({
+  value,
+  onChange,
+}: {
+  value: unknown
+  onChange: (v: unknown) => void
+}) {
+  const v = (
+    value && typeof value === 'object' && !Array.isArray(value) ? value : {}
+  ) as PhotoAnnotatedValue
   const attachments = Array.isArray(v.attachments) ? v.attachments : []
   const markers = Array.isArray(v.markers) ? v.markers : []
   const imgWrapRef = useRef<HTMLDivElement>(null)
@@ -2174,7 +2242,8 @@ function PhotoAnnotateInput({ value, onChange }: { value: unknown; onChange: (v:
   const setFiles = (files: AttachedFile[]) =>
     onChange({ attachments: files, markers: files.length ? markers : [] })
   const newId = () =>
-    globalThis.crypto?.randomUUID?.() ?? `m_${markers.length}_${markers.reduce((a, m) => a + m.x, 0)}`
+    globalThis.crypto?.randomUUID?.() ??
+    `m_${markers.length}_${markers.reduce((a, m) => a + m.x, 0)}`
   const addMarker = (e: React.MouseEvent) => {
     const rect = imgWrapRef.current?.getBoundingClientRect()
     if (!rect || rect.width === 0) return
@@ -2215,7 +2284,9 @@ function PhotoAnnotateInput({ value, onChange }: { value: unknown; onChange: (v:
           </span>
         ))}
       </div>
-      <p className="text-[11px] text-slate-400">Tap the photo to drop a numbered marker on a hazard.</p>
+      <p className="text-[11px] text-slate-400">
+        Tap the photo to drop a numbered marker on a hazard.
+      </p>
       {markers.length > 0 ? (
         <ul className="space-y-1">
           {markers.map((m, i) => (
@@ -2275,13 +2346,19 @@ function QrScannerInput({ value, onChange }: { value: unknown; onChange: (v: unk
 
   const start = async () => {
     setErr(null)
-    const Detector = (window as unknown as { BarcodeDetector?: new () => { detect: (s: unknown) => Promise<{ rawValue: string }[]> } }).BarcodeDetector
+    const Detector = (
+      window as unknown as {
+        BarcodeDetector?: new () => { detect: (s: unknown) => Promise<{ rawValue: string }[]> }
+      }
+    ).BarcodeDetector
     if (!Detector) {
       setErr('Scanning isn’t supported on this device — type the code instead.')
       return
     }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' },
+      })
       streamRef.current = stream
       setScanning(true)
       const v = videoRef.current
@@ -2323,7 +2400,12 @@ function QrScannerInput({ value, onChange }: { value: unknown; onChange: (v: unk
         </Button>
       </div>
       {scanning ? (
-        <video ref={videoRef} muted playsInline className="w-full max-w-xs rounded border border-slate-200" />
+        <video
+          ref={videoRef}
+          muted
+          playsInline
+          className="w-full max-w-xs rounded border border-slate-200"
+        />
       ) : null}
       {err ? <p className="text-xs text-amber-600">{err}</p> : null}
     </div>
@@ -2362,7 +2444,8 @@ function RankingInput({
     next[j] = tmp
     onChange(next)
   }
-  if (opts.length === 0) return <p className="text-xs text-slate-400">Add options to rank (Element → Options).</p>
+  if (opts.length === 0)
+    return <p className="text-xs text-slate-400">Add options to rank (Element → Options).</p>
   return (
     <ol className="space-y-1">
       {ordered.map((v, i) => (
@@ -2422,7 +2505,12 @@ function RichTextInput({ value, onChange }: { value: unknown; onChange: (v: unkn
         <button type="button" className={btn} title="Italic" onClick={() => exec('italic')}>
           <Italic size={13} />
         </button>
-        <button type="button" className={btn} title="Bulleted list" onClick={() => exec('insertUnorderedList')}>
+        <button
+          type="button"
+          className={btn}
+          title="Bulleted list"
+          onClick={() => exec('insertUnorderedList')}
+        >
           <List size={13} />
         </button>
         <button
@@ -2442,7 +2530,7 @@ function RichTextInput({ value, onChange }: { value: unknown; onChange: (v: unkn
         contentEditable
         suppressContentEditableWarning
         onInput={(e) => onChange((e.target as HTMLDivElement).innerHTML)}
-        className="app-scroll prose prose-sm max-w-none min-h-[80px] max-h-60 overflow-auto p-2 text-sm focus:outline-none"
+        className="app-scroll prose prose-sm max-h-60 min-h-[80px] max-w-none overflow-auto p-2 text-sm focus:outline-none"
       />
     </div>
   )
@@ -2468,7 +2556,9 @@ type NominatimHit = {
 }
 
 function AddressInput({ value, onChange }: { value: unknown; onChange: (v: unknown) => void }) {
-  const v = (value && typeof value === 'object' && !Array.isArray(value) ? value : {}) as AddressValue
+  const v = (
+    value && typeof value === 'object' && !Array.isArray(value) ? value : {}
+  ) as AddressValue
   const [suggestions, setSuggestions] = useState<NominatimHit[]>([])
   const [searching, setSearching] = useState(false)
   const timerRef = useRef<number | null>(null)
@@ -2521,7 +2611,7 @@ function AddressInput({ value, onChange }: { value: unknown; onChange: (v: unkno
           onChange={(e) => onQuery(e.target.value)}
         />
         {searching ? (
-          <span className="absolute right-2 top-2.5 text-xs text-slate-400">…</span>
+          <span className="absolute top-2.5 right-2 text-xs text-slate-400">…</span>
         ) : null}
         {suggestions.length > 0 ? (
           <ul className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-md border border-slate-200 bg-white shadow-lg">
@@ -2546,7 +2636,11 @@ function AddressInput({ value, onChange }: { value: unknown; onChange: (v: unkno
           onChange={(e) => set({ line1: e.target.value })}
           className="col-span-2"
         />
-        <Input value={v.city ?? ''} placeholder="City" onChange={(e) => set({ city: e.target.value })} />
+        <Input
+          value={v.city ?? ''}
+          placeholder="City"
+          onChange={(e) => set({ city: e.target.value })}
+        />
         <Input
           value={v.region ?? ''}
           placeholder="State / region"
@@ -2573,7 +2667,10 @@ function validateOne(field: FormField, value: unknown): string | null {
   // Rich text: an "empty" editor can still hold <br>/<div> markup, so check text.
   if (field.type === 'rich_text') {
     const required = field.required || field.validation?.required
-    const text = String(value ?? '').replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim()
+    const text = String(value ?? '')
+      .replace(/<[^>]*>/g, '')
+      .replace(/&nbsp;/g, ' ')
+      .trim()
     if (required && text === '') return field.validation?.message ?? 'Required'
     return null
   }
@@ -2629,7 +2726,8 @@ function validateOne(field: FormField, value: unknown): string | null {
       if (v?.minLength && s.length < v.minLength) return v?.message ?? `Min ${v.minLength} chars`
       if (v?.maxLength && s.length > v.maxLength) return v?.message ?? `Max ${v.maxLength} chars`
       if (v?.pattern && !new RegExp(v.pattern).test(s)) return v?.message ?? 'Invalid format'
-      if (field.type === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s)) return v?.message ?? 'Invalid email'
+      if (field.type === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s))
+        return v?.message ?? 'Invalid email'
       if (field.type === 'url' && !/^https?:\/\/.+/.test(s)) return v?.message ?? 'Invalid URL'
       return null
     }

@@ -13,5 +13,7 @@ import { DrawerNavigateContext } from '@beaconhs/ui'
 export function NavigationProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const navigate = useCallback((href: string) => router.push(href as never), [router])
-  return <DrawerNavigateContext.Provider value={navigate}>{children}</DrawerNavigateContext.Provider>
+  return (
+    <DrawerNavigateContext.Provider value={navigate}>{children}</DrawerNavigateContext.Provider>
+  )
 }

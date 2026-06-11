@@ -105,7 +105,7 @@ export function CustomerSignatureCard({
           <>
             {currentSignature ? (
               <div className="space-y-1">
-                <div className="text-xs uppercase tracking-wide text-slate-500">
+                <div className="text-xs tracking-wide text-slate-500 uppercase">
                   Signature (locked)
                 </div>
                 <img
@@ -144,12 +144,7 @@ export function CustomerSignatureCard({
                 {pending ? 'Saving…' : 'Save signature'}
               </Button>
               {currentSignature ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={clearSignature}
-                  disabled={pending}
-                >
+                <Button type="button" variant="outline" onClick={clearSignature} disabled={pending}>
                   Clear stored signature
                 </Button>
               ) : null}

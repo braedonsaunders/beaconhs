@@ -146,10 +146,7 @@ export async function recordPpeIssueAction(
         .set({ status: 'returned', currentHolderPersonId: null })
         .where(eq(ppeItems.id, args.itemId))
     } else if (args.action === 'mark_damaged') {
-      await tx
-        .update(ppeItems)
-        .set({ status: 'damaged' })
-        .where(eq(ppeItems.id, args.itemId))
+      await tx.update(ppeItems).set({ status: 'damaged' }).where(eq(ppeItems.id, args.itemId))
     } else if (args.action === 'discard') {
       await tx
         .update(ppeItems)

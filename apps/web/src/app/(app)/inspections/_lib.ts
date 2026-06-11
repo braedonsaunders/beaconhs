@@ -126,126 +126,130 @@ export async function syncCorrectiveActionForCriterion(
   ctx: RequestContext,
   criterionRowId: string,
 ): Promise<string | null> {
-  return ctx.db(async (tx) => {
-    const [row] = await tx
-      .select({
-        c: inspectionRecordCriteria,
-        record: inspectionRecords,
-        type: inspectionTypes,
-      })
-      .from(inspectionRecordCriteria)
-      .innerJoin(inspectionRecords, eq(inspectionRecords.id, inspectionRecordCriteria.recordId))
-      .innerJoin(inspectionTypes, eq(inspectionTypes.id, inspectionRecords.typeId))
-      .where(eq(inspectionRecordCriteria.id, criterionRowId))
-      .limit(1)
-    if (!row) return null
+  return ctx
+    .db(async (tx) => {
+      const [row] = await tx
+        .select({
+          c: inspectionRecordCriteria,
+          record: inspectionRecords,
+          type: inspectionTypes,
+        })
+        .from(inspectionRecordCriteria)
+        .innerJoin(inspectionRecords, eq(inspectionRecords.id, inspectionRecordCriteria.recordId))
+        .innerJoin(inspectionTypes, eq(inspectionTypes.id, inspectionRecords.typeId))
+        .where(eq(inspectionRecordCriteria.id, criterionRowId))
+        .limit(1)
+      if (!row) return null
 
-    // Type-level kill switch
-    if (!row.type.enableCorrectiveActions) return null
+      // Type-level kill switch
+      if (!row.type.enableCorrectiveActions) return null
 
-    const answer = row.c.answer as CriterionAnswer | null
-    const severity = row.c.severity as CriterionSeverity | null
-    const shouldHaveCA = shouldSpawnCorrectiveAction(answer, severity)
+      const answer = row.c.answer as CriterionAnswer | null
+      const severity = row.c.severity as CriterionSeverity | null
+      const shouldHaveCA = shouldSpawnCorrectiveAction(answer, severity)
 
-    // Cleanup: if the user flipped it back to pass/N-A, or the severity
-    // dropped below the threshold, remove the link to the CA. We DON'T
-    // delete the CA itself — a CA might already be in progress.
-    if (!shouldHaveCA) {
-      if (row.c.correctiveActionId) {
-        await tx
-          .update(inspectionRecordCriteria)
-          .set({ correctiveActionId: null })
-          .where(eq(inspectionRecordCriteria.id, criterionRowId))
+      // Cleanup: if the user flipped it back to pass/N-A, or the severity
+      // dropped below the threshold, remove the link to the CA. We DON'T
+      // delete the CA itself — a CA might already be in progress.
+      if (!shouldHaveCA) {
+        if (row.c.correctiveActionId) {
+          await tx
+            .update(inspectionRecordCriteria)
+            .set({ correctiveActionId: null })
+            .where(eq(inspectionRecordCriteria.id, criterionRowId))
+        }
+        return null
       }
-      return null
-    }
 
-    const title = `Inspection finding: ${row.c.questionTextSnapshot.slice(0, 80)}`
-    const description = [
-      row.c.nonComplianceDescription ?? '',
-      row.c.compliantNote ? `\n\nNotes: ${row.c.compliantNote}` : '',
-      row.c.actionTaken ? `\n\nAction taken: ${row.c.actionTaken}` : '',
-    ]
-      .join('')
-      .trim() || row.c.questionTextSnapshot
+      const title = `Inspection finding: ${row.c.questionTextSnapshot.slice(0, 80)}`
+      const description =
+        [
+          row.c.nonComplianceDescription ?? '',
+          row.c.compliantNote ? `\n\nNotes: ${row.c.compliantNote}` : '',
+          row.c.actionTaken ? `\n\nAction taken: ${row.c.actionTaken}` : '',
+        ]
+          .join('')
+          .trim() || row.c.questionTextSnapshot
 
-    // Severity → due offset (in days) — sane defaults that mirror legacy
-    const dayOffset = severity === 'critical' ? 1 : severity === 'high' ? 3 : 7
-    const dueDate = new Date(row.record.occurredAt)
-    dueDate.setDate(dueDate.getDate() + dayOffset)
-    const dueOn = row.c.assignedDueDate ?? dueDate.toISOString().slice(0, 10)
+      // Severity → due offset (in days) — sane defaults that mirror legacy
+      const dayOffset = severity === 'critical' ? 1 : severity === 'high' ? 3 : 7
+      const dueDate = new Date(row.record.occurredAt)
+      dueDate.setDate(dueDate.getDate() + dayOffset)
+      const dueOn = row.c.assignedDueDate ?? dueDate.toISOString().slice(0, 10)
 
-    // Map criterion severity to CA severity (1:1). Drizzle's enum column
-    // doesn't accept null in the set() narrowing so we widen with as-any.
-    const caSeverity = severity ?? 'high'
+      // Map criterion severity to CA severity (1:1). Drizzle's enum column
+      // doesn't accept null in the set() narrowing so we widen with as-any.
+      const caSeverity = severity ?? 'high'
 
-    if (row.c.correctiveActionId) {
-      // Update existing CA in place
-      await tx
-        .update(correctiveActions)
-        .set({
+      if (row.c.correctiveActionId) {
+        // Update existing CA in place
+        await tx
+          .update(correctiveActions)
+          .set({
+            title,
+            description,
+            severity: caSeverity,
+            dueOn,
+            siteOrgUnitId: row.record.siteOrgUnitId,
+            actionTaken: row.c.actionTaken,
+          })
+          .where(eq(correctiveActions.id, row.c.correctiveActionId))
+        return row.c.correctiveActionId
+      }
+
+      // Spawn a new CA
+      const year = new Date().getFullYear()
+      const refRows = await tx
+        .select({ n: count() })
+        .from(correctiveActions)
+        .where(
+          sql`extract(year from coalesce(${correctiveActions.assignedOn}, current_date)) = ${year}`,
+        )
+      const reference = `CA-${year}-${String(Number(refRows[0]?.n ?? 0) + 1).padStart(4, '0')}`
+
+      const [ca] = await tx
+        .insert(correctiveActions)
+        .values({
+          tenantId: ctx.tenantId,
+          reference,
           title,
           description,
           severity: caSeverity,
-          dueOn,
+          status: 'open',
+          source: 'inspection',
+          sourceEntityType: 'inspection_record',
+          sourceEntityId: row.c.recordId,
           siteOrgUnitId: row.record.siteOrgUnitId,
-          actionTaken: row.c.actionTaken,
+          assignedOn: new Date().toISOString().slice(0, 10),
+          dueOn,
+          assignedByTenantUserId: ctx.membership?.id ?? null,
+          ownerTenantUserId: row.c.assignedToTenantUserId ?? ctx.membership?.id ?? null,
         })
-        .where(eq(correctiveActions.id, row.c.correctiveActionId))
-      return row.c.correctiveActionId
-    }
+        .returning()
 
-    // Spawn a new CA
-    const year = new Date().getFullYear()
-    const refRows = await tx
-      .select({ n: count() })
-      .from(correctiveActions)
-      .where(sql`extract(year from coalesce(${correctiveActions.assignedOn}, current_date)) = ${year}`)
-    const reference = `CA-${year}-${String(Number(refRows[0]?.n ?? 0) + 1).padStart(4, '0')}`
+      if (!ca) return null
 
-    const [ca] = await tx
-      .insert(correctiveActions)
-      .values({
-        tenantId: ctx.tenantId,
-        reference,
-        title,
-        description,
-        severity: caSeverity,
-        status: 'open',
-        source: 'inspection',
-        sourceEntityType: 'inspection_record',
-        sourceEntityId: row.c.recordId,
-        siteOrgUnitId: row.record.siteOrgUnitId,
-        assignedOn: new Date().toISOString().slice(0, 10),
-        dueOn,
-        assignedByTenantUserId: ctx.membership?.id ?? null,
-        ownerTenantUserId: row.c.assignedToTenantUserId ?? ctx.membership?.id ?? null,
-      })
-      .returning()
+      // Link back from the criterion row
+      await tx
+        .update(inspectionRecordCriteria)
+        .set({ correctiveActionId: ca.id })
+        .where(eq(inspectionRecordCriteria.id, criterionRowId))
 
-    if (!ca) return null
+      // Audit on the CA itself
+      await tx.execute(sql`SELECT 1`) // no-op to keep the tx open for the audit below
 
-    // Link back from the criterion row
-    await tx
-      .update(inspectionRecordCriteria)
-      .set({ correctiveActionId: ca.id })
-      .where(eq(inspectionRecordCriteria.id, criterionRowId))
-
-    // Audit on the CA itself
-    await tx.execute(sql`SELECT 1`) // no-op to keep the tx open for the audit below
-
-    return ca.id
-  }).then(async (caId) => {
-    // Audit AFTER the transaction so the audit row isn't rolled back if a
-    // downstream caller errors.
-    if (!caId) return null
-    // We only audit when a NEW CA is spawned, not on each update. Determine
-    // that by checking whether the row's correctiveActionId was just set in
-    // this call — best-effort: compare against a freshly-fetched record.
-    return caId
-  })
+      return ca.id
+    })
+    .then(async (caId) => {
+      // Audit AFTER the transaction so the audit row isn't rolled back if a
+      // downstream caller errors.
+      if (!caId) return null
+      // We only audit when a NEW CA is spawned, not on each update. Determine
+      // that by checking whether the row's correctiveActionId was just set in
+      // this call — best-effort: compare against a freshly-fetched record.
+      return caId
+    })
 }
-
 
 /**
  * Walk a record's criteria + return human-readable list of unanswered /

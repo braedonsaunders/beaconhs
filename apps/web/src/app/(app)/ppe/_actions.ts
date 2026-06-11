@@ -33,9 +33,7 @@ function makeBatchId(): string {
   return `bat_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
 }
 
-function safeTenantUserId(
-  ctx: Awaited<ReturnType<typeof requireRequestContext>>,
-): string | null {
+function safeTenantUserId(ctx: Awaited<ReturnType<typeof requireRequestContext>>): string | null {
   const id = ctx.membership?.id
   if (!id || id === 'super-admin') return null
   return id
@@ -86,12 +84,7 @@ export async function bulkIssuePpeToPerson(args: {
       .from(ppeItems)
       .where(inArray(ppeItems.id, ids))
     const editable = rows
-      .filter(
-        (r) =>
-          r.deletedAt === null &&
-          r.status !== 'discarded' &&
-          r.status !== 'expired',
-      )
+      .filter((r) => r.deletedAt === null && r.status !== 'discarded' && r.status !== 'expired')
       .map((r) => r.id)
     const skipped = rows.length - editable.length
     if (editable.length === 0) return { updated: 0, skipped }
@@ -224,9 +217,7 @@ export async function bulkDiscardPpe(args: {
   return { ok: true, updated: result.updated, skipped: result.skipped }
 }
 
-export async function bulkExportPpeCsv(args: {
-  ppeItemIds: string[]
-}): Promise<BulkCsvResult> {
+export async function bulkExportPpeCsv(args: { ppeItemIds: string[] }): Promise<BulkCsvResult> {
   const ctx = await requireRequestContext()
   if (args.ppeItemIds.length === 0) return { ok: false, error: 'No items selected.' }
   const ids = args.ppeItemIds.slice(0, MAX_BULK)

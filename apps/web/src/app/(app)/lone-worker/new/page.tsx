@@ -31,7 +31,10 @@ async function startSession(formData: FormData) {
   const task = String(formData.get('task') ?? '').trim() || null
   const intervalMinutes = Math.max(5, Number(formData.get('intervalMinutes') ?? '30') || 30)
   const gracePeriodMinutes = Math.max(1, Number(formData.get('gracePeriodMinutes') ?? '10') || 10)
-  const durationMinutes = Math.max(intervalMinutes, Number(formData.get('durationMinutes') ?? '120') || 120)
+  const durationMinutes = Math.max(
+    intervalMinutes,
+    Number(formData.get('durationMinutes') ?? '120') || 120,
+  )
   const now = new Date()
   const expectedEndAt = new Date(now.getTime() + durationMinutes * 60 * 1000)
   const nextCheckinDueAt = new Date(now.getTime() + intervalMinutes * 60 * 1000)
@@ -145,10 +148,22 @@ export default async function NewLoneWorkerPage() {
                   <Input name="intervalMinutes" type="number" min="5" defaultValue="30" required />
                 </Field>
                 <Field label="Grace period (min)" required>
-                  <Input name="gracePeriodMinutes" type="number" min="1" defaultValue="10" required />
+                  <Input
+                    name="gracePeriodMinutes"
+                    type="number"
+                    min="1"
+                    defaultValue="10"
+                    required
+                  />
                 </Field>
                 <Field label="Expected duration (min)" required className="sm:col-span-2">
-                  <Input name="durationMinutes" type="number" min="15" defaultValue="120" required />
+                  <Input
+                    name="durationMinutes"
+                    type="number"
+                    min="15"
+                    defaultValue="120"
+                    required
+                  />
                 </Field>
               </div>
               <div className="flex justify-end">

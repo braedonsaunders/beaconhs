@@ -8,15 +8,15 @@ event to a tenant-configured URL with an HMAC SHA-256 signature in the
 
 ```js
 // Node 20+
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual } from 'node:crypto'
 
 function verify(rawBody, headerValue, secret) {
-  const [algo, hex] = headerValue.split("=");
-  if (algo !== "sha256") return false;
-  const expected = createHmac("sha256", secret).update(rawBody).digest("hex");
-  const a = Buffer.from(expected, "hex");
-  const b = Buffer.from(hex, "hex");
-  return a.length === b.length && timingSafeEqual(a, b);
+  const [algo, hex] = headerValue.split('=')
+  if (algo !== 'sha256') return false
+  const expected = createHmac('sha256', secret).update(rawBody).digest('hex')
+  const a = Buffer.from(expected, 'hex')
+  const b = Buffer.from(hex, 'hex')
+  return a.length === b.length && timingSafeEqual(a, b)
 }
 ```
 
@@ -33,7 +33,9 @@ older than a few minutes to prevent replay.
   "tenantId": "uuid",
   "actorId": "uuid|null",
   "occurredAt": "2026-05-19T17:32:11.123Z",
-  "payload": { /* event-specific */ }
+  "payload": {
+    /* event-specific */
+  }
 }
 ```
 

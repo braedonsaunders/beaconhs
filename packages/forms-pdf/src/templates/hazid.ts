@@ -291,7 +291,9 @@ export function renderHazidHtml(input: HazidRenderInput): string {
                   s.csEntrant ? ' · Entrant' : ''
                 }${s.csAttendant ? ' · Attendant' : ''}${s.csRescue ? ' · Rescue' : ''}</div>
                 <div class="sig-line">${
-                  s.signatureDataUrl ? `<img src="${esc(s.signatureDataUrl)}" alt="signature"/>` : '<em>Not signed</em>'
+                  s.signatureDataUrl
+                    ? `<img src="${esc(s.signatureDataUrl)}" alt="signature"/>`
+                    : '<em>Not signed</em>'
                 }</div>
                 <div class="sig-when">${s.signedAt ? esc(fmtDateTime(s.signedAt)) : ''}</div>
               </div>`,

@@ -84,13 +84,21 @@ export function extractParticipants(
     for (const field of section.fields) {
       if (field.type === 'person_picker') {
         const pid = asString(values[field.id])
-        if (pid) raw.push({ personId: pid, signed: false, fieldId: field.id, sectionId: '', role: null })
+        if (pid)
+          raw.push({ personId: pid, signed: false, fieldId: field.id, sectionId: '', role: null })
       } else if (field.type === 'multi_person_picker') {
         const v = values[field.id]
         if (Array.isArray(v)) {
           for (const item of v) {
             const pid = asString(item)
-            if (pid) raw.push({ personId: pid, signed: false, fieldId: field.id, sectionId: '', role: null })
+            if (pid)
+              raw.push({
+                personId: pid,
+                signed: false,
+                fieldId: field.id,
+                sectionId: '',
+                role: null,
+              })
           }
         }
       }

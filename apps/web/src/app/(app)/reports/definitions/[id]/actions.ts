@@ -27,10 +27,7 @@ export async function runOnceFromDefinition(definitionId: string): Promise<void>
       .where(
         and(
           eq(reportDefinitions.id, definitionId),
-          or(
-            isNull(reportDefinitions.tenantId),
-            eq(reportDefinitions.tenantId, ctx.tenantId),
-          ),
+          or(isNull(reportDefinitions.tenantId), eq(reportDefinitions.tenantId, ctx.tenantId)),
         ),
       )
       .limit(1)
@@ -120,9 +117,7 @@ export async function deleteDefinition(definitionId: string): Promise<void> {
       .where(eq(reportSchedules.definitionId, definitionId))
       .limit(1)
     if (subs.length > 0) {
-      throw new Error(
-        'Delete the schedules pointing at this report first, then try again.',
-      )
+      throw new Error('Delete the schedules pointing at this report first, then try again.')
     }
     await tx.delete(reportDefinitions).where(eq(reportDefinitions.id, definitionId))
     return d.name
@@ -141,4 +136,3 @@ export async function deleteDefinition(definitionId: string): Promise<void> {
   revalidatePath('/reports/definitions')
   redirect('/reports/definitions' as any)
 }
-

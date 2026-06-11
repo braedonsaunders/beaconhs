@@ -177,7 +177,7 @@ export function JournalWorkspace({
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 32, stiffness: 320, mass: 0.8 }}
-              className="absolute right-0 top-0 h-full w-[88%] max-w-xs border-l border-slate-200 bg-white shadow-2xl"
+              className="absolute top-0 right-0 h-full w-[88%] max-w-xs border-l border-slate-200 bg-white shadow-2xl"
             >
               {sidebar}
             </motion.aside>

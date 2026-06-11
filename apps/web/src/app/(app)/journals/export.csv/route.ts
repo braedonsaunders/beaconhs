@@ -34,7 +34,18 @@ export async function GET(req: NextRequest) {
 
   return csvResponse({
     filename: csvFilename('journals'),
-    headers: ['Reference', 'Date', 'Title', 'Author', 'Site', 'Type', 'Status', 'Tags', 'Photos', 'Summary'],
+    headers: [
+      'Reference',
+      'Date',
+      'Title',
+      'Author',
+      'Site',
+      'Type',
+      'Status',
+      'Tags',
+      'Photos',
+      'Summary',
+    ],
     rows: rows.map((r) => [
       r.reference,
       r.entryDate,

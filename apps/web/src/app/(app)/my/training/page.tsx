@@ -174,8 +174,16 @@ export default async function MyTrainingPage({
         params.sort === 'course'
           ? [params.dir === 'asc' ? asc(trainingCourses.name) : desc(trainingCourses.name)]
           : params.sort === 'expiresOn'
-            ? [params.dir === 'asc' ? asc(trainingRecords.expiresOn) : desc(trainingRecords.expiresOn)]
-            : [params.dir === 'asc' ? asc(trainingRecords.completedOn) : desc(trainingRecords.completedOn)]
+            ? [
+                params.dir === 'asc'
+                  ? asc(trainingRecords.expiresOn)
+                  : desc(trainingRecords.expiresOn),
+              ]
+            : [
+                params.dir === 'asc'
+                  ? asc(trainingRecords.completedOn)
+                  : desc(trainingRecords.completedOn),
+              ]
 
       const records = await tx
         .select({ rec: trainingRecords, course: trainingCourses })
@@ -292,7 +300,11 @@ export default async function MyTrainingPage({
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {data.courses.map((c) => {
               const label =
-                c.status === 'completed' ? 'Review' : c.status ? `Continue · ${c.percent}%` : 'Start'
+                c.status === 'completed'
+                  ? 'Review'
+                  : c.status
+                    ? `Continue · ${c.percent}%`
+                    : 'Start'
               return (
                 <Card key={c.id} className="flex flex-col">
                   <CardContent className="flex flex-1 flex-col gap-3 py-5">

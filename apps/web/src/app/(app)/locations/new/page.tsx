@@ -58,7 +58,10 @@ async function createCustomer(formData: FormData) {
 export default function NewCustomerPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-6 p-6">
-      <DetailHeader back={{ href: '/locations', label: 'Back to locations' }} title="Add customer" />
+      <DetailHeader
+        back={{ href: '/locations', label: 'Back to locations' }}
+        title="Add customer"
+      />
       <Card>
         <CardContent className="pt-6">
           <form action={createCustomer} className="space-y-4">
@@ -135,9 +138,7 @@ function Field({
   )
 }
 
-function buildAddressFromForm(
-  formData: FormData,
-): {
+function buildAddressFromForm(formData: FormData): {
   line1?: string
   line2?: string
   city?: string

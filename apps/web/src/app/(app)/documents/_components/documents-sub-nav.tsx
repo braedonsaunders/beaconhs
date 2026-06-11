@@ -5,13 +5,7 @@
 
 import { ModuleNav } from '@/components/module-admin/module-nav'
 
-type NavKey =
-  | 'documents'
-  | 'books'
-  | 'reference'
-  | 'management-reviews'
-  | 'types'
-  | 'categories'
+type NavKey = 'documents' | 'books' | 'reference' | 'management-reviews' | 'types' | 'categories'
 
 export function DocumentsSubNav({ active }: { active: NavKey }) {
   return <ModuleNav moduleKey="documents" active={active} />

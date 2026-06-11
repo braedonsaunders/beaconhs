@@ -74,9 +74,7 @@ export default async function UpcomingOilChange({
             description={`Equipment with oil changes due in the next ${days} days, plus everything overdue.`}
             back={{ href: '/equipment/reports', label: 'Back to reports' }}
             actions={
-              <Link
-                href={buildExportHref('/equipment/reports/upcoming-oil-change/export.csv', sp)}
-              >
+              <Link href={buildExportHref('/equipment/reports/upcoming-oil-change/export.csv', sp)}>
                 <Button variant="outline">Export CSV</Button>
               </Link>
             }
@@ -125,8 +123,7 @@ export default async function UpcomingOilChange({
             </TableHeader>
             <TableBody>
               {rows.map(({ item, type, site, holder }) => {
-                const overdue =
-                  item.nextOilChangeDue !== null && item.nextOilChangeDue < today
+                const overdue = item.nextOilChangeDue !== null && item.nextOilChangeDue < today
                 return (
                   <TableRow key={item.id}>
                     <TableCell className="font-mono text-xs">
@@ -140,10 +137,8 @@ export default async function UpcomingOilChange({
                     <TableCell className="text-slate-600">
                       {holder ? `${holder.firstName} ${holder.lastName}` : '—'}
                     </TableCell>
-                    <TableCell className="text-slate-600">
-                      {item.lastOilChangeOn ?? '—'}
-                    </TableCell>
-                    <TableCell className={overdue ? 'text-red-700 font-medium' : 'text-slate-700'}>
+                    <TableCell className="text-slate-600">{item.lastOilChangeOn ?? '—'}</TableCell>
+                    <TableCell className={overdue ? 'font-medium text-red-700' : 'text-slate-700'}>
                       {item.nextOilChangeDue ?? 'unscheduled'}
                       {overdue ? (
                         <Badge variant="destructive" className="ml-2">

@@ -37,7 +37,7 @@ export default async function JournalRecordsPage() {
           title="Journal records"
           description="Browse, filter, and read every journal you have access to — by person, site, date, and more."
         />
-        <div className="pb-3 pt-2">
+        <div className="pt-2 pb-3">
           <ModuleSubNav tabs={moduleManageTabs('journals')} active="records" />
         </div>
       </div>

@@ -7,14 +7,7 @@
 
 import { notFound } from 'next/navigation'
 import { eq } from 'drizzle-orm'
-import {
-  Badge,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  DetailHeader,
-} from '@beaconhs/ui'
+import { Badge, Card, CardContent, CardHeader, CardTitle, DetailHeader } from '@beaconhs/ui'
 import { db, withSuperAdmin } from '@beaconhs/db'
 import { emailLog, tenants } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
@@ -29,7 +22,9 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   return { title: `Email · ${id.slice(0, 8)}` }
 }
 
-function statusVariant(status: string): 'secondary' | 'success' | 'destructive' | 'warning' | 'outline' {
+function statusVariant(
+  status: string,
+): 'secondary' | 'success' | 'destructive' | 'warning' | 'outline' {
   switch (status) {
     case 'sent':
       return 'success'
@@ -46,11 +41,7 @@ function statusVariant(status: string): 'secondary' | 'success' | 'destructive' 
   }
 }
 
-export default async function EmailLogDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>
-}) {
+export default async function EmailLogDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const ctx = await requireRequestContext()
 
@@ -207,10 +198,8 @@ export default async function EmailLogDetailPage({
           />
           {log.errorMessage ? (
             <div className="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-              <div className="mb-1 text-xs font-semibold uppercase tracking-wide">
-                Error
-              </div>
-              <pre className="whitespace-pre-wrap font-mono text-[12px]">{log.errorMessage}</pre>
+              <div className="mb-1 text-xs font-semibold tracking-wide uppercase">Error</div>
+              <pre className="font-mono text-[12px] whitespace-pre-wrap">{log.errorMessage}</pre>
             </div>
           ) : null}
         </Section>
@@ -247,7 +236,7 @@ export default async function EmailLogDetailPage({
           </CardHeader>
           <CardContent>
             {log.textBody ? (
-              <pre className="max-h-[640px] overflow-auto whitespace-pre-wrap rounded-md border border-slate-200 bg-slate-50 p-3 font-mono text-[12px] text-slate-800">
+              <pre className="max-h-[640px] overflow-auto rounded-md border border-slate-200 bg-slate-50 p-3 font-mono text-[12px] whitespace-pre-wrap text-slate-800">
                 {log.textBody}
               </pre>
             ) : (

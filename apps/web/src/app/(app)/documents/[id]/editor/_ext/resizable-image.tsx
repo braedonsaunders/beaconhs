@@ -53,7 +53,7 @@ function ImageView({ node, updateAttributes, selected, editor }: NodeViewProps) 
         />
         {editor.isEditable ? (
           <>
-            <div className="absolute left-1 top-1 hidden gap-0.5 rounded bg-white/95 p-0.5 shadow ring-1 ring-slate-200 group-hover:flex">
+            <div className="absolute top-1 left-1 hidden gap-0.5 rounded bg-white/95 p-0.5 shadow ring-1 ring-slate-200 group-hover:flex">
               {(['left', 'center', 'right'] as const).map((a) => (
                 <button
                   key={a}
@@ -74,7 +74,7 @@ function ImageView({ node, updateAttributes, selected, editor }: NodeViewProps) 
             </div>
             <span
               onPointerDown={startResize}
-              className="absolute -bottom-1.5 -right-1.5 h-3.5 w-3.5 cursor-nwse-resize rounded-full border-2 border-white bg-teal-500 opacity-0 shadow group-hover:opacity-100"
+              className="absolute -right-1.5 -bottom-1.5 h-3.5 w-3.5 cursor-nwse-resize rounded-full border-2 border-white bg-teal-500 opacity-0 shadow group-hover:opacity-100"
             />
           </>
         ) : null}

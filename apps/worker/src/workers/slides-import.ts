@@ -20,12 +20,7 @@ import { randomUUID } from 'node:crypto'
 import { eq } from 'drizzle-orm'
 import JSZip from 'jszip'
 import { db, withTenant } from '@beaconhs/db'
-import {
-  attachments,
-  trainingContentItems,
-  trainingLessons,
-  type Slide,
-} from '@beaconhs/db/schema'
+import { attachments, trainingContentItems, trainingLessons, type Slide } from '@beaconhs/db/schema'
 import { getObject, newAttachmentKey, putObject } from '@beaconhs/storage'
 import { audit } from '@beaconhs/audit'
 

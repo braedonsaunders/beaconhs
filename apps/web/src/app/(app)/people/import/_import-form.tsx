@@ -12,13 +12,7 @@
 
 import { useMemo, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import {
-  AlertTriangle,
-  CheckCircle2,
-  FileText,
-  Loader2,
-  Upload,
-} from 'lucide-react'
+import { AlertTriangle, CheckCircle2, FileText, Loader2, Upload } from 'lucide-react'
 import {
   Badge,
   Button,
@@ -38,13 +32,7 @@ import { toast } from '@/lib/toast'
 import { importPeopleCsv, type ImportResult } from '../_actions/import'
 
 const REQUIRED_HEADERS = ['first_name', 'last_name']
-const OPTIONAL_HEADERS = [
-  'email',
-  'employee_no',
-  'hire_date',
-  'department',
-  'trade',
-]
+const OPTIONAL_HEADERS = ['email', 'employee_no', 'hire_date', 'department', 'trade']
 
 type ParsedRow = {
   lineNo: number
@@ -137,7 +125,9 @@ export function ImportPeopleForm({
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-xs text-slate-600">
-            <div className="mb-1 font-medium text-slate-700">Expected columns (header row required)</div>
+            <div className="mb-1 font-medium text-slate-700">
+              Expected columns (header row required)
+            </div>
             <div className="flex flex-wrap gap-1">
               {REQUIRED_HEADERS.map((h) => (
                 <Badge key={h} variant="destructive">
@@ -152,14 +142,21 @@ export function ImportPeopleForm({
             </div>
             <div className="mt-1 text-[11px] text-slate-500">
               <span className="inline-flex items-center gap-1">
-                <Badge variant="destructive" className="px-1.5 py-0">required</Badge> first_name, last_name
+                <Badge variant="destructive" className="px-1.5 py-0">
+                  required
+                </Badge>{' '}
+                first_name, last_name
               </span>
               <span className="ml-3 inline-flex items-center gap-1">
-                <Badge variant="secondary" className="px-1.5 py-0">optional</Badge> everything else
+                <Badge variant="secondary" className="px-1.5 py-0">
+                  optional
+                </Badge>{' '}
+                everything else
               </span>
             </div>
             <div className="mt-1 text-[11px] text-slate-500">
-              hire_date must be in YYYY-MM-DD format. department / trade are matched by name to existing records (case-insensitive).
+              hire_date must be in YYYY-MM-DD format. department / trade are matched by name to
+              existing records (case-insensitive).
             </div>
           </div>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto]">
@@ -184,11 +181,7 @@ export function ImportPeopleForm({
                   if (f) onFile(f)
                 }}
               />
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => inputRef.current?.click()}
-              >
+              <Button type="button" variant="outline" onClick={() => inputRef.current?.click()}>
                 <FileText size={14} className="mr-1" />
                 Upload CSV file
               </Button>
@@ -251,9 +244,13 @@ export function ImportPeopleForm({
                         {r.firstName} {r.lastName}
                       </TableCell>
                       <TableCell className="text-xs text-slate-600">{r.email ?? '—'}</TableCell>
-                      <TableCell className="text-xs text-slate-600">{r.employeeNo ?? '—'}</TableCell>
+                      <TableCell className="text-xs text-slate-600">
+                        {r.employeeNo ?? '—'}
+                      </TableCell>
                       <TableCell className="text-xs text-slate-600">{r.hireDate ?? '—'}</TableCell>
-                      <TableCell className="text-xs text-slate-600">{r.department ?? '—'}</TableCell>
+                      <TableCell className="text-xs text-slate-600">
+                        {r.department ?? '—'}
+                      </TableCell>
                       <TableCell className="text-xs text-slate-600">{r.trade ?? '—'}</TableCell>
                       <TableCell>
                         {r.errors.length === 0 ? (
@@ -274,11 +271,7 @@ export function ImportPeopleForm({
               </Table>
             </div>
             <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-3">
-              <Button
-                type="button"
-                onClick={submit}
-                disabled={pending || validRows.length === 0}
-              >
+              <Button type="button" onClick={submit} disabled={pending || validRows.length === 0}>
                 {pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
                 Import {validRows.length} {validRows.length === 1 ? 'person' : 'people'}
               </Button>

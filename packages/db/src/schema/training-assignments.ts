@@ -42,15 +42,15 @@ export const trainingAudienceAssignmentTargetKind = pgEnum(
   ['person', 'trade', 'role', 'everyone'],
 )
 
-export const trainingAudienceAssignmentItemKind = pgEnum(
-  'training_audience_assignment_item_kind',
-  ['course', 'assessment_type'],
-)
+export const trainingAudienceAssignmentItemKind = pgEnum('training_audience_assignment_item_kind', [
+  'course',
+  'assessment_type',
+])
 
-export const trainingAudienceAssignmentStatus = pgEnum(
-  'training_audience_assignment_status',
-  ['active', 'archived'],
-)
+export const trainingAudienceAssignmentStatus = pgEnum('training_audience_assignment_status', [
+  'active',
+  'archived',
+])
 
 export const trainingAudienceAssignments = pgTable(
   'training_audience_assignments',
@@ -110,9 +110,7 @@ export const trainingAudienceAssignmentTargets = pgTable(
     ...timestamps,
   },
   (t) => ({
-    assignmentIdx: index('training_audience_assignment_targets_assignment_idx').on(
-      t.assignmentId,
-    ),
+    assignmentIdx: index('training_audience_assignment_targets_assignment_idx').on(t.assignmentId),
     tenantIdx: index('training_audience_assignment_targets_tenant_idx').on(t.tenantId),
   }),
 )
@@ -144,23 +142,13 @@ export const trainingAudienceAssignmentRecords = pgTable(
     // Whichever underlying record satisfied this assignment.
     sourceTrainingRecordId: uuid('source_training_record_id'),
     sourceAssessmentId: uuid('source_assessment_id'),
-    lastEvaluatedAt: timestamp('last_evaluated_at', { withTimezone: true })
-      .defaultNow()
-      .notNull(),
+    lastEvaluatedAt: timestamp('last_evaluated_at', { withTimezone: true }).defaultNow().notNull(),
     ...timestamps,
   },
   (t) => ({
-    assignmentIdx: index('training_audience_assignment_records_assignment_idx').on(
-      t.assignmentId,
-    ),
-    personIdx: index('training_audience_assignment_records_person_idx').on(
-      t.tenantId,
-      t.personId,
-    ),
-    statusIdx: index('training_audience_assignment_records_status_idx').on(
-      t.tenantId,
-      t.status,
-    ),
+    assignmentIdx: index('training_audience_assignment_records_assignment_idx').on(t.assignmentId),
+    personIdx: index('training_audience_assignment_records_person_idx').on(t.tenantId, t.personId),
+    statusIdx: index('training_audience_assignment_records_status_idx').on(t.tenantId, t.status),
     uniqAssignmentPerson: uniqueIndex('training_audience_assignment_records_uq').on(
       t.assignmentId,
       t.personId,
@@ -234,9 +222,7 @@ export const trainingAudienceAssignmentRecordsRelations = relations(
 
 // Re-export the boolean used by the compliance helpers. Not a table; just a
 // convenient symbolic constant other modules can import for completeness.
-export const TRAINING_AUDIENCE_ASSIGNMENT_RECORD_COMPLETED_STATUSES = [
-  'completed',
-] as const
+export const TRAINING_AUDIENCE_ASSIGNMENT_RECORD_COMPLETED_STATUSES = ['completed'] as const
 
 // Unused helper to silence "TRAINING_AUDIENCE..." linter warning if removed
 // elsewhere. Type-only export for boolean.

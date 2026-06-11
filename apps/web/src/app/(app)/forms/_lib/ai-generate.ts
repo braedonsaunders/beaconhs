@@ -91,8 +91,16 @@ export async function generateAppFromPrompt(
       attempt === 0
         ? `Build an App for: ${prompt}`
         : `Build an App for: ${prompt}\n\nYour previous JSON was invalid (${lastErr}). Return corrected JSON only.`
-    const text = await runBuilderPrompt(config, { system: APP_SYSTEM, prompt: userPrompt, tier: 'smart' })
-    if (!text) return { ok: false, error: 'AI is not configured for this workspace, or the model did not respond.' }
+    const text = await runBuilderPrompt(config, {
+      system: APP_SYSTEM,
+      prompt: userPrompt,
+      tier: 'smart',
+    })
+    if (!text)
+      return {
+        ok: false,
+        error: 'AI is not configured for this workspace, or the model did not respond.',
+      }
     let json: unknown
     try {
       json = extractJson(text)
@@ -124,8 +132,16 @@ export async function generateAppEdit(
       attempt === 0
         ? base
         : `${base}\n\nYour previous JSON was invalid (${lastErr}). Return corrected JSON only.`
-    const text = await runBuilderPrompt(config, { system: APP_SYSTEM, prompt: userPrompt, tier: 'smart' })
-    if (!text) return { ok: false, error: 'AI is not configured for this workspace, or the model did not respond.' }
+    const text = await runBuilderPrompt(config, {
+      system: APP_SYSTEM,
+      prompt: userPrompt,
+      tier: 'smart',
+    })
+    if (!text)
+      return {
+        ok: false,
+        error: 'AI is not configured for this workspace, or the model did not respond.',
+      }
     let json: unknown
     try {
       json = extractJson(text)
@@ -178,7 +194,10 @@ export async function generateFlowFromPrompt(
   prompt: string,
   fieldIds: string[],
 ): Promise<GenResult<AutomationGraph>> {
-  const system = FLOW_SYSTEM.replace('{{FIELD_IDS}}', fieldIds.length ? fieldIds.join(', ') : '(none yet)')
+  const system = FLOW_SYSTEM.replace(
+    '{{FIELD_IDS}}',
+    fieldIds.length ? fieldIds.join(', ') : '(none yet)',
+  )
   const fieldIdSet = new Set(fieldIds)
   let lastErr = ''
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -187,7 +206,11 @@ export async function generateFlowFromPrompt(
         ? `Build a Flow for: ${prompt}`
         : `Build a Flow for: ${prompt}\n\nYour previous JSON was invalid (${lastErr}). Return corrected JSON only.`
     const text = await runBuilderPrompt(config, { system, prompt: userPrompt, tier: 'smart' })
-    if (!text) return { ok: false, error: 'AI is not configured for this workspace, or the model did not respond.' }
+    if (!text)
+      return {
+        ok: false,
+        error: 'AI is not configured for this workspace, or the model did not respond.',
+      }
     let json: unknown
     try {
       json = extractJson(text)
@@ -197,7 +220,11 @@ export async function generateFlowFromPrompt(
     }
     const parsed = automationGraphSchema.safeParse(json)
     if (parsed.success) {
-      return { ok: true, value: parsed.data, warnings: lintAutomationGraph(parsed.data, fieldIdSet) }
+      return {
+        ok: true,
+        value: parsed.data,
+        warnings: lintAutomationGraph(parsed.data, fieldIdSet),
+      }
     }
     lastErr = zodIssues(parsed.error)
   }

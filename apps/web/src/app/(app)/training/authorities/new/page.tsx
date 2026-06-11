@@ -1,14 +1,6 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import {
-  Button,
-  Card,
-  CardContent,
-  DetailHeader,
-  Input,
-  Label,
-  Textarea,
-} from '@beaconhs/ui'
+import { Button, Card, CardContent, DetailHeader, Input, Label, Textarea } from '@beaconhs/ui'
 import { trainingSkillAuthorities } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule, requireModuleManage } from '@/lib/module-admin/guard'

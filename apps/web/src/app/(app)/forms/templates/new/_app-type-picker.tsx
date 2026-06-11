@@ -114,9 +114,7 @@ export function AppTypePicker() {
 
       <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-end">
         <div className="flex-1 space-y-1.5">
-          <Label htmlFor="app-name">
-            Name your {active.title.toLowerCase()}
-          </Label>
+          <Label htmlFor="app-name">Name your {active.title.toLowerCase()}</Label>
           <Input
             id="app-name"
             value={name}
@@ -137,7 +135,9 @@ export function AppTypePicker() {
           />
         </div>
         <Button onClick={create} disabled={pending} className="shrink-0">
-          {pending ? 'Creating…' : (
+          {pending ? (
+            'Creating…'
+          ) : (
             <>
               Create {active.title} <ArrowRight size={15} />
             </>

@@ -157,10 +157,9 @@ export const incidents = pgTable(
     // Coexists with the legacy `classification` JSON column (which carries
     // the materialised path so old reports keep rendering after an
     // archive).
-    classificationId: uuid('classification_id').references(
-      () => incidentClassifications.id,
-      { onDelete: 'set null' },
-    ),
+    classificationId: uuid('classification_id').references(() => incidentClassifications.id, {
+      onDelete: 'set null',
+    }),
 
     // Investigation
     rootCause: text('root_cause'),
@@ -250,7 +249,11 @@ export const incidentInjuries = pgTable(
 )
 
 // Lost time transitions (off → restricted → full duty)
-export const lostTimeStatus = pgEnum('lost_time_status', ['off_work', 'restricted_duty', 'full_duty'])
+export const lostTimeStatus = pgEnum('lost_time_status', [
+  'off_work',
+  'restricted_duty',
+  'full_duty',
+])
 
 export const incidentLostTimeEvents = pgTable(
   'incident_lost_time_events',
@@ -318,10 +321,9 @@ export const incidentEvents = pgTable(
       .notNull()
       .references(() => incidents.id, { onDelete: 'cascade' }),
     occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
-    recordedByTenantUserId: uuid('recorded_by_tenant_user_id').references(
-      () => tenantUsers.id,
-      { onDelete: 'set null' },
-    ),
+    recordedByTenantUserId: uuid('recorded_by_tenant_user_id').references(() => tenantUsers.id, {
+      onDelete: 'set null',
+    }),
     description: text('description').notNull(),
     ...timestamps,
   },

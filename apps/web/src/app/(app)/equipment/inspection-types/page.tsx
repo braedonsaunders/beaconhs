@@ -188,7 +188,7 @@ export default async function InspectionTypesPage() {
                           ) : null}
                         </TableCell>
                         <TableCell className="text-slate-600">
-                          {applies?.name ?? <span className="italic text-slate-400">any</span>}
+                          {applies?.name ?? <span className="text-slate-400 italic">any</span>}
                         </TableCell>
                         <TableCell>
                           <Badge variant="secondary">{t.interval.replace('_', ' ')}</Badge>
@@ -275,7 +275,7 @@ export default async function InspectionTypesPage() {
                 <span>Failed criterion auto-creates a work order</span>
               </label>
             </div>
-            <div className="sm:col-span-2 flex justify-end">
+            <div className="flex justify-end sm:col-span-2">
               <Button type="submit">Create template</Button>
             </div>
           </form>

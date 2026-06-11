@@ -3,12 +3,7 @@
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { Badge } from '@beaconhs/ui'
-import {
-  BulkPpeBar,
-  HeaderSelectAll,
-  SelectionCheckbox,
-  type PpeHolderOption,
-} from './_bulk-bar'
+import { BulkPpeBar, HeaderSelectAll, SelectionCheckbox, type PpeHolderOption } from './_bulk-bar'
 
 export type PpeTableRow = {
   id: string
@@ -57,7 +52,7 @@ export function PpeRecordsTable({
       <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs uppercase tracking-wide text-slate-500">
+            <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase">
               <th className="w-8 px-3 py-2">
                 <HeaderSelectAll allSelected={allSelected} onToggleAll={toggleAll} />
               </th>
@@ -73,16 +68,9 @@ export function PpeRecordsTable({
             {rows.map((r) => {
               const isSelected = selected.has(r.id)
               return (
-                <tr
-                  key={r.id}
-                  className={isSelected ? 'bg-teal-50/40' : 'hover:bg-slate-50/50'}
-                >
+                <tr key={r.id} className={isSelected ? 'bg-teal-50/40' : 'hover:bg-slate-50/50'}>
                   <td className="w-8 px-3 py-2">
-                    <SelectionCheckbox
-                      id={r.id}
-                      selected={isSelected}
-                      onToggle={toggleOne}
-                    />
+                    <SelectionCheckbox id={r.id} selected={isSelected} onToggle={toggleOne} />
                   </td>
                   <td className="px-3 py-2">
                     <Link
@@ -108,20 +96,14 @@ export function PpeRecordsTable({
                     </Badge>
                   </td>
                   <td className="px-3 py-2 text-slate-600">{r.holderName ?? '—'}</td>
-                  <td className="px-3 py-2 text-slate-600">
-                    {r.nextInspectionDue ?? '—'}
-                  </td>
+                  <td className="px-3 py-2 text-slate-600">{r.nextInspectionDue ?? '—'}</td>
                 </tr>
               )
             })}
           </tbody>
         </table>
       </div>
-      <BulkPpeBar
-        selectedIds={Array.from(selected)}
-        onClear={clear}
-        holders={holders}
-      />
+      <BulkPpeBar selectedIds={Array.from(selected)} onClear={clear} holders={holders} />
     </>
   )
 }

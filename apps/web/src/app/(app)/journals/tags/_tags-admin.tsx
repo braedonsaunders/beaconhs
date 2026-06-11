@@ -33,7 +33,8 @@ export function TagsAdmin({ initialTags }: { initialTags: ManagedTag[] }) {
 
   const q = query.trim().toLowerCase()
   const filtered = useMemo(
-    () => (q ? tags.filter((t) => t.name.includes(q) || t.description?.toLowerCase().includes(q)) : tags),
+    () =>
+      q ? tags.filter((t) => t.name.includes(q) || t.description?.toLowerCase().includes(q)) : tags,
     [tags, q],
   )
   const totalUses = useMemo(() => tags.reduce((n, t) => n + t.usage, 0), [tags])
@@ -61,7 +62,9 @@ export function TagsAdmin({ initialTags }: { initialTags: ManagedTag[] }) {
     )
   }
   function onMerge(source: string, target: string) {
-    startTransition(async () => apply(await mergeTag({ source, target }), `Merged into “${target}”`))
+    startTransition(async () =>
+      apply(await mergeTag({ source, target }), `Merged into “${target}”`),
+    )
   }
   function onDelete(name: string, usage: number) {
     const msg = usage
@@ -76,7 +79,7 @@ export function TagsAdmin({ initialTags }: { initialTags: ManagedTag[] }) {
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-0 flex-1">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Search size={15} className="absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" />
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -85,7 +88,8 @@ export function TagsAdmin({ initialTags }: { initialTags: ManagedTag[] }) {
           />
         </div>
         <div className="hidden text-xs text-slate-500 sm:block">
-          {tags.length} {tags.length === 1 ? 'tag' : 'tags'} · {totalUses} use{totalUses === 1 ? '' : 's'}
+          {tags.length} {tags.length === 1 ? 'tag' : 'tags'} · {totalUses} use
+          {totalUses === 1 ? '' : 's'}
         </div>
         <Button
           type="button"
@@ -193,13 +197,13 @@ function TagRow({
         {tag.description ? (
           <span className="truncate text-sm text-slate-500">{tag.description}</span>
         ) : !tag.defined ? (
-          <span className="text-xs italic text-slate-400">ad-hoc</span>
+          <span className="text-xs text-slate-400 italic">ad-hoc</span>
         ) : null}
       </div>
 
       <div className="flex shrink-0 items-center gap-3">
         <UsageMeter tag={tag} />
-        <div className="flex items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+        <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
           <IconBtn label="Edit" onClick={onEdit} disabled={disabled}>
             <Pencil size={14} />
           </IconBtn>
@@ -224,7 +228,7 @@ function UsageMeter({ tag }: { tag: ManagedTag }) {
       <span className="font-medium text-slate-700">{tag.usage}</span>
       {tag.usage === 1 ? 'entry' : 'entries'}
       {tag.aiCount > 0 ? (
-        <span className="inline-flex items-center gap-0.5 rounded-full bg-teal-50 px-1.5 py-0.5 text-[10px] font-medium text-teal-700 ring-1 ring-inset ring-teal-600/15">
+        <span className="inline-flex items-center gap-0.5 rounded-full bg-teal-50 px-1.5 py-0.5 text-[10px] font-medium text-teal-700 ring-1 ring-teal-600/15 ring-inset">
           <Sparkles size={9} /> {tag.aiCount}
         </span>
       ) : null}
@@ -271,7 +275,12 @@ function MergeRow({
         <strong>{tag.name}</strong> will be removed.
       </p>
       <div className="flex items-center gap-2">
-        <Button type="button" size="sm" disabled={pending || !target} onClick={() => onMerge(target)}>
+        <Button
+          type="button"
+          size="sm"
+          disabled={pending || !target}
+          onClick={() => onMerge(target)}
+        >
           <GitMerge size={14} /> Merge
         </Button>
         <button type="button" onClick={onCancel} className="text-sm text-slate-500 hover:underline">
@@ -317,7 +326,9 @@ function TagForm({
     <div className="space-y-3">
       <div className="flex flex-wrap items-end gap-3">
         <div className="min-w-[10rem] flex-1 space-y-1">
-          <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Name</label>
+          <label className="text-[11px] font-medium tracking-wide text-slate-400 uppercase">
+            Name
+          </label>
           <Input
             autoFocus
             value={name}
@@ -333,7 +344,9 @@ function TagForm({
           />
         </div>
         <div className="space-y-1">
-          <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Preview</label>
+          <label className="text-[11px] font-medium tracking-wide text-slate-400 uppercase">
+            Preview
+          </label>
           <div className="flex h-10 items-center">
             <Chip name={clean || 'preview'} color={color} />
           </div>
@@ -341,13 +354,15 @@ function TagForm({
       </div>
 
       <div className="space-y-1.5">
-        <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Colour</label>
+        <label className="text-[11px] font-medium tracking-wide text-slate-400 uppercase">
+          Colour
+        </label>
         <ColorSwatches value={color} onChange={setColor} />
       </div>
 
       <div className="space-y-1">
-        <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
-          Description <span className="font-normal normal-case text-slate-400">(optional)</span>
+        <label className="text-[11px] font-medium tracking-wide text-slate-400 uppercase">
+          Description <span className="font-normal text-slate-400 normal-case">(optional)</span>
         </label>
         <Textarea
           value={description}
@@ -369,7 +384,13 @@ function TagForm({
   )
 }
 
-function ColorSwatches({ value, onChange }: { value: string | null; onChange: (c: string | null) => void }) {
+function ColorSwatches({
+  value,
+  onChange,
+}: {
+  value: string | null
+  onChange: (c: string | null) => void
+}) {
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       {TAG_COLOR_KEYS.map((key) => {

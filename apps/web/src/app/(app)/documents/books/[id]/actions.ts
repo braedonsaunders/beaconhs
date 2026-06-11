@@ -39,10 +39,7 @@ export async function reorderBookItemsAction(
   revalidatePath(`/documents/books/${bookId}`)
 }
 
-export async function removeBookItemAction(
-  bookId: string,
-  documentId: string,
-): Promise<void> {
+export async function removeBookItemAction(bookId: string, documentId: string): Promise<void> {
   const ctx = await requireRequestContext()
   if (!bookId || !documentId) return
   await ctx.db(async (tx) => {

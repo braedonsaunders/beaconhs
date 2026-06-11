@@ -151,7 +151,13 @@ function personRow(
   }
 }
 
-async function evalTraining(tx: Tx, tid: string, members: ResolvedMember[], ob: Ob, today: string): Promise<EvalResult> {
+async function evalTraining(
+  tx: Tx,
+  tid: string,
+  members: ResolvedMember[],
+  ob: Ob,
+  today: string,
+): Promise<EvalResult> {
   if (members.length === 0) return empty()
   const ids = members.map((m) => m.personId)
   const names = await loadNames(tx, ids)
@@ -160,7 +166,10 @@ async function evalTraining(tx: Tx, tid: string, members: ResolvedMember[], ob: 
 
   if (ref.trainingItemKind === 'assessment_type' && ref.assessmentTypeId) {
     const rows = await tx
-      .select({ personId: trainingAssessments.personId, completedAt: trainingAssessments.completedAt })
+      .select({
+        personId: trainingAssessments.personId,
+        completedAt: trainingAssessments.completedAt,
+      })
       .from(trainingAssessments)
       .where(
         and(
@@ -172,10 +181,15 @@ async function evalTraining(tx: Tx, tid: string, members: ResolvedMember[], ob: 
           isNull(trainingAssessments.deletedAt),
         ),
       )
-    for (const r of rows) if (r.completedAt) done.set(r.personId, r.completedAt.toISOString().slice(0, 10))
+    for (const r of rows)
+      if (r.completedAt) done.set(r.personId, r.completedAt.toISOString().slice(0, 10))
   } else if (ref.courseId) {
     const rows = await tx
-      .select({ personId: trainingRecords.personId, completedOn: trainingRecords.completedOn, expiresOn: trainingRecords.expiresOn })
+      .select({
+        personId: trainingRecords.personId,
+        completedOn: trainingRecords.completedOn,
+        expiresOn: trainingRecords.expiresOn,
+      })
       .from(trainingRecords)
       .where(
         and(
@@ -192,7 +206,11 @@ async function evalTraining(tx: Tx, tid: string, members: ResolvedMember[], ob: 
   } else if (ref.skillTypeId) {
     // cert_requirement satisfied by holding a valid (non-expired) skill grant of this type
     const rows = await tx
-      .select({ personId: trainingSkillAssignments.personId, grantedOn: trainingSkillAssignments.grantedOn, expiresOn: trainingSkillAssignments.expiresOn })
+      .select({
+        personId: trainingSkillAssignments.personId,
+        grantedOn: trainingSkillAssignments.grantedOn,
+        expiresOn: trainingSkillAssignments.expiresOn,
+      })
       .from(trainingSkillAssignments)
       .where(
         and(
@@ -212,19 +230,36 @@ async function evalTraining(tx: Tx, tid: string, members: ResolvedMember[], ob: 
     ids.map((pid) => {
       const c = done.get(pid)
       const status: EvalStatus = c ? 'completed' : dueOn && dueOn < today ? 'overdue' : 'pending'
-      return personRow(pid, names.get(pid) ?? '(unnamed)', status, { dueOn, completedOn: c ?? null })
+      return personRow(pid, names.get(pid) ?? '(unnamed)', status, {
+        dueOn,
+        completedOn: c ?? null,
+      })
     }),
   )
 }
 
-async function evalDocument(tx: Tx, tid: string, members: ResolvedMember[], ob: Ob, today: string): Promise<EvalResult> {
+async function evalDocument(
+  tx: Tx,
+  tid: string,
+  members: ResolvedMember[],
+  ob: Ob,
+  today: string,
+): Promise<EvalResult> {
   if (members.length === 0 || !ob.targetRef?.documentId) return empty()
   const ids = members.map((m) => m.personId)
   const names = await loadNames(tx, ids)
   const acks = await tx
-    .select({ personId: documentAcknowledgments.personId, at: documentAcknowledgments.acknowledgedAt })
+    .select({
+      personId: documentAcknowledgments.personId,
+      at: documentAcknowledgments.acknowledgedAt,
+    })
     .from(documentAcknowledgments)
-    .where(and(eq(documentAcknowledgments.documentId, ob.targetRef.documentId), inArray(documentAcknowledgments.personId, ids)))
+    .where(
+      and(
+        eq(documentAcknowledgments.documentId, ob.targetRef.documentId),
+        inArray(documentAcknowledgments.personId, ids),
+      ),
+    )
   const ackedAt = new Map<string, Date>()
   for (const a of acks) ackedAt.set(a.personId, a.at)
   const dueOn = ob.recurrence?.dueOn ?? null
@@ -232,12 +267,21 @@ async function evalDocument(tx: Tx, tid: string, members: ResolvedMember[], ob: 
     ids.map((pid) => {
       const a = ackedAt.get(pid)
       const status: EvalStatus = a ? 'completed' : dueOn && dueOn < today ? 'overdue' : 'pending'
-      return personRow(pid, names.get(pid) ?? '(unnamed)', status, { dueOn, completedOn: a ? a.toISOString().slice(0, 10) : null })
+      return personRow(pid, names.get(pid) ?? '(unnamed)', status, {
+        dueOn,
+        completedOn: a ? a.toISOString().slice(0, 10) : null,
+      })
     }),
   )
 }
 
-async function evalJournal(tx: Tx, tid: string, members: ResolvedMember[], ob: Ob, today: string): Promise<EvalResult> {
+async function evalJournal(
+  tx: Tx,
+  tid: string,
+  members: ResolvedMember[],
+  ob: Ob,
+  today: string,
+): Promise<EvalResult> {
   if (members.length === 0) return empty()
   const ids = members.map((m) => m.personId)
   const names = await loadNames(tx, ids)
@@ -266,13 +310,22 @@ async function evalJournal(tx: Tx, tid: string, members: ResolvedMember[], ob: O
   )
 }
 
-async function evalForm(tx: Tx, tid: string, members: ResolvedMember[], ob: Ob, today: string): Promise<EvalResult> {
+async function evalForm(
+  tx: Tx,
+  tid: string,
+  members: ResolvedMember[],
+  ob: Ob,
+  today: string,
+): Promise<EvalResult> {
   if (members.length === 0 || !ob.targetRef?.formTemplateId) return empty()
   const ids = members.map((m) => m.personId)
   const names = await loadNames(tx, ids)
   const since = periodStart(ob.recurrence?.frequency ?? 'week', today)
   const parts = await tx
-    .select({ personId: formResponseParticipants.personId, occurredOn: formResponseParticipants.occurredOn })
+    .select({
+      personId: formResponseParticipants.personId,
+      occurredOn: formResponseParticipants.occurredOn,
+    })
     .from(formResponseParticipants)
     .where(
       and(
@@ -286,12 +339,20 @@ async function evalForm(tx: Tx, tid: string, members: ResolvedMember[], ob: Ob, 
   return tally(
     ids.map((pid) => {
       const c = done.get(pid)
-      return personRow(pid, names.get(pid) ?? '(unnamed)', c ? 'completed' : 'pending', { completedOn: c ?? null })
+      return personRow(pid, names.get(pid) ?? '(unnamed)', c ? 'completed' : 'pending', {
+        completedOn: c ?? null,
+      })
     }),
   )
 }
 
-async function evalInspection(tx: Tx, tid: string, members: ResolvedMember[], ob: Ob, today: string): Promise<EvalResult> {
+async function evalInspection(
+  tx: Tx,
+  tid: string,
+  members: ResolvedMember[],
+  ob: Ob,
+  today: string,
+): Promise<EvalResult> {
   if (members.length === 0 || !ob.targetRef?.inspectionTypeId) return empty()
   const ids = members.map((m) => m.personId)
   const names = await loadNames(tx, ids)
@@ -332,7 +393,10 @@ async function evalInspection(tx: Tx, tid: string, members: ResolvedMember[], ob
       const tu = m.userId ? tuByUser.get(m.userId) : undefined
       const n = tu ? (countByTu.get(tu) ?? 0) : 0
       const status: EvalStatus = n >= expected ? 'completed' : n > 0 ? 'in_progress' : 'pending'
-      return personRow(m.personId, names.get(m.personId) ?? '(unnamed)', status, { count: n, expected })
+      return personRow(m.personId, names.get(m.personId) ?? '(unnamed)', status, {
+        count: n,
+        expected,
+      })
     }),
   )
 }
@@ -347,34 +411,79 @@ function expiryStatus(due: string | null, today: string, remindDays: number): Ev
   return due <= horizon.toISOString().slice(0, 10) ? 'expiring' : 'completed'
 }
 
-function recordRow(id: string, label: string, status: EvalStatus, dueOn: string | null): EvalSubjectRow {
-  return { key: `record:${id}`, label, personId: null, subjectRef: { recordId: id }, status, dueOn, completedOn: null }
+function recordRow(
+  id: string,
+  label: string,
+  status: EvalStatus,
+  dueOn: string | null,
+): EvalSubjectRow {
+  return {
+    key: `record:${id}`,
+    label,
+    personId: null,
+    subjectRef: { recordId: id },
+    status,
+    dueOn,
+    completedOn: null,
+  }
 }
 
 async function evalEquipment(tx: Tx, tid: string, ob: Ob, today: string): Promise<EvalResult> {
   const remind = ob.recurrence?.remindBeforeDays ?? 30
   const typeId = ob.targetRef?.equipmentTypeId
   const rows = await tx
-    .select({ id: equipmentItems.id, name: equipmentItems.name, tag: equipmentItems.assetTag, due: equipmentItems.nextAnnualInspectionDue })
+    .select({
+      id: equipmentItems.id,
+      name: equipmentItems.name,
+      tag: equipmentItems.assetTag,
+      due: equipmentItems.nextAnnualInspectionDue,
+    })
     .from(equipmentItems)
-    .where(and(eq(equipmentItems.tenantId, tid), typeId ? eq(equipmentItems.typeId, typeId) : undefined, isNull(equipmentItems.deletedAt)))
+    .where(
+      and(
+        eq(equipmentItems.tenantId, tid),
+        typeId ? eq(equipmentItems.typeId, typeId) : undefined,
+        isNull(equipmentItems.deletedAt),
+      ),
+    )
     .limit(2000)
-  return tally(rows.map((r) => recordRow(r.id, `${r.name} (${r.tag})`, expiryStatus(r.due, today, remind), r.due)))
+  return tally(
+    rows.map((r) =>
+      recordRow(r.id, `${r.name} (${r.tag})`, expiryStatus(r.due, today, remind), r.due),
+    ),
+  )
 }
 
 async function evalPpe(tx: Tx, tid: string, ob: Ob, today: string): Promise<EvalResult> {
   const remind = ob.recurrence?.remindBeforeDays ?? 30
   const typeId = ob.targetRef?.ppeTypeId
   const rows = await tx
-    .select({ id: ppeItems.id, serial: ppeItems.serialNumber, type: ppeTypes.name, inspection: ppeItems.nextInspectionDue, expiresOn: ppeItems.expiresOn })
+    .select({
+      id: ppeItems.id,
+      serial: ppeItems.serialNumber,
+      type: ppeTypes.name,
+      inspection: ppeItems.nextInspectionDue,
+      expiresOn: ppeItems.expiresOn,
+    })
     .from(ppeItems)
     .leftJoin(ppeTypes, eq(ppeTypes.id, ppeItems.typeId))
-    .where(and(eq(ppeItems.tenantId, tid), typeId ? eq(ppeItems.typeId, typeId) : undefined, isNull(ppeItems.deletedAt)))
+    .where(
+      and(
+        eq(ppeItems.tenantId, tid),
+        typeId ? eq(ppeItems.typeId, typeId) : undefined,
+        isNull(ppeItems.deletedAt),
+      ),
+    )
     .limit(2000)
   return tally(
     rows.map((r) => {
       const due = [r.inspection, r.expiresOn].filter(Boolean).sort()[0] ?? null
-      return recordRow(r.id, `${r.type ?? 'PPE'}${r.serial ? ` · ${r.serial}` : ''}`, expiryStatus(due, today, remind), due)
+      return recordRow(
+        r.id,
+        `${r.type ?? 'PPE'}${r.serial ? ` · ${r.serial}` : ''}`,
+        expiryStatus(due, today, remind),
+        due,
+      )
     }),
   )
 }
@@ -404,9 +513,17 @@ async function evalJobTitle(tx: Tx, tid: string, ob: Ob): Promise<EvalResult> {
   const taskIds = tasks.map((t) => t.id)
   const personIds = holders.map((h) => h.id)
   const acks = await tx
-    .select({ taskId: jobTitleTaskAcknowledgments.taskId, personId: jobTitleTaskAcknowledgments.personId })
+    .select({
+      taskId: jobTitleTaskAcknowledgments.taskId,
+      personId: jobTitleTaskAcknowledgments.personId,
+    })
     .from(jobTitleTaskAcknowledgments)
-    .where(and(inArray(jobTitleTaskAcknowledgments.taskId, taskIds), inArray(jobTitleTaskAcknowledgments.personId, personIds)))
+    .where(
+      and(
+        inArray(jobTitleTaskAcknowledgments.taskId, taskIds),
+        inArray(jobTitleTaskAcknowledgments.personId, personIds),
+      ),
+    )
   const acked = new Set(acks.map((a) => `${a.taskId}:${a.personId}`))
   const out: EvalSubjectRow[] = []
   for (const h of holders) {

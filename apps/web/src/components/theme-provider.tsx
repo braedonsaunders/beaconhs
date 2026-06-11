@@ -26,7 +26,8 @@ function systemPrefersDark(): boolean {
 }
 
 function apply(theme: Theme): ResolvedTheme {
-  const resolved: ResolvedTheme = theme === 'system' ? (systemPrefersDark() ? 'dark' : 'light') : theme
+  const resolved: ResolvedTheme =
+    theme === 'system' ? (systemPrefersDark() ? 'dark' : 'light') : theme
   document.documentElement.classList.toggle('dark', resolved === 'dark')
   return resolved
 }

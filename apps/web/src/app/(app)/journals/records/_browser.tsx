@@ -69,7 +69,13 @@ export function RecordsBrowser({
 
   // Debounce search → filters.q
   useEffect(() => {
-    const t = setTimeout(() => setFilters((f) => (f.q === (q.trim() || undefined) ? f : { ...f, q: q.trim() || undefined })), 300)
+    const t = setTimeout(
+      () =>
+        setFilters((f) =>
+          f.q === (q.trim() || undefined) ? f : { ...f, q: q.trim() || undefined },
+        ),
+      300,
+    )
     return () => clearTimeout(t)
   }, [q])
 
@@ -132,9 +138,14 @@ export function RecordsBrowser({
   }
 
   const activeCount = Object.values(filters).filter((v) => v !== undefined && v !== '').length
-  const exportHref = '/journals/export.csv?' + new URLSearchParams(
-    Object.entries(filters).flatMap(([k, v]) => (v ? [[k, String(v)]] : [])) as [string, string][],
-  ).toString()
+  const exportHref =
+    '/journals/export.csv?' +
+    new URLSearchParams(
+      Object.entries(filters).flatMap(([k, v]) => (v ? [[k, String(v)]] : [])) as [
+        string,
+        string,
+      ][],
+    ).toString()
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-slate-50/40">
@@ -142,12 +153,12 @@ export function RecordsBrowser({
       <div className="shrink-0 space-y-2 border-b border-slate-200 bg-white px-4 py-2.5 sm:px-6">
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-[180px] flex-1">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Search size={15} className="absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" />
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Search journals…"
-              className="h-9 w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-500/25"
+              className="h-9 w-full rounded-lg border border-slate-300 bg-white pr-3 pl-9 text-sm transition outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/25"
             />
           </div>
 
@@ -196,7 +207,12 @@ export function RecordsBrowser({
 
           <select
             value={filters.status ?? ''}
-            onChange={(e) => setFilters((f) => ({ ...f, status: (e.target.value || undefined) as JournalFilters['status'] }))}
+            onChange={(e) =>
+              setFilters((f) => ({
+                ...f,
+                status: (e.target.value || undefined) as JournalFilters['status'],
+              }))
+            }
             aria-label="Status"
             className="h-9 rounded-lg border border-slate-300 bg-white px-2 text-sm text-slate-700 outline-none focus:border-teal-500"
           >
@@ -207,7 +223,12 @@ export function RecordsBrowser({
           </select>
           <select
             value={filters.definition ?? ''}
-            onChange={(e) => setFilters((f) => ({ ...f, definition: (e.target.value || undefined) as JournalFilters['definition'] }))}
+            onChange={(e) =>
+              setFilters((f) => ({
+                ...f,
+                definition: (e.target.value || undefined) as JournalFilters['definition'],
+              }))
+            }
             aria-label="Type"
             className="h-9 rounded-lg border border-slate-300 bg-white px-2 text-sm text-slate-700 outline-none focus:border-teal-500"
           >
@@ -252,7 +273,9 @@ export function RecordsBrowser({
               </span>
             ) : (
               <>
-                <span className="font-semibold text-slate-700">{(total ?? items.length).toLocaleString()}</span>{' '}
+                <span className="font-semibold text-slate-700">
+                  {(total ?? items.length).toLocaleString()}
+                </span>{' '}
                 {total === 1 ? 'journal' : 'journals'}
               </>
             )}
@@ -267,10 +290,18 @@ export function RecordsBrowser({
               <Download size={13} /> Export
             </a>
             <div className="flex items-center gap-0.5 rounded-lg bg-slate-100 p-0.5">
-              <ViewBtn active={view === 'split'} onClick={() => setView('split')} label="Split view">
+              <ViewBtn
+                active={view === 'split'}
+                onClick={() => setView('split')}
+                label="Split view"
+              >
                 <Columns2 size={15} />
               </ViewBtn>
-              <ViewBtn active={view === 'table'} onClick={() => setView('table')} label="Table view">
+              <ViewBtn
+                active={view === 'table'}
+                onClick={() => setView('table')}
+                label="Table view"
+              >
                 <Rows3 size={15} />
               </ViewBtn>
               <ViewBtn active={view === 'cards'} onClick={() => setView('cards')} label="Card view">
@@ -289,7 +320,10 @@ export function RecordsBrowser({
           </div>
         ) : view === 'split' ? (
           <div className="flex h-full min-h-0">
-            <div onScroll={onScroll} className="app-scroll w-[360px] shrink-0 overflow-y-auto border-r border-slate-200 bg-white">
+            <div
+              onScroll={onScroll}
+              className="app-scroll w-[360px] shrink-0 overflow-y-auto border-r border-slate-200 bg-white"
+            >
               {items.map((it) => (
                 <SplitRow
                   key={it.id}
@@ -307,7 +341,7 @@ export function RecordsBrowser({
         ) : view === 'table' ? (
           <div onScroll={onScroll} className="app-scroll h-full overflow-y-auto">
             <table className="w-full border-collapse text-sm">
-              <thead className="sticky top-0 z-10 bg-slate-50/95 text-left text-[11px] uppercase tracking-wide text-slate-400 backdrop-blur">
+              <thead className="sticky top-0 z-10 bg-slate-50/95 text-left text-[11px] tracking-wide text-slate-400 uppercase backdrop-blur">
                 <tr className="border-b border-slate-200">
                   <th className="px-4 py-2 font-medium">Author</th>
                   <th className="px-3 py-2 font-medium">Date</th>
@@ -338,7 +372,12 @@ export function RecordsBrowser({
           <div onScroll={onScroll} className="app-scroll h-full overflow-y-auto p-4 sm:p-6">
             <div className="mx-auto grid max-w-6xl grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
               {items.map((it) => (
-                <CardItem key={it.id} item={it} tagColors={tagColors} onClick={() => openReader(it.id)} />
+                <CardItem
+                  key={it.id}
+                  item={it}
+                  tagColors={tagColors}
+                  onClick={() => openReader(it.id)}
+                />
               ))}
             </div>
             <MoreFooter more={more} hasMore={hasMore} />
@@ -363,9 +402,14 @@ export function RecordsBrowser({
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 32, stiffness: 320, mass: 0.8 }}
-              className="absolute right-0 top-0 h-full w-[92%] max-w-xl border-l border-slate-200 bg-white shadow-2xl"
+              className="absolute top-0 right-0 h-full w-[92%] max-w-xl border-l border-slate-200 bg-white shadow-2xl"
             >
-              <RecordReader entry={reader} loading={readerLoading} tagColors={tagColors} onClose={() => setSlideOpen(false)} />
+              <RecordReader
+                entry={reader}
+                loading={readerLoading}
+                tagColors={tagColors}
+                onClose={() => setSlideOpen(false)}
+              />
             </motion.div>
           </div>
         ) : null}
@@ -376,7 +420,15 @@ export function RecordsBrowser({
 
 // --- rows / cards ----------------------------------------------------------
 
-function SplitRow({ item, active, onClick }: { item: JournalListItem; active: boolean; onClick: () => void }) {
+function SplitRow({
+  item,
+  active,
+  onClick,
+}: {
+  item: JournalListItem
+  active: boolean
+  onClick: () => void
+}) {
   return (
     <button
       type="button"
@@ -389,13 +441,21 @@ function SplitRow({ item, active, onClick }: { item: JournalListItem; active: bo
       <Avatar name={item.authorName} size={30} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-2">
-          <span className="truncate text-sm font-medium text-slate-800">{item.authorName ?? 'Unassigned'}</span>
-          <span className="shrink-0 text-[11px] text-slate-400">{formatLongDate(item.entryDate)}</span>
+          <span className="truncate text-sm font-medium text-slate-800">
+            {item.authorName ?? 'Unassigned'}
+          </span>
+          <span className="shrink-0 text-[11px] text-slate-400">
+            {formatLongDate(item.entryDate)}
+          </span>
         </div>
         <p className="truncate text-xs text-slate-500">{item.snippet || '—'}</p>
         <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-slate-400">
           {item.siteName ? <span className="truncate">{item.siteName}</span> : null}
-          {item.photoCount > 0 ? <span className="inline-flex items-center gap-0.5"><ImageIcon size={10} /> {item.photoCount}</span> : null}
+          {item.photoCount > 0 ? (
+            <span className="inline-flex items-center gap-0.5">
+              <ImageIcon size={10} /> {item.photoCount}
+            </span>
+          ) : null}
         </div>
       </div>
     </button>
@@ -417,15 +477,22 @@ function TableRow({
   return (
     <tr
       onClick={onClick}
-      className={cn('cursor-pointer border-b border-slate-100 transition-colors', active ? 'bg-teal-50' : 'hover:bg-slate-50')}
+      className={cn(
+        'cursor-pointer border-b border-slate-100 transition-colors',
+        active ? 'bg-teal-50' : 'hover:bg-slate-50',
+      )}
     >
       <td className="px-4 py-2">
         <div className="flex items-center gap-2">
           <Avatar name={item.authorName} size={26} />
-          <span className="truncate font-medium text-slate-800">{item.authorName ?? 'Unassigned'}</span>
+          <span className="truncate font-medium text-slate-800">
+            {item.authorName ?? 'Unassigned'}
+          </span>
         </div>
       </td>
-      <td className="whitespace-nowrap px-3 py-2 text-slate-500">{formatLongDate(item.entryDate)}</td>
+      <td className="px-3 py-2 whitespace-nowrap text-slate-500">
+        {formatLongDate(item.entryDate)}
+      </td>
       <td className="px-3 py-2 text-slate-500">{item.siteName ?? '—'}</td>
       <td className="max-w-[24rem] px-3 py-2 text-slate-500">
         <span className="line-clamp-1">{item.snippet || '—'}</span>
@@ -435,16 +502,29 @@ function TableRow({
           {item.tags.slice(0, 3).map((t) => {
             const sw = tagSwatch(tagColors.get(t) ?? null)
             return (
-              <span key={t} className={cn('rounded-full px-1.5 py-0.5 text-[10px] font-medium ring-1 ring-inset', sw.chip)}>
+              <span
+                key={t}
+                className={cn(
+                  'rounded-full px-1.5 py-0.5 text-[10px] font-medium ring-1 ring-inset',
+                  sw.chip,
+                )}
+              >
                 {t}
               </span>
             )
           })}
-          {item.tags.length > 3 ? <span className="text-[10px] text-slate-400">+{item.tags.length - 3}</span> : null}
+          {item.tags.length > 3 ? (
+            <span className="text-[10px] text-slate-400">+{item.tags.length - 3}</span>
+          ) : null}
         </div>
       </td>
       <td className="px-3 py-2 text-center">
-        <span className={cn('rounded-full px-2 py-px text-[10px] font-medium ring-1 ring-inset', status.className)}>
+        <span
+          className={cn(
+            'rounded-full px-2 py-px text-[10px] font-medium ring-1 ring-inset',
+            status.className,
+          )}
+        >
           {status.label}
         </span>
       </td>
@@ -472,7 +552,9 @@ function CardItem({
       <div className="flex items-center gap-2.5">
         <Avatar name={item.authorName} size={34} />
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-semibold text-slate-900">{item.authorName ?? 'Unassigned'}</div>
+          <div className="truncate text-sm font-semibold text-slate-900">
+            {item.authorName ?? 'Unassigned'}
+          </div>
           <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
             {formatLongDate(item.entryDate)}
             {item.siteName ? (
@@ -485,17 +567,28 @@ function CardItem({
             ) : null}
           </div>
         </div>
-        <span className={cn('shrink-0 rounded-full px-2 py-px text-[10px] font-medium ring-1 ring-inset', status.className)}>
+        <span
+          className={cn(
+            'shrink-0 rounded-full px-2 py-px text-[10px] font-medium ring-1 ring-inset',
+            status.className,
+          )}
+        >
           {status.label}
         </span>
       </div>
       <p className="line-clamp-3 text-sm text-slate-600">{item.snippet || 'No content.'}</p>
-      {(item.tags.length > 0 || item.photoCount > 0) ? (
+      {item.tags.length > 0 || item.photoCount > 0 ? (
         <div className="mt-auto flex flex-wrap items-center gap-1.5 pt-1">
           {item.tags.slice(0, 4).map((t) => {
             const sw = tagSwatch(tagColors.get(t) ?? null)
             return (
-              <span key={t} className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset', sw.chip)}>
+              <span
+                key={t}
+                className={cn(
+                  'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset',
+                  sw.chip,
+                )}
+              >
                 <span className={cn('h-1.5 w-1.5 rounded-full', sw.dot)} />
                 {t}
               </span>
@@ -519,7 +612,8 @@ function MoreFooter({ more, hasMore }: { more: boolean; hasMore: boolean }) {
         <Loader2 size={14} className="animate-spin" /> Loading more…
       </div>
     )
-  if (!hasMore) return <div className="py-5 text-center text-[11px] text-slate-300">End of results</div>
+  if (!hasMore)
+    return <div className="py-5 text-center text-[11px] text-slate-300">End of results</div>
   return <div className="h-6" />
 }
 

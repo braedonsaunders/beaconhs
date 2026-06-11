@@ -100,12 +100,14 @@ async function updateStatus(formData: FormData) {
         status: status as any,
         submittedAt: status === 'submitted' || status === 'closed' ? new Date() : null,
         closedAt: closing ? new Date() : null,
-        closedByTenantUserId: closing ? ctx.membership?.id ?? null : null,
+        closedByTenantUserId: closing ? (ctx.membership?.id ?? null) : null,
         locked: closing,
       })
       .where(eq(inspectionRecords.id, id)),
   )
-  await logRecordAudit(ctx, id, `Status changed to "${status.replace(/_/g, ' ')}"`, 'update', { status })
+  await logRecordAudit(ctx, id, `Status changed to "${status.replace(/_/g, ' ')}"`, 'update', {
+    status,
+  })
   revalidatePath(`/inspections/records/${id}`)
   revalidatePath('/inspections/records')
 }
@@ -390,10 +392,7 @@ async function saveCriterionDetails(input: {
           .update(inspectionRecords)
           .set({ status: 'in_progress' })
           .where(
-            and(
-              eq(inspectionRecords.id, input.recordId),
-              eq(inspectionRecords.status, 'draft'),
-            ),
+            and(eq(inspectionRecords.id, input.recordId), eq(inspectionRecords.status, 'draft')),
           )
       }
     })
@@ -420,14 +419,11 @@ async function saveCriterionDetailsForm(formData: FormData): Promise<void> {
     rowId: String(formData.get('rowId') ?? ''),
     answer: parseAnswer(formData.get('answer')),
     severity: parseSeverity(formData.get('severity')),
-    nonComplianceDescription:
-      String(formData.get('nonComplianceDescription') ?? '').trim() || null,
+    nonComplianceDescription: String(formData.get('nonComplianceDescription') ?? '').trim() || null,
     actionTaken: String(formData.get('actionTaken') ?? '').trim() || null,
     compliantNote: String(formData.get('compliantNote') ?? '').trim() || null,
-    assignedToPersonId:
-      String(formData.get('assignedToPersonId') ?? '').trim() || null,
-    assignedDueDate:
-      String(formData.get('assignedDueDate') ?? '').trim() || null,
+    assignedToPersonId: String(formData.get('assignedToPersonId') ?? '').trim() || null,
+    assignedDueDate: String(formData.get('assignedDueDate') ?? '').trim() || null,
     correctedOn: String(formData.get('correctedOn') ?? '').trim() || null,
   })
   if (!result.ok) throw new Error(result.error)
@@ -466,7 +462,10 @@ async function passAll(formData: FormData) {
       .select({ id: inspectionRecordCriteria.id })
       .from(inspectionRecordCriteria)
       .where(
-        and(eq(inspectionRecordCriteria.recordId, recordId), isNull(inspectionRecordCriteria.answer)),
+        and(
+          eq(inspectionRecordCriteria.recordId, recordId),
+          isNull(inspectionRecordCriteria.answer),
+        ),
       )
     if (rows.length === 0) return 0
     await tx
@@ -477,7 +476,10 @@ async function passAll(formData: FormData) {
         answeredByTenantUserId: ctx.membership?.id ?? null,
       })
       .where(
-        and(eq(inspectionRecordCriteria.recordId, recordId), isNull(inspectionRecordCriteria.answer)),
+        and(
+          eq(inspectionRecordCriteria.recordId, recordId),
+          isNull(inspectionRecordCriteria.answer),
+        ),
       )
     // Auto-transition draft → in_progress
     await tx
@@ -589,7 +591,10 @@ export default async function InspectionRecordDetailPage({
         eq(inspectionBankCriteria.id, inspectionRecordCriteria.criterionId),
       )
       .leftJoin(people, eq(people.id, inspectionRecordCriteria.assignedToPersonId))
-      .leftJoin(correctiveActions, eq(correctiveActions.id, inspectionRecordCriteria.correctiveActionId))
+      .leftJoin(
+        correctiveActions,
+        eq(correctiveActions.id, inspectionRecordCriteria.correctiveActionId),
+      )
       .where(eq(inspectionRecordCriteria.recordId, id))
       .orderBy(asc(inspectionRecordCriteria.sequence))
 
@@ -611,9 +616,7 @@ export default async function InspectionRecordDetailPage({
 
     // For per-criterion photo previews, fetch attachments referenced in any
     // photoAttachmentIds in one pass.
-    const allPhotoIds = Array.from(
-      new Set(criteria.flatMap((c) => c.c.photoAttachmentIds ?? [])),
-    )
+    const allPhotoIds = Array.from(new Set(criteria.flatMap((c) => c.c.photoAttachmentIds ?? [])))
     const criterionPhotoMap = new Map<string, { id: string; url: string; filename: string }>()
     if (allPhotoIds.length > 0) {
       const rows = await tx
@@ -629,16 +632,7 @@ export default async function InspectionRecordDetailPage({
   })
 
   if (!data) notFound()
-  const {
-    record,
-    type,
-    site,
-    inspector,
-    criteria,
-    photos,
-    peopleList,
-    criterionPhotoMap,
-  } = data
+  const { record, type, site, inspector, criteria, photos, peopleList, criterionPhotoMap } = data
 
   // Summary counts
   const total = criteria.length
@@ -647,7 +641,8 @@ export default async function InspectionRecordDetailPage({
   const naCount = criteria.filter((c) => c.c.answer === 'n_a').length
   const unansweredCount = criteria.filter((c) => !c.c.answer).length
   const failRows = criteria.filter((c) => c.c.answer === 'fail')
-  const compliantPct = total > 0 ? Math.round((passCount / Math.max(1, passCount + failCount)) * 100) : 0
+  const compliantPct =
+    total > 0 ? Math.round((passCount / Math.max(1, passCount + failCount)) * 100) : 0
 
   const activity =
     active === 'activity' ? await recentActivityForEntity(ctx, 'inspection_record', id, 50) : []
@@ -668,7 +663,7 @@ export default async function InspectionRecordDetailPage({
   const closeHref = `${basePath}?tab=${active}`
   const editingRow =
     drawerKey === 'edit-criterion' && drawerRowId
-      ? criteria.find((c) => c.c.id === drawerRowId) ?? null
+      ? (criteria.find((c) => c.c.id === drawerRowId) ?? null)
       : null
 
   return (
@@ -722,9 +717,8 @@ export default async function InspectionRecordDetailPage({
               <AlertTitle>This inspection is locked</AlertTitle>
               <AlertDescription className="flex items-center justify-between">
                 <span>
-                  Closed on{' '}
-                  {record.closedAt ? new Date(record.closedAt).toLocaleDateString() : '—'}. Unlock
-                  to make further edits.
+                  Closed on {record.closedAt ? new Date(record.closedAt).toLocaleDateString() : '—'}
+                  . Unlock to make further edits.
                 </span>
                 <form action={toggleLock} className="inline">
                   <input type="hidden" name="id" value={id} />
@@ -774,8 +768,21 @@ export default async function InspectionRecordDetailPage({
             <Section title="General information">
               <DetailGrid
                 rows={[
-                  { label: 'Reference', value: <span className="font-mono">{record.reference}</span> },
-                  { label: 'Type', value: <Link className="hover:underline" href={`/inspections/types/${record.typeId}`}>{type.name}</Link> },
+                  {
+                    label: 'Reference',
+                    value: <span className="font-mono">{record.reference}</span>,
+                  },
+                  {
+                    label: 'Type',
+                    value: (
+                      <Link
+                        className="hover:underline"
+                        href={`/inspections/types/${record.typeId}`}
+                      >
+                        {type.name}
+                      </Link>
+                    ),
+                  },
                   { label: 'Occurred', value: new Date(record.occurredAt).toLocaleString() },
                   { label: 'Site', value: site?.name ?? '—' },
                   { label: 'Inspector', value: inspector?.name ?? '—' },
@@ -792,9 +799,7 @@ export default async function InspectionRecordDetailPage({
                   },
                   {
                     label: 'Submitted',
-                    value: record.submittedAt
-                      ? new Date(record.submittedAt).toLocaleString()
-                      : '—',
+                    value: record.submittedAt ? new Date(record.submittedAt).toLocaleString() : '—',
                   },
                   {
                     label: 'Closed',
@@ -804,7 +809,7 @@ export default async function InspectionRecordDetailPage({
               />
               {record.notes ? (
                 <div className="mt-4 text-sm">
-                  <div className="text-xs uppercase tracking-wide text-slate-500">Notes</div>
+                  <div className="text-xs tracking-wide text-slate-500 uppercase">Notes</div>
                   <p className="mt-1 whitespace-pre-wrap text-slate-800">{record.notes}</p>
                 </div>
               ) : null}
@@ -851,8 +856,8 @@ export default async function InspectionRecordDetailPage({
                   </Button>
                 </form>
                 <p className="mt-2 text-xs text-slate-500">
-                  Moving to "submitted" or "closed" requires every criterion to be answered. Move
-                  to "closed" to lock the record.
+                  Moving to "submitted" or "closed" requires every criterion to be answered. Move to
+                  "closed" to lock the record.
                 </p>
               </CardContent>
             </Card>
@@ -898,7 +903,10 @@ export default async function InspectionRecordDetailPage({
                 requiresComment={row.bank?.requiresComment ?? false}
                 assignee={
                   row.assignee
-                    ? { id: row.assignee.id, name: `${row.assignee.firstName} ${row.assignee.lastName}` }
+                    ? {
+                        id: row.assignee.id,
+                        name: `${row.assignee.firstName} ${row.assignee.lastName}`,
+                      }
                     : null
                 }
                 peopleList={peopleList.map((p) => ({
@@ -928,10 +936,7 @@ export default async function InspectionRecordDetailPage({
             ) : (
               <div className="space-y-3">
                 {failRows.map((row) => (
-                  <div
-                    key={row.c.id}
-                    className="rounded-md border border-slate-200 bg-white p-3"
-                  >
+                  <div key={row.c.id} className="rounded-md border border-slate-200 bg-white p-3">
                     <div className="mb-2 flex items-start justify-between gap-2">
                       <div>
                         <div className="text-sm font-medium text-slate-900">
@@ -1102,7 +1107,7 @@ function Stat({
             : 'text-slate-700 bg-slate-50 border-slate-200'
   return (
     <div className={`rounded-md border px-3 py-2 ${tone}`}>
-      <div className="text-xs uppercase tracking-wide">{label}</div>
+      <div className="text-xs tracking-wide uppercase">{label}</div>
       <div className="text-xl font-semibold tabular-nums">{value}</div>
     </div>
   )
@@ -1112,9 +1117,7 @@ function Stat({
  * Severity → Tailwind class triple. Mirrors the legacy app's colour map:
  * low=slate, medium=amber, high=orange, critical=rose.
  */
-function severityBadgeClasses(
-  severity: 'low' | 'medium' | 'high' | 'critical' | null,
-): string {
+function severityBadgeClasses(severity: 'low' | 'medium' | 'high' | 'critical' | null): string {
   switch (severity) {
     case 'low':
       return 'border-slate-300 bg-slate-100 text-slate-700'
@@ -1234,18 +1237,18 @@ function CriterionCard(props: {
             {requiresPhoto ? <Badge variant="secondary">Photo required</Badge> : null}
             {severity && answer === 'fail' ? (
               <span
-                className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${severityBadgeClasses(severity)}`}
+                className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase ${severityBadgeClasses(severity)}`}
               >
                 {severity}
               </span>
             ) : null}
             {overdue ? (
-              <span className="inline-flex items-center gap-1 rounded-full border border-red-300 bg-red-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-700">
+              <span className="inline-flex items-center gap-1 rounded-full border border-red-300 bg-red-50 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-red-700 uppercase">
                 <AlertOctagon size={10} /> Overdue
               </span>
             ) : null}
             {correctedOn && answer === 'fail' ? (
-              <span className="inline-flex items-center rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
+              <span className="inline-flex items-center rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-emerald-700 uppercase">
                 Corrected {correctedOn}
               </span>
             ) : null}
@@ -1350,11 +1353,7 @@ function CriterionCard(props: {
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Due date</Label>
-              <Input
-                name="assignedDueDate"
-                type="date"
-                defaultValue={assignedDueDate ?? ''}
-              />
+              <Input name="assignedDueDate" type="date" defaultValue={assignedDueDate ?? ''} />
             </div>
             <Button type="submit" size="sm" variant="outline">
               Save
@@ -1366,10 +1365,7 @@ function CriterionCard(props: {
             <input type="hidden" name="rowId" value={rowId} />
             <div className="flex-1 space-y-1">
               <Label className="text-xs">Attach photo (by attachment id)</Label>
-              <Input
-                name="attachmentId"
-                placeholder="upload via Photos tab, then paste id here"
-              />
+              <Input name="attachmentId" placeholder="upload via Photos tab, then paste id here" />
             </div>
             <Button type="submit" size="sm" variant="outline">
               Link photo
@@ -1377,14 +1373,17 @@ function CriterionCard(props: {
           </form>
           <p className="text-xs text-slate-500">
             Tip: upload from the Photos tab first, then copy the attachment id and paste it here.
-            Per-criterion photo upload widget lands in a follow-up — the data model already
-            supports it.
+            Per-criterion photo upload widget lands in a follow-up — the data model already supports
+            it.
           </p>
         </div>
       ) : null}
 
       {allowCompliantNotes && answer && answer !== 'fail' && !locked ? (
-        <form action={setCriterionCompliantNote} className="mt-3 space-y-1 border-t border-slate-200 pt-3">
+        <form
+          action={setCriterionCompliantNote}
+          className="mt-3 space-y-1 border-t border-slate-200 pt-3"
+        >
           <input type="hidden" name="recordId" value={recordId} />
           <input type="hidden" name="rowId" value={rowId} />
           <Label className="text-xs">Compliant notes (optional)</Label>
@@ -1404,7 +1403,7 @@ function CriterionCard(props: {
 
       {photoPreviews.length > 0 ? (
         <div className="mt-3 border-t border-slate-200 pt-3">
-          <div className="mb-1 text-xs uppercase tracking-wide text-slate-500">
+          <div className="mb-1 text-xs tracking-wide text-slate-500 uppercase">
             Photos ({photoPreviews.length})
           </div>
           <div className="flex flex-wrap gap-2">
@@ -1426,9 +1425,7 @@ function CriterionCard(props: {
       {locked ? (
         <div className="mt-2 space-y-1 text-xs text-slate-600">
           {severity ? <div>Severity: {severity}</div> : null}
-          {nonComplianceDescription ? (
-            <div>Non-compliance: {nonComplianceDescription}</div>
-          ) : null}
+          {nonComplianceDescription ? <div>Non-compliance: {nonComplianceDescription}</div> : null}
           {actionTaken ? <div>Action taken: {actionTaken}</div> : null}
           {assignee ? <div>Assigned: {assignee.name}</div> : null}
           {assignedDueDate ? <div>Due: {assignedDueDate}</div> : null}
@@ -1491,14 +1488,14 @@ function CriterionEditForm({
             <AlertOctagon size={14} /> This finding is overdue
           </AlertTitle>
           <AlertDescription>
-            Due date {row.c.assignedDueDate} has passed without a correction. Set the
-            "Corrected on" date below to clear the flag.
+            Due date {row.c.assignedDueDate} has passed without a correction. Set the "Corrected on"
+            date below to clear the flag.
           </AlertDescription>
         </Alert>
       ) : null}
 
       <div className="space-y-1.5">
-        <Label className="text-xs uppercase tracking-wide text-slate-500">Result</Label>
+        <Label className="text-xs tracking-wide text-slate-500 uppercase">Result</Label>
         <Select name="answer" defaultValue={a ?? ''}>
           <option value="">— Unanswered —</option>
           <option value="pass">Pass</option>
@@ -1511,7 +1508,7 @@ function CriterionEditForm({
       </div>
 
       <fieldset className="space-y-3 rounded-md border border-slate-200 bg-slate-50/60 p-3">
-        <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <legend className="px-1 text-xs font-semibold tracking-wide text-slate-500 uppercase">
           Non-compliance
         </legend>
 
@@ -1528,10 +1525,7 @@ function CriterionEditForm({
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Assigned to</Label>
-            <Select
-              name="assignedToPersonId"
-              defaultValue={row.c.assignedToPersonId ?? ''}
-            >
+            <Select name="assignedToPersonId" defaultValue={row.c.assignedToPersonId ?? ''}>
               <option value="">— unassigned —</option>
               {peopleList.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -1542,19 +1536,11 @@ function CriterionEditForm({
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Due date</Label>
-            <Input
-              name="assignedDueDate"
-              type="date"
-              defaultValue={row.c.assignedDueDate ?? ''}
-            />
+            <Input name="assignedDueDate" type="date" defaultValue={row.c.assignedDueDate ?? ''} />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Corrected on</Label>
-            <Input
-              name="correctedOn"
-              type="date"
-              defaultValue={row.c.correctedOn ?? ''}
-            />
+            <Input name="correctedOn" type="date" defaultValue={row.c.correctedOn ?? ''} />
             <p className="text-[11px] text-slate-500">
               Fill this in once the fix is verified — clears the overdue flag.
             </p>
@@ -1582,10 +1568,7 @@ function CriterionEditForm({
           {row.ca?.reference ? (
             <p className="text-[11px] text-slate-500">
               Synced to corrective action{' '}
-              <Link
-                href="/corrective-actions"
-                className="text-teal-700 hover:underline"
-              >
+              <Link href="/corrective-actions" className="text-teal-700 hover:underline">
                 {row.ca.reference}
               </Link>
               .
@@ -1595,7 +1578,7 @@ function CriterionEditForm({
       </fieldset>
 
       <fieldset className="space-y-2 rounded-md border border-slate-200 p-3">
-        <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <legend className="px-1 text-xs font-semibold tracking-wide text-slate-500 uppercase">
           Compliant context (only used on pass / N/A)
         </legend>
         <div className="space-y-1.5">

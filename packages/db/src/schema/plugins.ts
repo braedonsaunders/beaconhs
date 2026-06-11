@@ -93,7 +93,10 @@ export const pluginEvents = pgTable(
     event: text('event').notNull(), // 'incident.created' etc.
     payload: jsonb('payload').$type<Record<string, unknown>>().notNull(),
     status: text('status').default('pending').notNull(),
-    attempts: jsonb('attempts').$type<{ at: string; status: number; error?: string }[]>().default([]).notNull(),
+    attempts: jsonb('attempts')
+      .$type<{ at: string; status: number; error?: string }[]>()
+      .default([])
+      .notNull(),
     deliveredAt: timestamp('delivered_at', { withTimezone: true }),
     nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true }),
     ...timestamps,

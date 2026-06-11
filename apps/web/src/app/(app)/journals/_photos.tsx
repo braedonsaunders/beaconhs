@@ -62,7 +62,7 @@ export function Photos({
 
   return (
     <div className="space-y-2.5">
-      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+      <div className="flex items-center gap-2 text-xs font-semibold tracking-wide text-slate-400 uppercase">
         Photos
         {busy ? <Loader2 size={12} className="animate-spin text-teal-600" /> : null}
         {aiEnabled ? (
@@ -75,9 +75,14 @@ export function Photos({
       {photos.length > 0 ? (
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
           {photos.map((p) => (
-            <div key={p.id} className="group relative aspect-square overflow-hidden rounded-lg bg-slate-100 ring-1 ring-slate-200">
+            <div
+              key={p.id}
+              className="group relative aspect-square overflow-hidden rounded-lg bg-slate-100 ring-1 ring-slate-200"
+            >
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              {p.url ? <img src={p.url} alt={p.caption ?? ''} className="h-full w-full object-cover" /> : null}
+              {p.url ? (
+                <img src={p.url} alt={p.caption ?? ''} className="h-full w-full object-cover" />
+              ) : null}
 
               {p.caption ? (
                 <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-1.5">
@@ -86,7 +91,7 @@ export function Photos({
               ) : null}
 
               {editable ? (
-                <div className="absolute right-1 top-1 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                <div className="absolute top-1 right-1 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                   {aiEnabled && !p.caption ? (
                     <button
                       type="button"

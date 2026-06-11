@@ -27,7 +27,13 @@ function StatusBadge({ status }: { status: string }) {
   return <Badge variant="secondary">Pending</Badge>
 }
 
-function cadence(rec: { kind: string; frequency?: string; quantity?: number; cron?: string; dueOn?: string }): string {
+function cadence(rec: {
+  kind: string
+  frequency?: string
+  quantity?: number
+  cron?: string
+  dueOn?: string
+}): string {
   if (rec.kind === 'frequency') return `${rec.quantity ?? 1}/${rec.frequency ?? 'week'}`
   if (rec.kind === 'cron') return rec.cron ? `cron ${rec.cron}` : '—'
   if (rec.kind === 'one_time') return rec.dueOn ? `due ${rec.dueOn}` : 'one-off'
@@ -47,7 +53,11 @@ export default async function ObligationDetailPage({
   const { obligation: ob, audience, result } = data
   const hasCounts = result.rows.some((r) => r.expected != null)
   const subjectNoun =
-    ob.subjectKind === 'per_record' ? 'Record' : ob.subjectKind === 'per_task' ? 'Sign-off' : 'Person'
+    ob.subjectKind === 'per_record'
+      ? 'Record'
+      : ob.subjectKind === 'per_task'
+        ? 'Sign-off'
+        : 'Person'
 
   return (
     <PageContainer>
@@ -56,7 +66,9 @@ export default async function ObligationDetailPage({
           back={{ href: '/compliance/obligations', label: 'Back to obligations' }}
           title={ob.title}
           subtitle={`${kindLabel(ob.sourceModule)} · ${cadence(ob.recurrence)}${
-            ob.subjectKind === 'per_person' ? ` · ${audience.length || 'everyone'} audience target(s)` : ''
+            ob.subjectKind === 'per_person'
+              ? ` · ${audience.length || 'everyone'} audience target(s)`
+              : ''
           }`}
           actions={<ObligationDetailActions id={ob.id} enabled={ob.status === 'active'} />}
         />

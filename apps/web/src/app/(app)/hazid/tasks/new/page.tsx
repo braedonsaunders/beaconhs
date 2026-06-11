@@ -49,7 +49,11 @@ export default async function NewTaskPage() {
                 <Label>Linked hazards</Label>
                 <MultiPicker
                   name="hazardIds"
-                  options={hazards.map((h) => ({ value: h.id, label: h.name, sublabel: h.typeName ?? undefined }))}
+                  options={hazards.map((h) => ({
+                    value: h.id,
+                    label: h.name,
+                    sublabel: h.typeName ?? undefined,
+                  }))}
                 />
               </div>
               <div className="flex items-center justify-end">

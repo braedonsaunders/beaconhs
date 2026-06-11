@@ -29,10 +29,18 @@ export function Pagination({
           <>No results</>
         ) : (
           <>
-            Showing <strong className="font-medium text-slate-900 dark:text-slate-100">{from.toLocaleString()}</strong>
+            Showing{' '}
+            <strong className="font-medium text-slate-900 dark:text-slate-100">
+              {from.toLocaleString()}
+            </strong>
             {'–'}
-            <strong className="font-medium text-slate-900 dark:text-slate-100">{to.toLocaleString()}</strong> of{' '}
-            <strong className="font-medium text-slate-900 dark:text-slate-100">{total.toLocaleString()}</strong>
+            <strong className="font-medium text-slate-900 dark:text-slate-100">
+              {to.toLocaleString()}
+            </strong>{' '}
+            of{' '}
+            <strong className="font-medium text-slate-900 dark:text-slate-100">
+              {total.toLocaleString()}
+            </strong>
           </>
         )}
       </span>
@@ -60,11 +68,15 @@ function PageButton({
   disabled,
   children,
   ...rest
-}: { href: string; disabled?: boolean; children: React.ReactNode } & React.HTMLAttributes<HTMLAnchorElement>) {
+}: {
+  href: string
+  disabled?: boolean
+  children: React.ReactNode
+} & React.HTMLAttributes<HTMLAnchorElement>) {
   if (disabled) {
     return (
       <span
-        className="inline-flex cursor-not-allowed items-center gap-1 rounded-md border border-slate-200 dark:border-slate-800 px-2 py-1 text-xs text-slate-400 dark:text-slate-500"
+        className="inline-flex cursor-not-allowed items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500"
         {...(rest as object)}
       >
         {children}
@@ -74,7 +86,7 @@ function PageButton({
   return (
     <Link
       href={href as any}
-      className="inline-flex items-center gap-1 rounded-md border border-slate-200 dark:border-slate-800 px-2 py-1 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/60"
+      className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-800/60"
       {...(rest as object)}
     >
       {children}

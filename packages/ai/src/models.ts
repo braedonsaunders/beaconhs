@@ -37,7 +37,11 @@ function str(value: unknown): string {
 
 /** OpenAI returns every model (embeddings, tts, image…) — keep chat-capable text ones. */
 function isOpenAiChatModel(id: string): boolean {
-  if (/embedding|whisper|tts|audio|dall-e|image|moderation|realtime|transcribe|search|similarity|edit|babbage|davinci/i.test(id)) {
+  if (
+    /embedding|whisper|tts|audio|dall-e|image|moderation|realtime|transcribe|search|similarity|edit|babbage|davinci/i.test(
+      id,
+    )
+  ) {
     return false
   }
   return /^(gpt-|o1|o3|o4|chatgpt)/i.test(id)
@@ -59,7 +63,10 @@ export async function listModels(config: AiConfig): Promise<ModelListItem[]> {
       })
       const data = asArray((json as Record<string, unknown>)?.data)
       return dedupeSort(
-        data.map((m) => ({ id: str(m.id), label: m.display_name ? str(m.display_name) : undefined })),
+        data.map((m) => ({
+          id: str(m.id),
+          label: m.display_name ? str(m.display_name) : undefined,
+        })),
       )
     }
     case 'openai': {
@@ -67,9 +74,7 @@ export async function listModels(config: AiConfig): Promise<ModelListItem[]> {
         Authorization: `Bearer ${key}`,
       })
       const data = asArray((json as Record<string, unknown>)?.data)
-      return dedupeSort(
-        data.map((m) => ({ id: str(m.id) })).filter((m) => isOpenAiChatModel(m.id)),
-      )
+      return dedupeSort(data.map((m) => ({ id: str(m.id) })).filter((m) => isOpenAiChatModel(m.id)))
     }
     case 'google': {
       const json = await fetchJson(

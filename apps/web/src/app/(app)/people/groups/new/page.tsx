@@ -1,13 +1,5 @@
 import Link from 'next/link'
-import {
-  Button,
-  Card,
-  CardContent,
-  DetailHeader,
-  Input,
-  Label,
-  Textarea,
-} from '@beaconhs/ui'
+import { Button, Card, CardContent, DetailHeader, Input, Label, Textarea } from '@beaconhs/ui'
 import { PageContainer } from '@/components/page-layout'
 import { requireModuleManage } from '@/lib/module-admin/guard'
 import { createGroup } from '../../_actions/groups'

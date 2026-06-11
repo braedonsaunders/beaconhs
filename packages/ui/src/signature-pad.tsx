@@ -103,13 +103,7 @@ export function SignaturePad({
         img.onload = () => {
           // The image was captured at CSS-pixel dimensions, so paint it back
           // sized to the current CSS box; the context transform handles DPR.
-          ctx.drawImage(
-            img,
-            0,
-            0,
-            canvas.width / dprRef.current,
-            canvas.height / dprRef.current,
-          )
+          ctx.drawImage(img, 0, 0, canvas.width / dprRef.current, canvas.height / dprRef.current)
           resolve()
         }
         img.onerror = () => resolve()
@@ -235,8 +229,7 @@ export function SignaturePad({
   // Variable stroke width: slower pointer → thicker line. Velocity is smoothed
   // with a simple low-pass filter so quick jitter doesn't make the line pulse.
   const computeWidth = (velocity: number) => {
-    const smoothed =
-      VELOCITY_FILTER * velocity + (1 - VELOCITY_FILTER) * lastVelocityRef.current
+    const smoothed = VELOCITY_FILTER * velocity + (1 - VELOCITY_FILTER) * lastVelocityRef.current
     lastVelocityRef.current = smoothed
     // Map velocity to width: 0 px/ms → max, 1.5+ px/ms → min.
     const t = Math.min(1, smoothed / 1.5)
@@ -390,7 +383,9 @@ export function SignaturePad({
       <div
         className={cn(
           'relative w-full overflow-hidden rounded-md border bg-white dark:bg-slate-900',
-          disabled ? 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900' : 'border-slate-300 dark:border-slate-700',
+          disabled
+            ? 'border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900'
+            : 'border-slate-300 dark:border-slate-700',
         )}
         style={{ height }}
       >
@@ -421,7 +416,7 @@ export function SignaturePad({
             {!hasInk && !disabled ? (
               <div className="pointer-events-none absolute inset-0">
                 <div
-                  className="absolute left-4 right-4 border-t border-dashed border-slate-200 dark:border-slate-800"
+                  className="absolute right-4 left-4 border-t border-dashed border-slate-200 dark:border-slate-800"
                   style={{ top: `${(2 / 3) * 100}%` }}
                 />
                 <div className="absolute inset-0 flex items-center justify-center">

@@ -63,7 +63,12 @@ export type Session = Awaited<ReturnType<typeof auth.api.getSession>>
 
 // Minimal SMTP client for Mailpit (no auth, plain text). Avoids pulling a
 // full mail library when we just need dev delivery.
-async function sendViaSmtp(args: { to: string | string[]; subject: string; html: string; text: string }) {
+async function sendViaSmtp(args: {
+  to: string | string[]
+  subject: string
+  html: string
+  text: string
+}) {
   const { createConnection } = await import('node:net')
   const host = process.env.SMTP_HOST ?? 'localhost'
   const port = Number(process.env.SMTP_PORT ?? 1025)

@@ -40,9 +40,7 @@ export async function enqueuePdf(data: PdfJobData) {
   await pdfQueue.add(data.kind, data)
 }
 
-export async function enqueueSlidesImport(
-  data: Extract<PdfJobData, { kind: 'slides_import' }>,
-) {
+export async function enqueueSlidesImport(data: Extract<PdfJobData, { kind: 'slides_import' }>) {
   // PPTX→PNG conversion is deterministic; a retry after partial failure would
   // duplicate appended slides, so run a single attempt and surface failures
   // through importStatus='failed' instead.

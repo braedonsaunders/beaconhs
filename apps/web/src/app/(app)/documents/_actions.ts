@@ -14,12 +14,7 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm'
-import {
-  documentBookItems,
-  documentBooks,
-  documentDrafts,
-  documents,
-} from '@beaconhs/db/schema'
+import { documentBookItems, documentBooks, documentDrafts, documents } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 
@@ -82,10 +77,7 @@ export async function bulkPublishDocuments(args: {
       .map((r) => r.id)
     const skipped = rows.length - editable.length
     if (editable.length === 0) return { updated: 0, skipped }
-    await tx
-      .update(documents)
-      .set({ status: 'published' })
-      .where(inArray(documents.id, editable))
+    await tx.update(documents).set({ status: 'published' }).where(inArray(documents.id, editable))
     return { updated: editable.length, skipped, editable }
   })
 
@@ -130,10 +122,7 @@ export async function bulkArchiveDocuments(args: {
       .map((r) => r.id)
     const skipped = rows.length - editable.length
     if (editable.length === 0) return { updated: 0, skipped }
-    await tx
-      .update(documents)
-      .set({ status: 'archived' })
-      .where(inArray(documents.id, editable))
+    await tx.update(documents).set({ status: 'archived' }).where(inArray(documents.id, editable))
     return { updated: editable.length, skipped, editable }
   })
 
@@ -248,9 +237,7 @@ export async function bulkAddDocumentsToBook(args: {
 
 // ---------- Lookups (used by bulk-bar dropdowns) ----------------------------
 
-export async function listDocumentBooksForBulk(): Promise<
-  { id: string; label: string }[]
-> {
+export async function listDocumentBooksForBulk(): Promise<{ id: string; label: string }[]> {
   const ctx = await requireRequestContext()
   return ctx.db(async (tx) => {
     const rows = await tx

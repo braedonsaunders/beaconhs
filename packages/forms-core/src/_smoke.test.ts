@@ -16,8 +16,20 @@ const LIFT_PLAN_SCHEMA: FormSchemaV1 = {
       title: { en: 'General info' },
       step: 'plan',
       fields: [
-        { id: 'lift_date', type: 'date', label: { en: 'Lift date' }, required: true, defaultValue: { kind: 'today' } },
-        { id: 'supervisor', type: 'person_picker', label: { en: 'Lift supervisor' }, required: true, defaultValue: { kind: 'current_user_person_id' } },
+        {
+          id: 'lift_date',
+          type: 'date',
+          label: { en: 'Lift date' },
+          required: true,
+          defaultValue: { kind: 'today' },
+        },
+        {
+          id: 'supervisor',
+          type: 'person_picker',
+          label: { en: 'Lift supervisor' },
+          required: true,
+          defaultValue: { kind: 'current_user_person_id' },
+        },
       ],
     },
     {
@@ -29,7 +41,12 @@ const LIFT_PLAN_SCHEMA: FormSchemaV1 = {
       rowLabelTemplate: 'Load #{index+1} · {description}',
       fields: [
         { id: 'description', type: 'text', label: { en: 'Description' }, required: true },
-        { id: 'load_weight_lbs', type: 'number', label: { en: 'Load weight (lbs)' }, required: true },
+        {
+          id: 'load_weight_lbs',
+          type: 'number',
+          label: { en: 'Load weight (lbs)' },
+          required: true,
+        },
         { id: 'rigging_weight_lbs', type: 'number', label: { en: 'Rigging weight (lbs)' } },
       ],
     },

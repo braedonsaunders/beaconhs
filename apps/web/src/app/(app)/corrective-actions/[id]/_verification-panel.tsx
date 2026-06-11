@@ -4,14 +4,7 @@ import Link from 'next/link'
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { CheckCircle2, ShieldCheck } from 'lucide-react'
-import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
-  Button,
-  Label,
-  Textarea,
-} from '@beaconhs/ui'
+import { Alert, AlertDescription, AlertTitle, Button, Label, Textarea } from '@beaconhs/ui'
 import { SignaturePad } from '@/components/signature-pad'
 import { verifyCorrectiveAction } from '../_actions'
 
@@ -46,12 +39,8 @@ export function VerificationPanel({
         </Alert>
         {verificationNotes ? (
           <div>
-            <div className="text-xs uppercase tracking-wide text-slate-500">
-              Verification notes
-            </div>
-            <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">
-              {verificationNotes}
-            </p>
+            <div className="text-xs tracking-wide text-slate-500 uppercase">Verification notes</div>
+            <p className="mt-1 text-sm whitespace-pre-wrap text-slate-700">{verificationNotes}</p>
           </div>
         ) : null}
       </div>
@@ -62,9 +51,7 @@ export function VerificationPanel({
     return (
       <Alert variant="warning">
         <AlertTitle>Locked</AlertTitle>
-        <AlertDescription>
-          This action is locked. Unlock or reopen it to sign off.
-        </AlertDescription>
+        <AlertDescription>This action is locked. Unlock or reopen it to sign off.</AlertDescription>
       </Alert>
     )
   }
@@ -75,8 +62,8 @@ export function VerificationPanel({
         <ShieldCheck size={16} />
         <AlertTitle>Verification required</AlertTitle>
         <AlertDescription>
-          Confirm the corrective action is complete and effective. Your name and
-          timestamp will be stamped on the record once you sign.
+          Confirm the corrective action is complete and effective. Your name and timestamp will be
+          stamped on the record once you sign.
         </AlertDescription>
       </Alert>
       <Link href={`/corrective-actions/${caId}?tab=verification&drawer=verify`}>

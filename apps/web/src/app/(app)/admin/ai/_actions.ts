@@ -2,7 +2,13 @@
 
 import { revalidatePath } from 'next/cache'
 import { assertCan, type RequestContext } from '@beaconhs/tenant'
-import { isAiProvider, listModels, pingModel, type AiProvider, type ModelListItem } from '@beaconhs/ai'
+import {
+  isAiProvider,
+  listModels,
+  pingModel,
+  type AiProvider,
+  type ModelListItem,
+} from '@beaconhs/ai'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { clearTenantAiKey, getTenantAiConfig, saveTenantAiSettings } from '@/lib/ai-config'
@@ -82,12 +88,20 @@ export async function listAiModels(input: {
     }
   }
   if (!apiKey) {
-    return { ok: false, models: [], message: 'Enter an API key for this provider to load its models.' }
+    return {
+      ok: false,
+      models: [],
+      message: 'Enter an API key for this provider to load its models.',
+    }
   }
   try {
     const models = await listModels({ provider, apiKey, baseUrl: baseUrl || null })
     if (!models.length) {
-      return { ok: false, models: [], message: 'The provider returned no models — enter the id manually.' }
+      return {
+        ok: false,
+        models: [],
+        message: 'The provider returned no models — enter the id manually.',
+      }
     }
     return { ok: true, models }
   } catch (e) {

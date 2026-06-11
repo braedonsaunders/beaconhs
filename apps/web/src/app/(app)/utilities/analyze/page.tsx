@@ -25,10 +25,7 @@ export const dynamic = 'force-dynamic'
 
 export default async function AnalyzePage() {
   const ctx = await requireRequestContext()
-  const [findings, totals] = await Promise.all([
-    runAnalyzer(ctx),
-    getTenantTableTotals(ctx),
-  ])
+  const [findings, totals] = await Promise.all([runAnalyzer(ctx), getTenantTableTotals(ctx)])
   await recordAudit(ctx, {
     entityType: 'data_quality',
     action: 'view_sensitive',
@@ -60,13 +57,14 @@ export default async function AnalyzePage() {
         ) : (
           <Alert variant="destructive">
             <AlertTitle>
-              {totalIssues} item{totalIssues === 1 ? '' : 's'} flagged across {findings.filter((f) => f.count > 0).length}{' '}
-              check{findings.filter((f) => f.count > 0).length === 1 ? '' : 's'}
+              {totalIssues} item{totalIssues === 1 ? '' : 's'} flagged across{' '}
+              {findings.filter((f) => f.count > 0).length} check
+              {findings.filter((f) => f.count > 0).length === 1 ? '' : 's'}
             </AlertTitle>
             <AlertDescription>
-              Reports and dashboards roll up the underlying records, so unflagged tenants
-              get cleaner numbers. Click through each finding for the first ten affected
-              rows and a link to the source list.
+              Reports and dashboards roll up the underlying records, so unflagged tenants get
+              cleaner numbers. Click through each finding for the first ten affected rows and a link
+              to the source list.
             </AlertDescription>
           </Alert>
         )}
@@ -79,7 +77,7 @@ export default async function AnalyzePage() {
             { label: 'Incidents', value: totals.incidents },
           ].map((s) => (
             <div key={s.label} className="rounded-lg border border-slate-200 bg-white p-4">
-              <div className="text-xs uppercase tracking-wide text-slate-500">{s.label}</div>
+              <div className="text-xs tracking-wide text-slate-500 uppercase">{s.label}</div>
               <div className="mt-1 text-2xl font-semibold text-slate-900">{s.value}</div>
             </div>
           ))}
@@ -105,9 +103,7 @@ export default async function AnalyzePage() {
                     >
                       {f.count}
                     </div>
-                    <div className="text-xs uppercase tracking-wide text-slate-500">
-                      affected
-                    </div>
+                    <div className="text-xs tracking-wide text-slate-500 uppercase">affected</div>
                   </div>
                 </div>
               </CardHeader>
@@ -117,11 +113,13 @@ export default async function AnalyzePage() {
                     {f.samples.map((s) => (
                       <li key={s.id} className="flex items-center justify-between gap-2">
                         <span className="truncate text-slate-700">{s.label}</span>
-                        <code className="ml-2 shrink-0 text-xs text-slate-400">{s.id.slice(0, 8)}</code>
+                        <code className="ml-2 shrink-0 text-xs text-slate-400">
+                          {s.id.slice(0, 8)}
+                        </code>
                       </li>
                     ))}
                     {f.count > f.samples.length ? (
-                      <li className="text-xs italic text-slate-500">
+                      <li className="text-xs text-slate-500 italic">
                         … and {f.count - f.samples.length} more.
                       </li>
                     ) : null}

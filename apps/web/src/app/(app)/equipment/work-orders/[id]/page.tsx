@@ -3,22 +3,8 @@ import { notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { asc, eq } from 'drizzle-orm'
 import { FileText, Mail } from 'lucide-react'
-import {
-  Badge,
-  Button,
-  DetailHeader,
-  Input,
-  Label,
-  Select,
-  Textarea,
-} from '@beaconhs/ui'
-import {
-  equipmentItems,
-  equipmentWorkOrders,
-  people,
-  tenantUsers,
-  user,
-} from '@beaconhs/db/schema'
+import { Badge, Button, DetailHeader, Input, Label, Select, Textarea } from '@beaconhs/ui'
+import { equipmentItems, equipmentWorkOrders, people, tenantUsers, user } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { pickString } from '@/lib/list-params'
@@ -72,10 +58,8 @@ async function updateOverview(formData: FormData) {
   const summary = String(formData.get('summary') ?? '').trim()
   const description = String(formData.get('description') ?? '').trim() || null
   const priority = String(formData.get('priority') ?? 'med') as (typeof PRIORITIES)[number]
-  const assignedToTenantUserId =
-    String(formData.get('assignedToTenantUserId') ?? '').trim() || null
-  const reportedByPersonId =
-    String(formData.get('reportedByPersonId') ?? '').trim() || null
+  const assignedToTenantUserId = String(formData.get('assignedToTenantUserId') ?? '').trim() || null
+  const reportedByPersonId = String(formData.get('reportedByPersonId') ?? '').trim() || null
   if (!id || !summary) return
   if (!PRIORITIES.includes(priority)) return
 
@@ -275,9 +259,7 @@ export default async function WorkOrderDetailPage({
   if (!data) notFound()
   const { wo, item, assignee, assigneeUser, reporter, assignees, reporters } = data
   const activity =
-    active === 'activity'
-      ? await recentActivityForEntity(ctx, 'equipment_work_order', id, 50)
-      : []
+    active === 'activity' ? await recentActivityForEntity(ctx, 'equipment_work_order', id, 50) : []
   const basePath = `/equipment/work-orders/${id}`
   const closed = wo.status === 'closed' || wo.status === 'cancelled'
 
@@ -304,7 +286,9 @@ export default async function WorkOrderDetailPage({
                 </Button>
               </Link>
               <Link
-                href={`/equipment/work-orders/${id}?send=1${active !== 'overview' ? `&tab=${active}` : ''}` as any}
+                href={
+                  `/equipment/work-orders/${id}?send=1${active !== 'overview' ? `&tab=${active}` : ''}` as any
+                }
                 scroll={false}
               >
                 <Button variant="outline">
@@ -345,7 +329,10 @@ export default async function WorkOrderDetailPage({
                   {
                     label: 'Equipment',
                     value: item ? (
-                      <Link href={`/equipment/${item.id}`} className="text-teal-700 hover:underline">
+                      <Link
+                        href={`/equipment/${item.id}`}
+                        className="text-teal-700 hover:underline"
+                      >
                         <span className="font-mono text-xs">{item.assetTag}</span> · {item.name}
                       </Link>
                     ) : (
@@ -361,7 +348,10 @@ export default async function WorkOrderDetailPage({
                   {
                     label: 'Reported by',
                     value: reporter ? (
-                      <Link href={`/people/${reporter.id}`} className="text-teal-700 hover:underline">
+                      <Link
+                        href={`/people/${reporter.id}`}
+                        className="text-teal-700 hover:underline"
+                      >
                         {reporter.firstName} {reporter.lastName}
                       </Link>
                     ) : (
@@ -378,8 +368,10 @@ export default async function WorkOrderDetailPage({
               />
               {wo.description ? (
                 <div className="mt-4">
-                  <div className="text-xs uppercase tracking-wide text-slate-500">Description</div>
-                  <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{wo.description}</p>
+                  <div className="text-xs tracking-wide text-slate-500 uppercase">Description</div>
+                  <p className="mt-1 text-sm whitespace-pre-wrap text-slate-700">
+                    {wo.description}
+                  </p>
                 </div>
               ) : null}
             </Section>
@@ -414,10 +406,7 @@ export default async function WorkOrderDetailPage({
                     </Select>
                   </Field>
                   <Field label="Reported by" className="sm:col-span-2">
-                    <Select
-                      name="reportedByPersonId"
-                      defaultValue={wo.reportedByPersonId ?? ''}
-                    >
+                    <Select name="reportedByPersonId" defaultValue={wo.reportedByPersonId ?? ''}>
                       <option value="">— Not specified —</option>
                       {reporters.map((p) => (
                         <option key={p.id} value={p.id}>

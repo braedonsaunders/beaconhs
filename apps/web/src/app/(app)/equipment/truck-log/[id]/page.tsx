@@ -12,12 +12,7 @@ import {
   Select,
   Textarea,
 } from '@beaconhs/ui'
-import {
-  equipmentItems,
-  orgUnits,
-  people,
-  truckLogEntries,
-} from '@beaconhs/db/schema'
+import { equipmentItems, orgUnits, people, truckLogEntries } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { DetailGrid } from '@/components/detail-grid'
@@ -60,7 +55,9 @@ async function updateEntry(formData: FormData) {
   const manpowerCount = safeInt(formData.get('manpowerCount'))
   const notes = safeStr(formData.get('notes'))
   const kmDriven =
-    typeof startOdometer === 'number' && typeof endOdometer === 'number' && endOdometer >= startOdometer
+    typeof startOdometer === 'number' &&
+    typeof endOdometer === 'number' &&
+    endOdometer >= startOdometer
       ? endOdometer - startOdometer
       : null
 
@@ -158,7 +155,11 @@ export default async function TruckLogDetailPage({
     if (!row) return null
     const [trucks, sites, drivers] = await Promise.all([
       tx
-        .select({ id: equipmentItems.id, assetTag: equipmentItems.assetTag, name: equipmentItems.name })
+        .select({
+          id: equipmentItems.id,
+          assetTag: equipmentItems.assetTag,
+          name: equipmentItems.name,
+        })
         .from(equipmentItems)
         .orderBy(asc(equipmentItems.assetTag))
         .limit(500),
@@ -187,7 +188,10 @@ export default async function TruckLogDetailPage({
     <DetailPageLayout
       header={
         <DetailHeader
-          back={{ href: `/equipment/truck-log?month=${entry.entryDate.slice(0, 7)}`, label: 'Back to truck log' }}
+          back={{
+            href: `/equipment/truck-log?month=${entry.entryDate.slice(0, 7)}`,
+            label: 'Back to truck log',
+          }}
           title={`${truck?.assetTag ?? '—'} · ${entry.entryDate}`}
           subtitle={truck ? truck.name : 'Equipment removed'}
         />
@@ -241,8 +245,8 @@ export default async function TruckLogDetailPage({
             />
             {entry.notes ? (
               <div className="mt-4">
-                <div className="text-xs uppercase tracking-wide text-slate-500">Notes</div>
-                <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{entry.notes}</p>
+                <div className="text-xs tracking-wide text-slate-500 uppercase">Notes</div>
+                <p className="mt-1 text-sm whitespace-pre-wrap text-slate-700">{entry.notes}</p>
               </div>
             ) : null}
             <div className="mt-6 flex justify-end">

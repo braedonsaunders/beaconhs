@@ -130,7 +130,10 @@ export async function mergeTags(
       .select({ id: journalEntryTags.entryId })
       .from(journalEntryTags)
       .where(
-        and(eq(journalEntryTags.tenantId, ctx.tenantId), inArray(journalEntryTags.tag, [...srcs, tgt])),
+        and(
+          eq(journalEntryTags.tenantId, ctx.tenantId),
+          inArray(journalEntryTags.tag, [...srcs, tgt]),
+        ),
       )
     const entryIds = Array.from(new Set(touched.map((r) => r.id)))
 
@@ -139,7 +142,10 @@ export async function mergeTags(
     await tx.execute(sql`
       delete from ${journalEntryTags} src
       where src.tenant_id = ${ctx.tenantId}
-        and src.tag in (${sql.join(srcs.map((s) => sql`${s}`), sql`, `)})
+        and src.tag in (${sql.join(
+          srcs.map((s) => sql`${s}`),
+          sql`, `,
+        )})
         and exists (
           select 1 from ${journalEntryTags} keep
           where keep.entry_id = src.entry_id and keep.tag = ${tgt}
@@ -188,11 +194,7 @@ export async function mergeTags(
 }
 
 /** Rename a tag everywhere; if the new name already exists this becomes a merge. */
-export async function renameTag(
-  ctx: RequestContext,
-  from: string,
-  to: string,
-): Promise<number> {
+export async function renameTag(ctx: RequestContext, from: string, to: string): Promise<number> {
   return mergeTags(ctx, [from], to)
 }
 

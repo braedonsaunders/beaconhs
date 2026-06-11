@@ -129,9 +129,7 @@ export default async function ChargesReport({
   for (const e of expenseRows) {
     const key = e.orgUnitId ?? '__unassigned__'
     const cur = rollup.get(key) ?? {
-      name: e.orgUnitId
-        ? (projectMap.get(e.orgUnitId)?.name ?? 'Unknown')
-        : 'Unassigned',
+      name: e.orgUnitId ? (projectMap.get(e.orgUnitId)?.name ?? 'Unknown') : 'Unassigned',
       expenses: 0,
       hours: 0,
       revenue: 0,
@@ -162,14 +160,8 @@ export default async function ChargesReport({
   const totalCharges = totalRevenue + totalExpenses
 
   // Month navigation links.
-  const prev =
-    month === 1
-      ? `${year - 1}-12`
-      : `${year}-${String(month - 1).padStart(2, '0')}`
-  const next =
-    month === 12
-      ? `${year + 1}-01`
-      : `${year}-${String(month + 1).padStart(2, '0')}`
+  const prev = month === 1 ? `${year - 1}-12` : `${year}-${String(month - 1).padStart(2, '0')}`
+  const next = month === 12 ? `${year + 1}-01` : `${year}-${String(month + 1).padStart(2, '0')}`
 
   return (
     <ListPageLayout
@@ -182,7 +174,9 @@ export default async function ChargesReport({
             back={{ href: '/equipment/reports', label: 'Back to reports' }}
             actions={
               <Link
-                href={buildExportHref('/equipment/reports/charges/export.csv', { month: `${year}-${String(month).padStart(2, '0')}` })}
+                href={buildExportHref('/equipment/reports/charges/export.csv', {
+                  month: `${year}-${String(month).padStart(2, '0')}`,
+                })}
               >
                 <Button variant="outline">Export CSV</Button>
               </Link>

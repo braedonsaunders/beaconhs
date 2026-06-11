@@ -223,22 +223,19 @@ async function createWorkOrder(formData: FormData) {
   const itemId = String(formData.get('itemId') ?? '')
   const summary = String(formData.get('summary') ?? '').trim()
   const description = String(formData.get('description') ?? '').trim() || null
-  const status =
-    (String(formData.get('status') ?? 'open') as
-      | 'open'
-      | 'assigned'
-      | 'in_progress'
-      | 'awaiting_parts'
-      | 'repaired'
-      | 'verified'
-      | 'closed'
-      | 'cancelled')
+  const status = String(formData.get('status') ?? 'open') as
+    | 'open'
+    | 'assigned'
+    | 'in_progress'
+    | 'awaiting_parts'
+    | 'repaired'
+    | 'verified'
+    | 'closed'
+    | 'cancelled'
   if (!itemId || !summary) return
 
   const ref = await ctx.db(async (tx) => {
-    const [agg] = await tx
-      .select({ n: sql<number>`count(*)::int` })
-      .from(equipmentWorkOrders)
+    const [agg] = await tx.select({ n: sql<number>`count(*)::int` }).from(equipmentWorkOrders)
     const next = ((agg?.n ?? 0) + 1).toString().padStart(4, '0')
     const reference = `WO-${new Date().getFullYear()}-${next}`
     await tx.insert(equipmentWorkOrders).values({
@@ -348,8 +345,7 @@ async function checkOutFromItem(formData: FormData) {
   const ctx = await requireRequestContext()
   const itemId = String(formData.get('itemId') ?? '').trim()
   const holderPersonId = String(formData.get('holderPersonId') ?? '').trim() || null
-  const destinationOrgUnitId =
-    String(formData.get('destinationOrgUnitId') ?? '').trim() || null
+  const destinationOrgUnitId = String(formData.get('destinationOrgUnitId') ?? '').trim() || null
   const expectedReturnOn = String(formData.get('expectedReturnOn') ?? '').trim() || null
   const notes = String(formData.get('notes') ?? '').trim() || null
   if (!itemId) return
@@ -448,14 +444,8 @@ async function createWorkOrderAction(input: {
 }): Promise<{ ok: boolean; error?: string }> {
   'use server'
   const ctx = await requireRequestContext()
-  const {
-    itemId,
-    summary,
-    description,
-    priority,
-    assignedToTenantUserId,
-    reportedByPersonId,
-  } = input
+  const { itemId, summary, description, priority, assignedToTenantUserId, reportedByPersonId } =
+    input
   if (!itemId || !summary.trim()) return { ok: false, error: 'Summary is required.' }
   if (!PRIORITIES.includes(priority)) return { ok: false, error: 'Invalid priority.' }
 
@@ -616,87 +606,80 @@ export default async function EquipmentDetailPage({
       logRows,
       checkoutRows,
     ] = await Promise.all([
-        tx
-          .select({ history: equipmentLocationHistory, site: orgUnits, holder: people })
-          .from(equipmentLocationHistory)
-          .leftJoin(orgUnits, eq(orgUnits.id, equipmentLocationHistory.siteOrgUnitId))
-          .leftJoin(people, eq(people.id, equipmentLocationHistory.holderPersonId))
-          .where(eq(equipmentLocationHistory.itemId, id))
-          .orderBy(desc(equipmentLocationHistory.recordedAt))
-          .limit(50),
-        tx
-          .select()
-          .from(equipmentWorkOrders)
-          .where(eq(equipmentWorkOrders.itemId, id))
-          .orderBy(desc(equipmentWorkOrders.openedAt))
-          .limit(50),
-        tx.select().from(orgUnits).orderBy(asc(orgUnits.name)).limit(200),
-        tx.select().from(people).orderBy(asc(people.lastName), asc(people.firstName)).limit(200),
-        // Active tenant members for the work-order assignee dropdown.
-        tx
-          .select({ id: tenantUsers.id, displayName: tenantUsers.displayName, userName: user.name })
-          .from(tenantUsers)
-          .leftJoin(user, eq(user.id, tenantUsers.userId))
-          .where(eq(tenantUsers.status, 'active'))
-          .orderBy(asc(tenantUsers.displayName))
-          .limit(500),
-        // "Certificates" — document-kind attachments linked to this equipment via metadata->>equipmentId
-        tx
-          .select()
-          .from(attachments)
-          .where(
-            and(
-              eq(attachments.kind, 'document'),
-              sql`${attachments.exif}->>'equipmentId' = ${id}`,
-            ),
-          )
-          .orderBy(desc(attachments.createdAt))
-          .limit(50),
-        tx
-          .select({ response: formResponses, template: formTemplates })
-          .from(formResponses)
-          .innerJoin(formTemplates, eq(formTemplates.id, formResponses.templateId))
-          .where(
-            and(
-              eq(formResponses.sourceEntityType, 'equipment'),
-              eq(formResponses.sourceEntityId, id),
-            ),
-          )
-          .orderBy(desc(formResponses.submittedAt))
-          .limit(50),
-        // Rate for this item's type (one-row-per-type).
-        row.type
-          ? tx
-              .select()
-              .from(equipmentRates)
-              .where(eq(equipmentRates.typeId, row.type.id))
-              .limit(1)
-          : Promise.resolve([]),
-        // Per-item expense ledger.
-        tx
-          .select()
-          .from(equipmentExpenses)
-          .where(eq(equipmentExpenses.equipmentItemId, id))
-          .orderBy(desc(equipmentExpenses.incurredOn))
-          .limit(100),
-        // Per-item freeform log.
-        tx
-          .select({ log: equipmentLogEntries, person: people })
-          .from(equipmentLogEntries)
-          .leftJoin(people, eq(people.id, equipmentLogEntries.personPersonId))
-          .where(eq(equipmentLogEntries.equipmentItemId, id))
-          .orderBy(desc(equipmentLogEntries.entryDate))
-          .limit(100),
-        // Per-item check-out history.
-        tx
-          .select({ co: equipmentCheckouts, holder: people, dest: orgUnits })
-          .from(equipmentCheckouts)
-          .leftJoin(people, eq(people.id, equipmentCheckouts.holderPersonId))
-          .leftJoin(orgUnits, eq(orgUnits.id, equipmentCheckouts.destinationOrgUnitId))
-          .where(eq(equipmentCheckouts.equipmentItemId, id))
-          .orderBy(desc(equipmentCheckouts.checkedOutAt))
-          .limit(100),
-      ])
+      tx
+        .select({ history: equipmentLocationHistory, site: orgUnits, holder: people })
+        .from(equipmentLocationHistory)
+        .leftJoin(orgUnits, eq(orgUnits.id, equipmentLocationHistory.siteOrgUnitId))
+        .leftJoin(people, eq(people.id, equipmentLocationHistory.holderPersonId))
+        .where(eq(equipmentLocationHistory.itemId, id))
+        .orderBy(desc(equipmentLocationHistory.recordedAt))
+        .limit(50),
+      tx
+        .select()
+        .from(equipmentWorkOrders)
+        .where(eq(equipmentWorkOrders.itemId, id))
+        .orderBy(desc(equipmentWorkOrders.openedAt))
+        .limit(50),
+      tx.select().from(orgUnits).orderBy(asc(orgUnits.name)).limit(200),
+      tx.select().from(people).orderBy(asc(people.lastName), asc(people.firstName)).limit(200),
+      // Active tenant members for the work-order assignee dropdown.
+      tx
+        .select({ id: tenantUsers.id, displayName: tenantUsers.displayName, userName: user.name })
+        .from(tenantUsers)
+        .leftJoin(user, eq(user.id, tenantUsers.userId))
+        .where(eq(tenantUsers.status, 'active'))
+        .orderBy(asc(tenantUsers.displayName))
+        .limit(500),
+      // "Certificates" — document-kind attachments linked to this equipment via metadata->>equipmentId
+      tx
+        .select()
+        .from(attachments)
+        .where(
+          and(eq(attachments.kind, 'document'), sql`${attachments.exif}->>'equipmentId' = ${id}`),
+        )
+        .orderBy(desc(attachments.createdAt))
+        .limit(50),
+      tx
+        .select({ response: formResponses, template: formTemplates })
+        .from(formResponses)
+        .innerJoin(formTemplates, eq(formTemplates.id, formResponses.templateId))
+        .where(
+          and(
+            eq(formResponses.sourceEntityType, 'equipment'),
+            eq(formResponses.sourceEntityId, id),
+          ),
+        )
+        .orderBy(desc(formResponses.submittedAt))
+        .limit(50),
+      // Rate for this item's type (one-row-per-type).
+      row.type
+        ? tx.select().from(equipmentRates).where(eq(equipmentRates.typeId, row.type.id)).limit(1)
+        : Promise.resolve([]),
+      // Per-item expense ledger.
+      tx
+        .select()
+        .from(equipmentExpenses)
+        .where(eq(equipmentExpenses.equipmentItemId, id))
+        .orderBy(desc(equipmentExpenses.incurredOn))
+        .limit(100),
+      // Per-item freeform log.
+      tx
+        .select({ log: equipmentLogEntries, person: people })
+        .from(equipmentLogEntries)
+        .leftJoin(people, eq(people.id, equipmentLogEntries.personPersonId))
+        .where(eq(equipmentLogEntries.equipmentItemId, id))
+        .orderBy(desc(equipmentLogEntries.entryDate))
+        .limit(100),
+      // Per-item check-out history.
+      tx
+        .select({ co: equipmentCheckouts, holder: people, dest: orgUnits })
+        .from(equipmentCheckouts)
+        .leftJoin(people, eq(people.id, equipmentCheckouts.holderPersonId))
+        .leftJoin(orgUnits, eq(orgUnits.id, equipmentCheckouts.destinationOrgUnitId))
+        .where(eq(equipmentCheckouts.equipmentItemId, id))
+        .orderBy(desc(equipmentCheckouts.checkedOutAt))
+        .limit(100),
+    ])
 
     return {
       ...row,
@@ -838,9 +821,7 @@ export default async function EquipmentDetailPage({
                   <>
                     <div>{headline}.</div>
                     {item.missingNotes ? (
-                      <div className="mt-1 whitespace-pre-wrap text-xs">
-                        {item.missingNotes}
-                      </div>
+                      <div className="mt-1 text-xs whitespace-pre-wrap">{item.missingNotes}</div>
                     ) : null}
                     <div className="mt-1 text-xs">
                       Use <strong>Mark as found</strong> when the asset is recovered.
@@ -909,237 +890,406 @@ export default async function EquipmentDetailPage({
              * outgoing panel fades while the incoming one slides in.
              */}
             <TabContent tabKey={active}>
-
-            {active === 'overview' ? (
-              <Section title="General">
-                <DetailGrid
-                  rows={[
-                    { label: 'Name', value: item.name },
-                    { label: 'Asset tag', value: <span className="font-mono">{item.assetTag}</span> },
-                    { label: 'Serial #', value: item.serialNumber ?? '—' },
-                    { label: 'Type', value: type?.name ?? '—' },
-                    { label: 'Category', value: type?.category ?? '—' },
-                    { label: 'Description', value: item.description ?? '—' },
-                    { label: 'Current site', value: site?.name ?? '—' },
-                    {
-                      label: 'Current holder',
-                      value: holder ? (
-                        <Link href={`/people/${holder.id}`} className="text-teal-700 hover:underline">
-                          {holder.firstName} {holder.lastName}
-                        </Link>
-                      ) : (
-                        '—'
-                      ),
-                    },
-                    { label: 'Purchased', value: item.purchaseDate ?? '—' },
-                    { label: 'Warranty expires', value: item.warrantyExpiresOn ?? '—' },
-                    { label: 'Billing category', value: item.billingRateCategory ?? '—' },
-                    {
-                      label: 'Last seen',
-                      value: item.lastSeenAt ? new Date(item.lastSeenAt).toLocaleString() : '—',
-                    },
-                  ]}
-                />
-              </Section>
-            ) : null}
-
-            {active === 'maintenance' ? (
-              <div className="space-y-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Inspection settings</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <DetailGrid
-                      rows={[
-                        {
-                          label: 'Requires pre-use inspection',
-                          value: item.requiresPreUseInspection ? (
-                            <Badge variant="success">Yes</Badge>
-                          ) : (
-                            <Badge variant="secondary">No</Badge>
-                          ),
-                        },
-                        {
-                          label: 'Pre-use template',
-                          value: item.preUseInspectionTemplateKey ?? '—',
-                        },
-                        {
-                          label: 'Last pre-use inspection',
-                          value: item.lastPreUseInspectionAt
-                            ? new Date(item.lastPreUseInspectionAt).toLocaleString()
-                            : '—',
-                        },
-                        {
-                          label: 'Requires annual inspection',
-                          value: item.requiresAnnualInspection ? (
-                            <Badge variant="success">Yes</Badge>
-                          ) : (
-                            <Badge variant="secondary">No</Badge>
-                          ),
-                        },
-                        { label: 'Last annual', value: item.lastAnnualInspectionOn ?? '—' },
-                        { label: 'Next annual due', value: item.nextAnnualInspectionDue ?? '—' },
-                      ]}
-                    />
-                  </CardContent>
-                </Card>
-                <Section title="Start a new inspection">
-                  <div className="flex flex-wrap items-center gap-3 text-sm">
-                    <p className="text-slate-600">
-                      Choose a form template bound to equipment inspection to start a new
-                      inspection. The completed form will appear under the Inspections tab.
-                    </p>
-                    <Link
-                      href={`/forms?category=inspection&sourceEntityType=equipment&sourceEntityId=${id}`}
-                    >
-                      <Button>
-                        <ClipboardCheck size={14} /> Browse inspection forms
-                      </Button>
-                    </Link>
-                  </div>
+              {active === 'overview' ? (
+                <Section title="General">
+                  <DetailGrid
+                    rows={[
+                      { label: 'Name', value: item.name },
+                      {
+                        label: 'Asset tag',
+                        value: <span className="font-mono">{item.assetTag}</span>,
+                      },
+                      { label: 'Serial #', value: item.serialNumber ?? '—' },
+                      { label: 'Type', value: type?.name ?? '—' },
+                      { label: 'Category', value: type?.category ?? '—' },
+                      { label: 'Description', value: item.description ?? '—' },
+                      { label: 'Current site', value: site?.name ?? '—' },
+                      {
+                        label: 'Current holder',
+                        value: holder ? (
+                          <Link
+                            href={`/people/${holder.id}`}
+                            className="text-teal-700 hover:underline"
+                          >
+                            {holder.firstName} {holder.lastName}
+                          </Link>
+                        ) : (
+                          '—'
+                        ),
+                      },
+                      { label: 'Purchased', value: item.purchaseDate ?? '—' },
+                      { label: 'Warranty expires', value: item.warrantyExpiresOn ?? '—' },
+                      { label: 'Billing category', value: item.billingRateCategory ?? '—' },
+                      {
+                        label: 'Last seen',
+                        value: item.lastSeenAt ? new Date(item.lastSeenAt).toLocaleString() : '—',
+                      },
+                    ]}
+                  />
                 </Section>
-              </div>
-            ) : null}
+              ) : null}
 
-            {active === 'work_orders' ? (
-              <div className="space-y-4">
+              {active === 'maintenance' ? (
+                <div className="space-y-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Inspection settings</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <DetailGrid
+                        rows={[
+                          {
+                            label: 'Requires pre-use inspection',
+                            value: item.requiresPreUseInspection ? (
+                              <Badge variant="success">Yes</Badge>
+                            ) : (
+                              <Badge variant="secondary">No</Badge>
+                            ),
+                          },
+                          {
+                            label: 'Pre-use template',
+                            value: item.preUseInspectionTemplateKey ?? '—',
+                          },
+                          {
+                            label: 'Last pre-use inspection',
+                            value: item.lastPreUseInspectionAt
+                              ? new Date(item.lastPreUseInspectionAt).toLocaleString()
+                              : '—',
+                          },
+                          {
+                            label: 'Requires annual inspection',
+                            value: item.requiresAnnualInspection ? (
+                              <Badge variant="success">Yes</Badge>
+                            ) : (
+                              <Badge variant="secondary">No</Badge>
+                            ),
+                          },
+                          { label: 'Last annual', value: item.lastAnnualInspectionOn ?? '—' },
+                          { label: 'Next annual due', value: item.nextAnnualInspectionDue ?? '—' },
+                        ]}
+                      />
+                    </CardContent>
+                  </Card>
+                  <Section title="Start a new inspection">
+                    <div className="flex flex-wrap items-center gap-3 text-sm">
+                      <p className="text-slate-600">
+                        Choose a form template bound to equipment inspection to start a new
+                        inspection. The completed form will appear under the Inspections tab.
+                      </p>
+                      <Link
+                        href={`/forms?category=inspection&sourceEntityType=equipment&sourceEntityId=${id}`}
+                      >
+                        <Button>
+                          <ClipboardCheck size={14} /> Browse inspection forms
+                        </Button>
+                      </Link>
+                    </div>
+                  </Section>
+                </div>
+              ) : null}
+
+              {active === 'work_orders' ? (
+                <div className="space-y-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Work orders ({workOrders.length})</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {workOrders.length === 0 ? (
+                        <EmptyState
+                          icon={<Wrench size={24} />}
+                          title="No work orders"
+                          description="Open a work order below to track repairs or scheduled service."
+                        />
+                      ) : (
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Ref</TableHead>
+                              <TableHead>Summary</TableHead>
+                              <TableHead>Status</TableHead>
+                              <TableHead>Opened</TableHead>
+                              <TableHead>Closed</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {workOrders.map((w) => (
+                              <TableRow key={w.id}>
+                                <TableCell className="font-mono text-xs">{w.reference}</TableCell>
+                                <TableCell>{w.summary}</TableCell>
+                                <TableCell>
+                                  <Badge
+                                    variant={
+                                      w.status === 'closed'
+                                        ? 'success'
+                                        : w.status === 'cancelled'
+                                          ? 'secondary'
+                                          : 'warning'
+                                    }
+                                  >
+                                    {w.status.replace('_', ' ')}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>{new Date(w.openedAt).toLocaleDateString()}</TableCell>
+                                <TableCell>
+                                  {w.closedAt ? new Date(w.closedAt).toLocaleDateString() : '—'}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      )}
+                    </CardContent>
+                  </Card>
+                  <Section title="Open a new work order">
+                    <form
+                      action={createWorkOrder}
+                      className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+                    >
+                      <input type="hidden" name="itemId" value={id} />
+                      <Field label="Summary" required className="sm:col-span-2">
+                        <Input
+                          name="summary"
+                          required
+                          placeholder="e.g. Brake lights inoperative"
+                        />
+                      </Field>
+                      <Field label="Initial status">
+                        <Select name="status" defaultValue="open">
+                          <option value="open">Open</option>
+                          <option value="assigned">Assigned</option>
+                          <option value="in_progress">In progress</option>
+                          <option value="awaiting_parts">Awaiting parts</option>
+                        </Select>
+                      </Field>
+                      <Field label="Description" className="sm:col-span-2">
+                        <Textarea name="description" rows={3} placeholder="What's wrong?" />
+                      </Field>
+                      <div className="flex justify-end sm:col-span-2">
+                        <Button type="submit">
+                          <Wrench size={14} /> Create work order
+                        </Button>
+                      </div>
+                    </form>
+                  </Section>
+                </div>
+              ) : null}
+
+              {active === 'location' ? (
+                <div className="space-y-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Current location</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-1 text-sm">
+                      <div className="flex items-center gap-2">
+                        <MapPin size={16} className="text-slate-400" />
+                        {site?.name ?? 'Unassigned'}
+                      </div>
+                      {holder ? (
+                        <div className="text-slate-600">
+                          Held by{' '}
+                          <Link
+                            href={`/people/${holder.id}`}
+                            className="text-teal-700 hover:underline"
+                          >
+                            {holder.firstName} {holder.lastName}
+                          </Link>
+                        </div>
+                      ) : null}
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Location history ({history.length})</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {history.length === 0 ? (
+                        <p className="text-sm text-slate-500">No movement recorded yet.</p>
+                      ) : (
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>When</TableHead>
+                              <TableHead>Site</TableHead>
+                              <TableHead>Holder</TableHead>
+                              <TableHead>Note</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {history.map((row) => (
+                              <TableRow key={row.history.id}>
+                                <TableCell>
+                                  {new Date(row.history.recordedAt).toLocaleString()}
+                                </TableCell>
+                                <TableCell>{row.site?.name ?? '—'}</TableCell>
+                                <TableCell>
+                                  {row.holder
+                                    ? `${row.holder.firstName} ${row.holder.lastName}`
+                                    : '—'}
+                                </TableCell>
+                                <TableCell className="text-slate-600">
+                                  {row.history.note ?? '—'}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      )}
+                    </CardContent>
+                  </Card>
+                  <Section title="Transfer to a new location or holder">
+                    <form
+                      action={transferLocation}
+                      className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+                    >
+                      <input type="hidden" name="id" value={id} />
+                      <Field label="Move to site">
+                        <Select name="siteOrgUnitId" defaultValue={item.currentSiteOrgUnitId ?? ''}>
+                          <option value="">— Unassigned —</option>
+                          {sites.map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.name}
+                            </option>
+                          ))}
+                        </Select>
+                      </Field>
+                      <Field label="Assign to person">
+                        <Select
+                          name="holderPersonId"
+                          defaultValue={item.currentHolderPersonId ?? ''}
+                        >
+                          <option value="">— No holder —</option>
+                          {holders.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.lastName}, {p.firstName}
+                            </option>
+                          ))}
+                        </Select>
+                      </Field>
+                      <Field label="Note" className="sm:col-span-2">
+                        <Input name="note" placeholder="Optional context for the audit log" />
+                      </Field>
+                      <div className="flex justify-end sm:col-span-2">
+                        <Button type="submit">
+                          <ArrowLeftRight size={14} /> Record transfer
+                        </Button>
+                      </div>
+                    </form>
+                  </Section>
+                </div>
+              ) : null}
+
+              {active === 'certificates' ? (
                 <Card>
                   <CardHeader>
-                    <CardTitle>Work orders ({workOrders.length})</CardTitle>
+                    <CardTitle>Certificates ({certAttachments.length})</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    {workOrders.length === 0 ? (
+                    {certAttachments.length === 0 ? (
                       <EmptyState
-                        icon={<Wrench size={24} />}
-                        title="No work orders"
-                        description="Open a work order below to track repairs or scheduled service."
+                        icon={<FileText size={24} />}
+                        title="No certificates attached"
+                        description="Upload calibration, inspection, or warranty certificates and tag them with this equipment's id in their exif metadata to surface them here."
                       />
                     ) : (
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead>Ref</TableHead>
-                            <TableHead>Summary</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead>Opened</TableHead>
-                            <TableHead>Closed</TableHead>
+                            <TableHead>File</TableHead>
+                            <TableHead>Type</TableHead>
+                            <TableHead>Size</TableHead>
+                            <TableHead>Uploaded</TableHead>
+                            <TableHead></TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {workOrders.map((w) => (
-                            <TableRow key={w.id}>
-                              <TableCell className="font-mono text-xs">{w.reference}</TableCell>
-                              <TableCell>{w.summary}</TableCell>
+                          {certAttachments.map((a) => (
+                            <TableRow key={a.id}>
+                              <TableCell className="font-medium">{a.filename}</TableCell>
+                              <TableCell className="text-slate-600">{a.contentType}</TableCell>
+                              <TableCell className="text-slate-600">
+                                {humanSize(a.sizeBytes)}
+                              </TableCell>
+                              <TableCell>{new Date(a.createdAt).toLocaleDateString()}</TableCell>
+                              <TableCell>
+                                <a
+                                  href={publicUrl(a.r2Key)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-teal-700 hover:underline"
+                                >
+                                  Open →
+                                </a>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )}
+                  </CardContent>
+                </Card>
+              ) : null}
+
+              {active === 'inspections' ? (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Inspection history ({inspectionResponses.length})</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {inspectionResponses.length === 0 ? (
+                      <EmptyState
+                        icon={<ClipboardCheck size={24} />}
+                        title="No inspections recorded"
+                        description="Pre-use, scheduled, and ad-hoc inspections (any form pinned to this equipment) appear here."
+                        action={
+                          <Link
+                            href={`/forms?category=inspection&sourceEntityType=equipment&sourceEntityId=${id}`}
+                          >
+                            <Button variant="outline" size="sm">
+                              Start an inspection →
+                            </Button>
+                          </Link>
+                        }
+                      />
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Form</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead>Submitted</TableHead>
+                            <TableHead></TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {inspectionResponses.map((r) => (
+                            <TableRow key={r.response.id}>
+                              <TableCell className="font-medium">{r.template.name}</TableCell>
                               <TableCell>
                                 <Badge
                                   variant={
-                                    w.status === 'closed'
+                                    r.response.status === 'closed' ||
+                                    r.response.status === 'submitted'
                                       ? 'success'
-                                      : w.status === 'cancelled'
-                                        ? 'secondary'
-                                        : 'warning'
+                                      : 'warning'
                                   }
                                 >
-                                  {w.status.replace('_', ' ')}
+                                  {r.response.status.replace('_', ' ')}
                                 </Badge>
                               </TableCell>
-                              <TableCell>{new Date(w.openedAt).toLocaleDateString()}</TableCell>
                               <TableCell>
-                                {w.closedAt ? new Date(w.closedAt).toLocaleDateString() : '—'}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    )}
-                  </CardContent>
-                </Card>
-                <Section title="Open a new work order">
-                  <form
-                    action={createWorkOrder}
-                    className="grid grid-cols-1 gap-3 sm:grid-cols-2"
-                  >
-                    <input type="hidden" name="itemId" value={id} />
-                    <Field label="Summary" required className="sm:col-span-2">
-                      <Input name="summary" required placeholder="e.g. Brake lights inoperative" />
-                    </Field>
-                    <Field label="Initial status">
-                      <Select name="status" defaultValue="open">
-                        <option value="open">Open</option>
-                        <option value="assigned">Assigned</option>
-                        <option value="in_progress">In progress</option>
-                        <option value="awaiting_parts">Awaiting parts</option>
-                      </Select>
-                    </Field>
-                    <Field label="Description" className="sm:col-span-2">
-                      <Textarea name="description" rows={3} placeholder="What's wrong?" />
-                    </Field>
-                    <div className="sm:col-span-2 flex justify-end">
-                      <Button type="submit">
-                        <Wrench size={14} /> Create work order
-                      </Button>
-                    </div>
-                  </form>
-                </Section>
-              </div>
-            ) : null}
-
-            {active === 'location' ? (
-              <div className="space-y-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Current location</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-1 text-sm">
-                    <div className="flex items-center gap-2">
-                      <MapPin size={16} className="text-slate-400" />
-                      {site?.name ?? 'Unassigned'}
-                    </div>
-                    {holder ? (
-                      <div className="text-slate-600">
-                        Held by{' '}
-                        <Link
-                          href={`/people/${holder.id}`}
-                          className="text-teal-700 hover:underline"
-                        >
-                          {holder.firstName} {holder.lastName}
-                        </Link>
-                      </div>
-                    ) : null}
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Location history ({history.length})</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {history.length === 0 ? (
-                      <p className="text-sm text-slate-500">No movement recorded yet.</p>
-                    ) : (
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>When</TableHead>
-                            <TableHead>Site</TableHead>
-                            <TableHead>Holder</TableHead>
-                            <TableHead>Note</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {history.map((row) => (
-                            <TableRow key={row.history.id}>
-                              <TableCell>
-                                {new Date(row.history.recordedAt).toLocaleString()}
-                              </TableCell>
-                              <TableCell>{row.site?.name ?? '—'}</TableCell>
-                              <TableCell>
-                                {row.holder
-                                  ? `${row.holder.firstName} ${row.holder.lastName}`
+                                {r.response.submittedAt
+                                  ? new Date(r.response.submittedAt).toLocaleDateString()
                                   : '—'}
                               </TableCell>
-                              <TableCell className="text-slate-600">
-                                {row.history.note ?? '—'}
+                              <TableCell>
+                                <Link
+                                  href={`/forms/responses/${r.response.id}`}
+                                  className="text-xs text-teal-700 hover:underline"
+                                >
+                                  View →
+                                </Link>
                               </TableCell>
                             </TableRow>
                           ))}
@@ -1148,481 +1298,307 @@ export default async function EquipmentDetailPage({
                     )}
                   </CardContent>
                 </Card>
-                <Section title="Transfer to a new location or holder">
-                  <form
-                    action={transferLocation}
-                    className="grid grid-cols-1 gap-3 sm:grid-cols-2"
-                  >
-                    <input type="hidden" name="id" value={id} />
-                    <Field label="Move to site">
-                      <Select name="siteOrgUnitId" defaultValue={item.currentSiteOrgUnitId ?? ''}>
-                        <option value="">— Unassigned —</option>
-                        {sites.map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.name}
-                          </option>
-                        ))}
-                      </Select>
-                    </Field>
-                    <Field label="Assign to person">
-                      <Select
-                        name="holderPersonId"
-                        defaultValue={item.currentHolderPersonId ?? ''}
-                      >
-                        <option value="">— No holder —</option>
-                        {holders.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.lastName}, {p.firstName}
-                          </option>
-                        ))}
-                      </Select>
-                    </Field>
-                    <Field label="Note" className="sm:col-span-2">
-                      <Input name="note" placeholder="Optional context for the audit log" />
-                    </Field>
-                    <div className="sm:col-span-2 flex justify-end">
-                      <Button type="submit">
-                        <ArrowLeftRight size={14} /> Record transfer
-                      </Button>
-                    </div>
-                  </form>
-                </Section>
-              </div>
-            ) : null}
+              ) : null}
 
-            {active === 'certificates' ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Certificates ({certAttachments.length})</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {certAttachments.length === 0 ? (
-                    <EmptyState
-                      icon={<FileText size={24} />}
-                      title="No certificates attached"
-                      description="Upload calibration, inspection, or warranty certificates and tag them with this equipment's id in their exif metadata to surface them here."
-                    />
-                  ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>File</TableHead>
-                          <TableHead>Type</TableHead>
-                          <TableHead>Size</TableHead>
-                          <TableHead>Uploaded</TableHead>
-                          <TableHead></TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {certAttachments.map((a) => (
-                          <TableRow key={a.id}>
-                            <TableCell className="font-medium">{a.filename}</TableCell>
-                            <TableCell className="text-slate-600">{a.contentType}</TableCell>
-                            <TableCell className="text-slate-600">
-                              {humanSize(a.sizeBytes)}
-                            </TableCell>
-                            <TableCell>
-                              {new Date(a.createdAt).toLocaleDateString()}
-                            </TableCell>
-                            <TableCell>
-                              <a
-                                href={publicUrl(a.r2Key)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-xs text-teal-700 hover:underline"
-                              >
-                                Open →
-                              </a>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  )}
-                </CardContent>
-              </Card>
-            ) : null}
-
-            {active === 'inspections' ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Inspection history ({inspectionResponses.length})</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {inspectionResponses.length === 0 ? (
-                    <EmptyState
-                      icon={<ClipboardCheck size={24} />}
-                      title="No inspections recorded"
-                      description="Pre-use, scheduled, and ad-hoc inspections (any form pinned to this equipment) appear here."
-                      action={
-                        <Link
-                          href={`/forms?category=inspection&sourceEntityType=equipment&sourceEntityId=${id}`}
-                        >
-                          <Button variant="outline" size="sm">
-                            Start an inspection →
-                          </Button>
-                        </Link>
-                      }
-                    />
-                  ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Form</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Submitted</TableHead>
-                          <TableHead></TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {inspectionResponses.map((r) => (
-                          <TableRow key={r.response.id}>
-                            <TableCell className="font-medium">{r.template.name}</TableCell>
-                            <TableCell>
-                              <Badge
-                                variant={
-                                  r.response.status === 'closed' ||
-                                  r.response.status === 'submitted'
-                                    ? 'success'
-                                    : 'warning'
-                                }
-                              >
-                                {r.response.status.replace('_', ' ')}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>
-                              {r.response.submittedAt
-                                ? new Date(r.response.submittedAt).toLocaleDateString()
-                                : '—'}
-                            </TableCell>
-                            <TableCell>
-                              <Link
-                                href={`/forms/responses/${r.response.id}`}
-                                className="text-xs text-teal-700 hover:underline"
-                              >
-                                View →
-                              </Link>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  )}
-                </CardContent>
-              </Card>
-            ) : null}
-
-            {active === 'rates' ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle>
-                    Rates {type ? `(${type.name})` : ''}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {rate ? (
-                    <div className="space-y-3">
-                      <DetailGrid
-                        rows={[
-                          { label: 'Hourly', value: fmtMoney(rate.hourly, rate.currency) },
-                          { label: 'Daily', value: fmtMoney(rate.daily, rate.currency) },
-                          { label: 'Weekly', value: fmtMoney(rate.weekly, rate.currency) },
-                          { label: 'Monthly', value: fmtMoney(rate.monthly, rate.currency) },
-                          { label: 'Currency', value: rate.currency },
-                          { label: 'Category', value: rate.category ?? '—' },
-                        ]}
-                      />
-                      <div>
-                        <Link
-                          href="/equipment/rates"
-                          className="text-xs text-teal-700 hover:underline"
-                        >
-                          Edit rate matrix →
-                        </Link>
-                      </div>
-                    </div>
-                  ) : (
-                    <EmptyState
-                      title="No rate set for this type"
-                      description={
-                        type
-                          ? `Set hourly / daily / weekly / monthly rates for ${type.name}.`
-                          : 'Assign this item to an equipment type first.'
-                      }
-                      action={
-                        <Link href="/equipment/rates">
-                          <Button size="sm">Open rate matrix</Button>
-                        </Link>
-                      }
-                    />
-                  )}
-                </CardContent>
-              </Card>
-            ) : null}
-
-            {active === 'expenses' ? (
-              <div className="space-y-4">
+              {active === 'rates' ? (
                 <Card>
-                  <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
-                    <CardTitle>
-                      Expenses ({expenses.length}) ·{' '}
-                      <span className="text-sm font-normal text-slate-500">
-                        {fmtMoney(expensesYtd.toFixed(2))} YTD
-                      </span>
-                    </CardTitle>
-                    <Link href={`${basePath}?tab=expenses&drawer=add-expense` as any}>
-                      <Button size="sm">
-                        <Plus size={14} /> Add expense
-                      </Button>
-                    </Link>
+                  <CardHeader>
+                    <CardTitle>Rates {type ? `(${type.name})` : ''}</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    {expenses.length === 0 ? (
-                      <EmptyState
-                        title="No expenses logged"
-                        description="Log fuel, repairs, parts, registration, etc against this item."
-                        action={
-                          <Link href={`${basePath}?tab=expenses&drawer=add-expense` as any}>
-                            <Button size="sm" variant="outline">
-                              <Plus size={14} /> Add the first expense
-                            </Button>
-                          </Link>
-                        }
-                      />
-                    ) : (
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Date</TableHead>
-                            <TableHead>Category</TableHead>
-                            <TableHead>Vendor</TableHead>
-                            <TableHead>Description</TableHead>
-                            <TableHead className="text-right">Amount</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {expenses.map((e) => (
-                            <TableRow key={e.id}>
-                              <TableCell className="font-mono text-xs">{e.incurredOn}</TableCell>
-                              <TableCell>
-                                <Badge variant="secondary">{e.category}</Badge>
-                              </TableCell>
-                              <TableCell className="text-slate-600">
-                                {e.vendor ?? '—'}
-                              </TableCell>
-                              <TableCell className="text-slate-600">
-                                {e.description ?? '—'}
-                              </TableCell>
-                              <TableCell className="text-right font-medium">
-                                {fmtMoney(e.amount, e.currency)}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-            ) : null}
-
-            {active === 'log' ? (
-              <div className="space-y-4">
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
-                    <CardTitle>Log entries ({logEntries.length})</CardTitle>
-                    <Link href={`${basePath}?tab=log&drawer=add-log` as any}>
-                      <Button size="sm">
-                        <Plus size={14} /> Add log entry
-                      </Button>
-                    </Link>
-                  </CardHeader>
-                  <CardContent>
-                    {logEntries.length === 0 ? (
-                      <EmptyState
-                        title="No log entries"
-                        description="Capture observations, fuel-ups, modifications, and anything else worth noting against this asset."
-                        action={
-                          <Link href={`${basePath}?tab=log&drawer=add-log` as any}>
-                            <Button size="sm" variant="outline">
-                              <Plus size={14} /> Add the first entry
-                            </Button>
-                          </Link>
-                        }
-                      />
-                    ) : (
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Date</TableHead>
-                            <TableHead>Kind</TableHead>
-                            <TableHead>Title / details</TableHead>
-                            <TableHead>Person</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {logEntries.map(({ log, person }) => (
-                            <TableRow key={log.id}>
-                              <TableCell className="font-mono text-xs">
-                                {log.entryDate}
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant="secondary">{log.kind}</Badge>
-                              </TableCell>
-                              <TableCell>
-                                {log.title ? (
-                                  <div className="font-medium">{log.title}</div>
-                                ) : null}
-                                <div className="text-xs text-slate-600 whitespace-pre-wrap">
-                                  {log.details}
-                                </div>
-                              </TableCell>
-                              <TableCell className="text-slate-600">
-                                {person ? `${person.firstName} ${person.lastName}` : '—'}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-            ) : null}
-
-            {active === 'checkouts' ? (
-              <div className="space-y-4">
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
-                    <CardTitle>Check-out history ({checkouts.length})</CardTitle>
-                    <div className="flex items-center gap-2">
-                      {openCheckout ? (
-                        <Link
-                          href={`${basePath}?tab=checkouts&drawer=check-in` as any}
-                        >
-                          <Button size="sm">
-                            <LogIn size={14} /> Check in
-                          </Button>
-                        </Link>
-                      ) : (
-                        <Link
-                          href={`${basePath}?tab=checkouts&drawer=check-out` as any}
-                        >
-                          <Button size="sm">
-                            <LogOut size={14} /> Check out
-                          </Button>
-                        </Link>
-                      )}
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    {checkouts.length === 0 ? (
-                      <EmptyState
-                        title="No checkout history"
-                        description="This item has never been checked out. Hand it to someone or pin it to a site using the Check out button."
-                        action={
+                    {rate ? (
+                      <div className="space-y-3">
+                        <DetailGrid
+                          rows={[
+                            { label: 'Hourly', value: fmtMoney(rate.hourly, rate.currency) },
+                            { label: 'Daily', value: fmtMoney(rate.daily, rate.currency) },
+                            { label: 'Weekly', value: fmtMoney(rate.weekly, rate.currency) },
+                            { label: 'Monthly', value: fmtMoney(rate.monthly, rate.currency) },
+                            { label: 'Currency', value: rate.currency },
+                            { label: 'Category', value: rate.category ?? '—' },
+                          ]}
+                        />
+                        <div>
                           <Link
-                            href={`${basePath}?tab=checkouts&drawer=check-out` as any}
+                            href="/equipment/rates"
+                            className="text-xs text-teal-700 hover:underline"
                           >
-                            <Button size="sm" variant="outline">
+                            Edit rate matrix →
+                          </Link>
+                        </div>
+                      </div>
+                    ) : (
+                      <EmptyState
+                        title="No rate set for this type"
+                        description={
+                          type
+                            ? `Set hourly / daily / weekly / monthly rates for ${type.name}.`
+                            : 'Assign this item to an equipment type first.'
+                        }
+                        action={
+                          <Link href="/equipment/rates">
+                            <Button size="sm">Open rate matrix</Button>
+                          </Link>
+                        }
+                      />
+                    )}
+                  </CardContent>
+                </Card>
+              ) : null}
+
+              {active === 'expenses' ? (
+                <div className="space-y-4">
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+                      <CardTitle>
+                        Expenses ({expenses.length}) ·{' '}
+                        <span className="text-sm font-normal text-slate-500">
+                          {fmtMoney(expensesYtd.toFixed(2))} YTD
+                        </span>
+                      </CardTitle>
+                      <Link href={`${basePath}?tab=expenses&drawer=add-expense` as any}>
+                        <Button size="sm">
+                          <Plus size={14} /> Add expense
+                        </Button>
+                      </Link>
+                    </CardHeader>
+                    <CardContent>
+                      {expenses.length === 0 ? (
+                        <EmptyState
+                          title="No expenses logged"
+                          description="Log fuel, repairs, parts, registration, etc against this item."
+                          action={
+                            <Link href={`${basePath}?tab=expenses&drawer=add-expense` as any}>
+                              <Button size="sm" variant="outline">
+                                <Plus size={14} /> Add the first expense
+                              </Button>
+                            </Link>
+                          }
+                        />
+                      ) : (
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Date</TableHead>
+                              <TableHead>Category</TableHead>
+                              <TableHead>Vendor</TableHead>
+                              <TableHead>Description</TableHead>
+                              <TableHead className="text-right">Amount</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {expenses.map((e) => (
+                              <TableRow key={e.id}>
+                                <TableCell className="font-mono text-xs">{e.incurredOn}</TableCell>
+                                <TableCell>
+                                  <Badge variant="secondary">{e.category}</Badge>
+                                </TableCell>
+                                <TableCell className="text-slate-600">{e.vendor ?? '—'}</TableCell>
+                                <TableCell className="text-slate-600">
+                                  {e.description ?? '—'}
+                                </TableCell>
+                                <TableCell className="text-right font-medium">
+                                  {fmtMoney(e.amount, e.currency)}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              ) : null}
+
+              {active === 'log' ? (
+                <div className="space-y-4">
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+                      <CardTitle>Log entries ({logEntries.length})</CardTitle>
+                      <Link href={`${basePath}?tab=log&drawer=add-log` as any}>
+                        <Button size="sm">
+                          <Plus size={14} /> Add log entry
+                        </Button>
+                      </Link>
+                    </CardHeader>
+                    <CardContent>
+                      {logEntries.length === 0 ? (
+                        <EmptyState
+                          title="No log entries"
+                          description="Capture observations, fuel-ups, modifications, and anything else worth noting against this asset."
+                          action={
+                            <Link href={`${basePath}?tab=log&drawer=add-log` as any}>
+                              <Button size="sm" variant="outline">
+                                <Plus size={14} /> Add the first entry
+                              </Button>
+                            </Link>
+                          }
+                        />
+                      ) : (
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Date</TableHead>
+                              <TableHead>Kind</TableHead>
+                              <TableHead>Title / details</TableHead>
+                              <TableHead>Person</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {logEntries.map(({ log, person }) => (
+                              <TableRow key={log.id}>
+                                <TableCell className="font-mono text-xs">{log.entryDate}</TableCell>
+                                <TableCell>
+                                  <Badge variant="secondary">{log.kind}</Badge>
+                                </TableCell>
+                                <TableCell>
+                                  {log.title ? (
+                                    <div className="font-medium">{log.title}</div>
+                                  ) : null}
+                                  <div className="text-xs whitespace-pre-wrap text-slate-600">
+                                    {log.details}
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-slate-600">
+                                  {person ? `${person.firstName} ${person.lastName}` : '—'}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              ) : null}
+
+              {active === 'checkouts' ? (
+                <div className="space-y-4">
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+                      <CardTitle>Check-out history ({checkouts.length})</CardTitle>
+                      <div className="flex items-center gap-2">
+                        {openCheckout ? (
+                          <Link href={`${basePath}?tab=checkouts&drawer=check-in` as any}>
+                            <Button size="sm">
+                              <LogIn size={14} /> Check in
+                            </Button>
+                          </Link>
+                        ) : (
+                          <Link href={`${basePath}?tab=checkouts&drawer=check-out` as any}>
+                            <Button size="sm">
                               <LogOut size={14} /> Check out
                             </Button>
                           </Link>
-                        }
-                      />
-                    ) : (
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Held by</TableHead>
-                            <TableHead>Destination</TableHead>
-                            <TableHead>Out</TableHead>
-                            <TableHead>Expected</TableHead>
-                            <TableHead>Returned</TableHead>
-                            <TableHead>Condition</TableHead>
-                            <TableHead>Notes</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {checkouts.map(({ co, holder, dest }) => (
-                            <TableRow key={co.id}>
-                              <TableCell>
-                                {holder ? `${holder.firstName} ${holder.lastName}` : '—'}
-                              </TableCell>
-                              <TableCell className="text-slate-600">
-                                {dest?.name ?? '—'}
-                              </TableCell>
-                              <TableCell className="text-slate-600">
-                                {new Date(co.checkedOutAt).toLocaleDateString()}
-                              </TableCell>
-                              <TableCell className="text-slate-600">
-                                {co.expectedReturnOn ?? '—'}
-                              </TableCell>
-                              <TableCell className="text-slate-600">
-                                {co.returnedAt
-                                  ? new Date(co.returnedAt).toLocaleDateString()
-                                  : '—'}
-                              </TableCell>
-                              <TableCell>
-                                {co.returnedCondition ? (
-                                  <Badge
-                                    variant={
-                                      co.returnedCondition === 'damaged' ||
-                                      co.returnedCondition === 'unusable'
-                                        ? 'destructive'
-                                        : co.returnedCondition === 'fair'
-                                          ? 'warning'
-                                          : 'success'
-                                    }
-                                  >
-                                    {co.returnedCondition}
-                                  </Badge>
-                                ) : co.returnedAt ? (
-                                  '—'
-                                ) : (
-                                  <Badge variant="warning">out</Badge>
-                                )}
-                              </TableCell>
-                              <TableCell className="max-w-xs truncate text-xs text-slate-600">
-                                {co.returnedNotes ?? co.notes ?? '—'}
-                              </TableCell>
+                        )}
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      {checkouts.length === 0 ? (
+                        <EmptyState
+                          title="No checkout history"
+                          description="This item has never been checked out. Hand it to someone or pin it to a site using the Check out button."
+                          action={
+                            <Link href={`${basePath}?tab=checkouts&drawer=check-out` as any}>
+                              <Button size="sm" variant="outline">
+                                <LogOut size={14} /> Check out
+                              </Button>
+                            </Link>
+                          }
+                        />
+                      ) : (
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Held by</TableHead>
+                              <TableHead>Destination</TableHead>
+                              <TableHead>Out</TableHead>
+                              <TableHead>Expected</TableHead>
+                              <TableHead>Returned</TableHead>
+                              <TableHead>Condition</TableHead>
+                              <TableHead>Notes</TableHead>
                             </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    )}
+                          </TableHeader>
+                          <TableBody>
+                            {checkouts.map(({ co, holder, dest }) => (
+                              <TableRow key={co.id}>
+                                <TableCell>
+                                  {holder ? `${holder.firstName} ${holder.lastName}` : '—'}
+                                </TableCell>
+                                <TableCell className="text-slate-600">
+                                  {dest?.name ?? '—'}
+                                </TableCell>
+                                <TableCell className="text-slate-600">
+                                  {new Date(co.checkedOutAt).toLocaleDateString()}
+                                </TableCell>
+                                <TableCell className="text-slate-600">
+                                  {co.expectedReturnOn ?? '—'}
+                                </TableCell>
+                                <TableCell className="text-slate-600">
+                                  {co.returnedAt
+                                    ? new Date(co.returnedAt).toLocaleDateString()
+                                    : '—'}
+                                </TableCell>
+                                <TableCell>
+                                  {co.returnedCondition ? (
+                                    <Badge
+                                      variant={
+                                        co.returnedCondition === 'damaged' ||
+                                        co.returnedCondition === 'unusable'
+                                          ? 'destructive'
+                                          : co.returnedCondition === 'fair'
+                                            ? 'warning'
+                                            : 'success'
+                                      }
+                                    >
+                                      {co.returnedCondition}
+                                    </Badge>
+                                  ) : co.returnedAt ? (
+                                    '—'
+                                  ) : (
+                                    <Badge variant="warning">out</Badge>
+                                  )}
+                                </TableCell>
+                                <TableCell className="max-w-xs truncate text-xs text-slate-600">
+                                  {co.returnedNotes ?? co.notes ?? '—'}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      )}
+                    </CardContent>
+                  </Card>
+                  {openCheckout ? (
+                    <Alert>
+                      <AlertTitle>Currently checked out</AlertTitle>
+                      <AlertDescription>
+                        Held by{' '}
+                        {openCheckout.holder
+                          ? `${openCheckout.holder.firstName} ${openCheckout.holder.lastName}`
+                          : '—'}
+                        {openCheckout.co.expectedReturnOn
+                          ? ` · expected back ${openCheckout.co.expectedReturnOn}`
+                          : ''}
+                        . Use the Check in button above to record the return.
+                      </AlertDescription>
+                    </Alert>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {active === 'activity' ? (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>
+                      <Activity size={14} className="mr-2 inline" /> Activity
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ActivityFeed entries={activity} />
                   </CardContent>
                 </Card>
-                {openCheckout ? (
-                  <Alert>
-                    <AlertTitle>Currently checked out</AlertTitle>
-                    <AlertDescription>
-                      Held by{' '}
-                      {openCheckout.holder
-                        ? `${openCheckout.holder.firstName} ${openCheckout.holder.lastName}`
-                        : '—'}
-                      {openCheckout.co.expectedReturnOn
-                        ? ` · expected back ${openCheckout.co.expectedReturnOn}`
-                        : ''}
-                      . Use the Check in button above to record the return.
-                    </AlertDescription>
-                  </Alert>
-                ) : null}
-              </div>
-            ) : null}
-
-            {active === 'activity' ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle>
-                    <Activity size={14} className="mr-2 inline" /> Activity
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ActivityFeed entries={activity} />
-                </CardContent>
-              </Card>
-            ) : null}
+              ) : null}
             </TabContent>
           </div>
         </div>
@@ -1798,8 +1774,8 @@ export default async function EquipmentDetailPage({
             />
           </Field>
           <p className="text-xs text-slate-500">
-            The found timestamp is set to now. Use the Location tab to record the
-            current site / holder once the asset is back in place.
+            The found timestamp is set to now. Use the Location tab to record the current site /
+            holder once the asset is back in place.
           </p>
         </form>
       </UrlDrawer>
@@ -1929,7 +1905,7 @@ export default async function EquipmentDetailPage({
 function SidebarRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between text-sm">
-      <span className="text-xs uppercase tracking-wide text-slate-500">{label}</span>
+      <span className="text-xs tracking-wide text-slate-500 uppercase">{label}</span>
       <span>{children}</span>
     </div>
   )

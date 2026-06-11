@@ -44,8 +44,8 @@ export function InlineField({
     return (
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="text-xs uppercase tracking-wide text-slate-500">{label}</div>
-          <div className="mt-0.5 whitespace-pre-wrap text-sm text-slate-900">
+          <div className="text-xs tracking-wide text-slate-500 uppercase">{label}</div>
+          <div className="mt-0.5 text-sm whitespace-pre-wrap text-slate-900">
             {initialValue ? initialValue : <span className="text-slate-400">—</span>}
           </div>
         </div>
@@ -59,9 +59,14 @@ export function InlineField({
   }
   return (
     <div className="space-y-2">
-      <div className="text-xs uppercase tracking-wide text-slate-500">{label}</div>
+      <div className="text-xs tracking-wide text-slate-500 uppercase">{label}</div>
       {multiline ? (
-        <Textarea rows={4} value={value} onChange={(e) => setValue(e.target.value)} placeholder={placeholder} />
+        <Textarea
+          rows={4}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder={placeholder}
+        />
       ) : (
         <Input value={value} onChange={(e) => setValue(e.target.value)} placeholder={placeholder} />
       )}
