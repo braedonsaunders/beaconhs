@@ -49,6 +49,13 @@ export function AiSettingsForm({
   const [manual, setManual] = useState(false)
   const [loading, startLoad] = useTransition()
 
+  // Auto-load the saved provider's models on first render (a key is on file).
+  // Must run before any early return so the hook order stays stable.
+  useEffect(() => {
+    if (initial.hasKey && initial.provider === provider) loadModels()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const spec = specs.find((s) => s.value === provider) ?? specs[0]
   if (!spec) return null
   const showBaseUrl = spec.requiresBaseUrl || spec.baseUrl !== null
@@ -66,12 +73,6 @@ export function AiSettingsForm({
       }
     })
   }
-
-  // Auto-load the saved provider's models on first render (a key is on file).
-  useEffect(() => {
-    if (initial.hasKey && initial.provider === provider) loadModels()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   function onProviderChange(next: string) {
     setProvider(next)
@@ -228,11 +229,7 @@ export function AiSettingsForm({
               disabled={loading}
               className="inline-flex items-center gap-1 font-medium text-teal-600 hover:text-teal-700 disabled:opacity-50"
             >
-              {loading ? (
-                <Loader2 size={12} className="animate-spin" />
-              ) : (
-                <RefreshCw size={12} />
-              )}
+              {loading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
               {loading ? 'Loading…' : models.length ? 'Reload' : 'Load models'}
             </button>
           </div>
@@ -259,8 +256,8 @@ export function AiSettingsForm({
           <p className="text-xs text-amber-600">{modelsError}</p>
         ) : models.length ? (
           <p className="text-xs text-slate-400">
-            {models.length} models available. Leave a field on “Provider default” to use the built-in
-            default. The smart model handles photo captions — pick a vision-capable one.
+            {models.length} models available. Leave a field on “Provider default” to use the
+            built-in default. The smart model handles photo captions — pick a vision-capable one.
           </p>
         ) : (
           <p className="text-xs text-slate-400">

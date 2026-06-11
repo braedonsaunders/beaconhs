@@ -173,10 +173,7 @@ async function deleteClassification(formData: FormData): Promise<void> {
   // Refuse if any incidents reference this classification — admin must
   // re-tag them first.  Cheaper than a soft delete + tombstone migration.
   const [{ usage } = { usage: 0 }] = await ctx.db((tx) =>
-    tx
-      .select({ usage: count() })
-      .from(incidents)
-      .where(eq(incidents.classificationId, id)),
+    tx.select({ usage: count() }).from(incidents).where(eq(incidents.classificationId, id)),
   )
   if (Number(usage ?? 0) > 0) {
     // Fall back to archive — safest outcome.  The UI flags the path.
@@ -285,7 +282,7 @@ export default async function ClassificationsPage({
                 <ClassificationNode
                   key={root.id}
                   node={root}
-                  children={childrenOf(root.id)}
+                  childNodes={childrenOf(root.id)}
                   usageById={usageById}
                   editingId={editingId}
                 />
@@ -349,7 +346,9 @@ export default async function ClassificationsPage({
               <p>
                 Every incident has a <strong>classification</strong>. Pick this when reporting or
                 investigating. The TRIR / DART / OSHA-log reports roll up only nodes flagged
-                <Badge variant="secondary" className="ml-1 mr-1">recordable</Badge>
+                <Badge variant="secondary" className="mr-1 ml-1">
+                  recordable
+                </Badge>
                 — so leave non-recordable categories (near-miss, environmental, security) unflagged.
               </p>
               <p>
@@ -366,12 +365,12 @@ export default async function ClassificationsPage({
 
 function ClassificationNode({
   node,
-  children,
+  childNodes,
   usageById,
   editingId,
 }: {
   node: ClassificationRow
-  children: ClassificationRow[]
+  childNodes: ClassificationRow[]
   usageById: Record<string, number>
   editingId: string | undefined
 }) {
@@ -392,18 +391,17 @@ function ClassificationNode({
               </div>
               <Textarea name="description" rows={2} defaultValue={node.description ?? ''} />
               <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  name="isRecordable"
-                  defaultChecked={!!node.isRecordable}
-                />
+                <input type="checkbox" name="isRecordable" defaultChecked={!!node.isRecordable} />
                 Recordable
               </label>
               <div className="flex items-center gap-2">
                 <Button type="submit" size="sm">
                   Save
                 </Button>
-                <a href="/incidents/classifications" className="text-sm text-slate-500 hover:underline">
+                <a
+                  href="/incidents/classifications"
+                  className="text-sm text-slate-500 hover:underline"
+                >
                   Cancel
                 </a>
               </div>
@@ -417,9 +415,7 @@ function ClassificationNode({
                     {node.code}
                   </Badge>
                 ) : null}
-                {node.isRecordable ? (
-                  <Badge variant="secondary">Recordable</Badge>
-                ) : null}
+                {node.isRecordable ? <Badge variant="secondary">Recordable</Badge> : null}
                 {!node.isActive ? (
                   <Badge variant="outline" className="border-amber-300 text-amber-800">
                     Archived
@@ -475,9 +471,9 @@ function ClassificationNode({
           </div>
         )}
       </div>
-      {children.length > 0 ? (
+      {childNodes.length > 0 ? (
         <ul className="space-y-1.5 border-t border-slate-100 bg-slate-50/30 p-2 pl-8">
-          {children.map((c) => (
+          {childNodes.map((c) => (
             <li
               key={c.id}
               className="flex items-center justify-between rounded border border-slate-100 bg-white px-3 py-1.5 text-sm"

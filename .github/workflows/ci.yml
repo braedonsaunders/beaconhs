@@ -38,11 +38,13 @@ jobs:
       APP_URL: http://localhost:3000
     steps:
       - uses: actions/checkout@v4
+      # No version here — package.json's packageManager field pins pnpm; passing
+      # both errors "Multiple versions of pnpm specified". Node 22 to match the
+      # deploy image (require(esm) support needed by `pnpm build`).
       - uses: pnpm/action-setup@v4
-        with: { version: 9.12.0 }
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm format:check
