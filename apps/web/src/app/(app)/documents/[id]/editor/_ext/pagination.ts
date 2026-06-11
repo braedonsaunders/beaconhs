@@ -20,18 +20,30 @@ import type { EditorView } from '@tiptap/pm/view'
 
 export const paginationKey = new PluginKey('pagination')
 
-type Break = { pos: number; fill: number; gap: number }
+type Break = { pos: number; fill: number; gap: number; margin: number }
 
-function spacerElement(fill: number, gap: number): HTMLElement {
+function spacerElement(fill: number, gap: number, margin: number): HTMLElement {
   const el = document.createElement('div')
   el.className = 'pm-page-spacer'
   el.setAttribute('data-page-spacer', 'true')
   el.contentEditable = 'false'
   const fillPx = Math.max(0, Math.round(fill))
   const gapPx = Math.max(8, Math.round(gap))
-  el.style.height = `${fillPx + gapPx}px`
-  // White fills the rest of the current page; only the inter-page gap is gray.
-  el.style.background = `linear-gradient(to bottom, #ffffff 0, #ffffff ${fillPx}px, rgb(203 213 225 / 0.6) ${fillPx}px, rgb(203 213 225 / 0.6) 100%)`
+  const marginPx = Math.max(0, Math.round(margin))
+  // The spacer reproduces the page boundary so every page has the same margins
+  // as page 1 (whose top margin is the ProseMirror container padding):
+  //   white  = rest of page N's content area + page N's bottom margin
+  //   gray   = the inter-page gap
+  //   white  = page N+1's top margin (the bit that was missing → no top margin
+  //            on subsequent pages)
+  const whiteBottom = fillPx + marginPx
+  const grayEnd = whiteBottom + gapPx
+  const total = grayEnd + marginPx
+  el.style.height = `${total}px`
+  const g = 'rgb(203 213 225 / 0.6)'
+  el.style.background =
+    `linear-gradient(to bottom, #ffffff 0, #ffffff ${whiteBottom}px, ` +
+    `${g} ${whiteBottom}px, ${g} ${grayEnd}px, #ffffff ${grayEnd}px, #ffffff 100%)`
   return el
 }
 
@@ -71,7 +83,7 @@ function computeBreaks(view: EditorView): Break[] {
     if (lastBottom > pageStart && contentBottom - pageStart > cssPH + 1) {
       const used = lastBottom - pageStart
       const pos = positions[blockIndex]
-      if (pos !== undefined) breaks.push({ pos, fill: cssPH - used, gap: GAP })
+      if (pos !== undefined) breaks.push({ pos, fill: cssPH - used, gap: GAP, margin: M })
       pageStart = contentTop
     }
     lastBottom = contentBottom
@@ -117,7 +129,7 @@ export const Pagination = Extension.create({
             if (nextSig === sig) return
             sig = nextSig
             const decos = breaks.map((b) =>
-              Decoration.widget(b.pos, () => spacerElement(b.fill, b.gap), {
+              Decoration.widget(b.pos, () => spacerElement(b.fill, b.gap, b.margin), {
                 side: -1,
                 key: `pb-${b.pos}-${Math.round(b.fill)}`,
               }),
