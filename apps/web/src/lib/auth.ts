@@ -67,8 +67,25 @@ export async function getRequestContext(): Promise<RequestContext | null> {
       // Find which tenant to view
       let tenantId = cookieTenantId
       if (!tenantId) {
-        const allTenants = await tx.select({ id: tenants.id }).from(tenants).limit(2)
-        if (allTenants.length === 1) tenantId = allTenants[0]!.id
+        // No active-tenant cookie yet (e.g. first login). Default to a tenant
+        // the super-admin belongs to, else the oldest tenant. We must NOT
+        // return null while tenants exist: the (app) layout treats a null
+        // context as "logged out" and redirects to /login, which then redirects
+        // a logged-in user back to /dashboard → infinite redirect loop.
+        const [pick] = await tx
+          .select({ id: tenants.id })
+          .from(tenants)
+          .leftJoin(
+            tenantUsers,
+            and(
+              eq(tenantUsers.tenantId, tenants.id),
+              eq(tenantUsers.userId, userId),
+              eq(tenantUsers.status, 'active'),
+            ),
+          )
+          .orderBy(sql`(${tenantUsers.id} is null)`, tenants.createdAt)
+          .limit(1)
+        tenantId = pick?.id ?? null
       }
       if (!tenantId) return null
 
