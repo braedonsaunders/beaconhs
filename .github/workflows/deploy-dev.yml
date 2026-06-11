@@ -41,7 +41,10 @@ jobs:
             ${{ env.IMAGE_NAME }}:${{ github.sha }}
             ${{ env.IMAGE_NAME }}:dev
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # ignore-error: the GHA cache backend intermittently fails the blob
+          # write ("error writing layer blob: not_found") AFTER the image is
+          # already pushed — don't let a cache hiccup fail the build/deploy.
+          cache-to: type=gha,mode=max,ignore-error=true
 
   deploy:
     needs: build
