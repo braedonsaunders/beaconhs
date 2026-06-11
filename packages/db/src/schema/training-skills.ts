@@ -9,7 +9,7 @@
 // sign-off of in-house competencies; this models externally-issued credentials.
 
 import { relations } from 'drizzle-orm'
-import { date, index, integer, pgTable, text, uuid } from 'drizzle-orm/pg-core'
+import { date, index, integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
 import { id, timestamps } from './_helpers'
 import { attachments } from './attachments'
 import { tenants, tenantUsers } from './core'
@@ -84,6 +84,32 @@ export const trainingSkillAssignments = pgTable(
   }),
 )
 
+// Issued skill certificate (PDF + QR-verifiable token). Mirrors
+// training_certificates, keyed on the skill assignment instead of the
+// training record. Rows are created lazily on first certificate/wallet-card
+// request for an assignment.
+export const trainingSkillCertificates = pgTable(
+  'training_skill_certificates',
+  {
+    id: id(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    skillAssignmentId: uuid('skill_assignment_id')
+      .notNull()
+      .references(() => trainingSkillAssignments.id, { onDelete: 'cascade' }),
+    pdfAttachmentId: uuid('pdf_attachment_id'),
+    verifyToken: text('verify_token').notNull(), // public, opaque; resolves to assignment
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    revokedReason: text('revoked_reason'),
+    ...timestamps,
+  },
+  (t) => ({
+    assignmentIdx: index('training_skill_certificates_assignment_idx').on(t.skillAssignmentId),
+    tokenIdx: index('training_skill_certificates_token_idx').on(t.verifyToken),
+  }),
+)
+
 export const trainingSkillAuthoritiesRelations = relations(
   trainingSkillAuthorities,
   ({ one, many }) => ({
@@ -103,6 +129,20 @@ export const trainingSkillTypesRelations = relations(trainingSkillTypes, ({ one,
   }),
   assignments: many(trainingSkillAssignments),
 }))
+
+export const trainingSkillCertificatesRelations = relations(
+  trainingSkillCertificates,
+  ({ one }) => ({
+    tenant: one(tenants, {
+      fields: [trainingSkillCertificates.tenantId],
+      references: [tenants.id],
+    }),
+    assignment: one(trainingSkillAssignments, {
+      fields: [trainingSkillCertificates.skillAssignmentId],
+      references: [trainingSkillAssignments.id],
+    }),
+  }),
+)
 
 export const trainingSkillAssignmentsRelations = relations(trainingSkillAssignments, ({ one }) => ({
   tenant: one(tenants, { fields: [trainingSkillAssignments.tenantId], references: [tenants.id] }),

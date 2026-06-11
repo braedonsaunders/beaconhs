@@ -58,8 +58,13 @@ import {
   trainingCertificates,
   trainingCourses,
   trainingRecords,
+  trainingSkillAssignments,
+  trainingSkillAuthorities,
+  trainingSkillCertificates,
+  trainingSkillTypes,
   user,
 } from '@beaconhs/db/schema'
+import QRCode from 'qrcode'
 import {
   renderCaPdf,
   renderCertificatePdf,
@@ -88,6 +93,8 @@ export async function processPdf(job: Job<PdfJobData>): Promise<void> {
         return await renderIncident(data.tenantId, data.incidentId)
       case 'certificate':
         return await renderCertificate(data.tenantId, data.certificateId)
+      case 'skill_certificate':
+        return await renderSkillCertificate(data.tenantId, data.skillCertificateId)
       case 'hazid':
         return await renderHazid(data.tenantId, data.assessmentId)
       case 'ca':
@@ -381,6 +388,18 @@ async function renderIncident(tenantId: string, incidentId: string): Promise<voi
 
 // --- certificate ----------------------------------------------------------
 
+// Verify-URL QR as a PNG data URL, embedded into both the certificate and
+// the wallet card. margin:2 keeps a quiet zone even where the template lays
+// the code straight onto the parchment background.
+async function makeVerifyQr(verifyUrl: string): Promise<string> {
+  return QRCode.toDataURL(verifyUrl, {
+    errorCorrectionLevel: 'M',
+    margin: 2,
+    scale: 8,
+    color: { dark: '#0f172a', light: '#ffffff' },
+  })
+}
+
 async function renderCertificate(tenantId: string, certificateId: string): Promise<void> {
   const result = await withTenant(db, tenantId, async (tx) => {
     const [row] = await tx
@@ -418,40 +437,47 @@ async function renderCertificate(tenantId: string, certificateId: string): Promi
   }
   const { cert, record, person, course, tenant: t, photoUrl } = result
 
-  // Public verify URL — used in QR / footer text.
+  // Public verify URL — encoded into the QR + printed in the footer text.
   const baseUrl = process.env.PUBLIC_APP_URL ?? 'http://localhost:3000'
   const verifyUrl = `${baseUrl}/verify/${cert.verifyToken}`
+  const qrDataUrl = await makeVerifyQr(verifyUrl)
 
   const { certificate, wallet } = await renderCertificatePdf({
     tenantName: t.name,
     tenantLogoUrl: t.branding.logoUrl,
     primaryColor: t.branding.primaryColor,
+    variant: 'completion',
     recipient: {
       fullName: `${person.firstName} ${person.lastName}`,
       employeeNo: person.employeeNo,
     },
-    course: { code: course.code, name: course.name },
+    credential: { code: course.code, name: course.name },
     completedOn: record.completedOn,
     expiresOn: record.expiresOn,
     instructor: record.instructor,
     grade: record.grade,
     verifyUrl,
     verifyToken: cert.verifyToken,
+    qrDataUrl,
+    certificateId: cert.id,
     generatedAt: new Date(),
     wallet: {
       tenantName: t.name,
       tenantLogoUrl: t.branding.logoUrl,
       primaryColor: t.branding.primaryColor,
+      variant: 'completion',
       recipient: {
         fullName: `${person.firstName} ${person.lastName}`,
         employeeNo: person.employeeNo,
         photoUrl,
       },
-      course: { code: course.code, name: course.name },
+      credential: { code: course.code, name: course.name },
       completedOn: record.completedOn,
       expiresOn: record.expiresOn,
       verifyUrl,
       verifyToken: cert.verifyToken,
+      qrDataUrl,
+      cardId: cert.id,
     },
   })
 
@@ -514,6 +540,160 @@ async function renderCertificate(tenantId: string, certificateId: string): Promi
 
   console.log(
     `[pdf] certificate ${certificateId} rendered (cert ${certificate.length}B, wallet ${wallet.length}B)`,
+  )
+}
+
+// --- skill certificate ------------------------------------------------------
+//
+// Same certificate + wallet pair as 'certificate', driven by a
+// training_skill_certificates row → skill assignment → skill type →
+// authority. Renders with variant 'qualification' so the templates swap the
+// headline + phrasing and print the issuing authority.
+
+async function renderSkillCertificate(tenantId: string, skillCertificateId: string): Promise<void> {
+  const result = await withTenant(db, tenantId, async (tx) => {
+    const [row] = await tx
+      .select({
+        cert: trainingSkillCertificates,
+        assignment: trainingSkillAssignments,
+        skillType: trainingSkillTypes,
+        authority: trainingSkillAuthorities,
+        person: people,
+        tenant: tenants,
+      })
+      .from(trainingSkillCertificates)
+      .innerJoin(
+        trainingSkillAssignments,
+        eq(trainingSkillAssignments.id, trainingSkillCertificates.skillAssignmentId),
+      )
+      .innerJoin(
+        trainingSkillTypes,
+        eq(trainingSkillTypes.id, trainingSkillAssignments.skillTypeId),
+      )
+      .innerJoin(
+        trainingSkillAuthorities,
+        eq(trainingSkillAuthorities.id, trainingSkillTypes.authorityId),
+      )
+      .innerJoin(people, eq(people.id, trainingSkillAssignments.personId))
+      .innerJoin(tenants, eq(tenants.id, trainingSkillCertificates.tenantId))
+      .where(eq(trainingSkillCertificates.id, skillCertificateId))
+      .limit(1)
+    if (!row) return null
+    let photoUrl: string | null = null
+    if (row.person.photoAttachmentId) {
+      const [photoAtt] = await tx
+        .select({ r2Key: attachments.r2Key })
+        .from(attachments)
+        .where(eq(attachments.id, row.person.photoAttachmentId))
+        .limit(1)
+      if (photoAtt) photoUrl = publicUrl(photoAtt.r2Key)
+    }
+    return { ...row, photoUrl }
+  })
+
+  if (!result) {
+    console.warn(`[pdf] skill_certificate ${skillCertificateId} not found`)
+    return
+  }
+  const { cert, assignment, skillType, authority, person, tenant: t, photoUrl } = result
+
+  const baseUrl = process.env.PUBLIC_APP_URL ?? 'http://localhost:3000'
+  const verifyUrl = `${baseUrl}/verify/${cert.verifyToken}`
+  const qrDataUrl = await makeVerifyQr(verifyUrl)
+  const fullName = `${person.firstName} ${person.lastName}`
+
+  const { certificate, wallet } = await renderCertificatePdf({
+    tenantName: t.name,
+    tenantLogoUrl: t.branding.logoUrl,
+    primaryColor: t.branding.primaryColor,
+    variant: 'qualification',
+    recipient: { fullName, employeeNo: person.employeeNo },
+    credential: { code: skillType.code, name: skillType.name },
+    authorityName: authority.name,
+    completedOn: assignment.grantedOn,
+    expiresOn: assignment.expiresOn,
+    verifyUrl,
+    verifyToken: cert.verifyToken,
+    qrDataUrl,
+    certificateId: cert.id,
+    generatedAt: new Date(),
+    wallet: {
+      tenantName: t.name,
+      tenantLogoUrl: t.branding.logoUrl,
+      primaryColor: t.branding.primaryColor,
+      variant: 'qualification',
+      recipient: { fullName, employeeNo: person.employeeNo, photoUrl },
+      credential: { code: skillType.code, name: skillType.name },
+      authorityName: authority.name,
+      completedOn: assignment.grantedOn,
+      expiresOn: assignment.expiresOn,
+      verifyUrl,
+      verifyToken: cert.verifyToken,
+      qrDataUrl,
+      cardId: cert.id,
+    },
+  })
+
+  const stamp = Date.now()
+  const safeSkill = (skillType.code || skillType.name).replace(/[^a-zA-Z0-9]+/g, '-').slice(0, 40)
+  const certFilename = `skill-certificate-${safeSkill}-${person.lastName}-${stamp}.pdf`
+  const walletFilename = `skill-wallet-${safeSkill}-${person.lastName}-${stamp}.pdf`
+  const certKey = `pdfs/skill-certificates/${skillCertificateId}-cert-${stamp}.pdf`
+  const walletKey = `pdfs/skill-certificates/${skillCertificateId}-wallet-${stamp}.pdf`
+
+  await Promise.all([
+    putObject({ key: certKey, body: certificate, contentType: 'application/pdf' }),
+    putObject({ key: walletKey, body: wallet, contentType: 'application/pdf' }),
+  ])
+
+  await withTenant(db, tenantId, async (tx) => {
+    const [certAtt] = await tx
+      .insert(attachments)
+      .values({
+        tenantId,
+        kind: 'document',
+        r2Key: certKey,
+        contentType: 'application/pdf',
+        sizeBytes: certificate.length,
+        filename: certFilename,
+      })
+      .returning()
+    const [walletAtt] = await tx
+      .insert(attachments)
+      .values({
+        tenantId,
+        kind: 'document',
+        r2Key: walletKey,
+        contentType: 'application/pdf',
+        sizeBytes: wallet.length,
+        filename: walletFilename,
+      })
+      .returning()
+    if (certAtt) {
+      await tx
+        .update(trainingSkillCertificates)
+        .set({ pdfAttachmentId: certAtt.id })
+        .where(eq(trainingSkillCertificates.id, skillCertificateId))
+    }
+    await audit(tx, {
+      tenantId,
+      entityType: 'training_skill_certificate',
+      entityId: skillCertificateId,
+      action: 'export',
+      summary: `Rendered skill certificate + wallet PDFs for ${fullName} / ${skillType.name}`,
+      metadata: {
+        certificateAttachmentId: certAtt?.id,
+        walletAttachmentId: walletAtt?.id,
+        certificateUrl: publicUrl(certKey),
+        walletUrl: publicUrl(walletKey),
+        certificateBytes: certificate.length,
+        walletBytes: wallet.length,
+      },
+    })
+  })
+
+  console.log(
+    `[pdf] skill_certificate ${skillCertificateId} rendered (cert ${certificate.length}B, wallet ${wallet.length}B)`,
   )
 }
 

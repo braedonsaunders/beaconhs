@@ -57,6 +57,21 @@ export async function requestCertificatePdf(certificateId: string): Promise<Requ
   return { ok: true }
 }
 
+export async function requestSkillCertificatePdf(
+  skillCertificateId: string,
+): Promise<RequestPdfResult> {
+  const ctx = await requireRequestContext()
+  if (!ctx.tenantId) return { ok: false, error: 'No active tenant' }
+  await enqueuePdf({ kind: 'skill_certificate', tenantId: ctx.tenantId, skillCertificateId })
+  await recordAudit(ctx, {
+    entityType: 'training_skill_certificate',
+    entityId: skillCertificateId,
+    action: 'export',
+    summary: 'Requested skill certificate PDF render',
+  })
+  return { ok: true }
+}
+
 export async function requestHazidPdf(assessmentId: string): Promise<RequestPdfResult> {
   const ctx = await requireRequestContext()
   if (!ctx.tenantId) return { ok: false, error: 'No active tenant' }

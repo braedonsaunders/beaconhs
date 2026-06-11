@@ -5,6 +5,10 @@ export type PdfJobData =
   | { kind: 'form_response'; tenantId: string; responseId: string }
   | { kind: 'incident'; tenantId: string; incidentId: string }
   | { kind: 'certificate'; tenantId: string; certificateId: string }
+  // Skill credential (training_skill_certificates) — renders the same
+  // certificate + wallet-card pair as 'certificate' but for an
+  // externally-authorised skill assignment.
+  | { kind: 'skill_certificate'; tenantId: string; skillCertificateId: string }
   | { kind: 'hazid'; tenantId: string; assessmentId: string }
   | { kind: 'ca'; tenantId: string; caId: string }
   | { kind: 'document'; tenantId: string; documentId: string }

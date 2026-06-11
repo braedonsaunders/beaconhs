@@ -536,15 +536,19 @@ export async function renderCertificatePdf(
 
 async function renderCertificateOnly(input: CertificateRenderInput): Promise<Buffer> {
   const body = renderCertificateHtml(input)
-  // Certificate template carries its own @page rule + outer 8.5×11 wrapper,
-  // so we render with zero default margins and let CSS control layout.
-  const html = wrapDocument(body, 'Certificate of Completion')
+  // Certificate template carries its own @page rule + 11×8.5in landscape
+  // wrapper, so we render with zero default margins and let CSS control
+  // layout. The embedded @font-face data URLs must finish decoding before
+  // print, hence the explicit document.fonts.ready wait.
+  const html = wrapDocument(body, 'Certificate')
   const b = await browser()
   const page = await b.newPage()
   try {
     await page.setContent(html, { waitUntil: 'load', timeout: 30_000 })
+    await page.evaluateHandle('document.fonts.ready')
     const pdf = await page.pdf({
-      format: 'Letter',
+      width: '11in',
+      height: '8.5in',
       printBackground: true,
       margin: { top: 0, bottom: 0, left: 0, right: 0 },
       preferCSSPageSize: true,
@@ -562,9 +566,11 @@ async function renderWalletOnly(input: WalletRenderInput): Promise<Buffer> {
   const page = await b.newPage()
   try {
     await page.setContent(html, { waitUntil: 'load', timeout: 30_000 })
+    await page.evaluateHandle('document.fonts.ready')
+    // CR80 credit-card size; two pages (front + back).
     const pdf = await page.pdf({
-      width: '3.5in',
-      height: '2in',
+      width: '3.375in',
+      height: '2.125in',
       printBackground: true,
       margin: { top: 0, bottom: 0, left: 0, right: 0 },
       preferCSSPageSize: true,
@@ -580,16 +586,19 @@ function walletFromCertificate(input: CertificateRenderInput): WalletRenderInput
     tenantName: input.tenantName,
     tenantLogoUrl: input.tenantLogoUrl,
     primaryColor: input.primaryColor,
+    variant: input.variant,
     recipient: {
       fullName: input.recipient.fullName,
       employeeNo: input.recipient.employeeNo,
     },
-    course: input.course,
+    credential: input.credential,
+    authorityName: input.authorityName,
     completedOn: input.completedOn,
     expiresOn: input.expiresOn,
     verifyUrl: input.verifyUrl,
     verifyToken: input.verifyToken,
     qrDataUrl: input.qrDataUrl,
+    cardId: input.certificateId,
   }
 }
 

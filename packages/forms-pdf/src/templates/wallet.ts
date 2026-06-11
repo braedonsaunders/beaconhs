@@ -1,228 +1,457 @@
-// Training wallet card — landscape 3.5" × 2".
+// Training wallet card — true credit-card size (CR80: 3.375 × 2.125 in).
 //
-// Two-sided ID-style card. Front: photo placeholder + name + course + expiry.
-// Back: verify URL + QR placeholder. Rendered as two pages at the wallet
-// dimensions so the worker can print one PDF containing both sides.
+// Two-sided ID-style card printed as two pages at exact card dimensions so
+// the PDF can go straight to a card printer or be cut from a sheet.
+//
+//   Front: brand band (tenant gradient + logo), portrait photo (or initials
+//          tile), holder name + employee no, credential name/code, issue +
+//          expiry dates, miniature rosette seal.
+//   Back:  dark brand field with security lattice, QR verify tile, verify
+//          URL + token, issuer line, tamper notice + card id.
+//
+// Same generalized input as the certificate: variant 'completion' (course)
+// or 'qualification' (skill, with issuing authority).
+
+import { credentialFontFaces } from './fonts'
+import {
+  GOLD,
+  esc,
+  formatDateShort,
+  initialsOf,
+  rgba,
+  ringLattice,
+  safeColor,
+  sealSvg,
+  shade,
+  tint,
+} from './credential-theme'
 
 export type WalletRenderInput = {
   tenantName: string
   tenantLogoUrl?: string
   primaryColor?: string
+  variant?: 'completion' | 'qualification'
   recipient: {
     fullName: string
     employeeNo?: string | null
     photoUrl?: string | null
   }
-  course: {
-    code: string
+  credential: {
     name: string
+    code?: string | null
   }
+  authorityName?: string | null
   completedOn: string
   expiresOn?: string | null
   verifyUrl?: string
   verifyToken?: string
   qrDataUrl?: string
+  cardId?: string
 }
 
 export function renderWalletHtml(input: WalletRenderInput): string {
-  const primary = input.primaryColor ?? '#1f3a5f'
+  const variant = input.variant ?? 'completion'
+  const primary = safeColor(input.primaryColor, '#1f3a5f')
+  const primaryDark = shade(primary, 0.42)
+  const ink = shade(primary, 0.62)
+
   const verifyUrl = input.verifyUrl ?? ''
-  const verifyShort = verifyUrl.replace(/^https?:\/\//, '').slice(0, 50)
+  const verifyShort = verifyUrl.replace(/^https?:\/\//, '').slice(0, 64)
+  const cardIdShort = input.cardId ? input.cardId.slice(0, 8).toUpperCase() : null
+
+  const tag = variant === 'qualification' ? 'Skill Credential' : 'Training Credential'
+  const name = input.recipient.fullName
+  const nameSize = name.length > 24 ? 8.5 : name.length > 18 ? 9.5 : 10.5
+
+  const miniSeal = sealSvg({
+    initials: initialsOf(input.tenantName, 2),
+    ribbon: primary,
+    size: 34,
+    showRibbons: false,
+  })
 
   return `
   <style>
-    :root { --primary: ${primary}; }
-    @page { size: 3.5in 2in landscape; margin: 0; }
-    * { box-sizing: border-box; }
-    body { margin: 0; padding: 0; font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; color: #1a1a1a; }
+    ${credentialFontFaces}
+    @page { size: 3.375in 2.125in; margin: 0; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Archivo', 'Helvetica Neue', Arial, sans-serif;
+      color: ${ink};
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
     .card {
-      width: 3.5in;
-      height: 2in;
-      padding: 0.12in;
-      page-break-after: always;
-      display: flex;
-      overflow: hidden;
+      width: 3.375in;
+      height: 2.125in;
       position: relative;
+      overflow: hidden;
+      page-break-after: always;
     }
     .card:last-child { page-break-after: auto; }
-    /* Front */
-    .card.front {
-      background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-      border: 1.5px solid var(--primary);
-    }
-    .card.front .bar {
+
+    /* ---------- Front ---------- */
+    .card.front { background: #ffffff; }
+    .front .band {
       position: absolute;
       top: 0; left: 0; right: 0;
-      height: 8px;
-      background: var(--primary);
-    }
-    .front .left {
-      width: 0.85in;
+      height: 0.56in;
+      background: linear-gradient(118deg, ${primary} 0%, ${primaryDark} 78%);
       display: flex;
-      flex-direction: column;
       align-items: center;
-      justify-content: center;
-      margin-right: 6px;
-      padding-top: 12px;
+      justify-content: space-between;
+      padding: 0 0.13in;
     }
-    .photo {
-      width: 0.75in;
-      height: 0.95in;
-      border: 1px solid #999;
-      background: #e5e7eb;
-      object-fit: cover;
+    .front .band::after {
+      content: '';
+      position: absolute;
+      left: 0; right: 0; bottom: -2px;
+      height: 2px;
+      background: linear-gradient(90deg, ${GOLD.light}, ${GOLD.mid} 40%, ${GOLD.deep});
+    }
+    .band .brand { min-width: 0; }
+    .band .tenant {
+      font-size: 7pt;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #ffffff;
+      white-space: nowrap;
       overflow: hidden;
+      text-overflow: ellipsis;
     }
-    .photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
-    .photo.placeholder {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #777;
-      font-size: 7pt;
-      letter-spacing: 0.5px;
+    .band .tag {
+      margin-top: 1.5px;
+      font-size: 4.8pt;
+      font-weight: 600;
+      letter-spacing: 0.22em;
       text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.72);
     }
-    .front .right {
-      flex: 1;
-      padding: 14px 4px 4px;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
+    .band .logo-chip {
+      flex-shrink: 0;
+      margin-left: 6px;
+      background: #ffffff;
+      border-radius: 3px;
+      padding: 2px 5px;
+      max-width: 0.95in;
     }
-    .tenant {
-      font-size: 7pt;
-      font-weight: 700;
-      color: var(--primary);
-      letter-spacing: 1px;
-      text-transform: uppercase;
-    }
-    .person-name {
-      font-size: 11pt;
-      font-weight: 700;
-      color: #111;
-      line-height: 1.1;
-      margin-top: 2px;
-    }
-    .employee-no { font-size: 7.5pt; color: #666; margin-top: 1px; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
-    .course {
-      font-size: 8pt;
-      color: #444;
-      margin-top: 6px;
-      line-height: 1.2;
-    }
-    .course .code { color: #888; font-family: ui-monospace, monospace; font-size: 7pt; }
-    .expiry {
-      margin-top: 4px;
-      font-size: 7.5pt;
-      color: #555;
-    }
-    .expiry strong { color: var(--primary); }
+    .band .logo-chip img { max-height: 0.22in; max-width: 0.85in; display: block; object-fit: contain; }
 
-    /* Back */
-    .card.back {
-      background: var(--primary);
-      color: white;
-      flex-direction: column;
-      justify-content: space-between;
-      padding: 0.16in;
+    .front .lattice {
+      position: absolute;
+      inset: 0.56in 0 0 0;
+      background: ${ringLattice(primary, 0.045)};
+      background-size: 120px 120px;
     }
-    .back .header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
+
+    .front .photo {
+      position: absolute;
+      top: 0.36in;
+      left: 0.13in;
+      width: 0.68in;
+      height: 0.85in;
+      border-radius: 5px;
+      border: 2px solid #ffffff;
+      box-shadow: 0 1.5px 5px rgba(15, 23, 42, 0.28);
+      overflow: hidden;
+      background: linear-gradient(135deg, ${tint(primary, 0.18)}, ${primaryDark});
     }
-    .back .header img {
-      max-height: 18px;
-      max-width: 0.9in;
-      filter: brightness(0) invert(1);
-    }
-    .back .header .tenant {
-      color: white;
-      font-size: 7pt;
-      letter-spacing: 1px;
-    }
-    .back .center {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-    .back .qr {
-      width: 0.7in;
-      height: 0.7in;
-      background: white;
+    .front .photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .front .photo .initials {
+      width: 100%;
+      height: 100%;
       display: flex;
       align-items: center;
       justify-content: center;
+      font-size: 17pt;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.92);
+      letter-spacing: 0.04em;
     }
-    .back .qr img { width: 100%; height: 100%; }
-    .back .qr .placeholder {
-      width: 90%; height: 90%;
-      background: repeating-conic-gradient(#000 0% 25%, #fff 0% 50%) 50% / 5px 5px;
+
+    .front .info {
+      position: absolute;
+      top: 0.64in;
+      left: 0.93in;
+      right: 0.13in;
     }
-    .back .info { flex: 1; font-size: 7.5pt; line-height: 1.3; }
-    .back .info .label { text-transform: uppercase; letter-spacing: 1px; opacity: 0.7; font-size: 6.5pt; }
-    .back .info .value { font-weight: 600; word-break: break-all; }
-    .back .footer { font-size: 6.5pt; opacity: 0.75; text-align: center; }
+    .info .name {
+      font-size: ${nameSize}pt;
+      font-weight: 800;
+      color: #0f172a;
+      line-height: 1.05;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 1;
+      -webkit-box-orient: vertical;
+    }
+    .info .emp {
+      margin-top: 1.5px;
+      font-size: 5.4pt;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      color: #64748b;
+      font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+    }
+    .info .cred {
+      margin-top: 0.055in;
+      font-size: 7.2pt;
+      font-weight: 600;
+      color: #1e293b;
+      line-height: 1.18;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+    }
+    .info .cred-meta {
+      margin-top: 2.5px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .cred-meta .code {
+      font-size: 5.2pt;
+      font-weight: 600;
+      font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+      color: ${primaryDark};
+      border: 0.6px solid ${rgba(primary, 0.45)};
+      border-radius: 2.5px;
+      padding: 0.5px 3px;
+      letter-spacing: 0.05em;
+    }
+    .cred-meta .authority {
+      font-size: 5.2pt;
+      font-weight: 500;
+      color: #64748b;
+      letter-spacing: 0.04em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .front .dates {
+      position: absolute;
+      left: 0.13in;
+      right: 0.55in;
+      bottom: 0.115in;
+      display: flex;
+      gap: 0.26in;
+    }
+    .dates .cell .label {
+      font-size: 4.6pt;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: ${GOLD.deep};
+    }
+    .dates .cell .value {
+      margin-top: 1px;
+      font-size: 6.8pt;
+      font-weight: 700;
+      color: #0f172a;
+    }
+    .front .mini-seal {
+      position: absolute;
+      right: 0.125in;
+      bottom: 0.095in;
+      opacity: 0.92;
+    }
+
+    /* ---------- Back ---------- */
+    .card.back {
+      background:
+        radial-gradient(ellipse at 18% 0%, ${rgba(tint(primary, 0.25), 0.3)} 0%, rgba(0,0,0,0) 52%),
+        ${ringLattice('#ffffff', 0.06)},
+        linear-gradient(150deg, ${primaryDark} 0%, ${shade(primary, 0.58)} 100%);
+      background-size: auto, 120px 120px, auto;
+      color: #ffffff;
+      padding: 0.115in 0.14in;
+      display: flex;
+      flex-direction: column;
+    }
+    .back .head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .back .head .tenant {
+      font-size: 6.2pt;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.92);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .back .head .label {
+      flex-shrink: 0;
+      font-size: 4.8pt;
+      font-weight: 600;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: ${GOLD.light};
+    }
+    .back .head-rule {
+      margin-top: 4px;
+      height: 0.8px;
+      background: linear-gradient(90deg, ${GOLD.mid}, rgba(255,255,255,0.12));
+    }
+
+    .back .center {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 0.13in;
+      padding-top: 0.06in;
+    }
+    .back .qr-tile {
+      flex-shrink: 0;
+      width: 0.8in;
+      height: 0.8in;
+      background: #ffffff;
+      border-radius: 6px;
+      padding: 0.045in;
+      box-shadow: 0 1.5px 5px rgba(0, 0, 0, 0.35);
+    }
+    .back .qr-tile img { width: 100%; height: 100%; display: block; }
+    .back .qr-tile .blank {
+      width: 100%;
+      height: 100%;
+      border: 1px dashed ${rgba(primary, 0.5)};
+      border-radius: 3px;
+    }
+    .back .verify { flex: 1; min-width: 0; }
+    .verify .scan {
+      font-size: 6.4pt;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: #ffffff;
+    }
+    .verify .url {
+      margin-top: 2.5px;
+      font-size: 5.6pt;
+      line-height: 1.35;
+      color: rgba(255, 255, 255, 0.82);
+      word-break: break-all;
+      font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+    }
+    .verify .token-label {
+      margin-top: 4.5px;
+      font-size: 4.6pt;
+      font-weight: 600;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.55);
+    }
+    .verify .token {
+      margin-top: 1.5px;
+      display: inline-block;
+      font-size: 5.8pt;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+      color: ${GOLD.light};
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 3px;
+      padding: 1.5px 5px;
+    }
+
+    .back .foot {
+      border-top: 0.6px solid rgba(255, 255, 255, 0.22);
+      padding-top: 4px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .foot .issuer {
+      min-width: 0;
+      font-size: 4.9pt;
+      line-height: 1.45;
+      color: rgba(255, 255, 255, 0.72);
+    }
+    .foot .issuer .notice { color: rgba(255, 255, 255, 0.48); }
+    .foot .card-id {
+      flex-shrink: 0;
+      font-size: 4.9pt;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+      color: rgba(255, 255, 255, 0.55);
+    }
   </style>
 
   <div class="card front">
-    <div class="bar"></div>
-    <div class="left">
+    <div class="lattice"></div>
+    <div class="band">
+      <div class="brand">
+        <div class="tenant">${esc(input.tenantName)}</div>
+        <div class="tag">${esc(tag)}</div>
+      </div>
+      ${input.tenantLogoUrl ? `<div class="logo-chip"><img src="${esc(input.tenantLogoUrl)}" alt=""/></div>` : ''}
+    </div>
+    <div class="photo">
       ${
         input.recipient.photoUrl
-          ? `<div class="photo"><img src="${esc(input.recipient.photoUrl)}" alt=""/></div>`
-          : `<div class="photo placeholder">Photo</div>`
+          ? `<img src="${esc(input.recipient.photoUrl)}" alt=""/>`
+          : `<div class="initials">${esc(initialsOf(name, 2))}</div>`
       }
     </div>
-    <div class="right">
-      <div>
-        <div class="tenant">${esc(input.tenantName)}</div>
-        <div class="person-name">${esc(input.recipient.fullName)}</div>
-        ${input.recipient.employeeNo ? `<div class="employee-no">#${esc(input.recipient.employeeNo)}</div>` : ''}
-        <div class="course">
-          ${esc(input.course.name)}<br/>
-          <span class="code">${esc(input.course.code)}</span>
-        </div>
-      </div>
-      <div class="expiry">
-        Issued <strong>${esc(formatDate(input.completedOn))}</strong>${input.expiresOn ? ` · Expires <strong>${esc(formatDate(input.expiresOn))}</strong>` : ''}
+    <div class="info">
+      <div class="name">${esc(name)}</div>
+      ${input.recipient.employeeNo ? `<div class="emp">NO. ${esc(input.recipient.employeeNo)}</div>` : ''}
+      <div class="cred">${esc(input.credential.name)}</div>
+      <div class="cred-meta">
+        ${input.credential.code ? `<span class="code">${esc(input.credential.code)}</span>` : ''}
+        ${input.authorityName ? `<span class="authority">${esc(input.authorityName)}</span>` : ''}
       </div>
     </div>
+    <div class="dates">
+      <div class="cell">
+        <div class="label">${variant === 'qualification' ? 'Granted' : 'Issued'}</div>
+        <div class="value">${esc(formatDateShort(input.completedOn))}</div>
+      </div>
+      <div class="cell">
+        <div class="label">Expires</div>
+        <div class="value">${input.expiresOn ? esc(formatDateShort(input.expiresOn)) : 'No expiry'}</div>
+      </div>
+    </div>
+    <div class="mini-seal">${miniSeal}</div>
   </div>
 
   <div class="card back">
-    <div class="header">
-      ${input.tenantLogoUrl ? `<img src="${esc(input.tenantLogoUrl)}" alt=""/>` : `<span class="tenant">${esc(input.tenantName)}</span>`}
-      <span class="tenant">Verify</span>
+    <div class="head">
+      <div class="tenant">${esc(input.tenantName)}</div>
+      <div class="label">Credential Verification</div>
     </div>
+    <div class="head-rule"></div>
     <div class="center">
-      <div class="qr">
-        ${input.qrDataUrl ? `<img src="${esc(input.qrDataUrl)}" alt="QR"/>` : `<div class="placeholder"></div>`}
+      <div class="qr-tile">
+        ${input.qrDataUrl ? `<img src="${esc(input.qrDataUrl)}" alt="QR"/>` : `<div class="blank"></div>`}
       </div>
-      <div class="info">
-        <div class="label">Scan or visit</div>
-        <div class="value">${esc(verifyShort)}</div>
-        ${input.verifyToken ? `<div class="label" style="margin-top:4px;">Token</div><div class="value" style="font-family: ui-monospace, monospace; font-size: 6.5pt;">${esc(input.verifyToken.slice(0, 16))}</div>` : ''}
+      <div class="verify">
+        <div class="scan">Scan to verify</div>
+        ${verifyShort ? `<div class="url">${esc(verifyShort)}</div>` : ''}
+        ${
+          input.verifyToken
+            ? `<div class="token-label">Verification token</div>
+        <div class="token">${esc(input.verifyToken.slice(0, 20))}</div>`
+            : ''
+        }
       </div>
     </div>
-    <div class="footer">Tampering with this card invalidates the credential.</div>
+    <div class="foot">
+      <div class="issuer">
+        Issued by ${esc(input.tenantName)}${input.authorityName ? ` · Authority: ${esc(input.authorityName)}` : ''}<br/>
+        <span class="notice">This card remains property of the issuer. Tampering or alteration voids the credential.</span>
+      </div>
+      ${cardIdShort ? `<div class="card-id">ID ${esc(cardIdShort)}</div>` : ''}
+    </div>
   </div>
   `
-}
-
-function formatDate(d: string | Date): string {
-  const date = typeof d === 'string' ? new Date(d) : d
-  if (Number.isNaN(date.getTime())) return String(d)
-  return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
-}
-
-function esc(s: string | number | null | undefined): string {
-  if (s === null || s === undefined) return ''
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
 }

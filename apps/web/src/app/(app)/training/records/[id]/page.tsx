@@ -36,6 +36,7 @@ import { publicUrl } from '@beaconhs/storage'
 import { requireRequestContext } from '@/lib/auth'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { ActivityFeed } from '@/components/activity-feed'
+import { CredentialDownloadButton } from '@/components/credential-download-button'
 import { DetailGrid } from '@/components/detail-grid'
 import { Section } from '@/components/section'
 import { DetailPageLayout } from '@/components/page-layout'
@@ -234,16 +235,20 @@ export default async function TrainingRecordPage({
           }
           actions={
             <>
-              <Link href={`/training/records/${id}/certificate?format=wallet`}>
-                <Button variant="outline">
-                  <IdCard size={14} /> Wallet card
-                </Button>
-              </Link>
-              <Link href={`/training/records/${id}/certificate?format=cert`}>
-                <Button variant="outline">
-                  <FileText size={14} /> Certificate PDF
-                </Button>
-              </Link>
+              <CredentialDownloadButton
+                endpoint={`/training/records/${id}/certificate`}
+                format="wallet"
+                variant="outline"
+              >
+                <IdCard size={14} /> Wallet card
+              </CredentialDownloadButton>
+              <CredentialDownloadButton
+                endpoint={`/training/records/${id}/certificate`}
+                format="cert"
+                variant="outline"
+              >
+                <FileText size={14} /> Certificate PDF
+              </CredentialDownloadButton>
             </>
           }
         />
@@ -457,11 +462,13 @@ export default async function TrainingRecordPage({
                 verifyToken={certs[0]?.verifyToken ?? null}
               />
               <div className="mt-4 flex justify-end">
-                <Link href={`/training/records/${id}/certificate?format=wallet`}>
-                  <Button variant="outline">
-                    <IdCard size={14} /> Download wallet PDF
-                  </Button>
-                </Link>
+                <CredentialDownloadButton
+                  endpoint={`/training/records/${id}/certificate`}
+                  format="wallet"
+                  variant="outline"
+                >
+                  <IdCard size={14} /> Download wallet PDF
+                </CredentialDownloadButton>
               </div>
             </CardContent>
           </Card>

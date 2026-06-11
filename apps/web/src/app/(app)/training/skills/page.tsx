@@ -5,7 +5,7 @@
 // config at /training/skills/types.
 
 import Link from 'next/link'
-import { Star } from 'lucide-react'
+import { FileText, IdCard, Star } from 'lucide-react'
 import {
   and,
   asc,
@@ -29,6 +29,7 @@ import {
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { parseListParams, pickString } from '@/lib/list-params'
+import { CredentialDownloadButton } from '@/components/credential-download-button'
 import { SearchInput } from '@/components/search-input'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
@@ -260,6 +261,7 @@ export default async function SkillsPage({
                     Expires
                   </SortableTh>
                   <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Credential</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -310,6 +312,30 @@ export default async function SkillsPage({
                         ) : (
                           <Badge variant="success">Valid</Badge>
                         )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1.5">
+                          <CredentialDownloadButton
+                            endpoint={`/training/skills/${assignment.id}/certificate`}
+                            format="cert"
+                            variant="ghost"
+                            size="sm"
+                            title="Download certificate PDF"
+                            pendingLabel=""
+                          >
+                            <FileText size={15} />
+                          </CredentialDownloadButton>
+                          <CredentialDownloadButton
+                            endpoint={`/training/skills/${assignment.id}/certificate`}
+                            format="wallet"
+                            variant="ghost"
+                            size="sm"
+                            title="Download wallet card PDF"
+                            pendingLabel=""
+                          >
+                            <IdCard size={15} />
+                          </CredentialDownloadButton>
+                        </div>
                       </TableCell>
                     </TableRow>
                   )

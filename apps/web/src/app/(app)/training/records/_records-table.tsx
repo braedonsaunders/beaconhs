@@ -2,7 +2,9 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
+import { FileText, IdCard } from 'lucide-react'
 import { Badge } from '@beaconhs/ui'
+import { CredentialDownloadButton } from '@/components/credential-download-button'
 import { BulkTrainingRecordsBar, HeaderSelectAll, SelectionCheckbox } from './_bulk-bar'
 
 export type TrainingRecordsTableRow = {
@@ -60,6 +62,7 @@ export function TrainingRecordsTable({ rows }: { rows: TrainingRecordsTableRow[]
               <th className="px-3 py-2">Completed</th>
               <th className="px-3 py-2">Expires</th>
               <th className="px-3 py-2">Source</th>
+              <th className="px-3 py-2 text-right">Credential</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -107,6 +110,30 @@ export function TrainingRecordsTable({ rows }: { rows: TrainingRecordsTableRow[]
                     ) : null}
                   </td>
                   <td className="px-3 py-2 text-xs text-slate-600">{r.source.replace('_', ' ')}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex justify-end gap-1.5">
+                      <CredentialDownloadButton
+                        endpoint={`/training/records/${r.id}/certificate`}
+                        format="cert"
+                        variant="ghost"
+                        size="sm"
+                        title="Download certificate PDF"
+                        pendingLabel=""
+                      >
+                        <FileText size={15} />
+                      </CredentialDownloadButton>
+                      <CredentialDownloadButton
+                        endpoint={`/training/records/${r.id}/certificate`}
+                        format="wallet"
+                        variant="ghost"
+                        size="sm"
+                        title="Download wallet card PDF"
+                        pendingLabel=""
+                      >
+                        <IdCard size={15} />
+                      </CredentialDownloadButton>
+                    </div>
+                  </td>
                 </tr>
               )
             })}
