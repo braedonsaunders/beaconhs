@@ -415,6 +415,7 @@ export function renderWalletHtml(input: WalletRenderInput): string {
       height: 0.50in;
       background: linear-gradient(90deg, ${primary} 0%, ${shade(primary, 0.28)} 100%);
     }
+    .card.field-pass.front .band .tag { display: none; }
     .card.field-pass.front .lattice { inset: 0.50in 0 0 0; }
     .card.field-pass.front .photo { top: 0.32in; border-radius: 2px; }
     .card.field-pass.front .mini-seal { opacity: 0.8; }

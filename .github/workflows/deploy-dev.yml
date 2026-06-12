@@ -76,9 +76,9 @@ jobs:
           docker pull "${IMAGE_NAME}:${GITHUB_SHA}"
           docker image inspect "${IMAGE_NAME}:${GITHUB_SHA}" --format 'pulled {{.Id}}'
 
-      # Refresh the registry credential Dokploy uses for this deployment. The
-      # job token can read the image it just pushed, and no long-lived package
-      # token needs to be stored in source.
+      # Best-effort refresh for Dokploy's stored registry credential. The
+      # image is already pre-pulled onto the constrained swarm manager above,
+      # so a Dokploy API shape/version mismatch here should not block deploy.
       - name: Refresh GHCR pull credential on Dokploy
         env:
           DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
@@ -88,12 +88,21 @@ jobs:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          jq -n --arg id "$REGISTRY_ID" --arg u "$GHCR_USER" --arg p "$GHCR_TOKEN" \
-            '{registryId:$id, registryName:"ghcr-beaconhs", username:$u, password:$p,
-              registryUrl:"ghcr.io", imagePrefix:"braedonsaunders", registryType:"cloud"}' \
-            | curl -sf -X POST "$DOKPLOY_URL/api/registry.update" \
-                -H "x-api-key: $DOKPLOY_TOKEN" -H "content-type: application/json" --data @-
-          echo "GHCR credential refreshed"
+          response="$(mktemp)"
+          status="$(
+            jq -n --arg id "$REGISTRY_ID" --arg u "$GHCR_USER" --arg p "$GHCR_TOKEN" \
+              '{registryId:$id, registryName:"ghcr-beaconhs", username:$u, password:$p,
+                registryUrl:"ghcr.io", imagePrefix:"braedonsaunders", registryType:"cloud"}' \
+              | curl -sS -o "$response" -w "%{http_code}" -X POST "$DOKPLOY_URL/api/registry.update" \
+                  -H "x-api-key: $DOKPLOY_TOKEN" -H "content-type: application/json" --data @- || true
+          )"
+          if [ "$status" -ge 200 ] && [ "$status" -lt 300 ]; then
+            echo "GHCR credential refreshed"
+          else
+            echo "::warning::Dokploy registry.update returned HTTP ${status}; continuing because the image was pre-pulled on the deployment host."
+            head -c 500 "$response" || true
+            echo
+          fi
 
       - name: Update env + redeploy on Dokploy
         env:
