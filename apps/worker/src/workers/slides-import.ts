@@ -173,10 +173,25 @@ export async function importSlidesFromPptx(args: {
         return row?.id ?? null
       })
       if (!attachmentRowId) throw new Error('Failed to store a converted slide image')
+      // Canvas slide with a locked full-bleed page render — the Fabric editor
+      // lets authors annotate on top without disturbing the imported page.
       imported.push({
         id: randomUUID(),
-        layout: 'pptx',
-        imageAttachmentId: attachmentRowId,
+        layout: 'canvas',
+        bgColor: '#ffffff',
+        elements: [
+          {
+            id: randomUUID(),
+            kind: 'image',
+            attachmentId: attachmentRowId,
+            x: 0,
+            y: 0,
+            w: 960,
+            h: 540,
+            fit: 'contain',
+            locked: true,
+          },
+        ],
         notes: notes.get(i + 1),
       })
     }

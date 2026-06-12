@@ -1,10 +1,187 @@
 // Shared slide renderer — server-safe (no hooks). Used by the studio editor
 // preview, the filmstrip thumbnails, present mode, and the learner player.
-// Structured layouts over the bespoke LessonBlock regions; `pptx` slides are
-// pixel-perfect page images from the PowerPoint import.
+//
+// `canvas` slides (the Fabric editor's model) render as a container-query
+// scaled stage: positions/sizes are percentages of the virtual 960×540 stage
+// and font/stroke sizes use cqw units, so the same markup is pixel-faithful
+// from filmstrip thumbnails to fullscreen presenting. Legacy structured
+// layouts and `pptx` page images keep their original branches.
 
-import { isRichRegion, type Slide, type SlideRegion } from '@beaconhs/db/schema'
+import type { CSSProperties } from 'react'
+import {
+  SLIDE_STAGE,
+  isRichRegion,
+  type Slide,
+  type SlideElement,
+  type SlideRegion,
+  type SlideTextElement,
+  type SlideTextRun,
+} from '@beaconhs/db/schema'
 import { LessonBlocksView } from '../_lib/blocks'
+
+// Mirrors SLIDE_FONT_CSS in training/_editor/slide-model.ts — duplicated so
+// this file stays importable from server components. Fallbacks are CSS-only;
+// the Fabric editor uses the bare first family.
+const CANVAS_FONTS: Record<'sans' | 'serif' | 'mono', string> = {
+  sans: 'Arial, sans-serif',
+  serif: 'Georgia, serif',
+  mono: 'Menlo, monospace',
+}
+
+// 1 stage unit → cqw (stage width = 100cqw).
+const cqw = (units: number) => `${(units / SLIDE_STAGE.width) * 100}cqw`
+const pctX = (units: number) => `${(units / SLIDE_STAGE.width) * 100}%`
+const pctY = (units: number) => `${(units / SLIDE_STAGE.height) * 100}%`
+
+function canvasBaseStyle(el: SlideElement): CSSProperties {
+  return {
+    position: 'absolute',
+    left: pctX(el.x),
+    top: pctY(el.y),
+    width: pctX(el.w),
+    opacity: el.opacity ?? 1,
+    transform: el.rotation ? `rotate(${el.rotation}deg)` : undefined,
+    transformOrigin: 'top left',
+  }
+}
+
+function CanvasText({ el }: { el: SlideTextElement }) {
+  const lines: SlideTextRun[][] = el.runs?.length
+    ? el.runs
+    : (el.text ?? '').split('\n').map((line) => [{ text: line }])
+  return (
+    <div
+      style={{
+        ...canvasBaseStyle(el),
+        minHeight: pctY(el.h),
+        fontFamily: CANVAS_FONTS[el.fontFamily ?? 'sans'],
+        fontSize: cqw(el.fontSize),
+        fontWeight: el.bold ? 700 : 400,
+        fontStyle: el.italic ? 'italic' : 'normal',
+        textDecoration: el.underline ? 'underline' : undefined,
+        color: el.color ?? '#0f172a',
+        textAlign: el.align ?? 'left',
+        lineHeight: el.lineHeight ?? 1.2,
+        overflowWrap: 'break-word',
+      }}
+    >
+      {lines.map((line, li) => (
+        <div key={li} style={{ minHeight: '1em' }}>
+          {line.map((run, ri) => {
+            const bold = run.bold ?? el.bold
+            const italic = run.italic ?? el.italic
+            const underline = run.underline ?? el.underline
+            const color = run.color ?? undefined
+            const plain = !run.bold && !run.italic && !run.underline && !run.color
+            if (plain) return <span key={ri}>{run.text}</span>
+            return (
+              <span
+                key={ri}
+                style={{
+                  fontWeight: bold ? 700 : 400,
+                  fontStyle: italic ? 'italic' : 'normal',
+                  textDecoration: underline ? 'underline' : undefined,
+                  color,
+                }}
+              >
+                {run.text}
+              </span>
+            )
+          })}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function CanvasElementView({
+  el,
+  attachmentUrls,
+}: {
+  el: SlideElement
+  attachmentUrls: Record<string, string | null | undefined>
+}) {
+  if (el.kind === 'text') return <CanvasText el={el} />
+
+  if (el.kind === 'image') {
+    const url = el.attachmentId ? attachmentUrls[el.attachmentId] : el.url
+    const style: CSSProperties = {
+      ...canvasBaseStyle(el),
+      height: pctY(el.h),
+      borderRadius: el.radius ? cqw(el.radius) : undefined,
+      overflow: 'hidden',
+    }
+    if (!url) {
+      return (
+        <div
+          style={{
+            ...style,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: '#f8fafc',
+            border: '1px dashed #94a3b8',
+            color: '#94a3b8',
+            fontSize: cqw(12),
+          }}
+        >
+          Image
+        </div>
+      )
+    }
+    const fit = el.fit === 'cover' ? 'cover' : el.fit === 'contain' ? 'contain' : 'fill'
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={url} alt="" style={{ ...style, objectFit: fit, display: 'block' }} />
+    )
+  }
+
+  // shape
+  const strokeW = el.strokeWidth ? cqw(el.strokeWidth) : '0'
+  if (el.shape === 'line') {
+    return (
+      <div
+        style={{
+          ...canvasBaseStyle(el),
+          height: 0,
+          borderTop: `${cqw(el.strokeWidth ?? 2)} solid ${el.stroke ?? '#0f172a'}`,
+        }}
+      />
+    )
+  }
+  return (
+    <div
+      style={{
+        ...canvasBaseStyle(el),
+        height: pctY(el.h),
+        background: el.fill ?? 'transparent',
+        border: el.strokeWidth ? `${strokeW} solid ${el.stroke ?? 'transparent'}` : undefined,
+        borderRadius: el.shape === 'ellipse' ? '50%' : el.radius ? cqw(el.radius) : undefined,
+        boxSizing: 'border-box',
+      }}
+    />
+  )
+}
+
+/** Freeform Fabric-authored slide — scales with its container. */
+function CanvasSlideContent({
+  slide,
+  attachmentUrls,
+}: {
+  slide: Slide
+  attachmentUrls: Record<string, string | null | undefined>
+}) {
+  return (
+    <div
+      className="absolute inset-0"
+      style={{ background: slide.bgColor ?? '#ffffff', containerType: 'inline-size' }}
+    >
+      {(slide.elements ?? []).map((el) => (
+        <CanvasElementView key={el.id} el={el} attachmentUrls={attachmentUrls} />
+      ))}
+    </div>
+  )
+}
 
 // Regions are RichDoc (TipTap HTML, sanitized server-side at save) or legacy
 // LessonBlock[]. Consumers inject `.slide-rich` typography via lessonProseCss.
@@ -50,6 +227,10 @@ export function SlideView({
 
   return (
     <div className={`relative aspect-[16/9] w-full overflow-hidden ${bg} ${className}`}>
+      {slide.layout === 'canvas' ? (
+        <CanvasSlideContent slide={slide} attachmentUrls={attachmentUrls} />
+      ) : null}
+
       {slide.layout === 'pptx' ? (
         imgUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -170,7 +351,9 @@ export function SlideThumb({
     <div
       className={`relative aspect-[16/9] w-full overflow-hidden rounded border border-slate-200 ${bg} ${className}`}
     >
-      {slide.layout === 'pptx' || slide.layout === 'image-full' ? (
+      {slide.layout === 'canvas' ? (
+        <CanvasSlideContent slide={slide} attachmentUrls={attachmentUrls} />
+      ) : slide.layout === 'pptx' || slide.layout === 'image-full' ? (
         imgUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={imgUrl} alt="" className="h-full w-full object-cover" />

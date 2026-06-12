@@ -9,6 +9,7 @@ import { revalidatePath } from 'next/cache'
 import { and, eq, isNull } from 'drizzle-orm'
 import {
   isRichRegion,
+  sanitizeCanvasSlide,
   trainingCourseFiles,
   trainingCourses,
   trainingCourseModules,
@@ -333,16 +334,20 @@ export async function saveLessonContent(lessonId: string, courseId: string, bloc
   revalidatePath(studioPath(courseId))
 }
 
-// Sanitize TipTap HTML in slide text regions before persisting.
+// Normalize canvas slides and sanitize TipTap HTML in legacy slide text
+// regions before persisting.
 function sanitizeSlides(slides: Slide[]): Slide[] {
-  return slides.map((s) => ({
-    ...s,
-    body: isRichRegion(s.body) ? { ...s.body, html: sanitizeDocumentHtml(s.body.html) } : s.body,
-    left: isRichRegion(s.left) ? { ...s.left, html: sanitizeDocumentHtml(s.left.html) } : s.left,
-    right: isRichRegion(s.right)
-      ? { ...s.right, html: sanitizeDocumentHtml(s.right.html) }
-      : s.right,
-  }))
+  return slides.map((s) => {
+    if (s.layout === 'canvas') return sanitizeCanvasSlide(s)
+    return {
+      ...s,
+      body: isRichRegion(s.body) ? { ...s.body, html: sanitizeDocumentHtml(s.body.html) } : s.body,
+      left: isRichRegion(s.left) ? { ...s.left, html: sanitizeDocumentHtml(s.left.html) } : s.left,
+      right: isRichRegion(s.right)
+        ? { ...s.right, html: sanitizeDocumentHtml(s.right.html) }
+        : s.right,
+    }
+  })
 }
 
 export async function saveLessonSlides(lessonId: string, courseId: string, slides: Slide[]) {

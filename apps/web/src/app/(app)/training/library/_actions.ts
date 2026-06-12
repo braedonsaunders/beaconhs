@@ -8,11 +8,14 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { eq } from 'drizzle-orm'
 import {
+  isRichRegion,
+  sanitizeCanvasSlide,
   trainingContentItems,
   trainingLessons,
   type LessonBlock,
   type Slide,
 } from '@beaconhs/db/schema'
+import { sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import { enqueueSlidesImport } from '@beaconhs/jobs'
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
@@ -97,8 +100,24 @@ export async function saveContentItemSlides(id: string, slides: Slide[]) {
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'training')
   if (!Array.isArray(slides) || slides.length > 500) throw new Error('Invalid slide deck')
+  // Normalize canvas slides; sanitize TipTap HTML in legacy regions (mirrors
+  // the course studio's saveLessonSlides).
+  const clean = slides.map((s) => {
+    if (s.layout === 'canvas') return sanitizeCanvasSlide(s)
+    return {
+      ...s,
+      body: isRichRegion(s.body) ? { ...s.body, html: sanitizeDocumentHtml(s.body.html) } : s.body,
+      left: isRichRegion(s.left) ? { ...s.left, html: sanitizeDocumentHtml(s.left.html) } : s.left,
+      right: isRichRegion(s.right)
+        ? { ...s.right, html: sanitizeDocumentHtml(s.right.html) }
+        : s.right,
+    }
+  })
   await ctx.db(async (tx) => {
-    await tx.update(trainingContentItems).set({ slides }).where(eq(trainingContentItems.id, id))
+    await tx
+      .update(trainingContentItems)
+      .set({ slides: clean })
+      .where(eq(trainingContentItems.id, id))
   })
   revalidatePath(`/training/library/${id}`)
 }

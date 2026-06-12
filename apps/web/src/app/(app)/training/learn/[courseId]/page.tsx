@@ -121,6 +121,9 @@ export default async function PlayerPage({ params }: { params: Promise<{ courseI
     const collectSlideAtts = (slides: (typeof lessons)[number]['slides'] | null) => {
       for (const s of slides ?? []) {
         if (s.imageAttachmentId) attIds.add(s.imageAttachmentId)
+        for (const el of s.elements ?? []) {
+          if (el.kind === 'image' && el.attachmentId) attIds.add(el.attachmentId)
+        }
         collectBlockAtts(Array.isArray(s.body) ? s.body : null)
         collectBlockAtts(Array.isArray(s.left) ? s.left : null)
         collectBlockAtts(Array.isArray(s.right) ? s.right : null)

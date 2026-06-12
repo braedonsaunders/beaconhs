@@ -34,6 +34,9 @@ export default async function ContentItemPage({ params }: { params: Promise<{ id
     const attIds = new Set<string>()
     for (const s of it.slides ?? []) {
       if (s.imageAttachmentId) attIds.add(s.imageAttachmentId)
+      for (const el of s.elements ?? []) {
+        if (el.kind === 'image' && el.attachmentId) attIds.add(el.attachmentId)
+      }
       for (const region of [s.body, s.left, s.right]) {
         const blocks = Array.isArray(region) ? region : []
         for (const b of blocks) {

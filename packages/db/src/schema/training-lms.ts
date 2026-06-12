@@ -55,15 +55,82 @@ export type LessonBlock =
 // of truth for editing) + sanitized HTML (render in player / slide regions).
 export type RichDoc = { html: string; json?: unknown }
 
-// One slide in a slideshow lesson / library deck. Structured layouts (the
-// Articulate-Rise pattern) rather than a freeform canvas. Text regions are
-// RichDoc (inline TipTap editing); legacy decks may still hold LessonBlock[]
-// regions — renderers support both. `pptx` slides are pixel-perfect page
-// images produced by the PowerPoint import pipeline (soffice → pdf → png).
+// One slide in a slideshow lesson / library deck.
+//
+// `canvas` slides are the current model: a freeform PowerPoint-style stage of
+// SlideElement[] authored in the Fabric editor (@beaconhs/design-studio engine)
+// on a virtual 960×540 (16:9) coordinate space, scaled to the rendered size.
+// The structured layouts (title / two-col / …) and their RichDoc/LessonBlock
+// regions are the legacy model — still rendered everywhere, converted to
+// canvas the first time a deck is edited. `pptx` slides are pixel-perfect page
+// images produced by the PowerPoint import pipeline (soffice → pdf → png);
+// new imports arrive as canvas slides with a locked full-bleed image.
 export type SlideRegion = RichDoc | LessonBlock[]
+
+export const SLIDE_STAGE = { width: 960, height: 540 } as const
+
+// A styled run of text within one line of a text element. Properties override
+// the element-level defaults for that span only.
+export type SlideTextRun = {
+  text: string
+  bold?: boolean
+  italic?: boolean
+  underline?: boolean
+  color?: string
+}
+
+type SlideElementBase = {
+  id: string
+  x: number
+  y: number
+  w: number
+  h: number
+  rotation?: number // degrees, around the top-left corner (Fabric left/top origin)
+  opacity?: number // 0..1
+  locked?: boolean // not selectable in the editor (pptx page renders)
+}
+
+export type SlideTextElement = SlideElementBase & {
+  kind: 'text'
+  text: string // plain text, \n-separated lines (always kept in sync with runs)
+  runs?: SlideTextRun[][] // optional per-line styled runs; omit when uniformly styled
+  fontSize: number // stage units (px at 960-wide)
+  fontFamily?: 'sans' | 'serif' | 'mono'
+  bold?: boolean
+  italic?: boolean
+  underline?: boolean
+  color?: string
+  align?: 'left' | 'center' | 'right'
+  lineHeight?: number
+  list?: 'bullet' | 'number' // lines carry literal "• " / "1. " prefixes
+}
+
+export type SlideImageElement = SlideElementBase & {
+  kind: 'image'
+  attachmentId?: string // tenant attachment (URL resolved at render)
+  url?: string // direct https URL (e.g. images pasted into legacy regions)
+  fit?: 'stretch' | 'cover' | 'contain' // player object-fit; editor shows the box
+  radius?: number // corner radius, stage units
+}
+
+export type SlideShapeElement = SlideElementBase & {
+  kind: 'shape'
+  shape: 'rect' | 'ellipse' | 'line'
+  fill?: string
+  stroke?: string
+  strokeWidth?: number // stage units
+  radius?: number // rect corner radius, stage units
+}
+
+export type SlideElement = SlideTextElement | SlideImageElement | SlideShapeElement
+
 export type Slide = {
   id: string
-  layout: 'title' | 'title-content' | 'two-col' | 'image-text' | 'image-full' | 'pptx'
+  layout: 'canvas' | 'title' | 'title-content' | 'two-col' | 'image-text' | 'image-full' | 'pptx'
+  // canvas slides
+  elements?: SlideElement[]
+  bgColor?: string // hex stage background
+  // legacy structured slides
   title?: string
   subtitle?: string
   body?: SlideRegion // title-content + image-text text region
@@ -76,6 +143,113 @@ export type Slide = {
 
 export function isRichRegion(r: SlideRegion | null | undefined): r is RichDoc {
   return !!r && !Array.isArray(r) && typeof (r as RichDoc).html === 'string'
+}
+
+// --- Canvas slide sanitisation (server-side, before persisting) -------------
+
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/
+const clampN = (v: unknown, min: number, max: number, fb: number) =>
+  typeof v === 'number' && Number.isFinite(v) ? Math.max(min, Math.min(max, v)) : fb
+const hexOr = (v: unknown, fb: string | undefined) =>
+  typeof v === 'string' && HEX_COLOR.test(v) ? v : fb
+const str = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max) : '')
+
+function sanitizeRuns(runs: unknown): SlideTextRun[][] | undefined {
+  if (!Array.isArray(runs)) return undefined
+  const lines = runs.slice(0, 400).map((line) =>
+    (Array.isArray(line) ? line : []).slice(0, 80).map(
+      (r): SlideTextRun => ({
+        text: str((r as SlideTextRun)?.text, 2000),
+        ...((r as SlideTextRun)?.bold ? { bold: true } : {}),
+        ...((r as SlideTextRun)?.italic ? { italic: true } : {}),
+        ...((r as SlideTextRun)?.underline ? { underline: true } : {}),
+        ...(hexOr((r as SlideTextRun)?.color, undefined)
+          ? { color: hexOr((r as SlideTextRun)?.color, undefined) }
+          : {}),
+      }),
+    ),
+  )
+  return lines
+}
+
+function sanitizeElement(input: unknown): SlideElement | null {
+  const el = input as Partial<SlideElement> | null
+  if (!el || typeof el !== 'object' || typeof el.id !== 'string') return null
+  const base = {
+    id: el.id.slice(0, 64),
+    x: clampN(el.x, -SLIDE_STAGE.width, SLIDE_STAGE.width * 2, 0),
+    y: clampN(el.y, -SLIDE_STAGE.height, SLIDE_STAGE.height * 2, 0),
+    w: clampN(el.w, 1, SLIDE_STAGE.width * 3, 100),
+    h: clampN(el.h, 0, SLIDE_STAGE.height * 3, 40),
+    ...(el.rotation ? { rotation: clampN(el.rotation, -360, 360, 0) } : {}),
+    ...(el.opacity != null && el.opacity !== 1 ? { opacity: clampN(el.opacity, 0, 1, 1) } : {}),
+    ...(el.locked === true ? { locked: true } : {}),
+  }
+  if (el.kind === 'text') {
+    const t = el as Partial<SlideTextElement>
+    return {
+      ...base,
+      kind: 'text',
+      text: str(t.text, 20_000),
+      ...(t.runs ? { runs: sanitizeRuns(t.runs) } : {}),
+      fontSize: clampN(t.fontSize, 4, 400, 20),
+      ...(t.fontFamily && ['sans', 'serif', 'mono'].includes(t.fontFamily)
+        ? { fontFamily: t.fontFamily }
+        : {}),
+      ...(t.bold ? { bold: true } : {}),
+      ...(t.italic ? { italic: true } : {}),
+      ...(t.underline ? { underline: true } : {}),
+      ...(hexOr(t.color, undefined) ? { color: hexOr(t.color, undefined) } : {}),
+      ...(t.align && ['left', 'center', 'right'].includes(t.align) ? { align: t.align } : {}),
+      ...(t.lineHeight ? { lineHeight: clampN(t.lineHeight, 0.6, 3, 1.2) } : {}),
+      ...(t.list && ['bullet', 'number'].includes(t.list) ? { list: t.list } : {}),
+    }
+  }
+  if (el.kind === 'image') {
+    const i = el as Partial<SlideImageElement>
+    const url = typeof i.url === 'string' && /^https?:\/\//.test(i.url) ? i.url.slice(0, 2000) : ''
+    return {
+      ...base,
+      kind: 'image',
+      ...(typeof i.attachmentId === 'string' && i.attachmentId
+        ? { attachmentId: i.attachmentId.slice(0, 64) }
+        : {}),
+      ...(url ? { url } : {}),
+      ...(i.fit && ['stretch', 'cover', 'contain'].includes(i.fit) ? { fit: i.fit } : {}),
+      ...(i.radius ? { radius: clampN(i.radius, 0, 200, 0) } : {}),
+    }
+  }
+  if (el.kind === 'shape') {
+    const s = el as Partial<SlideShapeElement>
+    return {
+      ...base,
+      kind: 'shape',
+      shape: s.shape && ['rect', 'ellipse', 'line'].includes(s.shape) ? s.shape : 'rect',
+      ...(hexOr(s.fill, undefined) ? { fill: hexOr(s.fill, undefined) } : {}),
+      ...(hexOr(s.stroke, undefined) ? { stroke: hexOr(s.stroke, undefined) } : {}),
+      ...(s.strokeWidth != null ? { strokeWidth: clampN(s.strokeWidth, 0, 60, 1) } : {}),
+      ...(s.radius ? { radius: clampN(s.radius, 0, 200, 0) } : {}),
+    }
+  }
+  return null
+}
+
+/** Normalize a canvas slide's elements/background before persisting (caps,
+ * numeric clamps, hex-only colors, https-only image URLs). Non-canvas slides
+ * pass through untouched — their RichDoc regions are sanitized separately. */
+export function sanitizeCanvasSlide(slide: Slide): Slide {
+  if (slide.layout !== 'canvas') return slide
+  const elements = (Array.isArray(slide.elements) ? slide.elements : [])
+    .slice(0, 120)
+    .map(sanitizeElement)
+    .filter((e): e is SlideElement => !!e)
+  return {
+    id: String(slide.id).slice(0, 64),
+    layout: 'canvas',
+    elements,
+    ...(hexOr(slide.bgColor, undefined) ? { bgColor: hexOr(slide.bgColor, undefined) } : {}),
+    ...(slide.notes ? { notes: str(slide.notes, 8000) } : {}),
+  }
 }
 
 // Per-criteria checklist on a practical (hands-on) lesson, signed off by an
