@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { BookOpen } from 'lucide-react'
 import { and, asc, count, desc, ilike, isNull, or, eq, type SQL } from 'drizzle-orm'
 import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
+import { can } from '@beaconhs/tenant'
 import { documentCategories, documentTypes, documents } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
@@ -13,6 +14,7 @@ import { TableToolbar } from '@/components/table-toolbar'
 import { createBlankDocument, listDocumentBooksForBulk } from './_actions'
 import { DocumentsRecordsTable, type DocumentsTableRow } from './_records-table'
 import { DocumentsSubNav } from './_components/documents-sub-nav'
+import { ReadOnlyDocumentsGrid, type ReadOnlyDoc } from './_read-only-grid'
 
 export const metadata = { title: 'Documents' }
 
@@ -41,16 +43,20 @@ export default async function DocumentsPage({
   const categoryFilter = pickString(sp.category)
   const typeFilter = pickString(sp.type)
   const ctx = await requireRequestContext()
+  // Administration + Health & Safety (documents.manage) get the management table;
+  // everyone else gets a read-only card library of published documents.
+  const canManage = ctx.isSuperAdmin || can(ctx, 'documents.manage')
 
   const { rows, total, statusCounts, categoryCounts, typeCounts, categories, types } = await ctx.db(
     async (tx) => {
       const filters: SQL<unknown>[] = [isNull(documents.deletedAt)]
+      if (!canManage) filters.push(eq(documents.status, 'published'))
       if (params.q) {
         const term = `%${params.q}%`
         const cond = or(ilike(documents.title, term), ilike(documents.description, term))
         if (cond) filters.push(cond)
       }
-      if (statusFilter) filters.push(eq(documents.status, statusFilter as any))
+      if (canManage && statusFilter) filters.push(eq(documents.status, statusFilter as any))
       if (categoryFilter) filters.push(eq(documents.categoryId, categoryFilter))
       if (typeFilter) filters.push(eq(documents.typeId, typeFilter))
       const whereClause = and(...filters)
@@ -130,34 +136,53 @@ export default async function DocumentsPage({
     }
   })
 
+  const cardRows: ReadOnlyDoc[] = rows.map((d) => {
+    const t = d.typeId ? typeMap.get(d.typeId) : null
+    return {
+      id: d.id,
+      title: d.title,
+      description: d.description,
+      category: d.categoryId ? (catName.get(d.categoryId) ?? null) : d.category,
+      type: t ? { name: t.name, color: t.color ?? null } : null,
+    }
+  })
+
   return (
     <ListPageLayout
       header={
         <>
           <PageHeader
             title="Documents"
-            description="Versioned library + read-and-acknowledge + periodic review + management review books."
+            description={
+              canManage
+                ? 'Versioned library + read-and-acknowledge + periodic review + management review books.'
+                : 'Browse and read your safety documents, policies, and procedures.'
+            }
             actions={
-              <div className="flex items-center gap-2">
-                <Link href={buildExportHref('/documents/export.csv', sp)}>
-                  <Button variant="outline">Export CSV</Button>
-                </Link>
-                <form action={createBlankDocument}>
-                  <Button type="submit">New document</Button>
-                </form>
-              </div>
+              canManage ? (
+                <div className="flex items-center gap-2">
+                  <Link href={buildExportHref('/documents/export.csv', sp)}>
+                    <Button variant="outline">Export CSV</Button>
+                  </Link>
+                  <form action={createBlankDocument}>
+                    <Button type="submit">New document</Button>
+                  </form>
+                </div>
+              ) : null
             }
           />
           <DocumentsSubNav active="documents" />
           <TableToolbar>
             <SearchInput placeholder="Search title or description" />
-            <FilterChips
-              basePath="/documents"
-              currentParams={sp}
-              paramKey="status"
-              label="Status"
-              options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
-            />
+            {canManage ? (
+              <FilterChips
+                basePath="/documents"
+                currentParams={sp}
+                paramKey="status"
+                label="Status"
+                options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
+              />
+            ) : null}
             {categories.length > 0 ? (
               <FilterChips
                 basePath="/documents"
@@ -192,16 +217,26 @@ export default async function DocumentsPage({
         <EmptyState
           icon={<BookOpen size={32} />}
           title={params.q || statusFilter ? 'No documents match these filters' : 'No documents'}
-          description="Add policies, procedures, SDS sheets, manuals, and have workers acknowledge them."
+          description={
+            canManage
+              ? 'Add policies, procedures, SDS sheets, manuals, and have workers acknowledge them.'
+              : 'No published documents are available to view yet.'
+          }
           action={
-            <form action={createBlankDocument}>
-              <Button type="submit">New document</Button>
-            </form>
+            canManage ? (
+              <form action={createBlankDocument}>
+                <Button type="submit">New document</Button>
+              </form>
+            ) : undefined
           }
         />
       ) : (
         <>
-          <DocumentsRecordsTable rows={tableRows} books={books} />
+          {canManage ? (
+            <DocumentsRecordsTable rows={tableRows} books={books} />
+          ) : (
+            <ReadOnlyDocumentsGrid docs={cardRows} />
+          )}
           <Pagination
             basePath="/documents"
             currentParams={sp}

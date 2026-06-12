@@ -13,6 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from '@beaconhs/ui'
+import { can } from '@beaconhs/tenant'
 import { documentBookItems, documentBooks } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { parseListParams, pickString } from '@/lib/list-params'
@@ -23,6 +24,7 @@ import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
 import { TableToolbar } from '@/components/table-toolbar'
 import { DocumentsSubNav } from '../_components/documents-sub-nav'
+import { ReadOnlyBooksGrid } from './_read-only-books-grid'
 
 export const metadata = { title: 'Document books' }
 
@@ -47,15 +49,17 @@ export default async function DocumentBooksPage({
   })
   const statusFilter = pickString(sp.status)
   const ctx = await requireRequestContext()
+  const canManage = ctx.isSuperAdmin || can(ctx, 'documents.manage')
 
   const { rows, total, statusCounts, memberCounts } = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = []
+    if (!canManage) filters.push(eq(documentBooks.status, 'published'))
     if (params.q) {
       const term = `%${params.q}%`
       const cond = or(ilike(documentBooks.title, term), ilike(documentBooks.description, term))
       if (cond) filters.push(cond)
     }
-    if (statusFilter) filters.push(eq(documentBooks.status, statusFilter as any))
+    if (canManage && statusFilter) filters.push(eq(documentBooks.status, statusFilter as any))
     const whereClause = filters.length > 0 ? and(...filters) : undefined
 
     const orderBy =
@@ -100,6 +104,14 @@ export default async function DocumentBooksPage({
     }
   })
 
+  const bookCards = rows.map((b) => ({
+    id: b.id,
+    title: b.title || b.name || '(untitled)',
+    description: b.description,
+    category: b.category,
+    documentCount: memberCounts[b.id] ?? 0,
+  }))
+
   const sortProps = { basePath: '/documents/books', currentParams: sp, dir: params.dir }
 
   return (
@@ -108,23 +120,31 @@ export default async function DocumentBooksPage({
         <>
           <PageHeader
             title="Document books"
-            description="Curated, ordered bundles of documents that publish as a single PDF — perfect for management review packs."
+            description={
+              canManage
+                ? 'Curated, ordered bundles of documents that publish as a single PDF — perfect for management review packs.'
+                : 'Read complete document packs — each book opens as a single PDF.'
+            }
             actions={
-              <Link href="/documents/books/new">
-                <Button>New book</Button>
-              </Link>
+              canManage ? (
+                <Link href="/documents/books/new">
+                  <Button>New book</Button>
+                </Link>
+              ) : null
             }
           />
           <DocumentsSubNav active="books" />
           <TableToolbar>
             <SearchInput placeholder="Search title or description" />
-            <FilterChips
-              basePath="/documents/books"
-              currentParams={sp}
-              paramKey="status"
-              label="Status"
-              options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
-            />
+            {canManage ? (
+              <FilterChips
+                basePath="/documents/books"
+                currentParams={sp}
+                paramKey="status"
+                label="Status"
+                options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
+              />
+            ) : null}
           </TableToolbar>
         </>
       }
@@ -133,13 +153,30 @@ export default async function DocumentBooksPage({
         <EmptyState
           icon={<Library size={32} />}
           title={params.q || statusFilter ? 'No books match these filters' : 'No books'}
-          description="Create a book to bundle related documents into a single management-review PDF."
+          description={
+            canManage
+              ? 'Create a book to bundle related documents into a single management-review PDF.'
+              : 'No published books are available to read yet.'
+          }
           action={
-            <Link href="/documents/books/new">
-              <Button>New book</Button>
-            </Link>
+            canManage ? (
+              <Link href="/documents/books/new">
+                <Button>New book</Button>
+              </Link>
+            ) : undefined
           }
         />
+      ) : !canManage ? (
+        <>
+          <ReadOnlyBooksGrid books={bookCards} />
+          <Pagination
+            basePath="/documents/books"
+            currentParams={sp}
+            total={total}
+            page={params.page}
+            perPage={params.perPage}
+          />
+        </>
       ) : (
         <>
           <Table>
