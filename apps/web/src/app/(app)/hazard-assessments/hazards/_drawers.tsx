@@ -3,31 +3,11 @@
 // Drawers for the hazard-library list page:
 //   • new-hazard   → create a new hazard library entry
 //   • edit-hazard  → edit an existing hazard (id taken from ?id=…)
-//
-// Both open via `?drawer=…` so they survive page refreshes and are
-// link-shareable. Server actions are passed in from the RSC page.
 
-import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2 } from 'lucide-react'
 import { Button, Input, Label, Select, Textarea, UrlDrawer } from '@beaconhs/ui'
 
-type CreateAction = (input: {
-  name: string
-  hazardTypeId: string | null
-  description: string | null
-  standardControls: string | null
-  risks: string | null
-}) => Promise<{ ok: true } | { ok: false; error: string }>
-
-type UpdateAction = (input: {
-  id: string
-  name: string
-  hazardTypeId: string | null
-  description: string | null
-  standardControls: string | null
-  risks: string | null
-}) => Promise<{ ok: true } | { ok: false; error: string }>
+type FormAction = (formData: FormData) => Promise<void>
 
 export type HazardTypeOption = { id: string; name: string }
 
@@ -46,13 +26,15 @@ export function HazardLibraryDrawers({
   types,
   createAction,
   updateAction,
+  deleteAction,
   editDefaults,
 }: {
   openDrawer: 'new-hazard' | 'edit-hazard' | null
   closeHref: string
   types: HazardTypeOption[]
-  createAction: CreateAction
-  updateAction: UpdateAction
+  createAction: FormAction
+  updateAction: FormAction
+  deleteAction: FormAction
   editDefaults: EditHazardDefaults | null
 }) {
   return (
@@ -68,13 +50,12 @@ export function HazardLibraryDrawers({
         closeHref={closeHref}
         types={types}
         defaults={editDefaults}
-        action={updateAction}
+        updateAction={updateAction}
+        deleteAction={deleteAction}
       />
     </>
   )
 }
-
-// ---- New hazard ------------------------------------------------------------
 
 function NewHazardDrawer({
   open,
@@ -85,52 +66,10 @@ function NewHazardDrawer({
   open: boolean
   closeHref: string
   types: HazardTypeOption[]
-  action: CreateAction
+  action: FormAction
 }) {
   const router = useRouter()
-  const [name, setName] = useState('')
-  const [hazardTypeId, setHazardTypeId] = useState('')
-  const [description, setDescription] = useState('')
-  const [standardControls, setStandardControls] = useState('')
-  const [risks, setRisks] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [pending, startTransition] = useTransition()
-
-  // Reset fields when the drawer closes so the next open is a fresh form
-  useEffect(() => {
-    if (!open) {
-      setName('')
-      setHazardTypeId('')
-      setDescription('')
-      setStandardControls('')
-      setRisks('')
-      setError(null)
-    }
-  }, [open])
-
-  function submit() {
-    setError(null)
-    const trimmed = name.trim()
-    if (!trimmed) {
-      setError('Name is required')
-      return
-    }
-    startTransition(async () => {
-      const res = await action({
-        name: trimmed,
-        hazardTypeId: hazardTypeId || null,
-        description: description.trim() || null,
-        standardControls: standardControls.trim() || null,
-        risks: risks.trim() || null,
-      })
-      if (res.ok) {
-        router.push(closeHref)
-        router.refresh()
-      } else {
-        setError(res.error)
-      }
-    })
-  }
+  const formId = 'new-hazard-form'
 
   return (
     <UrlDrawer
@@ -141,146 +80,72 @@ function NewHazardDrawer({
       size="md"
       footer={
         <div className="flex justify-end gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => router.push(closeHref)}
-            disabled={pending}
-          >
+          <Button type="button" variant="outline" onClick={() => router.push(closeHref)}>
             Cancel
           </Button>
-          <Button type="button" onClick={submit} disabled={pending}>
-            {pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
+          <Button type="submit" form={formId}>
             Create hazard
           </Button>
         </div>
       }
     >
-      <div className="space-y-4">
-        <div className="space-y-1.5">
-          <Label htmlFor="hazard-name">Name *</Label>
-          <Input
-            id="hazard-name"
-            value={name}
-            onChange={(e) => setName(e.currentTarget.value)}
-            required
-            placeholder="e.g. Pinch point"
-          />
+      <form key={open ? 'new-hazard-open' : 'new-hazard-closed'} id={formId} action={action}>
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="hazard-name">Name *</Label>
+            <Input id="hazard-name" name="name" required placeholder="e.g. Pinch point" />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="hazard-type">Type</Label>
+            <Select id="hazard-type" name="hazardTypeId" defaultValue="">
+              <option value="">—</option>
+              {types.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="hazard-description">Description</Label>
+            <Textarea id="hazard-description" name="description" rows={2} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="hazard-controls">Standard controls (canonical wording)</Label>
+            <Textarea
+              id="hazard-controls"
+              name="standardControls"
+              rows={4}
+              placeholder="What is the default mitigation?"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="hazard-risks">Risks (what could go wrong)</Label>
+            <Textarea id="hazard-risks" name="risks" rows={2} />
+          </div>
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="hazard-type">Type</Label>
-          <Select
-            id="hazard-type"
-            value={hazardTypeId}
-            onChange={(e) => setHazardTypeId(e.currentTarget.value)}
-          >
-            <option value="">—</option>
-            {types.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </Select>
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="hazard-description">Description</Label>
-          <Textarea
-            id="hazard-description"
-            value={description}
-            onChange={(e) => setDescription(e.currentTarget.value)}
-            rows={2}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="hazard-controls">Standard controls (canonical wording)</Label>
-          <Textarea
-            id="hazard-controls"
-            value={standardControls}
-            onChange={(e) => setStandardControls(e.currentTarget.value)}
-            rows={4}
-            placeholder="What is the default mitigation?"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="hazard-risks">Risks (what could go wrong)</Label>
-          <Textarea
-            id="hazard-risks"
-            value={risks}
-            onChange={(e) => setRisks(e.currentTarget.value)}
-            rows={2}
-          />
-        </div>
-        {error ? (
-          <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-            {error}
-          </p>
-        ) : null}
-      </div>
+      </form>
     </UrlDrawer>
   )
 }
-
-// ---- Edit hazard -----------------------------------------------------------
 
 function EditHazardDrawer({
   open,
   closeHref,
   types,
   defaults,
-  action,
+  updateAction,
+  deleteAction,
 }: {
   open: boolean
   closeHref: string
   types: HazardTypeOption[]
   defaults: EditHazardDefaults | null
-  action: UpdateAction
+  updateAction: FormAction
+  deleteAction: FormAction
 }) {
   const router = useRouter()
-  const [name, setName] = useState(defaults?.name ?? '')
-  const [hazardTypeId, setHazardTypeId] = useState(defaults?.hazardTypeId ?? '')
-  const [description, setDescription] = useState(defaults?.description ?? '')
-  const [standardControls, setStandardControls] = useState(defaults?.standardControls ?? '')
-  const [risks, setRisks] = useState(defaults?.risks ?? '')
-  const [error, setError] = useState<string | null>(null)
-  const [pending, startTransition] = useTransition()
-
-  // Re-seed fields when the target hazard changes
-  useEffect(() => {
-    if (defaults) {
-      setName(defaults.name)
-      setHazardTypeId(defaults.hazardTypeId ?? '')
-      setDescription(defaults.description ?? '')
-      setStandardControls(defaults.standardControls ?? '')
-      setRisks(defaults.risks ?? '')
-      setError(null)
-    }
-  }, [defaults])
-
-  function submit() {
-    if (!defaults) return
-    setError(null)
-    const trimmed = name.trim()
-    if (!trimmed) {
-      setError('Name is required')
-      return
-    }
-    startTransition(async () => {
-      const res = await action({
-        id: defaults.id,
-        name: trimmed,
-        hazardTypeId: hazardTypeId || null,
-        description: description.trim() || null,
-        standardControls: standardControls.trim() || null,
-        risks: risks.trim() || null,
-      })
-      if (res.ok) {
-        router.push(closeHref)
-        router.refresh()
-      } else {
-        setError(res.error)
-      }
-    })
-  }
+  const formId = 'edit-hazard-form'
 
   return (
     <UrlDrawer
@@ -291,79 +156,84 @@ function EditHazardDrawer({
       size="md"
       footer={
         <div className="flex justify-end gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => router.push(closeHref)}
-            disabled={pending}
-          >
+          <Button type="button" variant="outline" onClick={() => router.push(closeHref)}>
             Cancel
           </Button>
-          <Button type="button" onClick={submit} disabled={pending || !defaults}>
-            {pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
+          <Button type="submit" form={formId} disabled={!defaults}>
             Save
           </Button>
         </div>
       }
     >
-      <div className="space-y-4">
-        <div className="space-y-1.5">
-          <Label htmlFor="edit-hazard-name">Name *</Label>
-          <Input
-            id="edit-hazard-name"
-            value={name}
-            onChange={(e) => setName(e.currentTarget.value)}
-            required
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="edit-hazard-type">Type</Label>
-          <Select
-            id="edit-hazard-type"
-            value={hazardTypeId}
-            onChange={(e) => setHazardTypeId(e.currentTarget.value)}
+      {defaults ? (
+        <div className="space-y-6">
+          <form
+            key={`${defaults.id}-${open ? 'open' : 'closed'}`}
+            id={formId}
+            action={updateAction}
+            className="space-y-4"
           >
-            <option value="">—</option>
-            {types.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </Select>
+            <input type="hidden" name="id" value={defaults.id} />
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-hazard-name">Name *</Label>
+              <Input id="edit-hazard-name" name="name" defaultValue={defaults.name} required />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-hazard-type">Type</Label>
+              <Select
+                id="edit-hazard-type"
+                name="hazardTypeId"
+                defaultValue={defaults.hazardTypeId ?? ''}
+              >
+                <option value="">—</option>
+                {types.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-hazard-description">Description</Label>
+              <Textarea
+                id="edit-hazard-description"
+                name="description"
+                rows={2}
+                defaultValue={defaults.description ?? ''}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-hazard-controls">Standard controls</Label>
+              <Textarea
+                id="edit-hazard-controls"
+                name="standardControls"
+                rows={4}
+                defaultValue={defaults.standardControls ?? ''}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-hazard-risks">Risks</Label>
+              <Textarea
+                id="edit-hazard-risks"
+                name="risks"
+                rows={2}
+                defaultValue={defaults.risks ?? ''}
+              />
+            </div>
+          </form>
+          <div className="rounded-md border border-red-200 bg-red-50/70 p-3 dark:border-red-950 dark:bg-red-950/20">
+            <div className="mb-3 text-sm font-semibold text-red-700 dark:text-red-300">
+              Danger zone
+            </div>
+            <form action={deleteAction}>
+              <input type="hidden" name="id" value={defaults.id} />
+              <Button type="submit" variant="outline" className="text-red-600 hover:bg-red-50">
+                Delete hazard
+              </Button>
+            </form>
+          </div>
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="edit-hazard-description">Description</Label>
-          <Textarea
-            id="edit-hazard-description"
-            value={description}
-            onChange={(e) => setDescription(e.currentTarget.value)}
-            rows={2}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="edit-hazard-controls">Standard controls</Label>
-          <Textarea
-            id="edit-hazard-controls"
-            value={standardControls}
-            onChange={(e) => setStandardControls(e.currentTarget.value)}
-            rows={4}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="edit-hazard-risks">Risks</Label>
-          <Textarea
-            id="edit-hazard-risks"
-            value={risks}
-            onChange={(e) => setRisks(e.currentTarget.value)}
-            rows={2}
-          />
-        </div>
-        {error ? (
-          <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-            {error}
-          </p>
-        ) : null}
-      </div>
+      ) : null}
     </UrlDrawer>
   )
 }

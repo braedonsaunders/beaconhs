@@ -53,7 +53,6 @@ function revalidateAssessment(id: string) {
   for (const p of PATHS(id)) revalidatePath(p)
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type HazidTx = any
 
 async function latestTemplateVersion(tx: HazidTx, templateId: string) {
@@ -1521,6 +1520,7 @@ export async function deleteHazardType(formData: FormData) {
 
 export async function createHazardLibrary(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCanManageModule(ctx, 'hazid')
   const name = String(formData.get('name') ?? '').trim()
   if (!name) throw new Error('Name is required')
   const hazardTypeId = nullable(formData.get('hazardTypeId'))
@@ -1544,6 +1544,7 @@ export async function createHazardLibrary(formData: FormData) {
 
 export async function updateHazardLibrary(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCanManageModule(ctx, 'hazid')
   const id = String(formData.get('id') ?? '')
   const updates = {
     name: String(formData.get('name') ?? '').trim() || undefined,
@@ -1565,6 +1566,7 @@ export async function updateHazardLibrary(formData: FormData) {
 
 export async function deleteHazardLibrary(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCanManageModule(ctx, 'hazid')
   const id = String(formData.get('id') ?? '')
   await ctx.db((tx) =>
     tx.update(hazidHazards).set({ deletedAt: new Date() }).where(eq(hazidHazards.id, id)),
@@ -1649,6 +1651,7 @@ function riskInt(v: FormDataEntryValue | null): number | null {
 
 export async function createTaskLibrary(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCanManageModule(ctx, 'hazid')
   const name = String(formData.get('name') ?? '').trim()
   if (!name) throw new Error('Name is required')
   const description = nullable(formData.get('description'))
@@ -1684,6 +1687,7 @@ export async function createTaskLibrary(formData: FormData) {
 
 export async function updateTaskLibrary(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCanManageModule(ctx, 'hazid')
   const id = String(formData.get('id') ?? '')
   const hazardIds = String(formData.get('hazardIds') ?? '')
     .split(',')
@@ -1712,6 +1716,7 @@ export async function updateTaskLibrary(formData: FormData) {
 
 export async function deleteTaskLibrary(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCanManageModule(ctx, 'hazid')
   const id = String(formData.get('id') ?? '')
   await ctx.db((tx) =>
     tx.update(hazidTasks).set({ deletedAt: new Date() }).where(eq(hazidTasks.id, id)),
@@ -1813,6 +1818,7 @@ export async function deleteAssessmentType(formData: FormData) {
     summary: 'Deleted assessment type',
   })
   revalidatePath('/hazard-assessments/types')
+  revalidatePath(`/hazard-assessments/types/${id}`)
 }
 
 // Type-default PPE rows

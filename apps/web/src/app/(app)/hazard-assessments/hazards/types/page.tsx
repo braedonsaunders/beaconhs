@@ -3,8 +3,9 @@
 // hazard-count per type so admins know which categories actually get used.
 
 import Link from 'next/link'
-import { Palette } from 'lucide-react'
-import { and, asc, count, desc, eq, ilike, isNull, or, sql, type SQL } from 'drizzle-orm'
+import { redirect } from 'next/navigation'
+import { Palette, Pencil } from 'lucide-react'
+import { and, asc, count, desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -19,17 +20,37 @@ import {
 } from '@beaconhs/ui'
 import { hazidHazardTypes, hazidHazards } from '@beaconhs/db/schema'
 import { requireModuleManage } from '@/lib/module-admin/guard'
-import { parseListParams } from '@/lib/list-params'
+import { parseListParams, pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
 import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { HazidSubNav } from '../../_subnav'
+import { createHazardType, deleteHazardType, updateHazardType } from '../../_actions'
+import { HazardTypeDrawers, type EditHazardTypeDefaults } from './_drawers'
 
 export const metadata = { title: 'Hazard types' }
 export const dynamic = 'force-dynamic'
 
 const SORTS = ['name', 'created', 'hazards'] as const
+
+async function createHazardTypeAction(formData: FormData) {
+  'use server'
+  await createHazardType(formData)
+  redirect('/hazard-assessments/hazards/types')
+}
+
+async function updateHazardTypeAction(formData: FormData) {
+  'use server'
+  await updateHazardType(formData)
+  redirect('/hazard-assessments/hazards/types')
+}
+
+async function deleteHazardTypeAction(formData: FormData) {
+  'use server'
+  await deleteHazardType(formData)
+  redirect('/hazard-assessments/hazards/types')
+}
 
 export default async function HazardTypesPage({
   searchParams,
@@ -43,9 +64,11 @@ export default async function HazardTypesPage({
     perPage: 25,
     allowedSorts: SORTS,
   })
+  const drawer = pickString(sp.drawer)
+  const editId = pickString(sp.id)
   const ctx = await requireModuleManage('hazid')
 
-  const { rows, total } = await ctx.db(async (tx) => {
+  const { rows, total, editTarget } = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = []
     if (params.q) {
       const term = `%${params.q}%`
@@ -87,7 +110,25 @@ export default async function HazardTypesPage({
       .limit(params.perPage)
       .offset((params.page - 1) * params.perPage)
 
-    return { rows: data, total: Number(tot?.c ?? 0) }
+    let editTarget: EditHazardTypeDefaults | null = null
+    if (drawer === 'edit-hazard-type' && editId) {
+      const [target] = await tx
+        .select()
+        .from(hazidHazardTypes)
+        .where(eq(hazidHazardTypes.id, editId))
+        .limit(1)
+      if (target) {
+        editTarget = {
+          id: target.id,
+          name: target.name,
+          color: target.color,
+          iconKey: target.iconKey,
+          description: target.description,
+        }
+      }
+    }
+
+    return { rows: data, total: Number(tot?.c ?? 0), editTarget }
   })
 
   const sortProps = {
@@ -105,7 +146,7 @@ export default async function HazardTypesPage({
             title="Hazard types"
             description="Categorical buckets (mechanical, chemical, electrical…) for organizing the hazard bank. Color is shown alongside hazards in the assessment editor."
             actions={
-              <Link href="/hazard-assessments/hazards/types/new">
+              <Link href="/hazard-assessments/hazards/types?drawer=new-hazard-type" scroll={false}>
                 <Button>New hazard type</Button>
               </Link>
             }
@@ -122,7 +163,7 @@ export default async function HazardTypesPage({
           title={params.q ? `No types match "${params.q}"` : 'No hazard types'}
           description="Start with common categories — chemical, mechanical, electrical, biological, ergonomic."
           action={
-            <Link href="/hazard-assessments/hazards/types/new">
+            <Link href="/hazard-assessments/hazards/types?drawer=new-hazard-type" scroll={false}>
               <Button>Add a type</Button>
             </Link>
           }
@@ -144,6 +185,7 @@ export default async function HazardTypesPage({
                 <SortableTh {...sortProps} column="created" active={params.sort === 'created'}>
                   Created
                 </SortableTh>
+                <TableHead className="w-10" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -151,7 +193,8 @@ export default async function HazardTypesPage({
                 <TableRow key={type.id}>
                   <TableCell>
                     <Link
-                      href={`/hazard-assessments/hazards/types/${type.id}/edit`}
+                      href={`/hazard-assessments/hazards/types?drawer=edit-hazard-type&id=${type.id}`}
+                      scroll={false}
                       className="font-medium text-slate-900 hover:underline dark:text-slate-100"
                     >
                       {type.name}
@@ -187,6 +230,16 @@ export default async function HazardTypesPage({
                   <TableCell className="text-xs text-slate-500 tabular-nums">
                     {type.createdAt ? new Date(type.createdAt).toLocaleDateString() : '—'}
                   </TableCell>
+                  <TableCell className="text-right">
+                    <Link
+                      href={`/hazard-assessments/hazards/types?drawer=edit-hazard-type&id=${type.id}`}
+                      scroll={false}
+                      aria-label={`Edit ${type.name}`}
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
+                    >
+                      <Pencil size={14} />
+                    </Link>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -200,11 +253,20 @@ export default async function HazardTypesPage({
           />
         </>
       )}
+      <HazardTypeDrawers
+        openDrawer={
+          drawer === 'new-hazard-type'
+            ? 'new-hazard-type'
+            : drawer === 'edit-hazard-type'
+              ? 'edit-hazard-type'
+              : null
+        }
+        closeHref="/hazard-assessments/hazards/types"
+        createAction={createHazardTypeAction}
+        updateAction={updateHazardTypeAction}
+        deleteAction={deleteHazardTypeAction}
+        editDefaults={editTarget}
+      />
     </ListPageLayout>
   )
-}
-
-// Silence unused
-export function _hazardTypesReady() {
-  return [isNull].length > 0
 }

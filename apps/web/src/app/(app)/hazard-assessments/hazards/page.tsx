@@ -6,7 +6,7 @@
 // the new app's list pages.
 
 import Link from 'next/link'
-import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 import { ShieldAlert, Image as ImageIcon, Pencil } from 'lucide-react'
 import { and, asc, count, desc, eq, ilike, isNull, or, sql, type SQL } from 'drizzle-orm'
 import {
@@ -22,8 +22,7 @@ import {
   TableRow,
 } from '@beaconhs/ui'
 import { hazidAssessmentHazards, hazidHazardTypes, hazidHazards } from '@beaconhs/db/schema'
-import { requireRequestContext } from '@/lib/auth'
-import { recordAudit } from '@/lib/audit'
+import { requireModuleManage } from '@/lib/module-admin/guard'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
 import { TableToolbar } from '@/components/table-toolbar'
@@ -32,6 +31,7 @@ import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { HazidSubNav } from '../_subnav'
+import { createHazardLibrary, deleteHazardLibrary, updateHazardLibrary } from '../_actions'
 import { HazardLibraryDrawers, type EditHazardDefaults } from './_drawers'
 
 export const metadata = { title: 'Hazard library' }
@@ -39,78 +39,22 @@ export const dynamic = 'force-dynamic'
 
 const SORTS = ['name', 'type', 'updated', 'usage'] as const
 
-// ---------- Server actions (drawer-driven, typed object inputs) ----------
-
-async function createHazardAction(input: {
-  name: string
-  hazardTypeId: string | null
-  description: string | null
-  standardControls: string | null
-  risks: string | null
-}): Promise<{ ok: true } | { ok: false; error: string }> {
+async function createHazardAction(formData: FormData) {
   'use server'
-  const ctx = await requireRequestContext()
-  if (!ctx.tenantId) return { ok: false, error: 'Active tenant required' }
-  const name = input.name.trim()
-  if (!name) return { ok: false, error: 'Name is required' }
-  const [row] = await ctx.db((tx) =>
-    tx
-      .insert(hazidHazards)
-      .values({
-        tenantId: ctx.tenantId!,
-        name,
-        hazardTypeId: input.hazardTypeId,
-        description: input.description,
-        standardControls: input.standardControls,
-        risks: input.risks,
-      })
-      .returning(),
-  )
-  await recordAudit(ctx, {
-    entityType: 'hazid_hazard',
-    entityId: row?.id,
-    action: 'create',
-    summary: `Created hazard "${name}"`,
-  })
-  revalidatePath('/hazard-assessments/hazards')
-  return { ok: true }
+  await createHazardLibrary(formData)
+  redirect('/hazard-assessments/hazards')
 }
 
-async function updateHazardAction(input: {
-  id: string
-  name: string
-  hazardTypeId: string | null
-  description: string | null
-  standardControls: string | null
-  risks: string | null
-}): Promise<{ ok: true } | { ok: false; error: string }> {
+async function updateHazardAction(formData: FormData) {
   'use server'
-  const ctx = await requireRequestContext()
-  if (!ctx.tenantId) return { ok: false, error: 'Active tenant required' }
-  if (!input.id) return { ok: false, error: 'Missing hazard id' }
-  const name = input.name.trim()
-  if (!name) return { ok: false, error: 'Name is required' }
-  await ctx.db((tx) =>
-    tx
-      .update(hazidHazards)
-      .set({
-        name,
-        hazardTypeId: input.hazardTypeId,
-        description: input.description,
-        standardControls: input.standardControls,
-        risks: input.risks,
-      })
-      .where(eq(hazidHazards.id, input.id)),
-  )
-  await recordAudit(ctx, {
-    entityType: 'hazid_hazard',
-    entityId: input.id,
-    action: 'update',
-    summary: 'Updated hazard',
-  })
-  revalidatePath('/hazard-assessments/hazards')
-  revalidatePath(`/hazard-assessments/hazards/${input.id}`)
-  return { ok: true }
+  await updateHazardLibrary(formData)
+  redirect('/hazard-assessments/hazards')
+}
+
+async function deleteHazardAction(formData: FormData) {
+  'use server'
+  await deleteHazardLibrary(formData)
+  redirect('/hazard-assessments/hazards')
 }
 
 export default async function HazardsLibraryPage({
@@ -129,7 +73,7 @@ export default async function HazardsLibraryPage({
   const photoFilter = pickString(sp.photo) // 'with' | 'without'
   const drawer = pickString(sp.drawer)
   const editId = pickString(sp.id)
-  const ctx = await requireRequestContext()
+  const ctx = await requireModuleManage('hazid')
 
   const { rows, total, typeOptions, typeCounts, editTarget } = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = [isNull(hazidHazards.deletedAt)]
@@ -211,7 +155,7 @@ export default async function HazardsLibraryPage({
           risks: hazidHazards.risks,
         })
         .from(hazidHazards)
-        .where(eq(hazidHazards.id, editId))
+        .where(and(eq(hazidHazards.id, editId), isNull(hazidHazards.deletedAt)))
         .limit(1)
       if (target) {
         editTarget = {
@@ -407,6 +351,7 @@ export default async function HazardsLibraryPage({
         types={typeOptions}
         createAction={createHazardAction}
         updateAction={updateHazardAction}
+        deleteAction={deleteHazardAction}
         editDefaults={editTarget}
       />
     </ListPageLayout>
