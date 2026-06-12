@@ -20,7 +20,8 @@ jobs:
           theme: auto
           accent: teal
           receipts: false
-          # Informational only — no health grade/score, no language-ratio
-          # breakdown. `scale` keeps the file/function/LOC/language counts.
-          # `grade` (HEALTH) and `languages` are intentionally omitted.
-          panels: scale
+          # Public README — show structure, not judgment (matches bidwright).
+          # NB: `panels` only applies to style=detailed, so it can't hide the
+          # compact card's HEALTH grade; these flags do.
+          show-grade: false
+          show-score: false

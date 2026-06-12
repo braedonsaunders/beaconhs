@@ -21,6 +21,8 @@ const INK_CLASS = 'text-[#1B2B4A] dark:text-slate-100'
 type Mode = 'static' | 'loop' | 'draw'
 
 const delay = (s: number) => ({ '--bd': `${s}s` }) as CSSProperties
+const rayDelay = (s: number, pulse: number) =>
+  ({ '--bd': `${s}s`, '--bp': `${pulse}s` }) as CSSProperties
 
 /* ------------------------------- The mark -------------------------------- */
 // Drawn in a 48 × 106 box. Build-up order: base → tower → stripes → gallery →
@@ -48,11 +50,11 @@ const MARK_RAYS = [
 
 function MarkArt({ mode }: { mode: Mode }) {
   const draw = mode === 'draw'
-  const loop = mode === 'loop'
-  const lampLit = draw || loop
+  const animated = mode !== 'static'
+  const strokeCls = draw ? 'brand-stroke-draw' : animated ? 'brand-stroke-loop' : undefined
   return (
     <>
-      {lampLit ? (
+      {animated ? (
         <filter id="bhs-glow" x="-150%" y="-150%" width="400%" height="400%">
           <feGaussianBlur stdDeviation="3" />
         </filter>
@@ -68,23 +70,23 @@ function MarkArt({ mode }: { mode: Mode }) {
           <path
             key={d}
             d={d}
-            {...(draw
-              ? { pathLength: 1, className: 'brand-draw', style: delay(0.05 + i * 0.08) }
+            {...(animated
+              ? { pathLength: 1, className: strokeCls, style: delay(0.05 + i * 0.06) }
               : {})}
           />
         ))}
       </g>
       {/* lamp — faithful ink in the static logo, lit amber when animated */}
-      {lampLit ? (
+      {animated ? (
         <circle
           cx={24}
           cy={45.75}
           r={6}
           fill={BRAND_AMBER}
-          opacity={0.4}
+          opacity={0.45}
           filter="url(#bhs-glow)"
-          className={draw ? 'brand-in-pulse' : 'brand-pulse'}
-          style={delay(draw ? 0.95 : 0)}
+          className={draw ? 'brand-glow-draw' : 'brand-glow-loop'}
+          style={delay(0.85)}
         />
       ) : null}
       <rect
@@ -93,19 +95,24 @@ function MarkArt({ mode }: { mode: Mode }) {
         width={7}
         height={6.5}
         rx={1.6}
-        fill={lampLit ? BRAND_AMBER : 'currentColor'}
-        {...(draw ? { className: 'brand-in', style: delay(0.95) } : {})}
+        fill={animated ? BRAND_AMBER : 'currentColor'}
+        {...(animated
+          ? { className: draw ? 'brand-lamp-draw' : 'brand-lamp-loop', style: delay(0.85) }
+          : {})}
       />
+      {/* rays beam outward from the lamp (paths run inner → outer) */}
       <g fill="none" stroke={BRAND_AMBER} strokeWidth={5} strokeLinecap="round">
         {MARK_RAYS.map((d, i) => (
           <path
             key={d}
             d={d}
-            {...(draw
-              ? { className: 'brand-in-pulse', style: delay(1.05 + i * 0.09) }
-              : loop
-                ? { className: 'brand-pulse', style: delay(i * 0.16) }
-                : {})}
+            {...(animated
+              ? {
+                  pathLength: 1,
+                  className: draw ? 'brand-ray-draw' : 'brand-ray-loop',
+                  style: rayDelay(1.0 + i * 0.07, i * 0.16),
+                }
+              : {})}
           />
         ))}
       </g>
@@ -152,6 +159,8 @@ const LOCKUP_W = Math.ceil(WORD_END + 4)
 
 function WordmarkArt({ mode }: { mode: Mode }) {
   const draw = mode === 'draw'
+  const animated = mode !== 'static'
+  const strokeCls = draw ? 'brand-stroke-draw' : animated ? 'brand-stroke-loop' : undefined
   return (
     <g
       transform={`translate(${WORD_X} ${WORD_Y}) scale(${WORD_SCALE})`}
@@ -167,8 +176,8 @@ function WordmarkArt({ mode }: { mode: Mode }) {
           stroke={g.amber ? BRAND_AMBER : 'currentColor'}
         >
           {g.strokes.map((s, j) => {
-            const anim = draw
-              ? { pathLength: 1, className: 'brand-draw', style: delay(0.35 + i * 0.07) }
+            const anim = animated
+              ? { pathLength: 1, className: strokeCls, style: delay(0.3 + i * 0.06) }
               : {}
             return 'd' in s ? (
               <path key={j} d={s.d} {...anim} />

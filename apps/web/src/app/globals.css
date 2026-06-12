@@ -75,16 +75,20 @@
 }
 
 /* Brand logo animation (components/brand-logo.tsx). Strokes carry a normalized
-   pathLength of 1 so one dasharray rule draws any shape; `--bd` staggers the
-   build-up. `brand-pulse` is the looping beacon-ray shimmer. */
+   pathLength of 1 so one dasharray rule draws any shape. Resting styles are
+   the fully drawn logo; intros start hidden via fill-mode:backwards. Every
+   animated logo redraws itself on a 12s cycle: each element fades out, the
+   rays retract into the lamp, then everything redraws in build order. `--bd`
+   staggers both the intro and the cycle phase (so the redraw sweeps the logo
+   the same way the intro drew it); `--bp` staggers the beacon-ray pulse. */
 @keyframes brand-draw {
-  to {
-    stroke-dashoffset: 0;
+  from {
+    stroke-dashoffset: 1;
   }
 }
 @keyframes brand-in {
-  to {
-    opacity: 1;
+  from {
+    opacity: 0;
   }
 }
 @keyframes brand-pulse {
@@ -96,32 +100,146 @@
     opacity: 0.3;
   }
 }
-.brand-draw {
-  stroke-dasharray: 1;
-  stroke-dashoffset: 1;
-  animation: brand-draw 0.55s cubic-bezier(0.4, 0, 0.2, 1) var(--bd, 0s) forwards;
+/* Lamp ignition: bloom past the resting glow, then settle. */
+@keyframes brand-ignite {
+  from {
+    opacity: 0;
+  }
+  55% {
+    opacity: 0.95;
+  }
+  to {
+    opacity: 0.45;
+  }
 }
-.brand-in {
-  opacity: 0;
-  animation: brand-in 0.5s ease-out var(--bd, 0s) forwards;
-}
-.brand-pulse {
-  animation: brand-pulse 2s ease-in-out var(--bd, 0s) infinite;
-}
-.brand-in-pulse {
-  opacity: 0;
-  animation:
-    brand-in 0.5s ease-out var(--bd, 0s) forwards,
-    brand-pulse 2s ease-in-out calc(var(--bd, 0s) + 0.9s) infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-  .brand-draw,
-  .brand-in,
-  .brand-pulse,
-  .brand-in-pulse {
-    animation: none;
+/* 12s redraw cycle for ink strokes: hold → quick fade-out → redraw → hold. */
+@keyframes brand-cycle {
+  0% {
     stroke-dashoffset: 0;
     opacity: 1;
+  }
+  2% {
+    stroke-dashoffset: 0;
+    opacity: 0;
+  }
+  2.05% {
+    stroke-dashoffset: 1;
+    opacity: 1;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  6.65% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+/* Rays own opacity via brand-pulse, so their cycle is dash-only: retract
+   into the lamp, hold dark while the tower rebuilds, beam back out. */
+@keyframes brand-ray-cycle {
+  0% {
+    stroke-dashoffset: 0;
+  }
+  2% {
+    stroke-dashoffset: 1;
+  }
+  3% {
+    stroke-dashoffset: 1;
+    animation-timing-function: ease-out;
+  }
+  5.9% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes brand-lamp-cycle {
+  0% {
+    opacity: 1;
+  }
+  2% {
+    opacity: 0;
+  }
+  4.5% {
+    opacity: 0;
+  }
+  6% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+@keyframes brand-glow-cycle {
+  0% {
+    opacity: 0.45;
+  }
+  2% {
+    opacity: 0;
+  }
+  4.5% {
+    opacity: 0;
+  }
+  5.5% {
+    opacity: 0.95;
+  }
+  8% {
+    opacity: 0.45;
+  }
+  100% {
+    opacity: 0.45;
+  }
+}
+.brand-stroke-draw {
+  stroke-dasharray: 1;
+  animation:
+    brand-draw 0.5s cubic-bezier(0.4, 0, 0.2, 1) var(--bd, 0s) backwards,
+    brand-cycle 12s linear calc(var(--bd, 0s) + 12s) infinite;
+}
+.brand-stroke-loop {
+  stroke-dasharray: 1;
+  animation: brand-cycle 12s linear calc(var(--bd, 0s) + 12s) infinite;
+}
+.brand-ray-draw {
+  stroke-dasharray: 1;
+  animation:
+    brand-draw 0.35s ease-out var(--bd, 0s) backwards,
+    brand-ray-cycle 12s linear calc(var(--bd, 0s) + 12s) infinite,
+    brand-pulse 2s ease-in-out var(--bp, 0s) infinite;
+}
+.brand-ray-loop {
+  stroke-dasharray: 1;
+  animation:
+    brand-ray-cycle 12s linear calc(var(--bd, 0s) + 12s) infinite,
+    brand-pulse 2s ease-in-out var(--bp, 0s) infinite;
+}
+.brand-lamp-draw {
+  animation:
+    brand-in 0.5s ease-out var(--bd, 0s) backwards,
+    brand-lamp-cycle 12s linear calc(var(--bd, 0s) + 12s) infinite;
+}
+.brand-lamp-loop {
+  animation: brand-lamp-cycle 12s linear calc(var(--bd, 0s) + 12s) infinite;
+}
+.brand-glow-draw {
+  animation:
+    brand-ignite 0.9s ease-out var(--bd, 0s) backwards,
+    brand-glow-cycle 12s linear calc(var(--bd, 0s) + 12s) infinite;
+}
+.brand-glow-loop {
+  animation: brand-glow-cycle 12s linear calc(var(--bd, 0s) + 12s) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .brand-stroke-draw,
+  .brand-stroke-loop,
+  .brand-ray-draw,
+  .brand-ray-loop,
+  .brand-lamp-draw,
+  .brand-lamp-loop,
+  .brand-glow-draw,
+  .brand-glow-loop {
+    animation: none;
   }
 }
 
