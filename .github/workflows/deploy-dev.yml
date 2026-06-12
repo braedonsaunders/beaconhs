@@ -53,7 +53,7 @@ jobs:
       # passing both errors with "Multiple versions of pnpm specified".
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: pnpm }
+        with: { node-version: 22 }
       - run: pnpm install --frozen-lockfile
 
       - name: Migrate (schema + RLS + views)
