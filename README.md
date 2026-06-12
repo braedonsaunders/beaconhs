@@ -1,5 +1,8 @@
 <p align="center">
-  <img src=".github/assets/banner.png" alt="BeaconHS — Open-source HSE for construction" width="100%" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/assets/beaconhs-logo-dark.svg" />
+    <img src=".github/assets/beaconhs-logo.svg" alt="beaconHS" width="520" />
+  </picture>
 </p>
 
 <p align="center">
