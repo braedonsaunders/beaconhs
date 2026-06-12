@@ -2,7 +2,6 @@ import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
 import { loadDashboardMetrics } from './_metrics'
 import { loadDashboardLayout } from './_load-layout'
-import { ROLE_TIER_LABELS } from './_role-tier'
 import { DashboardGrid } from './_dashboard-grid'
 import { WidgetCard } from './_widget-views'
 import { WIDGETS } from './_widget-registry'
@@ -28,7 +27,7 @@ export default async function DashboardPage() {
   const today = new Date()
   const todayIso = today.toISOString().slice(0, 10)
 
-  const [{ layout, role, isCustomised }, data] = await Promise.all([
+  const [{ layout, role }, data] = await Promise.all([
     loadDashboardLayout(ctx),
     loadDashboardMetrics(ctx, today),
   ])
@@ -49,13 +48,7 @@ export default async function DashboardPage() {
   return (
     <PageContainer>
       <div className="space-y-5">
-        <DashboardHeader
-          greeting={greeting}
-          tenantSummary={tenantSummary}
-          asOf={today.toLocaleString()}
-          roleLabel={ROLE_TIER_LABELS[role]}
-          isCustomised={isCustomised}
-        />
+        <DashboardHeader greeting={greeting} tenantSummary={tenantSummary} />
 
         <DashboardGrid initialLayout={layout} nodes={nodes} role={role} mode="view" />
       </div>
@@ -65,16 +58,16 @@ export default async function DashboardPage() {
 
 function buildGreeting(now: Date, name: string | null): string {
   const hour = now.getHours()
-  const stem =
-    hour < 5
-      ? 'Working late'
-      : hour < 12
-        ? 'Good morning'
-        : hour < 17
-          ? 'Good afternoon'
-          : hour < 21
-            ? 'Good evening'
-            : 'Burning the midnight oil'
-  const firstName = name?.split(/\s+/)[0]
-  return firstName ? `${stem}, ${firstName}.` : `${stem}.`
+  const stem = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
+  const firstName = firstNameFrom(name)
+  return firstName ? `${stem}, ${firstName}` : stem
+}
+
+// Display names can arrive as "First Last" or "Last, First" (the employee
+// directory convention). Pull the real first name out of either shape.
+function firstNameFrom(name: string | null): string | null {
+  if (!name) return null
+  const trimmed = name.trim()
+  const base = trimmed.includes(',') ? (trimmed.split(',')[1] ?? '') : trimmed
+  return base.trim().split(/\s+/)[0] || null
 }

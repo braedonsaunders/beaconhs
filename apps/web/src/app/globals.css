@@ -1,5 +1,5 @@
-@import "tailwindcss";
-@config "../../tailwind.config.ts";
+@import 'tailwindcss';
+@config '../../tailwind.config.ts';
 
 /* Class-based dark mode: `dark:` variants respond to a `.dark` class on <html>
    (toggled by the theme switcher) instead of the OS `prefers-color-scheme`. */
@@ -71,6 +71,57 @@
   .dark .app-scroll::-webkit-scrollbar-thumb:hover {
     background: rgb(71 85 105);
     background-clip: padding-box;
+  }
+}
+
+/* Brand logo animation (components/brand-logo.tsx). Strokes carry a normalized
+   pathLength of 1 so one dasharray rule draws any shape; `--bd` staggers the
+   build-up. `brand-pulse` is the looping beacon-ray shimmer. */
+@keyframes brand-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes brand-in {
+  to {
+    opacity: 1;
+  }
+}
+@keyframes brand-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+.brand-draw {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: brand-draw 0.55s cubic-bezier(0.4, 0, 0.2, 1) var(--bd, 0s) forwards;
+}
+.brand-in {
+  opacity: 0;
+  animation: brand-in 0.5s ease-out var(--bd, 0s) forwards;
+}
+.brand-pulse {
+  animation: brand-pulse 2s ease-in-out var(--bd, 0s) infinite;
+}
+.brand-in-pulse {
+  opacity: 0;
+  animation:
+    brand-in 0.5s ease-out var(--bd, 0s) forwards,
+    brand-pulse 2s ease-in-out calc(var(--bd, 0s) + 0.9s) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .brand-draw,
+  .brand-in,
+  .brand-pulse,
+  .brand-in-pulse {
+    animation: none;
+    stroke-dashoffset: 0;
+    opacity: 1;
   }
 }
 

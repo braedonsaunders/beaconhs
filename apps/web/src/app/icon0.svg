@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 56 60">
+  <!-- BeaconHS favicon: the beacon top of the brand lighthouse (see
+       components/brand-logo.tsx). Ink follows the OS color scheme so the
+       icon stays visible in dark browser chrome; the lamp is always lit. -->
+  <style>
+    .ink { stroke: #1B2B4A }
+    @media (prefers-color-scheme: dark) { .ink { stroke: #E8EDF5 } }
+  </style>
+  <g fill="none" stroke="#F5A623" stroke-width="6" stroke-linecap="round">
+    <path d="M19.1 20.8L6.9 16.4" />
+    <path d="M22.6 16.2L15.1 5.6" />
+    <path d="M28 14.5L28 3" />
+    <path d="M33.4 16.2L40.9 5.6" />
+    <path d="M36.9 20.8L49.1 16.4" />
+  </g>
+  <g fill="none" class="ink" stroke="#1B2B4A" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M15.5 38L28 24L40.5 38Z" />
+    <path d="M20 38L36 38L36 53L20 53Z" />
+    <path d="M14.5 55L41.5 55" />
+  </g>
+  <rect x="24.5" y="42.5" width="7" height="6.5" rx="1.6" fill="#F5A623" />
+</svg>

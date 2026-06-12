@@ -7,6 +7,7 @@
 import { useCallback, useState } from 'react'
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { Badge, cn } from '@beaconhs/ui'
+import { Logo } from './brand-logo'
 import { SidebarNav, type SidebarNavGroup } from './sidebar-nav'
 import { ThemeToggle } from './theme-toggle'
 
@@ -47,16 +48,7 @@ export function AppSidebar({
           collapsed ? 'justify-center' : 'gap-2',
         )}
       >
-        {collapsed ? null : (
-          <>
-            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-teal-600 to-teal-800 text-sm font-bold text-white shadow-sm ring-1 ring-teal-900/10">
-              B
-            </div>
-            <span className="font-semibold tracking-tight text-slate-900 dark:text-slate-100">
-              BeaconHS
-            </span>
-          </>
-        )}
+        {collapsed ? null : <Logo className="h-7 w-auto" />}
         <button
           type="button"
           onClick={toggle}

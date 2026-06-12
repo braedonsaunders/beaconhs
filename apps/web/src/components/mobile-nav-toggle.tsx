@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Menu, X } from 'lucide-react'
+import { Logo } from './brand-logo'
 import { SidebarNav, type SidebarNavGroup } from './sidebar-nav'
 
 export function MobileNavToggle({ groups }: { groups: SidebarNavGroup[] }) {
@@ -64,14 +65,7 @@ export function MobileNavToggle({ groups }: { groups: SidebarNavGroup[] }) {
                     }}
                   >
                     <div className="flex h-14 items-center justify-between border-b border-slate-200 px-4 dark:border-slate-800">
-                      <div className="flex items-center gap-2">
-                        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-teal-600 to-teal-800 text-sm font-bold text-white">
-                          B
-                        </div>
-                        <span className="font-semibold tracking-tight text-slate-900 dark:text-slate-100">
-                          BeaconHS
-                        </span>
-                      </div>
+                      <Logo className="h-7 w-auto" />
                       <button
                         type="button"
                         onClick={() => setOpen(false)}

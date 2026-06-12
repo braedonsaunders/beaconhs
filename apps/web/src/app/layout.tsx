@@ -1,5 +1,6 @@
 import './globals.css'
 import type { Metadata, Viewport } from 'next'
+import { SplashScreen } from '@/components/brand-splash'
 
 export const metadata: Metadata = {
   title: { default: 'BeaconHS', template: '%s · BeaconHS' },
@@ -13,7 +14,7 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
-  themeColor: '#0f766e',
+  themeColor: '#1B2B4A',
 }
 
 // Applied before first paint so a dark-mode user never sees a white flash. Reads
@@ -29,6 +30,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="h-full overflow-hidden bg-slate-50 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100">
         {children}
+        <SplashScreen />
       </body>
     </html>
   )

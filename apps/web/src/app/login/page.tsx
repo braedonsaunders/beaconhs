@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
+import { Logo } from '@/components/brand-logo'
 import { getCurrentUserId } from '@/lib/auth'
 import { LoginForm } from './login-form'
 
@@ -12,10 +13,8 @@ export default async function LoginPage() {
     <main className="grid min-h-screen place-items-center px-4">
       <div className="w-full max-w-sm space-y-6">
         <div className="text-center">
-          <div className="mx-auto inline-flex h-10 w-10 items-center justify-center rounded-lg bg-teal-700 font-bold text-white">
-            B
-          </div>
-          <h1 className="mt-3 text-xl font-semibold">Sign in to BeaconHS</h1>
+          <Logo animated className="mx-auto h-11 w-auto" />
+          <h1 className="mt-5 text-xl font-semibold">Sign in</h1>
           <p className="mt-1 text-sm text-slate-500">Use your work email to continue</p>
         </div>
         <LoginForm />
