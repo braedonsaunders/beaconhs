@@ -1,7 +1,6 @@
-// Import/sync engine. Runs deployment-provided loaders in dependency order.
-// Each loader reads a landing table, maps each row to a target row (remapping
-// FKs via the etl.id_map crosswalk), and upserts in batches under
-// withSuperAdmin (RLS bypass). The crosswalk reserve + target upsert share one
+// Import/sync engine. Runs a list of loaders in dependency order. Each loader reads a landing
+// table, maps each row to a target row (remapping FKs via the etl.id_map crosswalk), and upserts
+// in batches under withSuperAdmin (RLS bypass). The crosswalk reserve + target upsert share one
 // transaction per batch, so a re-run is idempotent.
 import { randomUUID, createHash } from 'node:crypto'
 import { sql } from 'drizzle-orm'
@@ -18,7 +17,8 @@ export const H = {
     v == null || v === '' || isNaN(Number(v)) ? null : Number(v),
   int: (v: unknown): number | null =>
     v == null || v === '' || isNaN(Number(v)) ? null : Math.trunc(Number(v)),
-  // Source datetimes may arrive as Date objects or strings.
+  // legacy datetimes are naive America/Toronto. Landing tables give Date objects; the mssql_* FDW
+  // tables give MSSQL-formatted strings like "May 14 2026 12:00:00:AM" (note the ":AM" quirk).
   ts: (v: unknown): Date | null => {
     if (v == null || v === '') return null
     if (v instanceof Date) return isNaN(v.getTime()) ? null : v
@@ -86,7 +86,7 @@ export type Loader = {
   entity: string
   srcSchema: string
   srcTable: string
-  tenant: string
+  tenant: 'rassaun' | 'external-training'
   target: any
   pk?: string
   batch?: number
@@ -207,11 +207,13 @@ async function runGeneric(
   loader: Loader,
   mode: Mode,
 ): Promise<{ source: number; upserted: number }> {
-  const tenantId = env.tenantIdBySlug[loader.tenant]
-  if (!tenantId) throw new Error(`No tenant found for loader tenant slug "${loader.tenant}"`)
+  const tenantId = env.tenantIdBySlug[loader.tenant]!
   const pk = loader.pk ?? 'id'
-  // Both import and sync read from the configured landing schema. Sync uses
-  // updated_at > watermark when the source table exposes that convention.
+  // Both import and sync read the local landing schema (clean Postgres types + fast + indexed).
+  // The cluster's tds_fdw pipeline keeps the landing current from MSSQL; sync just reads the delta
+  // (updated_at > watermark). We deliberately do NOT read the mssql_* foreign tables directly for
+  // sync — they have a tds_fdw type-coercion bug on some date columns (MSSQL datetime → pg `date`),
+  // which fails the whole foreign scan (SQLSTATE 22007).
   const readSchema = loader.srcSchema
   const wm = mode === 'sync' ? await getWatermark(env, loader.srcSchema, loader.srcTable) : null
   const where = [loader.where, wm ? `"updated_at" > '${wm.replace(/'/g, "''")}'` : '']
@@ -289,10 +291,8 @@ export async function runImport(
       if (opts.only && loader.entity !== opts.only) continue
       process.stdout.write(`  ${loader.entity.padEnd(28)} `)
       const t0 = Date.now()
-      const tenantId = env.tenantIdBySlug[loader.tenant]
-      if (!tenantId) throw new Error(`No tenant found for loader tenant slug "${loader.tenant}"`)
       const r = loader.custom
-        ? await loader.custom(env, tenantId)
+        ? await loader.custom(env, env.tenantIdBySlug[loader.tenant]!)
         : await runGeneric(env, loader, mode)
       stats.push({ entity: loader.entity, ...r })
       console.log(

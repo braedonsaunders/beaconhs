@@ -1,4 +1,4 @@
-// Optional read-only connector for private MSSQL-backed migration adapters.
+// Read-only connector to the legacy MSSQL databases. Pools are cached per source DB.
 import sql from 'mssql'
 import { mssqlConfig, type SourceDbName } from '../config'
 
