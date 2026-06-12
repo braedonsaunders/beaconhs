@@ -11,7 +11,7 @@
 // continues toward the next version (never a blank page).
 
 import { revalidatePath } from 'next/cache'
-import { and, asc, desc, eq, like, or, sql } from 'drizzle-orm'
+import { asc, desc, eq, or, sql } from 'drizzle-orm'
 import {
   attachments,
   documentComments,
@@ -23,8 +23,13 @@ import {
 } from '@beaconhs/db/schema'
 import mammoth from 'mammoth'
 import { sanitizeDocumentHtml } from '@beaconhs/forms-core'
-import { enqueuePdf } from '@beaconhs/jobs'
-import { getObject, newAttachmentKey, presignGet, publicUrl, putObject } from '@beaconhs/storage'
+import {
+  getObject,
+  newAttachmentKey,
+  presignExistingGet,
+  publicUrl,
+  putObject,
+} from '@beaconhs/storage'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 
@@ -69,14 +74,11 @@ export async function updateDocumentLayout(input: {
   return { ok: true }
 }
 
-export type DocumentPdfUrlResult =
-  | { ok: true; url: string }
-  | { ok: true; pending: true }
-  | { ok: false; error: string }
+export type DocumentPdfUrlResult = { ok: true; url: string } | { ok: false; error: string }
 
 // Returns a short-lived URL to view the document inline. Prefers an uploaded
-// PDF version; else the latest generated PDF artifact; else enqueues a render
-// and reports `pending` so the viewer can retry.
+// PDF version; otherwise points the viewer at the dynamic PDF route, which
+// renders the document on demand.
 export async function getDocumentPdfUrl(documentId: string): Promise<DocumentPdfUrlResult> {
   const ctx = await requireRequestContext()
   if (!documentId) return { ok: false, error: 'Missing document id' }
@@ -94,30 +96,12 @@ export async function getDocumentPdfUrl(documentId: string): Promise<DocumentPdf
       .limit(1),
   )
   if (uploaded?.contentType === 'application/pdf') {
-    return { ok: true, url: await presignGet({ key: uploaded.key, expiresInSeconds: 300 }) }
+    const url = await presignExistingGet({ key: uploaded.key, expiresInSeconds: 300 })
+    if (!url) return { ok: false, error: 'Uploaded PDF is missing from storage.' }
+    return { ok: true, url }
   }
 
-  // 2. Latest generated PDF artifact.
-  const [generated] = await ctx.db((tx) =>
-    tx
-      .select({ key: attachments.r2Key })
-      .from(attachments)
-      .where(
-        and(
-          eq(attachments.contentType, 'application/pdf'),
-          like(attachments.r2Key, `pdfs/documents/${documentId}-%`),
-        ),
-      )
-      .orderBy(desc(attachments.createdAt))
-      .limit(1),
-  )
-  if (generated) {
-    return { ok: true, url: await presignGet({ key: generated.key, expiresInSeconds: 300 }) }
-  }
-
-  // 3. None yet — enqueue a render and report pending.
-  await enqueuePdf({ kind: 'document', tenantId: ctx.tenantId, documentId })
-  return { ok: true, pending: true }
+  return { ok: true, url: `/documents/${documentId}/pdf?render=${Date.now()}` }
 }
 
 // Resolves a public URL for an uploaded image attachment (for in-editor embeds
@@ -442,9 +426,6 @@ export async function publishDraft(input: {
       return publishedVersion
     })
 
-    if (ctx.tenantId) {
-      await enqueuePdf({ kind: 'document', tenantId: ctx.tenantId, documentId })
-    }
     await recordAudit(ctx, {
       entityType: 'document',
       entityId: documentId,

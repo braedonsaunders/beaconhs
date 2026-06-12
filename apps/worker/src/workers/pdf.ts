@@ -1,14 +1,10 @@
 // PDF worker.
 //
 // Consumes the `pdfs` BullMQ queue and renders all worker-rendered PDF kinds.
-// Older kinds (form_response / incident / certificate) attach the resulting
-// PDF to the source row directly; the new wave-6 kinds (hazid / toolbox / ca /
-// document / document_book / equipment_workorder / ppe_issue) write the
-// rendered PDF into the `attachments` table and rely on the GET /pdf route
-// to look up the latest matching attachment by tenant+entity+kind.
-//
-// All renders are uploaded straight to MinIO/R2 via the storage package and
-// recorded in the attachments table + audit_log (action='export').
+// On-demand route renders return transient object-store artifacts; the web
+// route streams the bytes back and deletes the temporary object. Long-lived
+// bundle/background outputs still persist attachment rows where the PDF is the
+// durable artifact of record.
 
 import type { Job } from 'bullmq'
 import { and, asc, desc, eq } from 'drizzle-orm'
@@ -78,12 +74,12 @@ import {
   renderPpeIssuePdf,
   type HazidRenderInput,
 } from '@beaconhs/forms-pdf'
-import { enqueueEmail, type PdfJobData } from '@beaconhs/jobs'
-import { newAttachmentKey, presignGet, publicUrl, putObject } from '@beaconhs/storage'
+import { enqueueEmail, type PdfJobData, type RenderedPdfArtifact } from '@beaconhs/jobs'
+import { presignGet, publicUrl, putObject } from '@beaconhs/storage'
 import { importSlidesFromPptx } from './slides-import'
 import { audit } from '@beaconhs/audit'
 
-export async function processPdf(job: Job<PdfJobData>): Promise<void> {
+export async function processPdf(job: Job<PdfJobData, unknown>): Promise<unknown> {
   const data = job.data
   try {
     switch (data.kind) {
@@ -120,7 +116,7 @@ export async function processPdf(job: Job<PdfJobData>): Promise<void> {
 
 // --- form_response --------------------------------------------------------
 
-async function renderFormResponse(tenantId: string, responseId: string): Promise<void> {
+async function renderFormResponse(tenantId: string, responseId: string): Promise<StoredPdfResult> {
   const result = await withTenant(db, tenantId, async (tx) => {
     const [row] = await tx
       .select({
@@ -141,8 +137,7 @@ async function renderFormResponse(tenantId: string, responseId: string): Promise
   })
 
   if (!result) {
-    console.warn(`[pdf] form_response ${responseId} not found`)
-    return
+    throw new Error(`Form response ${responseId} not found`)
   }
 
   const title =
@@ -176,45 +171,26 @@ async function renderFormResponse(tenantId: string, responseId: string): Promise
     pageSize: result.version.schema.pdf?.pageSize ?? 'Letter',
   })
 
-  const filename = `form-${responseId.slice(0, 8)}.pdf`
-  const r2Key = newAttachmentKey({ tenantId, kind: 'document', filename })
-
-  await putObject({ key: r2Key, body: pdf, contentType: 'application/pdf' })
-
-  await withTenant(db, tenantId, async (tx) => {
-    const [att] = await tx
-      .insert(attachments)
-      .values({
-        tenantId,
-        kind: 'document',
-        r2Key,
-        contentType: 'application/pdf',
-        sizeBytes: pdf.length,
-        filename,
-      })
-      .returning()
-    if (att) {
-      await tx
-        .update(formResponses)
-        .set({ pdfAttachmentId: att.id })
-        .where(eq(formResponses.id, responseId))
-    }
-    await audit(tx, {
-      tenantId,
-      entityType: 'form_response',
-      entityId: responseId,
-      action: 'export',
-      summary: 'Rendered form response PDF',
-      metadata: { attachmentId: att?.id, r2Key, sizeBytes: pdf.length, url: publicUrl(r2Key) },
-    })
+  const stamp = Date.now()
+  const filename = `form-${responseId.slice(0, 8)}-${stamp}.pdf`
+  const r2Key = `tmp/pdfs/form-responses/${tenantId}/${responseId}-${stamp}.pdf`
+  const stored = await storeTransientPdfArtifact({
+    tenantId,
+    pdf,
+    filename,
+    r2Key,
+    entityType: 'form_response',
+    entityId: responseId,
+    summary: 'Rendered form response PDF',
   })
 
   console.log(`[pdf] form_response ${responseId} rendered (${pdf.length} bytes) → ${r2Key}`)
+  return stored
 }
 
 // --- incident -------------------------------------------------------------
 
-async function renderIncident(tenantId: string, incidentId: string): Promise<void> {
+async function renderIncident(tenantId: string, incidentId: string): Promise<StoredPdfResult> {
   const result = await withTenant(db, tenantId, async (tx) => {
     const [row] = await tx
       .select({
@@ -261,8 +237,7 @@ async function renderIncident(tenantId: string, incidentId: string): Promise<voi
   })
 
   if (!result) {
-    console.warn(`[pdf] incident ${incidentId} not found`)
-    return
+    throw new Error(`Incident ${incidentId} not found`)
   }
   const i = result.incident
   const t = result.tenant
@@ -349,41 +324,19 @@ async function renderIncident(tenantId: string, incidentId: string): Promise<voi
 
   const stamp = Date.now()
   const filename = `incident-${i.reference || incidentId.slice(0, 8)}-${stamp}.pdf`
-  const r2Key = `pdfs/incidents/${incidentId}-${stamp}.pdf`
-
-  await putObject({ key: r2Key, body: pdf, contentType: 'application/pdf' })
-
-  await withTenant(db, tenantId, async (tx) => {
-    const [att] = await tx
-      .insert(attachments)
-      .values({
-        tenantId,
-        kind: 'document',
-        r2Key,
-        contentType: 'application/pdf',
-        sizeBytes: pdf.length,
-        filename,
-      })
-      .returning()
-    if (att) {
-      await tx.insert(incidentAttachments).values({
-        tenantId,
-        incidentId,
-        attachmentId: att.id,
-        caption: 'Generated incident report PDF',
-      })
-    }
-    await audit(tx, {
-      tenantId,
-      entityType: 'incident',
-      entityId: incidentId,
-      action: 'export',
-      summary: 'Rendered incident PDF',
-      metadata: { attachmentId: att?.id, r2Key, sizeBytes: pdf.length, url: publicUrl(r2Key) },
-    })
+  const r2Key = `tmp/pdfs/incidents/${tenantId}/${incidentId}-${stamp}.pdf`
+  const stored = await storeTransientPdfArtifact({
+    tenantId,
+    pdf,
+    filename,
+    r2Key,
+    entityType: 'incident',
+    entityId: incidentId,
+    summary: 'Rendered incident PDF',
   })
 
   console.log(`[pdf] incident ${incidentId} rendered (${pdf.length} bytes) → ${r2Key}`)
+  return stored
 }
 
 // --- certificate ----------------------------------------------------------
@@ -697,20 +650,16 @@ async function renderSkillCertificate(tenantId: string, skillCertificateId: stri
   )
 }
 
-// --- Shared helpers for wave-6 PDF kinds ----------------------------------
+// --- Shared helpers for on-demand PDF kinds --------------------------------
 //
-// Each wave-6 kind:
-//   1. Loads its primary entity + sub-tables (RLS-scoped via withTenant)
-//   2. Builds the render input
-//   3. Calls render*Pdf to produce a Buffer
-//   4. Uploads to MinIO/R2
-//   5. Inserts an `attachments` row with a predictable filename prefix so the
-//      GET /pdf route can later look up "the latest PDF for this entity"
-//   6. Records an `export` audit row with the attachment id + url
+// On-demand PDFs are transient artifacts: the worker renders to object storage
+// so the web route can stream the bytes back, then the route deletes the object.
+// Do not create attachment rows for these renders; clicking "PDF" should not
+// mutate domain file lists or create stale generated artifacts.
 
-type StoredPdfResult = { attachmentId: string; r2Key: string; sizeBytes: number }
+type StoredPdfResult = RenderedPdfArtifact
 
-async function storePdfArtifact(args: {
+async function storeTransientPdfArtifact(args: {
   tenantId: string
   pdf: Buffer
   filename: string
@@ -721,19 +670,7 @@ async function storePdfArtifact(args: {
 }): Promise<StoredPdfResult> {
   await putObject({ key: args.r2Key, body: args.pdf, contentType: 'application/pdf' })
 
-  return await withTenant(db, args.tenantId, async (tx) => {
-    const [att] = await tx
-      .insert(attachments)
-      .values({
-        tenantId: args.tenantId,
-        kind: 'document',
-        r2Key: args.r2Key,
-        contentType: 'application/pdf',
-        sizeBytes: args.pdf.length,
-        filename: args.filename,
-      })
-      .returning()
-    if (!att) throw new Error('Failed to insert attachment row')
+  await withTenant(db, args.tenantId, async (tx) => {
     await audit(tx, {
       tenantId: args.tenantId,
       entityType: args.entityType,
@@ -741,14 +678,21 @@ async function storePdfArtifact(args: {
       action: 'export',
       summary: args.summary,
       metadata: {
-        attachmentId: att.id,
+        attachmentId: null,
         r2Key: args.r2Key,
         sizeBytes: args.pdf.length,
+        transient: true,
         url: publicUrl(args.r2Key),
       },
     })
-    return { attachmentId: att.id, r2Key: args.r2Key, sizeBytes: args.pdf.length }
   })
+
+  return {
+    attachmentId: null,
+    r2Key: args.r2Key,
+    sizeBytes: args.pdf.length,
+    filename: args.filename,
+  }
 }
 
 function personName(p: { firstName: string; lastName: string } | null | undefined): string | null {
@@ -1005,29 +949,29 @@ function toHazidRenderInput(data: HazidLoadedAssessment): HazidRenderInput {
   }
 }
 
-async function renderHazid(tenantId: string, assessmentId: string): Promise<void> {
+async function renderHazid(tenantId: string, assessmentId: string): Promise<StoredPdfResult> {
   const data = await withTenant(db, tenantId, async (tx) => loadHazidAssessment(tx, assessmentId))
 
   if (!data) {
-    console.warn(`[pdf] hazid assessment ${assessmentId} not found`)
-    return
+    throw new Error(`HazID assessment ${assessmentId} not found`)
   }
 
   const a = data.a
   const pdf = await renderHazidPdf(toHazidRenderInput(data))
 
   const stamp = Date.now()
-  await storePdfArtifact({
+  const stored = await storeTransientPdfArtifact({
     tenantId,
     pdf,
     filename: `hazid-${a.reference || assessmentId.slice(0, 8)}-${stamp}.pdf`,
-    r2Key: `pdfs/hazid/${assessmentId}-${stamp}.pdf`,
+    r2Key: `tmp/pdfs/hazid/${tenantId}/${assessmentId}-${stamp}.pdf`,
     entityType: 'hazid_assessment',
     entityId: assessmentId,
     summary: 'Rendered HazID assessment PDF',
   })
 
   console.log(`[pdf] hazid ${assessmentId} rendered (${pdf.length} bytes)`)
+  return stored
 }
 
 // --- hazid signed-report bundle -------------------------------------------
@@ -1335,7 +1279,7 @@ function escapeHtml(s: string | null | undefined): string {
 
 // --- ca --------------------------------------------------------------------
 
-async function renderCa(tenantId: string, caId: string): Promise<void> {
+async function renderCa(tenantId: string, caId: string): Promise<StoredPdfResult> {
   const data = await withTenant(db, tenantId, async (tx) => {
     const [row] = await tx
       .select({
@@ -1397,8 +1341,7 @@ async function renderCa(tenantId: string, caId: string): Promise<void> {
   })
 
   if (!data) {
-    console.warn(`[pdf] ca ${caId} not found`)
-    return
+    throw new Error(`Corrective action ${caId} not found`)
   }
 
   const c = data.c
@@ -1451,22 +1394,23 @@ async function renderCa(tenantId: string, caId: string): Promise<void> {
   })
 
   const stamp = Date.now()
-  await storePdfArtifact({
+  const stored = await storeTransientPdfArtifact({
     tenantId,
     pdf,
     filename: `ca-${c.reference || caId.slice(0, 8)}-${stamp}.pdf`,
-    r2Key: `pdfs/corrective-actions/${caId}-${stamp}.pdf`,
+    r2Key: `tmp/pdfs/corrective-actions/${tenantId}/${caId}-${stamp}.pdf`,
     entityType: 'corrective_action',
     entityId: caId,
     summary: 'Rendered corrective action PDF',
   })
 
   console.log(`[pdf] ca ${caId} rendered (${pdf.length} bytes)`)
+  return stored
 }
 
 // --- document --------------------------------------------------------------
 
-async function renderDocument(tenantId: string, documentId: string): Promise<void> {
+async function renderDocument(tenantId: string, documentId: string): Promise<StoredPdfResult> {
   const data = await withTenant(db, tenantId, async (tx) => {
     const [row] = await tx
       .select({
@@ -1504,8 +1448,7 @@ async function renderDocument(tenantId: string, documentId: string): Promise<voi
   })
 
   if (!data) {
-    console.warn(`[pdf] document ${documentId} not found`)
-    return
+    throw new Error(`Document ${documentId} not found`)
   }
 
   const d = data.d
@@ -1545,22 +1488,23 @@ async function renderDocument(tenantId: string, documentId: string): Promise<voi
   })
 
   const stamp = Date.now()
-  await storePdfArtifact({
+  const stored = await storeTransientPdfArtifact({
     tenantId,
     pdf,
     filename: `document-${d.key || documentId.slice(0, 8)}-${stamp}.pdf`,
-    r2Key: `pdfs/documents/${documentId}-${stamp}.pdf`,
+    r2Key: `tmp/pdfs/documents/${tenantId}/${documentId}-${stamp}.pdf`,
     entityType: 'document',
     entityId: documentId,
     summary: 'Rendered document PDF',
   })
 
   console.log(`[pdf] document ${documentId} rendered (${pdf.length} bytes)`)
+  return stored
 }
 
 // --- document_book ---------------------------------------------------------
 
-async function renderDocumentBook(tenantId: string, bookId: string): Promise<void> {
+async function renderDocumentBook(tenantId: string, bookId: string): Promise<StoredPdfResult> {
   const data = await withTenant(db, tenantId, async (tx) => {
     const [row] = await tx
       .select({ b: documentBooks, tenant: tenants })
@@ -1593,8 +1537,7 @@ async function renderDocumentBook(tenantId: string, bookId: string): Promise<voi
   })
 
   if (!data) {
-    console.warn(`[pdf] document_book ${bookId} not found`)
-    return
+    throw new Error(`Document book ${bookId} not found`)
   }
 
   const b = data.b
@@ -1633,22 +1576,26 @@ async function renderDocumentBook(tenantId: string, bookId: string): Promise<voi
   })
 
   const stamp = Date.now()
-  await storePdfArtifact({
+  const stored = await storeTransientPdfArtifact({
     tenantId,
     pdf,
     filename: `document-book-${bookId.slice(0, 8)}-${stamp}.pdf`,
-    r2Key: `pdfs/document-books/${bookId}-${stamp}.pdf`,
+    r2Key: `tmp/pdfs/document-books/${tenantId}/${bookId}-${stamp}.pdf`,
     entityType: 'document_book',
     entityId: bookId,
     summary: 'Rendered document book PDF',
   })
 
   console.log(`[pdf] document_book ${bookId} rendered (${pdf.length} bytes)`)
+  return stored
 }
 
 // --- equipment_workorder ---------------------------------------------------
 
-async function renderEquipmentWorkOrder(tenantId: string, workOrderId: string): Promise<void> {
+async function renderEquipmentWorkOrder(
+  tenantId: string,
+  workOrderId: string,
+): Promise<StoredPdfResult> {
   const data = await withTenant(db, tenantId, async (tx) => {
     const [row] = await tx
       .select({
@@ -1704,8 +1651,7 @@ async function renderEquipmentWorkOrder(tenantId: string, workOrderId: string): 
   })
 
   if (!data) {
-    console.warn(`[pdf] equipment_workorder ${workOrderId} not found`)
-    return
+    throw new Error(`Equipment work order ${workOrderId} not found`)
   }
 
   const wo = data.wo
@@ -1744,22 +1690,23 @@ async function renderEquipmentWorkOrder(tenantId: string, workOrderId: string): 
   })
 
   const stamp = Date.now()
-  await storePdfArtifact({
+  const stored = await storeTransientPdfArtifact({
     tenantId,
     pdf,
     filename: `wo-${wo.reference || workOrderId.slice(0, 8)}-${stamp}.pdf`,
-    r2Key: `pdfs/equipment-work-orders/${workOrderId}-${stamp}.pdf`,
+    r2Key: `tmp/pdfs/equipment-work-orders/${tenantId}/${workOrderId}-${stamp}.pdf`,
     entityType: 'equipment_work_order',
     entityId: workOrderId,
     summary: 'Rendered equipment work order PDF',
   })
 
   console.log(`[pdf] equipment_workorder ${workOrderId} rendered (${pdf.length} bytes)`)
+  return stored
 }
 
 // --- ppe_issue -------------------------------------------------------------
 
-async function renderPpeIssue(tenantId: string, issueReportId: string): Promise<void> {
+async function renderPpeIssue(tenantId: string, issueReportId: string): Promise<StoredPdfResult> {
   const data = await withTenant(db, tenantId, async (tx) => {
     const [row] = await tx
       .select({
@@ -1793,8 +1740,7 @@ async function renderPpeIssue(tenantId: string, issueReportId: string): Promise<
   })
 
   if (!data) {
-    console.warn(`[pdf] ppe_issue ${issueReportId} not found`)
-    return
+    throw new Error(`PPE issue report ${issueReportId} not found`)
   }
 
   const r = data.r
@@ -1827,15 +1773,16 @@ async function renderPpeIssue(tenantId: string, issueReportId: string): Promise<
   })
 
   const stamp = Date.now()
-  await storePdfArtifact({
+  const stored = await storeTransientPdfArtifact({
     tenantId,
     pdf,
     filename: `ppe-issue-${issueReportId.slice(0, 8)}-${stamp}.pdf`,
-    r2Key: `pdfs/ppe-issues/${issueReportId}-${stamp}.pdf`,
+    r2Key: `tmp/pdfs/ppe-issues/${tenantId}/${issueReportId}-${stamp}.pdf`,
     entityType: 'ppe_issue_report',
     entityId: issueReportId,
     summary: 'Rendered PPE issue report PDF',
   })
 
   console.log(`[pdf] ppe_issue ${issueReportId} rendered (${pdf.length} bytes)`)
+  return stored
 }

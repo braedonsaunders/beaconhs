@@ -1,4 +1,4 @@
-import { Queue, type JobsOptions } from 'bullmq'
+import { Queue, QueueEvents, type JobsOptions } from 'bullmq'
 import { connection } from '../connection'
 
 export type PdfJobData =
@@ -30,7 +30,24 @@ export type PdfJobData =
       attachmentId: string
     }
 
-export const pdfQueue = new Queue<PdfJobData>('pdfs', {
+export type OnDemandPdfJobData =
+  | Extract<PdfJobData, { kind: 'form_response' }>
+  | Extract<PdfJobData, { kind: 'incident' }>
+  | Extract<PdfJobData, { kind: 'hazid' }>
+  | Extract<PdfJobData, { kind: 'ca' }>
+  | Extract<PdfJobData, { kind: 'document' }>
+  | Extract<PdfJobData, { kind: 'document_book' }>
+  | Extract<PdfJobData, { kind: 'equipment_workorder' }>
+  | Extract<PdfJobData, { kind: 'ppe_issue' }>
+
+export type RenderedPdfArtifact = {
+  attachmentId?: string | null
+  r2Key: string
+  sizeBytes: number
+  filename: string
+}
+
+export const pdfQueue = new Queue<PdfJobData, unknown>('pdfs', {
   connection,
   defaultJobOptions: {
     attempts: 3,
@@ -76,8 +93,8 @@ async function addPdfJob(data: PdfJobData, opts?: JobsOptions) {
     const state = await existing.getState()
     if (state !== 'completed' && state !== 'failed') return existing
 
-    // The route only re-enqueues when the artifact is still missing. If the
-    // previous job has already ended, clear it so a legitimate retry can run.
+    // Completed PDF jobs are render records, not caches. Clear the old job so
+    // an explicit PDF request can generate a fresh artifact on demand.
     await existing.remove()
   }
 
@@ -86,6 +103,41 @@ async function addPdfJob(data: PdfJobData, opts?: JobsOptions) {
 
 export async function enqueuePdf(data: PdfJobData) {
   await addPdfJob(data)
+}
+
+function isRenderedPdfArtifact(value: unknown): value is RenderedPdfArtifact {
+  if (!value || typeof value !== 'object') return false
+  const result = value as Partial<RenderedPdfArtifact>
+  return (
+    (result.attachmentId === undefined ||
+      result.attachmentId === null ||
+      typeof result.attachmentId === 'string') &&
+    typeof result.r2Key === 'string' &&
+    typeof result.sizeBytes === 'number' &&
+    typeof result.filename === 'string'
+  )
+}
+
+export async function renderPdfOnDemand(
+  data: OnDemandPdfJobData,
+  opts: { timeoutMs?: number } = {},
+): Promise<RenderedPdfArtifact> {
+  const job = await addPdfJob(data, {
+    attempts: 1,
+    removeOnComplete: { age: 3600 },
+    removeOnFail: { age: 24 * 3600 },
+  })
+  const events = new QueueEvents('pdfs', { connection })
+  await events.waitUntilReady()
+  try {
+    const result = await job.waitUntilFinished(events, opts.timeoutMs ?? 60_000)
+    if (!isRenderedPdfArtifact(result)) {
+      throw new Error(`PDF job ${job.id} completed without a generated PDF artifact`)
+    }
+    return result
+  } finally {
+    await events.close()
+  }
 }
 
 export async function enqueueSlidesImport(data: Extract<PdfJobData, { kind: 'slides_import' }>) {

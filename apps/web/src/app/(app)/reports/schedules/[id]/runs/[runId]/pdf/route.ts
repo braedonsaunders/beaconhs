@@ -1,14 +1,14 @@
 // GET /reports/schedules/:id/runs/:runId/pdf
 //
-// Redirects to a short-lived signed GET URL for the run's PDF attachment.
+// Streams the run's PDF attachment through the app.
 // Returns 404 if the run has no PDF yet (e.g. it's still queued/running, or
 // failed before rendering).
 
 import { NextResponse } from 'next/server'
 import { and, eq } from 'drizzle-orm'
 import { attachments, reportRuns } from '@beaconhs/db/schema'
-import { presignGet } from '@beaconhs/storage'
 import { requireRequestContext } from '@/lib/auth'
+import { storedPdfArtifactResponse } from '@/lib/pdf-route'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,6 +42,13 @@ export async function GET(
     )
   }
 
-  const url = await presignGet({ key: found.attachment.r2Key, expiresInSeconds: 300 })
-  return NextResponse.redirect(url, { status: 307 })
+  try {
+    return await storedPdfArtifactResponse({
+      r2Key: found.attachment.r2Key,
+      filename: found.attachment.filename,
+    })
+  } catch (error) {
+    console.error(`[pdf] report run artifact missing: ${found.attachment.r2Key}`, error)
+    return NextResponse.json({ error: 'PDF artifact is missing from storage' }, { status: 410 })
+  }
 }

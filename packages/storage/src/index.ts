@@ -3,7 +3,9 @@
 
 import {
   CreateBucketCommand,
+  DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   HeadBucketCommand,
   PutObjectCommand,
   S3Client,
@@ -81,6 +83,41 @@ export async function presignGet(args: {
   return getSignedUrl(client, cmd, { expiresIn: args.expiresInSeconds ?? 600 })
 }
 
+function isMissingObjectError(error: unknown): boolean {
+  const maybeError = error as {
+    name?: string
+    code?: string
+    Code?: string
+    $metadata?: { httpStatusCode?: number }
+  }
+  return (
+    maybeError.$metadata?.httpStatusCode === 404 ||
+    maybeError.name === 'NotFound' ||
+    maybeError.name === 'NoSuchKey' ||
+    maybeError.code === 'NoSuchKey' ||
+    maybeError.Code === 'NoSuchKey'
+  )
+}
+
+export async function objectExists(args: { key: string }): Promise<boolean> {
+  try {
+    await client.send(new HeadObjectCommand({ Bucket: bucket, Key: args.key }))
+    return true
+  } catch (error) {
+    if (isMissingObjectError(error)) return false
+    throw error
+  }
+}
+
+export async function presignExistingGet(args: {
+  key: string
+  expiresInSeconds?: number
+}): Promise<string | null> {
+  const exists = await objectExists({ key: args.key })
+  if (!exists) return null
+  return presignGet(args)
+}
+
 /** Server-side direct download. Returns the object's bytes as a Buffer. */
 export async function getObject(args: { key: string }): Promise<Buffer> {
   const res = await client.send(new GetObjectCommand({ Bucket: bucket, Key: args.key }))
@@ -88,6 +125,10 @@ export async function getObject(args: { key: string }): Promise<Buffer> {
   if (!body) throw new Error(`Object not found: ${args.key}`)
   const bytes = await body.transformToByteArray()
   return Buffer.from(bytes)
+}
+
+export async function deleteObject(args: { key: string }): Promise<void> {
+  await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: args.key }))
 }
 
 export function publicUrl(key: string): string {
