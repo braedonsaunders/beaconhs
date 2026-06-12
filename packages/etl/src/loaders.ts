@@ -25,6 +25,8 @@ const {
   documentVersions,
   documentTypes,
   documentCategories,
+  documentBooks,
+  documentBookItems,
   documentReferences,
   documentReferenceTypes,
   documentReferenceCategories,
@@ -531,6 +533,7 @@ export const RASSAUN_LOADERS: Loader[] = [
       title: H.str(r.Name) ?? `Document ${r.id}`,
       description: H.str(r.Description),
       category: (ctx.prepared as Map<number, string>)?.get(Number(r.CategoryID)) || null,
+      categoryId: await ctx.lookup('beaconhs', 'DOCUMENTATIONCATEGORY', r.CategoryID),
       typeId: await ctx.lookup('beaconhs', 'DOCUMENTATIONTYPE', r.TypeID),
       status: H.bool(r.IsPublished) ? 'published' : 'draft',
       printHeader: H.bool(r.PrintHeader),
@@ -553,6 +556,117 @@ export const RASSAUN_LOADERS: Loader[] = [
         changelog: H.str(r.Changelog),
         publishedAt: H.ts(r.created_at),
       }
+    },
+  },
+  // ---- document books (DOCUMENTATIONBOOK → document_books + document_book_items) ----
+  // Legacy books are "smart" definitions: ordered records referencing a Document, a whole
+  // document Type (expand to every document of that type), a Reference/Assessment, or a Chapter
+  // header whose child records nest via EntityParent. The new model stores explicit document
+  // items, so we flatten the tree in reading order and expand Type refs. Reference/Assessment
+  // items have no document equivalent → skipped; chapter headers collapse (their docs remain).
+  {
+    entity: 'document_book',
+    srcSchema: 'beaconhs',
+    srcTable: 'DOCUMENTATIONBOOK',
+    tenant: 'rassaun',
+    target: documentBooks,
+    map: () => null,
+    custom: async (env: Env, tenantId: string) => {
+      const src = source()
+      const books: any[] = await src.unsafe(
+        'select * from beaconhs."DOCUMENTATIONBOOK" order by id',
+      )
+      const records: any[] = await src.unsafe(
+        'select id, "BookID", "Name", "Type", "EntityID", "EntityOrder", "EntityParent" from beaconhs."DOCUMENTATIONBOOKRECORD"',
+      )
+      const docsByType = new Map<string, number[]>()
+      for (const d of await src.unsafe('select id, "TypeID" from beaconhs."DOCUMENTATION"')) {
+        const k = String((d as any).TypeID)
+        ;(docsByType.get(k) ?? docsByType.set(k, []).get(k)!).push((d as any).id)
+      }
+      const recsByBook = new Map<string, any[]>()
+      for (const r of records) {
+        const k = String(r.BookID)
+        ;(recsByBook.get(k) ?? recsByBook.set(k, []).get(k)!).push(r)
+      }
+      let booksN = 0
+      let itemsN = 0
+      for (const b of books) {
+        await withSuperAdmin(env.db, async (tx: any) => {
+          const lookup = internals.makeLookup(env, tx)
+          const recs = recsByBook.get(String(b.id)) ?? []
+          const childrenOf = new Map<string, any[]>()
+          const roots: any[] = []
+          for (const rec of recs) {
+            if (Number(rec.EntityParent) === 0) roots.push(rec)
+            else {
+              const k = String(rec.EntityParent)
+              ;(childrenOf.get(k) ?? childrenOf.set(k, []).get(k)!).push(rec)
+            }
+          }
+          const byOrder = (a: any, z: any) =>
+            (H.int(a.EntityOrder) ?? 0) - (H.int(z.EntityOrder) ?? 0)
+          roots.sort(byOrder)
+          for (const list of childrenOf.values()) list.sort(byOrder)
+          const legacyDocIds: number[] = []
+          const emit = (rec: any) => {
+            const t = String(rec.Type ?? '').toLowerCase()
+            if (t === 'document') legacyDocIds.push(Number(rec.EntityID))
+            else if (t === 'type')
+              legacyDocIds.push(...(docsByType.get(String(rec.EntityID)) ?? []))
+            else if (t === 'chapter')
+              for (const ch of childrenOf.get(String(rec.id)) ?? []) emit(ch)
+          }
+          for (const root of roots) emit(root)
+          const seen = new Set<string>()
+          const docIds: string[] = []
+          for (const ld of legacyDocIds) {
+            const did = await lookup('beaconhs', 'DOCUMENTATION', ld)
+            if (did && !seen.has(did)) {
+              seen.add(did)
+              docIds.push(did)
+            }
+          }
+          const name = H.str(b.Name) ?? `Book ${b.id}`
+          const contents = docIds.map((id) => ({ documentId: id }))
+          const bookId = await internals.reserve(
+            env,
+            tx,
+            'beaconhs',
+            'DOCUMENTATIONBOOK',
+            b.id,
+            'document_book',
+            tenantId,
+            rowHash(b),
+          )
+          await tx
+            .insert(documentBooks)
+            .values({
+              id: bookId,
+              tenantId,
+              title: name,
+              name,
+              description: H.str(b.Description),
+              status: 'published',
+              publishedAt: H.ts(b.created_at) ?? new Date(),
+              contents,
+            })
+            .onConflictDoUpdate({
+              target: documentBooks.id,
+              set: { title: name, name, description: H.str(b.Description), contents },
+            })
+          booksN++
+          await tx.delete(documentBookItems).where(eq(documentBookItems.bookId, bookId))
+          if (docIds.length) {
+            await tx
+              .insert(documentBookItems)
+              .values(docIds.map((did, i) => ({ tenantId, bookId, documentId: did, position: i })))
+            itemsN += docIds.length
+          }
+        })
+      }
+      console.log(`[${booksN} books, ${itemsN} items] `)
+      return { source: books.length, upserted: booksN }
     },
   },
   {
