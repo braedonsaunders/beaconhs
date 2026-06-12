@@ -59,3 +59,8 @@ private/
 
 # Local ops helpers that embed cluster creds — never commit.
 packages/db/src/scripts/dokploy-*.ts
+
+# Private legacy-migration ETL — lives on the migration Mac only (embeds MSSQL/Azure
+# creds + bespoke mappers). Kept in the workspace for @beaconhs/db + @beaconhs/storage
+# access; run on-demand. Never published. See memory: legacy-mssql-migration.
+packages/etl/
