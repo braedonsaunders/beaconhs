@@ -102,6 +102,108 @@
           "total": 886
         }
       ]
+    },
+    {
+      "at": "2026-06-12T02:47:16.567Z",
+      "sha": "5fd6345e9c3670076c9b42a6b9ff11171fcd3411",
+      "pr": null,
+      "actor": "braedonsaunders",
+      "files": 921,
+      "functions": 2680,
+      "loc": 228866,
+      "languages": 17,
+      "topLanguages": [
+        {
+          "ext": "tsx",
+          "pct": 49,
+          "lines": 113085
+        },
+        {
+          "ext": "ts",
+          "pct": 28,
+          "lines": 64668
+        },
+        {
+          "ext": "json",
+          "pct": 14,
+          "lines": 31843
+        },
+        {
+          "ext": "yaml",
+          "pct": 5,
+          "lines": 11409
+        },
+        {
+          "ext": "sql",
+          "pct": 2,
+          "lines": 3904
+        }
+      ],
+      "dead": 36,
+      "deadPct": 1.3,
+      "circular": 1,
+      "godObjects": 1,
+      "avgCoupling": 6,
+      "securityIssues": 40,
+      "patterns": 9,
+      "duplicates": 50,
+      "layerViolations": 411,
+      "connections": 5568,
+      "avgFnLines": 15.5,
+      "longestFn": 16,
+      "testFiles": 3,
+      "testRatio": 0.3,
+      "topFolders": [
+        {
+          "name": "apps",
+          "count": 671
+        },
+        {
+          "name": "packages",
+          "count": 225
+        },
+        {
+          "name": "root",
+          "count": 13
+        },
+        {
+          "name": "scripts",
+          "count": 6
+        },
+        {
+          "name": "docs",
+          "count": 3
+        }
+      ],
+      "folders": 5,
+      "grade": "D",
+      "score": 65,
+      "topBlast": {
+        "path": "apps/web/src/app/(app)/hazard-assessments/_option-field.tsx",
+        "direct": 357,
+        "transitive": 693,
+        "total": 1050
+      },
+      "fragility": [
+        {
+          "path": "apps/web/src/app/(app)/hazard-assessments/_option-field.tsx",
+          "direct": 357,
+          "transitive": 693,
+          "total": 1050
+        },
+        {
+          "path": "apps/web/src/lib/auth.ts",
+          "direct": 317,
+          "transitive": 661,
+          "total": 978
+        },
+        {
+          "path": "apps/web/src/app/(app)/forms/templates/[id]/designer/form-designer.tsx",
+          "direct": 192,
+          "transitive": 694,
+          "total": 886
+        }
+      ]
     }
   ]
 }
