@@ -12,11 +12,11 @@ services:
       POSTGRES_PASSWORD: beaconhs
       POSTGRES_DB: beaconhs
     ports:
-      - "5433:5432"
+      - '5433:5432'
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U beaconhs -d beaconhs"]
+      test: ['CMD-SHELL', 'pg_isready -U beaconhs -d beaconhs']
       interval: 5s
       timeout: 5s
       retries: 10
@@ -25,11 +25,11 @@ services:
     image: redis:7-alpine
     container_name: beaconhs-redis
     ports:
-      - "6380:6379"
+      - '6380:6379'
     volumes:
       - redis-data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
       timeout: 5s
       retries: 10
@@ -42,12 +42,12 @@ services:
       MINIO_ROOT_USER: beaconhs
       MINIO_ROOT_PASSWORD: beaconhs-dev-secret
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - '9000:9000'
+      - '9001:9001'
     volumes:
       - minio-data:/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: ['CMD', 'curl', '-f', 'http://localhost:9000/minio/health/live']
       interval: 5s
       timeout: 5s
       retries: 10
@@ -56,8 +56,8 @@ services:
     image: axllent/mailpit:latest
     container_name: beaconhs-mailpit
     ports:
-      - "1025:1025"
-      - "8025:8025"
+      - '1025:1025'
+      - '8025:8025'
 
 volumes:
   postgres-data:

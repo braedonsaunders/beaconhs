@@ -31,13 +31,13 @@ async function handler(ctx, event) {
   // Re-validate URL on every invocation rather than caching: a tenant
   // can update settings between runs and we want the next event to use
   // the new value immediately.
-  const cfg = (ctx.settings && ctx.settings.webhooks && ctx.settings.webhooks.primary) || null;
+  const cfg = (ctx.settings && ctx.settings.webhooks && ctx.settings.webhooks.primary) || null
   if (!cfg || !cfg.url) {
-    ctx.log("warn", "no webhook url configured; skipping event", {
+    ctx.log('warn', 'no webhook url configured; skipping event', {
       eventId: event.eventId,
       type: event.type,
-    });
-    return { skipped: true, reason: "no_url" };
+    })
+    return { skipped: true, reason: 'no_url' }
   }
 
   // Build the body once. We POST the whole envelope so receivers can
@@ -50,39 +50,36 @@ async function handler(ctx, event) {
     actorId: event.actorId,
     occurredAt: event.occurredAt,
     payload: event.payload,
-  };
+  }
 
-  ctx.log("info", "firing webhook", {
-    name: "primary",
+  ctx.log('info', 'firing webhook', {
+    name: 'primary',
     type: event.type,
     eventId: event.eventId,
-  });
+  })
 
   // The runner's fireWebhook computes the HMAC, sets the signature
   // header, and POSTs. It also records latency in plugin_runs.output.
   // We just need to pass the body + any extra headers the receiver wants.
-  const result = await ctx.fireWebhook("primary", body, {
-    "X-BeaconHS-Event-Id": event.eventId,
-    "X-BeaconHS-Event-Type": event.type,
-  });
+  const result = await ctx.fireWebhook('primary', body, {
+    'X-BeaconHS-Event-Id': event.eventId,
+    'X-BeaconHS-Event-Type': event.type,
+  })
 
   // If the receiver rejects the event, surface that as a plugin-run
   // failure so the admin UI flags it. 2xx is success; everything
   // else throws so the run row goes to "failed".
   if (result.status < 200 || result.status >= 300) {
     throw new Error(
-      "webhook receiver returned " +
-        result.status +
-        ": " +
-        result.bodyText.slice(0, 500),
-    );
+      'webhook receiver returned ' + result.status + ': ' + result.bodyText.slice(0, 500),
+    )
   }
 
   return {
     delivered: true,
     status: result.status,
     eventId: event.eventId,
-  };
+  }
 }
 
 // The runner expects `handler` to be defined at module scope and to be

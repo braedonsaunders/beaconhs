@@ -6,17 +6,15 @@ const CACHE = 'beaconhs-shell-v1'
 const SHELL = ['/']
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE).then((c) => c.addAll(SHELL).catch(() => undefined)),
-  )
+  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL).catch(() => undefined)))
   self.skipWaiting()
 })
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))),
-    ),
+    caches
+      .keys()
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))),
   )
   self.clients.claim()
 })
@@ -24,9 +22,7 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   // Network-first for navigations; fall back to cached shell only on offline.
   if (event.request.mode === 'navigate') {
-    event.respondWith(
-      fetch(event.request).catch(() => caches.match('/')),
-    )
+    event.respondWith(fetch(event.request).catch(() => caches.match('/')))
   }
 })
 
