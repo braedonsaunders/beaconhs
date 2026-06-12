@@ -9,19 +9,47 @@ import { Button, type ButtonProps } from '@beaconhs/ui'
 
 export function CredentialDownloadButton({
   endpoint,
+  outputId,
   format,
+  action = 'open',
   children,
   pendingLabel: _pendingLabel,
   ...buttonProps
 }: {
   endpoint: string
-  format: 'cert' | 'wallet'
+  outputId?: string
+  format?: 'cert' | 'wallet'
+  action?: 'open' | 'print'
   children: React.ReactNode
   pendingLabel?: string
 } & Omit<ButtonProps, 'onClick' | 'asChild'>) {
+  function credentialUrl() {
+    const url = new URL(endpoint, window.location.origin)
+    if (outputId) url.searchParams.set('output', outputId)
+    else if (format) url.searchParams.set('format', format)
+    return url
+  }
+
   function handleClick() {
-    const url = `${endpoint}?format=${format}`
-    window.open(url, '_blank', 'noopener,noreferrer')
+    const url = credentialUrl()
+    if (action === 'print') {
+      const iframe = document.createElement('iframe')
+      iframe.style.position = 'fixed'
+      iframe.style.right = '0'
+      iframe.style.bottom = '0'
+      iframe.style.width = '0'
+      iframe.style.height = '0'
+      iframe.style.border = '0'
+      iframe.src = url.toString()
+      iframe.onload = () => {
+        iframe.contentWindow?.focus()
+        iframe.contentWindow?.print()
+        window.setTimeout(() => iframe.remove(), 30_000)
+      }
+      document.body.appendChild(iframe)
+      return
+    }
+    window.open(url.toString(), '_blank', 'noopener,noreferrer')
   }
 
   return (

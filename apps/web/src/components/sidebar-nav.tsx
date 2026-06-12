@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   AlertTriangle,
+  Award,
   BellRing,
   BookOpen,
   CheckCircle2,
@@ -16,6 +17,7 @@ import {
   GraduationCap,
   HardHat,
   Layers,
+  LayoutGrid,
   LibraryBig,
   Link2,
   ListChecks,
@@ -40,6 +42,7 @@ import { cn } from '@beaconhs/ui'
 // so the parent server component passes us a key and we resolve client-side.
 const ICONS: Record<string, LucideIcon> = {
   alert: AlertTriangle,
+  award: Award,
   bell: BellRing,
   book: BookOpen,
   check: CheckCircle2,
@@ -50,6 +53,7 @@ const ICONS: Record<string, LucideIcon> = {
   file: FileText,
   gauge: Gauge,
   grad: GraduationCap,
+  grid: LayoutGrid,
   'hard-hat': HardHat,
   layers: Layers,
   library: LibraryBig,

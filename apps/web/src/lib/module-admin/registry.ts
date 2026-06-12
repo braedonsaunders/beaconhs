@@ -24,7 +24,7 @@ export type AdminSection = {
   permission?: string
 }
 
-export type ModuleAdminTab = { key: string; label: string; href: string }
+export type ModuleAdminTab = { key: string; label: string; href: string; permission?: string }
 
 export type ModuleAdmin = {
   /** Matches a NAV_MODULES key (lib/nav/registry.ts): 'journals', 'incidents', … */
@@ -289,21 +289,46 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
     iconKey: 'grad',
     permission: 'training.course.manage',
     tabs: [
-      // Two credential lists: Certificates = course-completion records;
-      // Skills = externally-issued credentials (authority/code/expiry).
+      // Two credential lists: Certificates = training records (completed or
+      // uploaded); Skills = held competencies tied to an issuing authority.
       { key: 'records', label: 'Certificates', href: '/training/records' },
       { key: 'skills', label: 'Skills', href: '/training/skills' },
       { key: 'courses', label: 'Courses', href: '/training/courses' },
-      { key: 'library', label: 'Library', href: '/training/library' },
-      { key: 'credential-designs', label: 'Designs', href: '/training/credential-designs' },
       { key: 'classes', label: 'Classes', href: '/training/classes' },
       { key: 'assessments', label: 'Assessments', href: '/training/assessments' },
-      { key: 'matrix', label: 'Matrix', href: '/training/matrix' },
-      { key: 'transcripts', label: 'Transcripts', href: '/training/transcripts' },
       // No Reports tab — training reporting lives in the global /reports
       // builder (incl. the seeded "CWB welder roster" custom definition).
+      // Library, Card studio, Matrix and Transcripts live under Manage below.
     ],
     sections: [
+      {
+        key: 'library',
+        label: 'Library',
+        href: '/training/library',
+        iconKey: 'library',
+        desc: 'Reusable lessons, videos, files and embeds for your courses.',
+      },
+      {
+        key: 'credential-designs',
+        label: 'Card studio',
+        href: '/training/credential-designs',
+        iconKey: 'award',
+        desc: 'Design the certificate and wallet-card layouts issued from training.',
+      },
+      {
+        key: 'matrix',
+        label: 'Matrix',
+        href: '/training/matrix',
+        iconKey: 'grid',
+        desc: 'Workforce coverage grid — who holds which course, and what is expiring.',
+      },
+      {
+        key: 'transcripts',
+        label: 'Transcripts',
+        href: '/training/transcripts',
+        iconKey: 'file',
+        desc: 'Per-person training history — records, assessments and skills.',
+      },
       {
         key: 'skill-types',
         label: 'Skill types',

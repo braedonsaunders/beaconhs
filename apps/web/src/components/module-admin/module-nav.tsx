@@ -14,6 +14,7 @@ import { ModuleSubNav } from './module-sub-nav'
 import { moduleAdminByKey } from '@/lib/module-admin/registry'
 import { canManageModule } from '@/lib/module-admin/guard'
 import { getRequestContext } from '@/lib/auth'
+import { can } from '@beaconhs/tenant'
 
 export async function ModuleNav({ moduleKey, active }: { moduleKey: string; active: string }) {
   const m = moduleAdminByKey(moduleKey)
@@ -32,7 +33,14 @@ export async function ModuleNav({ moduleKey, active }: { moduleKey: string; acti
 
   const ctx = await getRequestContext()
   const canManage = ctx ? canManageModule(ctx, moduleKey) : false
+  const visibleTabs = ctx
+    ? m.tabs.filter((tab) => !tab.permission || canManage || can(ctx, tab.permission))
+    : m.tabs.filter((tab) => !tab.permission)
   return (
-    <ModuleSubNav tabs={m.tabs} active={active} manageHref={canManage ? m.managePath : undefined} />
+    <ModuleSubNav
+      tabs={visibleTabs}
+      active={active}
+      manageHref={canManage ? m.managePath : undefined}
+    />
   )
 }

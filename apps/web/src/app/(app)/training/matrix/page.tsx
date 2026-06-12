@@ -10,7 +10,7 @@ import {
   trainingCourses,
   trainingRecords,
 } from '@beaconhs/db/schema'
-import { requireRequestContext } from '@/lib/auth'
+import { requireModuleManage } from '@/lib/module-admin/guard'
 import { ListPageLayout } from '@/components/page-layout'
 import { FilterChips } from '@/components/filter-bar'
 import { pickString } from '@/lib/list-params'
@@ -73,7 +73,7 @@ export default async function TrainingMatrixPage({
   const departmentFilter = pickString(sp.department)
   const tradeFilter = pickString(sp.trade)
   const crewFilter = pickString(sp.crew)
-  const ctx = await requireRequestContext()
+  const ctx = await requireModuleManage('training')
 
   const { peopleRows, coursesRows, recs, deptsRows, tradesRows, crewsRows } = await ctx.db(
     async (tx) => {
@@ -161,7 +161,7 @@ export default async function TrainingMatrixPage({
         <>
           <PageHeader
             title="Training matrix"
-            description="Person × course coverage. Each cell shows the latest training record's status. Filter by department, trade, or crew."
+            description="Person × course coverage — each cell shows the latest record's status."
             actions={
               <div className="flex items-center gap-2">
                 <Link href={csvHref as any}>

@@ -2,9 +2,10 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
-import { FileText, IdCard } from 'lucide-react'
+import { CreditCard, FileText, Printer } from 'lucide-react'
 import { Badge } from '@beaconhs/ui'
 import { CredentialDownloadButton } from '@/components/credential-download-button'
+import type { CredentialOutput } from '@/lib/credential-designs'
 import { BulkTrainingRecordsBar, HeaderSelectAll, SelectionCheckbox } from './_bulk-bar'
 
 export type TrainingRecordsTableRow = {
@@ -22,7 +23,13 @@ export type TrainingRecordsTableRow = {
   daysToExpiry: number | null // negative = overdue, null = no expiry
 }
 
-export function TrainingRecordsTable({ rows }: { rows: TrainingRecordsTableRow[] }) {
+export function TrainingRecordsTable({
+  rows,
+  credentialOutputs,
+}: {
+  rows: TrainingRecordsTableRow[]
+  credentialOutputs: CredentialOutput[]
+}) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
   const allSelected = useMemo(
@@ -112,26 +119,37 @@ export function TrainingRecordsTable({ rows }: { rows: TrainingRecordsTableRow[]
                   <td className="px-3 py-2 text-xs text-slate-600">{r.source.replace('_', ' ')}</td>
                   <td className="px-3 py-2">
                     <div className="flex justify-end gap-1.5">
-                      <CredentialDownloadButton
-                        endpoint={`/training/records/${r.id}/certificate`}
-                        format="cert"
-                        variant="ghost"
-                        size="sm"
-                        title="Download certificate PDF"
-                        pendingLabel=""
-                      >
-                        <FileText size={15} />
-                      </CredentialDownloadButton>
-                      <CredentialDownloadButton
-                        endpoint={`/training/records/${r.id}/certificate`}
-                        format="wallet"
-                        variant="ghost"
-                        size="sm"
-                        title="Download wallet card PDF"
-                        pendingLabel=""
-                      >
-                        <IdCard size={15} />
-                      </CredentialDownloadButton>
+                      {credentialOutputs.map((output) => (
+                        <span key={output.id} className="inline-flex gap-1">
+                          <CredentialDownloadButton
+                            endpoint={`/training/records/${r.id}/certificate`}
+                            outputId={output.id}
+                            variant="ghost"
+                            size="sm"
+                            title={`Open ${output.name}`}
+                            pendingLabel=""
+                          >
+                            {output.format === 'wallet' ? (
+                              <CreditCard size={15} />
+                            ) : (
+                              <FileText size={15} />
+                            )}
+                          </CredentialDownloadButton>
+                          {output.format === 'wallet' ? (
+                            <CredentialDownloadButton
+                              endpoint={`/training/records/${r.id}/certificate`}
+                              outputId={output.id}
+                              action="print"
+                              variant="ghost"
+                              size="sm"
+                              title={`Print ${output.name}`}
+                              pendingLabel=""
+                            >
+                              <Printer size={15} />
+                            </CredentialDownloadButton>
+                          ) : null}
+                        </span>
+                      ))}
                     </div>
                   </td>
                 </tr>

@@ -1,4 +1,4 @@
-// GET /training/records/:id/certificate?format=cert|wallet
+// GET /training/records/:id/certificate?output=certificate
 //
 // Resolves the training_certificate row for the given record, creating one
 // lazily if the record has never been issued a certificate (records entered
@@ -6,8 +6,8 @@
 // normally creates the row). The PDF itself is rendered on demand so design
 // updates apply instantly and stale generated files never need invalidation.
 //
-// `format=wallet` returns the wallet card variant.
-// `format=cert` (default) returns the full-size certificate.
+// `output` selects one of the tenant's saved credential designs.
+// `format=wallet|cert` is retained for legacy links.
 
 import { randomBytes } from 'node:crypto'
 import { NextResponse, type NextRequest } from 'next/server'
@@ -30,6 +30,7 @@ export async function GET(
   const { id: recordId } = await params
   const format = (req.nextUrl.searchParams.get('format') ?? 'cert').toLowerCase()
   const pdfFormat: CredentialPdfFormat = format === 'wallet' ? 'wallet' : 'cert'
+  const outputId = req.nextUrl.searchParams.get('output')
 
   const ctx = await requireRequestContext()
   if (!ctx.tenantId) {
@@ -77,7 +78,10 @@ export async function GET(
     return NextResponse.json({ error: result.error }, { status: result.status })
   }
 
-  const rendered = await renderTrainingCredentialPdf(ctx, result.cert.id, pdfFormat)
+  const rendered = await renderTrainingCredentialPdf(ctx, result.cert.id, {
+    outputId,
+    format: pdfFormat,
+  })
   if (!rendered) {
     return NextResponse.json({ error: 'Training certificate not found.' }, { status: 404 })
   }

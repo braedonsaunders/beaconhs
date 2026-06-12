@@ -4,7 +4,7 @@ import { FileText, Link2, Paperclip, Presentation, Video } from 'lucide-react'
 import { and, asc, count, eq, ilike, isNotNull, isNull, or, sql, type SQL } from 'drizzle-orm'
 import { Badge, Button, EmptyState, Input, PageHeader, Select } from '@beaconhs/ui'
 import { trainingContentItems, trainingLessons } from '@beaconhs/db/schema'
-import { requireRequestContext } from '@/lib/auth'
+import { requireModuleManage } from '@/lib/module-admin/guard'
 import { pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
 import { FilterChips } from '@/components/filter-bar'
@@ -40,7 +40,7 @@ export default async function ContentLibraryPage({
   const q = pickString(sp.q)
   const kindFilter = pickString(sp.kind)
   const tagFilter = pickString(sp.tag)
-  const ctx = await requireRequestContext()
+  const ctx = await requireModuleManage('training')
 
   const { items, usageMap, kindCounts, tagVocab } = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = [isNull(trainingContentItems.deletedAt)]

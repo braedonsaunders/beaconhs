@@ -1,7 +1,7 @@
 // Training sub-nav — a thin delegate to the shared, registry-driven <ModuleNav>.
-// Operational tabs (Records / Courses / Classes / Assessments / Assignments /
-// Matrix / Transcripts / Reports) + a Manage pill; the admin catalogues (skill
-// types, authorities, assessment types) live in /training/manage.
+// Operational tabs (Certificates / Skills / Courses / Classes / Assessments) +
+// a Manage pill; the manage surfaces (Library, Card studio, Matrix, Transcripts,
+// skill types, authorities, assessment types) live in /training/manage.
 
 import { ModuleNav } from '@/components/module-admin/module-nav'
 

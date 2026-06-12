@@ -14,6 +14,11 @@ import {
   type FormSchemaV1,
   type FormulaExpression,
 } from '@beaconhs/forms-core'
+import {
+  renderDesignDocumentHtml,
+  type CredentialDesignData,
+  type DesignDocument,
+} from '@beaconhs/design-studio'
 import { renderIncidentHtml, type IncidentRenderInput } from './templates/incident'
 import { renderCertificateHtml, type CertificateRenderInput } from './templates/certificate'
 import { renderWalletHtml, type WalletRenderInput } from './templates/wallet'
@@ -55,6 +60,8 @@ export type {
   CredentialDesignOptions,
   CredentialDesignTemplateId,
   CredentialDesignTypeface,
+  CredentialDesignData,
+  DesignDocument,
 }
 // Note: HazidSignedReportRenderInput is exported via the function declaration
 // below so that consumers can import it alongside renderHazidSignedReportPdf.
@@ -70,6 +77,31 @@ export {
   renderEquipmentWorkOrderHtml,
   renderPpeIssueHtml,
   closeBrowser,
+}
+
+export async function renderDesignDocumentPdf(input: {
+  document: DesignDocument
+  data: CredentialDesignData
+  title?: string
+}): Promise<Buffer> {
+  const html = renderDesignDocumentHtml(input.document, input.data, { title: input.title })
+  const first = input.document.artboards[0]
+  const b = await browser()
+  const page = await b.newPage()
+  try {
+    await page.setContent(html, { waitUntil: 'load', timeout: 30_000 })
+    await page.evaluateHandle('document.fonts.ready')
+    const pdf = await page.pdf({
+      width: first ? `${first.width}in` : '11in',
+      height: first ? `${first.height}in` : '8.5in',
+      printBackground: true,
+      margin: { top: 0, bottom: 0, left: 0, right: 0 },
+      preferCSSPageSize: true,
+    })
+    return Buffer.from(pdf)
+  } finally {
+    await page.close()
+  }
 }
 
 export type RenderInput = {

@@ -1,0 +1,601 @@
+import type {
+  CredentialDataField,
+  DesignArtboard,
+  DesignDocument,
+  DesignElement,
+  PrintProfile,
+} from './schema'
+
+export const DESIGN_STUDIO_DPI = 96
+
+export const LETTER_LANDSCAPE = { width: 11, height: 8.5 }
+export const LETTER_PORTRAIT = { width: 8.5, height: 11 }
+export const CR80 = { width: 3.375, height: 2.125 }
+
+const certificatePrintProfile: PrintProfile = {
+  provider: 'browser-pdf',
+  media: 'letter',
+  edgeToEdge: true,
+  orientation: 'landscape',
+}
+
+const cardPrintProfile: PrintProfile = {
+  provider: 'browser-pdf',
+  media: 'cr80',
+  duplex: true,
+  edgeToEdge: true,
+  orientation: 'landscape',
+}
+
+export type DesignStudioTheme = {
+  primary: string
+  accent: string
+  paper: string
+  typeface?: 'classic' | 'modern' | 'technical'
+}
+
+export const DEFAULT_DESIGN_STUDIO_THEME: DesignStudioTheme = {
+  primary: '#18385f',
+  accent: '#b8892f',
+  paper: '#fdf9ef',
+  typeface: 'classic',
+}
+
+export function createCertificateDesignDocument(
+  theme: DesignStudioTheme = DEFAULT_DESIGN_STUDIO_THEME,
+): DesignDocument {
+  const font = fontFor(theme.typeface)
+  return {
+    version: 1,
+    engine: 'fabric',
+    kind: 'training-credential',
+    name: 'Full-size certificate',
+    unit: 'in',
+    dpi: DESIGN_STUDIO_DPI,
+    artboards: [
+      {
+        id: 'certificate',
+        name: 'Certificate',
+        format: 'letter-landscape',
+        width: LETTER_LANDSCAPE.width,
+        height: LETTER_LANDSCAPE.height,
+        background: theme.paper,
+        bleed: 0,
+        printProfile: certificatePrintProfile,
+        elements: [
+          rect(
+            'outer-frame',
+            'Outer frame',
+            0.34,
+            0.34,
+            10.32,
+            7.82,
+            'transparent',
+            theme.primary,
+            0.035,
+          ),
+          rect(
+            'accent-frame',
+            'Accent frame',
+            0.47,
+            0.47,
+            10.06,
+            7.56,
+            'transparent',
+            theme.accent,
+            0.018,
+          ),
+          field('tenant', 'Issuer', 'tenant.name', 1.2, 0.72, 8.6, 0.28, 13, theme.primary, {
+            align: 'center',
+            letterSpacing: 0.08,
+            fontFamily: "'Archivo', Arial, sans-serif",
+          }),
+          line('brand-rule', 'Brand rule', 3.8, 1.1, 3.4, 0.01, theme.accent, 0.018),
+          text('title', 'Title', 'CERTIFICATE', 1.25, 1.48, 8.5, 0.62, 46, theme.primary, {
+            align: 'center',
+            fontFamily: font.display,
+            fontWeight: '700',
+            letterSpacing: 0.08,
+          }),
+          text('subtitle', 'Subtitle', 'OF COMPLETION', 2.85, 2.08, 5.3, 0.28, 11, theme.accent, {
+            align: 'center',
+            fontFamily: "'Archivo', Arial, sans-serif",
+            fontWeight: '700',
+            letterSpacing: 0.1,
+          }),
+          text('preface', 'Preface', 'This certifies that', 3.35, 2.86, 4.3, 0.26, 14, '#475569', {
+            align: 'center',
+            fontStyle: 'italic',
+            fontWeight: '400',
+          }),
+          field(
+            'recipient',
+            'Recipient name',
+            'recipient.fullName',
+            1.3,
+            3.12,
+            8.4,
+            0.62,
+            44,
+            theme.primary,
+            {
+              align: 'center',
+              fontFamily: font.recipient,
+              fontWeight: '700',
+            },
+          ),
+          line('recipient-rule', 'Recipient rule', 2.15, 3.86, 6.7, 0.01, theme.accent, 0.015),
+          field(
+            'credential',
+            'Credential name',
+            'credential.name',
+            1.55,
+            4.32,
+            7.9,
+            0.56,
+            25,
+            '#0f172a',
+            {
+              align: 'center',
+              fontFamily: font.body,
+              fontWeight: '700',
+            },
+          ),
+          field(
+            'course-code',
+            'Course code',
+            'credential.code',
+            3.8,
+            4.94,
+            3.4,
+            0.24,
+            10,
+            '#64748b',
+            {
+              align: 'center',
+              prefix: 'Course ',
+              fontFamily: "'Archivo', Arial, sans-serif",
+              letterSpacing: 0.07,
+            },
+          ),
+          meta('completed', 'Completed', 'completedOn', 1.65, 5.65, theme.primary),
+          meta('expires', 'Valid until', 'expiresOn', 4.55, 5.65, theme.primary),
+          meta('instructor', 'Instructor', 'instructor', 7.1, 5.65, theme.primary),
+          seal('seal', 'Issuer seal', 4.9, 6.48, 1.18, 1.18, theme.accent, theme.primary),
+          line('signature-left', 'Signature line', 1.2, 7.2, 2.4, 0.01, theme.primary, 0.012),
+          text(
+            'signature-left-label',
+            'Signature label',
+            'Instructor / Evaluator',
+            1.2,
+            7.28,
+            2.4,
+            0.18,
+            8,
+            '#64748b',
+            {
+              align: 'center',
+              fontFamily: "'Archivo', Arial, sans-serif",
+            },
+          ),
+          line('signature-right', 'Issuer line', 7.4, 7.2, 2.4, 0.01, theme.primary, 0.012),
+          text(
+            'signature-right-label',
+            'Issuer label',
+            'Issued by Beacon',
+            7.4,
+            7.28,
+            2.4,
+            0.18,
+            8,
+            '#64748b',
+            {
+              align: 'center',
+              fontFamily: "'Archivo', Arial, sans-serif",
+            },
+          ),
+          qr('qr', 'Verification QR', 9.42, 0.72, 0.82, 0.82),
+          field(
+            'verify-token',
+            'Verify token',
+            'verify.token',
+            8.35,
+            7.68,
+            2.0,
+            0.16,
+            5.5,
+            '#64748b',
+            {
+              align: 'right',
+              fontFamily: "ui-monospace, 'SF Mono', monospace",
+              prefix: 'Token ',
+            },
+          ),
+        ],
+      },
+    ],
+  }
+}
+
+export function createWalletDesignDocument(
+  theme: DesignStudioTheme = DEFAULT_DESIGN_STUDIO_THEME,
+): DesignDocument {
+  return {
+    version: 1,
+    engine: 'fabric',
+    kind: 'training-credential',
+    name: 'Wallet card',
+    unit: 'in',
+    dpi: DESIGN_STUDIO_DPI,
+    artboards: [walletFront(theme), walletBack(theme)],
+  }
+}
+
+function walletFront(theme: DesignStudioTheme): DesignArtboard {
+  return {
+    id: 'wallet-front',
+    name: 'Front',
+    format: 'cr80-front',
+    width: CR80.width,
+    height: CR80.height,
+    background: theme.paper,
+    bleed: 0,
+    printProfile: cardPrintProfile,
+    elements: [
+      rect('brand-band', 'Brand band', 0, 0, 3.375, 0.55, theme.primary, theme.primary, 0),
+      rect('accent-rule', 'Accent rule', 0, 0.55, 3.375, 0.035, theme.accent, theme.accent, 0),
+      field('tenant', 'Issuer', 'tenant.name', 0.14, 0.15, 2.45, 0.16, 7, '#ffffff', {
+        fontFamily: "'Archivo', Arial, sans-serif",
+        fontWeight: '800',
+        letterSpacing: 0.025,
+        transform: 'uppercase',
+      }),
+      text('tag', 'Card label', 'TRAINING CREDENTIAL', 0.14, 0.32, 2.25, 0.12, 4.6, '#dbeafe', {
+        fontFamily: "'Archivo', Arial, sans-serif",
+        fontWeight: '700',
+        letterSpacing: 0.045,
+      }),
+      image('logo', 'Logo', 'tenant.logo', 2.63, 0.13, 0.56, 0.26, 'contain'),
+      image('photo', 'Photo', 'recipient.photo', 0.14, 0.36, 0.68, 0.84, 'cover', 0.06),
+      field('recipient', 'Recipient', 'recipient.fullName', 0.94, 0.67, 2.22, 0.2, 10, '#0f172a', {
+        fontFamily: "'Archivo', Arial, sans-serif",
+        fontWeight: '800',
+      }),
+      field(
+        'employee',
+        'Employee number',
+        'recipient.employeeNo',
+        0.94,
+        0.9,
+        1.5,
+        0.12,
+        5.2,
+        '#64748b',
+        {
+          fontFamily: "ui-monospace, 'SF Mono', monospace",
+          prefix: '#',
+        },
+      ),
+      field('credential', 'Credential', 'credential.name', 0.94, 1.07, 2.2, 0.34, 7.4, '#1e293b', {
+        fontFamily: "'Archivo', Arial, sans-serif",
+        fontWeight: '700',
+        lineHeight: 1.1,
+      }),
+      field('code', 'Code', 'credential.code', 0.94, 1.47, 0.75, 0.14, 5.5, theme.primary, {
+        fontFamily: "ui-monospace, 'SF Mono', monospace",
+        fontWeight: '700',
+      }),
+      meta('completed', 'Completed', 'completedOn', 0.14, 1.73, theme.primary, 0.75, 0.24, 5.2),
+      meta('expires', 'Expires', 'expiresOn', 0.95, 1.73, theme.primary, 0.75, 0.24, 5.2),
+      qr('qr-mini', 'QR', 2.73, 1.55, 0.42, 0.42),
+      seal('seal', 'Seal', 2.34, 1.58, 0.36, 0.36, theme.accent, theme.primary),
+    ],
+  }
+}
+
+function walletBack(theme: DesignStudioTheme): DesignArtboard {
+  return {
+    id: 'wallet-back',
+    name: 'Back',
+    format: 'cr80-back',
+    width: CR80.width,
+    height: CR80.height,
+    background: theme.primary,
+    bleed: 0,
+    printProfile: cardPrintProfile,
+    elements: [
+      rect('back-field', 'Security field', 0.1, 0.1, 3.175, 1.925, '#ffffff', theme.accent, 0.012),
+      qr('qr', 'Verification QR', 0.18, 0.23, 0.86, 0.86),
+      text(
+        'verify-label',
+        'Verify label',
+        'VERIFY THIS CARD',
+        1.18,
+        0.28,
+        1.9,
+        0.14,
+        6.2,
+        theme.primary,
+        {
+          fontFamily: "'Archivo', Arial, sans-serif",
+          fontWeight: '800',
+          letterSpacing: 0.045,
+        },
+      ),
+      field('verify-url', 'Verify URL', 'verify.url', 1.18, 0.47, 1.88, 0.24, 5.8, '#334155', {
+        fontFamily: "ui-monospace, 'SF Mono', monospace",
+        lineHeight: 1.1,
+      }),
+      field('verify-token', 'Verify token', 'verify.token', 1.18, 0.79, 1.9, 0.14, 5.2, '#64748b', {
+        fontFamily: "ui-monospace, 'SF Mono', monospace",
+        prefix: 'Token ',
+      }),
+      field('issuer', 'Issuer', 'tenant.name', 0.18, 1.33, 2.95, 0.18, 6.2, theme.primary, {
+        fontFamily: "'Archivo', Arial, sans-serif",
+        fontWeight: '700',
+        align: 'center',
+      }),
+      text(
+        'notice',
+        'Notice',
+        'This credential remains property of the issuer and must be verified before site access.',
+        0.28,
+        1.58,
+        2.82,
+        0.22,
+        5.5,
+        '#475569',
+        { align: 'center', lineHeight: 1.1, fontFamily: "'Archivo', Arial, sans-serif" },
+      ),
+    ],
+  }
+}
+
+function fontFor(typeface: DesignStudioTheme['typeface']) {
+  if (typeface === 'technical') {
+    return {
+      body: "'Archivo', Arial, sans-serif",
+      display: "ui-monospace, 'SF Mono', monospace",
+      recipient: "'Archivo', Arial, sans-serif",
+    }
+  }
+  if (typeface === 'modern') {
+    return {
+      body: "'Archivo', Arial, sans-serif",
+      display: "'Archivo', Arial, sans-serif",
+      recipient: "'Cormorant Garamond', Georgia, serif",
+    }
+  }
+  return {
+    body: "'Cormorant Garamond', Georgia, serif",
+    display: "'Cormorant Garamond', Georgia, serif",
+    recipient: "'Great Vibes', 'Apple Chancery', cursive",
+  }
+}
+
+function text(
+  id: string,
+  name: string,
+  value: string,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  fontSize: number,
+  color: string,
+  extra: Partial<Extract<DesignElement, { kind: 'text' }>> = {},
+): DesignElement {
+  return {
+    id,
+    name,
+    kind: 'text',
+    text: value,
+    x,
+    y,
+    width,
+    height,
+    fontSize,
+    color,
+    fontFamily: "'Archivo', Arial, sans-serif",
+    fontWeight: '600',
+    align: 'left',
+    visible: true,
+    opacity: 1,
+    ...extra,
+  }
+}
+
+function field(
+  id: string,
+  name: string,
+  value: CredentialDataField,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  fontSize: number,
+  color: string,
+  extra: Partial<Extract<DesignElement, { kind: 'field' }>> = {},
+): DesignElement {
+  return {
+    id,
+    name,
+    kind: 'field',
+    field: value,
+    x,
+    y,
+    width,
+    height,
+    fontSize,
+    color,
+    fontFamily: "'Archivo', Arial, sans-serif",
+    fontWeight: '600',
+    align: 'left',
+    transform: 'none',
+    fallback: '',
+    visible: true,
+    opacity: 1,
+    ...extra,
+  }
+}
+
+function meta(
+  id: string,
+  label: string,
+  value: CredentialDataField,
+  x: number,
+  y: number,
+  color: string,
+  width = 1.8,
+  height = 0.42,
+  fontSize = 8,
+): DesignElement {
+  return {
+    id,
+    name: label,
+    kind: 'field',
+    field: value,
+    prefix: `${label}: `,
+    x,
+    y,
+    width,
+    height,
+    fontSize,
+    color,
+    fontFamily: "'Archivo', Arial, sans-serif",
+    fontWeight: '700',
+    align: 'center',
+    transform: value === 'completedOn' || value === 'expiresOn' ? 'date-long' : 'none',
+    visible: true,
+    opacity: 1,
+  }
+}
+
+function rect(
+  id: string,
+  name: string,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  fill: string,
+  stroke: string,
+  strokeWidth: number,
+): DesignElement {
+  return {
+    id,
+    name,
+    kind: 'rect',
+    x,
+    y,
+    width,
+    height,
+    fill,
+    stroke,
+    strokeWidth,
+    visible: true,
+    opacity: 1,
+  }
+}
+
+function line(
+  id: string,
+  name: string,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  stroke: string,
+  strokeWidth: number,
+): DesignElement {
+  return {
+    id,
+    name,
+    kind: 'line',
+    x,
+    y,
+    width,
+    height,
+    fill: 'transparent',
+    stroke,
+    strokeWidth,
+    visible: true,
+    opacity: 1,
+  }
+}
+
+function image(
+  id: string,
+  name: string,
+  source: 'tenant.logo' | 'recipient.photo',
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  fit: 'contain' | 'cover',
+  radius = 0,
+): DesignElement {
+  return {
+    id,
+    name,
+    kind: 'image',
+    source,
+    x,
+    y,
+    width,
+    height,
+    fit,
+    radius,
+    visible: true,
+    opacity: 1,
+  }
+}
+
+function qr(
+  id: string,
+  name: string,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+): DesignElement {
+  return {
+    id,
+    name,
+    kind: 'qr',
+    field: 'verify.qr',
+    x,
+    y,
+    width,
+    height,
+    background: '#ffffff',
+    foreground: '#0f172a',
+    visible: true,
+    opacity: 1,
+  }
+}
+
+function seal(
+  id: string,
+  name: string,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  fill: string,
+  stroke: string,
+): DesignElement {
+  return {
+    id,
+    name,
+    kind: 'seal',
+    x,
+    y,
+    width,
+    height,
+    fill,
+    stroke,
+    visible: true,
+    opacity: 1,
+  }
+}

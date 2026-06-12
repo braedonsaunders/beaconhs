@@ -5,7 +5,7 @@
 // config at /training/skills/types.
 
 import Link from 'next/link'
-import { FileText, IdCard, Star } from 'lucide-react'
+import { CreditCard, FileText, Printer, Star } from 'lucide-react'
 import {
   and,
   asc,
@@ -23,12 +23,14 @@ import {
 import { Badge, EmptyState, PageHeader } from '@beaconhs/ui'
 import {
   people,
+  tenants,
   trainingSkillAssignments,
   trainingSkillAuthorities,
   trainingSkillTypes,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { parseListParams, pickString } from '@/lib/list-params'
+import { enabledCredentialOutputs } from '@/lib/credential-designs'
 import { CredentialDownloadButton } from '@/components/credential-download-button'
 import { SearchInput } from '@/components/search-input'
 import { Pagination } from '@/components/pagination'
@@ -65,10 +67,12 @@ export default async function SkillsPage({
   const statusFilter = pickString(sp.status)
   const authorityFilter = pickString(sp.authority)
   const ctx = await requireRequestContext()
-  const today = new Date().toISOString().slice(0, 10)
-  const in90 = new Date(Date.now() + 90 * 86_400_000).toISOString().slice(0, 10)
+  const now = new Date()
+  const nowMs = now.getTime()
+  const today = now.toISOString().slice(0, 10)
+  const in90 = new Date(nowMs + 90 * 86_400_000).toISOString().slice(0, 10)
 
-  const { rows, total, authorities } = await ctx.db(async (tx) => {
+  const { rows, total, authorities, tenantSettings } = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = []
     if (params.q) {
       const term = `%${params.q}%`
@@ -167,8 +171,20 @@ export default async function SkillsPage({
       .from(trainingSkillAuthorities)
       .orderBy(asc(trainingSkillAuthorities.name))
 
-    return { rows: data, total: Number(tot?.c ?? 0), authorities: auths }
+    const [tenant] = await tx
+      .select({ settings: tenants.settings })
+      .from(tenants)
+      .where(eq(tenants.id, ctx.tenantId))
+      .limit(1)
+
+    return {
+      rows: data,
+      total: Number(tot?.c ?? 0),
+      authorities: auths,
+      tenantSettings: tenant?.settings ?? {},
+    }
   })
+  const credentialOutputs = enabledCredentialOutputs(tenantSettings)
 
   return (
     <ListPageLayout
@@ -268,7 +284,7 @@ export default async function SkillsPage({
                 {rows.map(({ assignment, type, authority, person }) => {
                   const exp = assignment.expiresOn
                   const days = exp
-                    ? Math.round((new Date(exp).getTime() - Date.now()) / 86_400_000)
+                    ? Math.round((new Date(exp).getTime() - nowMs) / 86_400_000)
                     : null
                   return (
                     <TableRow key={assignment.id}>
@@ -315,26 +331,37 @@ export default async function SkillsPage({
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1.5">
-                          <CredentialDownloadButton
-                            endpoint={`/training/skills/${assignment.id}/certificate`}
-                            format="cert"
-                            variant="ghost"
-                            size="sm"
-                            title="Download certificate PDF"
-                            pendingLabel=""
-                          >
-                            <FileText size={15} />
-                          </CredentialDownloadButton>
-                          <CredentialDownloadButton
-                            endpoint={`/training/skills/${assignment.id}/certificate`}
-                            format="wallet"
-                            variant="ghost"
-                            size="sm"
-                            title="Download wallet card PDF"
-                            pendingLabel=""
-                          >
-                            <IdCard size={15} />
-                          </CredentialDownloadButton>
+                          {credentialOutputs.map((output) => (
+                            <span key={output.id} className="inline-flex gap-1">
+                              <CredentialDownloadButton
+                                endpoint={`/training/skills/${assignment.id}/certificate`}
+                                outputId={output.id}
+                                variant="ghost"
+                                size="sm"
+                                title={`Open ${output.name}`}
+                                pendingLabel=""
+                              >
+                                {output.format === 'wallet' ? (
+                                  <CreditCard size={15} />
+                                ) : (
+                                  <FileText size={15} />
+                                )}
+                              </CredentialDownloadButton>
+                              {output.format === 'wallet' ? (
+                                <CredentialDownloadButton
+                                  endpoint={`/training/skills/${assignment.id}/certificate`}
+                                  outputId={output.id}
+                                  action="print"
+                                  variant="ghost"
+                                  size="sm"
+                                  title={`Print ${output.name}`}
+                                  pendingLabel=""
+                                >
+                                  <Printer size={15} />
+                                </CredentialDownloadButton>
+                              ) : null}
+                            </span>
+                          ))}
                         </div>
                       </TableCell>
                     </TableRow>

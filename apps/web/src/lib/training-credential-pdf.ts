@@ -12,13 +12,17 @@ import {
   trainingSkillCertificates,
   trainingSkillTypes,
 } from '@beaconhs/db/schema'
-import { renderCertificatePagePdf, renderWalletCardPdf } from '@beaconhs/forms-pdf'
+import {
+  renderCertificatePagePdf,
+  renderDesignDocumentPdf,
+  renderWalletCardPdf,
+} from '@beaconhs/forms-pdf'
 import { publicUrl } from '@beaconhs/storage'
 import type { RequestContext } from '@beaconhs/tenant'
 import {
-  CREDENTIAL_DESIGN_SETTINGS_KEY,
-  normalizeCredentialDesign,
-  type CredentialDesign,
+  credentialOutputPdfFormat,
+  resolveCredentialOutput,
+  type CredentialOutputRequest,
 } from '@/lib/credential-designs'
 
 export type CredentialPdfFormat = 'cert' | 'wallet'
@@ -46,22 +50,6 @@ function safeName(value: string | null | undefined, fallback: string): string {
   return (s || fallback).slice(0, 48)
 }
 
-function credentialDesignForFormat(
-  settings: Record<string, unknown>,
-  format: CredentialPdfFormat,
-): CredentialDesign {
-  const design = normalizeCredentialDesign(settings[CREDENTIAL_DESIGN_SETTINGS_KEY])
-  return {
-    ...design,
-    format:
-      format === 'wallet'
-        ? 'wallet'
-        : design.format === 'letter-portrait'
-          ? 'letter-portrait'
-          : 'letter-landscape',
-  }
-}
-
 async function photoUrlForPerson(ctx: RequestContext, photoAttachmentId: string | null) {
   if (!photoAttachmentId) return null
   return ctx.db(async (tx) => {
@@ -77,7 +65,7 @@ async function photoUrlForPerson(ctx: RequestContext, photoAttachmentId: string 
 export async function renderTrainingCredentialPdf(
   ctx: RequestContext,
   certificateId: string,
-  format: CredentialPdfFormat,
+  request: CredentialOutputRequest,
 ): Promise<RenderedCredentialPdf | null> {
   const data = await ctx.db(async (tx) => {
     const [row] = await tx
@@ -104,7 +92,9 @@ export async function renderTrainingCredentialPdf(
   const verifyUrl = `${appBaseUrl()}/verify/${cert.verifyToken}`
   const qrDataUrl = await makeVerifyQr(verifyUrl)
   const fullName = `${person.firstName} ${person.lastName}`
-  const design = credentialDesignForFormat(tenant.settings, format)
+  const output = resolveCredentialOutput(tenant.settings, request)
+  const pdfFormat = credentialOutputPdfFormat(output)
+  const design = output
   const certificateInput = {
     tenantName: tenant.name,
     tenantLogoUrl: tenant.branding.logoUrl,
@@ -139,25 +129,45 @@ export async function renderTrainingCredentialPdf(
     cardId: cert.id,
   } as const
   const bytes =
-    format === 'wallet'
-      ? await renderWalletCardPdf(walletInput)
-      : await renderCertificatePagePdf(certificateInput)
+    output.document != null
+      ? await renderDesignDocumentPdf({
+          document: output.document,
+          data: {
+            tenantName: tenant.name,
+            tenantLogoUrl: tenant.branding.logoUrl,
+            recipientFullName: fullName,
+            recipientEmployeeNo: person.employeeNo,
+            recipientPhotoUrl: photoUrl,
+            credentialName: course.name,
+            credentialCode: course.code,
+            completedOn: record.completedOn,
+            expiresOn: record.expiresOn,
+            instructor: record.instructor,
+            grade: record.grade,
+            verifyUrl,
+            verifyToken: cert.verifyToken,
+            qrDataUrl,
+            issuedAt: cert.createdAt,
+          },
+          title: output.name,
+        })
+      : pdfFormat === 'wallet'
+        ? await renderWalletCardPdf(walletInput)
+        : await renderCertificatePagePdf(certificateInput)
 
   const coursePart = safeName(course.code, 'course')
   const personPart = safeName(person.lastName, 'person')
+  const outputPart = safeName(output.name, pdfFormat === 'wallet' ? 'wallet' : 'certificate')
   return {
     bytes,
-    filename:
-      format === 'wallet'
-        ? `wallet-${coursePart}-${personPart}.pdf`
-        : `certificate-${coursePart}-${personPart}.pdf`,
+    filename: `${outputPart}-${coursePart}-${personPart}.pdf`,
   }
 }
 
 export async function renderSkillCredentialPdf(
   ctx: RequestContext,
   certificateId: string,
-  format: CredentialPdfFormat,
+  request: CredentialOutputRequest,
 ): Promise<RenderedCredentialPdf | null> {
   const data = await ctx.db(async (tx) => {
     const [row] = await tx
@@ -195,7 +205,9 @@ export async function renderSkillCredentialPdf(
   const verifyUrl = `${appBaseUrl()}/verify/${cert.verifyToken}`
   const qrDataUrl = await makeVerifyQr(verifyUrl)
   const fullName = `${person.firstName} ${person.lastName}`
-  const design = credentialDesignForFormat(tenant.settings, format)
+  const output = resolveCredentialOutput(tenant.settings, request)
+  const pdfFormat = credentialOutputPdfFormat(output)
+  const design = output
   const certificateInput = {
     tenantName: tenant.name,
     tenantLogoUrl: tenant.branding.logoUrl,
@@ -230,18 +242,37 @@ export async function renderSkillCredentialPdf(
     cardId: cert.id,
   } as const
   const bytes =
-    format === 'wallet'
-      ? await renderWalletCardPdf(walletInput)
-      : await renderCertificatePagePdf(certificateInput)
+    output.document != null
+      ? await renderDesignDocumentPdf({
+          document: output.document,
+          data: {
+            tenantName: tenant.name,
+            tenantLogoUrl: tenant.branding.logoUrl,
+            recipientFullName: fullName,
+            recipientEmployeeNo: person.employeeNo,
+            recipientPhotoUrl: photoUrl,
+            credentialName: skillType.name,
+            credentialCode: skillType.code,
+            authorityName: authority.name,
+            completedOn: assignment.grantedOn,
+            expiresOn: assignment.expiresOn,
+            verifyUrl,
+            verifyToken: cert.verifyToken,
+            qrDataUrl,
+            issuedAt: cert.createdAt,
+          },
+          title: output.name,
+        })
+      : pdfFormat === 'wallet'
+        ? await renderWalletCardPdf(walletInput)
+        : await renderCertificatePagePdf(certificateInput)
 
   const skillPart = safeName(skillType.code || skillType.name, 'skill')
   const personPart = safeName(person.lastName, 'person')
+  const outputPart = safeName(output.name, pdfFormat === 'wallet' ? 'wallet' : 'certificate')
   return {
     bytes,
-    filename:
-      format === 'wallet'
-        ? `skill-wallet-${skillPart}-${personPart}.pdf`
-        : `skill-certificate-${skillPart}-${personPart}.pdf`,
+    filename: `skill-${outputPart}-${skillPart}-${personPart}.pdf`,
   }
 }
 

@@ -2,7 +2,15 @@ import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { and, desc, eq, isNull, like } from 'drizzle-orm'
-import { Award, FileText, IdCard, Paperclip, RotateCcw, ShieldOff } from 'lucide-react'
+import {
+  CreditCard,
+  FileText,
+  Paperclip,
+  Printer,
+  RotateCcw,
+  Settings,
+  ShieldOff,
+} from 'lucide-react'
 import {
   Alert,
   AlertDescription,
@@ -28,6 +36,7 @@ import {
 import {
   attachments,
   people,
+  tenants,
   trainingCertificates,
   trainingCourses,
   trainingRecords,
@@ -41,10 +50,16 @@ import { DetailGrid } from '@/components/detail-grid'
 import { Section } from '@/components/section'
 import { DetailPageLayout } from '@/components/page-layout'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
+import {
+  enabledCredentialOutputs,
+  type CredentialFormat,
+  type CredentialOutput,
+} from '@/lib/credential-designs'
+import { canDesignTrainingCredentials } from '@/lib/training-credential-access'
 
 export const dynamic = 'force-dynamic'
 
-const TABS = ['overview', 'certificate', 'wallet', 'attachments', 'activity'] as const
+const TABS = ['overview', 'outputs', 'attachments', 'activity'] as const
 type Tab = (typeof TABS)[number]
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
@@ -176,12 +191,7 @@ export default async function TrainingRecordPage({
       .where(eq(trainingRecords.id, id))
       .limit(1)
     if (!row) return null
-    const [certs, certAttachments] = await Promise.all([
-      tx
-        .select()
-        .from(trainingCertificates)
-        .where(eq(trainingCertificates.recordId, id))
-        .orderBy(desc(trainingCertificates.createdAt)),
+    const [certAttachments, tenant] = await Promise.all([
       // Pull any uploaded scan attachments tagged with this record (by r2Key
       // prefix or exif metadata). The cert-route also lists them via r2 prefix.
       tx
@@ -194,13 +204,21 @@ export default async function TrainingRecordPage({
           ),
         )
         .orderBy(desc(attachments.createdAt)),
+      tx
+        .select({ settings: tenants.settings })
+        .from(tenants)
+        .where(eq(tenants.id, ctx.tenantId))
+        .limit(1)
+        .then(([tenant]) => tenant),
     ])
-    return { ...row, certs, certAttachments }
+    return { ...row, certAttachments, tenantSettings: tenant?.settings ?? {} }
   })
 
   if (!data) notFound()
-  const { record, person, course, certs, certAttachments } = data
+  const { record, person, course, certAttachments, tenantSettings } = data
   const isRevoked = record.deletedAt != null
+  const credentialOutputs = enabledCredentialOutputs(tenantSettings)
+  const canDesignCredentials = canDesignTrainingCredentials(ctx)
 
   const today = new Date()
   const exp = record.expiresOn ? new Date(record.expiresOn) : null
@@ -233,24 +251,6 @@ export default async function TrainingRecordPage({
               {isRevoked ? <Badge variant="destructive">Revoked</Badge> : null}
             </div>
           }
-          actions={
-            <>
-              <CredentialDownloadButton
-                endpoint={`/training/records/${id}/certificate`}
-                format="wallet"
-                variant="outline"
-              >
-                <IdCard size={14} /> Wallet card
-              </CredentialDownloadButton>
-              <CredentialDownloadButton
-                endpoint={`/training/records/${id}/certificate`}
-                format="cert"
-                variant="outline"
-              >
-                <FileText size={14} /> Certificate PDF
-              </CredentialDownloadButton>
-            </>
-          }
         />
       }
       alerts={
@@ -270,8 +270,7 @@ export default async function TrainingRecordPage({
           active={active}
           tabs={[
             { key: 'overview', label: 'Overview' },
-            { key: 'certificate', label: 'Certificate', count: certs.length },
-            { key: 'wallet', label: 'Wallet card' },
+            { key: 'outputs', label: 'Cards & certificates', count: credentialOutputs.length },
             { key: 'attachments', label: 'Attachments', count: certAttachments.length },
             { key: 'activity', label: 'Activity' },
           ]}
@@ -307,7 +306,7 @@ export default async function TrainingRecordPage({
                 { label: 'Expires on', value: record.expiresOn ?? '—' },
                 { label: 'Instructor', value: record.instructor ?? '—' },
                 { label: 'Grade', value: record.grade != null ? `${record.grade}%` : '—' },
-                { label: 'Certificate type', value: record.certificateType ?? '—' },
+                { label: 'Credential type', value: record.certificateType ?? '—' },
               ]}
             />
             {record.details ? (
@@ -394,83 +393,76 @@ export default async function TrainingRecordPage({
           </>
         ) : null}
 
-        {active === 'certificate' ? (
+        {active === 'outputs' ? (
           <Card>
             <CardHeader>
-              <CardTitle>Issued certificates ({certs.length})</CardTitle>
+              <div className="flex items-center justify-between gap-3">
+                <CardTitle>Cards & certificates ({credentialOutputs.length})</CardTitle>
+                {canDesignCredentials ? (
+                  <Link href="/training/credential-designs">
+                    <Button variant="outline" size="sm">
+                      <Settings size={14} /> Design
+                    </Button>
+                  </Link>
+                ) : null}
+              </div>
             </CardHeader>
-            <CardContent>
-              {certs.length === 0 ? (
-                <EmptyState
-                  icon={<Award size={24} />}
-                  title="No certificates"
-                  description="Select 'Certificate PDF' in the header to generate and store one for this record."
-                />
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Verify token</TableHead>
-                      <TableHead>Generated</TableHead>
-                      <TableHead>Revoked</TableHead>
-                      <TableHead></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {certs.map((c) => (
-                      <TableRow key={c.id}>
-                        <TableCell className="font-mono text-xs">{c.verifyToken}</TableCell>
-                        <TableCell>{new Date(c.createdAt).toLocaleDateString()}</TableCell>
-                        <TableCell>
-                          {c.revokedAt ? (
-                            <Badge variant="destructive">
-                              {new Date(c.revokedAt).toLocaleDateString()}
-                            </Badge>
-                          ) : (
-                            <Badge variant="success">Active</Badge>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Link
-                            href={`/verify/${c.verifyToken}` as any}
-                            target="_blank"
-                            className="text-xs text-teal-700 hover:underline"
+            <CardContent className="space-y-6">
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {credentialOutputs.map((output) => (
+                  <div
+                    key={output.id}
+                    className="flex min-h-44 flex-col rounded-lg border border-slate-200 bg-white p-4"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div
+                        className="grid h-11 w-11 shrink-0 place-items-center rounded-md border"
+                        style={{
+                          borderColor: output.accent,
+                          color: output.primary,
+                          backgroundColor: output.paper,
+                        }}
+                      >
+                        <OutputIcon output={output} size={18} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate font-semibold text-slate-900">{output.name}</div>
+                        <div className="mt-1">
+                          <Badge variant="secondary">{formatLabel(output.format)}</Badge>
+                        </div>
+                      </div>
+                    </div>
+                    <p className="mt-3 line-clamp-2 text-sm text-slate-600">{output.description}</p>
+                    <div className="mt-4 text-xs text-slate-500">
+                      Opens as a fresh PDF using the current design.
+                    </div>
+                    <div className="mt-auto pt-4">
+                      <div className="flex flex-wrap gap-2">
+                        <CredentialDownloadButton
+                          endpoint={`/training/records/${id}/certificate`}
+                          outputId={output.id}
+                          variant="outline"
+                          size="sm"
+                          title={`Open ${output.name}`}
+                        >
+                          <OutputIcon output={output} /> Open PDF
+                        </CredentialDownloadButton>
+                        {output.format === 'wallet' ? (
+                          <CredentialDownloadButton
+                            endpoint={`/training/records/${id}/certificate`}
+                            outputId={output.id}
+                            action="print"
+                            variant="outline"
+                            size="sm"
+                            title={`Print ${output.name}`}
                           >
-                            Verify page →
-                          </Link>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-        ) : null}
-
-        {active === 'wallet' ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>Wallet card preview</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <WalletCardPreview
-                person={person}
-                course={course}
-                completedOn={record.completedOn}
-                expiresOn={record.expiresOn ?? null}
-                grade={record.grade}
-                instructor={record.instructor ?? null}
-                verifyToken={certs[0]?.verifyToken ?? null}
-              />
-              <div className="mt-4 flex justify-end">
-                <CredentialDownloadButton
-                  endpoint={`/training/records/${id}/certificate`}
-                  format="wallet"
-                  variant="outline"
-                >
-                  <IdCard size={14} /> Download wallet PDF
-                </CredentialDownloadButton>
+                            <Printer size={14} /> Print
+                          </CredentialDownloadButton>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </CardContent>
           </Card>
@@ -540,69 +532,6 @@ export default async function TrainingRecordPage({
   )
 }
 
-function WalletCardPreview({
-  person,
-  course,
-  completedOn,
-  expiresOn,
-  grade,
-  instructor,
-  verifyToken,
-}: {
-  person: typeof people.$inferSelect
-  course: typeof trainingCourses.$inferSelect
-  completedOn: string
-  expiresOn: string | null
-  grade: number | null
-  instructor: string | null
-  verifyToken: string | null
-}) {
-  return (
-    <div className="flex justify-center">
-      <div className="w-[340px] rounded-xl border-2 border-teal-700 bg-gradient-to-br from-teal-50 to-white p-5 shadow-md">
-        <div className="mb-3 flex items-start justify-between">
-          <div>
-            <div className="text-[10px] font-semibold tracking-wider text-teal-700 uppercase">
-              Certificate of Training
-            </div>
-            <div className="mt-0.5 text-base font-bold text-slate-900">
-              {person.firstName} {person.lastName}
-            </div>
-            {person.employeeNo ? (
-              <div className="text-xs text-slate-500">Emp #{person.employeeNo}</div>
-            ) : null}
-          </div>
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-teal-700 text-white">
-            <Award size={22} />
-          </div>
-        </div>
-        <div className="mt-2 text-sm font-semibold text-slate-900">{course.name}</div>
-        <div className="text-xs text-slate-600">{course.code}</div>
-        <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
-          <Cell label="Completed">{completedOn}</Cell>
-          <Cell label="Expires">{expiresOn ?? '—'}</Cell>
-          <Cell label="Grade">{grade != null ? `${grade}%` : '—'}</Cell>
-          <Cell label="Instructor">{instructor ?? '—'}</Cell>
-        </div>
-        {verifyToken ? (
-          <div className="mt-3 border-t border-teal-200 pt-2 text-center font-mono text-[10px] text-slate-600">
-            Verify: {verifyToken.slice(0, 16)}…
-          </div>
-        ) : null}
-      </div>
-    </div>
-  )
-}
-
-function Cell({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="rounded bg-white/60 p-1.5">
-      <div className="text-[9px] tracking-wide text-teal-700 uppercase">{label}</div>
-      <div className="text-slate-900">{children}</div>
-    </div>
-  )
-}
-
 function Field({
   label,
   required,
@@ -623,6 +552,16 @@ function Field({
       {children}
     </div>
   )
+}
+
+function OutputIcon({ output, size = 14 }: { output: CredentialOutput; size?: number }) {
+  return output.format === 'wallet' ? <CreditCard size={size} /> : <FileText size={size} />
+}
+
+function formatLabel(format: CredentialFormat): string {
+  if (format === 'wallet') return 'CR80 wallet'
+  if (format === 'letter-portrait') return '8.5 x 11 portrait'
+  return '11 x 8.5 landscape'
 }
 
 function humanSize(bytes: number): string {

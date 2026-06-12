@@ -1,8 +1,9 @@
-// GET /training/skills/:id/certificate?format=cert|wallet
+// GET /training/skills/:id/certificate?output=certificate
 //
 // `:id` is a training_skill_assignments id. Resolves (or lazily creates) the
 // training_skill_certificates row for the assignment, then renders the selected
-// credential PDF on demand.
+// credential PDF on demand. `output` selects a saved credential design;
+// `format=wallet|cert` is retained for legacy links.
 
 import { randomBytes } from 'node:crypto'
 import { NextResponse, type NextRequest } from 'next/server'
@@ -25,6 +26,7 @@ export async function GET(
   const { id: assignmentId } = await params
   const format = (req.nextUrl.searchParams.get('format') ?? 'cert').toLowerCase()
   const pdfFormat: CredentialPdfFormat = format === 'wallet' ? 'wallet' : 'cert'
+  const outputId = req.nextUrl.searchParams.get('output')
 
   const ctx = await requireRequestContext()
   if (!ctx.tenantId) {
@@ -65,7 +67,10 @@ export async function GET(
     return NextResponse.json({ error: result.error }, { status: result.status })
   }
 
-  const rendered = await renderSkillCredentialPdf(ctx, result.cert.id, pdfFormat)
+  const rendered = await renderSkillCredentialPdf(ctx, result.cert.id, {
+    outputId,
+    format: pdfFormat,
+  })
   if (!rendered) {
     return NextResponse.json({ error: 'Skill certificate not found.' }, { status: 404 })
   }

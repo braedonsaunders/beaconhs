@@ -26,9 +26,10 @@ import {
   type SQL,
 } from 'drizzle-orm'
 import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
-import { people, trainingCourses, trainingRecords } from '@beaconhs/db/schema'
+import { people, tenants, trainingCourses, trainingRecords } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { parseListParams, pickString } from '@/lib/list-params'
+import { enabledCredentialOutputs } from '@/lib/credential-designs'
 import { SearchInput } from '@/components/search-input'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
@@ -71,8 +72,9 @@ export default async function TrainingRecordsPage({
   const expiryFilter = pickString(sp.expiry)
   const ctx = await requireRequestContext()
   const today = new Date().toISOString().slice(0, 10)
+  const todayMs = new Date(today).getTime()
 
-  const { rows, total, sourceCounts, expiryCounts } = await ctx.db(async (tx) => {
+  const { rows, total, sourceCounts, expiryCounts, tenantSettings } = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = [isNull(trainingRecords.deletedAt)]
     if (params.q) {
       const term = `%${params.q}%`
@@ -160,6 +162,12 @@ export default async function TrainingRecordsPage({
         ),
       )
 
+    const [tenant] = await tx
+      .select({ settings: tenants.settings })
+      .from(tenants)
+      .where(eq(tenants.id, ctx.tenantId))
+      .limit(1)
+
     return {
       rows: data,
       total: Number(tot?.c ?? 0),
@@ -168,15 +176,16 @@ export default async function TrainingRecordsPage({
         expired: Number(expiredCount?.c ?? 0),
         current: Number(currentCount?.c ?? 0),
       } as Record<string, number>,
+      tenantSettings: tenant?.settings ?? {},
     }
   })
+  const credentialOutputs = enabledCredentialOutputs(tenantSettings)
 
   const tableRows: TrainingRecordsTableRow[] = rows.map(({ record, person, course }) => {
     let daysToExpiry: number | null = null
     if (record.expiresOn) {
       const exp = new Date(record.expiresOn).getTime()
-      const now = Date.now()
-      daysToExpiry = Math.round((exp - now) / 86_400_000)
+      daysToExpiry = Math.round((exp - todayMs) / 86_400_000)
     }
     return {
       id: record.id,
@@ -200,7 +209,7 @@ export default async function TrainingRecordsPage({
         <>
           <PageHeader
             title="Certificates"
-            description="Course-completion certificates — every earned training record, with expiry tracking. Externally-issued credentials live under Skills."
+            description="Training records with completion dates and expiry tracking."
             actions={
               <div className="flex items-center gap-2">
                 <Link href="/training/courses/new">
@@ -254,7 +263,7 @@ export default async function TrainingRecordsPage({
         />
       ) : (
         <>
-          <TrainingRecordsTable rows={tableRows} />
+          <TrainingRecordsTable rows={tableRows} credentialOutputs={credentialOutputs} />
           <Pagination
             basePath="/training/records"
             currentParams={sp}
