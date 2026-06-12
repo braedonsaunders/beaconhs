@@ -1,6 +1,4 @@
-// Read-only reader for the rassaun "landing" schemas (the tds_fdw Postgres mirror of MSSQL).
-// Landing schemas: beaconhs / toolcrib / peopleapp / externaltraining (lowercase), with original
-// MSSQL table + column casing preserved (e.g. beaconhs."INCIDENTLOG"."IncidentDate").
+// Read-only reader for deployment-specific landing schemas.
 import postgres from 'postgres'
 
 let sql: ReturnType<typeof postgres> | null = null
@@ -8,7 +6,7 @@ let sql: ReturnType<typeof postgres> | null = null
 export function source(): ReturnType<typeof postgres> {
   if (!sql) {
     const url = process.env.ETL_SOURCE_URL
-    if (!url) throw new Error('ETL_SOURCE_URL is required (the rassaun mirror DB)')
+    if (!url) throw new Error('ETL_SOURCE_URL is required')
     sql = postgres(url, { max: 6, prepare: false, onnotice: () => {} })
   }
   return sql

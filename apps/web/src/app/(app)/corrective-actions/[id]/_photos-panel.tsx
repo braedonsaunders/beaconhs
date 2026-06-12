@@ -44,7 +44,7 @@ export function PhotosPanel({
           ) : null}
         </>
       ) : (
-        <p className="text-sm text-slate-500">No photos attached yet.</p>
+        <p className="text-sm text-slate-500">No photos attached.</p>
       )}
       {!locked ? (
         <PhotoUploaderSection

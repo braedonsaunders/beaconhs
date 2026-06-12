@@ -23,16 +23,20 @@ export function PageHeader({
           ← {back.label}
         </a>
       ) : null}
-      <header className="flex items-end justify-between gap-4">
+      {/* Phones stack title → description → actions; sm+ keeps the classic
+          one-row header with a truncating title. */}
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
         <div className="min-w-0 space-y-1">
-          <h1 className="truncate text-2xl font-semibold text-slate-900 dark:text-slate-100">
+          <h1 className="text-xl font-semibold text-slate-900 sm:truncate sm:text-2xl dark:text-slate-100">
             {title}
           </h1>
           {description ? (
             <p className="text-sm text-slate-500 dark:text-slate-400">{description}</p>
           ) : null}
         </div>
-        {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
+        {actions ? (
+          <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>
+        ) : null}
       </header>
     </div>
   )
@@ -58,14 +62,14 @@ export function DetailHeader({
           ← {back.label}
         </a>
       ) : null}
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex min-w-0 items-center gap-3">
-          <h1 className="truncate text-2xl font-semibold text-slate-900 dark:text-slate-100">
+      <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
+          <h1 className="text-xl font-semibold text-slate-900 sm:truncate sm:text-2xl dark:text-slate-100">
             {title}
           </h1>
           {badge}
         </div>
-        {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
+        {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
       </div>
       {subtitle ? <p className="text-sm text-slate-500 dark:text-slate-400">{subtitle}</p> : null}
     </header>

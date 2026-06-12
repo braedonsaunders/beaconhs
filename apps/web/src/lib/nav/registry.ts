@@ -74,7 +74,13 @@ export const NAV_MODULES: NavModule[] = [
     iconKey: 'clipboard',
     group: 'Frontline',
   },
-  { key: 'hazid', href: '/hazid', label: 'JSHA / HazID', iconKey: 'radiation', group: 'Frontline' },
+  {
+    key: 'hazid',
+    href: '/hazard-assessments',
+    label: 'Hazard Assessments',
+    iconKey: 'radiation',
+    group: 'Frontline',
+  },
   { key: 'journals', href: '/journals', label: 'Journals', iconKey: 'journal', group: 'Frontline' },
   {
     key: 'incidents',

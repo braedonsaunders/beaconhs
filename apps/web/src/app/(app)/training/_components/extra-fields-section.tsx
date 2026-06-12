@@ -72,8 +72,8 @@ export function ExtraFieldsSection({
           {rows.length === 0 ? (
             <EmptyState
               icon={<Plus size={24} />}
-              title="No custom fields yet"
-              description="Capture extra metadata that doesn't fit the built-in columns — e.g. issuing union local, reference number, internal SKU."
+              title="No custom fields"
+              description="Capture extra fields that don't fit the built-in columns — e.g. issuing union local, reference number."
             />
           ) : (
             <ul className="divide-y divide-slate-100 text-sm">

@@ -6,7 +6,7 @@ import { eq } from 'drizzle-orm'
 import { reportSchedules, reportRuns } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
-import { computeNextRunAt } from '@/lib/report-cadence'
+import { computeNextRunAt } from '@beaconhs/reports'
 import { enqueueReportRun } from '@beaconhs/jobs'
 
 export async function setActive(scheduleId: string, active: boolean): Promise<void> {

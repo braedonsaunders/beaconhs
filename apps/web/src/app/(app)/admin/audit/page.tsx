@@ -94,7 +94,7 @@ export default async function AuditLogPage({
           />
         </TableToolbar>
         {rows.length === 0 ? (
-          <EmptyState title="No audit entries yet" />
+          <EmptyState title="No audit entries" />
         ) : (
           <>
             <Table>

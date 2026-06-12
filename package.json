@@ -5,7 +5,7 @@
   "license": "AGPL-3.0-or-later",
   "packageManager": "pnpm@10.30.3",
   "engines": {
-    "node": ">=20.11.0"
+    "node": ">=22.12.0"
   },
   "scripts": {
     "build": "turbo run build",
@@ -16,6 +16,7 @@
     "db:generate": "pnpm --filter @beaconhs/db generate",
     "db:migrate": "pnpm --filter @beaconhs/db migrate",
     "db:push": "pnpm --filter @beaconhs/db push",
+    "db:push:ci": "pnpm --filter @beaconhs/db push:ci",
     "db:studio": "pnpm --filter @beaconhs/db studio",
     "db:seed": "pnpm --filter @beaconhs/db seed",
     "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",

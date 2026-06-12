@@ -8,6 +8,7 @@ import {
   TableHeader,
   TableRow,
 } from '@beaconhs/ui'
+import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { ListPageLayout } from '@/components/page-layout'
 import { type AgingBucket, agingFromStatus, kindLabel } from '../_hub'
@@ -27,6 +28,7 @@ const BUCKETS: { key: AgingBucket; label: string; tone: 'warning' | 'danger' }[]
 
 export default async function AgingPage() {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'compliance.read')
   const rows = await agingFromStatus(ctx)
 
   const matrix = new Map<string, number>() // `${kind}::${bucket}` -> count
@@ -43,7 +45,7 @@ export default async function AgingPage() {
         <>
           <PageHeader
             title="Compliance"
-            description="Every overdue or expiring subject across all obligation kinds, bucketed by age."
+            description="Every overdue or expiring subject across all obligation kinds, grouped by age."
           />
           <ComplianceSubNav active="aging" />
         </>

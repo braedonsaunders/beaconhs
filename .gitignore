@@ -50,6 +50,8 @@ docs/migration/*.json
 # Local storage
 .r2-local/
 uploads/
+.local/
+private/
 
 # Misc
 .cache/

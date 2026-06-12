@@ -14,6 +14,7 @@ import { ActivityFeed } from '@/components/activity-feed'
 import { DetailPageLayout } from '@/components/page-layout'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { GenericSendEmailDialog } from '@/components/send-email-dialog'
+import { PersonSelectField } from '@/components/person-select-field'
 import { sendWorkOrderEmail } from './_send-email'
 
 export const dynamic = 'force-dynamic'
@@ -241,15 +242,26 @@ export default async function WorkOrderDetailPage({
     if (!row) return null
     const [assignees, reporters] = await Promise.all([
       tx
-        .select({ id: tenantUsers.id, displayName: tenantUsers.displayName, userName: user.name })
+        .select({
+          id: tenantUsers.id,
+          displayName: tenantUsers.displayName,
+          userName: user.name,
+          email: user.email,
+        })
         .from(tenantUsers)
         .leftJoin(user, eq(user.id, tenantUsers.userId))
         .where(eq(tenantUsers.status, 'active'))
         .orderBy(asc(tenantUsers.displayName))
         .limit(500),
       tx
-        .select({ id: people.id, firstName: people.firstName, lastName: people.lastName })
+        .select({
+          id: people.id,
+          firstName: people.firstName,
+          lastName: people.lastName,
+          employeeNo: people.employeeNo,
+        })
         .from(people)
+        .where(eq(people.status, 'active'))
         .orderBy(asc(people.lastName), asc(people.firstName))
         .limit(500),
     ])
@@ -393,27 +405,33 @@ export default async function WorkOrderDetailPage({
                     </Select>
                   </Field>
                   <Field label="Assign to">
-                    <Select
+                    <PersonSelectField
                       name="assignedToTenantUserId"
                       defaultValue={wo.assignedToTenantUserId ?? ''}
-                    >
-                      <option value="">— Unassigned —</option>
-                      {assignees.map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {a.userName ?? a.displayName ?? a.id.slice(0, 6)}
-                        </option>
-                      ))}
-                    </Select>
+                      options={assignees.map((a) => ({
+                        value: a.id,
+                        label: a.userName ?? a.displayName ?? a.id.slice(0, 6),
+                        hint: a.email ?? undefined,
+                      }))}
+                      placeholder="Select an assignee..."
+                      searchPlaceholder="Search people..."
+                      sheetTitle="Assign to"
+                      emptyLabel="Unassigned"
+                    />
                   </Field>
                   <Field label="Reported by" className="sm:col-span-2">
-                    <Select name="reportedByPersonId" defaultValue={wo.reportedByPersonId ?? ''}>
-                      <option value="">— Not specified —</option>
-                      {reporters.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.lastName}, {p.firstName}
-                        </option>
-                      ))}
-                    </Select>
+                    <PersonSelectField
+                      name="reportedByPersonId"
+                      defaultValue={wo.reportedByPersonId ?? ''}
+                      options={reporters.map((p) => ({
+                        value: p.id,
+                        label: `${p.lastName}, ${p.firstName}`,
+                        hint: p.employeeNo ?? undefined,
+                      }))}
+                      placeholder="Select a person…"
+                      clearable
+                      emptyLabel="— Not specified —"
+                    />
                   </Field>
                 </div>
                 <div className="flex justify-end">
@@ -494,7 +512,7 @@ export default async function WorkOrderDetailPage({
       <GenericSendEmailDialog
         open={pickString(sp.send) === '1'}
         title="Send work order"
-        description="Sends a recap of this work order to the tenant admin distribution list (and the assignee, if blank). Add explicit recipients below to override."
+        description="Sends a recap of this work order to the tenant admin distribution list and the assignee. Add explicit recipients below to override."
         reference={wo.reference}
         defaultSubjectPrefix="Update"
         sendAction={async (fd) => {

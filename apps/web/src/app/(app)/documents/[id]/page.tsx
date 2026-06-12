@@ -455,8 +455,8 @@ export default async function DocumentDetailPage({
                     {versions.length === 0 ? (
                       <EmptyState
                         icon={<FileText size={24} />}
-                        title="No versions yet"
-                        description="Add a draft version below — once it's filled out, publish the document."
+                        title="No versions"
+                        description="Add a draft version below, then publish the document."
                       />
                     ) : (
                       <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
@@ -548,7 +548,7 @@ export default async function DocumentDetailPage({
 
                     {acks.length === 0 ? (
                       <p className="text-sm text-slate-500 dark:text-slate-400">
-                        No-one has acknowledged this yet.
+                        No acknowledgments recorded.
                       </p>
                     ) : (
                       <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">

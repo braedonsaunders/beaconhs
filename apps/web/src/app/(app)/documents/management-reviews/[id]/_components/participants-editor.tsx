@@ -2,9 +2,9 @@
 
 import { Plus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
-import { Badge, Button, Label, Select } from '@beaconhs/ui'
+import { Badge, Button, Label, SearchSelect } from '@beaconhs/ui'
 
-type Member = { id: string; label: string }
+type Member = { id: string; label: string; hint?: string }
 
 export function ParticipantsEditor({
   members,
@@ -32,16 +32,16 @@ export function ParticipantsEditor({
       <Label>Participants</Label>
       <div className="flex items-end gap-2">
         <div className="flex-1">
-          <Select value={pending} onChange={(e) => setPending(e.target.value)}>
-            <option value="">— pick a participant —</option>
-            {members
+          <SearchSelect
+            value={pending}
+            onChange={setPending}
+            options={members
               .filter((m) => !value.includes(m.id))
-              .map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.label}
-                </option>
-              ))}
-          </Select>
+              .map((m) => ({ value: m.id, label: m.label, hint: m.hint }))}
+            placeholder="Add a participant..."
+            searchPlaceholder="Search people..."
+            sheetTitle="Add a participant"
+          />
         </div>
         <Button type="button" variant="outline" onClick={add}>
           <Plus size={14} /> Add

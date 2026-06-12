@@ -10,6 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from '@beaconhs/ui'
+import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { ListPageLayout } from '@/components/page-layout'
 import { obligationRollup, kindLabel } from './_hub'
@@ -21,6 +22,8 @@ export const dynamic = 'force-dynamic'
 
 export default async function ComplianceOverviewPage() {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'compliance.read')
+  const canAssign = can(ctx, 'compliance.assign')
   const rollup = await obligationRollup(ctx)
 
   const totalSubjects = rollup.reduce((s, r) => s + r.total, 0)
@@ -34,11 +37,13 @@ export default async function ComplianceOverviewPage() {
         <>
           <PageHeader
             title="Compliance"
-            description="The unified home for every compliance obligation — across inspections, documents, training, apps, journals, certifications, equipment, PPE and job-title sign-offs."
+            description="Every compliance obligation — inspections, documents, training, apps, journals, certifications, equipment, PPE, and job-title sign-offs — in one place."
             actions={
-              <Link href="/compliance/obligations/new">
-                <Button>New obligation</Button>
-              </Link>
+              canAssign ? (
+                <Link href="/compliance/obligations/new">
+                  <Button>New obligation</Button>
+                </Link>
+              ) : undefined
             }
           />
           <ComplianceSubNav active="overview" />
@@ -59,11 +64,16 @@ export default async function ComplianceOverviewPage() {
 
         {rollup.length === 0 ? (
           <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 p-8 text-center text-sm text-slate-500">
-            No obligations yet.{' '}
-            <Link href="/compliance/obligations/new" className="text-teal-700 hover:underline">
-              Create your first one
-            </Link>
-            .
+            No obligations.
+            {canAssign ? (
+              <>
+                {' '}
+                <Link href="/compliance/obligations/new" className="text-teal-700 hover:underline">
+                  Create one
+                </Link>
+                .
+              </>
+            ) : null}
           </div>
         ) : (
           <Table>

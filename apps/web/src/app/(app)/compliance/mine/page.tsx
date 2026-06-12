@@ -50,7 +50,7 @@ export default async function MyCompliancePage() {
         <>
           <PageHeader
             title="My compliance"
-            description="Everything you owe — obligations assigned to you, plus your due and expiring items."
+            description="Obligations assigned to you, plus due and expiring items."
           />
           <ComplianceSubNav active="mine" />
         </>
@@ -59,11 +59,11 @@ export default async function MyCompliancePage() {
       <div className="space-y-6">
         {!person ? (
           <div className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-700">
-            Your login isn&apos;t linked to a person record, so there&apos;s nothing to show here.
+            Your account is not linked to a person record, so there is nothing to show.
           </div>
         ) : rows.length === 0 && signals.length === 0 ? (
           <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 p-8 text-center text-sm text-slate-500">
-            You&apos;re all caught up — nothing assigned, due, or expiring for you.
+            Nothing assigned, due, or expiring.
           </div>
         ) : (
           <>

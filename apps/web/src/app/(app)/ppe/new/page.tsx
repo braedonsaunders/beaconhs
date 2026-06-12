@@ -66,8 +66,8 @@ export default async function NewPpePage() {
         />
         {types.length === 0 ? (
           <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-            No PPE types defined yet. Add one in <strong>Admin → Tenant settings</strong> (or
-            directly insert via seed) before creating items.
+            No PPE types defined. Add one in <strong>Admin → Tenant settings</strong> before
+            creating items.
           </div>
         ) : null}
         <form

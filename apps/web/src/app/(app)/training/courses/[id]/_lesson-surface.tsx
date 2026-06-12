@@ -640,7 +640,7 @@ export function LessonSurface({
                 </>
               ) : (
                 <div className="grid aspect-[16/9] place-items-center rounded-lg border-2 border-dashed border-slate-300 bg-white text-sm text-slate-400">
-                  Add your first slide from the ribbon.
+                  Add a slide from the ribbon.
                 </div>
               )}
             </div>
@@ -1022,7 +1022,7 @@ function ImageDrop({
       type="button"
       onClick={() => inputRef.current?.click()}
       className="group relative block h-full w-full"
-      title="Click to set image"
+      title="Set image"
     >
       {url ? (
         // eslint-disable-next-line @next/next/no-img-element
@@ -1033,7 +1033,7 @@ function ImageDrop({
         />
       ) : (
         <span className="grid h-full w-full place-items-center bg-slate-200 text-xs text-slate-500">
-          {busy ? <Loader2 size={16} className="animate-spin" /> : 'Click to add an image'}
+          {busy ? <Loader2 size={16} className="animate-spin" /> : 'Add an image'}
         </span>
       )}
       <span className="absolute inset-0 hidden place-items-center bg-black/40 text-xs font-medium text-white group-hover:grid">

@@ -8,7 +8,7 @@ import { reportDefinitions, reportSchedules } from '@beaconhs/db/schema'
 import { enqueueReportRun } from '@beaconhs/jobs'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
-import { computeNextRunAt } from '@/lib/report-cadence'
+import { computeNextRunAt } from '@beaconhs/reports'
 
 /**
  * Run-once: build (or reuse) a hidden, single-recipient schedule pointed at

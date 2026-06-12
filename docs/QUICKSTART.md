@@ -1,22 +1,37 @@
 # Quick start
 
+## One-click launchers
+
+From the repo root:
+
+- macOS: double-click `scripts/launchers/dev.command`
+- Windows: double-click `scripts/launchers/dev.bat`
+- Linux: run `scripts/launchers/install-linux-desktop.sh`, then launch
+  **BeaconHS Dev** from your application menu
+
+The launchers install dependencies when needed, start Docker services, run
+`pnpm dev`, and clean up launcher-started processes on exit. They default to
+`BEACONHS_DB_MODE=auto`: existing `.env` files with a remote `DATABASE_URL` keep
+using the remote PG cluster, while fresh local clones use Docker Postgres.
+
+## Manual local setup
+
 ```bash
 # 1. Prereqs
-nvm use 20            # Node 20 LTS (see .nvmrc)
+nvm use              # Node 22+ (see .nvmrc)
 corepack enable       # pnpm via corepack
 
 # 2. Install dependencies
 pnpm install
 
-# 3. Bring up local infra
-docker compose up -d  # postgres:5432, redis:6379, minio:9000/9001, mailpit:8025
-
-# 4. Configure env
+# 3. Configure env
 cp .env.example .env
-# (the defaults work against the docker-compose services above)
+# (the local defaults work against the docker-compose services below)
+
+# 4. Bring up local infra
+docker compose --profile local-db up -d  # postgres:5433, redis:6380, minio:9000/9001, mailpit:8025
 
 # 5. Set up the database
-pnpm db:generate      # generate SQL from Drizzle schema
 pnpm db:migrate       # apply migrations + install RLS policies
 pnpm db:seed          # creates a super-admin + a 'demo' tenant with built-in roles
 
@@ -31,8 +46,18 @@ Then open:
 - MinIO console: <http://localhost:9001> (login `beaconhs` / `beaconhs-dev-secret`)
 
 > Postgres is on **5433** and Redis on **6380** so they don't collide with
-> other local instances. `.env.example` already uses those ports. If you start
-> the web app outside `pnpm dev`, symlink the env: `ln -sfn ../../.env apps/web/.env.local`.
+> common local services. `.env.example` already uses those ports. Maintainers
+> with an existing `.env` that points at an external Postgres cluster can run
+> `docker compose up -d` without the `local-db` profile and keep using that
+> database.
+
+Maintainers using the shared dev PG cluster should keep their real `.env`
+`DATABASE_URL` pointed at that cluster and start only the supporting services:
+
+```bash
+docker compose up -d
+pnpm dev
+```
 
 ## Default super-admin
 
@@ -50,7 +75,7 @@ tab on the login form — the link will arrive in Mailpit at
 | Better-Auth (email/password + magic link)                    | ✅                              |
 | Tenant context + permission catalogue + built-in roles       | ✅                              |
 | Forms core (schema, validators, scoring, formula evaluator)  | ✅                              |
-| Auto-PDF renderer via Puppeteer                              | ✅ (call-site stub)             |
+| Auto-PDF renderer via Puppeteer                              | ✅                              |
 | BullMQ queues (emails, pdfs, notifications, scheduled ticks) | ✅                              |
 | Worker process with handlers                                 | ✅                              |
 | Plugin SDK + manifest shape                                  | ✅                              |
@@ -61,6 +86,6 @@ tab on the login form — the link will arrive in Mailpit at
 | Dashboard widget builder                                     | 🟡 default tiles only — Phase 4 |
 | Report builder                                               | 🟡 — Phase 4                    |
 | First-party plugins (NetSuite, adminapp2-sync)               | 🟡 — Phase 5                    |
-| Migration ETL from beaconhs SQL Server                       | 🟡 — Phase 5                    |
+| External migration adapters                                  | 🟡 project-specific             |
 
 See [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) for the full phased plan.

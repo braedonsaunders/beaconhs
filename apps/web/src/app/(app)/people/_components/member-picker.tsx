@@ -25,7 +25,7 @@ export function MemberPicker({
   candidates,
   initialMemberIds,
   action,
-  emptyMembersLabel = 'No members yet',
+  emptyMembersLabel = 'No members',
 }: {
   entityId: string
   entityIdField: 'groupId' | 'divisionId' | 'titleId'
@@ -301,7 +301,7 @@ function toggleHighlight(
 
 function formatRelative(ts: number): string {
   const diff = Date.now() - ts
-  if (diff < 5000) return 'just now'
+  if (diff < 5000) return 'now'
   if (diff < 60_000) return `${Math.floor(diff / 1000)}s ago`
   return `${Math.floor(diff / 60_000)}m ago`
 }

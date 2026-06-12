@@ -50,6 +50,6 @@ jobs:
       - run: pnpm format:check
       - run: pnpm typecheck
       - run: pnpm lint
-      - run: pnpm db:push
+      - run: pnpm db:push:ci
       - run: pnpm test
       - run: pnpm build

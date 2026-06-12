@@ -92,7 +92,7 @@ function RecordReviewDrawer({
       open={open}
       closeHref={closeHref}
       title="Record review"
-      description="Log a periodic review. The document's next-review date will roll forward based on the cadence or your override below."
+      description="Log a periodic review. The next-review date rolls forward based on the cadence or the override below."
       size="md"
       footer={
         <div className="flex justify-end gap-2">

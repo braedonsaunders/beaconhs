@@ -194,13 +194,16 @@ export default async function MyAcknowledgmentsPage({
     return (
       <ListPageLayout
         header={
-          <PageHeader title="My acknowledgments" description="Documents you've read & signed." />
+          <PageHeader
+            title="My acknowledgments"
+            description="Documents you have read and signed."
+          />
         }
       >
         <EmptyState
           icon={<BookOpen size={32} />}
-          title="No person record linked to your account"
-          description="Ask an administrator to link your user account to a person record so we can track your document acknowledgments."
+          title="No person record linked"
+          description="Ask an administrator to link your account to a person record. Acknowledgments appear once linked."
         />
       </ListPageLayout>
     )
@@ -243,15 +246,11 @@ export default async function MyAcknowledgmentsPage({
       {active.length === 0 ? (
         <EmptyState
           icon={tab === 'outstanding' ? <CheckCircle2 size={32} /> : <BookCheck size={32} />}
-          title={
-            tab === 'outstanding'
-              ? 'You are caught up. No outstanding documents.'
-              : 'No acknowledgments captured yet'
-          }
+          title={tab === 'outstanding' ? 'No outstanding documents' : 'No acknowledgments'}
           description={
             tab === 'outstanding'
-              ? 'Documents will appear here whenever a new policy or procedure is published.'
-              : 'When you sign off on a document, it shows up here as proof of acknowledgment.'
+              ? 'Documents appear here when a new policy or procedure is published.'
+              : 'Signed documents appear here as proof of acknowledgment.'
           }
         />
       ) : (

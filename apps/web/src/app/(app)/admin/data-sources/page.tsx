@@ -187,8 +187,8 @@ export default async function DataSourcesPage() {
             {sources.length === 0 ? (
               <EmptyState
                 icon={<Database size={32} />}
-                title="No data sources yet"
-                description="Create your first reference list (e.g. Sites → Areas) or surface an app's responses as live data."
+                title="No data sources"
+                description="Create a reference list (e.g. Sites → Areas) or surface an app's responses as live data."
               />
             ) : (
               <ul className="space-y-3">

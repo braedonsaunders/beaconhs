@@ -14,7 +14,6 @@ import {
   EmptyState,
   Input,
   Label,
-  Select,
 } from '@beaconhs/ui'
 import {
   orgUnits,
@@ -29,6 +28,7 @@ import {
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { DetailGrid } from '@/components/detail-grid'
+import { PersonSelectField } from '@/components/person-select-field'
 import { Section } from '@/components/section'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { DetailPageLayout } from '@/components/page-layout'
@@ -245,6 +245,7 @@ export default async function TrainingClassPage({
               firstName: people.firstName,
               lastName: people.lastName,
               jobTitle: people.jobTitle,
+              employeeNo: people.employeeNo,
             })
             .from(people)
             .where(and(eq(people.status, 'active'), notInArray(people.id, memberIds)))
@@ -256,6 +257,7 @@ export default async function TrainingClassPage({
               firstName: people.firstName,
               lastName: people.lastName,
               jobTitle: people.jobTitle,
+              employeeNo: people.employeeNo,
             })
             .from(people)
             .where(eq(people.status, 'active'))
@@ -397,16 +399,17 @@ export default async function TrainingClassPage({
                     <input type="hidden" name="classId" value={id} />
                     <div className="min-w-0 flex-1 space-y-1.5">
                       <Label htmlFor="personId">Person</Label>
-                      <Select id="personId" name="personId" defaultValue="" required>
-                        <option value="" disabled>
-                          Pick a person…
-                        </option>
-                        {availablePeople.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.lastName}, {p.firstName} {p.jobTitle ? `· ${p.jobTitle}` : ''}
-                          </option>
-                        ))}
-                      </Select>
+                      <PersonSelectField
+                        name="personId"
+                        defaultValue=""
+                        clearable={false}
+                        placeholder="Pick a person…"
+                        options={availablePeople.map((p) => ({
+                          value: p.id,
+                          label: `${p.lastName}, ${p.firstName}`,
+                          hint: p.employeeNo ?? undefined,
+                        }))}
+                      />
                     </div>
                     <Button type="submit">
                       <Plus size={14} /> Add
@@ -432,7 +435,7 @@ export default async function TrainingClassPage({
               ) : attendees.length === 0 ? (
                 <EmptyState
                   icon={<GraduationCap size={24} />}
-                  title="No attendees yet"
+                  title="No attendees"
                   description="Add attendees on the Roster tab before marking completion."
                 />
               ) : (

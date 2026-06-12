@@ -295,7 +295,7 @@ export default function NewTemplatePage() {
       <div className="mx-auto max-w-4xl space-y-8">
         <PageHeader
           title="New app"
-          description="Pick an app type to start — each opens the designer already shaped for that type. Or clone a canonical template / build from scratch below."
+          description="Select an app type to open the designer pre-configured for it, clone a canonical template, or build from scratch."
           back={{ href: '/forms', label: 'Back to Builder' }}
         />
 
@@ -409,7 +409,7 @@ export default function NewTemplatePage() {
                     id="description"
                     name="description"
                     rows={3}
-                    placeholder="What's this template for? Who fills it out?"
+                    placeholder="Purpose and audience"
                   />
                 </div>
 

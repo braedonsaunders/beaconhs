@@ -8,8 +8,7 @@ import { can } from '@beaconhs/tenant'
 import { PageHeader } from '@beaconhs/ui'
 import { requireRequestContext } from '@/lib/auth'
 import { ListPageLayout } from '@/components/page-layout'
-import { ModuleSubNav } from '@/components/module-admin/module-sub-nav'
-import { moduleManageTabs } from '@/lib/module-admin/registry'
+import { ModuleNav } from '@/components/module-admin/module-nav'
 import { listManagedTags } from './_data'
 import { TagsAdmin } from './_tags-admin'
 
@@ -30,7 +29,7 @@ export default async function JournalTagsPage() {
             title="Journal tags"
             description="Govern the tag vocabulary for daily journals — set colours, rename, merge duplicates, and prune unused tags. Changes apply across every entry."
           />
-          <ModuleSubNav tabs={moduleManageTabs('journals')} active="tags" />
+          <ModuleNav moduleKey="journals" active="tags" />
         </>
       }
     >

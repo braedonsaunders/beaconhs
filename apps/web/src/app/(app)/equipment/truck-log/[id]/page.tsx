@@ -20,6 +20,7 @@ import { Section } from '@/components/section'
 import { ActivityFeed } from '@/components/activity-feed'
 import { DetailPageLayout } from '@/components/page-layout'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
+import { PersonSelectField } from '@/components/person-select-field'
 
 export const dynamic = 'force-dynamic'
 
@@ -170,8 +171,14 @@ export default async function TruckLogDetailPage({
         .orderBy(asc(orgUnits.name))
         .limit(500),
       tx
-        .select({ id: people.id, firstName: people.firstName, lastName: people.lastName })
+        .select({
+          id: people.id,
+          firstName: people.firstName,
+          lastName: people.lastName,
+          employeeNo: people.employeeNo,
+        })
         .from(people)
+        .where(eq(people.status, 'active'))
         .orderBy(asc(people.lastName), asc(people.firstName))
         .limit(500),
     ])
@@ -280,14 +287,18 @@ export default async function TruckLogDetailPage({
                       <Input name="entryDate" type="date" required defaultValue={entry.entryDate} />
                     </Field>
                     <Field label="Driver">
-                      <Select name="driverPersonId" defaultValue={entry.driverPersonId ?? ''}>
-                        <option value="">— Not specified —</option>
-                        {drivers.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.lastName}, {p.firstName}
-                          </option>
-                        ))}
-                      </Select>
+                      <PersonSelectField
+                        name="driverPersonId"
+                        defaultValue={entry.driverPersonId ?? ''}
+                        options={drivers.map((p) => ({
+                          value: p.id,
+                          label: `${p.lastName}, ${p.firstName}`,
+                          hint: p.employeeNo ?? undefined,
+                        }))}
+                        placeholder="Select a driver…"
+                        clearable
+                        emptyLabel="— Not specified —"
+                      />
                     </Field>
                     <Field label="Site">
                       <Select name="siteOrgUnitId" defaultValue={entry.siteOrgUnitId ?? ''}>

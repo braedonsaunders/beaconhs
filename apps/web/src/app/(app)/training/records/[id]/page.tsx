@@ -333,7 +333,7 @@ export default async function TrainingRecordPage({
 
             <Section title="Renew this training">
               <p className="mb-3 text-sm text-slate-600">
-                Creates a new training record for the same person + course with a fresh expiry.
+                Creates a new training record for the same person and course with a fresh expiry.
                 Useful for refresher courses or external recertification.
               </p>
               <form action={renewRecord} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -350,17 +350,19 @@ export default async function TrainingRecordPage({
                   <Input
                     name="expiresOn"
                     type="date"
-                    placeholder={course.validForMonths ? `auto: +${course.validForMonths}mo` : ''}
+                    placeholder={
+                      course.validForMonths ? `Defaults to +${course.validForMonths} months` : ''
+                    }
                   />
                 </Field>
                 <Field label="Instructor">
                   <Input name="instructor" defaultValue={record.instructor ?? ''} />
                 </Field>
                 <Field label="Grade %">
-                  <Input name="grade" type="number" min="0" max="100" placeholder="optional" />
+                  <Input name="grade" type="number" min="0" max="100" placeholder="Optional" />
                 </Field>
                 <Field label="Notes" className="sm:col-span-2">
-                  <Textarea name="notes" rows={2} placeholder="What was renewed?" />
+                  <Textarea name="notes" rows={2} placeholder="Notes about this renewal" />
                 </Field>
                 <div className="flex justify-end sm:col-span-2">
                   <Button type="submit">
@@ -379,7 +381,7 @@ export default async function TrainingRecordPage({
                 <form action={revokeRecord} className="space-y-3 text-sm">
                   <input type="hidden" name="id" value={id} />
                   <Field label="Reason">
-                    <Input name="reason" placeholder="Why is this being revoked?" />
+                    <Input name="reason" placeholder="Reason for revocation" />
                   </Field>
                   <div className="flex justify-end">
                     <Button type="submit" variant="destructive">
@@ -401,8 +403,8 @@ export default async function TrainingRecordPage({
               {certs.length === 0 ? (
                 <EmptyState
                   icon={<Award size={24} />}
-                  title="No certificate generated yet"
-                  description="Click 'Certificate PDF' in the header to generate one — it will be rendered by the worker and stored against this record."
+                  title="No certificates"
+                  description="Select 'Certificate PDF' in the header to generate and store one for this record."
                 />
               ) : (
                 <Table>
@@ -484,7 +486,7 @@ export default async function TrainingRecordPage({
                 <EmptyState
                   icon={<Paperclip size={24} />}
                   title="No attachments uploaded"
-                  description="Scanned certificates, instructor notes, and other supporting documents appear here when uploaded under the training/records/{id}/ prefix."
+                  description="Scanned certificates, instructor notes, and other supporting documents appear here."
                 />
               ) : (
                 <Table>

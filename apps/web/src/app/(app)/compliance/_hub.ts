@@ -3,16 +3,19 @@
 // queries, one source of truth, kept fresh by the worker scan. Replaces the old
 // per-module legacy breakdowns entirely.
 
-import { and, desc, eq, inArray, isNull, ne, sql } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { complianceObligations, complianceStatus } from '@beaconhs/db/schema'
 import type { requireRequestContext } from '@/lib/auth'
 import { type ObligationKind, kindLabel } from './obligations/_meta'
 
 type Ctx = Awaited<ReturnType<typeof requireRequestContext>>
 
+// Scoreboard reads only count ACTIVE obligations — a paused (disabled)
+// obligation stops counting against people immediately (its compliance_status
+// rows also stop being refreshed by the scan, so they would go stale anyway).
 const liveFilter = () => [
   isNull(complianceObligations.deletedAt),
-  ne(complianceObligations.status, 'archived'),
+  eq(complianceObligations.status, 'active'),
 ]
 
 export type RollupRow = {

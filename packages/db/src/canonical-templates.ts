@@ -313,7 +313,7 @@ const wahRescueSchema: FormSchemaV1 = {
 }
 
 // Note: JSHA is NOT a canonical template — there's a real first-class
-// module at /hazid with multi-section sign-off, hazard library, atmospheric
+// module at /hazard-assessments with multi-section sign-off, hazard library, atmospheric
 // readings, etc. The form-template gallery would have been confusing
 // alongside the native module, so we skipped it. The `jshaSchema` constant
 // is kept above for reference; it isn't exported.

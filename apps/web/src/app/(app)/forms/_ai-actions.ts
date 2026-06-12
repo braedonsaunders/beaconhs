@@ -66,7 +66,11 @@ export async function runAppBuilderChat(args: {
 
   const gen = await generateAppEdit(aiConfig, prompt, args.currentSchema)
   if (!gen.ok) {
-    await appendMessage({ conversationId, role: 'assistant', content: `Sorry — ${gen.error}` })
+    await appendMessage({
+      conversationId,
+      role: 'assistant',
+      content: `Generation failed — ${gen.error}`,
+    })
     return { ok: false, error: gen.error, conversationId }
   }
 

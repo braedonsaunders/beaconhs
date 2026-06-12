@@ -864,8 +864,14 @@ export default async function IncidentDetailPage({
     active === 'investigation'
       ? await ctx.db((tx) =>
           tx
-            .select({ id: people.id, firstName: people.firstName, lastName: people.lastName })
+            .select({
+              id: people.id,
+              firstName: people.firstName,
+              lastName: people.lastName,
+              employeeNo: people.employeeNo,
+            })
             .from(people)
+            .where(eq(people.status, 'active'))
             .orderBy(asc(people.lastName), asc(people.firstName))
             .limit(200),
         )
@@ -1265,8 +1271,8 @@ export default async function IncidentDetailPage({
             >
               {lostTime.length === 0 ? (
                 <p className="text-sm text-slate-500">
-                  No lost-time tracking yet. Use the form below to record an off-work or
-                  restricted-duty window.
+                  No lost-time tracking. Use the form below to record an off-work or restricted-duty
+                  window.
                 </p>
               ) : (
                 <ul className="divide-y divide-slate-100 text-sm">
@@ -1335,8 +1341,8 @@ export default async function IncidentDetailPage({
             >
               {timelineEvents.length === 0 ? (
                 <EmptyState
-                  title="No events logged yet"
-                  description="Add a timeline entry to start reconstructing what happened."
+                  title="No events logged"
+                  description="Add a timeline entry to reconstruct the sequence of events."
                 />
               ) : (
                 <ol className="relative space-y-3 border-l border-slate-200 pl-5 text-sm">
@@ -1541,8 +1547,8 @@ export default async function IncidentDetailPage({
             >
               {prevSteps.length === 0 ? (
                 <EmptyState
-                  title="No preventative steps yet"
-                  description="Capture what your team will change to prevent a repeat. Promote any of these to a full CAPA later."
+                  title="No preventative steps"
+                  description="Record the changes that will prevent recurrence. Steps can be promoted to a full CAPA."
                 />
               ) : (
                 <ul className="divide-y divide-slate-100 text-sm">
@@ -1606,7 +1612,7 @@ export default async function IncidentDetailPage({
             <Section title={`Linked corrective actions (${linkedCAs.length})`} defaultOpen={false}>
               {linkedCAs.length === 0 ? (
                 <div className="flex items-center justify-between text-sm text-slate-500">
-                  <span>No corrective actions linked yet.</span>
+                  <span>No corrective actions linked.</span>
                   <Link
                     href={`/corrective-actions/new?sourceEntityType=incident&sourceEntityId=${id}`}
                     className="text-teal-700 hover:underline"

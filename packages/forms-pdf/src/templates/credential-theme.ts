@@ -21,6 +21,66 @@ export function safeColor(hex: string | null | undefined, fallback: string): str
   return fallback
 }
 
+export type CredentialDesignFormat = 'letter-landscape' | 'letter-portrait' | 'wallet'
+export type CredentialDesignTemplateId = 'sovereign-seal' | 'field-pass' | 'clean-authority'
+export type CredentialDesignTypeface = 'classic' | 'modern' | 'technical'
+
+export type CredentialDesignOptions = {
+  format?: CredentialDesignFormat
+  templateId?: CredentialDesignTemplateId
+  primary?: string
+  accent?: string
+  paper?: string
+  typeface?: CredentialDesignTypeface
+  patternStrength?: number
+  showPhoto?: boolean
+  showQr?: boolean
+  showSeal?: boolean
+}
+
+export type NormalizedCredentialDesignOptions = Required<CredentialDesignOptions>
+
+const designFormats: CredentialDesignFormat[] = ['letter-landscape', 'letter-portrait', 'wallet']
+const designTemplates: CredentialDesignTemplateId[] = [
+  'sovereign-seal',
+  'field-pass',
+  'clean-authority',
+]
+const designTypefaces: CredentialDesignTypeface[] = ['classic', 'modern', 'technical']
+
+export function normalizeCredentialDesignOptions(
+  input: CredentialDesignOptions | null | undefined,
+  primaryFallback = '#1f3a5f',
+): NormalizedCredentialDesignOptions {
+  const raw = input ?? {}
+  const primary = safeColor(raw.primary, safeColor(primaryFallback, '#1f3a5f'))
+  return {
+    format: designFormats.includes(raw.format as CredentialDesignFormat)
+      ? (raw.format as CredentialDesignFormat)
+      : 'letter-landscape',
+    templateId: designTemplates.includes(raw.templateId as CredentialDesignTemplateId)
+      ? (raw.templateId as CredentialDesignTemplateId)
+      : 'sovereign-seal',
+    primary,
+    accent: safeColor(raw.accent, '#c2a05c'),
+    paper: safeColor(raw.paper, '#fdfcf7'),
+    typeface: designTypefaces.includes(raw.typeface as CredentialDesignTypeface)
+      ? (raw.typeface as CredentialDesignTypeface)
+      : 'classic',
+    patternStrength:
+      typeof raw.patternStrength === 'number'
+        ? Math.max(0, Math.min(80, Math.round(raw.patternStrength)))
+        : 56,
+    showPhoto: typeof raw.showPhoto === 'boolean' ? raw.showPhoto : true,
+    showQr: typeof raw.showQr === 'boolean' ? raw.showQr : true,
+    showSeal: typeof raw.showSeal === 'boolean' ? raw.showSeal : true,
+  }
+}
+
+export function patternOpacity(strength: number, max = 0.08): number {
+  return Number(((Math.max(0, Math.min(80, strength)) / 80) * max).toFixed(3))
+}
+
 type Rgb = { r: number; g: number; b: number }
 
 function toRgb(hex: string): Rgb {

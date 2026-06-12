@@ -44,7 +44,11 @@ export function TabNav({
   return (
     <nav
       className={cn(
-        'flex flex-wrap items-center gap-1 border-b border-slate-200 dark:border-slate-800',
+        // Phones get a single scrollable row (tabs off-screen instead of a
+        // 4-row wall); from sm up the strip wraps like before.
+        'flex items-center gap-1 border-b border-slate-200 dark:border-slate-800',
+        '[scrollbar-width:none] flex-nowrap overflow-x-auto [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden',
+        'sm:flex-wrap sm:overflow-x-visible',
         className,
       )}
       role="tablist"
@@ -63,7 +67,7 @@ export function TabNav({
               title={iconOnly && t.icon ? t.label : undefined}
               aria-label={iconOnly && t.icon ? t.label : undefined}
               className={cn(
-                '-mb-px inline-flex items-center gap-1.5 border-b-2 py-2 text-sm',
+                '-mb-px inline-flex shrink-0 items-center gap-1.5 border-b-2 py-2 text-sm whitespace-nowrap',
                 iconOnly && t.icon ? 'px-2.5' : 'px-3',
                 'transition-[color,border-color,background-color] duration-150 ease-out',
                 'focus-visible:rounded-t-md focus-visible:ring-2 focus-visible:ring-teal-500/40 focus-visible:outline-none',

@@ -30,6 +30,10 @@ export default async function FillTemplatePage({
   const { id } = await params
   const sp = await searchParams
   const responseIdParam = typeof sp.responseId === 'string' ? sp.responseId : null
+  const returnTo =
+    typeof sp.returnTo === 'string' && sp.returnTo.startsWith('/') && !sp.returnTo.startsWith('//')
+      ? sp.returnTo
+      : null
 
   const ctx = await requireRequestContext()
   const data = await ctx.db(async (tx) => {
@@ -82,8 +86,14 @@ export default async function FillTemplatePage({
         .where(eq(orgUnits.level, 'site'))
         .orderBy(asc(orgUnits.name)),
       tx
-        .select({ id: people.id, firstName: people.firstName, lastName: people.lastName })
+        .select({
+          id: people.id,
+          firstName: people.firstName,
+          lastName: people.lastName,
+          employeeNo: people.employeeNo,
+        })
         .from(people)
+        .where(eq(people.status, 'active'))
         .orderBy(asc(people.lastName), asc(people.firstName)),
       // Look up the active user's person record (if any) — used for the
       // `current_user_person_id` / `current_user_name` default-value resolvers.
@@ -152,6 +162,7 @@ export default async function FillTemplatePage({
       initialRows={initialRows}
       initialStepIndex={initialStepIndex}
       isResumed={resumeOk}
+      returnTo={returnTo}
     />
   )
 }

@@ -62,11 +62,11 @@ export default async function TitlesPage() {
       {rows.length === 0 ? (
         <EmptyState
           icon={<IdCard size={32} />}
-          title="No titles yet"
-          description="Define the formal job titles used in your Job Description PDFs."
+          title="No titles"
+          description="Define the formal job titles used in Job Description PDFs."
           action={
             <Link href="/people/titles/new">
-              <Button>Add your first title</Button>
+              <Button>New title</Button>
             </Link>
           }
         />

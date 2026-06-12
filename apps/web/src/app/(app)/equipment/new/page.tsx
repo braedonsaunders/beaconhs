@@ -76,7 +76,7 @@ export default async function NewEquipmentPage() {
       <div className="mx-auto max-w-2xl">
         <PageHeader
           title="New equipment"
-          description="Register a new piece of equipment. You'll be able to attach inspection schedules, transfer to a site, and assign a holder from the detail page."
+          description="Register a new piece of equipment. Inspection schedules, site transfers, and holder assignment are managed from the detail page."
           back={{ href: '/equipment', label: 'Back to equipment' }}
         />
         <form

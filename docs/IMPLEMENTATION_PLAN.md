@@ -81,7 +81,7 @@ Every list has search + sort + pagination + filter chips. Every row clicks throu
 
 ### Phase 5 — Migration + cutover
 
-- ⬜ ETL from beaconhs SQL Server
+- ⬜ Project-specific ETL adapters
 - ⬜ Validation harness
 - ⬜ Dry runs + cutover
 
@@ -166,7 +166,7 @@ App-shell nav: Frontline now includes JSHA/HazID / Toolbox talks / Lift plans; I
 
 **What we're building:** A from-scratch, multi-tenant H&S SaaS platform that replicates the existing BeaconHS feature surface (Incidents, HazID/JSHA, Inspections, Training, Equipment, PPE, Documentation, Corrective Actions) and adds a powerful freeform form builder, configurable risk matrices, a tenant-aware plugin/integration framework, an in-app dashboard widget builder, and a public REST API.
 
-**Strategy:** Hard cutover. 100% historical data migration. Rassaun Services Inc and Rassaun External Training become the first two tenants. The new platform is self-hosted (Docker Swarm continuity), Canada-only, sized for <50 tenants / <5k users / <1M records in year one with headroom to grow.
+**Strategy:** Hard cutover for private adopters that need historical migration. The public platform ships with generic ETL scaffolding; tenant-specific source mappings and cutover notes stay outside the repository. The deployment shape is self-host friendly and sized for small-to-midmarket HSE programs with room to grow.
 
 **Stack:** TypeScript / Node.js / Next.js (App Router) full-stack + React + PostgreSQL + BullMQ on Redis + Cloudflare R2 + Postgres full-text search.
 
@@ -185,8 +185,8 @@ App-shell nav: Frontline now includes JSHA/HazID / Toolbox talks / Lift plans; I
 | **DB**                    | PostgreSQL with row-level security for tenant isolation                                 |
 | **Auth**                  | Email + password and magic-link; no MFA in v1 (architect for it)                        |
 | **Worker login**          | Email/magic link — every worker has email, no SMS/PIN flow                              |
-| **Hosting**               | Self-host on own infra (Docker Swarm continuity)                                        |
-| **Residency**             | Canada-only                                                                             |
+| **Hosting**               | Self-host friendly container deployment                                                 |
+| **Residency**             | Deployment-controlled                                                                   |
 | **Scale target**          | < 50 tenants / < 5k users / < 1M records (year 1–2)                                     |
 | **File storage**          | Cloudflare R2 (S3-compatible, no egress)                                                |
 | **Search**                | Postgres full-text + trigram                                                            |
@@ -679,7 +679,7 @@ export default definePlugin({
 - `beaconhs` SQL Server (primary)
 - `peopleapp` SQL Server (HR — replaced by adminapp2 sync + initial seed)
 - `toolcrib` SQL Server (folded into Equipment)
-- `externaltraining` SQL Server (folded into Training; becomes its own tenant)
+- External training sources can be folded into Training or split into a dedicated tenant.
 - `adminapp2` (kept; new app reads from it ongoing)
 
 ### 11.2 ETL architecture
@@ -693,9 +693,9 @@ export default definePlugin({
 
 ### 11.3 Tenant split at migration time
 
-- `Rassaun Services Inc` tenant gets all internal beaconhs records.
-- `Rassaun External Training` tenant gets the externaltraining records.
-- Personnel split by source database with optional manual reconciliation for shared individuals (their answer was "isolated tenants, no sharing" — confirm at migration time).
+- Internal operational records usually land in the primary tenant.
+- External training records can land in a separate tenant when isolation is required.
+- Personnel split by source database with optional manual reconciliation for shared individuals.
 
 ### 11.4 Migration order (each must succeed before the next runs)
 
@@ -792,7 +792,7 @@ A realistic phasing assuming a small focused team (1–3 engineers). Each phase 
 
 - ETL build + dry runs.
 - Validation harness.
-- Beta with internal Rassaun tenant on staging.
+- Beta with an internal tenant on staging.
 - Cutover weekend.
 
 **Total: ~30–40 weeks (7–10 months) end-to-end for a small team.** Compresses with more engineers but the form builder + module work is hard to parallelize cleanly.
@@ -812,9 +812,9 @@ A realistic phasing assuming a small focused team (1–3 engineers). Each phase 
 
 ### Open questions to resolve before/during build
 
-1. **Should the externaltraining tenant and Rassaun internal tenant be able to share a course catalogue?** You answered "fully isolated"; revisit if it bites at launch.
+1. **Should separately migrated tenants be able to share a course catalogue?** Default to full isolation; revisit only if a deployment needs shared catalogue governance.
 2. **What exactly lives in adminapp2 today vs what the new app should own?** Need a working session with whoever owns adminapp2 to draw the line. Particularly: customers, projects, employees — which is canonical where?
-3. **How is the existing externaltraining codebase implemented?** I couldn't see it in this worktree. Need to scan it before finalizing the Training module's feature set. Likely surfaces some training workflow we'd miss otherwise.
+3. **How are external training systems implemented for each adopter?** Scan those systems before finalizing a private migration adapter.
 4. **How do you want to handle the existing field-worker user base re: passwords on cutover day?** Magic-link first-login is the friendliest path; let me know if you want a different choice.
 5. **Lone Worker — is SMS escalation built day-one or later?** SMS is the only critical-channel use case for v1; either way you need a Twilio account if you want it.
 6. **Risk matrix configuration UX.** The "configurable per tenant — none / 3×3 / 5×5 / custom" requirement is broad. Recommend shipping with three built-in presets and a custom editor in v1.1.
@@ -838,7 +838,7 @@ A realistic phasing assuming a small focused team (1–3 engineers). Each phase 
 ## 15. Immediate Next Steps
 
 1. Validate this plan with key stakeholders (you + anyone else who'll use the system).
-2. Inspect the `externaltraining` codebase to confirm Training module scope.
+2. Inspect private external training systems to confirm Training module scope.
 3. Sit down with whoever owns `adminapp2` to draw the master-data boundary.
 4. Decide team size + start date — that determines whether the timeline is 7 or 10 months.
 5. Set up the monorepo scaffold + tenant primitives + auth (Phase 0, weeks 1–4) as the proving ground for the rest.

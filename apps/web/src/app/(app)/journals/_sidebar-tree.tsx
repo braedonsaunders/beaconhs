@@ -209,8 +209,8 @@ export function SidebarTree({
           </div>
         ) : data.tree.length === 0 ? (
           <div className="px-3 py-10 text-center text-xs text-slate-400">
-            No entries yet. Hit <span className="font-medium text-slate-600">New entry</span> to
-            start today’s journal.
+            No entries. Use <span className="font-medium text-slate-600">New entry</span> to start
+            today’s journal.
           </div>
         ) : (
           <div className="space-y-px">

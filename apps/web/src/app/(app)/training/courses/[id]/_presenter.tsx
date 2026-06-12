@@ -128,7 +128,7 @@ export function CoursePresenter({
   if (!step) {
     return (
       <Overlay onClose={onClose}>
-        <p className="text-sm text-white/70">This course has no content yet.</p>
+        <p className="text-sm text-white/70">This course has no content.</p>
       </Overlay>
     )
   }
@@ -255,7 +255,7 @@ function Stage({
   // Slides — one slide per step, PowerPoint-style.
   if (eff.kind === 'slides') {
     const slide = slideIndex != null ? eff.slides[slideIndex] : null
-    if (!slide) return <EmptyCard label="No slides in this slideshow yet." />
+    if (!slide) return <EmptyCard label="No slides in this slideshow." />
     return (
       <div className="max-h-full w-full max-w-[160vh]">
         <SlideView
@@ -282,7 +282,7 @@ function Stage({
         ) : eff.blocks.length > 0 ? (
           <LessonBlocksView blocks={eff.blocks} attachmentUrls={attachmentUrls} />
         ) : (
-          <p className="text-sm text-slate-400">No content yet.</p>
+          <p className="text-sm text-slate-400">No content.</p>
         )}
         {eff.kind === 'practical' && eff.lesson.practicalCriteria.length > 0 ? (
           <div className="mt-6 border-t border-slate-200 pt-4">
@@ -386,7 +386,7 @@ function Stage({
           </span>
         </div>
         {qs.length === 0 ? (
-          <p className="text-sm text-slate-400">No assessment configured for this quiz yet.</p>
+          <p className="text-sm text-slate-400">No assessment configured for this quiz.</p>
         ) : (
           <ol className="space-y-4">
             {qs.map((q, i) => (

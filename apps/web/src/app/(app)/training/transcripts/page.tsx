@@ -112,7 +112,7 @@ export default async function TranscriptsListPage({
         <>
           <PageHeader
             title="Transcripts"
-            description="Per-person training history: records, assessments, skills, and any upcoming expirations. Click a person to see their full transcript."
+            description="Per-person training history: records, assessments, skills, and upcoming expirations."
           />
           <TrainingSubNav active="transcripts" />
           <div className="flex items-center gap-3">
@@ -125,7 +125,7 @@ export default async function TranscriptsListPage({
         <EmptyState
           icon={<FileText size={32} />}
           title="No people found"
-          description="Add people to your tenant to start building transcripts."
+          description="Add people to build training transcripts."
         />
       ) : (
         <>

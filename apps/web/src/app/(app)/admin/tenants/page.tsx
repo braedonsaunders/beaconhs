@@ -66,7 +66,7 @@ export default async function AdminTenantsPage() {
         />
 
         {rows.length === 0 ? (
-          <EmptyState title="No tenants yet" />
+          <EmptyState title="No tenants" />
         ) : (
           <Table>
             <TableHeader>

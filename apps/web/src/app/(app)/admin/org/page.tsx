@@ -240,7 +240,7 @@ function OrgTree({
   }
 
   if (units.length === 0) {
-    return <p className="text-sm text-slate-500">No org units yet.</p>
+    return <p className="text-sm text-slate-500">No org units.</p>
   }
   return render(null, 0)
 }
@@ -265,7 +265,7 @@ function NameListCard({
       </CardHeader>
       <CardContent className="space-y-2">
         {items.length === 0 ? (
-          <p className="text-xs text-slate-500">None yet.</p>
+          <p className="text-xs text-slate-500">None.</p>
         ) : (
           <ul className="space-y-1 text-sm">
             {items.map((i) => (

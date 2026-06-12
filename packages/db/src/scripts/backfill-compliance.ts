@@ -3,8 +3,8 @@
 // Maps the legacy 5 (inspection / document / training / form / journal)
 // assignment rows → compliance_obligations + compliance_audience. Idempotent:
 // keyed on (legacy_table, legacy_id) via the unique index + onConflictDoNothing,
-// so re-running is safe. Run with the cluster URL:
-//   DATABASE_URL='postgresql://…@10.0.0.85:5432/beaconhs?sslmode=disable' \
+// so re-running is safe. Run with a writable database URL:
+//   DATABASE_URL='postgresql://beaconhs:beaconhs@localhost:5433/beaconhs' \
 //     npx tsx src/scripts/backfill-compliance.ts
 //
 // beaconhs_app owns the tables and RLS is ENABLE (not FORCE), so the owner

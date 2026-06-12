@@ -9,3 +9,9 @@ next-env.d.ts
 **/.turbo/
 **/coverage/
 pnpm-lock.yaml
+
+# Local-only/private migration material kept out of the public repo.
+.local/
+private/
+docs/migration/*.json
+packages/db/src/scripts/dokploy-*.ts

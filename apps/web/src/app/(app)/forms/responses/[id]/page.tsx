@@ -644,8 +644,8 @@ export default async function FormResponsePage({
                 {comments.length === 0 ? (
                   <EmptyState
                     icon={<MessageSquare size={24} />}
-                    title="No comments yet"
-                    description="Use comments for back-and-forth between reviewers and submitters, follow-up notes, or correction history."
+                    title="No comments"
+                    description="Discussion between reviewers and submitters, follow-up notes, and correction history."
                   />
                 ) : (
                   <ul className="space-y-3 text-sm">

@@ -47,6 +47,7 @@ import { pickString } from '@/lib/list-params'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { ActivityFeed } from '@/components/activity-feed'
 import { DetailGrid } from '@/components/detail-grid'
+import { PersonSelectField } from '@/components/person-select-field'
 import { DetailPageLayout } from '@/components/page-layout'
 import { PhotoGallery } from '@/components/photo-gallery'
 import { PhotoUploaderSection } from '@/components/photo-uploader-section'
@@ -609,6 +610,7 @@ export default async function InspectionRecordDetailPage({
         id: people.id,
         firstName: people.firstName,
         lastName: people.lastName,
+        employeeNo: people.employeeNo,
       })
       .from(people)
       .where(eq(people.status, 'active'))
@@ -912,6 +914,7 @@ export default async function InspectionRecordDetailPage({
                 peopleList={peopleList.map((p) => ({
                   id: p.id,
                   name: `${p.firstName} ${p.lastName}`,
+                  hint: p.employeeNo ?? undefined,
                 }))}
                 criterionPhotoMap={criterionPhotoMap}
                 locked={record.locked}
@@ -1072,6 +1075,7 @@ export default async function InspectionRecordDetailPage({
             peopleList={peopleList.map((p) => ({
               id: p.id,
               name: `${p.firstName} ${p.lastName}`,
+              hint: p.employeeNo ?? undefined,
             }))}
             recordOccurredAt={record.occurredAt}
             action={saveCriterionDetailsForm}
@@ -1179,7 +1183,7 @@ function CriterionCard(props: {
   requiresPhoto: boolean
   requiresComment: boolean
   assignee: { id: string; name: string } | null
-  peopleList: { id: string; name: string }[]
+  peopleList: { id: string; name: string; hint?: string }[]
   criterionPhotoMap: Map<string, { id: string; url: string; filename: string }>
   locked: boolean
   allowCompliantNotes: boolean
@@ -1342,14 +1346,14 @@ function CriterionCard(props: {
             <input type="hidden" name="rowId" value={rowId} />
             <div className="space-y-1">
               <Label className="text-xs">Assigned to</Label>
-              <Select name="assignedToPersonId" defaultValue={assignedToPersonId ?? ''}>
-                <option value="">— unassigned —</option>
-                {peopleList.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </Select>
+              <PersonSelectField
+                name="assignedToPersonId"
+                defaultValue={assignedToPersonId ?? ''}
+                options={peopleList.map((p) => ({ value: p.id, label: p.name, hint: p.hint }))}
+                placeholder="— unassigned —"
+                clearable
+                emptyLabel="— unassigned —"
+              />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Due date</Label>
@@ -1365,16 +1369,14 @@ function CriterionCard(props: {
             <input type="hidden" name="rowId" value={rowId} />
             <div className="flex-1 space-y-1">
               <Label className="text-xs">Attach photo (by attachment id)</Label>
-              <Input name="attachmentId" placeholder="upload via Photos tab, then paste id here" />
+              <Input name="attachmentId" placeholder="Attachment ID from the Photos tab" />
             </div>
             <Button type="submit" size="sm" variant="outline">
               Link photo
             </Button>
           </form>
           <p className="text-xs text-slate-500">
-            Tip: upload from the Photos tab first, then copy the attachment id and paste it here.
-            Per-criterion photo upload widget lands in a follow-up — the data model already supports
-            it.
+            Upload from the Photos tab, then paste the attachment ID here.
           </p>
         </div>
       ) : null}
@@ -1466,7 +1468,7 @@ function CriterionEditForm({
     }
     ca: { reference: string } | null
   }
-  peopleList: { id: string; name: string }[]
+  peopleList: { id: string; name: string; hint?: string }[]
   recordOccurredAt: Date
   action: (formData: FormData) => Promise<void>
 }) {
@@ -1525,14 +1527,14 @@ function CriterionEditForm({
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Assigned to</Label>
-            <Select name="assignedToPersonId" defaultValue={row.c.assignedToPersonId ?? ''}>
-              <option value="">— unassigned —</option>
-              {peopleList.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </Select>
+            <PersonSelectField
+              name="assignedToPersonId"
+              defaultValue={row.c.assignedToPersonId ?? ''}
+              options={peopleList.map((p) => ({ value: p.id, label: p.name, hint: p.hint }))}
+              placeholder="— unassigned —"
+              clearable
+              emptyLabel="— unassigned —"
+            />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Due date</Label>

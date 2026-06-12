@@ -292,8 +292,8 @@ export default async function InspectionBankDetailPage({
               {criteria.length === 0 ? (
                 <EmptyState
                   icon={<ClipboardList size={24} />}
-                  title="No criteria yet"
-                  description="Add a question below to get started."
+                  title="No criteria"
+                  description="Add a question below."
                 />
               ) : (
                 <Table>

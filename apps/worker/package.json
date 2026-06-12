@@ -23,6 +23,7 @@
     "@beaconhs/forms-pdf": "workspace:*",
     "@beaconhs/jobs": "workspace:*",
     "@beaconhs/plugin-sdk": "workspace:*",
+    "@beaconhs/reports": "workspace:*",
     "@beaconhs/storage": "workspace:*",
     "bullmq": "^5.78.0",
     "drizzle-orm": "^0.45.2",

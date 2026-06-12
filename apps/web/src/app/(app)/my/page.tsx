@@ -13,6 +13,7 @@ import {
   ClipboardList,
   GraduationCap,
   ListChecks,
+  Radiation,
   Settings,
   User,
 } from 'lucide-react'
@@ -30,6 +31,7 @@ import {
   correctiveActions,
   documentAcknowledgments,
   documents,
+  hazidAssessments,
   incidents,
   inspectionRecords,
   people,
@@ -78,6 +80,20 @@ export default async function MyLandingPage() {
           .from(incidents)
           .where(
             and(eq(incidents.reportedByTenantUserId, membershipId), isNull(incidents.deletedAt)),
+          )
+          .then((r) => Number(r[0]?.c ?? 0))
+      : Promise.resolve(0)
+
+    // ---- hazard assessments started by me --------------------------------
+    const hazardAssessmentsPromise: Promise<number> = membershipId
+      ? tx
+          .select({ c: count() })
+          .from(hazidAssessments)
+          .where(
+            and(
+              eq(hazidAssessments.reportedByTenantUserId, membershipId),
+              isNull(hazidAssessments.deletedAt),
+            ),
           )
           .then((r) => Number(r[0]?.c ?? 0))
       : Promise.resolve(0)
@@ -198,6 +214,7 @@ export default async function MyLandingPage() {
 
     return {
       incidents: await incidentsPromise,
+      hazardAssessments: await hazardAssessmentsPromise,
       openTasks: await openTasksPromise,
       overdueTasks: await overdueTasksPromise,
       trainingRecords: await trainingRecordsPromise,
@@ -215,6 +232,13 @@ export default async function MyLandingPage() {
       description: 'Incidents you reported.',
       icon: AlertTriangle,
       count: counts.incidents,
+    },
+    {
+      href: '/my/hazard-assessments',
+      label: 'My assessments',
+      description: 'Hazard assessments you started.',
+      icon: Radiation,
+      count: counts.hazardAssessments,
     },
     {
       href: '/my/tasks',
@@ -249,9 +273,10 @@ export default async function MyLandingPage() {
     {
       href: '/my/acknowledgments',
       label: 'My acknowledgments',
-      description: 'Documents you have read & signed.',
+      description: 'Documents you have read and signed.',
       icon: CheckCircle2,
-      hint: counts.docsOutstanding > 0 ? `${counts.docsOutstanding} outstanding` : 'All caught up',
+      hint:
+        counts.docsOutstanding > 0 ? `${counts.docsOutstanding} outstanding` : 'None outstanding',
       accent: counts.docsOutstanding > 0 ? 'amber' : 'teal',
     },
   ]

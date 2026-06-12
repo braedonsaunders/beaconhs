@@ -194,12 +194,12 @@ export default async function FormResponsesPage({
           title={
             statusFilter || params.q || categoryFilter
               ? 'No responses match these filters'
-              : 'No responses yet'
+              : 'No responses'
           }
           description={
             categoryFilter
-              ? `No ${CATEGORY_LABEL[activeTab] ?? categoryFilter} responses yet — fill out a template to log one.`
-              : 'Pick a template to fill out a new form.'
+              ? `No ${CATEGORY_LABEL[activeTab] ?? categoryFilter} responses. Fill out a template to log one.`
+              : 'Select a template to fill out a new form.'
           }
           action={
             <Link href="/forms">

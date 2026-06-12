@@ -164,10 +164,10 @@ export default async function IncidentsPage({
           icon={<AlertTriangle size={32} />}
           title={
             params.q || typeFilter || statusFilter
-              ? 'No incidents match these filters'
+              ? 'No matching incidents'
               : 'No incidents reported'
           }
-          description="When a worker reports an injury, illness, or near-miss it shows up here."
+          description="Reported injuries, illnesses, and near-misses appear here."
           action={
             <Link href="/incidents/new">
               <Button>Report an incident</Button>

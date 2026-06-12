@@ -79,7 +79,7 @@ export default async function EditPpeTypePage({ params }: { params: Promise<{ id
       <div className="mx-auto max-w-2xl">
         <PageHeader
           title={`Edit "${type.name}"`}
-          description="Tweak the basic properties of this PPE type. Use the sub-tabs on the detail page to manage criteria and sizing."
+          description="Edit the basic properties of this PPE type. Criteria and sizing are managed from the detail page sub-tabs."
           back={{ href: `/ppe/types/${id}`, label: 'Back to PPE type' }}
         />
         <form

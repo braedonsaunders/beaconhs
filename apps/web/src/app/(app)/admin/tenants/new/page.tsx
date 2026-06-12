@@ -87,7 +87,7 @@ export default function NewTenantPage() {
           </Link>
           <PageHeader
             title="New tenant"
-            description="Super-admin only. Creates an empty tenant — you'll add an admin user from the users page after."
+            description="Super-admin only. Creates an empty tenant. Add an admin user from the Users page afterwards."
           />
         </div>
         <form
@@ -96,7 +96,7 @@ export default function NewTenantPage() {
         >
           <div className="space-y-1.5">
             <Label htmlFor="name">Tenant name *</Label>
-            <Input id="name" name="name" required placeholder="e.g. Rassaun Services Inc" />
+            <Input id="name" name="name" required placeholder="e.g. Acme Industrial" />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="slug">Slug (optional)</Label>

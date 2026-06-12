@@ -133,38 +133,47 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
   },
   {
     moduleKey: 'hazid',
-    label: 'JSHA / HazID',
-    href: '/hazid',
-    managePath: '/hazid/manage',
+    label: 'Hazard Assessments',
+    href: '/hazard-assessments',
+    managePath: '/hazard-assessments/manage',
     iconKey: 'radiation',
     permission: 'admin.settings.manage',
-    tabs: [
-      { key: 'assessments', label: 'Assessments', href: '/hazid' },
-      { key: 'hazards', label: 'Hazards', href: '/hazid/hazards' },
-      { key: 'tasks', label: 'Tasks', href: '/hazid/tasks' },
-      { key: 'signed', label: 'Signed reports', href: '/hazid/reports/signed' },
-    ],
+    tabs: [{ key: 'assessments', label: 'Assessments', href: '/hazard-assessments' }],
     sections: [
+      {
+        key: 'hazards',
+        label: 'Hazard library',
+        href: '/hazard-assessments/hazards',
+        iconKey: 'library',
+        desc: 'Reusable hazard records with default controls and risk prompts.',
+      },
+      {
+        key: 'tasks',
+        label: 'Task library',
+        href: '/hazard-assessments/tasks',
+        iconKey: 'clipboard',
+        desc: 'Reusable task templates that preload hazards and controls.',
+      },
       {
         key: 'hazard-types',
         label: 'Hazard types',
-        href: '/hazid/hazards/types',
+        href: '/hazard-assessments/hazards/types',
         iconKey: 'radiation',
         desc: 'The master taxonomy of hazard categories.',
       },
       {
         key: 'hazard-sets',
         label: 'Hazard sets',
-        href: '/hazid/hazards/sets',
+        href: '/hazard-assessments/hazards/sets',
         iconKey: 'layers',
         desc: 'Reusable bundles of hazards to seed new assessments.',
       },
       {
         key: 'assessment-types',
         label: 'Assessment types',
-        href: '/hazid/types',
+        href: '/hazard-assessments/types',
         iconKey: 'clipboard',
-        desc: 'Templates that define each kind of risk assessment.',
+        desc: 'Templates that define each kind of hazard assessment.',
       },
     ],
   },
@@ -258,7 +267,7 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
     sections: [
       {
         key: 'types',
-        label: 'Document types',
+        label: 'Types',
         href: '/documents/types',
         iconKey: 'layers',
         desc: 'Classify controlled documents (policy, procedure, form, …).',
@@ -286,6 +295,7 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
       { key: 'skills', label: 'Skills', href: '/training/skills' },
       { key: 'courses', label: 'Courses', href: '/training/courses' },
       { key: 'library', label: 'Library', href: '/training/library' },
+      { key: 'credential-designs', label: 'Designs', href: '/training/credential-designs' },
       { key: 'classes', label: 'Classes', href: '/training/classes' },
       { key: 'assessments', label: 'Assessments', href: '/training/assessments' },
       { key: 'matrix', label: 'Matrix', href: '/training/matrix' },
@@ -356,11 +366,4 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
 
 export function moduleAdminByKey(key: string): ModuleAdmin | undefined {
   return MODULE_ADMIN.find((m) => m.moduleKey === key)
-}
-
-/** Tabs for a module's Manage-area sub-nav: the operational tab(s) + each section. */
-export function moduleManageTabs(key: string): ModuleAdminTab[] {
-  const m = moduleAdminByKey(key)
-  if (!m) return []
-  return [...m.tabs, ...m.sections.map((s) => ({ key: s.key, label: s.label, href: s.href }))]
 }

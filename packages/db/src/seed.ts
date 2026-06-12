@@ -71,6 +71,7 @@ import {
   user,
   // HazID / JSHA
   hazidAssessmentTypePPE,
+  hazidAssessmentTypeApps,
   hazidAssessmentTypeQuestions,
   hazidAssessmentTypes,
   hazidHazardSets,
@@ -89,6 +90,7 @@ import {
 } from './schema'
 import type { FormSchemaV1 } from './schema'
 import { CANONICAL_TEMPLATES } from './canonical-templates'
+import { seedHazardAssessmentAppTemplates } from './seed/hazard-assessment-app-templates'
 import { seedLiftPlanTemplate } from './seed/lift-plan-template'
 import { seedToolboxTemplate } from './seed/toolbox-template'
 
@@ -3330,29 +3332,33 @@ export async function seedHazidLibraries(tx: any, tenantId: string): Promise<voi
     .returning({ id: hazidHazards.id, name: hazidHazards.name })
 
   // Hazard sets — pre-curated groupings
-  await tx.insert(hazidHazardSets).values([
-    {
-      tenantId,
-      name: 'Confined space entry',
-      hazardIds: hazardRows
-        .filter((h: any) => /slip|pinch|solvent|biohaz/i.test(h.name))
-        .map((h: any) => h.id),
-    },
-    {
-      tenantId,
-      name: 'Outdoor work — summer',
-      hazardIds: hazardRows
-        .filter((h: any) => /heat|slip|repetitive|fall/i.test(h.name))
-        .map((h: any) => h.id),
-    },
-    {
-      tenantId,
-      name: 'Welding / hot work',
-      hazardIds: hazardRows
-        .filter((h: any) => /weld|sharp|noise|fall/i.test(h.name))
-        .map((h: any) => h.id),
-    },
-  ])
+  const hazardSets = await tx
+    .insert(hazidHazardSets)
+    .values([
+      {
+        tenantId,
+        name: 'Confined space entry',
+        hazardIds: hazardRows
+          .filter((h: any) => /slip|pinch|solvent|biohaz/i.test(h.name))
+          .map((h: any) => h.id),
+      },
+      {
+        tenantId,
+        name: 'Outdoor work — summer',
+        hazardIds: hazardRows
+          .filter((h: any) => /heat|slip|repetitive|fall/i.test(h.name))
+          .map((h: any) => h.id),
+      },
+      {
+        tenantId,
+        name: 'Welding / hot work',
+        hazardIds: hazardRows
+          .filter((h: any) => /weld|sharp|noise|fall/i.test(h.name))
+          .map((h: any) => h.id),
+      },
+    ])
+    .returning({ id: hazidHazardSets.id, name: hazidHazardSets.name })
+  const hazardSetByName = new Map(hazardSets.map((s: any) => [s.name, s.id] as const))
 
   // Task library
   await tx.insert(hazidTasks).values([
@@ -3394,21 +3400,23 @@ export async function seedHazidLibraries(tx: any, tenantId: string): Promise<voi
     },
   ])
 
-  // Assessment types (one full, one minimal)
-  const [fullType, minimalType] = await tx
+  const embeddedAppTemplates = await seedHazardAssessmentAppTemplates(tx, tenantId)
+
+  // Assessment types — native JSHA structure plus embedded builder apps for
+  // specialty procedures that need their own structure/workflow.
+  const [fullType, minimalType, confinedType, arcFlashType] = await tx
     .insert(hazidAssessmentTypes)
     .values([
       {
         tenantId,
         name: 'Standard JSHA',
-        description: 'Job Safety Hazard Analysis with all sections enabled.',
+        description: 'Job Safety Hazard Analysis with the core sections enabled.',
         hasTasks: true,
         hasHazards: true,
         hasPPE: true,
         hasQuestions: true,
         hasWAH: true,
-        hasCS: true,
-        hasArcFlash: false,
+        defaultHazardSetId: hazardSetByName.get('Outdoor work — summer') ?? null,
       },
       {
         tenantId,
@@ -3419,26 +3427,79 @@ export async function seedHazidLibraries(tx: any, tenantId: string): Promise<voi
         hasPPE: true,
         hasQuestions: false,
         hasWAH: false,
-        hasCS: false,
-        hasArcFlash: false,
+      },
+      {
+        tenantId,
+        name: 'Confined Space JSHA',
+        description:
+          'Core JSHA plus an embedded confined-space entry app for readings, entry log, rescue planning, and sign-off.',
+        hasTasks: true,
+        hasHazards: true,
+        hasPPE: true,
+        hasQuestions: true,
+        hasWAH: false,
+        defaultHazardSetId: hazardSetByName.get('Confined space entry') ?? null,
+      },
+      {
+        tenantId,
+        name: 'Arc Flash JSHA',
+        description:
+          'Core JSHA plus an embedded arc-flash work-plan app for electrical boundaries, PPE, controls, and qualified sign-off.',
+        hasTasks: true,
+        hasHazards: true,
+        hasPPE: true,
+        hasQuestions: true,
+        hasWAH: false,
+        defaultHazardSetId: hazardSetByName.get('Welding / hot work') ?? null,
       },
     ])
     .returning({ id: hazidAssessmentTypes.id, name: hazidAssessmentTypes.name })
 
-  // Default PPE for the full type
-  await tx.insert(hazidAssessmentTypePPE).values([
-    { tenantId, typeId: fullType.id, name: 'Hard hat', required: true, entityOrder: 1 },
-    { tenantId, typeId: fullType.id, name: 'Safety glasses', required: true, entityOrder: 2 },
-    { tenantId, typeId: fullType.id, name: 'Steel-toe boots', required: true, entityOrder: 3 },
-    { tenantId, typeId: fullType.id, name: 'Hi-vis vest', required: true, entityOrder: 4 },
+  await tx.insert(hazidAssessmentTypeApps).values([
     {
       tenantId,
-      typeId: fullType.id,
-      name: 'Gloves (task-specific)',
-      required: false,
-      entityOrder: 5,
+      typeId: confinedType.id,
+      templateId: embeddedAppTemplates.confinedSpaceTemplateId,
+      key: 'confined_space_entry_plan',
+      label: 'Confined-space entry app',
+      description: 'Readings, entry log, rescue planning, and entry sign-off.',
+      required: true,
+      autoCreate: true,
+      entityOrder: 1,
+      config: { replacesNativeSection: 'confined_space' },
     },
-    { tenantId, typeId: fullType.id, name: 'Hearing protection', required: false, entityOrder: 6 },
+    {
+      tenantId,
+      typeId: arcFlashType.id,
+      templateId: embeddedAppTemplates.arcFlashTemplateId,
+      key: 'arc_flash_work_plan',
+      label: 'Arc-flash work-plan app',
+      description: 'Electrical study details, controls, PPE, boundaries, and sign-off.',
+      required: true,
+      autoCreate: true,
+      entityOrder: 1,
+      config: { replacesNativeSection: 'arc_flash' },
+    },
+  ])
+
+  const basePpe: Array<[string, boolean]> = [
+    ['Hard hat', true],
+    ['Safety glasses', true],
+    ['Steel-toe boots', true],
+    ['Hi-vis vest', true],
+    ['Gloves (task-specific)', false],
+    ['Hearing protection', false],
+  ]
+  const ppeRows = [fullType, minimalType, confinedType, arcFlashType].flatMap((type: any) =>
+    basePpe.map(([name, required], i) => ({
+      tenantId,
+      typeId: type.id,
+      name,
+      required,
+      entityOrder: i + 1,
+    })),
+  )
+  ppeRows.push(
     {
       tenantId,
       typeId: fullType.id,
@@ -3446,46 +3507,75 @@ export async function seedHazidLibraries(tx: any, tenantId: string): Promise<voi
       required: false,
       entityOrder: 7,
     },
-  ])
+    {
+      tenantId,
+      typeId: confinedType.id,
+      name: 'Respiratory protection (if required by atmosphere/SDS)',
+      required: false,
+      entityOrder: 7,
+    },
+    {
+      tenantId,
+      typeId: confinedType.id,
+      name: 'Retrieval harness / lifeline',
+      required: true,
+      entityOrder: 8,
+    },
+    {
+      tenantId,
+      typeId: arcFlashType.id,
+      name: 'Arc-rated FR clothing',
+      required: true,
+      entityOrder: 7,
+    },
+    {
+      tenantId,
+      typeId: arcFlashType.id,
+      name: 'Voltage-rated gloves with leather protectors',
+      required: true,
+      entityOrder: 8,
+    },
+  )
+  await tx.insert(hazidAssessmentTypePPE).values(ppeRows)
 
-  // Default Q&A for the full type
-  await tx.insert(hazidAssessmentTypeQuestions).values([
+  const baseQuestions = [
+    'Have all crew members reviewed this JSHA?',
+    'Have all hazards been assessed and controlled?',
+    'Is the work area clear and properly barricaded?',
+    'Are emergency procedures known to all crew?',
+  ]
+  const questionRows = [fullType, confinedType, arcFlashType].flatMap((type: any) =>
+    baseQuestions.map((question, i) => ({
+      tenantId,
+      typeId: type.id,
+      question,
+      questionType: 'yes_no' as const,
+      requiresYes: true,
+      entityOrder: i + 1,
+    })),
+  )
+  questionRows.push(
     {
       tenantId,
-      typeId: fullType.id,
-      question: 'Have all crew members reviewed this JSHA?',
-      questionType: 'yes_no',
+      typeId: confinedType.id,
+      question: 'Has the confined-space entry app been completed before entry?',
+      questionType: 'yes_no' as const,
       requiresYes: true,
-      entityOrder: 1,
+      entityOrder: 5,
     },
     {
       tenantId,
-      typeId: fullType.id,
-      question: 'Have all hazards been assessed and controlled?',
-      questionType: 'yes_no',
+      typeId: arcFlashType.id,
+      question: 'Has the arc-flash work-plan app been completed before electrical work?',
+      questionType: 'yes_no' as const,
       requiresYes: true,
-      entityOrder: 2,
+      entityOrder: 5,
     },
-    {
-      tenantId,
-      typeId: fullType.id,
-      question: 'Is the work area clear and properly barricaded?',
-      questionType: 'yes_no',
-      requiresYes: true,
-      entityOrder: 3,
-    },
-    {
-      tenantId,
-      typeId: fullType.id,
-      question: 'Are emergency procedures known to all crew?',
-      questionType: 'yes_no',
-      requiresYes: true,
-      entityOrder: 4,
-    },
-  ])
+  )
+  await tx.insert(hazidAssessmentTypeQuestions).values(questionRows)
 
   console.log(
-    `  · hazid libraries: ${typeRows.length} hazard types, ${hazardRows.length} hazards, 3 sets, 8 tasks, 2 assessment types`,
+    `  · hazid libraries: ${typeRows.length} hazard types, ${hazardRows.length} hazards, 3 sets, 8 tasks, 4 assessment types, 2 embedded apps`,
   )
 }
 

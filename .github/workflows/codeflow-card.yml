@@ -16,10 +16,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: braedonsaunders/codeflow/card@v1
         with:
-          style: detailed
+          style: compact
           theme: auto
           accent: teal
-          receipts: true
+          receipts: false
           # Informational only — no health grade/score, no language-ratio
           # breakdown. `scale` keeps the file/function/LOC/language counts.
           # `grade` (HEALTH) and `languages` are intentionally omitted.

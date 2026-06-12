@@ -154,11 +154,11 @@ export default async function LocationsPage({
       {rows.length === 0 ? (
         <EmptyState
           icon={<MapPin size={32} />}
-          title={params.q ? `No customers match "${params.q}"` : 'No customers yet'}
-          description="Add a customer to start tracking projects, sites and on-site contacts."
+          title={params.q ? `No customers match "${params.q}"` : 'No customers'}
+          description="Add a customer to track projects, sites, and on-site contacts."
           action={
             <Link href="/locations/new">
-              <Button>Add your first customer</Button>
+              <Button>Add customer</Button>
             </Link>
           }
         />

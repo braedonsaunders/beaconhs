@@ -440,10 +440,10 @@ export function CourseWorkspace({
                     <div>
                       <Layers size={28} className="mx-auto text-slate-300" />
                       <p className="mt-2 text-sm font-medium text-slate-600">
-                        Drag your first element here
+                        Drag an element here
                       </p>
                       <p className="text-xs text-slate-400">
-                        Pick a content type from the Build tab on the left — a module is created
+                        Select a content type from the Build tab on the left — a module is created
                         automatically.
                       </p>
                     </div>
@@ -628,7 +628,7 @@ function RecordsPanel({
         </Link>
       </div>
       {records.length === 0 ? (
-        <p className="px-1 text-xs text-slate-400">Nobody has completed this course yet.</p>
+        <p className="px-1 text-xs text-slate-400">No completions recorded.</p>
       ) : (
         records.map((r) => {
           const expired = r.expiresOn && r.expiresOn < today

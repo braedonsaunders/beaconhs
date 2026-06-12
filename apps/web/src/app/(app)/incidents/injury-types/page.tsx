@@ -199,8 +199,8 @@ export default async function InjuryTypesPage({
           {rows.length === 0 ? (
             <EmptyState
               icon={<Plus size={32} />}
-              title="No injury types yet"
-              description="Add the labels your investigators reach for — laceration, strain, fracture, burn, chemical exposure, etc."
+              title="No injury types"
+              description="Add labels such as laceration, strain, fracture, burn, or chemical exposure."
             />
           ) : (
             <Table>

@@ -195,7 +195,7 @@ export default async function AuthorityDetailPage({
               {skillTypes.length === 0 ? (
                 <EmptyState
                   icon={<Award size={24} />}
-                  title="No skill types yet"
+                  title="No skill types"
                   description="Add the first skill type below."
                 />
               ) : (

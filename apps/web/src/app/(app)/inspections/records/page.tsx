@@ -308,8 +308,8 @@ export default async function InspectionRecordsPage({
       {rows.length === 0 ? (
         <EmptyState
           icon={<ClipboardList size={32} />}
-          title={params.q ? `No records match "${params.q}"` : 'No inspection records yet'}
-          description="Pick an inspection type and start one."
+          title={params.q ? `No records match "${params.q}"` : 'No inspection records'}
+          description="Select an inspection type to start one."
           action={
             <Link href="/inspections/records/new">
               <Button>New inspection</Button>

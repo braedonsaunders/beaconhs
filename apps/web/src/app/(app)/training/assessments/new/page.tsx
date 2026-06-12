@@ -12,6 +12,7 @@ import {
 import { people, trainingAssessmentTypes } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
+import { PersonSelectField } from '@/components/person-select-field'
 import { startAssessmentAttempt } from '../../_actions/assessments'
 
 export const metadata = { title: 'New assessment attempt' }
@@ -66,17 +67,17 @@ export default async function NewAssessmentAttemptPage({
                 <Label>
                   Person <span className="text-red-600">*</span>
                 </Label>
-                <Select name="personId" required defaultValue={defaultPersonId ?? ''}>
-                  <option value="" disabled>
-                    Choose a person…
-                  </option>
-                  {peopleRows.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.lastName}, {p.firstName}
-                      {p.employeeNo ? ` (#${p.employeeNo})` : ''}
-                    </option>
-                  ))}
-                </Select>
+                <PersonSelectField
+                  name="personId"
+                  defaultValue={defaultPersonId ?? ''}
+                  clearable={false}
+                  placeholder="Choose a person…"
+                  options={peopleRows.map((p) => ({
+                    value: p.id,
+                    label: `${p.lastName}, ${p.firstName}`,
+                    hint: p.employeeNo ?? undefined,
+                  }))}
+                />
               </div>
               <div className="space-y-1.5">
                 <Label>

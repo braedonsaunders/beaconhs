@@ -190,12 +190,12 @@ export default async function CorrectiveActionsPage({
           title={
             params.q || statusFilter || sevFilter
               ? 'No corrective actions match these filters'
-              : 'No corrective actions yet'
+              : 'No corrective actions'
           }
           description="Create one to assign accountability for a fix and track it to verification."
           action={
             <Link href="/corrective-actions/new">
-              <Button>Create your first action</Button>
+              <Button>New corrective action</Button>
             </Link>
           }
         />

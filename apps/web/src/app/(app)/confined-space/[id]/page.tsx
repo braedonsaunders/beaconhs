@@ -31,6 +31,7 @@ import {
   csAtmosphericReadings,
   csPermitPersonnel,
   csPermits,
+  hazidAssessments,
   orgUnits,
   people,
   tenantUsers,
@@ -42,6 +43,7 @@ import { ActivityFeed } from '@/components/activity-feed'
 import { DetailGrid } from '@/components/detail-grid'
 import { Section } from '@/components/section'
 import { DetailPageLayout } from '@/components/page-layout'
+import { PersonSelectField } from '@/components/person-select-field'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 
 export const dynamic = 'force-dynamic'
@@ -226,11 +228,17 @@ export default async function CSPermitDetailPage({
         site: orgUnits,
         issuer: tenantUsers,
         issuerAccount: user,
+        hazardAssessment: {
+          id: hazidAssessments.id,
+          reference: hazidAssessments.reference,
+          jobScope: hazidAssessments.jobScope,
+        },
       })
       .from(csPermits)
       .leftJoin(orgUnits, eq(orgUnits.id, csPermits.siteOrgUnitId))
       .leftJoin(tenantUsers, eq(tenantUsers.id, csPermits.issuedByTenantUserId))
       .leftJoin(user, eq(user.id, tenantUsers.userId))
+      .leftJoin(hazidAssessments, eq(hazidAssessments.id, csPermits.hazardAssessmentId))
       .where(eq(csPermits.id, id))
       .limit(1)
     if (!row) return null
@@ -256,7 +264,7 @@ export default async function CSPermitDetailPage({
     return { ...row, readings, personnel, allPeople }
   })
   if (!data) notFound()
-  const { permit, site, issuerAccount, readings, personnel, allPeople } = data
+  const { permit, site, issuerAccount, hazardAssessment, readings, personnel, allPeople } = data
   const outOfSpec = readings.find((r) => r.outOfSpec === 1)
 
   const currentlyInside = personnel.filter((p) => p.row.enteredAt && !p.row.exitedAt)
@@ -272,17 +280,28 @@ export default async function CSPermitDetailPage({
           title={permit.title}
           subtitle={`${permit.reference} · issued ${new Date(permit.issuedAt).toLocaleString()}`}
           badge={
-            <Badge
-              variant={
-                permit.status === 'active'
-                  ? 'success'
-                  : permit.status === 'expired'
-                    ? 'destructive'
-                    : 'secondary'
-              }
-            >
-              {permit.status}
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Badge
+                variant={
+                  permit.status === 'active'
+                    ? 'success'
+                    : permit.status === 'expired'
+                      ? 'destructive'
+                      : 'secondary'
+                }
+              >
+                {permit.status}
+              </Badge>
+              {hazardAssessment?.id ? (
+                <Link
+                  href={`/hazard-assessments/${hazardAssessment.id}?tab=cs` as any}
+                  className="inline-flex items-center gap-1 rounded-full border border-teal-200 bg-teal-50 px-2.5 py-0.5 text-xs font-medium text-teal-700 hover:border-teal-400 dark:border-teal-900 dark:bg-teal-950 dark:text-teal-300"
+                  title={hazardAssessment.jobScope ?? undefined}
+                >
+                  Hazard assessment {hazardAssessment.reference}
+                </Link>
+              ) : null}
+            </div>
           }
           actions={
             <>
@@ -362,6 +381,19 @@ export default async function CSPermitDetailPage({
                   label: 'Closed at',
                   value: permit.closedAt ? new Date(permit.closedAt).toLocaleString() : '—',
                 },
+                {
+                  label: 'Hazard assessment',
+                  value: hazardAssessment?.id ? (
+                    <Link
+                      href={`/hazard-assessments/${hazardAssessment.id}` as any}
+                      className="font-mono text-teal-700 hover:underline dark:text-teal-400"
+                    >
+                      {hazardAssessment.reference}
+                    </Link>
+                  ) : (
+                    'Standalone permit'
+                  ),
+                },
               ]}
             />
             <div className="mt-4 space-y-2 text-sm">
@@ -389,7 +421,7 @@ export default async function CSPermitDetailPage({
             {readings.length === 0 ? (
               <EmptyState
                 icon={<Wind size={24} />}
-                title="No readings recorded yet"
+                title="No readings recorded"
                 description="Log the first atmospheric reading below. Industry-standard pass thresholds: 19.5–23% O₂, LEL <10%, H₂S <10 ppm, CO <25 ppm."
               />
             ) : (
@@ -617,15 +649,17 @@ export default async function CSPermitDetailPage({
         >
           <input type="hidden" name="permitId" value={id} />
           <Field label="Person" required>
-            <Select name="personId" required defaultValue="">
-              <option value="">— Select —</option>
-              {allPeople.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.lastName}, {p.firstName}
-                  {p.employeeNo ? ` (#${p.employeeNo})` : ''}
-                </option>
-              ))}
-            </Select>
+            <PersonSelectField
+              name="personId"
+              defaultValue=""
+              options={allPeople.map((p) => ({
+                value: p.id,
+                label: `${p.lastName}, ${p.firstName}`,
+                hint: p.employeeNo ?? undefined,
+              }))}
+              placeholder="Select a person…"
+              clearable={false}
+            />
           </Field>
           <Field label="Role" required>
             <Select name="role" required defaultValue="entrant">

@@ -27,6 +27,9 @@ export async function submitFormResponse(args: {
   // inserting a new one. Set by the filler client whenever it has been
   // autosaving against a known response id.
   responseId?: string | null
+  // Optional internal path for embedded/bound app flows that should return to
+  // their parent workspace after submit instead of the generic response page.
+  returnTo?: string | null
 }): Promise<{ ok: boolean; responseId?: string; errors?: { fieldId: string; message: string }[] }> {
   const ctx = await requireRequestContext()
 
@@ -192,6 +195,14 @@ export async function submitFormResponse(args: {
       // swallow — automations are non-critical to the submit
     }
     revalidatePath('/forms/responses')
+    const returnTo =
+      args.returnTo && args.returnTo.startsWith('/') && !args.returnTo.startsWith('//')
+        ? args.returnTo
+        : null
+    if (returnTo) {
+      revalidatePath(returnTo.split('?')[0] || returnTo)
+      redirect(returnTo as any)
+    }
     redirect(`/forms/responses/${result.responseId}`)
   }
   // Validation/missing-version error branches — strip the inner discriminator.

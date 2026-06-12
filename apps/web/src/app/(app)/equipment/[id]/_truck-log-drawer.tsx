@@ -8,7 +8,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2, Truck } from 'lucide-react'
-import { Button, Input, Label, Select, Textarea, UrlDrawer } from '@beaconhs/ui'
+import { Button, Input, Label, SearchSelect, Select, Textarea, UrlDrawer } from '@beaconhs/ui'
 
 type CreateTruckLogInput = {
   equipmentItemId: string
@@ -26,7 +26,7 @@ export type CreateTruckLogAction = (
   input: CreateTruckLogInput,
 ) => Promise<{ ok: boolean; error?: string }>
 
-type Driver = { id: string; firstName: string; lastName: string }
+type Driver = { id: string; firstName: string; lastName: string; employeeNo?: string | null }
 type Site = { id: string; name: string }
 
 function safeInt(raw: string): number | null {
@@ -135,18 +135,20 @@ export function NewTruckLogEntryDrawer({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="tl-driver">Driver</Label>
-            <Select
-              id="tl-driver"
+            <SearchSelect
               value={driverPersonId}
-              onChange={(e) => setDriverPersonId(e.currentTarget.value)}
-            >
-              <option value="">— Not specified —</option>
-              {drivers.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.lastName}, {p.firstName}
-                </option>
-              ))}
-            </Select>
+              onChange={setDriverPersonId}
+              options={drivers.map((p) => ({
+                value: p.id,
+                label: `${p.lastName}, ${p.firstName}`,
+                hint: p.employeeNo ?? undefined,
+              }))}
+              placeholder="Select a driver…"
+              searchPlaceholder="Search people…"
+              sheetTitle="Driver"
+              clearable
+              emptyLabel="— Not specified —"
+            />
           </div>
           <div className="space-y-1.5 sm:col-span-2">
             <Label htmlFor="tl-site">Site</Label>

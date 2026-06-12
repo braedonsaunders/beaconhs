@@ -32,7 +32,12 @@ type Action = {
 
 const ACTIONS: Action[] = [
   { href: '/incidents/new', label: 'Report incident', icon: AlertTriangle, tone: 'rose' },
-  { href: '/hazid/new', label: 'Start JSHA', icon: HardHat, tone: 'amber' },
+  {
+    href: '/hazard-assessments/new',
+    label: 'Start hazard assessment',
+    icon: HardHat,
+    tone: 'amber',
+  },
   {
     href: '/forms/by-key/toolbox-talk/fill',
     label: 'Log toolbox talk',

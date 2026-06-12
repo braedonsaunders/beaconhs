@@ -6,54 +6,22 @@
 // `RecurrenceValue` shape mirrors the unified `ComplianceRecurrence` (M3) so the
 // obligation form's payload survives the engine swap unchanged.
 //
-// Controlled. The `show` prop selects which knobs render — each obligation kind
-// exposes a different subset (e.g. inspections/journals show quantity +
+// Controlled. The `fields` prop selects which knobs render — each obligation
+// kind exposes a different subset (e.g. inspections/journals show quantity +
 // threshold; documents/training show a one-time due date; training shows a
 // reminder lead). Hidden entirely for one-off kinds (corrective actions).
+//
+// The pure model (types, FREQUENCIES, frequencyToCron, recurrenceValueFromStored)
+// lives in `./recurrence` so server code can use it too.
 
 import { Card, CardContent, CardHeader, CardTitle, Input, Label, Select } from '@beaconhs/ui'
-
-export type Frequency = 'day' | 'week' | 'month' | 'quarter' | 'year'
-
-export type RecurrenceKind = 'one_time' | 'frequency' | 'cron'
-
-export type RecurrenceValue = {
-  kind: RecurrenceKind
-  frequency?: Frequency
-  cron?: string
-  quantity?: number
-  compliantPercentage?: number
-  dueOn?: string
-  remindBeforeDays?: number
-  dueOffsetMinutes?: number
-}
-
-export const FREQUENCIES: Array<{ value: Frequency; label: string; cron: string }> = [
-  { value: 'day', label: 'Daily', cron: '0 8 * * *' },
-  { value: 'week', label: 'Weekly', cron: '0 8 * * 1' },
-  { value: 'month', label: 'Monthly', cron: '0 8 1 * *' },
-  { value: 'quarter', label: 'Quarterly', cron: '0 8 1 */3 *' },
-  { value: 'year', label: 'Yearly', cron: '0 8 1 1 *' },
-]
-
-export function frequencyToCron(f: Frequency): string {
-  return FREQUENCIES.find((x) => x.value === f)?.cron ?? '0 8 * * 1'
-}
-
-export type RecurrenceFields = {
-  /** Allow a one-time (single due date) cadence. */
-  oneTime?: boolean
-  /** Allow a recurring (frequency/cron) cadence. */
-  recurring?: boolean
-  /** Show quantity-per-period (inspection / journal). */
-  quantity?: boolean
-  /** Show the compliant-threshold % (inspection / journal). */
-  threshold?: boolean
-  /** Show the reminder lead-days (training). */
-  remind?: boolean
-  /** Show the due-offset minutes (inspection / form). */
-  dueOffset?: boolean
-}
+import {
+  FREQUENCIES,
+  type Frequency,
+  type RecurrenceFields,
+  type RecurrenceKind,
+  type RecurrenceValue,
+} from './recurrence'
 
 export function RecurrencePicker({
   value,

@@ -142,7 +142,7 @@ export default async function TitleTasksPage({
               <CardContent>
                 {tasks.length === 0 ? (
                   <p className="text-sm text-slate-500">
-                    No tasks yet. Add the first task in the form on the right.
+                    No tasks. Add one with the form on the right.
                   </p>
                 ) : (
                   <ol className="space-y-2">
@@ -291,7 +291,7 @@ export default async function TitleTasksPage({
               {assignments.length === 0 || tasks.length === 0 ? (
                 <p className="text-sm text-slate-500">
                   {assignments.length === 0
-                    ? 'No one assigned to this title yet.'
+                    ? 'No one assigned to this title.'
                     : 'No tasks defined.'}
                 </p>
               ) : (

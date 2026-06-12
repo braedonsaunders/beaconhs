@@ -1,5 +1,5 @@
 {
-  "id": "387c4605-586e-495c-b271-51703fb3621d",
+  "id": "b7a9acec-c583-4d7d-8717-fb93c7eac1e8",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -13259,6 +13259,12 @@
           "notNull": true,
           "default": "'{}'::jsonb"
         },
+        "hazard_assessment_id": {
+          "name": "hazard_assessment_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -13331,6 +13337,21 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "cs_permits_hazard_assessment_idx": {
+          "name": "cs_permits_hazard_assessment_idx",
+          "columns": [
+            {
+              "expression": "hazard_assessment_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -13368,6 +13389,15 @@
           "columnsFrom": ["closed_by_tenant_user_id"],
           "columnsTo": ["id"],
           "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "cs_permits_hazard_assessment_id_hazid_assessments_id_fk": {
+          "name": "cs_permits_hazard_assessment_id_hazid_assessments_id_fk",
+          "tableFrom": "cs_permits",
+          "tableTo": "hazid_assessments",
+          "columnsFrom": ["hazard_assessment_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },
@@ -17425,6 +17455,126 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.training_skill_certificates": {
+      "name": "training_skill_certificates",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "skill_assignment_id": {
+          "name": "skill_assignment_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "pdf_attachment_id": {
+          "name": "pdf_attachment_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "verify_token": {
+          "name": "verify_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "revoked_at": {
+          "name": "revoked_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "revoked_reason": {
+          "name": "revoked_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "training_skill_certificates_assignment_idx": {
+          "name": "training_skill_certificates_assignment_idx",
+          "columns": [
+            {
+              "expression": "skill_assignment_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "training_skill_certificates_token_idx": {
+          "name": "training_skill_certificates_token_idx",
+          "columns": [
+            {
+              "expression": "verify_token",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "training_skill_certificates_tenant_id_tenants_id_fk": {
+          "name": "training_skill_certificates_tenant_id_tenants_id_fk",
+          "tableFrom": "training_skill_certificates",
+          "tableTo": "tenants",
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "training_skill_certificates_skill_assignment_id_training_skill_assignments_id_fk": {
+          "name": "training_skill_certificates_skill_assignment_id_training_skill_assignments_id_fk",
+          "tableFrom": "training_skill_certificates",
+          "tableTo": "training_skill_assignments",
+          "columnsFrom": ["skill_assignment_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.training_skill_types": {
       "name": "training_skill_types",
       "schema": "",
@@ -20247,124 +20397,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.report_dashboards": {
-      "name": "report_dashboards",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "is_default": {
-          "name": "is_default",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "layout": {
-          "name": "layout",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_by_tenant_user_id": {
-          "name": "created_by_tenant_user_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "report_dashboards_tenant_idx": {
-          "name": "report_dashboards_tenant_idx",
-          "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "report_dashboards_tenant_name_ux": {
-          "name": "report_dashboards_tenant_name_ux",
-          "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "name",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "report_dashboards_tenant_id_tenants_id_fk": {
-          "name": "report_dashboards_tenant_id_tenants_id_fk",
-          "tableFrom": "report_dashboards",
-          "tableTo": "tenants",
-          "columnsFrom": ["tenant_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.report_definitions": {
       "name": "report_definitions",
       "schema": "",
@@ -22715,6 +22747,211 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.hazid_assessment_type_apps": {
+      "name": "hazid_assessment_type_apps",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type_id": {
+          "name": "type_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "template_id": {
+          "name": "template_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "label": {
+          "name": "label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "required": {
+          "name": "required",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "auto_create": {
+          "name": "auto_create",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "entity_order": {
+          "name": "entity_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "config": {
+          "name": "config",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "hazid_assessment_type_apps_type_idx": {
+          "name": "hazid_assessment_type_apps_type_idx",
+          "columns": [
+            {
+              "expression": "type_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "entity_order",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "hazid_assessment_type_apps_template_idx": {
+          "name": "hazid_assessment_type_apps_template_idx",
+          "columns": [
+            {
+              "expression": "template_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "hazid_assessment_type_apps_tenant_idx": {
+          "name": "hazid_assessment_type_apps_tenant_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "hazid_assessment_type_apps_type_key_ux": {
+          "name": "hazid_assessment_type_apps_type_key_ux",
+          "columns": [
+            {
+              "expression": "type_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "hazid_assessment_type_apps_tenant_id_tenants_id_fk": {
+          "name": "hazid_assessment_type_apps_tenant_id_tenants_id_fk",
+          "tableFrom": "hazid_assessment_type_apps",
+          "tableTo": "tenants",
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "hazid_assessment_type_apps_type_id_hazid_assessment_types_id_fk": {
+          "name": "hazid_assessment_type_apps_type_id_hazid_assessment_types_id_fk",
+          "tableFrom": "hazid_assessment_type_apps",
+          "tableTo": "hazid_assessment_types",
+          "columnsFrom": ["type_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "hazid_assessment_type_apps_template_id_form_templates_id_fk": {
+          "name": "hazid_assessment_type_apps_template_id_form_templates_id_fk",
+          "tableFrom": "hazid_assessment_type_apps",
+          "tableTo": "form_templates",
+          "columnsFrom": ["template_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.hazid_assessment_type_ppe": {
       "name": "hazid_assessment_type_ppe",
       "schema": "",
@@ -23071,6 +23308,13 @@
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
+        },
+        "available_to_group_ids": {
+          "name": "available_to_group_ids",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
         },
         "created_at": {
           "name": "created_at",
@@ -23723,6 +23967,30 @@
           "primaryKey": false,
           "notNull": false
         },
+        "pre_likelihood": {
+          "name": "pre_likelihood",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pre_severity": {
+          "name": "pre_severity",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "post_likelihood": {
+          "name": "post_likelihood",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "post_severity": {
+          "name": "post_severity",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -23788,6 +24056,211 @@
           "tableFrom": "hazid_tasks",
           "tableTo": "tenants",
           "columnsFrom": ["tenant_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.hazid_assessment_app_responses": {
+      "name": "hazid_assessment_app_responses",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "assessment_id": {
+          "name": "assessment_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type_app_id": {
+          "name": "type_app_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "template_id": {
+          "name": "template_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "response_id": {
+          "name": "response_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "entity_order": {
+          "name": "entity_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "hazid_assessment_app_responses_assessment_idx": {
+          "name": "hazid_assessment_app_responses_assessment_idx",
+          "columns": [
+            {
+              "expression": "assessment_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "entity_order",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "hazid_assessment_app_responses_response_idx": {
+          "name": "hazid_assessment_app_responses_response_idx",
+          "columns": [
+            {
+              "expression": "response_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "hazid_assessment_app_responses_tenant_idx": {
+          "name": "hazid_assessment_app_responses_tenant_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "hazid_assessment_app_responses_assessment_type_app_ux": {
+          "name": "hazid_assessment_app_responses_assessment_type_app_ux",
+          "columns": [
+            {
+              "expression": "assessment_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "type_app_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "hazid_assessment_app_responses_response_ux": {
+          "name": "hazid_assessment_app_responses_response_ux",
+          "columns": [
+            {
+              "expression": "response_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "hazid_assessment_app_responses_tenant_id_tenants_id_fk": {
+          "name": "hazid_assessment_app_responses_tenant_id_tenants_id_fk",
+          "tableFrom": "hazid_assessment_app_responses",
+          "tableTo": "tenants",
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "hazid_assessment_app_responses_assessment_id_hazid_assessments_id_fk": {
+          "name": "hazid_assessment_app_responses_assessment_id_hazid_assessments_id_fk",
+          "tableFrom": "hazid_assessment_app_responses",
+          "tableTo": "hazid_assessments",
+          "columnsFrom": ["assessment_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "hazid_assessment_app_responses_type_app_id_hazid_assessment_type_apps_id_fk": {
+          "name": "hazid_assessment_app_responses_type_app_id_hazid_assessment_type_apps_id_fk",
+          "tableFrom": "hazid_assessment_app_responses",
+          "tableTo": "hazid_assessment_type_apps",
+          "columnsFrom": ["type_app_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "hazid_assessment_app_responses_template_id_form_templates_id_fk": {
+          "name": "hazid_assessment_app_responses_template_id_form_templates_id_fk",
+          "tableFrom": "hazid_assessment_app_responses",
+          "tableTo": "form_templates",
+          "columnsFrom": ["template_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "hazid_assessment_app_responses_response_id_form_responses_id_fk": {
+          "name": "hazid_assessment_app_responses_response_id_form_responses_id_fk",
+          "tableFrom": "hazid_assessment_app_responses",
+          "tableTo": "form_responses",
+          "columnsFrom": ["response_id"],
           "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"

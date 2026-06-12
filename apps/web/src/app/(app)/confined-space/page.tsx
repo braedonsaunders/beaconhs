@@ -22,6 +22,7 @@ import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
 import { TableToolbar } from '@/components/table-toolbar'
+import { ConfinedSpaceSubNav } from './_nav'
 
 export const metadata = { title: 'Confined Space' }
 
@@ -110,20 +111,7 @@ export default async function ConfinedSpacePage({
               </div>
             }
           />
-          <nav className="flex flex-wrap items-center gap-2">
-            <Link
-              href="/confined-space"
-              className="rounded-full border border-teal-500 bg-teal-50 px-3 py-1 text-xs font-medium text-teal-700"
-            >
-              Permits
-            </Link>
-            <Link
-              href="/confined-space/sensors"
-              className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:border-teal-500 hover:bg-teal-50 hover:text-teal-700"
-            >
-              Atmospheric sensors
-            </Link>
-          </nav>
+          <ConfinedSpaceSubNav active="permits" />
           <TableToolbar>
             <SearchInput placeholder="Search by permit title" />
             <FilterChips
@@ -140,11 +128,11 @@ export default async function ConfinedSpacePage({
       {rows.length === 0 ? (
         <EmptyState
           icon={<ShieldCheck size={32} />}
-          title={params.q || statusFilter ? 'No permits match these filters' : 'No permits yet'}
+          title={params.q || statusFilter ? 'No permits match these filters' : 'No permits'}
           description="Open a new permit before any confined-space entry."
           action={
             <Link href="/confined-space/new">
-              <Button>Open your first permit</Button>
+              <Button>New permit</Button>
             </Link>
           }
         />

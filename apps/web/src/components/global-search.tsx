@@ -51,9 +51,9 @@ const ENTITY_META: Record<
     viewAllHref: (q) => `/documents?q=${encodeURIComponent(q)}`,
   },
   hazid_assessments: {
-    label: 'JSHA / HazID',
+    label: 'Hazard Assessments',
     icon: Radiation,
-    viewAllHref: (q) => `/hazid?q=${encodeURIComponent(q)}`,
+    viewAllHref: (q) => `/hazard-assessments?q=${encodeURIComponent(q)}`,
   },
 }
 

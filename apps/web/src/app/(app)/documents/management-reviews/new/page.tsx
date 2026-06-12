@@ -56,7 +56,7 @@ export default function NewManagementReviewPage() {
       <div className="mx-auto max-w-2xl">
         <PageHeader
           title="New management review"
-          description="Record the annual / scheduled review of the SH&S management system. After saving you can attach the documents that were reviewed and link to follow-up corrective actions."
+          description="Record the annual or scheduled review of the SH&S management system. Reviewed documents and follow-up corrective actions can be attached after saving."
           back={{ href: '/documents/management-reviews', label: 'Back to reviews' }}
         />
         <form

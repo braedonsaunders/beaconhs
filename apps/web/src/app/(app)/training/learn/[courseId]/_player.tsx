@@ -217,7 +217,7 @@ export function CoursePlayer({
         {!current ? (
           <Card>
             <CardContent className="py-10 text-center text-sm text-slate-500">
-              This course has no lessons yet.
+              This course has no lessons.
             </CardContent>
           </Card>
         ) : (
@@ -329,7 +329,7 @@ export function CoursePlayer({
                   <p className="mt-2 text-sm text-slate-600">
                     {current.assessmentTypeId
                       ? 'This lesson includes a quiz you must pass to continue.'
-                      : 'No assessment has been configured for this quiz yet.'}
+                      : 'No assessment is configured for this quiz.'}
                   </p>
                 </div>
               ) : current.kind === 'session' ? (

@@ -1,4 +1,4 @@
-import { Queue } from 'bullmq'
+import { Queue, type JobsOptions } from 'bullmq'
 import { connection } from '../connection'
 
 export type PdfJobData =
@@ -40,13 +40,57 @@ export const pdfQueue = new Queue<PdfJobData>('pdfs', {
   },
 })
 
+function pdfJobId(data: PdfJobData): string {
+  switch (data.kind) {
+    case 'form_response':
+      return `pdf|${data.tenantId}|form_response|${data.responseId}`
+    case 'incident':
+      return `pdf|${data.tenantId}|incident|${data.incidentId}`
+    case 'certificate':
+      return `pdf|${data.tenantId}|certificate|${data.certificateId}`
+    case 'skill_certificate':
+      return `pdf|${data.tenantId}|skill_certificate|${data.skillCertificateId}`
+    case 'hazid':
+      return `pdf|${data.tenantId}|hazid|${data.assessmentId}`
+    case 'ca':
+      return `pdf|${data.tenantId}|ca|${data.caId}`
+    case 'document':
+      return `pdf|${data.tenantId}|document|${data.documentId}`
+    case 'document_book':
+      return `pdf|${data.tenantId}|document_book|${data.bookId}`
+    case 'equipment_workorder':
+      return `pdf|${data.tenantId}|equipment_workorder|${data.workOrderId}`
+    case 'ppe_issue':
+      return `pdf|${data.tenantId}|ppe_issue|${data.issueReportId}`
+    case 'hazid_signed_report':
+      return `pdf|${data.tenantId}|hazid_signed_report|${data.reportId}`
+    case 'slides_import':
+      return `pdf|${data.tenantId}|slides_import|${data.target}|${data.targetId}|${data.attachmentId}`
+  }
+}
+
+async function addPdfJob(data: PdfJobData, opts?: JobsOptions) {
+  const jobId = pdfJobId(data)
+  const existing = await pdfQueue.getJob(jobId)
+  if (existing) {
+    const state = await existing.getState()
+    if (state !== 'completed' && state !== 'failed') return existing
+
+    // The route only re-enqueues when the artifact is still missing. If the
+    // previous job has already ended, clear it so a legitimate retry can run.
+    await existing.remove()
+  }
+
+  return pdfQueue.add(data.kind, data, { ...opts, jobId })
+}
+
 export async function enqueuePdf(data: PdfJobData) {
-  await pdfQueue.add(data.kind, data)
+  await addPdfJob(data)
 }
 
 export async function enqueueSlidesImport(data: Extract<PdfJobData, { kind: 'slides_import' }>) {
   // PPTX→PNG conversion is deterministic; a retry after partial failure would
   // duplicate appended slides, so run a single attempt and surface failures
   // through importStatus='failed' instead.
-  await pdfQueue.add(data.kind, data, { attempts: 1 })
+  await addPdfJob(data, { attempts: 1 })
 }

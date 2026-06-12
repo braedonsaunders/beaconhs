@@ -5,7 +5,7 @@
 // created_at == the baseline's when. Touches ONLY drizzle's bookkeeping, never
 // data tables.
 //
-//   cd packages/db && DATABASE_URL='postgresql://…' npx tsx src/scripts/reconcile-baseline.ts
+//   cd packages/db && DATABASE_URL='postgresql://beaconhs:beaconhs@localhost:5433/beaconhs' npx tsx src/scripts/reconcile-baseline.ts
 
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'

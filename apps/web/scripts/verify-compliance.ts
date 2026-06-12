@@ -2,7 +2,7 @@
 // Inserts real obligations, runs the evaluation adapters, prints results, cleans
 // up. Proves schema + RLS + adapter SQL actually execute end-to-end.
 //
-//   cd apps/web && DATABASE_URL='postgresql://…@10.0.0.85:5432/beaconhs?sslmode=disable' \
+//   cd apps/web && DATABASE_URL='postgresql://beaconhs:beaconhs@localhost:5433/beaconhs' \
 //     npx tsx scripts/verify-compliance.ts
 
 import { and, eq, isNull, sql } from 'drizzle-orm'

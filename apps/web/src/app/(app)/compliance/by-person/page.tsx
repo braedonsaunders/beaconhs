@@ -12,6 +12,7 @@ import {
   TableRow,
 } from '@beaconhs/ui'
 import { people } from '@beaconhs/db/schema'
+import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
@@ -29,6 +30,7 @@ export default async function ByPersonPage({
 }) {
   const sp = await searchParams
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'compliance.read')
   const personId = pickString(sp.person)
 
   const peopleOptions = await ctx.db((tx) =>
@@ -61,7 +63,7 @@ export default async function ByPersonPage({
         <>
           <PageHeader
             title="Compliance"
-            description="Everything one person owes across every obligation kind."
+            description="Every obligation one person is responsible for, across every kind."
           />
           <ComplianceSubNav active="by-person" />
         </>

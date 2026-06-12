@@ -243,14 +243,12 @@ export default async function TrainingRecordsPage({
         <EmptyState
           icon={<Award size={32} />}
           title={
-            params.q || sourceFilter || expiryFilter
-              ? 'No training records match these filters'
-              : 'No training records yet'
+            params.q || sourceFilter || expiryFilter ? 'No matching records' : 'No training records'
           }
           description="Issue a certificate, complete a class, or upload an external record."
           action={
             <Link href="/training/records/new">
-              <Button>Log your first record</Button>
+              <Button>Log a record</Button>
             </Link>
           }
         />

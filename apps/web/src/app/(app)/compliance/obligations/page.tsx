@@ -12,6 +12,7 @@ import {
   TableRow,
 } from '@beaconhs/ui'
 import { ListChecks } from 'lucide-react'
+import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
@@ -32,6 +33,8 @@ export default async function ObligationsPage({
 }) {
   const sp = await searchParams
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'compliance.read')
+  const canAssign = can(ctx, 'compliance.assign')
   const rawKind = pickString(sp.kind)
   const kindFilter = OBLIGATION_KINDS.includes(rawKind as ObligationKind)
     ? (rawKind as ObligationKind)
@@ -45,11 +48,13 @@ export default async function ObligationsPage({
         <>
           <PageHeader
             title="Obligations"
-            description="Every recurring assignment, across every kind, in one place. Create, audience, and cadence — managed here."
+            description="All recurring obligations in one place — kind, audience, and cadence."
             actions={
-              <Link href="/compliance/obligations/new">
-                <Button>New obligation</Button>
-              </Link>
+              canAssign ? (
+                <Link href="/compliance/obligations/new">
+                  <Button>New obligation</Button>
+                </Link>
+              ) : undefined
             }
           />
           <ComplianceSubNav active="obligations" />
@@ -67,15 +72,15 @@ export default async function ObligationsPage({
         <EmptyState
           icon={<ListChecks size={32} />}
           title={
-            kindFilter
-              ? `No ${kindLabel(kindFilter).toLowerCase()} obligations yet`
-              : 'No obligations yet'
+            kindFilter ? `No ${kindLabel(kindFilter).toLowerCase()} obligations` : 'No obligations'
           }
-          description="Create a recurring obligation so the right people complete the right thing on cadence."
+          description="Create a recurring obligation to assign required work on a schedule."
           action={
-            <Link href="/compliance/obligations/new">
-              <Button>New obligation</Button>
-            </Link>
+            canAssign ? (
+              <Link href="/compliance/obligations/new">
+                <Button>New obligation</Button>
+              </Link>
+            ) : undefined
           }
         />
       ) : (

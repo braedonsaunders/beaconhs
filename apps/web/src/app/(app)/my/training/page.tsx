@@ -253,8 +253,8 @@ export default async function MyTrainingPage({
       >
         <EmptyState
           icon={<GraduationCap size={32} />}
-          title="No person record linked to your account"
-          description="Ask an administrator to link your user account to a person record so your training shows up here."
+          title="No person record linked"
+          description="Ask an administrator to link your account to a person record. Training appears once linked."
         />
       </ListPageLayout>
     )
@@ -293,8 +293,8 @@ export default async function MyTrainingPage({
         data.courses.length === 0 ? (
           <EmptyState
             icon={<GraduationCap size={32} />}
-            title="No courses available yet"
-            description="Once a course has published content it'll appear here for you to take."
+            title="No courses available"
+            description="Courses with published content appear here."
           />
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -354,8 +354,8 @@ export default async function MyTrainingPage({
         data.records.length === 0 ? (
           <EmptyState
             icon={<GraduationCap size={32} />}
-            title="No training records yet"
-            description="As soon as an instructor or evaluator signs you off, it'll appear here."
+            title="No training records"
+            description="Records appear here once an instructor or evaluator signs you off."
           />
         ) : (
           <>
@@ -441,7 +441,7 @@ export default async function MyTrainingPage({
           <EmptyState
             icon={<GraduationCap size={32} />}
             title="Nothing expiring in the next 90 days"
-            description="All your certifications are good for at least the next quarter."
+            description="All certifications are valid for at least the next 90 days."
           />
         ) : (
           <>
@@ -503,7 +503,7 @@ export default async function MyTrainingPage({
           <EmptyState
             icon={<GraduationCap size={32} />}
             title="No outstanding assignments"
-            description="When someone assigns a course or assessment to you, it'll show up here until it's completed."
+            description="Assigned courses and assessments appear here until completed."
           />
         ) : (
           <>

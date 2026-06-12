@@ -400,8 +400,8 @@ export default async function DocumentBookPage({
                 {items.length === 0 ? (
                   <EmptyState
                     icon={<FileText size={24} />}
-                    title="No documents in this book yet"
-                    description="Use the picker below to add documents in the order you want them to appear in the PDF."
+                    title="No documents in this book"
+                    description="Add documents below in the order they should appear in the PDF."
                   />
                 ) : (
                   <ol className="space-y-2 text-sm">

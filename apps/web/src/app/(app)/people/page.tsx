@@ -92,7 +92,7 @@ export default async function PeoplePage({
           <PeopleSubNav active="directory" />
           <PageHeader
             title="People"
-            description="Workers, contractors, supervisors. Sync from your HRIS via the plugin framework."
+            description="Workers, contractors, and supervisors. Sync from an HRIS via plugins."
             actions={
               <div className="flex items-center gap-2">
                 <Link href="/people/org-chart">
@@ -119,11 +119,11 @@ export default async function PeoplePage({
       {rows.length === 0 ? (
         <EmptyState
           icon={<Users size={32} />}
-          title={params.q ? `No people match "${params.q}"` : 'No people yet'}
+          title={params.q ? `No people match "${params.q}"` : 'No people'}
           description="Add people one at a time, import via CSV from Admin → Import, or enable the NetSuite plugin."
           action={
             <Link href="/people/new">
-              <Button>Add your first person</Button>
+              <Button>Add person</Button>
             </Link>
           }
         />

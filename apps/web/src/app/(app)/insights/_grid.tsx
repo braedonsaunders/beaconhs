@@ -109,7 +109,7 @@ export function InsightsGrid({
           <div className="grid h-64 place-items-center rounded-xl border border-dashed border-slate-200 bg-slate-50/40 text-center text-sm text-slate-400">
             {editing
               ? 'Add widgets from the library →'
-              : 'This dashboard is empty. Click Customise to add widgets.'}
+              : 'This dashboard is empty. Select Customise to add widgets.'}
           </div>
         ) : (
           <Responsive

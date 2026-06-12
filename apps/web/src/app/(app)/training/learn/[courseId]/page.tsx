@@ -208,8 +208,8 @@ export default async function PlayerPage({ params }: { params: Promise<{ courseI
       {!person ? (
         <Card>
           <CardContent className="py-10 text-center text-sm text-slate-500">
-            Your account isn&apos;t linked to a worker profile yet, so we can&apos;t track your
-            progress. Ask an admin to link your People record.
+            Your account is not linked to a worker profile, so progress is not tracked. Ask an
+            administrator to link your People record.
           </CardContent>
         </Card>
       ) : !enrollment ? (

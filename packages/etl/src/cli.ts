@@ -5,10 +5,14 @@ import * as src from './source/mssql'
 const [cmd, ...args] = process.argv.slice(2)
 
 function isSourceDb(s: string): s is SourceDbName {
-  return (SOURCE_DBS as string[]).includes(s)
+  return SOURCE_DBS.includes(s)
 }
 
 async function counts() {
+  if (SOURCE_DBS.length === 0) {
+    console.log('No source DBs configured. Set ETL_SOURCE_DBS for private migration adapters.')
+    return
+  }
   for (const db of SOURCE_DBS) {
     const rows = await src.query<{ tbl: string; rows: number }>(
       db,
@@ -17,15 +21,15 @@ async function counts() {
        GROUP BY t.name ORDER BY rows DESC`,
     )
     const total = rows.reduce((a, r) => a + Number(r.rows || 0), 0)
-    console.log(
-      `\n## ${db} → ${TENANT_SLUG_BY_DB[db]}  (${rows.length} tables, ${total.toLocaleString()} rows)`,
-    )
-    for (const r of rows)
+    const tenant = TENANT_SLUG_BY_DB[db] ?? '(unmapped)'
+    console.log(`\n## ${db} -> ${tenant} (${rows.length} tables, ${total.toLocaleString()} rows)`)
+    for (const r of rows) {
       console.log(
         `  ${r.tbl.padEnd(40)} ${Number(r.rows || 0)
           .toLocaleString()
           .padStart(12)}`,
       )
+    }
   }
 }
 
@@ -46,24 +50,6 @@ async function cols() {
   console.dir(rows, { depth: null })
 }
 
-// Spot-check: print count + 1 sample row for a handful of core mapped tables, to eyeball the mapping.
-async function verify() {
-  const spot: Array<[SourceDbName, string]> = [
-    ['beaconHS', 'INCIDENTLOG'],
-    ['beaconHS', 'HAZIDJSA'],
-    ['beaconHS', 'DAILYJOURNALS'],
-    ['beaconHS', 'CORRECTIVEACTIONS'],
-    ['toolCRIB', 'EQUIPMENT'],
-    ['peopleApp', 'EMPLOYEESHR'],
-  ]
-  for (const [db, table] of spot) {
-    const n = await src.rowCount(db, table)
-    const [row] = await src.sample(db, table, 1)
-    console.log(`\n### ${db}.${table}  (${n.toLocaleString()} rows)`)
-    console.dir(row, { depth: null })
-  }
-}
-
 async function clusterCheck() {
   const { connect } = await import('./crosswalk')
   const sql = connect()
@@ -73,11 +59,6 @@ async function clusterCheck() {
     console.log(r[0]!.v)
   } catch (e: any) {
     console.error(`FAILED to reach DATABASE_URL: ${e.message}`)
-    if (/pg_hba|no encryption|SSL/.test(e.message)) {
-      console.error(
-        '\nHint: the cluster has no pg_hba.conf rule for this host, or requires/forbids SSL.',
-      )
-    }
     process.exitCode = 1
   } finally {
     await sql.end({ timeout: 3 })
@@ -85,11 +66,27 @@ async function clusterCheck() {
 }
 
 function help(usage?: string) {
-  if (usage) console.error(`usage: etl ${usage}`)
-  else
-    console.log(
-      `BeaconHS ETL\n\nRead-only (legacy MSSQL):\n  counts                 row counts for all in-scope source tables\n  sample <db> <table> [n] print sample rows\n  cols <db> <table>       column list\n  verify                  spot-check core mapped tables\n\nCluster (needs DATABASE_URL access):\n  cluster-check           test the target Postgres connection\n  bootstrap               create tenants + admin users + roles + templates   [Phase 1]\n  import [--dry-run]      one-time bulk import                               [Phase 2]\n  sync                    incremental upsert                                 [Phase 3]\n  reconcile               source vs target row-count report\n\ndbs: ${SOURCE_DBS.join(', ')}`,
-    )
+  if (usage) {
+    console.error(`usage: etl ${usage}`)
+    return
+  }
+  console.log(
+    `BeaconHS ETL
+
+Read-only source inspection:
+  counts                 row counts for configured source DBs
+  sample <db> <table> [n] print sample rows
+  cols <db> <table>       column list
+
+Target Postgres:
+  cluster-check           test DATABASE_URL
+  bootstrap               create configured tenants + roles + templates
+  import                  run configured loaders once
+  sync                    run configured loaders in incremental mode
+
+Configure private adapters with ETL_SOURCE_DBS, ETL_TENANT_SLUG_BY_DB, and ETL_SOURCE_URL.
+Configured source DBs: ${SOURCE_DBS.length ? SOURCE_DBS.join(', ') : '(none)'}`,
+  )
 }
 
 async function main() {
@@ -103,9 +100,6 @@ async function main() {
     case 'cols':
       await cols()
       break
-    case 'verify':
-      await verify()
-      break
     case 'cluster-check':
       await clusterCheck()
       break
@@ -117,24 +111,14 @@ async function main() {
     case 'import':
     case 'sync': {
       const { runImport } = await import('./orchestrator')
-      const { RASSAUN_LOADERS, EXTERNAL_TRAINING_LOADERS, ALL_LOADERS } = await import('./loaders')
-      const set = args.includes('--set') ? args[args.indexOf('--set') + 1] : 'all'
-      const loaders =
-        set === 'rassaun'
-          ? RASSAUN_LOADERS
-          : set === 'et' || set === 'external-training'
-            ? EXTERNAL_TRAINING_LOADERS
-            : ALL_LOADERS
+      const { ALL_LOADERS } = await import('./loaders')
       const only = args.includes('--only') ? args[args.indexOf('--only') + 1] : undefined
-      await runImport(loaders, { only, mode: cmd === 'sync' ? 'sync' : 'import' })
+      if (ALL_LOADERS.length === 0) {
+        console.log('No public ETL loaders configured. Add private loaders before import/sync.')
+      }
+      await runImport(ALL_LOADERS, { only, mode: cmd === 'sync' ? 'sync' : 'import' })
       break
     }
-    case 'reconcile':
-      console.error(
-        `"${cmd}" is not implemented yet — depends on cluster access (see plan Phase 1+).`,
-      )
-      process.exitCode = 1
-      break
     default:
       help()
   }

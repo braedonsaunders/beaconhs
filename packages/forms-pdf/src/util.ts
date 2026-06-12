@@ -3,14 +3,31 @@
 // Chromium startup tax. Workers should call `closeBrowser()` on shutdown if
 // they want to be polite.
 
+import { existsSync } from 'node:fs'
 import puppeteer, { type Browser } from 'puppeteer-core'
 
 let browserPromise: Promise<Browser> | null = null
 
+/** PUPPETEER_EXECUTABLE_PATH wins; otherwise probe the Docker image's
+ *  chromium, then the usual macOS installs (local dev). */
+function resolveExecutablePath(): string {
+  const candidates = [
+    process.env.PUPPETEER_EXECUTABLE_PATH,
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser',
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    '/Applications/Chromium.app/Contents/MacOS/Chromium',
+  ].filter((p): p is string => Boolean(p))
+  for (const p of candidates) {
+    if (existsSync(p)) return p
+  }
+  throw new Error('No Chromium executable found for PDF rendering — set PUPPETEER_EXECUTABLE_PATH')
+}
+
 export function getBrowser(): Promise<Browser> {
   if (!browserPromise) {
     browserPromise = puppeteer.launch({
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH ?? '/usr/bin/chromium',
+      executablePath: resolveExecutablePath(),
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',

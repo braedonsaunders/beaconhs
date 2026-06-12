@@ -25,6 +25,7 @@ import {
 } from '@beaconhs/ui'
 import { people, ppeIssues, ppeItems, ppeTypes } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { PersonSelectField } from '@/components/person-select-field'
 import { ListPageLayout } from '@/components/page-layout'
 import { Section } from '@/components/section'
 import { PpeSubNav } from '@/components/ppe-sub-nav'
@@ -103,8 +104,14 @@ export default async function PpeIssuePage() {
         .orderBy(asc(people.lastName), asc(people.firstName))
         .limit(500)
       const allPeople = await tx
-        .select({ id: people.id, firstName: people.firstName, lastName: people.lastName })
+        .select({
+          id: people.id,
+          firstName: people.firstName,
+          lastName: people.lastName,
+          employeeNo: people.employeeNo,
+        })
         .from(people)
+        .where(eq(people.status, 'active'))
         .orderBy(asc(people.lastName), asc(people.firstName))
         .limit(500)
       const recent = await tx
@@ -159,7 +166,7 @@ export default async function PpeIssuePage() {
         <Section title="Issue PPE to a person" defaultOpen>
           {inStock.length === 0 ? (
             <p className="text-sm text-slate-500">
-              Nothing in stock right now — every item is issued, damaged, or discarded.
+              Nothing in stock — every item is issued, damaged, or discarded.
             </p>
           ) : (
             <form action={issuePpe} className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -181,14 +188,17 @@ export default async function PpeIssuePage() {
               </div>
               <div className="space-y-1.5 sm:col-span-2">
                 <Label>Hand to person *</Label>
-                <Select name="personId" required defaultValue="">
-                  <option value="">— Select person —</option>
-                  {peopleList.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.lastName}, {p.firstName}
-                    </option>
-                  ))}
-                </Select>
+                <PersonSelectField
+                  name="personId"
+                  defaultValue=""
+                  options={peopleList.map((p) => ({
+                    value: p.id,
+                    label: `${p.lastName}, ${p.firstName}`,
+                    hint: p.employeeNo ?? undefined,
+                  }))}
+                  placeholder="Select a person…"
+                  clearable={false}
+                />
               </div>
               <div className="space-y-1.5">
                 <Label>&nbsp;</Label>
@@ -216,7 +226,7 @@ export default async function PpeIssuePage() {
             <EmptyState
               icon={<ArrowLeftRight size={28} />}
               title="Nothing currently issued"
-              description="The board is clear — every PPE item is either in stock or out of service."
+              description="Every PPE item is in stock or out of service."
             />
           ) : (
             <div className="overflow-x-auto rounded-md border border-slate-200 bg-white">
@@ -292,7 +302,7 @@ export default async function PpeIssuePage() {
           defaultOpen={false}
         >
           {recentLedger.length === 0 ? (
-            <p className="text-sm text-slate-500">No PPE activity yet.</p>
+            <p className="text-sm text-slate-500">No PPE activity.</p>
           ) : (
             <Table>
               <TableHeader>

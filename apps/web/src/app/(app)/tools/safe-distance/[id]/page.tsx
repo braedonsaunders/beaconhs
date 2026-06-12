@@ -17,13 +17,20 @@ import {
   Select,
   Textarea,
 } from '@beaconhs/ui'
-import { orgUnits, people, safeDistanceRecords, tenantUsers } from '@beaconhs/db/schema'
+import {
+  orgUnits,
+  people,
+  safeDistanceRecords,
+  tenantUsers,
+  user as userTable,
+} from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recentActivityForEntity } from '@/lib/audit'
 import { ActivityFeed } from '@/components/activity-feed'
 import { DetailGrid } from '@/components/detail-grid'
 import { Section } from '@/components/section'
 import { DetailPageLayout } from '@/components/page-layout'
+import { PersonSelectField } from '@/components/person-select-field'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import {
   deleteSafeDistanceRecordAndRedirect,
@@ -105,8 +112,9 @@ export default async function SafeDistanceDetailPage({
             .orderBy(asc(orgUnits.name))
             .limit(200)
           const supervisors = await tx
-            .select({ id: tenantUsers.id, name: tenantUsers.displayName })
+            .select({ id: tenantUsers.id, name: tenantUsers.displayName, email: userTable.email })
             .from(tenantUsers)
+            .leftJoin(userTable, eq(userTable.id, tenantUsers.userId))
             .where(eq(tenantUsers.status, 'active'))
             .orderBy(asc(tenantUsers.displayName))
             .limit(200)
@@ -115,6 +123,7 @@ export default async function SafeDistanceDetailPage({
               id: people.id,
               firstName: people.firstName,
               lastName: people.lastName,
+              employeeNo: people.employeeNo,
             })
             .from(people)
             .where(eq(people.status, 'active'))
@@ -352,34 +361,35 @@ export default async function SafeDistanceDetailPage({
             </div>
             <div className="space-y-2">
               <Label htmlFor="supervisorTenantUserId">Supervisor</Label>
-              <Select
-                id="supervisorTenantUserId"
+              <PersonSelectField
                 name="supervisorTenantUserId"
                 defaultValue={row.supervisorTenantUserId ?? ''}
-              >
-                <option value="">— None —</option>
-                {sources.supervisors.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name ?? '(unnamed)'}
-                  </option>
-                ))}
-              </Select>
+                options={sources.supervisors.map((s) => ({
+                  value: s.id,
+                  label: s.name ?? '(unnamed)',
+                  hint: s.email ?? undefined,
+                }))}
+                placeholder="Select a supervisor…"
+                clearable
+                emptyLabel="— None —"
+              />
             </div>
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="operatorPersonId">Operator</Label>
-              <Select
-                id="operatorPersonId"
+              <PersonSelectField
                 name="operatorPersonId"
                 defaultValue={row.operatorPersonId ?? ''}
-              >
-                <option value="">— None —</option>
-                {sources.operators.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {`${p.lastName ?? ''}${p.lastName ? ', ' : ''}${p.firstName ?? ''}`.trim() ||
-                      '(unnamed)'}
-                  </option>
-                ))}
-              </Select>
+                options={sources.operators.map((p) => ({
+                  value: p.id,
+                  label:
+                    `${p.lastName ?? ''}${p.lastName ? ', ' : ''}${p.firstName ?? ''}`.trim() ||
+                    '(unnamed)',
+                  hint: p.employeeNo ?? undefined,
+                }))}
+                placeholder="Select an operator…"
+                clearable
+                emptyLabel="— None —"
+              />
             </div>
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="notes">Notes</Label>

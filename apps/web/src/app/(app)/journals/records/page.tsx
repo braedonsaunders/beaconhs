@@ -7,8 +7,7 @@
 import { redirect } from 'next/navigation'
 import { PageHeader } from '@beaconhs/ui'
 import { requireRequestContext } from '@/lib/auth'
-import { ModuleSubNav } from '@/components/module-admin/module-sub-nav'
-import { moduleManageTabs } from '@/lib/module-admin/registry'
+import { ModuleNav } from '@/components/module-admin/module-nav'
 import { countEntries, listEntries, listMetaOptions, listTagSuggestions } from '../_data'
 import { getAuthorPersonId, journalCanBrowseAll, journalScopeWhere } from '../_lib'
 import { RecordsBrowser } from './_browser'
@@ -35,10 +34,10 @@ export default async function JournalRecordsPage() {
       <div className="shrink-0 border-b border-slate-200 px-4 pt-4 sm:px-6">
         <PageHeader
           title="Journal records"
-          description="Browse, filter, and read every journal you have access to — by person, site, date, and more."
+          description="Browse and filter journal entries by person, site, and date."
         />
         <div className="pt-2 pb-3">
-          <ModuleSubNav tabs={moduleManageTabs('journals')} active="records" />
+          <ModuleNav moduleKey="journals" active="records" />
         </div>
       </div>
       <div className="min-h-0 flex-1">

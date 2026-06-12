@@ -4,7 +4,7 @@
 //
 //   cd apps/web && npx tsx --env-file=../../.env scripts/materialize-compliance.ts [tenant-slug]
 //
-// Defaults to the `rassaun` tenant. Prints a per-obligation compliance summary.
+// Defaults to the `demo` tenant. Prints a per-obligation compliance summary.
 
 import { eq } from 'drizzle-orm'
 import { createClient, withTenant } from '@beaconhs/db'
@@ -13,7 +13,7 @@ import { materializeTenant } from '@beaconhs/compliance'
 
 async function main() {
   if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL required')
-  const slug = process.argv[2] ?? 'rassaun'
+  const slug = process.argv[2] ?? 'demo'
   const { db, sql: pg } = createClient({ url: process.env.DATABASE_URL, max: 1 })
 
   const [tenant] = await db

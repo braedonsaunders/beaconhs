@@ -191,12 +191,12 @@ export default async function SafeDistanceListPage({
           title={
             params.q || typeFilter || compliesFilter || siteFilter
               ? 'No assessments match these filters'
-              : 'No safe-distance assessments yet'
+              : 'No safe-distance assessments'
           }
           description="Create one to record the required vs. actual clearance for an electrical, drone, crane, or vehicle proximity assessment."
           action={
             <Link href="/tools/safe-distance/new">
-              <Button>Create the first assessment</Button>
+              <Button>New assessment</Button>
             </Link>
           }
         />

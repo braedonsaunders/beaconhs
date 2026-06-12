@@ -22,6 +22,7 @@ import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
 import { TableToolbar } from '@/components/table-toolbar'
+import { DocumentsSubNav } from '../_components/documents-sub-nav'
 
 export const metadata = { title: 'Document books' }
 
@@ -114,32 +115,7 @@ export default async function DocumentBooksPage({
               </Link>
             }
           />
-          <nav className="flex flex-wrap items-center gap-2">
-            <Link
-              href="/documents"
-              className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:border-teal-500 hover:bg-teal-50 hover:text-teal-700"
-            >
-              Documents
-            </Link>
-            <Link
-              href="/documents/books"
-              className="rounded-full border border-teal-500 bg-teal-50 px-3 py-1 text-xs font-medium text-teal-700"
-            >
-              Books
-            </Link>
-            <Link
-              href="/documents/categories"
-              className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:border-teal-500 hover:bg-teal-50 hover:text-teal-700"
-            >
-              Categories
-            </Link>
-            <Link
-              href="/documents/types"
-              className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:border-teal-500 hover:bg-teal-50 hover:text-teal-700"
-            >
-              Types
-            </Link>
-          </nav>
+          <DocumentsSubNav active="books" />
           <TableToolbar>
             <SearchInput placeholder="Search title or description" />
             <FilterChips
@@ -156,11 +132,11 @@ export default async function DocumentBooksPage({
       {rows.length === 0 ? (
         <EmptyState
           icon={<Library size={32} />}
-          title={params.q || statusFilter ? 'No books match these filters' : 'No books yet'}
+          title={params.q || statusFilter ? 'No books match these filters' : 'No books'}
           description="Create a book to bundle related documents into a single management-review PDF."
           action={
             <Link href="/documents/books/new">
-              <Button>Create your first book</Button>
+              <Button>New book</Button>
             </Link>
           }
         />

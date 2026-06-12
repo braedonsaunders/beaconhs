@@ -261,12 +261,12 @@ export default async function MyTasksPage({
           title={
             params.q || sevFilter || overdueOnly || rawStatus !== 'all_open'
               ? 'No tasks match these filters'
-              : 'No open tasks. Inbox zero!'
+              : 'No open tasks'
           }
           description={
             rawStatus === 'all_open'
-              ? 'Tasks assigned to you show up here as soon as they are created.'
-              : 'Try a different status filter to widen the view.'
+              ? 'Tasks assigned to you appear here when created.'
+              : 'Adjust the status filter to widen the view.'
           }
         />
       ) : (

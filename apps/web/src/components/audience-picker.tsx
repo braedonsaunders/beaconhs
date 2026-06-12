@@ -26,6 +26,7 @@ import {
   CardTitle,
   Input,
   Label,
+  SearchSelect,
   Select,
 } from '@beaconhs/ui'
 
@@ -157,6 +158,18 @@ export function AudiencePicker({
                 value="All active people"
                 disabled
                 className="bg-slate-50 dark:bg-slate-900"
+              />
+            ) : pendingType === 'person' ? (
+              <SearchSelect
+                value={pendingValue}
+                onChange={onPendingValueChange}
+                options={valueOptions()}
+                placeholder="— pick —"
+                searchPlaceholder="Search people…"
+                sheetTitle="Select a person"
+                ariaLabel="Pick a person"
+                clearable
+                emptyLabel="— pick —"
               />
             ) : (
               <Select

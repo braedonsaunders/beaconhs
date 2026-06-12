@@ -15,12 +15,14 @@
 import { credentialFontFaces } from './fonts'
 import {
   GOLD,
+  type CredentialDesignOptions,
   esc,
   formatDateShort,
   initialsOf,
+  normalizeCredentialDesignOptions,
+  patternOpacity,
   rgba,
   ringLattice,
-  safeColor,
   sealSvg,
   shade,
   tint,
@@ -47,13 +49,31 @@ export type WalletRenderInput = {
   verifyToken?: string
   qrDataUrl?: string
   cardId?: string
+  design?: CredentialDesignOptions
 }
 
 export function renderWalletHtml(input: WalletRenderInput): string {
   const variant = input.variant ?? 'completion'
-  const primary = safeColor(input.primaryColor, '#1f3a5f')
+  const design = normalizeCredentialDesignOptions(
+    { ...input.design, format: 'wallet' },
+    input.primaryColor,
+  )
+  const primary = design.primary
+  const accent = design.accent
+  const paper = design.paper
   const primaryDark = shade(primary, 0.42)
   const ink = shade(primary, 0.62)
+  const latticeOpacity = patternOpacity(design.patternStrength, 0.07)
+  const bodyFont =
+    design.typeface === 'technical'
+      ? "ui-monospace, 'SF Mono', Menlo, monospace"
+      : design.typeface === 'classic'
+        ? "'Cormorant Garamond', Georgia, 'Times New Roman', serif"
+        : "'Archivo', 'Helvetica Neue', Arial, sans-serif"
+  const utilityFont =
+    design.typeface === 'technical'
+      ? "ui-monospace, 'SF Mono', Menlo, monospace"
+      : "'Archivo', 'Helvetica Neue', Arial, sans-serif"
 
   const verifyUrl = input.verifyUrl ?? ''
   const verifyShort = verifyUrl.replace(/^https?:\/\//, '').slice(0, 64)
@@ -76,7 +96,7 @@ export function renderWalletHtml(input: WalletRenderInput): string {
     @page { size: 3.375in 2.125in; margin: 0; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: 'Archivo', 'Helvetica Neue', Arial, sans-serif;
+      font-family: ${bodyFont};
       color: ${ink};
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
@@ -91,7 +111,7 @@ export function renderWalletHtml(input: WalletRenderInput): string {
     .card:last-child { page-break-after: auto; }
 
     /* ---------- Front ---------- */
-    .card.front { background: #ffffff; }
+    .card.front { background: ${paper}; }
     .front .band {
       position: absolute;
       top: 0; left: 0; right: 0;
@@ -107,7 +127,7 @@ export function renderWalletHtml(input: WalletRenderInput): string {
       position: absolute;
       left: 0; right: 0; bottom: -2px;
       height: 2px;
-      background: linear-gradient(90deg, ${GOLD.light}, ${GOLD.mid} 40%, ${GOLD.deep});
+      background: linear-gradient(90deg, ${tint(accent, 0.35)}, ${accent} 46%, ${shade(accent, 0.18)});
     }
     .band .brand { min-width: 0; }
     .band .tenant {
@@ -141,7 +161,7 @@ export function renderWalletHtml(input: WalletRenderInput): string {
     .front .lattice {
       position: absolute;
       inset: 0.56in 0 0 0;
-      background: ${ringLattice(primary, 0.045)};
+      background: ${design.patternStrength ? ringLattice(primary, patternOpacity(design.patternStrength, 0.052)) : 'none'};
       background-size: 120px 120px;
     }
 
@@ -176,6 +196,7 @@ export function renderWalletHtml(input: WalletRenderInput): string {
       left: 0.93in;
       right: 0.13in;
     }
+    .front.no-photo .info { left: 0.16in; top: 0.68in; }
     .info .name {
       font-size: ${nameSize}pt;
       font-weight: 800;
@@ -192,7 +213,7 @@ export function renderWalletHtml(input: WalletRenderInput): string {
       font-weight: 600;
       letter-spacing: 0.08em;
       color: #64748b;
-      font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+      font-family: ${utilityFont};
     }
     .info .cred {
       margin-top: 0.055in;
@@ -214,7 +235,7 @@ export function renderWalletHtml(input: WalletRenderInput): string {
     .cred-meta .code {
       font-size: 5.2pt;
       font-weight: 600;
-      font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+      font-family: ${utilityFont};
       color: ${primaryDark};
       border: 0.6px solid ${rgba(primary, 0.45)};
       border-radius: 2.5px;
@@ -244,7 +265,7 @@ export function renderWalletHtml(input: WalletRenderInput): string {
       font-weight: 700;
       letter-spacing: 0.18em;
       text-transform: uppercase;
-      color: ${GOLD.deep};
+      color: ${accent};
     }
     .dates .cell .value {
       margin-top: 1px;
@@ -263,7 +284,7 @@ export function renderWalletHtml(input: WalletRenderInput): string {
     .card.back {
       background:
         radial-gradient(ellipse at 18% 0%, ${rgba(tint(primary, 0.25), 0.3)} 0%, rgba(0,0,0,0) 52%),
-        ${ringLattice('#ffffff', 0.06)},
+        ${design.patternStrength ? `${ringLattice('#ffffff', latticeOpacity)},` : ''}
         linear-gradient(150deg, ${primaryDark} 0%, ${shade(primary, 0.58)} 100%);
       background-size: auto, 120px 120px, auto;
       color: #ffffff;
@@ -293,12 +314,12 @@ export function renderWalletHtml(input: WalletRenderInput): string {
       font-weight: 600;
       letter-spacing: 0.2em;
       text-transform: uppercase;
-      color: ${GOLD.light};
+      color: ${tint(accent, 0.38)};
     }
     .back .head-rule {
       margin-top: 4px;
       height: 0.8px;
-      background: linear-gradient(90deg, ${GOLD.mid}, rgba(255,255,255,0.12));
+      background: linear-gradient(90deg, ${accent}, rgba(255,255,255,0.12));
     }
 
     .back .center {
@@ -307,6 +328,11 @@ export function renderWalletHtml(input: WalletRenderInput): string {
       align-items: center;
       gap: 0.13in;
       padding-top: 0.06in;
+    }
+    .back .center.no-qr {
+      justify-content: center;
+      padding: 0.13in 0.08in 0;
+      text-align: center;
     }
     .back .qr-tile {
       flex-shrink: 0;
@@ -338,7 +364,7 @@ export function renderWalletHtml(input: WalletRenderInput): string {
       line-height: 1.35;
       color: rgba(255, 255, 255, 0.82);
       word-break: break-all;
-      font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+      font-family: ${utilityFont};
     }
     .verify .token-label {
       margin-top: 4.5px;
@@ -354,8 +380,8 @@ export function renderWalletHtml(input: WalletRenderInput): string {
       font-size: 5.8pt;
       font-weight: 600;
       letter-spacing: 0.08em;
-      font-family: ui-monospace, 'SF Mono', Menlo, monospace;
-      color: ${GOLD.light};
+      font-family: ${utilityFont};
+      color: ${tint(accent, 0.38)};
       background: rgba(255, 255, 255, 0.1);
       border-radius: 3px;
       padding: 1.5px 5px;
@@ -381,12 +407,44 @@ export function renderWalletHtml(input: WalletRenderInput): string {
       font-size: 4.9pt;
       font-weight: 600;
       letter-spacing: 0.08em;
-      font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+      font-family: ${utilityFont};
       color: rgba(255, 255, 255, 0.55);
+    }
+
+    .card.field-pass.front .band {
+      height: 0.50in;
+      background: linear-gradient(90deg, ${primary} 0%, ${shade(primary, 0.28)} 100%);
+    }
+    .card.field-pass.front .lattice { inset: 0.50in 0 0 0; }
+    .card.field-pass.front .photo { top: 0.32in; border-radius: 2px; }
+    .card.field-pass.front .mini-seal { opacity: 0.8; }
+    .card.field-pass.back {
+      background:
+        ${design.patternStrength ? `${ringLattice('#ffffff', latticeOpacity)},` : ''}
+        linear-gradient(135deg, ${primary} 0%, ${shade(primary, 0.5)} 100%);
+    }
+
+    .card.clean-authority.front .band {
+      height: 0.42in;
+      background: ${primary};
+    }
+    .card.clean-authority.front .lattice { opacity: 0.35; }
+    .card.clean-authority.front .photo {
+      top: 0.40in;
+      border-radius: 7px;
+      box-shadow: none;
+      border-color: ${paper};
+    }
+    .card.clean-authority.front .info { top: 0.60in; }
+    .card.clean-authority.front.no-photo .info { top: 0.58in; }
+    .card.clean-authority.front .mini-seal { display: none; }
+    .card.clean-authority.back {
+      background:
+        linear-gradient(180deg, ${primaryDark}, ${shade(primary, 0.7)});
     }
   </style>
 
-  <div class="card front">
+  <div class="card front ${design.templateId} ${design.showPhoto ? '' : 'no-photo'}">
     <div class="lattice"></div>
     <div class="band">
       <div class="brand">
@@ -395,13 +453,17 @@ export function renderWalletHtml(input: WalletRenderInput): string {
       </div>
       ${input.tenantLogoUrl ? `<div class="logo-chip"><img src="${esc(input.tenantLogoUrl)}" alt=""/></div>` : ''}
     </div>
-    <div class="photo">
+    ${
+      design.showPhoto
+        ? `<div class="photo">
       ${
         input.recipient.photoUrl
           ? `<img src="${esc(input.recipient.photoUrl)}" alt=""/>`
           : `<div class="initials">${esc(initialsOf(name, 2))}</div>`
       }
-    </div>
+    </div>`
+        : ''
+    }
     <div class="info">
       <div class="name">${esc(name)}</div>
       ${input.recipient.employeeNo ? `<div class="emp">NO. ${esc(input.recipient.employeeNo)}</div>` : ''}
@@ -421,21 +483,25 @@ export function renderWalletHtml(input: WalletRenderInput): string {
         <div class="value">${input.expiresOn ? esc(formatDateShort(input.expiresOn)) : 'No expiry'}</div>
       </div>
     </div>
-    <div class="mini-seal">${miniSeal}</div>
+    ${design.showSeal ? `<div class="mini-seal">${miniSeal}</div>` : ''}
   </div>
 
-  <div class="card back">
+  <div class="card back ${design.templateId}">
     <div class="head">
       <div class="tenant">${esc(input.tenantName)}</div>
       <div class="label">Credential Verification</div>
     </div>
     <div class="head-rule"></div>
-    <div class="center">
-      <div class="qr-tile">
+    <div class="center ${design.showQr ? '' : 'no-qr'}">
+      ${
+        design.showQr
+          ? `<div class="qr-tile">
         ${input.qrDataUrl ? `<img src="${esc(input.qrDataUrl)}" alt="QR"/>` : `<div class="blank"></div>`}
-      </div>
+      </div>`
+          : ''
+      }
       <div class="verify">
-        <div class="scan">Scan to verify</div>
+        <div class="scan">${design.showQr ? 'Scan to verify' : 'Verify credential'}</div>
         ${verifyShort ? `<div class="url">${esc(verifyShort)}</div>` : ''}
         ${
           input.verifyToken

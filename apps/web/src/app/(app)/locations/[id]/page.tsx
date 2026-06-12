@@ -594,7 +594,7 @@ function ProjectsTab({
       {projects.length === 0 ? (
         <EmptyState
           icon={<Folder size={32} />}
-          title="No projects yet"
+          title="No projects"
           description="Create a project to group sites for this customer."
         />
       ) : (
@@ -646,8 +646,8 @@ function SitesTab({
     return (
       <EmptyState
         icon={<MapPin size={32} />}
-        title="No sites yet"
-        description="Sites live underneath a project (or directly under a customer)."
+        title="No sites"
+        description="Sites sit under a project or directly under a customer."
       />
     )
   }
@@ -704,7 +704,7 @@ function ContactsTab({
       {contacts.length === 0 ? (
         <EmptyState
           icon={<Users size={32} />}
-          title="No contacts yet"
+          title="No contacts"
           description="Add a customer contact below — site managers, client reps, emergency-only contacts."
         />
       ) : (

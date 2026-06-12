@@ -209,11 +209,11 @@ export default async function AssessmentTypesPage({
       {rows.length === 0 ? (
         <EmptyState
           icon={<ClipboardList size={32} />}
-          title={params.q ? `No assessment types match "${params.q}"` : 'No assessment types yet'}
-          description="Create one to start building a graded test bank."
+          title={params.q ? `No assessment types match "${params.q}"` : 'No assessment types'}
+          description="Create a type to build a graded question bank."
           action={
             <Link href="/training/assessments/types/new">
-              <Button>Create your first assessment type</Button>
+              <Button>New assessment type</Button>
             </Link>
           }
         />

@@ -7,9 +7,9 @@
 # supported during `next build`; Node 20 throws ERR_REQUIRE_ESM.
 ARG NODE_VERSION=22.12.0
 FROM node:${NODE_VERSION}-bookworm-slim AS base
-# Upgrade corepack first: the version bundled with node 20.18 ships stale pnpm
-# signing keys and fails `pnpm install` with "Cannot find matching keyid".
-RUN npm install -g corepack@latest && corepack enable && corepack prepare pnpm@9.12.0 --activate
+# Upgrade corepack first: bundled versions can ship stale pnpm signing keys and
+# fail `pnpm install` with "Cannot find matching keyid".
+RUN npm install -g corepack@latest && corepack enable && corepack prepare pnpm@10.30.3 --activate
 WORKDIR /app
 
 # --- Builder ---

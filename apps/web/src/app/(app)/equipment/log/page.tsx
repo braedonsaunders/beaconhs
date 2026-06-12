@@ -29,6 +29,7 @@ import { ListPageLayout } from '@/components/page-layout'
 import { TableToolbar } from '@/components/table-toolbar'
 import { Section } from '@/components/section'
 import { EquipmentSubNav } from '@/components/equipment-sub-nav'
+import { PersonSelectField } from '@/components/person-select-field'
 
 export const metadata = { title: 'Equipment log' }
 export const dynamic = 'force-dynamic'
@@ -167,8 +168,14 @@ export default async function EquipmentLogPage({
       .orderBy(asc(equipmentItems.assetTag))
       .limit(500)
     const allPeople = await tx
-      .select({ id: people.id, first: people.firstName, last: people.lastName })
+      .select({
+        id: people.id,
+        first: people.firstName,
+        last: people.lastName,
+        employeeNo: people.employeeNo,
+      })
       .from(people)
+      .where(eq(people.status, 'active'))
       .orderBy(asc(people.lastName), asc(people.firstName))
       .limit(500)
     const kinds = await tx
@@ -216,7 +223,7 @@ export default async function EquipmentLogPage({
             title={
               params.q || kindFilter || itemFilter
                 ? 'No log entries match these filters'
-                : 'No log entries yet'
+                : 'No log entries'
             }
             description="Add a new entry below to record an observation against a piece of equipment."
           />
@@ -324,14 +331,18 @@ export default async function EquipmentLogPage({
             </div>
             <div className="space-y-1.5">
               <Label>Person</Label>
-              <Select name="personPersonId" defaultValue="">
-                <option value="">—</option>
-                {peopleList.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.last}, {p.first}
-                  </option>
-                ))}
-              </Select>
+              <PersonSelectField
+                name="personPersonId"
+                defaultValue=""
+                options={peopleList.map((p) => ({
+                  value: p.id,
+                  label: `${p.last}, ${p.first}`,
+                  hint: p.employeeNo ?? undefined,
+                }))}
+                placeholder="Select a person…"
+                clearable
+                emptyLabel="—"
+              />
             </div>
             <div className="space-y-1.5 sm:col-span-3">
               <Label>Details *</Label>

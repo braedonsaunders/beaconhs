@@ -136,7 +136,7 @@ export function BlockEditor({
 
       {blocks.length === 0 ? (
         <div className="rounded-lg border border-dashed border-slate-300 px-4 py-10 text-center text-sm text-slate-400">
-          No content yet — add a block to start building this lesson.
+          No content. Add a block to build this lesson.
         </div>
       ) : (
         <div className="space-y-3">

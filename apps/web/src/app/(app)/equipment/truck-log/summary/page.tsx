@@ -195,7 +195,7 @@ export default async function TruckLogSummaryPage({
       {displayTrucks.length === 0 ? (
         <EmptyState
           icon={<Truck size={32} />}
-          title="No equipment yet"
+          title="No equipment"
           description="Add equipment first, then log daily entries to populate the monthly roll-up."
         />
       ) : (

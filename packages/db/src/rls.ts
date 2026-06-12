@@ -165,7 +165,6 @@ export const TENANT_SCOPED_TABLES = [
   'atmospheric_calibrations',
   'report_schedules',
   'report_runs',
-  'report_dashboards',
   'tenant_notification_recipients',
   'form_assignment_dispatches',
   'plugin_runs',

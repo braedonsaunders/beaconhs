@@ -40,7 +40,7 @@ export function CompleteStepsTimeline({ steps }: { steps: CompleteStep[] }) {
     <div>
       <div className="text-xs tracking-wide text-slate-500 uppercase">Timeline</div>
       {steps.length === 0 ? (
-        <p className="mt-2 text-sm text-slate-500">No steps recorded yet.</p>
+        <p className="mt-2 text-sm text-slate-500">No steps recorded.</p>
       ) : (
         <ol className="mt-2 space-y-2">
           {steps.map((s) => {

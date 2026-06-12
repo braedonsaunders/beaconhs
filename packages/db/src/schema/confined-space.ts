@@ -15,6 +15,7 @@ import {
 } from 'drizzle-orm/pg-core'
 import { id, timestamps } from './_helpers'
 import { tenants, tenantUsers } from './core'
+import { hazidAssessments } from './hazid-assessments'
 import { orgUnits, people } from './org'
 
 export const csPermitStatus = pgEnum('cs_permit_status', [
@@ -47,12 +48,19 @@ export const csPermits = pgTable(
     attendantPersonIds: jsonb('attendant_person_ids').$type<string[]>().default([]).notNull(),
     entrantPersonIds: jsonb('entrant_person_ids').$type<string[]>().default([]).notNull(),
     metadata: jsonb('metadata').$type<Record<string, unknown>>().default({}).notNull(),
+    // Formal link to the hazard assessment this permit was issued under.
+    // Permits can also stand alone, so it's nullable; an assessment may issue
+    // several permits over its life (re-issue after expiry).
+    hazardAssessmentId: uuid('hazard_assessment_id').references(() => hazidAssessments.id, {
+      onDelete: 'set null',
+    }),
     ...timestamps,
   },
   (t) => ({
     tenantIdx: index('cs_permits_tenant_idx').on(t.tenantId),
     statusIdx: index('cs_permits_status_idx').on(t.tenantId, t.status),
     expiresIdx: index('cs_permits_expires_idx').on(t.tenantId, t.expiresAt),
+    hazardAssessmentIdx: index('cs_permits_hazard_assessment_idx').on(t.hazardAssessmentId),
   }),
 )
 
@@ -122,6 +130,10 @@ export const csPermitsRelations = relations(csPermits, ({ one, many }) => ({
   tenant: one(tenants, { fields: [csPermits.tenantId], references: [tenants.id] }),
   readings: many(csAtmosphericReadings),
   personnel: many(csPermitPersonnel),
+  hazardAssessment: one(hazidAssessments, {
+    fields: [csPermits.hazardAssessmentId],
+    references: [hazidAssessments.id],
+  }),
 }))
 
 export const csPermitPersonnelRelations = relations(csPermitPersonnel, ({ one }) => ({

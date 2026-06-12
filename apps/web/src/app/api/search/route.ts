@@ -383,7 +383,7 @@ export async function GET(req: Request): Promise<NextResponse> {
         label: r.reference,
         sublabel:
           r.jobScope ?? (r.occurredAt ? new Date(r.occurredAt).toLocaleDateString() : undefined),
-        href: `/hazid/${r.id}`,
+        href: `/hazard-assessments/${r.id}`,
       })),
     })
   }

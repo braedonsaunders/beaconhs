@@ -8,7 +8,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2, Wrench } from 'lucide-react'
-import { Button, Input, Label, Select, Textarea, UrlDrawer } from '@beaconhs/ui'
+import { Button, Input, Label, SearchSelect, Select, Textarea, UrlDrawer } from '@beaconhs/ui'
 
 type CreateWorkOrderInput = {
   itemId: string
@@ -23,8 +23,13 @@ export type CreateWorkOrderAction = (
   input: CreateWorkOrderInput,
 ) => Promise<{ ok: boolean; error?: string }>
 
-type Assignee = { id: string; displayName: string | null; userName: string | null }
-type Reporter = { id: string; firstName: string; lastName: string }
+type Assignee = {
+  id: string
+  displayName: string | null
+  userName: string | null
+  email?: string | null
+}
+type Reporter = { id: string; firstName: string; lastName: string; employeeNo?: string | null }
 
 export function NewWorkOrderDrawer({
   open,
@@ -141,33 +146,38 @@ export function NewWorkOrderDrawer({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="wo-assignee">Assign to</Label>
-            <Select
-              id="wo-assignee"
+            <SearchSelect
               value={assignedTo}
-              onChange={(e) => setAssignedTo(e.currentTarget.value)}
-            >
-              <option value="">— Unassigned —</option>
-              {assignees.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.userName ?? a.displayName ?? a.id.slice(0, 6)}
-                </option>
-              ))}
-            </Select>
+              onChange={setAssignedTo}
+              options={assignees.map((a) => ({
+                value: a.id,
+                label: a.userName ?? a.displayName ?? a.id.slice(0, 6),
+                hint: a.email ?? undefined,
+              }))}
+              placeholder="Select an assignee..."
+              searchPlaceholder="Search people..."
+              sheetTitle="Assign to"
+              ariaLabel="Assign to"
+              clearable
+              emptyLabel="Unassigned"
+            />
           </div>
           <div className="space-y-1.5 sm:col-span-2">
             <Label htmlFor="wo-reporter">Reported by</Label>
-            <Select
-              id="wo-reporter"
+            <SearchSelect
               value={reportedBy}
-              onChange={(e) => setReportedBy(e.currentTarget.value)}
-            >
-              <option value="">— Not specified —</option>
-              {reporters.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.lastName}, {p.firstName}
-                </option>
-              ))}
-            </Select>
+              onChange={setReportedBy}
+              options={reporters.map((p) => ({
+                value: p.id,
+                label: `${p.lastName}, ${p.firstName}`,
+                hint: p.employeeNo ?? undefined,
+              }))}
+              placeholder="Select a person…"
+              searchPlaceholder="Search people…"
+              sheetTitle="Reported by"
+              clearable
+              emptyLabel="— Not specified —"
+            />
           </div>
         </div>
         {error ? (

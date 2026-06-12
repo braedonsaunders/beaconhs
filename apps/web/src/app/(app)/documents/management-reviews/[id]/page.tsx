@@ -88,9 +88,11 @@ export default async function ManagementReviewDetailPage({
           id: tenantUsers.id,
           displayName: tenantUsers.displayName,
           accountName: userTable.name,
+          email: userTable.email,
         })
         .from(tenantUsers)
         .leftJoin(userTable, eq(userTable.id, tenantUsers.userId))
+        .where(eq(tenantUsers.status, 'active'))
         .orderBy(asc(tenantUsers.displayName)),
     ])
 
@@ -113,17 +115,30 @@ export default async function ManagementReviewDetailPage({
             .from(correctiveActions)
             .where(inArray(correctiveActions.id, review.actionItemsCreated))
         : []
+    const participantMembers =
+      review.participants.length > 0
+        ? await tx
+            .select({
+              id: tenantUsers.id,
+              displayName: tenantUsers.displayName,
+              accountName: userTable.name,
+            })
+            .from(tenantUsers)
+            .leftJoin(userTable, eq(userTable.id, tenantUsers.userId))
+            .where(inArray(tenantUsers.id, review.participants))
+        : []
 
-    return { review, allDocs, allCAs, tenantMembers, reviewedDocs, reviewedCAs }
+    return { review, allDocs, allCAs, tenantMembers, reviewedDocs, reviewedCAs, participantMembers }
   })
 
   if (!data) notFound()
-  const { review, allDocs, allCAs, tenantMembers, reviewedDocs, reviewedCAs } = data
+  const { review, allDocs, allCAs, tenantMembers, reviewedDocs, reviewedCAs, participantMembers } =
+    data
   const basePath = `/documents/management-reviews/${id}`
 
   const participantNames = review.participants
     .map((pid) => {
-      const m = tenantMembers.find((t) => t.id === pid)
+      const m = participantMembers.find((t) => t.id === pid)
       return m?.displayName ?? m?.accountName ?? pid.slice(0, 8)
     })
     .join(', ')
@@ -219,6 +234,7 @@ export default async function ManagementReviewDetailPage({
               members={tenantMembers.map((m) => ({
                 id: m.id,
                 label: m.displayName ?? m.accountName ?? m.id.slice(0, 8),
+                hint: m.email ?? undefined,
               }))}
             />
           </>
@@ -344,7 +360,7 @@ function DecisionsView({
         )}
       </div>
       <p className="text-xs text-slate-500">
-        To edit discussion notes / decisions, head to the Overview tab and use the editor.
+        Edit discussion notes and decisions from the Overview tab.
       </p>
     </div>
   )

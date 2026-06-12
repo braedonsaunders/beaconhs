@@ -371,8 +371,7 @@ export default async function TranscriptDetailPage({
         </Card>
 
         <p className="text-xs text-slate-400">
-          Print produces a hard-copy transcript; use the browser's "Save as PDF" option to keep the
-          file. Suppression: try View → Headers and footers off for a cleaner result.
+          Print produces a paper copy; select "Save as PDF" in the print dialog to export a file.
         </p>
       </div>
     </PageContainer>

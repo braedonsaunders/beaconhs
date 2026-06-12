@@ -828,7 +828,7 @@ export function FormDesigner({
                           const next = window.prompt('Rename tab', t.title?.en ?? '')
                           if (next != null) renameTab(t.id, next.trim() || 'Tab')
                         }}
-                        title="Click to open · double-click to rename"
+                        title="Open · double-click to rename"
                         className={`group flex items-center gap-1 rounded-md px-3 py-1 text-xs font-medium transition ${
                           designerTab === t.id
                             ? 'bg-teal-600 text-white'
@@ -930,8 +930,8 @@ export function FormDesigner({
                             />
                           ) : sec.fields.length === 0 ? (
                             <div className="rounded-md border border-dashed border-slate-300 p-4 text-center text-xs text-slate-400">
-                              No elements yet. Drag one from the left panel, or click an element to
-                              add it here.
+                              No elements. Drag one from the left panel, or select an element to add
+                              it here.
                             </div>
                           ) : (
                             <Reorder.Group
@@ -1864,7 +1864,7 @@ function DataBindingEditor({
         </Select>
         {!loading && sources.length === 0 ? (
           <p className="text-[10px] text-slate-500">
-            No data sources yet. Create one in Admin → Data sources.
+            No data sources. Create one in Admin → Data sources.
           </p>
         ) : null}
       </div>
@@ -2371,7 +2371,7 @@ function ChoiceOptionsEditor({
     <div className="space-y-2 rounded-md border border-slate-200 bg-slate-50/50 p-2">
       <div className="text-xs font-semibold text-slate-600">Options</div>
       {options.length === 0 ? (
-        <p className="text-xs text-slate-500">No options yet.</p>
+        <p className="text-xs text-slate-500">No options.</p>
       ) : (
         <ul className="space-y-1">
           {options.map((opt, i) => (
@@ -2488,7 +2488,7 @@ function TableConfigEditor({
           Columns
         </div>
         {columns.length === 0 ? (
-          <p className="text-xs text-slate-500">No columns yet.</p>
+          <p className="text-xs text-slate-500">No columns.</p>
         ) : (
           <ul className="space-y-2">
             {columns.map((c, i) => (
@@ -2572,7 +2572,7 @@ function TableConfigEditor({
             Predefined rows
           </div>
           {fixedRows.length === 0 ? (
-            <p className="text-xs text-slate-500">No rows yet.</p>
+            <p className="text-xs text-slate-500">No rows.</p>
           ) : (
             <ul className="space-y-1">
               {fixedRows.map((r, i) => (
@@ -3067,7 +3067,7 @@ function OverviewPanel({
         <Textarea
           rows={4}
           value={description}
-          placeholder="What is this app for? Who fills it out?"
+          placeholder="Purpose and audience"
           onChange={(e) => setDescription(e.target.value)}
         />
       </LabeledField>

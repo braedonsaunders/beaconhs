@@ -135,21 +135,33 @@ it, extend it, or run it as the backbone of your safety program.
 
 ## Quick start
 
-You'll need **Node 20+**, **pnpm**, and **Docker**.
+You'll need **Node 22+**, **pnpm 10+**, and **Docker**.
+
+One-click launchers are available in [`scripts/launchers`](scripts/launchers):
+
+- macOS: double-click `scripts/launchers/dev.command`
+- Windows: double-click `scripts/launchers/dev.bat`
+- Linux: run `scripts/launchers/install-linux-desktop.sh`, then launch
+  **BeaconHS Dev** from your application menu
+
+The launchers auto-detect whether `.env` points at a remote Postgres cluster or
+local Postgres. Existing maintainer `.env` files keep using the remote cluster;
+fresh local clones use the Docker `local-db` profile.
+
+Manual local setup:
 
 ```bash
 # 1. Install dependencies
 corepack enable
 pnpm install
 
-# 2. Bring up local infra (Postgres, Redis, MinIO, Mailpit)
-docker compose up -d
-
-# 3. Configure env (defaults target the docker-compose services)
+# 2. Configure env (local defaults target the docker-compose services)
 cp .env.example .env
 
-# 4. Set up the database (schema + RLS policies + seed data)
-pnpm db:generate
+# 3. Bring up local infra (Postgres, Redis, MinIO, Mailpit)
+docker compose --profile local-db up -d
+
+# 4. Set up the local database (schema + RLS policies + seed data)
 pnpm db:migrate
 pnpm db:seed
 
@@ -164,6 +176,10 @@ Then open:
 | App                              | http://localhost:3000 |
 | Mailpit (catches outbound email) | http://localhost:8025 |
 | MinIO console                    | http://localhost:9001 |
+
+Maintainers using the shared dev PG cluster should keep their real `.env`
+`DATABASE_URL` pointed at that cluster and run Docker without the local DB
+profile: `docker compose up -d`.
 
 Sign in as the seeded super-admin `admin@beaconhs.local` via the **Magic link**
 tab — the link arrives in Mailpit.

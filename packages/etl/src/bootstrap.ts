@@ -1,6 +1,6 @@
-// Phase 1 bootstrap: create the two tenants (rassaun + external-training), a super-admin user,
-// builtin roles, and the canonical form templates — then ensure the `etl` crosswalk schema.
-// Idempotent (select-or-insert). Mirrors packages/db/src/seed.ts but with no demo data.
+// Optional ETL bootstrap for private migration projects. It can create generic
+// tenant shells and the ETL crosswalk schema without embedding tenant-specific
+// names in the public repository.
 import { randomUUID } from 'node:crypto'
 import { and, eq } from 'drizzle-orm'
 import { createClient, withSuperAdmin, schema, CANONICAL_TEMPLATES } from '@beaconhs/db'
@@ -10,22 +10,34 @@ import { targetUrl } from './config'
 const { tenants, user, tenantUsers, roles, formTemplates, formTemplateVersions, BUILTIN_ROLES } =
   schema
 
-const ADMIN = { email: 'bsaunders@rassaun.com', name: 'Braedon Saunders' }
-const TENANTS = [
-  { slug: 'rassaun', name: 'Rassaun Services Inc' },
-  { slug: 'external-training', name: 'External Training' },
-]
+type TenantSeed = { slug: string; name: string }
+
+function tenantSeeds(): TenantSeed[] {
+  const raw = process.env.ETL_BOOTSTRAP_TENANTS
+  if (!raw?.trim()) return [{ slug: 'demo', name: 'Demo Organization' }]
+  const parsed = JSON.parse(raw) as TenantSeed[]
+  if (!Array.isArray(parsed)) throw new Error('ETL_BOOTSTRAP_TENANTS must be a JSON array')
+  return parsed.map((t) => ({ slug: String(t.slug), name: String(t.name) }))
+}
+
+function adminSeed() {
+  return {
+    email: process.env.ETL_BOOTSTRAP_ADMIN_EMAIL ?? 'admin@beaconhs.local',
+    name: process.env.ETL_BOOTSTRAP_ADMIN_NAME ?? 'Super Admin',
+  }
+}
 
 function build5x5() {
   const cells: Record<string, { score: number; label: string; color: string }> = {}
   const labels = ['Low', 'Low', 'Medium', 'High', 'Extreme']
   const colors = ['#22c55e', '#86efac', '#eab308', '#f97316', '#dc2626']
-  for (let s = 0; s < 5; s++)
+  for (let s = 0; s < 5; s++) {
     for (let l = 0; l < 5; l++) {
       const score = (s + 1) * (l + 1)
       const tier = score <= 4 ? 0 : score <= 8 ? 1 : score <= 12 ? 2 : score <= 19 ? 3 : 4
       cells[`${s}:${l}`] = { score, label: labels[tier]!, color: colors[tier]! }
     }
+  }
   return cells
 }
 
@@ -39,27 +51,29 @@ const RISK_MATRIX = {
 
 export async function bootstrap(): Promise<void> {
   const { db, sql } = createClient({ url: targetUrl() })
+  const adminDef = adminSeed()
   try {
     await withSuperAdmin(db, async (tx) => {
-      // --- super-admin user (no password — set later via app magic-link / reset) ---
-      let admin = (await tx.select().from(user).where(eq(user.email, ADMIN.email)).limit(1))[0]
+      let admin = (await tx.select().from(user).where(eq(user.email, adminDef.email)).limit(1))[0]
       if (!admin) {
         admin = (
           await tx
             .insert(user)
             .values({
               id: randomUUID(),
-              email: ADMIN.email,
-              name: ADMIN.name,
+              email: adminDef.email,
+              name: adminDef.name,
               emailVerified: true,
               isSuperAdmin: true,
             })
             .returning()
         )[0]!
-        console.log(`  + user ${ADMIN.email}`)
-      } else console.log(`  · user ${ADMIN.email} exists`)
+        console.log(`  + user ${adminDef.email}`)
+      } else {
+        console.log(`  - user ${adminDef.email} exists`)
+      }
 
-      for (const def of TENANTS) {
+      for (const def of tenantSeeds()) {
         let tenant = (await tx.select().from(tenants).where(eq(tenants.slug, def.slug)).limit(1))[0]
         if (!tenant) {
           tenant = (
@@ -76,9 +90,10 @@ export async function bootstrap(): Promise<void> {
               .returning()
           )[0]!
           console.log(`  + tenant ${def.slug}`)
-        } else console.log(`  · tenant ${def.slug} exists`)
+        } else {
+          console.log(`  - tenant ${def.slug} exists`)
+        }
 
-        // membership
         const hasMember = (
           await tx
             .select({ id: tenantUsers.id })
@@ -92,12 +107,11 @@ export async function bootstrap(): Promise<void> {
             userId: admin.id,
             status: 'active',
             joinedAt: new Date(),
-            displayName: ADMIN.name,
+            displayName: adminDef.name,
           })
           console.log(`    + membership in ${def.slug}`)
         }
 
-        // builtin roles
         for (const [key, r] of Object.entries(BUILTIN_ROLES)) {
           await tx
             .insert(roles)
@@ -112,7 +126,6 @@ export async function bootstrap(): Promise<void> {
             .onConflictDoNothing({ target: [roles.tenantId, roles.key] })
         }
 
-        // canonical form templates (JSHA / Toolbox / Lift Plan / WAH Rescue)
         for (const c of CANONICAL_TEMPLATES) {
           const ins = await tx
             .insert(formTemplates)
@@ -141,13 +154,12 @@ export async function bootstrap(): Promise<void> {
             })
           }
         }
-        console.log(`    ✓ roles + ${CANONICAL_TEMPLATES.length} templates for ${def.slug}`)
+        console.log(`    roles + ${CANONICAL_TEMPLATES.length} templates ready for ${def.slug}`)
       }
     })
 
-    // --- etl crosswalk schema (id_map / sync_runs / table_watermarks) ---
     await ensureEtlSchema(sql as any)
-    console.log('  ✓ etl schema ensured')
+    console.log('  etl schema ensured')
   } finally {
     await sql.end({ timeout: 5 })
   }

@@ -120,7 +120,7 @@ export default async function TrainingAuthoritiesPage({
       {rows.length === 0 ? (
         <EmptyState
           icon={<Award size={32} />}
-          title={params.q ? `No authorities match "${params.q}"` : 'No skill authorities yet'}
+          title={params.q ? `No authorities match "${params.q}"` : 'No skill authorities'}
           description="Create an authority to start tracking who issues which credentials."
         />
       ) : (

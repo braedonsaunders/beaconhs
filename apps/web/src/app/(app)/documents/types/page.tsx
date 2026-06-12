@@ -177,7 +177,7 @@ export default async function DocumentTypesPage() {
         {rows.length === 0 ? (
           <EmptyState
             icon={<Tag size={32} />}
-            title="No document types yet"
+            title="No document types"
             description="Add types like Policy, Procedure, SDS, Manual so authors can classify documents consistently."
           />
         ) : (

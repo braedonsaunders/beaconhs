@@ -270,9 +270,9 @@ export default async function EquipmentExpensesPage({
             title={
               params.q || categoryFilter || itemFilter || fromDate || toDate
                 ? 'No expenses match these filters'
-                : 'No expenses logged yet'
+                : 'No expenses logged'
             }
-            description="Log a new expense below to start tracking spend per asset."
+            description="Log an expense below to track spend per asset."
           />
         ) : (
           <>

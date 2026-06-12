@@ -5,7 +5,7 @@
 // audience, its target picker, and its schedule knobs.
 
 import type { AudienceType } from '@/components/audience-picker'
-import type { RecurrenceFields } from '@/components/recurrence-picker'
+import type { RecurrenceFields } from '@/components/recurrence'
 
 export const OBLIGATION_KINDS = [
   'inspection',

@@ -313,7 +313,7 @@ function Intro({
   if (!aiEnabled) {
     return (
       <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-        <p className="font-medium">AI isn’t configured yet</p>
+        <p className="font-medium">AI is not configured</p>
         <p className="mt-1 text-xs text-amber-700">
           Add an API key to enable the writing assistant.
         </p>

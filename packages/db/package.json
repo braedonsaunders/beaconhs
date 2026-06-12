@@ -17,6 +17,7 @@
     "generate": "drizzle-kit generate",
     "migrate": "tsx --env-file=../../.env src/migrate.ts",
     "push": "drizzle-kit push",
+    "push:ci": "drizzle-kit push --force",
     "studio": "drizzle-kit studio",
     "seed": "tsx --env-file=../../.env src/seed.ts",
     "typecheck": "tsc --noEmit",

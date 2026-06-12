@@ -180,7 +180,7 @@ export default async function TitleDetailPage({
             <CardContent>
               {assignments.length === 0 ? (
                 <p className="text-sm text-slate-500">
-                  No one assigned yet. Assign this title from a person's Title tab.
+                  No one assigned. Assign this title from a person's Title tab.
                 </p>
               ) : (
                 <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -235,7 +235,7 @@ export default async function TitleDetailPage({
             <CardContent>
               {tasks.length === 0 ? (
                 <p className="text-sm text-slate-500">
-                  No tasks yet. Open the task manager to add them and capture per-person sign-offs.
+                  No tasks. Open the task manager to add tasks and capture per-person sign-offs.
                 </p>
               ) : (
                 <ol className="space-y-1 text-sm">

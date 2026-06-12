@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=BeaconHS Dev
+Comment=Install dependencies and run BeaconHS in development mode
+Exec=sh -c 'launcher_dir="$(dirname "$1")"; launcher_dir="$(cd "$launcher_dir" && pwd)"; exec "$launcher_dir/dev-launcher.sh"' beaconhs-dev %k
+Icon=utilities-terminal
+Terminal=true
+Categories=Development;
+StartupNotify=false

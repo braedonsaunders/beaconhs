@@ -9,25 +9,26 @@ import {
   CardHeader,
   CardTitle,
   DetailHeader,
-  Input,
-  Label,
-  Select,
+  EmptyState,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
-  Textarea,
 } from '@beaconhs/ui'
-import { reportDefinitions, reportRuns, reportSchedules } from '@beaconhs/db/schema'
-import { db, withSuperAdmin } from '@beaconhs/db'
+import { History, Pause, Play, Trash2, Zap } from 'lucide-react'
+import { reportRuns, reportSchedules } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
-import { PageContainer } from '@/components/page-layout'
+import { DetailPageLayout } from '@/components/page-layout'
+import { loadDefinitionById } from '../../_definitions'
+import { formatDateTime, StatusBadge } from '../../_format'
+import { loadScheduleFormData } from '../_data'
+import { ScheduleForm } from '../_schedule-form'
 import { deleteSchedule, setActive, triggerNow, updateSchedule } from './actions'
-import { StatusBadge } from '../../page'
 
 export const metadata = { title: 'Report schedule' }
+export const dynamic = 'force-dynamic'
 
 export default async function ScheduleDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -39,22 +40,18 @@ export default async function ScheduleDetailPage({ params }: { params: Promise<{
   })
   if (!schedule) notFound()
 
-  const [definition] = await withSuperAdmin(db, (tx) =>
-    tx
-      .select()
-      .from(reportDefinitions)
-      .where(eq(reportDefinitions.id, schedule.definitionId))
-      .limit(1),
-  )
-
-  const runs = await ctx.db(async (tx) =>
-    tx
-      .select()
-      .from(reportRuns)
-      .where(eq(reportRuns.scheduleId, id))
-      .orderBy(desc(reportRuns.startedAt))
-      .limit(50),
-  )
+  const [definition, { definitions, members }, runs] = await Promise.all([
+    loadDefinitionById(ctx.tenantId!, schedule.definitionId),
+    loadScheduleFormData(ctx),
+    ctx.db(async (tx) =>
+      tx
+        .select()
+        .from(reportRuns)
+        .where(eq(reportRuns.scheduleId, id))
+        .orderBy(desc(reportRuns.startedAt))
+        .limit(50),
+    ),
+  ])
 
   const triggerBound = triggerNow.bind(null, id)
   const toggleBound = setActive.bind(null, id, !schedule.active)
@@ -62,12 +59,16 @@ export default async function ScheduleDetailPage({ params }: { params: Promise<{
   const updateBound = updateSchedule.bind(null, id)
 
   return (
-    <PageContainer>
-      <div className="space-y-6">
+    <DetailPageLayout
+      header={
         <DetailHeader
-          back={{ href: '/reports', label: 'Back to reports' }}
+          back={{ href: '/reports/schedules', label: 'Back to schedules' }}
           title={schedule.name}
-          subtitle={definition?.name ?? 'Unknown report'}
+          subtitle={
+            definition
+              ? `Delivers “${definition.name}” as a PDF email`
+              : 'The underlying report definition no longer exists'
+          }
           badge={
             schedule.active ? (
               <Badge variant="success">active</Badge>
@@ -77,138 +78,94 @@ export default async function ScheduleDetailPage({ params }: { params: Promise<{
           }
           actions={
             <>
+              {definition ? (
+                <Link href={`/reports/definitions/${definition.id}`}>
+                  <Button variant="outline" size="sm">
+                    View report
+                  </Button>
+                </Link>
+              ) : null}
               <form action={triggerBound}>
-                <Button type="submit" variant="outline">
+                <Button type="submit" variant="outline" size="sm">
+                  <Zap size={14} className="mr-1.5" />
                   Run now
                 </Button>
               </form>
               <form action={toggleBound}>
-                <Button type="submit" variant="outline">
-                  {schedule.active ? 'Pause' : 'Resume'}
+                <Button type="submit" variant="outline" size="sm">
+                  {schedule.active ? (
+                    <>
+                      <Pause size={14} className="mr-1.5" />
+                      Pause
+                    </>
+                  ) : (
+                    <>
+                      <Play size={14} className="mr-1.5" />
+                      Resume
+                    </>
+                  )}
                 </Button>
               </form>
               <form action={deleteBound}>
-                <Button type="submit" variant="destructive">
+                <Button type="submit" variant="destructive" size="sm">
+                  <Trash2 size={14} className="mr-1.5" />
                   Delete
                 </Button>
               </form>
             </>
           }
         />
-
+      }
+    >
+      <div className="space-y-5">
         <Card>
           <CardHeader>
-            <CardTitle>Configuration</CardTitle>
+            <CardTitle className="text-sm">Configuration</CardTitle>
           </CardHeader>
           <CardContent>
-            <form action={updateBound} className="space-y-4">
-              <Field label="Schedule name" required>
-                <Input name="name" required defaultValue={schedule.name} />
-              </Field>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="Cadence" required>
-                  <Select name="cadence" defaultValue={schedule.cadence}>
-                    <option value="daily">Daily</option>
-                    <option value="weekly">Weekly</option>
-                    <option value="monthly">Monthly</option>
-                  </Select>
-                </Field>
-                <Field label="Timezone" required>
-                  <Input name="timezone" required defaultValue={schedule.timezone} />
-                </Field>
-                <Field label="Day of week (weekly)">
-                  <Select name="dayOfWeek" defaultValue={String(schedule.dayOfWeek ?? 1)}>
-                    <option value="0">Sunday</option>
-                    <option value="1">Monday</option>
-                    <option value="2">Tuesday</option>
-                    <option value="3">Wednesday</option>
-                    <option value="4">Thursday</option>
-                    <option value="5">Friday</option>
-                    <option value="6">Saturday</option>
-                  </Select>
-                </Field>
-                <Field label="Day of month (monthly)">
-                  <Input
-                    name="dayOfMonth"
-                    type="number"
-                    min={1}
-                    max={31}
-                    defaultValue={schedule.dayOfMonth ?? 1}
-                  />
-                </Field>
-                <Field label="Hour (0-23)" required>
-                  <Input
-                    name="hour"
-                    type="number"
-                    min={0}
-                    max={23}
-                    defaultValue={schedule.hour}
-                    required
-                  />
-                </Field>
-                <Field label="Minute (0-59)" required>
-                  <Input
-                    name="minute"
-                    type="number"
-                    min={0}
-                    max={59}
-                    defaultValue={schedule.minute}
-                    required
-                  />
-                </Field>
-              </div>
-
-              <Field label="Recipient emails (one per line, or comma-separated)">
-                <Textarea
-                  name="recipientEmails"
-                  rows={3}
-                  defaultValue={(schedule.recipientEmails ?? []).join('\n')}
-                />
-              </Field>
-
-              <Field label="Recipient user IDs (resolved to emails at send)">
-                <Textarea
-                  name="recipientUserIds"
-                  rows={2}
-                  defaultValue={(schedule.recipientUserIds ?? []).join('\n')}
-                />
-              </Field>
-
-              <Field label="Filters (JSON)">
-                <Textarea
-                  name="filters"
-                  rows={3}
-                  defaultValue={JSON.stringify(schedule.filters ?? {}, null, 2)}
-                />
-              </Field>
-
-              <div className="flex items-center justify-between text-xs text-slate-500">
-                <div>
+            <ScheduleForm
+              definitions={definitions}
+              members={members}
+              initial={{
+                definitionId: schedule.definitionId,
+                name: schedule.name,
+                cadence: schedule.cadence,
+                dayOfWeek: schedule.dayOfWeek,
+                dayOfMonth: schedule.dayOfMonth,
+                hour: schedule.hour,
+                minute: schedule.minute,
+                timezone: schedule.timezone,
+                recipientUserIds: schedule.recipientUserIds ?? [],
+                recipientEmails: schedule.recipientEmails ?? [],
+                filters: schedule.filters ?? {},
+              }}
+              submitLabel="Save changes"
+              action={updateBound}
+              extraFooter={
+                <p className="text-xs text-slate-500 dark:text-slate-400">
                   Next run:{' '}
+                  <strong>{schedule.nextRunAt ? formatDateTime(schedule.nextRunAt) : '—'}</strong> ·
+                  Last run:{' '}
                   <strong>
-                    {schedule.nextRunAt ? new Date(schedule.nextRunAt).toLocaleString() : '—'}
-                  </strong>{' '}
-                  · Last run:{' '}
-                  <strong>
-                    {schedule.lastRunAt ? new Date(schedule.lastRunAt).toLocaleString() : 'never'}
+                    {schedule.lastRunAt ? formatDateTime(schedule.lastRunAt) : 'never'}
                   </strong>
-                </div>
-                <Button type="submit">Save changes</Button>
-              </div>
-            </form>
+                </p>
+              }
+            />
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>Run history ({runs.length})</CardTitle>
+            <CardTitle className="text-sm">Run history ({runs.length})</CardTitle>
           </CardHeader>
           <CardContent>
             {runs.length === 0 ? (
-              <p className="text-sm text-slate-500">
-                No runs yet. Click <em>Run now</em> to trigger one manually.
-              </p>
+              <EmptyState
+                icon={<History size={24} />}
+                title="No runs"
+                description="Run now to trigger the first delivery."
+              />
             ) : (
               <Table>
                 <TableHeader>
@@ -223,31 +180,33 @@ export default async function ScheduleDetailPage({ params }: { params: Promise<{
                 <TableBody>
                   {runs.map((r) => (
                     <TableRow key={r.id}>
-                      <TableCell className="text-slate-600">
+                      <TableCell className="text-slate-600 dark:text-slate-300">
                         <Link
                           href={`/reports/schedules/${id}/runs/${r.id}`}
                           className="hover:underline"
                         >
-                          {new Date(r.startedAt).toLocaleString()}
+                          {formatDateTime(r.startedAt)}
                         </Link>
                       </TableCell>
-                      <TableCell className="text-slate-600">
-                        {r.finishedAt ? new Date(r.finishedAt).toLocaleString() : '—'}
+                      <TableCell className="text-slate-600 dark:text-slate-300">
+                        {r.finishedAt ? formatDateTime(r.finishedAt) : '—'}
                       </TableCell>
                       <TableCell>
                         <StatusBadge status={r.status} />
                       </TableCell>
-                      <TableCell className="text-slate-600">{r.rowCount ?? '—'}</TableCell>
+                      <TableCell className="text-slate-600 dark:text-slate-300">
+                        {r.rowCount ?? '—'}
+                      </TableCell>
                       <TableCell>
                         {r.pdfAttachmentId ? (
-                          <Link
-                            href={`/reports/schedules/${id}/runs/${r.id}`}
-                            className="text-teal-700 hover:underline"
+                          <a
+                            href={`/reports/schedules/${id}/runs/${r.id}/pdf`}
+                            className="text-teal-700 hover:underline dark:text-teal-300"
                           >
-                            View
-                          </Link>
+                            Download
+                          </a>
                         ) : (
-                          '—'
+                          <span className="text-slate-300 dark:text-slate-600">—</span>
                         )}
                       </TableCell>
                     </TableRow>
@@ -258,26 +217,6 @@ export default async function ScheduleDetailPage({ params }: { params: Promise<{
           </CardContent>
         </Card>
       </div>
-    </PageContainer>
-  )
-}
-
-function Field({
-  label,
-  required,
-  children,
-}: {
-  label: string
-  required?: boolean
-  children: React.ReactNode
-}) {
-  return (
-    <div className="space-y-1.5">
-      <Label>
-        {label}
-        {required ? <span className="text-red-600"> *</span> : null}
-      </Label>
-      {children}
-    </div>
+    </DetailPageLayout>
   )
 }

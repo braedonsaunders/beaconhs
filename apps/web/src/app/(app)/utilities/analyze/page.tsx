@@ -62,9 +62,9 @@ export default async function AnalyzePage() {
               {findings.filter((f) => f.count > 0).length === 1 ? '' : 's'}
             </AlertTitle>
             <AlertDescription>
-              Reports and dashboards roll up the underlying records, so unflagged tenants get
-              cleaner numbers. Click through each finding for the first ten affected rows and a link
-              to the source list.
+              Reports and dashboards roll up the underlying records, so resolving flagged items
+              improves accuracy. Each finding lists the first ten affected rows and a link to the
+              source list.
             </AlertDescription>
           </Alert>
         )}

@@ -65,7 +65,7 @@ export default async function LibraryHubPage() {
           </Link>
           <PageHeader
             title="Library & catalogues"
-            description="Long-lived reference data shared across modules. Most users won't touch these often — they're maintained by admins."
+            description="Long-lived reference data shared across modules, maintained by admins."
           />
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-2">

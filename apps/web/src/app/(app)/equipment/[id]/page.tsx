@@ -71,6 +71,7 @@ import { Section } from '@/components/section'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { ActivityFeed } from '@/components/activity-feed'
 import { PageContainer } from '@/components/page-layout'
+import { PersonSelectField } from '@/components/person-select-field'
 
 export const dynamic = 'force-dynamic'
 
@@ -621,10 +622,20 @@ export default async function EquipmentDetailPage({
         .orderBy(desc(equipmentWorkOrders.openedAt))
         .limit(50),
       tx.select().from(orgUnits).orderBy(asc(orgUnits.name)).limit(200),
-      tx.select().from(people).orderBy(asc(people.lastName), asc(people.firstName)).limit(200),
+      tx
+        .select()
+        .from(people)
+        .where(eq(people.status, 'active'))
+        .orderBy(asc(people.lastName), asc(people.firstName))
+        .limit(200),
       // Active tenant members for the work-order assignee dropdown.
       tx
-        .select({ id: tenantUsers.id, displayName: tenantUsers.displayName, userName: user.name })
+        .select({
+          id: tenantUsers.id,
+          displayName: tenantUsers.displayName,
+          userName: user.name,
+          email: user.email,
+        })
         .from(tenantUsers)
         .leftJoin(user, eq(user.id, tenantUsers.userId))
         .where(eq(tenantUsers.status, 'active'))
@@ -1105,7 +1116,7 @@ export default async function EquipmentDetailPage({
                     </CardHeader>
                     <CardContent>
                       {history.length === 0 ? (
-                        <p className="text-sm text-slate-500">No movement recorded yet.</p>
+                        <p className="text-sm text-slate-500">No movement recorded.</p>
                       ) : (
                         <Table>
                           <TableHeader>
@@ -1155,17 +1166,18 @@ export default async function EquipmentDetailPage({
                         </Select>
                       </Field>
                       <Field label="Assign to person">
-                        <Select
+                        <PersonSelectField
                           name="holderPersonId"
                           defaultValue={item.currentHolderPersonId ?? ''}
-                        >
-                          <option value="">— No holder —</option>
-                          {holders.map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.lastName}, {p.firstName}
-                            </option>
-                          ))}
-                        </Select>
+                          options={holders.map((p) => ({
+                            value: p.id,
+                            label: `${p.lastName}, ${p.firstName}`,
+                            hint: p.employeeNo ?? undefined,
+                          }))}
+                          placeholder="Select a person…"
+                          clearable
+                          emptyLabel="— No holder —"
+                        />
                       </Field>
                       <Field label="Note" className="sm:col-span-2">
                         <Input name="note" placeholder="Optional context for the audit log" />
@@ -1190,7 +1202,7 @@ export default async function EquipmentDetailPage({
                       <EmptyState
                         icon={<FileText size={24} />}
                         title="No certificates attached"
-                        description="Upload calibration, inspection, or warranty certificates and tag them with this equipment's id in their exif metadata to surface them here."
+                        description="Upload calibration, inspection, or warranty certificates tagged to this equipment."
                       />
                     ) : (
                       <Table>
@@ -1366,11 +1378,11 @@ export default async function EquipmentDetailPage({
                       {expenses.length === 0 ? (
                         <EmptyState
                           title="No expenses logged"
-                          description="Log fuel, repairs, parts, registration, etc against this item."
+                          description="Log fuel, repairs, parts, and registration against this item."
                           action={
                             <Link href={`${basePath}?tab=expenses&drawer=add-expense` as any}>
                               <Button size="sm" variant="outline">
-                                <Plus size={14} /> Add the first expense
+                                <Plus size={14} /> Add expense
                               </Button>
                             </Link>
                           }
@@ -1425,7 +1437,7 @@ export default async function EquipmentDetailPage({
                       {logEntries.length === 0 ? (
                         <EmptyState
                           title="No log entries"
-                          description="Capture observations, fuel-ups, modifications, and anything else worth noting against this asset."
+                          description="Capture observations, fuel-ups, modifications, and other notes against this asset."
                           action={
                             <Link href={`${basePath}?tab=log&drawer=add-log` as any}>
                               <Button size="sm" variant="outline">
@@ -1497,7 +1509,7 @@ export default async function EquipmentDetailPage({
                       {checkouts.length === 0 ? (
                         <EmptyState
                           title="No checkout history"
-                          description="This item has never been checked out. Hand it to someone or pin it to a site using the Check out button."
+                          description="This item has never been checked out. Use Check out to issue it to a person or site."
                           action={
                             <Link href={`${basePath}?tab=checkouts&drawer=check-out` as any}>
                               <Button size="sm" variant="outline">
@@ -1799,14 +1811,18 @@ export default async function EquipmentDetailPage({
         >
           <input type="hidden" name="itemId" value={id} />
           <Field label="Hand to person">
-            <Select name="holderPersonId" defaultValue="">
-              <option value="">— No specific holder —</option>
-              {holders.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.lastName}, {p.firstName}
-                </option>
-              ))}
-            </Select>
+            <PersonSelectField
+              name="holderPersonId"
+              defaultValue=""
+              options={holders.map((p) => ({
+                value: p.id,
+                label: `${p.lastName}, ${p.firstName}`,
+                hint: p.employeeNo ?? undefined,
+              }))}
+              placeholder="Select a person…"
+              clearable
+              emptyLabel="— No specific holder —"
+            />
           </Field>
           <Field label="Destination site">
             <Select name="destinationOrgUnitId" defaultValue="">

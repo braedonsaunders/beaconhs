@@ -69,7 +69,7 @@ const CATEGORIES: { key: string; label: string; description: string }[] = [
   },
   {
     key: 'jsha',
-    label: 'JSHA / HazID',
+    label: 'Hazard Assessments',
     description: 'Assessments needing sign-off and locked-record events.',
   },
   {
@@ -168,7 +168,7 @@ export default async function NotificationPreferencesPage() {
       <div className="space-y-6">
         <PageHeader
           title="Notification preferences"
-          description="Pick how each category of notification reaches you. In-app messages always appear in your inbox; turning off the in-app channel just stops them from raising the bell badge."
+          description="Choose how each notification category is delivered. In-app messages always appear in the inbox; disabling the in-app channel only stops the bell badge."
         />
 
         <form action={savePreferences} className="space-y-4">

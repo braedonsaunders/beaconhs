@@ -135,14 +135,23 @@ export async function listMetaOptions(
       .orderBy(asc(orgUnits.name))
       .limit(500)
     const ppl = await tx
-      .select({ id: people.id, firstName: people.firstName, lastName: people.lastName })
+      .select({
+        id: people.id,
+        firstName: people.firstName,
+        lastName: people.lastName,
+        employeeNo: people.employeeNo,
+      })
       .from(people)
       .where(eq(people.status, 'active'))
       .orderBy(asc(people.lastName), asc(people.firstName))
       .limit(1000)
     return {
       sites,
-      people: ppl.map((p) => ({ id: p.id, name: `${p.lastName}, ${p.firstName}` })),
+      people: ppl.map((p) => ({
+        id: p.id,
+        name: `${p.lastName}, ${p.firstName}`,
+        hint: p.employeeNo ?? undefined,
+      })),
     }
   })
 }

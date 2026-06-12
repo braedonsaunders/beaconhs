@@ -343,12 +343,12 @@ export default async function WorkOrdersPage({
           title={
             params.q || statusFilter || priorityFilter
               ? 'No work orders match these filters'
-              : 'No work orders yet'
+              : 'No work orders'
           }
-          description="Open the first work order to start tracking repairs against your equipment."
+          description="Open a work order to track repairs against equipment."
           action={
             <Link href={'/equipment/work-orders/new' as any}>
-              <Button>Create first work order</Button>
+              <Button>New work order</Button>
             </Link>
           }
         />

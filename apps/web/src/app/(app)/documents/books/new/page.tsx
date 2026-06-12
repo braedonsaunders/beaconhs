@@ -58,7 +58,7 @@ export default function NewBookPage() {
       <div className="mx-auto max-w-2xl">
         <PageHeader
           title="New document book"
-          description="A book is an ordered bundle of documents. Once you've added the documents you want, publish the book to lock the order + produce a single combined PDF."
+          description="A book is an ordered bundle of documents. Publish to lock the order and produce a single combined PDF."
           back={{ href: '/documents/books', label: 'Back to books' }}
         />
         <form

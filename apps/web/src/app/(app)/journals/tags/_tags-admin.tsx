@@ -119,11 +119,11 @@ export function TagsAdmin({ initialTags }: { initialTags: ManagedTag[] }) {
       {filtered.length === 0 ? (
         <EmptyState
           icon={<TagIcon size={30} />}
-          title={q ? 'No tags match' : 'No tags yet'}
+          title={q ? 'No tags match' : 'No tags'}
           description={
             q
               ? 'Try a different search.'
-              : 'Tags appear here as people add them to entries or when the AI auto-tags. Create one to get a head start.'
+              : 'Tags appear here as entries are tagged manually or by AI. Create one to predefine the vocabulary.'
           }
         />
       ) : (

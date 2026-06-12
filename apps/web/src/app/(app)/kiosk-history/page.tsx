@@ -138,7 +138,7 @@ export default async function KioskHistoryPage({
         <EmptyState
           icon={<Clock size={32} />}
           title={`No kiosk scans on ${dayFilter}`}
-          description="Once workers start using a kiosk tablet on site, their scans will appear here."
+          description="Kiosk sign-in and sign-out scans appear here."
         />
       ) : (
         <>

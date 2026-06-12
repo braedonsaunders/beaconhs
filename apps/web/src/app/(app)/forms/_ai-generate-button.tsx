@@ -48,7 +48,7 @@ export function AiGenerateButton() {
         open={open}
         onClose={() => setOpen(false)}
         title="Generate an App with AI"
-        description="Describe what you need — the AI drafts it, you refine it in the designer."
+        description="Describe the app. The AI drafts it for refinement in the designer."
         size="md"
         footer={
           <>

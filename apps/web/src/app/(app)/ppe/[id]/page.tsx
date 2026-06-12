@@ -65,6 +65,7 @@ import {
   ppeTypes,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { PersonSelectField } from '@/components/person-select-field'
 import { recordAudit } from '@/lib/audit'
 import { pickString } from '@/lib/list-params'
 import { DetailGrid } from '@/components/detail-grid'
@@ -423,8 +424,14 @@ export default async function PpeDetailPage({
           .where(eq(ppeAnnualRecords.itemId, id))
           .orderBy(desc(ppeAnnualRecords.inspectedOn)),
         tx
-          .select({ id: people.id, firstName: people.firstName, lastName: people.lastName })
+          .select({
+            id: people.id,
+            firstName: people.firstName,
+            lastName: people.lastName,
+            employeeNo: people.employeeNo,
+          })
           .from(people)
+          .where(eq(people.status, 'active'))
           .orderBy(asc(people.lastName), asc(people.firstName))
           .limit(500),
         tx
@@ -774,7 +781,7 @@ export default async function PpeDetailPage({
               {annualRecords.length === 0 ? (
                 <EmptyState
                   icon={<ShieldCheck size={24} />}
-                  title="No annual records yet"
+                  title="No annual records"
                   description="Upload the most recent third-party recertification to start the history."
                   action={
                     <Link href={`${basePath}?tab=annual&drawer=add-annual` as any}>
@@ -1110,14 +1117,17 @@ export default async function PpeDetailPage({
           <input type="hidden" name="status" value="issued" />
           <div className="space-y-1.5">
             <Label>Holder *</Label>
-            <Select name="personId" defaultValue={item.currentHolderPersonId ?? ''} required>
-              <option value="">— Pick a person —</option>
-              {peopleList.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.lastName}, {p.firstName}
-                </option>
-              ))}
-            </Select>
+            <PersonSelectField
+              name="personId"
+              defaultValue={item.currentHolderPersonId ?? ''}
+              options={peopleList.map((p) => ({
+                value: p.id,
+                label: `${p.lastName}, ${p.firstName}`,
+                hint: p.employeeNo ?? undefined,
+              }))}
+              placeholder="Pick a person…"
+              clearable={false}
+            />
           </div>
           <div className="space-y-1.5">
             <Label>Note</Label>
@@ -1212,14 +1222,18 @@ export default async function PpeDetailPage({
           </div>
           <div className="space-y-1.5 sm:col-span-2">
             <Label>Inspected by (person)</Label>
-            <Select name="inspectedByPersonId" defaultValue="">
-              <option value="">— External inspector —</option>
-              {peopleList.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.lastName}, {p.firstName}
-                </option>
-              ))}
-            </Select>
+            <PersonSelectField
+              name="inspectedByPersonId"
+              defaultValue=""
+              options={peopleList.map((p) => ({
+                value: p.id,
+                label: `${p.lastName}, ${p.firstName}`,
+                hint: p.employeeNo ?? undefined,
+              }))}
+              placeholder="Select a person…"
+              clearable
+              emptyLabel="— External inspector —"
+            />
           </div>
           <div className="space-y-1.5">
             <Label>Inspector name (free-text)</Label>
@@ -1341,7 +1355,7 @@ function CriteriaInspectionForm({
 
       {preUseCriteria.length === 0 && annualCriteria.length === 0 ? (
         <Alert>
-          <AlertTitle>No criteria configured on this PPE type yet</AlertTitle>
+          <AlertTitle>No criteria configured on this PPE type</AlertTitle>
           <AlertDescription>
             Go to{' '}
             <Link
@@ -1350,7 +1364,7 @@ function CriteriaInspectionForm({
             >
               the type detail page
             </Link>{' '}
-            and add criteria — they'll show up here automatically.
+            and add criteria — they appear here automatically.
           </AlertDescription>
         </Alert>
       ) : null}

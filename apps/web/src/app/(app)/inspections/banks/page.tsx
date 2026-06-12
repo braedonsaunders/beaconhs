@@ -177,8 +177,8 @@ export default async function InspectionBanksPage({
       {rows.length === 0 ? (
         <EmptyState
           icon={<ClipboardList size={32} />}
-          title={params.q ? `No banks match "${params.q}"` : 'No inspection banks yet'}
-          description="Create a bank, add a list of criteria, and reuse it across inspections."
+          title={params.q ? `No banks match "${params.q}"` : 'No inspection banks'}
+          description="Create a bank, add criteria, and reuse it across inspections."
         />
       ) : (
         <>

@@ -2,15 +2,31 @@
 
 import { useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { Button } from '@beaconhs/ui'
 import { deleteObligation, setObligationEnabled } from '../_actions'
 
-export function ObligationDetailActions({ id, enabled }: { id: string; enabled: boolean }) {
+export function ObligationDetailActions({
+  id,
+  enabled,
+  canManage,
+}: {
+  id: string
+  enabled: boolean
+  canManage: boolean
+}) {
   const router = useRouter()
   const [pending, start] = useTransition()
 
+  if (!canManage) return null
+
   return (
     <div className="flex gap-2">
+      <Link href={`/compliance/obligations/${id}/edit`}>
+        <Button variant="outline" disabled={pending}>
+          Edit
+        </Button>
+      </Link>
       <Button
         variant="outline"
         disabled={pending}

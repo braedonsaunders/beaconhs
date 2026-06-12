@@ -229,7 +229,7 @@ export default async function TrainingMatrixPage({
         <div className="rounded-lg border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
           {peopleRows.length === 0
             ? 'No active people match the current filters.'
-            : 'No courses defined yet.'}
+            : 'No courses defined.'}
         </div>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">

@@ -365,8 +365,8 @@ export default async function InspectionTypeDetailPage({
           <CardContent>
             {criteria.length === 0 ? (
               <EmptyState
-                title="No criteria yet"
-                description="Add your first question below. Reorder with the up/down arrows; click the pencil to edit a criterion in place."
+                title="No criteria"
+                description="Add a question below. Reorder with the arrows; edit a criterion with the pencil."
               />
             ) : (
               <ul className="space-y-2">

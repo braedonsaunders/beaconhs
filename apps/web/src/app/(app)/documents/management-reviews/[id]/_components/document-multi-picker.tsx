@@ -66,7 +66,7 @@ export function DocumentMultiPicker({
       </div>
 
       {selected.length === 0 ? (
-        <p className="text-sm text-slate-500">No documents added yet.</p>
+        <p className="text-sm text-slate-500">No documents added.</p>
       ) : (
         <ul className="space-y-2">
           {selected.map((id) => {
@@ -153,7 +153,7 @@ export function ActionItemsPicker({
       </div>
 
       {selected.length === 0 ? (
-        <p className="text-sm text-slate-500">No follow-up actions linked yet.</p>
+        <p className="text-sm text-slate-500">No follow-up actions linked.</p>
       ) : (
         <ul className="space-y-2">
           {selected.map((id) => {

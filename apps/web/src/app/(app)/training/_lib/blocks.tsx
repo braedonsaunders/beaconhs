@@ -75,7 +75,7 @@ export function LessonBlocksView({
   attachmentUrls?: Record<string, string | null | undefined>
 }) {
   if (!blocks || blocks.length === 0) {
-    return <p className="text-sm text-slate-400">No content yet.</p>
+    return <p className="text-sm text-slate-400">No content.</p>
   }
   return (
     <div className="space-y-4">

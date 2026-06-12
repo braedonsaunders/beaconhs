@@ -14,10 +14,11 @@ import {
   Select,
   Textarea,
 } from '@beaconhs/ui'
-import { orgUnits, people, tenantUsers } from '@beaconhs/db/schema'
+import { orgUnits, people, tenantUsers, user as userTable } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { pickString } from '@/lib/list-params'
 import { PageContainer } from '@/components/page-layout'
+import { PersonSelectField } from '@/components/person-select-field'
 import { createSafeDistanceRecordForm } from '../_actions'
 import {
   DRONE_DEFAULT_CLEARANCE_M,
@@ -49,8 +50,10 @@ export default async function NewSafeDistancePage({
       .select({
         id: tenantUsers.id,
         name: tenantUsers.displayName,
+        email: userTable.email,
       })
       .from(tenantUsers)
+      .leftJoin(userTable, eq(userTable.id, tenantUsers.userId))
       .where(eq(tenantUsers.status, 'active'))
       .orderBy(asc(tenantUsers.displayName))
       .limit(200)
@@ -59,6 +62,7 @@ export default async function NewSafeDistancePage({
         id: people.id,
         firstName: people.firstName,
         lastName: people.lastName,
+        employeeNo: people.employeeNo,
       })
       .from(people)
       .where(eq(people.status, 'active'))
@@ -66,11 +70,16 @@ export default async function NewSafeDistancePage({
       .limit(500)
     return {
       sites: s,
-      supervisors: sv.map((r) => ({ id: r.id, name: r.name ?? '(unnamed)' })),
+      supervisors: sv.map((r) => ({
+        id: r.id,
+        name: r.name ?? '(unnamed)',
+        email: r.email ?? undefined,
+      })),
       operators: op.map((p) => ({
         id: p.id,
         name:
           `${p.lastName ?? ''}${p.lastName ? ', ' : ''}${p.firstName ?? ''}`.trim() || '(unnamed)',
+        employeeNo: p.employeeNo,
       })),
     }
   })
@@ -80,7 +89,7 @@ export default async function NewSafeDistancePage({
       <div className="mx-auto max-w-3xl space-y-6">
         <PageHeader
           title="New safe-distance assessment"
-          description="Choose the assessment type and we'll auto-compute the minimum required distance."
+          description="Select an assessment type to calculate the minimum required distance."
           back={{ href: '/tools/safe-distance', label: 'All assessments' }}
         />
 
@@ -129,26 +138,34 @@ export default async function NewSafeDistancePage({
 
                 <div className="space-y-2">
                   <Label htmlFor="supervisorTenantUserId">Supervisor (sign-off)</Label>
-                  <Select id="supervisorTenantUserId" name="supervisorTenantUserId">
-                    <option value="">— None —</option>
-                    {supervisors.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </Select>
+                  <PersonSelectField
+                    name="supervisorTenantUserId"
+                    defaultValue=""
+                    options={supervisors.map((s) => ({
+                      value: s.id,
+                      label: s.name,
+                      hint: s.email,
+                    }))}
+                    placeholder="Select a supervisor…"
+                    clearable
+                    emptyLabel="— None —"
+                  />
                 </div>
 
                 <div className="space-y-2 sm:col-span-2">
                   <Label htmlFor="operatorPersonId">Operator</Label>
-                  <Select id="operatorPersonId" name="operatorPersonId">
-                    <option value="">— None —</option>
-                    {operators.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </Select>
+                  <PersonSelectField
+                    name="operatorPersonId"
+                    defaultValue=""
+                    options={operators.map((p) => ({
+                      value: p.id,
+                      label: p.name,
+                      hint: p.employeeNo ?? undefined,
+                    }))}
+                    placeholder="Select an operator…"
+                    clearable
+                    emptyLabel="— None —"
+                  />
                 </div>
               </div>
 

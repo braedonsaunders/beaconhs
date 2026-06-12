@@ -205,7 +205,7 @@ export default async function SkillsPage({
           title={
             params.q || statusFilter || authorityFilter
               ? 'No skills match these filters'
-              : 'No skills recorded yet'
+              : 'No skills recorded'
           }
           description="Grant skills from a person's transcript, or manage the catalogue under Manage → Skill types."
         />

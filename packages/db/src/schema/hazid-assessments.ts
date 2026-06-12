@@ -25,6 +25,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core'
 import { id, softDelete, timestamps } from './_helpers'
@@ -32,10 +33,12 @@ import { attachments } from './attachments'
 import { tenants, tenantUsers } from './core'
 import {
   hazidAssessmentTypes,
+  hazidAssessmentTypeApps,
   hazidHazards,
   hazidTasks,
   hazidQuestionType,
 } from './hazid-libraries'
+import { formResponses, formTemplates } from './forms'
 import { orgUnits, people } from './org'
 import { atmosphericSensors } from './sensors'
 
@@ -330,6 +333,49 @@ export const hazidAssessmentPhotos = pgTable(
 )
 
 // ----------------------------------------------------------------------------
+// Embedded builder-app responses
+// ----------------------------------------------------------------------------
+// Each row links one form-builder response to this assessment. The app's shape
+// comes from hazid_assessment_type_apps → form_templates; the response row
+// stores draft/submitted data, workflow, scoring, signatures, and PDF state.
+export const hazidAssessmentAppResponses = pgTable(
+  'hazid_assessment_app_responses',
+  {
+    id: id(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    assessmentId: uuid('assessment_id')
+      .notNull()
+      .references(() => hazidAssessments.id, { onDelete: 'cascade' }),
+    typeAppId: uuid('type_app_id').references(() => hazidAssessmentTypeApps.id, {
+      onDelete: 'set null',
+    }),
+    templateId: uuid('template_id')
+      .notNull()
+      .references(() => formTemplates.id, { onDelete: 'cascade' }),
+    responseId: uuid('response_id')
+      .notNull()
+      .references(() => formResponses.id, { onDelete: 'cascade' }),
+    entityOrder: integer('entity_order').default(1).notNull(),
+    ...timestamps,
+  },
+  (t) => ({
+    assessmentIdx: index('hazid_assessment_app_responses_assessment_idx').on(
+      t.assessmentId,
+      t.entityOrder,
+    ),
+    responseIdx: index('hazid_assessment_app_responses_response_idx').on(t.responseId),
+    tenantIdx: index('hazid_assessment_app_responses_tenant_idx').on(t.tenantId),
+    assessmentTypeAppUx: uniqueIndex('hazid_assessment_app_responses_assessment_type_app_ux').on(
+      t.assessmentId,
+      t.typeAppId,
+    ),
+    responseUx: uniqueIndex('hazid_assessment_app_responses_response_ux').on(t.responseId),
+  }),
+)
+
+// ----------------------------------------------------------------------------
 // Confined-space atmospheric readings
 // ----------------------------------------------------------------------------
 export const hazidAssessmentCSAtmospheric = pgTable(
@@ -488,6 +534,7 @@ export const hazidAssessmentsRelations = relations(hazidAssessments, ({ one, man
   ppe: many(hazidAssessmentPPE),
   questions: many(hazidAssessmentQuestions),
   photos: many(hazidAssessmentPhotos),
+  appResponses: many(hazidAssessmentAppResponses),
   atmosphericReadings: many(hazidAssessmentCSAtmospheric),
   entries: many(hazidAssessmentCSEntries),
 }))
@@ -564,6 +611,32 @@ export const hazidAssessmentPhotosRelations = relations(hazidAssessmentPhotos, (
     references: [attachments.id],
   }),
 }))
+
+export const hazidAssessmentAppResponsesRelations = relations(
+  hazidAssessmentAppResponses,
+  ({ one }) => ({
+    tenant: one(tenants, {
+      fields: [hazidAssessmentAppResponses.tenantId],
+      references: [tenants.id],
+    }),
+    assessment: one(hazidAssessments, {
+      fields: [hazidAssessmentAppResponses.assessmentId],
+      references: [hazidAssessments.id],
+    }),
+    typeApp: one(hazidAssessmentTypeApps, {
+      fields: [hazidAssessmentAppResponses.typeAppId],
+      references: [hazidAssessmentTypeApps.id],
+    }),
+    template: one(formTemplates, {
+      fields: [hazidAssessmentAppResponses.templateId],
+      references: [formTemplates.id],
+    }),
+    response: one(formResponses, {
+      fields: [hazidAssessmentAppResponses.responseId],
+      references: [formResponses.id],
+    }),
+  }),
+)
 
 export const hazidAssessmentCSAtmosphericRelations = relations(
   hazidAssessmentCSAtmospheric,

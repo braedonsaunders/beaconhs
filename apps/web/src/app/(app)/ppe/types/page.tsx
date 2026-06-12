@@ -87,11 +87,11 @@ export default async function PpeTypesPage() {
       {types.length === 0 ? (
         <EmptyState
           icon={<ShieldCheck size={32} />}
-          title="No PPE types defined yet"
+          title="No PPE types"
           description="Add types like Hard hat, Harness, Safety glasses, Gloves — every PPE item must belong to a type."
           action={
             <Link href="/ppe/types/new">
-              <Button>Add your first PPE type</Button>
+              <Button>New PPE type</Button>
             </Link>
           }
         />

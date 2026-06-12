@@ -92,10 +92,9 @@ export function FeedTimeline({ initial }: { initial: FeedPage }) {
         <div className="mb-4 grid h-16 w-16 place-items-center rounded-2xl bg-teal-50 text-teal-600">
           <Rss size={28} />
         </div>
-        <h2 className="text-lg font-semibold text-slate-900">Nothing here yet</h2>
+        <h2 className="text-lg font-semibold text-slate-900">No activity</h2>
         <p className="mt-1 max-w-sm text-sm text-slate-500">
-          As people submit journals, report incidents, raise corrective actions, and complete forms,
-          they’ll show up here — filtered to what you’re allowed to see.
+          Submitted journals, incidents, corrective actions, and form submissions appear here.
         </p>
       </div>
     )
@@ -114,7 +113,7 @@ export function FeedTimeline({ initial }: { initial: FeedPage }) {
           <Loader2 size={15} className="animate-spin" /> Loading more…
         </div>
       ) : !cursor ? (
-        <div className="py-8 text-center text-xs text-slate-400">You’re all caught up.</div>
+        <div className="py-8 text-center text-xs text-slate-400">End of feed.</div>
       ) : null}
     </div>
   )
@@ -273,7 +272,7 @@ const RTF = new Intl.RelativeTimeFormat('en', { numeric: 'auto' })
 function timeAgo(iso: string): string {
   const sec = Math.round((new Date(iso).getTime() - Date.now()) / 1000)
   const abs = Math.abs(sec)
-  if (abs < 45) return 'just now'
+  if (abs < 45) return 'now'
   const min = Math.round(sec / 60)
   if (Math.abs(min) < 60) return RTF.format(min, 'minute')
   const hr = Math.round(min / 60)

@@ -81,7 +81,7 @@ export async function registerSchedules() {
     { kind: 'plugin_cron', cadence: 'weekly' } as ScheduledTick,
     { repeat: { pattern: '30 7 * * 1' }, jobId: 'tick:plugin_weekly' },
   )
-  // Nightly 02:00: legacy MSSQL → BeaconHS incremental ETL sync (reads the rassaun landing delta).
+  // Nightly 02:00: optional private ETL sync when ETL_SOURCE_URL/loaders are configured.
   // Override the cron with ETL_SYNC_CRON if needed.
   await scheduledQueue.add('tick:etl_mssql_sync', { kind: 'etl_mssql_sync' } as ScheduledTick, {
     repeat: { pattern: process.env.ETL_SYNC_CRON ?? '0 2 * * *' },

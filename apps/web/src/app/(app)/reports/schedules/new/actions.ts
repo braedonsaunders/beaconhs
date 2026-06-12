@@ -7,7 +7,7 @@ import { db, withSuperAdmin } from '@beaconhs/db'
 import { eq } from 'drizzle-orm'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
-import { computeNextRunAt } from '@/lib/report-cadence'
+import { computeNextRunAt } from '@beaconhs/reports'
 
 const CADENCES = ['daily', 'weekly', 'monthly'] as const
 type Cadence = (typeof CADENCES)[number]

@@ -16,7 +16,7 @@ import { attachments, reportDefinitions, reportRuns, reportSchedules } from '@be
 import { db, withSuperAdmin } from '@beaconhs/db'
 import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
-import { StatusBadge } from '../../../../page'
+import { StatusBadge } from '../../../../_format'
 
 export const metadata = { title: 'Report run' }
 

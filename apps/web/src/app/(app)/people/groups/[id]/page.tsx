@@ -137,7 +137,7 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
                 candidates={candidates}
                 initialMemberIds={memberIds}
                 action={setGroupMembership}
-                emptyMembersLabel="No members yet. Move people from the left."
+                emptyMembersLabel="No members. Move people from the left."
               />
             </CardContent>
           </Card>
@@ -149,7 +149,7 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
           </CardHeader>
           <CardContent>
             {memberIds.length === 0 ? (
-              <p className="text-sm text-slate-500">No members yet.</p>
+              <p className="text-sm text-slate-500">No members.</p>
             ) : (
               <ul className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2 lg:grid-cols-3">
                 {candidates

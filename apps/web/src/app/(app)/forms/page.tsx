@@ -10,22 +10,12 @@ import { SearchInput } from '@/components/search-input'
 import { NavIcon } from '@/components/sidebar-nav'
 import { pickString } from '@/lib/list-params'
 import { loadNavConfig } from '@/lib/nav/resolve'
+import { FormsCategoryNav } from './_nav'
 import { PinFormButton } from './_pin-button'
 import { AiGenerateButton } from './_ai-generate-button'
 import { appVisibleTo, getUserRoleKeys } from './_lib/access'
 
 export const metadata = { title: 'Forms' }
-
-const CATEGORY_FILTERS = [
-  { value: '', label: 'All' },
-  { value: 'inspection', label: 'Inspection' },
-  { value: 'jsha', label: 'JSHA' },
-  { value: 'toolbox_talk', label: 'Toolbox talk' },
-  { value: 'lift_plan', label: 'Lift plan' },
-  { value: 'wah', label: 'WAH rescue' },
-  { value: 'incident_investigation', label: 'Incident investigation' },
-  { value: 'custom', label: 'Custom' },
-] as const
 
 // A template's icon: explicit override, else a sensible per-category default.
 // Tailwind classes per app kind (badge on each card; 'form' is the default and
@@ -173,26 +163,7 @@ export default async function FormsPage({
           </header>
 
           <div className="flex flex-wrap items-center gap-2">
-            {CATEGORY_FILTERS.map((c) => {
-              const active = c.value === categoryFilter
-              const params = new URLSearchParams()
-              if (c.value) params.set('category', c.value)
-              if (q) params.set('q', q)
-              const href = params.toString() ? `/forms?${params.toString()}` : '/forms'
-              return (
-                <Link
-                  key={c.value || 'all'}
-                  href={href as any}
-                  className={
-                    active
-                      ? 'rounded-full border border-teal-500 bg-teal-50 px-3 py-1 text-xs font-medium text-teal-700'
-                      : 'rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:border-teal-500 hover:bg-teal-50 hover:text-teal-700'
-                  }
-                >
-                  {c.label}
-                </Link>
-              )
-            })}
+            <FormsCategoryNav active={categoryFilter} q={q} />
             <div className="ml-auto w-full sm:w-64">
               <SearchInput placeholder="Search forms…" />
             </div>
@@ -203,8 +174,8 @@ export default async function FormsPage({
       {templates.length === 0 ? (
         <EmptyState
           icon={<ClipboardCheck size={32} />}
-          title={q || categoryFilter ? 'No matching forms' : 'No form templates yet'}
-          description="Build your first template — inspection, JSHA, toolbox talk, anything."
+          title={q || categoryFilter ? 'No matching forms' : 'No form templates'}
+          description="Create a template for inspections, JSHAs, toolbox talks, and more."
           action={
             canCreate ? (
               <Link

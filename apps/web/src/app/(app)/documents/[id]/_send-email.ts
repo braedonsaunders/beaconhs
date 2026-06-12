@@ -77,7 +77,7 @@ export async function sendDocumentEmail(
     `Category: ${data.doc.category ?? '—'}`,
     data.publishedVersion
       ? `Published version: v${data.publishedVersion.v.version}`
-      : 'No published version yet.',
+      : 'No published version.',
     data.doc.nextReviewOn ? `Next review: ${data.doc.nextReviewOn}` : '',
     ``,
     options?.messageOverride ? `Note: ${options.messageOverride}\n` : '',

@@ -176,12 +176,8 @@ export default async function MyInspectionsPage({
       {rows.length === 0 ? (
         <EmptyState
           icon={<ClipboardList size={32} />}
-          title={
-            params.q || statusFilter
-              ? 'No inspections match these filters'
-              : 'You have not run any inspections yet'
-          }
-          description="When you carry out an inspection, the record shows up here."
+          title={params.q || statusFilter ? 'No inspections match these filters' : 'No inspections'}
+          description="Inspections you carry out appear here."
           action={
             <Link href="/inspections/records/new">
               <Button>Start an inspection</Button>

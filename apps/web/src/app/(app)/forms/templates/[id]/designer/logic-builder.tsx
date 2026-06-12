@@ -76,7 +76,7 @@ export function LogicBuilder({
   }
 
   if (availableFields.length === 0) {
-    return <p className="text-xs text-slate-500">No other fields to reference yet.</p>
+    return <p className="text-xs text-slate-500">No other fields to reference.</p>
   }
 
   return (

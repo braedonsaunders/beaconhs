@@ -76,7 +76,7 @@ export default async function FormTranscriptPage({
           {rows.length === 0 ? (
             <EmptyState
               icon={<FileText size={24} />}
-              title="No form participation yet"
+              title="No form participation"
               description="This person has not appeared on a submitted form."
             />
           ) : (

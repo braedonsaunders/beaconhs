@@ -286,8 +286,8 @@ export default async function AssessmentsPage({
       {rows.length === 0 ? (
         <EmptyState
           icon={<ClipboardCheck size={32} />}
-          title="No assessment attempts yet"
-          description="Start one to grade someone on an assessment type."
+          title="No assessment attempts"
+          description="Start an attempt to grade a candidate against an assessment type."
           action={
             <Link href="/training/assessments/new">
               <Button>Start an attempt</Button>

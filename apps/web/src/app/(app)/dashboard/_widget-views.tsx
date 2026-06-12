@@ -289,7 +289,7 @@ export function WidgetCard({ widgetId, data, todayIso }: Props) {
     default:
       return (
         <CardShell title={`Unknown widget: ${widgetId}`} icon={AlertTriangle}>
-          <EmptyRow>This widget was removed or hasn't been built yet.</EmptyRow>
+          <EmptyRow>This widget is no longer available.</EmptyRow>
         </CardShell>
       )
   }
@@ -743,7 +743,7 @@ function DueCAsList({ items, todayIso }: { items: DashboardMetrics['dueCAs']; to
       accent="amber"
     >
       {items.length === 0 ? (
-        <EmptyRow>No open corrective actions. Inbox zero.</EmptyRow>
+        <EmptyRow>No open corrective actions.</EmptyRow>
       ) : (
         <ul className="space-y-0.5 px-2 pb-2">
           {items.map((c, idx) => {
@@ -911,7 +911,7 @@ function InboxList({ items }: { items: DashboardMetrics['myInbox'] }) {
         <EmptyRow>
           <span className="inline-flex items-center gap-2">
             <Bell size={12} className="text-emerald-500" />
-            Inbox zero. Nice.
+            No unread notifications.
           </span>
         </EmptyRow>
       ) : (
@@ -1080,7 +1080,7 @@ function relativeTime(value: string | Date) {
   const then = typeof value === 'string' ? new Date(value) : value
   const now = Date.now()
   const diff = Math.round((now - then.getTime()) / 1000)
-  if (diff < 60) return 'just now'
+  if (diff < 60) return 'now'
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
   if (diff < 86_400) return `${Math.floor(diff / 3600)}h ago`
   if (diff < 7 * 86_400) return `${Math.floor(diff / 86_400)}d ago`

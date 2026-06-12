@@ -47,11 +47,11 @@ export default async function DivisionsPage() {
       {rows.length === 0 ? (
         <EmptyState
           icon={<Layers size={32} />}
-          title="No divisions yet"
-          description="Divisions slice your workforce by trade-line, not site. Useful for matrix reporting."
+          title="No divisions"
+          description="Divisions segment the workforce by trade-line rather than site, for matrix reporting."
           action={
             <Link href="/people/divisions/new">
-              <Button>Add your first division</Button>
+              <Button>New division</Button>
             </Link>
           }
         />

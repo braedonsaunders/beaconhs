@@ -132,8 +132,8 @@ export default async function CourseEvaluationsPage({
       ) : rows.length === 0 ? (
         <EmptyState
           icon={<UserCheck size={32} />}
-          title="No one is enrolled yet"
-          description="Once learners start this course they'll appear here for sign-off."
+          title="No enrolled learners"
+          description="Learners appear here for sign-off once they start the course."
         />
       ) : (
         <EvaluationsGrid courseId={id} lessons={lessons} rows={rows} />

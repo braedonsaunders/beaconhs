@@ -210,7 +210,7 @@ export default async function SkillTypeDetailPage({
             {holdersWithStatus.length === 0 ? (
               <EmptyState
                 icon={<Users size={24} />}
-                title="No holders yet"
+                title="No holders"
                 description="Assign this skill to a person from their profile."
               />
             ) : (

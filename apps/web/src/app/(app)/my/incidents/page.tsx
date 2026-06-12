@@ -207,9 +207,9 @@ export default async function MyIncidentsPage({
           title={
             params.q || typeFilter || statusFilter
               ? 'No incidents match these filters'
-              : 'You have not reported any incidents yet'
+              : 'No reported incidents'
           }
-          description="When you report an incident, it shows up here so you can track its progress through investigation and close-out."
+          description="Incidents you report appear here, with progress through investigation and close-out."
           action={
             <Link href="/incidents/new">
               <Button>Report an incident</Button>

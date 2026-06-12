@@ -7,6 +7,7 @@ import { orgUnits, tenantUsers, trainingClasses, trainingCourses, users } from '
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { PageContainer } from '@/components/page-layout'
+import { PersonSelectField } from '@/components/person-select-field'
 
 export const metadata = { title: 'Schedule training class' }
 export const dynamic = 'force-dynamic'
@@ -74,7 +75,12 @@ export default async function NewClassPage() {
         .where(eq(orgUnits.level, 'site'))
         .orderBy(asc(orgUnits.name)),
       tx
-        .select({ id: tenantUsers.id, name: users.name, displayName: tenantUsers.displayName })
+        .select({
+          id: tenantUsers.id,
+          name: users.name,
+          displayName: tenantUsers.displayName,
+          email: users.email,
+        })
         .from(tenantUsers)
         .leftJoin(users, eq(users.id, tenantUsers.userId))
         .where(eq(tenantUsers.status, 'active')),
@@ -87,7 +93,7 @@ export default async function NewClassPage() {
       <div className="mx-auto max-w-2xl">
         <PageHeader
           title="Schedule a training class"
-          description="Set the course, date/time, instructor, and capacity. After the class runs you can roster attendees and mark completion to write training records."
+          description="Set the course, date/time, instructor, and capacity. Attendees can be rostered and completion marked after the class runs."
           back={{ href: '/training/classes', label: 'Back to classes' }}
         />
         <form
@@ -129,14 +135,18 @@ export default async function NewClassPage() {
               </Select>
             </Field>
             <Field label="Instructor">
-              <Select name="instructorTenantUserId" defaultValue="">
-                <option value="">— Pick an instructor —</option>
-                {instructors.map((i) => (
-                  <option key={i.id} value={i.id}>
-                    {i.displayName ?? i.name ?? '(no name)'}
-                  </option>
-                ))}
-              </Select>
+              <PersonSelectField
+                name="instructorTenantUserId"
+                options={instructors.map((i) => ({
+                  value: i.id,
+                  label: i.displayName ?? i.name ?? '(no name)',
+                  hint: i.email ?? undefined,
+                }))}
+                placeholder="Pick an instructor..."
+                searchPlaceholder="Search instructors..."
+                sheetTitle="Select an instructor"
+                emptyLabel="No instructor"
+              />
             </Field>
           </div>
           <Field label="Max attendees">

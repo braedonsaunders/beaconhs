@@ -561,7 +561,7 @@ function AddDrawer({
               label: t.name,
               hint: t.category ?? undefined,
             }))}
-            placeholder={templates.length ? 'Choose a form…' : 'No form templates yet'}
+            placeholder={templates.length ? 'Choose a form…' : 'No form templates'}
             searchPlaceholder="Search forms…"
             sheetTitle="Pin a form"
           />

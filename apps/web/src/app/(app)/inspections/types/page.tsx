@@ -185,8 +185,8 @@ export default async function InspectionTypesPage({
       {rows.length === 0 ? (
         <EmptyState
           icon={<ClipboardList size={32} />}
-          title={params.q ? `No types match "${params.q}"` : 'No inspection types yet'}
-          description="Create a type, link a few criteria banks, and reuse it for every inspection of that kind."
+          title={params.q ? `No types match "${params.q}"` : 'No inspection types'}
+          description="Create a type, link criteria banks, and reuse it for every inspection of that kind."
           action={
             <Link href="/inspections/types?drawer=new-type" scroll={false}>
               <Button>New type</Button>

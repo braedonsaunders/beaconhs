@@ -162,7 +162,7 @@ export default async function EquipmentInspectionsPage() {
         <EmptyState
           icon={<ClipboardCheck size={32} />}
           title="Nothing overdue"
-          description="No equipment is currently flagged for an inspection. Recent submissions will appear here once they're filed."
+          description="No equipment is currently flagged for an inspection. Recent submissions appear here."
         />
       ) : (
         <div className="space-y-8">
@@ -309,7 +309,7 @@ export default async function EquipmentInspectionsPage() {
               <span className="text-xs text-slate-500">({recent.length})</span>
             </div>
             {recent.length === 0 ? (
-              <p className="text-sm text-slate-500">No equipment inspections submitted yet.</p>
+              <p className="text-sm text-slate-500">No equipment inspections submitted.</p>
             ) : (
               <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
                 <Table>

@@ -16,6 +16,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { pickString } from '@/lib/list-params'
 import { PageContainer } from '@/components/page-layout'
+import { PersonSelectField } from '@/components/person-select-field'
 
 export const metadata = { title: 'New truck log entry' }
 export const dynamic = 'force-dynamic'
@@ -128,8 +129,14 @@ export default async function NewTruckLogEntryPage({
         .orderBy(asc(orgUnits.name))
         .limit(500),
       tx
-        .select({ id: people.id, firstName: people.firstName, lastName: people.lastName })
+        .select({
+          id: people.id,
+          firstName: people.firstName,
+          lastName: people.lastName,
+          employeeNo: people.employeeNo,
+        })
         .from(people)
+        .where(eq(people.status, 'active'))
         .orderBy(asc(people.lastName), asc(people.firstName))
         .limit(500),
     ])
@@ -162,14 +169,18 @@ export default async function NewTruckLogEntryPage({
                   <Input name="entryDate" type="date" required defaultValue={initialDate} />
                 </Field>
                 <Field label="Driver">
-                  <Select name="driverPersonId" defaultValue="">
-                    <option value="">— Not specified —</option>
-                    {drivers.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.lastName}, {p.firstName}
-                      </option>
-                    ))}
-                  </Select>
+                  <PersonSelectField
+                    name="driverPersonId"
+                    defaultValue=""
+                    options={drivers.map((p) => ({
+                      value: p.id,
+                      label: `${p.lastName}, ${p.firstName}`,
+                      hint: p.employeeNo ?? undefined,
+                    }))}
+                    placeholder="Select a driver…"
+                    clearable
+                    emptyLabel="— Not specified —"
+                  />
                 </Field>
                 <Field label="Site">
                   <Select name="siteOrgUnitId" defaultValue="">

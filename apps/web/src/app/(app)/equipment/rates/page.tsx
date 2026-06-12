@@ -155,7 +155,7 @@ export default async function EquipmentRatesPage() {
       {rows.length === 0 ? (
         <EmptyState
           icon={<Coins size={32} />}
-          title="No equipment types yet"
+          title="No equipment types"
           description="Create equipment types first to set per-type billing rates."
         />
       ) : (

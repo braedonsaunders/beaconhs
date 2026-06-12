@@ -224,10 +224,7 @@ export default async function EmailLogPage({
       }
     >
       {rows.length === 0 ? (
-        <EmptyState
-          title="No emails logged yet"
-          description="Once the worker dispatches an email it will appear here."
-        />
+        <EmptyState title="No emails logged" description="Sent emails appear here." />
       ) : (
         <div className="space-y-4">
           <Table>

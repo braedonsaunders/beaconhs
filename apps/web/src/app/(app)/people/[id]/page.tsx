@@ -1138,7 +1138,7 @@ export default async function PersonDetailPage({
                     <EmptyState
                       icon={<FileText size={24} />}
                       title="No forms about this person"
-                      description="JSHAs, incident investigations, evaluations and other forms where this person is the subject will show here."
+                      description="JSHAs, incident investigations, evaluations, and other forms where this person is the subject appear here."
                     />
                   ) : (
                     <Table>
@@ -1281,7 +1281,7 @@ function GroupsTab({
         </CardHeader>
         <CardContent>
           {memberships.length === 0 ? (
-            <p className="text-sm text-slate-500">Not in any groups yet.</p>
+            <p className="text-sm text-slate-500">Not in any groups.</p>
           ) : (
             <ul className="flex flex-wrap gap-2">
               {memberships.map(({ group }) => (
@@ -1396,7 +1396,7 @@ function DivisionsTab({
         </CardHeader>
         <CardContent>
           {memberships.length === 0 ? (
-            <p className="text-sm text-slate-500">Not in any divisions yet.</p>
+            <p className="text-sm text-slate-500">Not in any divisions.</p>
           ) : (
             <ul className="space-y-1 text-sm">
               {memberships.map(({ division }) => (

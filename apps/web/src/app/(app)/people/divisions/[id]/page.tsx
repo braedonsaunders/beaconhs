@@ -194,7 +194,7 @@ export default async function DivisionDetailPage({ params }: { params: Promise<{
                 candidates={candidates}
                 initialMemberIds={memberIds}
                 action={setDivisionMembership}
-                emptyMembersLabel="No members yet. Move people from the left."
+                emptyMembersLabel="No members. Move people from the left."
               />
             </CardContent>
           </Card>

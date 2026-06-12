@@ -81,7 +81,7 @@ export type OnThisDayItem = {
   yearsAgo: number
 }
 
-export type JournalOption = { id: string; name: string }
+export type JournalOption = { id: string; name: string; hint?: string }
 
 /** A tag offered in the entry picker — name + optional palette colour. */
 export type TagSuggestion = { name: string; color: string | null }

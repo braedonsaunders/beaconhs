@@ -102,7 +102,7 @@ export default async function PpePage({
           <PpeSubNav active="records" />
           <PageHeader
             title="PPE"
-            description="Issue, return, replace, discard — plus scheduled inspections for inspectable PPE."
+            description="Issue, return, replace, and discard PPE, with scheduled inspections for inspectable types."
             actions={
               <div className="flex items-center gap-2">
                 <Link href={buildExportHref('/ppe/export.csv', sp)}>
@@ -130,13 +130,11 @@ export default async function PpePage({
       {rows.length === 0 ? (
         <EmptyState
           icon={<HardHat size={32} />}
-          title={
-            params.q || statusFilter ? 'No PPE matches these filters' : 'No PPE registered yet'
-          }
-          description="Add helmets, harnesses, glasses, gloves — every inspectable item lives here."
+          title={params.q || statusFilter ? 'No PPE matches these filters' : 'No PPE registered'}
+          description="Track helmets, harnesses, glasses, gloves, and every other inspectable item."
           action={
             <Link href="/ppe/new">
-              <Button>Add your first PPE item</Button>
+              <Button>New PPE item</Button>
             </Link>
           }
         />

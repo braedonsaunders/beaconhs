@@ -1,4 +1,6 @@
-// Scheduled reports + dashboards.
+// Document reports (HTML view + scheduled PDF email). Dashboards are NOT a
+// reports concept — live dashboards/grids live in the Insights module
+// (insight_dashboards in insights.ts).
 //
 //   report_definitions  — report templates.
 //                         `kind='built_in'`  → system-defined, tenantId is null,
@@ -11,11 +13,6 @@
 //                         filters, and the rolling nextRunAt.
 //   report_runs         — execution log. One row per attempted run, points
 //                         at the generated PDF attachment.
-//   report_dashboards   — saved dashboard layouts. `layout` is a typed jsonb
-//                         array of widget descriptors (kpi tiles + lists).
-//                         Per-tenant; one default dashboard ships unset and
-//                         the built-in dashboard page renders the canonical
-//                         layout when no rows exist.
 
 import { relations } from 'drizzle-orm'
 import {
@@ -79,10 +76,43 @@ export type ReportCustomFilter = {
   value?: string | number | string[] | number[] | null
 }
 
+/** Leaf clause of the v2 nested filter tree. Same operator vocabulary and
+ *  column whitelist as v1 flat filters. */
+export type ReportRule = {
+  field: string
+  op: ReportFilterOperator
+  value?: string | number | string[] | number[] | null
+}
+
+/** Nested and/or filter tree (v2) — produced by the report studio's query
+ *  builder and compiled to SQL by @beaconhs/reports. When present it takes
+ *  precedence over the flat v1 `filters` list. */
+export type ReportRuleGroup = {
+  combinator: 'and' | 'or'
+  not?: boolean
+  rules: (ReportRule | ReportRuleGroup)[]
+}
+
+export const REPORT_CHART_TYPES = ['bar', 'line', 'area', 'pie', 'donut'] as const
+export type ReportChartType = (typeof REPORT_CHART_TYPES)[number]
+
+/** Optional chart rendered above the result table in the report viewer.
+ *  v1 metric is always a row count per distinct `dimension` value. */
+export type ReportChartConfig = {
+  type: ReportChartType
+  /** Column whose distinct values form the category axis / slices. */
+  dimension: string
+  metric: 'count'
+}
+
 export type ReportCustomQuery = {
   entity: ReportCustomEntity
   columns: string[]
   filters?: ReportCustomFilter[]
+  /** Nested and/or filter tree; takes precedence over `filters` when set. */
+  filtersV2?: ReportRuleGroup | null
+  /** Chart to render above the results table. */
+  chart?: ReportChartConfig | null
   groupBy?: string | null
   /** Defaults to descending by primary date column. */
   sort?: { column: string; direction: 'asc' | 'desc' } | null
@@ -190,69 +220,6 @@ export const reportRuns = pgTable(
   }),
 )
 
-// --- Dashboards (per-tenant saved layouts) --------------------------------
-
-/** Layout-payload widget kinds. Renderer maps each to a query helper. */
-export const REPORT_DASHBOARD_WIDGET_KINDS = [
-  'kpi_incidents_30d',
-  'kpi_open_cas',
-  'kpi_overdue_cas',
-  'kpi_trir',
-  'kpi_dart',
-  'kpi_training_compliance',
-  'kpi_document_compliance',
-  'kpi_open_ca_aging',
-  'kpi_inspections_this_month',
-  'kpi_lw_active',
-  'kpi_ppe_overdue',
-  'kpi_certs_expiring_90d',
-  'kpi_submissions_today',
-  'kpi_cs_active',
-  'kpi_people',
-  'list_recent_incidents',
-  'list_due_cas',
-  'list_expiring_certs',
-  'list_top_sites_incidents',
-  'list_top_overdue_cas',
-  'list_expiring_training_30d',
-  'list_inbox',
-] as const
-export type ReportDashboardWidgetKind = (typeof REPORT_DASHBOARD_WIDGET_KINDS)[number]
-
-export type ReportDashboardWidget = {
-  id: string
-  kind: ReportDashboardWidgetKind
-  title?: string
-  /** Reserved for future placement (grid coords). */
-  position?: { col: number; row: number; w: number; h: number }
-  options?: Record<string, unknown>
-}
-
-export type ReportDashboardLayout = {
-  widgets: ReportDashboardWidget[]
-}
-
-export const reportDashboards = pgTable(
-  'report_dashboards',
-  {
-    id: id(),
-    tenantId: uuid('tenant_id')
-      .notNull()
-      .references(() => tenants.id, { onDelete: 'cascade' }),
-    name: text('name').notNull(),
-    description: text('description'),
-    /** True for the dashboard rendered on /dashboard when no id provided. */
-    isDefault: boolean('is_default').default(false).notNull(),
-    layout: jsonb('layout').$type<ReportDashboardLayout>().notNull(),
-    createdByTenantUserId: uuid('created_by_tenant_user_id'),
-    ...timestamps,
-  },
-  (t) => ({
-    tenantIdx: index('report_dashboards_tenant_idx').on(t.tenantId),
-    tenantNameUx: uniqueIndex('report_dashboards_tenant_name_ux').on(t.tenantId, t.name),
-  }),
-)
-
 // --- Relations ------------------------------------------------------------
 
 export const reportDefinitionsRelations = relations(reportDefinitions, ({ one, many }) => ({
@@ -279,8 +246,4 @@ export const reportRunsRelations = relations(reportRuns, ({ one }) => ({
     fields: [reportRuns.pdfAttachmentId],
     references: [attachments.id],
   }),
-}))
-
-export const reportDashboardsRelations = relations(reportDashboards, ({ one }) => ({
-  tenant: one(tenants, { fields: [reportDashboards.tenantId], references: [tenants.id] }),
 }))

@@ -25,6 +25,7 @@ import {
 import { id, softDelete, timestamps } from './_helpers'
 import { attachments } from './attachments'
 import { tenants } from './core'
+import { formTemplates } from './forms'
 import { orgUnits } from './org'
 
 // ----------------------------------------------------------------------------
@@ -118,6 +119,13 @@ export const hazidTasks = pgTable(
     // Optional links to safe-work practice / safe-job procedure documents
     swpDocumentId: uuid('swp_document_id'),
     sjpDocumentId: uuid('sjp_document_id'),
+    // Default risk rating for the task itself (legacy task-bank Severity /
+    // Probability / RiskBefore / RiskAfter). 1-5 scales; risk score is derived
+    // in app code as likelihood × severity.
+    preLikelihood: integer('pre_likelihood'),
+    preSeverity: integer('pre_severity'),
+    postLikelihood: integer('post_likelihood'),
+    postSeverity: integer('post_severity'),
     ...timestamps,
     ...softDelete,
   },
@@ -184,6 +192,10 @@ export const hazidAssessmentTypes = pgTable(
       onDelete: 'set null',
     }),
 
+    // Restrict which person-groups may start assessments of this type (legacy
+    // AvailableTo). Empty array = available to everyone.
+    availableToGroupIds: jsonb('available_to_group_ids').$type<string[]>().default([]).notNull(),
+
     ...timestamps,
     ...softDelete,
   },
@@ -248,6 +260,45 @@ export const hazidAssessmentTypeQuestions = pgTable(
 )
 
 // ----------------------------------------------------------------------------
+// Type-attached builder apps
+// ----------------------------------------------------------------------------
+// Assessment types can be composed out of the native JSHA sections above plus
+// one or more form-builder apps. This is the abstraction layer for specialty
+// structures such as confined-space entry plans, arc-flash studies, lift plans,
+// or tenant-specific mini apps without hard-coding another sub-form column set.
+export const hazidAssessmentTypeApps = pgTable(
+  'hazid_assessment_type_apps',
+  {
+    id: id(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    typeId: uuid('type_id')
+      .notNull()
+      .references(() => hazidAssessmentTypes.id, { onDelete: 'cascade' }),
+    templateId: uuid('template_id')
+      .notNull()
+      .references(() => formTemplates.id, { onDelete: 'cascade' }),
+    // Stable per-type key used by seeders/admin UI, e.g. "confined_space".
+    key: text('key').notNull(),
+    label: text('label').notNull(),
+    description: text('description'),
+    required: boolean('required').default(false).notNull(),
+    autoCreate: boolean('auto_create').default(true).notNull(),
+    entityOrder: integer('entity_order').default(1).notNull(),
+    config: jsonb('config').$type<Record<string, unknown>>().default({}).notNull(),
+    ...timestamps,
+    ...softDelete,
+  },
+  (t) => ({
+    typeIdx: index('hazid_assessment_type_apps_type_idx').on(t.typeId, t.entityOrder),
+    templateIdx: index('hazid_assessment_type_apps_template_idx').on(t.templateId),
+    tenantIdx: index('hazid_assessment_type_apps_tenant_idx').on(t.tenantId),
+    typeKeyUx: uniqueIndex('hazid_assessment_type_apps_type_key_ux').on(t.typeId, t.key),
+  }),
+)
+
+// ----------------------------------------------------------------------------
 // Relations
 // ----------------------------------------------------------------------------
 
@@ -293,6 +344,7 @@ export const hazidAssessmentTypesRelations = relations(hazidAssessmentTypes, ({ 
   }),
   ppe: many(hazidAssessmentTypePPE),
   questions: many(hazidAssessmentTypeQuestions),
+  apps: many(hazidAssessmentTypeApps),
 }))
 
 export const hazidAssessmentTypePPERelations = relations(hazidAssessmentTypePPE, ({ one }) => ({
@@ -316,3 +368,15 @@ export const hazidAssessmentTypeQuestionsRelations = relations(
     }),
   }),
 )
+
+export const hazidAssessmentTypeAppsRelations = relations(hazidAssessmentTypeApps, ({ one }) => ({
+  tenant: one(tenants, { fields: [hazidAssessmentTypeApps.tenantId], references: [tenants.id] }),
+  type: one(hazidAssessmentTypes, {
+    fields: [hazidAssessmentTypeApps.typeId],
+    references: [hazidAssessmentTypes.id],
+  }),
+  template: one(formTemplates, {
+    fields: [hazidAssessmentTypeApps.templateId],
+    references: [formTemplates.id],
+  }),
+}))

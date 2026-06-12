@@ -1,6 +1,26 @@
-# NOTE: there is no local Postgres container. Dev connects DIRECTLY to the shared HA
-# cluster at 10.0.0.85:5432 (DATABASE_URL in .env). See docs/migration/cluster-setup.md.
+# Dev uses DATABASE_URL from .env. Maintainers can keep pointing at the shared
+# PG cluster, while open-source/local clones can opt into Postgres with:
+#   docker compose --profile local-db up -d
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: beaconhs-postgres
+    profiles:
+      - local-db
+    environment:
+      POSTGRES_USER: beaconhs
+      POSTGRES_PASSWORD: beaconhs
+      POSTGRES_DB: beaconhs
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U beaconhs -d beaconhs"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   redis:
     image: redis:7-alpine
     container_name: beaconhs-redis
@@ -40,5 +60,6 @@ services:
       - "8025:8025"
 
 volumes:
+  postgres-data:
   redis-data:
   minio-data:

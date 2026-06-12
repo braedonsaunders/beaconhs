@@ -1,9 +1,10 @@
-import { asc, eq, ne } from 'drizzle-orm'
+import { and, asc, eq, ne } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { Button, Card, CardContent, Input, Label, Select, Textarea } from '@beaconhs/ui'
 import { crews, departments, people, trades } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { PersonSelectField } from '@/components/person-select-field'
 
 async function savePerson(formData: FormData) {
   'use server'
@@ -60,9 +61,14 @@ export async function PersonEditTab({ personId }: { personId: string }) {
     // longer cycles (A → B → A); the org-chart renderer has an in-memory
     // cycle guard for that case.
     const m = await tx
-      .select({ id: people.id, firstName: people.firstName, lastName: people.lastName })
+      .select({
+        id: people.id,
+        firstName: people.firstName,
+        lastName: people.lastName,
+        employeeNo: people.employeeNo,
+      })
       .from(people)
-      .where(ne(people.id, personId))
+      .where(and(ne(people.id, personId), eq(people.status, 'active')))
       .orderBy(asc(people.lastName), asc(people.firstName))
     return [p, d, t, c, m] as const
   })
@@ -129,14 +135,18 @@ export async function PersonEditTab({ personId }: { personId: string }) {
               </Select>
             </Field>
             <Field label="Reports to">
-              <Select name="managerPersonId" defaultValue={person.managerPersonId ?? ''}>
-                <option value="">— no manager —</option>
-                {allManagers.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.lastName}, {m.firstName}
-                  </option>
-                ))}
-              </Select>
+              <PersonSelectField
+                name="managerPersonId"
+                defaultValue={person.managerPersonId ?? ''}
+                options={allManagers.map((m) => ({
+                  value: m.id,
+                  label: `${m.lastName}, ${m.firstName}`,
+                  hint: m.employeeNo ?? undefined,
+                }))}
+                placeholder="Search people…"
+                clearable
+                emptyLabel="— no manager —"
+              />
             </Field>
             <Field label="Status">
               <Select name="status" defaultValue={person.status}>

@@ -105,7 +105,7 @@ export function JournalAnalysisWidget({ aiEnabled }: { aiEnabled: boolean }) {
           </div>
         ) : !aiEnabled ? (
           <Empty>
-            AI is off.{' '}
+            AI is not configured.{' '}
             <Link href={'/admin/ai' as never} className="font-medium text-teal-700 underline">
               Configure a provider
             </Link>{' '}
@@ -115,7 +115,7 @@ export function JournalAnalysisWidget({ aiEnabled }: { aiEnabled: boolean }) {
           <Empty>
             Analyse recent field journals to surface <strong>sentiment</strong>,{' '}
             <strong>recurring issues</strong> and <strong>recommended corrective actions</strong>{' '}
-            routed to the right people.
+            with suggested owners.
           </Empty>
         ) : (
           <div className="space-y-3">

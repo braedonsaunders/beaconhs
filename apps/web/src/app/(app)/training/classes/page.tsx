@@ -155,10 +155,10 @@ export default async function TrainingClassesPage({
         <EmptyState
           icon={<CalendarCheck size={32} />}
           title={whenFilter === 'past' ? 'No past classes' : 'No classes scheduled'}
-          description="Schedule a class for any course in your catalogue. Roster attendees and mark completion when done."
+          description="Schedule a class for any course in the catalogue."
           action={
             <Link href="/training/classes/new">
-              <Button>Schedule your first class</Button>
+              <Button>Schedule a class</Button>
             </Link>
           }
         />

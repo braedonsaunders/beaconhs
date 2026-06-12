@@ -85,7 +85,7 @@ export default async function NewPpeTypePage() {
       <div className="mx-auto max-w-2xl">
         <PageHeader
           title="New PPE type"
-          description="Define a new PPE type. After creating you'll be able to add the per-type inspection criteria and sizing scheme."
+          description="Define a new PPE type. Inspection criteria and sizing scheme can be added after creation."
           back={{ href: '/ppe/types', label: 'Back to PPE types' }}
         />
         <form

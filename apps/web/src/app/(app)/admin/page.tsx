@@ -188,8 +188,8 @@ export default async function AdminPage() {
         <header className="space-y-1">
           <h1 className="text-2xl font-semibold text-slate-900">Admin</h1>
           <p className="max-w-2xl text-sm text-slate-500">
-            Everything that configures this workspace — people, settings, integrations and the audit
-            trail. Pick a panel to get started.
+            Everything that configures this workspace — people, settings, integrations, and the
+            audit trail.
           </p>
         </header>
 

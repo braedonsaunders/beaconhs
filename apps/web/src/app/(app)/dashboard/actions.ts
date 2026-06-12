@@ -40,7 +40,7 @@ export async function saveDashboardLayout(input: unknown) {
     return {
       ok: false as const,
       error:
-        'You are not a member of this tenant. Add yourself as a tenant user to save a personal dashboard.',
+        'You are not a member of this tenant. A tenant user account is required to save a personal dashboard.',
     }
   }
 

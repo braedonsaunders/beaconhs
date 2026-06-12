@@ -9,6 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from '@beaconhs/ui'
+import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
@@ -50,6 +51,7 @@ export default async function ExpiringPage({
 }) {
   const sp = await searchParams
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'compliance.read')
   const moduleFilter = pickString(sp.module) as SignalModule | undefined
   const statusFilter = pickString(sp.status) as SignalStatus | undefined
 
@@ -72,7 +74,7 @@ export default async function ExpiringPage({
         <>
           <PageHeader
             title="Compliance"
-            description="Everything coming due, expiring, or overdue across every module — certs, permits, equipment, PPE, lone-worker, document reviews, corrective actions and more."
+            description="Everything coming due, expiring, or overdue across every module — certifications, permits, equipment, PPE, lone-worker, document reviews, and corrective actions."
           />
           <ComplianceSubNav active="expiring" />
           <div className="flex flex-wrap items-center gap-2">

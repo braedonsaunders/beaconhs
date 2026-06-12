@@ -122,7 +122,7 @@ export async function bulkRenewTrainingRecords(args: {
         entityType: 'training_record',
         entityId: sourceId,
         action: 'update',
-        summary: 'Bulk action: renewed (new record minted)',
+        summary: 'Bulk action: renewed (new record created)',
         metadata: { batchId, newRecordId: newId },
       })
       if (newId) {

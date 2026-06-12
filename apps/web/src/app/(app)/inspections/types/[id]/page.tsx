@@ -366,8 +366,8 @@ export default async function InspectionTypeDetailPage({
               {links.length === 0 ? (
                 <EmptyState
                   icon={<span className="text-2xl">📋</span>}
-                  title="No banks linked yet"
-                  description="Pick a published bank below to add it to this inspection type."
+                  title="No banks linked"
+                  description="Select a published bank below to add it to this inspection type."
                 />
               ) : (
                 <Table>

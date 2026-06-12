@@ -304,7 +304,7 @@ function LineViz({ data }: { data: Pt[] }) {
 
 function BarViz({ data, horizontal }: { data: Pt[]; horizontal?: boolean }) {
   if (data.length === 0) {
-    return <div className="grid h-full place-items-center text-xs text-slate-400">No data yet.</div>
+    return <div className="grid h-full place-items-center text-xs text-slate-400">No data.</div>
   }
   if (horizontal) {
     return (

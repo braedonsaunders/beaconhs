@@ -145,8 +145,8 @@ export default async function LoneWorkerPage({
       {rows.length === 0 ? (
         <EmptyState
           icon={<Timer size={32} />}
-          title={statusFilter ? `No ${statusFilter} sessions` : 'No sessions yet'}
-          description="Open a session when a worker is going solo. Missed check-ins escalate to the supervisor automatically."
+          title={statusFilter ? `No ${statusFilter} sessions` : 'No sessions'}
+          description="Open a session when a worker is working alone. Missed check-ins escalate to the supervisor automatically."
           action={
             <Link href="/lone-worker/new">
               <Button>Start a session</Button>

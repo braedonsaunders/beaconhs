@@ -12,7 +12,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
-import { Button, Input, Label, Select, Textarea, UrlDrawer } from '@beaconhs/ui'
+import { Button, Input, Label, SearchSelect, Select, Textarea, UrlDrawer } from '@beaconhs/ui'
 
 // ---- Event timeline --------------------------------------------------------
 
@@ -396,7 +396,7 @@ export type PrevStepInput = {
 
 export type PrevStepAction = (input: PrevStepInput) => Promise<{ ok: boolean; error?: string }>
 
-type Person = { id: string; firstName: string; lastName: string }
+type Person = { id: string; firstName: string; lastName: string; employeeNo?: string | null }
 
 export function PrevStepDrawer({
   open,
@@ -493,18 +493,21 @@ export function PrevStepDrawer({
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="ps-owner">Owner</Label>
-            <Select
-              id="ps-owner"
+            <SearchSelect
               value={ownerPersonId}
-              onChange={(e) => setOwnerPersonId(e.currentTarget.value)}
-            >
-              <option value="">— Unassigned —</option>
-              {people.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.lastName}, {p.firstName}
-                </option>
-              ))}
-            </Select>
+              onChange={(val) => setOwnerPersonId(val)}
+              options={people.map((p) => ({
+                value: p.id,
+                label: `${p.lastName}, ${p.firstName}`,
+                hint: p.employeeNo ?? undefined,
+              }))}
+              placeholder="Select a person…"
+              searchPlaceholder="Search people…"
+              sheetTitle="Select a person"
+              ariaLabel="Owner"
+              clearable
+              emptyLabel="— Unassigned —"
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="ps-due">Target date</Label>

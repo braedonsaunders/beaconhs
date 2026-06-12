@@ -240,7 +240,7 @@ export default async function DocumentCategoriesPage() {
         {rows.length === 0 ? (
           <EmptyState
             icon={<FolderTree size={32} />}
-            title="No categories yet"
+            title="No categories"
             description="Add categories like Safety, HR, Operations and nest sub-categories underneath each."
           />
         ) : (

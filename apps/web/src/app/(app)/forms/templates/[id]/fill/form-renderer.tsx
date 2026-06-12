@@ -37,6 +37,7 @@ import {
   ShieldCheck,
   Sparkles,
   Trash2,
+  X,
 } from 'lucide-react'
 import {
   Alert,
@@ -50,6 +51,7 @@ import {
   CardTitle,
   Input,
   Label,
+  SearchSelect,
   Select,
   Textarea,
 } from '@beaconhs/ui'
@@ -111,13 +113,14 @@ export function FormRenderer({
   initialRows = {},
   initialStepIndex = 0,
   isResumed = false,
+  returnTo = null,
 }: {
   templateId: string
   templateName: string
   version: number
   schema: FormSchemaV1
   sites: { id: string; name: string }[]
-  people: { id: string; firstName: string; lastName: string }[]
+  people: { id: string; firstName: string; lastName: string; employeeNo?: string | null }[]
   // Per-picker entity-attribute maps preloaded server-side. Keyed by picker
   // field id (NOT entity id) so the runtime can pick up the right map by
   // field key in the evaluator. The client refreshes individual entries via
@@ -133,6 +136,7 @@ export function FormRenderer({
   // True when we successfully resumed a saved draft — drives the "Welcome
   // back, your draft was restored" toast on mount.
   isResumed?: boolean
+  returnTo?: string | null
 }) {
   // Per-step progress so users can click back into completed steps.
   const [completedSteps, setCompletedSteps] = useState<Set<string>>(new Set())
@@ -641,6 +645,7 @@ export function FormRenderer({
         // Pass the in-flight draft id (if any) so the server finalizes that
         // row in-place rather than inserting a duplicate.
         responseId,
+        returnTo,
       })
       if (!res.ok) {
         if (res.errors) {
@@ -667,10 +672,10 @@ export function FormRenderer({
       header={
         <div className="space-y-3">
           <Link
-            href={`/forms/templates/${templateId}`}
+            href={returnTo ?? `/forms/templates/${templateId}`}
             className="text-xs text-teal-700 hover:underline"
           >
-            ← Back to template
+            ← {returnTo ? 'Back to assessment' : 'Back to template'}
           </Link>
           <div className="flex items-center justify-between gap-2">
             <h1 className="truncate text-xl font-semibold">{templateName}</h1>
@@ -806,8 +811,8 @@ export function FormRenderer({
           <CardContent>
             <p className="text-sm text-slate-500">
               {tabbed
-                ? 'This tab has no sections yet.'
-                : 'No sections bound to this step. Click Submit to finalise.'}
+                ? 'This tab has no sections.'
+                : 'No sections bound to this step. Submit to finalise.'}
             </p>
           </CardContent>
         </Card>
@@ -957,7 +962,7 @@ function RepeatingSection({
   onAdd: () => void
   onRemove: (i: number) => void
   onUpdate: (i: number, patch: Record<string, unknown>) => void
-  people: { id: string; firstName: string; lastName: string }[]
+  people: { id: string; firstName: string; lastName: string; employeeNo?: string | null }[]
   evalCtx: EvalContext
   errors: Map<string, string>
   sectionError: string | null
@@ -974,7 +979,7 @@ function RepeatingSection({
       ) : null}
       {rows.length === 0 ? (
         <p className="text-sm text-slate-500">
-          No rows yet.
+          No rows.
           {min > 0 ? ` At least ${min} required.` : ''}
         </p>
       ) : (
@@ -1059,7 +1064,7 @@ function FieldRow({
   value: unknown
   onChange: (v: unknown) => void
   error?: string
-  people: { id: string; firstName: string; lastName: string }[]
+  people: { id: string; firstName: string; lastName: string; employeeNo?: string | null }[]
   evalCtx: EvalContext
   // True when an `entity_attr` fetch is in flight for this picker. Renders
   // a tiny "Looking up…" hint next to the label so users don't think the
@@ -1106,7 +1111,7 @@ function FieldInput({
   field: FormField
   value: unknown
   onChange: (v: unknown) => void
-  people: { id: string; firstName: string; lastName: string }[]
+  people: { id: string; firstName: string; lastName: string; employeeNo?: string | null }[]
   evalCtx: EvalContext
   setFieldValue?: (fieldId: string, v: unknown) => void
 }) {
@@ -1423,35 +1428,66 @@ function FieldInput({
       )
     case 'person_picker':
       return (
-        <Select value={(value as string) ?? ''} onChange={(e) => onChange(e.target.value)}>
-          <option value="">—</option>
-          {people.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.lastName}, {p.firstName}
-            </option>
-          ))}
-        </Select>
+        <SearchSelect
+          value={(value as string) ?? ''}
+          onChange={(v) => onChange(v)}
+          options={people.map((p) => ({
+            value: p.id,
+            label: `${p.lastName}, ${p.firstName}`,
+            hint: p.employeeNo ?? undefined,
+          }))}
+          placeholder="Select a person…"
+          searchPlaceholder="Search people…"
+          sheetTitle="Select a person"
+          clearable
+          emptyLabel="—"
+        />
       )
     case 'multi_person_picker': {
       const arr = Array.isArray(value) ? (value as string[]) : []
+      const byId = new Map(people.map((p) => [p.id, p]))
       return (
-        <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border border-slate-200 bg-white p-2">
-          {people.length === 0 ? (
-            <p className="text-xs text-slate-500">No people available.</p>
-          ) : (
-            people.map((p) => (
-              <label key={p.id} className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={arr.includes(p.id)}
-                  onChange={(e) =>
-                    onChange(e.target.checked ? [...arr, p.id] : arr.filter((v) => v !== p.id))
-                  }
-                />
-                {p.lastName}, {p.firstName}
-              </label>
-            ))
-          )}
+        <div className="space-y-2">
+          {arr.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              {arr.map((id) => {
+                const p = byId.get(id)
+                const label = p ? `${p.lastName}, ${p.firstName}` : id.slice(0, 8)
+                return (
+                  <span
+                    key={id}
+                    className="inline-flex items-center gap-1 rounded-full border border-teal-200 bg-teal-50 py-0.5 pr-1 pl-2.5 text-xs text-teal-900 dark:border-teal-800 dark:bg-teal-950/40 dark:text-teal-200"
+                  >
+                    {label}
+                    <button
+                      type="button"
+                      onClick={() => onChange(arr.filter((v) => v !== id))}
+                      aria-label={`Remove ${label}`}
+                      className="rounded-full p-0.5 text-teal-600 hover:bg-teal-100 hover:text-teal-900 dark:text-teal-400 dark:hover:bg-teal-900"
+                    >
+                      <X size={12} />
+                    </button>
+                  </span>
+                )
+              })}
+            </div>
+          ) : null}
+          <SearchSelect
+            value=""
+            onChange={(id) => {
+              if (id && !arr.includes(id)) onChange([...arr, id])
+            }}
+            options={people
+              .filter((p) => !arr.includes(p.id))
+              .map((p) => ({
+                value: p.id,
+                label: `${p.lastName}, ${p.firstName}`,
+                hint: p.employeeNo ?? undefined,
+              }))}
+            placeholder="Add person…"
+            searchPlaceholder="Search people…"
+            sheetTitle="Add a person"
+          />
         </div>
       )
     }
@@ -1579,7 +1615,7 @@ function TableField({
   if (columns.length === 0) {
     return (
       <p className="rounded-md border border-dashed border-slate-300 px-3 py-2 text-xs text-slate-400">
-        This table has no columns configured yet.
+        This table has no columns configured.
       </p>
     )
   }
@@ -1610,7 +1646,7 @@ function TableField({
                 colSpan={columns.length + 1}
                 className="px-2 py-3 text-center text-xs text-slate-400"
               >
-                No rows yet — add one below.
+                No rows. Add one below.
               </td>
             </tr>
           ) : (
@@ -2846,7 +2882,7 @@ function SaveStatus({
 
 function formatSavedAgo(at: Date): string {
   const seconds = Math.floor((Date.now() - at.getTime()) / 1000)
-  if (seconds < 5) return 'Saved just now'
+  if (seconds < 5) return 'Saved'
   if (seconds < 60) return `Saved ${seconds}s ago`
   const mins = Math.floor(seconds / 60)
   if (mins < 60) return `Saved ${mins}m ago`

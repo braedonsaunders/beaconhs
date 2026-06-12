@@ -75,7 +75,7 @@ export default async function PpeInspectionCriteriaPage() {
           <PpeSubNav active="inspection-criteria" />
           <PageHeader
             title="PPE inspection criteria"
-            description="The full catalog of pass/fail checks across every PPE type. Click a type to manage its criteria."
+            description="The full catalog of pass/fail checks across every PPE type."
           />
           <div className="flex flex-wrap gap-2 text-xs">
             <Badge variant="secondary">{typeCount} types</Badge>
@@ -84,7 +84,7 @@ export default async function PpeInspectionCriteriaPage() {
               {withPhotoCount} require photos
             </Badge>
             <Badge variant={highSevCount > 0 ? 'destructive' : 'secondary'}>
-              {highSevCount} high+ severity (auto-CA on fail)
+              {highSevCount} high+ severity (corrective action on fail)
             </Badge>
           </div>
         </>
@@ -93,8 +93,8 @@ export default async function PpeInspectionCriteriaPage() {
       {rows.length === 0 ? (
         <EmptyState
           icon={<ShieldCheck size={32} />}
-          title="No criteria configured yet"
-          description="Define a PPE type and add its first pre-use criterion to get started."
+          title="No criteria configured"
+          description="Define a PPE type and add its first pre-use criterion."
           action={
             <Link href="/ppe/types/new">
               <Button>Create a PPE type</Button>

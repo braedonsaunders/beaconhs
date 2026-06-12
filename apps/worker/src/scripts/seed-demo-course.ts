@@ -94,11 +94,9 @@ async function main() {
       .where(isNull(trainingCourses.deletedAt))
       .groupBy(trainingCourses.id, tenants.name)
       .orderBy(trainingCourses.name)
-    // Prefer the rassaun tenant (the user's home tenant), then empty courses.
+    // Prefer empty courses so the demo content can be added without disturbing
+    // existing course material.
     const ranked = [...rows].sort((a, b) => {
-      const ar = /rassaun/i.test(a.tenantName) ? 0 : 1
-      const br = /rassaun/i.test(b.tenantName) ? 0 : 1
-      if (ar !== br) return ar - br
       return Number(a.moduleCount) - Number(b.moduleCount)
     })
     return ranked.find((r) => Number(r.moduleCount) === 0) ?? ranked[0] ?? null

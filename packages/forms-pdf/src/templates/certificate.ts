@@ -17,13 +17,15 @@
 import { credentialFontFaces } from './fonts'
 import {
   GOLD,
+  type CredentialDesignOptions,
   esc,
   formatDateLong,
   initialsOf,
   mix,
+  normalizeCredentialDesignOptions,
+  patternOpacity,
   rgba,
   ringLattice,
-  safeColor,
   sealSvg,
   shade,
 } from './credential-theme'
@@ -53,14 +55,42 @@ export type CertificateRenderInput = {
   qrDataUrl?: string // pre-rendered QR PNG (data URL); omitted → no QR block
   certificateId?: string
   generatedAt?: string | Date
+  design?: CredentialDesignOptions
 }
 
 export function renderCertificateHtml(input: CertificateRenderInput): string {
   const variant = input.variant ?? 'completion'
-  const primary = safeColor(input.primaryColor, '#1f3a5f')
+  const design = normalizeCredentialDesignOptions(input.design, input.primaryColor)
+  const layout = design.format === 'letter-portrait' ? 'portrait' : 'landscape'
+  const page =
+    layout === 'portrait' ? { width: '8.5in', height: '11in' } : { width: '11in', height: '8.5in' }
+  const primary = design.primary
+  const accent = design.accent
   const ink = shade(primary, 0.55)
   const inkSoft = mix(ink, '#445', 0.35)
-  const parchment = '#fdfcf7'
+  const parchment = design.paper
+  const lattice = design.patternStrength
+    ? `${ringLattice(ink, patternOpacity(design.patternStrength, 0.065))},`
+    : ''
+
+  const font =
+    design.typeface === 'technical'
+      ? {
+          body: "'Archivo', 'Helvetica Neue', Arial, sans-serif",
+          display: "ui-monospace, 'SF Mono', Menlo, monospace",
+          recipient: "'Archivo', 'Helvetica Neue', Arial, sans-serif",
+        }
+      : design.typeface === 'modern'
+        ? {
+            body: "'Archivo', 'Helvetica Neue', Arial, sans-serif",
+            display: "'Archivo', 'Helvetica Neue', Arial, sans-serif",
+            recipient: "'Cormorant Garamond', Georgia, 'Times New Roman', serif",
+          }
+        : {
+            body: "'Cormorant Garamond', Georgia, 'Times New Roman', serif",
+            display: "'Cormorant Garamond', Georgia, 'Times New Roman', serif",
+            recipient: "'Great Vibes', 'Apple Chancery', cursive",
+          }
 
   const verifyUrl = input.verifyUrl ?? ''
   const verifyShort = verifyUrl.replace(/^https?:\/\//, '').slice(0, 70)
@@ -68,11 +98,20 @@ export function renderCertificateHtml(input: CertificateRenderInput): string {
   const name = input.recipient.fullName
   // Calligraphic names must never wrap or kiss the frame — step the size
   // down as the name gets longer.
-  const nameSize = name.length > 34 ? 30 : name.length > 26 ? 37 : 46
+  const nameSizeBase = name.length > 34 ? 30 : name.length > 26 ? 37 : 46
+  const nameSize = layout === 'portrait' ? Math.min(nameSizeBase, 40) : nameSizeBase
   const credName = input.credential.name
-  const credSize = credName.length > 58 ? 17 : credName.length > 38 ? 20 : 25
+  const credSizeBase = credName.length > 58 ? 17 : credName.length > 38 ? 20 : 25
+  const credSize = layout === 'portrait' ? Math.min(credSizeBase, 22) : credSizeBase
 
-  const subTitle = variant === 'qualification' ? 'OF QUALIFICATION' : 'OF COMPLETION'
+  const subTitle =
+    design.templateId === 'field-pass'
+      ? variant === 'qualification'
+        ? 'FIELD QUALIFICATION'
+        : 'FIELD AUTHORIZATION'
+      : variant === 'qualification'
+        ? 'OF QUALIFICATION'
+        : 'OF COMPLETION'
   const preface =
     variant === 'qualification'
       ? 'has demonstrated the required competency and is hereby certified in'
@@ -122,39 +161,39 @@ export function renderCertificateHtml(input: CertificateRenderInput): string {
   })
 
   const corner = `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
-    <path d="M3 63 V16 Q3 3 16 3 H63" fill="none" stroke="${GOLD.mid}" stroke-width="2.4"/>
+    <path d="M3 63 V16 Q3 3 16 3 H63" fill="none" stroke="${accent}" stroke-width="2.4"/>
     <path d="M9.5 63 V19 Q9.5 9.5 19 9.5 H63" fill="none" stroke="${ink}" stroke-width="0.9" opacity="0.55"/>
-    <path d="M16 16 l4.6 -4.6 4.6 4.6 -4.6 4.6 Z" fill="${GOLD.deep}"/>
+    <path d="M16 16 l4.6 -4.6 4.6 4.6 -4.6 4.6 Z" fill="${accent}"/>
   </svg>`
 
   return `
   <style>
     ${credentialFontFaces}
-    :root { --primary: ${primary}; --ink: ${ink}; --gold: ${GOLD.mid}; --gold-deep: ${GOLD.deep}; }
-    @page { size: 11in 8.5in; margin: 0; }
+    :root { --primary: ${primary}; --ink: ${ink}; --accent: ${accent}; --gold: ${GOLD.mid}; --gold-deep: ${GOLD.deep}; }
+    @page { size: ${page.width} ${page.height}; margin: 0; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: 'Cormorant Garamond', Georgia, 'Times New Roman', serif;
+      font-family: ${font.body};
       color: ${ink};
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
     .page {
-      width: 11in;
-      height: 8.5in;
+      width: ${page.width};
+      height: ${page.height};
       position: relative;
       overflow: hidden;
       background:
         radial-gradient(ellipse at 50% 42%, rgba(255,255,255,0.85) 0%, rgba(255,255,255,0) 58%),
         radial-gradient(ellipse at 0% 0%, ${rgba(primary, 0.05)} 0%, rgba(0,0,0,0) 42%),
         radial-gradient(ellipse at 100% 100%, ${rgba(primary, 0.05)} 0%, rgba(0,0,0,0) 42%),
-        ${ringLattice(ink, 0.05)},
+        ${lattice}
         ${parchment};
       background-size: auto, auto, auto, 120px 120px, auto;
     }
     /* Triple frame: gilt band between two engraved rules. */
     .frame-outer { position: absolute; inset: 0.26in; border: 2.6px solid ${ink}; }
-    .frame-gold  { position: absolute; inset: 0.335in; border: 1.4px solid ${GOLD.mid}; }
+    .frame-gold  { position: absolute; inset: 0.335in; border: 1.4px solid ${accent}; }
     .frame-hair  { position: absolute; inset: 0.40in; border: 0.6px solid ${rgba(ink, 0.38)}; }
     .corner { position: absolute; width: 0.62in; height: 0.62in; }
     .corner.tl { top: 0.33in; left: 0.33in; }
@@ -165,7 +204,7 @@ export function renderCertificateHtml(input: CertificateRenderInput): string {
       position: absolute;
       top: 50%; left: 50%;
       transform: translate(-50%, -54%);
-      opacity: 0.05;
+      opacity: ${design.templateId === 'clean-authority' ? '0.025' : '0.05'};
       filter: grayscale(1);
     }
     .content {
@@ -189,11 +228,12 @@ export function renderCertificateHtml(input: CertificateRenderInput): string {
       color: ${inkSoft};
     }
     .rule-diamond { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
-    .rule-diamond .line { width: 1.15in; height: 1px; background: ${GOLD.mid}; }
-    .rule-diamond .dot { width: 5px; height: 5px; background: ${GOLD.deep}; transform: rotate(45deg); }
+    .rule-diamond .line { width: 1.15in; height: 1px; background: ${accent}; }
+    .rule-diamond .dot { width: 5px; height: 5px; background: ${accent}; transform: rotate(45deg); }
 
     .title {
       margin-top: 0.16in;
+      font-family: ${font.display};
       font-size: 44pt;
       font-weight: 700;
       letter-spacing: 0.17em;
@@ -211,14 +251,14 @@ export function renderCertificateHtml(input: CertificateRenderInput): string {
       font-weight: 500;
       letter-spacing: 0.46em;
       text-indent: 0.46em;
-      color: ${GOLD.deep};
+      color: ${accent};
     }
-    .subtitle .line { width: 0.62in; height: 0.8px; background: ${rgba(GOLD.deep, 0.65)}; }
+    .subtitle .line { width: 0.62in; height: 0.8px; background: ${rgba(accent, 0.65)}; }
 
     .body { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; }
     .certify { font-style: italic; font-size: 13.5pt; color: ${inkSoft}; }
     .recipient {
-      font-family: 'Great Vibes', 'Apple Chancery', cursive;
+      font-family: ${font.recipient};
       font-size: ${nameSize}pt;
       color: ${shade(primary, 0.35)};
       line-height: 1.12;
@@ -226,8 +266,8 @@ export function renderCertificateHtml(input: CertificateRenderInput): string {
       padding: 0 0.3in;
     }
     .recipient-rule { display: flex; align-items: center; gap: 8px; margin-top: 0.02in; }
-    .recipient-rule .line { width: 2.1in; height: 1px; background: linear-gradient(90deg, rgba(0,0,0,0), ${GOLD.mid}, rgba(0,0,0,0)); }
-    .recipient-rule .dot { width: 4px; height: 4px; background: ${GOLD.deep}; transform: rotate(45deg); }
+    .recipient-rule .line { width: 2.1in; height: 1px; background: linear-gradient(90deg, rgba(0,0,0,0), ${accent}, rgba(0,0,0,0)); }
+    .recipient-rule .dot { width: 4px; height: 4px; background: ${accent}; transform: rotate(45deg); }
     .employee-no {
       margin-top: 0.055in;
       font-family: 'Archivo', 'Helvetica Neue', Arial, sans-serif;
@@ -273,7 +313,7 @@ export function renderCertificateHtml(input: CertificateRenderInput): string {
       letter-spacing: 0.22em;
       text-indent: 0.22em;
       text-transform: uppercase;
-      color: ${GOLD.deep};
+      color: ${accent};
     }
     .meta-value { margin-top: 3px; font-size: 14pt; font-weight: 600; color: ${ink}; }
 
@@ -298,6 +338,7 @@ export function renderCertificateHtml(input: CertificateRenderInput): string {
       text-align: center;
     }
     .seal-block { flex-shrink: 0; }
+    .seal-spacer { flex-shrink: 0; width: 1.18in; }
 
     /* Verification QR rides the top-right corner — the only reliably empty
        region (the footer hosts signatures + seal, the centre is text). */
@@ -326,10 +367,65 @@ export function renderCertificateHtml(input: CertificateRenderInput): string {
       letter-spacing: 0.06em;
       color: ${rgba(ink, 0.55)};
     }
+
+    .page.portrait .content { inset: 0.74in 0.72in 0.64in; }
+    .page.portrait .title { margin-top: 0.32in; font-size: 38pt; }
+    .page.portrait .subtitle { font-size: 9pt; letter-spacing: 0.34em; text-indent: 0.34em; }
+    .page.portrait .body { justify-content: flex-start; padding-top: 0.74in; }
+    .page.portrait .credential { max-width: 6.6in; }
+    .page.portrait .meta-row { margin-top: 0.28in; flex-direction: column; gap: 0.12in; }
+    .page.portrait .meta-cell { padding: 0.1in 0; }
+    .page.portrait .meta-cell + .meta-cell {
+      border-left: 0;
+      border-top: 0.8px solid ${rgba(ink, 0.22)};
+    }
+    .page.portrait .footer { margin-top: auto; }
+    .page.portrait .qr-corner { top: 0.68in; right: 0.68in; }
+
+    .page.field-pass {
+      background:
+        linear-gradient(90deg, ${rgba(primary, 0.09)} 0 0.12in, transparent 0.12in),
+        linear-gradient(180deg, ${rgba(accent, 0.12)}, rgba(255,255,255,0) 34%),
+        ${lattice}
+        ${parchment};
+    }
+    .page.field-pass .corner { display: none; }
+    .page.field-pass .frame-outer { inset: 0.24in; border-width: 1.2px; }
+    .page.field-pass .frame-gold { inset: 0.31in; border-color: ${accent}; }
+    .page.field-pass .frame-hair { display: none; }
+    .page.field-pass .title {
+      font-family: ${font.display};
+      letter-spacing: 0.08em;
+      text-indent: 0.08em;
+    }
+    .page.field-pass .recipient-rule .dot,
+    .page.field-pass .rule-diamond .dot { transform: none; }
+
+    .page.clean-authority {
+      background:
+        linear-gradient(180deg, ${rgba(primary, 0.045)}, rgba(255,255,255,0) 32%),
+        ${design.patternStrength ? `${ringLattice(primary, patternOpacity(design.patternStrength, 0.03))},` : ''}
+        ${parchment};
+    }
+    .page.clean-authority .corner,
+    .page.clean-authority .watermark { display: none; }
+    .page.clean-authority .frame-outer { inset: 0.34in; border-width: 1px; border-color: ${rgba(ink, 0.36)}; }
+    .page.clean-authority .frame-gold { inset: 0.40in; border-color: ${accent}; }
+    .page.clean-authority .frame-hair { display: none; }
+    .page.clean-authority .title {
+      font-family: ${font.display};
+      font-size: 38pt;
+      letter-spacing: 0.07em;
+      text-indent: 0.07em;
+    }
+    .page.clean-authority .recipient {
+      font-family: ${font.body};
+      font-weight: 700;
+    }
   </style>
 
-  <div class="page">
-    <div class="watermark">${watermark}</div>
+  <div class="page ${layout} ${design.templateId}">
+    ${design.showSeal ? `<div class="watermark">${watermark}</div>` : ''}
     <div class="frame-outer"></div>
     <div class="frame-gold"></div>
     <div class="frame-hair"></div>
@@ -345,7 +441,7 @@ export function renderCertificateHtml(input: CertificateRenderInput): string {
         <div class="rule-diamond"><div class="line"></div><div class="dot"></div><div class="line"></div></div>
       </div>
 
-      <div class="title">CERTIFICATE</div>
+      <div class="title">${design.templateId === 'field-pass' ? 'CREDENTIAL' : 'CERTIFICATE'}</div>
       <div class="subtitle"><div class="line"></div>${esc(subTitle)}<div class="line"></div></div>
 
       <div class="body">
@@ -377,7 +473,7 @@ export function renderCertificateHtml(input: CertificateRenderInput): string {
           <div class="sig-line"></div>
           <div class="sig-label">${esc(sigLeftLabel)}</div>
         </div>
-        <div class="seal-block">${seal}</div>
+        ${design.showSeal ? `<div class="seal-block">${seal}</div>` : '<div class="seal-spacer"></div>'}
         <div class="sig-block">
           <div class="sig-line"></div>
           <div class="sig-label">Issued by ${esc(input.tenantName)}</div>
@@ -387,7 +483,7 @@ export function renderCertificateHtml(input: CertificateRenderInput): string {
     </div>
 
     ${
-      input.qrDataUrl
+      input.qrDataUrl && design.showQr
         ? `<div class="qr-corner">
         <img src="${esc(input.qrDataUrl)}" alt="QR"/>
         <div class="qr-label">Scan to verify</div>

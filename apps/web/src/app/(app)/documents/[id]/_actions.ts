@@ -435,7 +435,7 @@ export async function publishDraft(input: {
         }
         publishedVersion = latest.version
       } else {
-        throw new Error('Nothing to publish — the document has no draft or version yet.')
+        throw new Error('Nothing to publish — the document has no draft or version.')
       }
 
       await tx.update(documents).set({ status: 'published' }).where(eq(documents.id, documentId))

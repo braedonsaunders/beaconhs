@@ -76,7 +76,7 @@ export default async function TitlePdfPage({ params }: { params: Promise<{ id: s
 
       <Section title={`Tasks (${tasks.length})`}>
         {tasks.length === 0 ? (
-          <p className="text-xs text-slate-500">No tasks defined for this title yet.</p>
+          <p className="text-xs text-slate-500">No tasks defined for this title.</p>
         ) : (
           <table className="w-full border-collapse text-xs">
             <thead>

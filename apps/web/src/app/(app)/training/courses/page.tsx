@@ -132,11 +132,11 @@ export default async function TrainingCoursesPage({
       {rows.length === 0 ? (
         <EmptyState
           icon={<GraduationCap size={32} />}
-          title={params.q ? `No courses match "${params.q}"` : 'No courses yet'}
+          title={params.q ? 'No matching courses' : 'No courses'}
           description="Add a course to start tracking competencies."
           action={
             <Link href="/training/courses/new">
-              <Button>Create your first course</Button>
+              <Button>New course</Button>
             </Link>
           }
         />

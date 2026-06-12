@@ -20,7 +20,7 @@ export default async function FeedPage() {
       header={
         <PageHeader
           title="Feed"
-          description="Recent activity across the team — journals, incidents, corrective actions, and forms, filtered to what you’re allowed to see."
+          description="Recent activity across journals, incidents, corrective actions, and forms."
         />
       }
     >

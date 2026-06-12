@@ -617,13 +617,13 @@ export function FlowsCanvas({
         <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2">
           {flowList.length === 0 ? (
             <div className="px-2 py-6 text-center text-xs text-slate-400">
-              No flows yet.
+              No flows.
               {canEdit ? (
                 <button
                   onClick={addFlow}
                   className="mt-2 block w-full text-teal-600 hover:underline"
                 >
-                  + Create your first flow
+                  + New flow
                 </button>
               ) : null}
             </div>
@@ -882,7 +882,7 @@ export function FlowsCanvas({
         open={showAi}
         onClose={() => setShowAi(false)}
         title="Generate a Flow with AI"
-        description="Describe the automation; the AI drafts the node graph for you to review."
+        description="Describe the automation. The AI drafts the node graph for review."
         size="sm"
         footer={
           <>

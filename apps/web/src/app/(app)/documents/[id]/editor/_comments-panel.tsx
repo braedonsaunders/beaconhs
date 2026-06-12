@@ -263,7 +263,7 @@ export function CommentsPanel({
 
       <div className="app-scroll min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
         {liveRoots.length === 0 && detachedRoots.length === 0 ? (
-          <p className="text-xs text-slate-400 dark:text-slate-500">No comments yet.</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500">No comments.</p>
         ) : null}
         {liveRoots.map((r) => renderThread(r))}
 

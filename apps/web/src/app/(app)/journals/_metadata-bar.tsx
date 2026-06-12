@@ -86,7 +86,7 @@ export function MetadataBar({
             sheetTitle="Supervisor"
             ariaLabel="Supervisor"
             onChange={(v) => onPatch({ supervisorPersonId: v || null })}
-            options={people.map((p) => ({ value: p.id, label: p.name }))}
+            options={people.map((p) => ({ value: p.id, label: p.name, hint: p.hint }))}
           />
         </Field>
       </div>

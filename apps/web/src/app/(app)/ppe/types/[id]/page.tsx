@@ -350,7 +350,7 @@ export default async function PpeTypeDetailPage({
           <>
             <Section
               title={`Pre-use inspection criteria (${preUseCriteria.length})`}
-              subtitle="Questions inspectors run through every day. Reorder with the arrows; highest severity drives auto-CA on fail."
+              subtitle="Questions inspectors complete every day. Reorder with the arrows; a failed high or critical check creates a corrective action."
               defaultOpen
             >
               <CriteriaTable
@@ -409,8 +409,8 @@ export default async function PpeTypeDetailPage({
                   <Select name="severity" defaultValue="medium">
                     <option value="low">Low</option>
                     <option value="medium">Medium</option>
-                    <option value="high">High (auto-CA)</option>
-                    <option value="critical">Critical (auto-CA)</option>
+                    <option value="high">High (creates corrective action)</option>
+                    <option value="critical">Critical (creates corrective action)</option>
                   </Select>
                 </div>
                 <div className="flex items-end gap-2">
@@ -457,8 +457,8 @@ export default async function PpeTypeDetailPage({
               </div>
             </form>
             <p className="mt-3 text-xs text-slate-500">
-              The sizing scheme is used by the New PPE item form as a dropdown so size entries stay
-              consistent. Leaving it blank lets users free-type a size.
+              Sizes appear as a dropdown when creating PPE items. Leave blank to allow free-text
+              entry.
             </p>
           </Section>
         ) : null}
@@ -493,8 +493,8 @@ function CriteriaTable({
     return (
       <EmptyState
         icon={<ShieldCheck size={24} />}
-        title={`No ${kind === 'pre_use' ? 'pre-use' : 'annual'} criteria yet`}
-        description="Add at least one criterion so inspectors have something to check."
+        title={`No ${kind === 'pre_use' ? 'pre-use' : 'annual'} criteria`}
+        description="Add at least one criterion for inspectors to check."
       />
     )
   }
@@ -506,7 +506,7 @@ function CriteriaTable({
             <TableHead className="w-12">#</TableHead>
             <TableHead>Question</TableHead>
             <TableHead>Severity</TableHead>
-            <TableHead>Photo?</TableHead>
+            <TableHead>Photo</TableHead>
             <TableHead></TableHead>
           </TableRow>
         </TableHeader>

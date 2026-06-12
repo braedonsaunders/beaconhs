@@ -1,6 +1,5 @@
-import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
-import { ModuleSubNav } from '@/components/module-admin/module-sub-nav'
+import { ModuleNav } from '@/components/module-admin/module-nav'
 import { getEntry, getWorkspaceData, listEntries } from './_data'
 import { JournalWorkspace } from './_workspace'
 
@@ -17,16 +16,11 @@ export default async function JournalsPage() {
     listEntries(ctx, {}, { limit: 1 }, true),
   ])
   const initialEntry = recent[0] ? await getEntry(ctx, recent[0].id) : null
-  const canManage = ctx.isSuperAdmin || can(ctx, 'journals.assign')
 
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="shrink-0 border-b border-slate-200 bg-white px-3 py-2 sm:px-4">
-        <ModuleSubNav
-          tabs={[{ key: 'workspace', label: 'Journals', href: '/journals' }]}
-          active="workspace"
-          manageHref={canManage ? '/journals/manage' : undefined}
-        />
+        <ModuleNav moduleKey="journals" active="workspace" />
       </div>
       <div className="min-h-0 flex-1">
         <JournalWorkspace initialData={data} initialEntry={initialEntry} initialGroupBy={groupBy} />

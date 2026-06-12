@@ -154,8 +154,8 @@ export default async function InspectionTypesPage() {
           {rows.length === 0 ? (
             <EmptyState
               icon={<ClipboardCheck size={28} />}
-              title="No inspection templates yet"
-              description="Add a template below — then add pass/fail criteria from the template detail page."
+              title="No inspection templates"
+              description="Add a template below, then add pass/fail criteria from its detail page."
             />
           ) : (
             <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">

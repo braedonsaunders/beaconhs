@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { CheckSquare, Square, UserCog, X } from 'lucide-react'
-import { Button, Select } from '@beaconhs/ui'
+import { Button, SearchSelect } from '@beaconhs/ui'
 import { bulkReassignCorrectiveActions } from './_actions'
 
 export type OwnerOption = { id: string; name: string; email: string | null }
@@ -71,20 +71,20 @@ export function BulkReassignBar({
         <span className="text-sm font-medium text-slate-900">{label}</span>
         <div className="flex items-center gap-2">
           <UserCog size={14} className="text-slate-500" />
-          <Select
+          <SearchSelect
             value={ownerId}
-            onChange={(e) => setOwnerId(e.target.value)}
+            onChange={(val) => setOwnerId(val)}
+            options={owners.map((o) => ({
+              value: o.id,
+              label: o.name,
+              hint: o.email ?? undefined,
+            }))}
+            placeholder="Pick new owner…"
+            searchPlaceholder="Search people…"
+            sheetTitle="Select a person"
             className="h-8 min-w-[12rem]"
             disabled={pending}
-          >
-            <option value="">Pick new owner…</option>
-            {owners.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name}
-                {o.email ? ` · ${o.email}` : ''}
-              </option>
-            ))}
-          </Select>
+          />
         </div>
         <Button size="sm" onClick={go} disabled={pending}>
           {pending ? 'Reassigning…' : 'Reassign'}

@@ -146,8 +146,8 @@ export default async function EquipmentCategoriesPage() {
           {categories.length === 0 ? (
             <EmptyState
               icon={<Tags size={28} />}
-              title="No categories yet"
-              description="Create your first category to organise equipment types in the rate matrix."
+              title="No categories"
+              description="Create a category to organise equipment types in the rate matrix."
             />
           ) : (
             <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">

@@ -231,7 +231,7 @@ export default async function LoneWorkerSessionPage({
         {active === 'checkins' ? (
           <Section title={`Check-in log (${checkins.length})`}>
             {checkins.length === 0 ? (
-              <p className="text-sm text-slate-500">No check-ins yet.</p>
+              <p className="text-sm text-slate-500">No check-ins.</p>
             ) : (
               <ul className="divide-y divide-slate-100 text-sm">
                 {checkins.map((c) => (
@@ -283,8 +283,8 @@ function MapTab({
     return (
       <EmptyState
         icon={<MapPin size={32} />}
-        title="No GPS check-ins yet"
-        description="Check-ins from the mobile app include the worker's last known coordinates and will appear here on a map."
+        title="No GPS check-ins"
+        description="Check-ins from the mobile app include the worker's last known coordinates and appear here on a map."
       />
     )
   }

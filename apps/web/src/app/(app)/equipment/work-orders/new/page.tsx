@@ -16,6 +16,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { pickString } from '@/lib/list-params'
 import { PageContainer } from '@/components/page-layout'
+import { PersonSelectField } from '@/components/person-select-field'
 
 export const metadata = { title: 'New work order' }
 export const dynamic = 'force-dynamic'
@@ -100,7 +101,12 @@ export default async function NewWorkOrderPage({
         .orderBy(asc(equipmentItems.assetTag))
         .limit(500),
       tx
-        .select({ id: tenantUsers.id, displayName: tenantUsers.displayName, userName: user.name })
+        .select({
+          id: tenantUsers.id,
+          displayName: tenantUsers.displayName,
+          userName: user.name,
+          email: user.email,
+        })
         .from(tenantUsers)
         .leftJoin(user, eq(user.id, tenantUsers.userId))
         .where(eq(tenantUsers.status, 'active'))
@@ -111,8 +117,10 @@ export default async function NewWorkOrderPage({
           id: people.id,
           firstName: people.firstName,
           lastName: people.lastName,
+          employeeNo: people.employeeNo,
         })
         .from(people)
+        .where(eq(people.status, 'active'))
         .orderBy(asc(people.lastName), asc(people.firstName))
         .limit(500),
     ])
@@ -159,24 +167,33 @@ export default async function NewWorkOrderPage({
                   </Select>
                 </Field>
                 <Field label="Assign to">
-                  <Select name="assignedToTenantUserId" defaultValue="">
-                    <option value="">— Unassigned —</option>
-                    {assignees.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.userName ?? a.displayName ?? a.id.slice(0, 6)}
-                      </option>
-                    ))}
-                  </Select>
+                  <PersonSelectField
+                    name="assignedToTenantUserId"
+                    defaultValue=""
+                    options={assignees.map((a) => ({
+                      value: a.id,
+                      label: a.userName ?? a.displayName ?? a.id.slice(0, 6),
+                      hint: a.email ?? undefined,
+                    }))}
+                    placeholder="Select an assignee..."
+                    searchPlaceholder="Search people..."
+                    sheetTitle="Assign to"
+                    emptyLabel="Unassigned"
+                  />
                 </Field>
                 <Field label="Reported by" className="sm:col-span-2">
-                  <Select name="reportedByPersonId" defaultValue="">
-                    <option value="">— Not specified —</option>
-                    {reporters.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.lastName}, {p.firstName}
-                      </option>
-                    ))}
-                  </Select>
+                  <PersonSelectField
+                    name="reportedByPersonId"
+                    defaultValue=""
+                    options={reporters.map((p) => ({
+                      value: p.id,
+                      label: `${p.lastName}, ${p.firstName}`,
+                      hint: p.employeeNo ?? undefined,
+                    }))}
+                    placeholder="Select a person…"
+                    clearable
+                    emptyLabel="— Not specified —"
+                  />
                 </Field>
               </div>
               <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-4">

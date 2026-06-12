@@ -17,6 +17,12 @@ import {
 import { renderIncidentHtml, type IncidentRenderInput } from './templates/incident'
 import { renderCertificateHtml, type CertificateRenderInput } from './templates/certificate'
 import { renderWalletHtml, type WalletRenderInput } from './templates/wallet'
+import type {
+  CredentialDesignFormat,
+  CredentialDesignOptions,
+  CredentialDesignTemplateId,
+  CredentialDesignTypeface,
+} from './templates/credential-theme'
 import { renderReportHtml, type ReportRenderInput, type ReportGroup } from './templates/report'
 import { renderHazidHtml, type HazidRenderInput } from './templates/hazid'
 import { renderCaHtml, type CaRenderInput } from './templates/ca'
@@ -45,6 +51,10 @@ export type {
   DocumentBookRenderInput,
   EquipmentWorkOrderRenderInput,
   PpeIssueRenderInput,
+  CredentialDesignFormat,
+  CredentialDesignOptions,
+  CredentialDesignTemplateId,
+  CredentialDesignTypeface,
 }
 // Note: HazidSignedReportRenderInput is exported via the function declaration
 // below so that consumers can import it alongside renderHazidSignedReportPdf.
@@ -528,13 +538,13 @@ export async function renderCertificatePdf(
 ): Promise<{ certificate: Buffer; wallet: Buffer }> {
   const wallet = input.wallet ?? walletFromCertificate(input)
   const [certificate, walletPdf] = await Promise.all([
-    renderCertificateOnly(input),
-    renderWalletOnly(wallet),
+    renderCertificatePagePdf(input),
+    renderWalletCardPdf(wallet),
   ])
   return { certificate, wallet: walletPdf }
 }
 
-async function renderCertificateOnly(input: CertificateRenderInput): Promise<Buffer> {
+export async function renderCertificatePagePdf(input: CertificateRenderInput): Promise<Buffer> {
   const body = renderCertificateHtml(input)
   // Certificate template carries its own @page rule + 11×8.5in landscape
   // wrapper, so we render with zero default margins and let CSS control
@@ -546,9 +556,10 @@ async function renderCertificateOnly(input: CertificateRenderInput): Promise<Buf
   try {
     await page.setContent(html, { waitUntil: 'load', timeout: 30_000 })
     await page.evaluateHandle('document.fonts.ready')
+    const portrait = input.design?.format === 'letter-portrait'
     const pdf = await page.pdf({
-      width: '11in',
-      height: '8.5in',
+      width: portrait ? '8.5in' : '11in',
+      height: portrait ? '11in' : '8.5in',
       printBackground: true,
       margin: { top: 0, bottom: 0, left: 0, right: 0 },
       preferCSSPageSize: true,
@@ -559,7 +570,7 @@ async function renderCertificateOnly(input: CertificateRenderInput): Promise<Buf
   }
 }
 
-async function renderWalletOnly(input: WalletRenderInput): Promise<Buffer> {
+export async function renderWalletCardPdf(input: WalletRenderInput): Promise<Buffer> {
   const body = renderWalletHtml(input)
   const html = wrapDocument(body, 'Wallet Card')
   const b = await browser()
@@ -586,6 +597,7 @@ function walletFromCertificate(input: CertificateRenderInput): WalletRenderInput
     tenantName: input.tenantName,
     tenantLogoUrl: input.tenantLogoUrl,
     primaryColor: input.primaryColor,
+    design: input.design,
     variant: input.variant,
     recipient: {
       fullName: input.recipient.fullName,
@@ -684,7 +696,7 @@ export async function renderHazidPdf(input: HazidRenderInput): Promise<Buffer> {
     body: renderHazidHtml(input),
     title: 'Hazard Assessment',
     footerLeft: input.tenantName,
-    footerRight: `HazID ${input.assessment.reference}`,
+    footerRight: `Hazard Assessment ${input.assessment.reference}`,
   })
 }
 
@@ -708,7 +720,7 @@ export type HazidSignedReportRenderInput = {
   }
   // The same shape as a per-assessment HazidRenderInput, sans the redundant
   // tenant/letterhead block. We re-use renderHazidHtml() so output matches
-  // the standalone /hazid/[id]/pdf rendering exactly.
+  // the standalone /hazard-assessments/[id]/pdf rendering exactly.
   assessments: HazidRenderInput[]
   generatedAt?: string | Date
 }

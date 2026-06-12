@@ -13,14 +13,14 @@ import {
   type ComplianceTargetRef,
   complianceAudience,
   complianceObligations,
+  complianceStatus,
 } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { materializeObligation } from '@beaconhs/compliance'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import type { AudienceItem } from '@/components/audience-picker'
-import type { RecurrenceValue } from '@/components/recurrence-picker'
-import { frequencyToCron } from '@/components/recurrence-picker'
+import { type RecurrenceValue, frequencyToCron } from '@/components/recurrence'
 import { KIND_META, type ObligationKind, kindLabel, recurrenceKindFor } from './_meta'
 
 export type ObligationInput = {
@@ -35,6 +35,8 @@ export type ObligationInput = {
   trainingItemKind?: 'course' | 'assessment_type'
   courseId?: string
   assessmentTypeId?: string
+  certItemKind?: 'course' | 'skill'
+  skillTypeId?: string
   formTemplateId?: string
   equipmentTypeId?: string
   ppeTypeId?: string
@@ -66,9 +68,16 @@ function buildTargetRef(input: ObligationInput): { ref: ComplianceTargetRef; err
         },
       }
     }
-    case 'cert_requirement':
+    case 'cert_requirement': {
+      // Satisfied either by a valid training record for a course, or by a valid
+      // skill grant of a skill type (the ETL fold-in authors the latter too).
+      if ((input.certItemKind ?? 'course') === 'skill') {
+        if (!input.skillTypeId) return { ref: {}, error: 'Pick the skill type' }
+        return { ref: { skillTypeId: input.skillTypeId } }
+      }
       if (!input.courseId) return { ref: {}, error: 'Pick the certification (course)' }
       return { ref: { trainingItemKind: 'course', courseId: input.courseId } }
+    }
     case 'form':
       if (!input.formTemplateId) return { ref: {}, error: 'Pick an app / form template' }
       return { ref: { formTemplateId: input.formTemplateId } }
@@ -113,6 +122,44 @@ function buildRecurrence(kind: ObligationKind, r: RecurrenceValue): ComplianceRe
   }
 }
 
+// Audience rows (per_person only). Journal with no picks ⇒ everyone.
+function buildAudienceRows(input: ObligationInput): {
+  rows: { kind: string; entityKey: string }[]
+  error?: string
+} {
+  if (!KIND_META[input.kind].audience) return { rows: [] }
+  const rows = input.audience.map((a) => ({
+    kind: a.type,
+    entityKey: a.type === 'everyone' ? '' : a.entityKey,
+  }))
+  if (rows.length === 0) {
+    if (input.kind === 'journal') return { rows: [{ kind: 'everyone', entityKey: '' }] }
+    return { rows, error: 'Add at least one audience target' }
+  }
+  return { rows }
+}
+
+// Refresh the materialised scoreboard for one obligation so the hub rollups
+// reflect the change immediately. Best-effort — the daily compliance_scan
+// reconciles anything missed.
+async function rematerialize(
+  ctx: Awaited<ReturnType<typeof requireRequestContext>>,
+  id: string,
+): Promise<void> {
+  try {
+    await ctx.db(async (tx) => {
+      const [row] = await tx
+        .select()
+        .from(complianceObligations)
+        .where(eq(complianceObligations.id, id))
+        .limit(1)
+      if (row) await materializeObligation(tx, ctx.tenantId, row)
+    })
+  } catch {
+    /* best-effort — the daily compliance_scan will reconcile */
+  }
+}
+
 export async function createObligation(input: ObligationInput): Promise<ObligationResult> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'compliance.assign')
@@ -123,18 +170,8 @@ export async function createObligation(input: ObligationInput): Promise<Obligati
   const { ref, error } = buildTargetRef(input)
   if (error) return { ok: false, error }
 
-  // Audience rows (per_person only). Journal with no picks ⇒ everyone.
-  let audienceRows: { kind: string; entityKey: string }[] = []
-  if (meta.audience) {
-    audienceRows = input.audience.map((a) => ({
-      kind: a.type,
-      entityKey: a.type === 'everyone' ? '' : a.entityKey,
-    }))
-    if (audienceRows.length === 0) {
-      if (input.kind === 'journal') audienceRows = [{ kind: 'everyone', entityKey: '' }]
-      else return { ok: false, error: 'Add at least one audience target' }
-    }
-  }
+  const { rows: audienceRows, error: audienceError } = buildAudienceRows(input)
+  if (audienceError) return { ok: false, error: audienceError }
 
   const recurrence = buildRecurrence(input.kind, input.recurrence)
   const recurrenceKind = recurrenceKindFor(input.kind, input.recurrence.kind === 'one_time')
@@ -174,23 +211,88 @@ export async function createObligation(input: ObligationInput): Promise<Obligati
       action: 'create',
       summary: `Created ${kindLabel(input.kind)} obligation "${input.title.trim() || meta.label}"`,
     })
-    // Materialise immediately so the hub rollups reflect the new obligation.
-    try {
-      await ctx.db(async (tx) => {
-        const [row] = await tx
-          .select()
-          .from(complianceObligations)
-          .where(eq(complianceObligations.id, id))
-          .limit(1)
-        if (row) await materializeObligation(tx, ctx.tenantId, row)
-      })
-    } catch {
-      /* best-effort — the daily compliance_scan will reconcile */
-    }
+    await rematerialize(ctx, id)
     revalidatePath('/compliance/obligations')
     return { ok: true, id, kind: input.kind }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : 'Failed to create obligation' }
+  }
+}
+
+export async function updateObligation(
+  id: string,
+  input: ObligationInput,
+): Promise<ObligationResult> {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'compliance.manage')
+  const meta = KIND_META[input.kind]
+
+  const [existing] = await ctx.db((tx) =>
+    tx.select().from(complianceObligations).where(eq(complianceObligations.id, id)).limit(1),
+  )
+  if (!existing || existing.deletedAt) return { ok: false, error: 'Obligation not found' }
+  // The kind determines the subject shape, target and evaluation adapter — it
+  // is fixed at creation. Delete + recreate to change it.
+  if (existing.sourceModule !== input.kind)
+    return { ok: false, error: 'The kind of an obligation cannot be changed' }
+
+  if (input.kind === 'journal' && !input.title.trim())
+    return { ok: false, error: 'Name is required' }
+  const { ref, error } = buildTargetRef(input)
+  if (error) return { ok: false, error }
+
+  const { rows: audienceRows, error: audienceError } = buildAudienceRows(input)
+  if (audienceError) return { ok: false, error: audienceError }
+
+  // Kinds with no schedule knobs in the form (cert / equipment / PPE /
+  // job-title) keep their stored recurrence untouched — rebuilding would
+  // clobber values authored elsewhere (e.g. the ETL fold-in).
+  const hasScheduleKnobs = Object.values(meta.recurrence).some(Boolean)
+  const recurrence = hasScheduleKnobs
+    ? buildRecurrence(input.kind, input.recurrence)
+    : existing.recurrence
+  const recurrenceKind = hasScheduleKnobs
+    ? recurrenceKindFor(input.kind, input.recurrence.kind === 'one_time')
+    : existing.recurrenceKind
+
+  try {
+    await ctx.db(async (tx) => {
+      await tx
+        .update(complianceObligations)
+        .set({
+          title: input.title.trim() || meta.label,
+          notes: input.notes ?? null,
+          targetRef: ref,
+          recurrence,
+          recurrenceKind: recurrenceKind as never,
+        })
+        .where(eq(complianceObligations.id, id))
+      // Replace the audience set wholesale — the unique (obligation, kind,
+      // entityKey) index makes a diff pointless at this scale.
+      await tx.delete(complianceAudience).where(eq(complianceAudience.obligationId, id))
+      if (audienceRows.length > 0) {
+        await tx.insert(complianceAudience).values(
+          audienceRows.map((a) => ({
+            tenantId: ctx.tenantId,
+            obligationId: id,
+            kind: a.kind as never,
+            entityKey: a.entityKey,
+          })),
+        )
+      }
+    })
+    await recordAudit(ctx, {
+      entityType: 'compliance_obligation',
+      entityId: id,
+      action: 'update',
+      summary: `Updated ${kindLabel(input.kind)} obligation "${input.title.trim() || meta.label}"`,
+    })
+    await rematerialize(ctx, id)
+    revalidatePath('/compliance/obligations')
+    revalidatePath(`/compliance/obligations/${id}`)
+    return { ok: true, id, kind: input.kind }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Failed to update obligation' }
   }
 }
 
@@ -206,6 +308,16 @@ export async function setObligationEnabled(
       .set({ status: enabled ? 'active' : 'paused' })
       .where(eq(complianceObligations.id, id)),
   )
+  await recordAudit(ctx, {
+    entityType: 'compliance_obligation',
+    entityId: id,
+    action: 'update',
+    summary: enabled ? 'Enabled compliance obligation' : 'Disabled compliance obligation',
+  })
+  // Re-enabling brings it back into the scoreboard immediately rather than
+  // waiting for the daily scan; the hub filters paused obligations out, so
+  // disabling needs no scoreboard work.
+  if (enabled) await rematerialize(ctx, id)
   revalidatePath('/compliance/obligations')
   revalidatePath(`/compliance/obligations/${id}`)
   return { ok: true }
@@ -216,12 +328,15 @@ export async function deleteObligation(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'compliance.manage')
-  await ctx.db((tx) =>
-    tx
+  await ctx.db(async (tx) => {
+    await tx
       .update(complianceObligations)
       .set({ deletedAt: new Date(), status: 'archived' })
-      .where(eq(complianceObligations.id, id)),
-  )
+      .where(eq(complianceObligations.id, id))
+    // The obligation row is kept (soft delete / audit trail) but its scoreboard
+    // rows are dead weight — purge them.
+    await tx.delete(complianceStatus).where(eq(complianceStatus.obligationId, id))
+  })
   await recordAudit(ctx, {
     entityType: 'compliance_obligation',
     entityId: id,
@@ -229,5 +344,6 @@ export async function deleteObligation(
     summary: 'Deleted compliance obligation',
   })
   revalidatePath('/compliance/obligations')
+  revalidatePath(`/compliance/obligations/${id}`)
   return { ok: true }
 }

@@ -15,6 +15,7 @@ import { equipmentItems, equipmentTypes, orgUnits, people } from '@beaconhs/db/s
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { PageContainer } from '@/components/page-layout'
+import { PersonSelectField } from '@/components/person-select-field'
 
 export const metadata = { title: 'Edit equipment' }
 export const dynamic = 'force-dynamic'
@@ -77,8 +78,14 @@ export default async function EditEquipmentPage({ params }: { params: Promise<{ 
       .where(eq(orgUnits.level, 'site'))
       .orderBy(asc(orgUnits.name))
     const p = await tx
-      .select({ id: people.id, firstName: people.firstName, lastName: people.lastName })
+      .select({
+        id: people.id,
+        firstName: people.firstName,
+        lastName: people.lastName,
+        employeeNo: people.employeeNo,
+      })
       .from(people)
+      .where(eq(people.status, 'active'))
       .orderBy(asc(people.lastName))
     return [r, t, s, p] as const
   })
@@ -142,17 +149,18 @@ export default async function EditEquipmentPage({ params }: { params: Promise<{ 
                   </Select>
                 </Field>
                 <Field label="Current holder">
-                  <Select
+                  <PersonSelectField
                     name="currentHolderPersonId"
                     defaultValue={item.currentHolderPersonId ?? ''}
-                  >
-                    <option value="">—</option>
-                    {allPeople.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.lastName}, {p.firstName}
-                      </option>
-                    ))}
-                  </Select>
+                    options={allPeople.map((p) => ({
+                      value: p.id,
+                      label: `${p.lastName}, ${p.firstName}`,
+                      hint: p.employeeNo ?? undefined,
+                    }))}
+                    placeholder="Select a holder…"
+                    clearable
+                    emptyLabel="—"
+                  />
                 </Field>
                 <Field label="Purchase date">
                   <Input name="purchaseDate" type="date" defaultValue={item.purchaseDate ?? ''} />

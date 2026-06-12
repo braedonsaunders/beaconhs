@@ -10,6 +10,7 @@ export type TrainingTab =
   | 'skills'
   | 'courses'
   | 'library'
+  | 'credential-designs'
   | 'classes'
   | 'assessments'
   | 'assessment-types'

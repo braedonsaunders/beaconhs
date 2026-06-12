@@ -77,8 +77,8 @@ export default async function AdminPluginsPage() {
         {catalogue.length === 0 ? (
           <EmptyState
             icon={<Plug size={32} />}
-            title="No plugins published yet"
-            description="Enable + configure first-party integrations: NetSuite sync, adminapp2-sync, webhook-out. The plugin SDK runtime is still under development — enabled plugins record state today but execution is gated until that ships."
+            title="No plugins published"
+            description="First-party integrations: NetSuite sync, adminapp2-sync, webhook-out. Enabled plugins record configuration only; execution is unavailable while the plugin runtime is in development."
           />
         ) : (
           <div className="grid gap-3 lg:grid-cols-2">

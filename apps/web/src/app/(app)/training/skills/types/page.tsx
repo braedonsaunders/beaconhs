@@ -137,7 +137,7 @@ export default async function TrainingSkillsPage({
       {rows.length === 0 ? (
         <EmptyState
           icon={<Award size={32} />}
-          title={params.q ? `No skills match "${params.q}"` : 'No skill types yet'}
+          title={params.q ? `No skills match "${params.q}"` : 'No skill types'}
           description="Create an authority first, then add the skills it issues."
         />
       ) : (

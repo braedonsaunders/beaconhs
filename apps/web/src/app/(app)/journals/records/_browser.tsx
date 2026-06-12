@@ -172,7 +172,7 @@ export function RecordsBrowser({
               searchPlaceholder="Search people…"
               sheetTitle="Person"
               ariaLabel="Filter by person"
-              options={people.map((p) => ({ value: p.id, label: p.name }))}
+              options={people.map((p) => ({ value: p.id, label: p.name, hint: p.hint }))}
             />
           </div>
           <div className="w-40">

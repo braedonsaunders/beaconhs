@@ -350,8 +350,8 @@ export default async function DataSourceDetailPage({
                       {rows.length === 0 ? (
                         <EmptyState
                           icon={<Plus size={28} />}
-                          title="No rows yet"
-                          description="Use the form above to add your first row."
+                          title="No rows"
+                          description="Use the form above to add a row."
                         />
                       ) : (
                         <div className="overflow-x-auto">
@@ -527,7 +527,7 @@ export default async function DataSourceDetailPage({
               </CardHeader>
               <CardContent className="space-y-3">
                 {cols.length === 0 ? (
-                  <p className="text-sm text-slate-500">No columns yet.</p>
+                  <p className="text-sm text-slate-500">No columns.</p>
                 ) : (
                   <ul className="space-y-1.5">
                     {cols.map((c) => (

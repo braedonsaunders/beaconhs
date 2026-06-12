@@ -273,8 +273,8 @@ export default async function ClassificationsPage({
           {roots.length === 0 ? (
             <EmptyState
               icon={<Plus size={32} />}
-              title="No classifications yet"
-              description="Add a top-level classification to get started. You can nest child categories underneath."
+              title="No classifications"
+              description="Add a top-level classification. Child categories can be nested underneath."
             />
           ) : (
             <ul className="space-y-3">

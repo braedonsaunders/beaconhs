@@ -243,7 +243,7 @@ export function InsightsWorkspace({
         ) : (
           <div className="grid h-full place-items-center">
             <div className="text-center">
-              <p className="mb-3 text-sm text-slate-500">No dashboards yet.</p>
+              <p className="mb-3 text-sm text-slate-500">No dashboards</p>
               <Button type="button" onClick={addDashboard}>
                 <Plus size={15} className="mr-1.5" /> Create a dashboard
               </Button>

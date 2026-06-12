@@ -184,9 +184,7 @@ export default async function AssessmentTypeDetailPage({
           </CardHeader>
           <CardContent>
             {questions.length === 0 ? (
-              <p className="text-sm text-slate-500">
-                No questions yet. Add the first one using the form below.
-              </p>
+              <p className="text-sm text-slate-500">No questions. Add one with the form below.</p>
             ) : (
               <ol className="space-y-3">
                 {questions.map((q, i) => {
@@ -386,8 +384,7 @@ export default async function AssessmentTypeDetailPage({
           </CardHeader>
           <CardContent>
             <p className="text-sm text-slate-500">
-              Start a new attempt for someone — they'll be redirected straight to the question
-              sheet.
+              Start a new attempt — the candidate is taken directly to the question sheet.
             </p>
             <div className="mt-3">
               <Link

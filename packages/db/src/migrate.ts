@@ -2,8 +2,67 @@ import { migrate } from 'drizzle-orm/postgres-js/migrator'
 import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
 import { sql } from 'drizzle-orm'
+import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { RLS_POLICY_SQL, TENANT_SCOPED_TABLES } from './rls'
 import { REPORT_VIEWS_SQL } from './views'
+
+function firstRow<T = Record<string, unknown>>(result: unknown): T | undefined {
+  const rows = (result as { rows?: T[] }).rows ?? (result as T[])
+  return rows[0]
+}
+
+function baselineMigration() {
+  const journal = JSON.parse(readFileSync('drizzle/meta/_journal.json', 'utf8')) as {
+    entries?: { tag: string; when: number }[]
+  }
+  const entry = journal.entries?.[0]
+  if (!entry) throw new Error('No baseline migration found in drizzle journal')
+  const hash = createHash('sha256')
+    .update(readFileSync(`drizzle/${entry.tag}.sql`, 'utf8'))
+    .digest('hex')
+  return { ...entry, hash }
+}
+
+async function reconcileFlattenedBaseline(db: ReturnType<typeof drizzle>) {
+  const appTable = firstRow<{ exists: string | null }>(
+    await db.execute(sql`select to_regclass('public.tenants')::text as exists`),
+  )?.exists
+  if (!appTable) return
+
+  const baseline = baselineMigration()
+  const migrationTable = firstRow<{ exists: string | null }>(
+    await db.execute(sql`select to_regclass('drizzle.__drizzle_migrations')::text as exists`),
+  )?.exists
+
+  if (migrationTable) {
+    const current = firstRow<{ hash: string; created_at: number }>(
+      await db.execute(sql`
+        select hash, created_at
+        from "drizzle"."__drizzle_migrations"
+        order by created_at desc
+        limit 1
+      `),
+    )
+    if (current?.hash === baseline.hash && Number(current.created_at) === baseline.when) return
+  }
+
+  console.log('▶ Existing schema detected; reconciling flattened drizzle baseline…')
+  await db.execute(sql`create schema if not exists "drizzle"`)
+  await db.execute(sql`
+    create table if not exists "drizzle"."__drizzle_migrations" (
+      id serial primary key,
+      hash text not null,
+      created_at bigint
+    )
+  `)
+  await db.execute(sql`delete from "drizzle"."__drizzle_migrations"`)
+  await db.execute(sql`
+    insert into "drizzle"."__drizzle_migrations" ("hash", "created_at")
+    values (${baseline.hash}, ${baseline.when})
+  `)
+  console.log(`✔ Baseline reconciled: ${baseline.tag}`)
+}
 
 async function main() {
   const url = process.env.DATABASE_URL
@@ -11,6 +70,8 @@ async function main() {
 
   const migrationClient = postgres(url, { max: 1 })
   const db = drizzle(migrationClient)
+
+  await reconcileFlattenedBaseline(db)
 
   console.log('▶ Running drizzle migrations…')
   await migrate(db, { migrationsFolder: './drizzle' })

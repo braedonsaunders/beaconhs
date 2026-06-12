@@ -100,7 +100,7 @@ export const INSIGHT_WIDGETS: InsightWidgetMeta[] = [
   {
     id: 'kpi-days-recordable',
     label: 'Days since recordable',
-    description: 'Streak since the last recordable incident.',
+    description: 'Days since the last recordable incident.',
     category: 'safety',
     ...KPI,
   },
@@ -175,7 +175,7 @@ export const INSIGHT_WIDGETS: InsightWidgetMeta[] = [
   {
     id: 'kpi-cs-active',
     label: 'Active confined-space permits',
-    description: 'Open CS permits right now.',
+    description: 'Currently open CS permits.',
     category: 'operations',
     ...KPI,
   },

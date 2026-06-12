@@ -56,11 +56,11 @@ export default async function GroupsPage() {
       {rows.length === 0 ? (
         <EmptyState
           icon={<Users size={32} />}
-          title="No groups yet"
-          description="Groups let you flag people for emergency response, committee membership, or any other ad-hoc taxonomy."
+          title="No groups"
+          description="Flag people for emergency response, committee membership, or other cross-cutting groupings."
           action={
             <Link href="/people/groups/new">
-              <Button>Add your first group</Button>
+              <Button>New group</Button>
             </Link>
           }
         />

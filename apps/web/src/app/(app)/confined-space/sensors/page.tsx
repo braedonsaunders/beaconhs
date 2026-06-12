@@ -30,6 +30,7 @@ import {
   type SensorStatus,
   type SensorType,
 } from './_drawers'
+import { ConfinedSpaceSubNav } from '../_nav'
 
 export const metadata = { title: 'Atmospheric Sensors' }
 
@@ -276,20 +277,7 @@ export default async function SensorsPage({
               </Link>
             }
           />
-          <nav className="flex flex-wrap items-center gap-2">
-            <Link
-              href="/confined-space"
-              className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:border-teal-500 hover:bg-teal-50 hover:text-teal-700"
-            >
-              Permits
-            </Link>
-            <Link
-              href="/confined-space/sensors"
-              className="rounded-full border border-teal-500 bg-teal-50 px-3 py-1 text-xs font-medium text-teal-700"
-            >
-              Atmospheric sensors
-            </Link>
-          </nav>
+          <ConfinedSpaceSubNav active="sensors" />
           <TableToolbar>
             <SearchInput placeholder="Search by identifier, make, model, or serial #" />
             <FilterChips
@@ -313,8 +301,8 @@ export default async function SensorsPage({
       {rows.length === 0 ? (
         <EmptyState
           icon={<Gauge size={32} />}
-          title={params.q ? `No sensors match "${params.q}"` : 'No sensors yet'}
-          description="Register a sensor to start tracking its calibration history."
+          title={params.q ? `No sensors match "${params.q}"` : 'No sensors'}
+          description="Register a sensor to track its calibration history."
           action={
             <Link href="/confined-space/sensors?drawer=new-sensor" scroll={false}>
               <Button>New sensor</Button>

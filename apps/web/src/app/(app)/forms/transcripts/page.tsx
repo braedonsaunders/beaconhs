@@ -59,7 +59,7 @@ export default async function FormTranscriptsIndexPage({
       {rows.length === 0 ? (
         <EmptyState
           icon={<Users size={32} />}
-          title="No participants yet"
+          title="No participants"
           description="Submit a form with an attendees section or a person field to build transcripts."
         />
       ) : (

@@ -161,7 +161,7 @@ function starterSchema(kind: AppKind, name: string, description: string | null):
               {
                 id: 'w_title',
                 type: 'heading' as const,
-                label: { en: 'Welcome to your app' },
+                label: { en: 'App title' },
                 required: false,
               },
               txt('field_a', 'Field A'),

@@ -36,9 +36,7 @@ export function BulkTrainingRecordsBar({
     setInfo(null)
     if (action === 'renew') {
       if (
-        !confirm(
-          `Renew ${selectedIds.length} record(s)? Each will mint a new training_records row dated today.`,
-        )
+        !confirm(`Renew ${selectedIds.length} record(s)? Each creates a new record dated today.`)
       ) {
         return
       }
@@ -116,7 +114,7 @@ export function BulkTrainingRecordsBar({
           className="h-8 min-w-[10rem]"
           disabled={pending}
         >
-          <option value="renew">Renew (mint new record)</option>
+          <option value="renew">Renew (create new record)</option>
           <option value="revoke">Revoke</option>
           <option value="export">Export selected to CSV</option>
         </Select>

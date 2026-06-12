@@ -96,7 +96,7 @@ export async function bulkSetIncidentClassification(args: {
 }): Promise<BulkActionResult> {
   const ctx = await requireRequestContext()
   if (args.incidentIds.length === 0) return { ok: false, error: 'No incidents selected.' }
-  if (!args.classificationId) return { ok: false, error: 'Pick a classification.' }
+  if (!args.classificationId) return { ok: false, error: 'Select a classification.' }
   const ids = args.incidentIds.slice(0, MAX_BULK)
   const batchId = makeBatchId()
 

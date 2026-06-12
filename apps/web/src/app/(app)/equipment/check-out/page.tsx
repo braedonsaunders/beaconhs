@@ -34,6 +34,7 @@ import { recordAudit } from '@/lib/audit'
 import { ListPageLayout } from '@/components/page-layout'
 import { Section } from '@/components/section'
 import { EquipmentSubNav } from '@/components/equipment-sub-nav'
+import { PersonSelectField } from '@/components/person-select-field'
 
 export const metadata = { title: 'Check in / out' }
 export const dynamic = 'force-dynamic'
@@ -198,8 +199,14 @@ export default async function CheckInOutPage() {
         .orderBy(asc(orgUnits.name))
         .limit(500)
       const allPeople = await tx
-        .select({ id: people.id, first: people.firstName, last: people.lastName })
+        .select({
+          id: people.id,
+          first: people.firstName,
+          last: people.lastName,
+          employeeNo: people.employeeNo,
+        })
         .from(people)
+        .where(eq(people.status, 'active'))
         .orderBy(asc(people.lastName), asc(people.firstName))
         .limit(500)
       const [openC] = await tx
@@ -268,8 +275,8 @@ export default async function CheckInOutPage() {
           {openCheckouts.length === 0 ? (
             <EmptyState
               icon={<CheckCheck size={28} />}
-              title="Nothing is checked out"
-              description="The board is clear — every asset is back at base."
+              title="Nothing checked out"
+              description="Every asset is at base."
             />
           ) : (
             <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
@@ -367,14 +374,18 @@ export default async function CheckInOutPage() {
             </div>
             <div className="space-y-1.5">
               <Label>Hand to person</Label>
-              <Select name="holderPersonId" defaultValue="">
-                <option value="">— No specific holder —</option>
-                {peopleList.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.last}, {p.first}
-                  </option>
-                ))}
-              </Select>
+              <PersonSelectField
+                name="holderPersonId"
+                defaultValue=""
+                options={peopleList.map((p) => ({
+                  value: p.id,
+                  label: `${p.last}, ${p.first}`,
+                  hint: p.employeeNo ?? undefined,
+                }))}
+                placeholder="Select a person…"
+                clearable
+                emptyLabel="— No specific holder —"
+              />
             </div>
             <div className="space-y-1.5">
               <Label>Destination site / project</Label>
@@ -411,7 +422,7 @@ export default async function CheckInOutPage() {
           {available.length === 0 ? (
             <EmptyState
               icon={<ArrowRightLeft size={28} />}
-              title="Nothing available right now"
+              title="No available equipment"
               description="All items are checked out or out of service."
             />
           ) : (

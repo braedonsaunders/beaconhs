@@ -145,7 +145,7 @@ export default async function ApiKeysPage() {
         </Card>
 
         {rows.length === 0 ? (
-          <EmptyState icon={<Key size={32} />} title="No API keys yet" />
+          <EmptyState icon={<Key size={32} />} title="No API keys" />
         ) : (
           <Table>
             <TableHeader>

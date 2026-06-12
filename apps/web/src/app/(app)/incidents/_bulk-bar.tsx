@@ -48,7 +48,11 @@ export function BulkIncidentsBar({
     setError(null)
     setInfo(null)
     if (action === 'archive') {
-      if (!confirm(`Archive ${selectedIds.length} incident(s)? This soft-deletes them.`)) {
+      if (
+        !confirm(
+          `Archive ${selectedIds.length} incident(s)? Archived incidents are removed from the list.`,
+        )
+      ) {
         return
       }
       start(async () => {
@@ -65,7 +69,7 @@ export function BulkIncidentsBar({
     }
     if (action === 'classification') {
       if (!classificationId) {
-        setError('Pick a classification.')
+        setError('Select a classification.')
         return
       }
       start(async () => {
@@ -122,7 +126,7 @@ export function BulkIncidentsBar({
           className="h-8 min-w-[10rem]"
           disabled={pending}
         >
-          <option value="archive">Archive (soft-delete)</option>
+          <option value="archive">Archive</option>
           <option value="classification">Set classification</option>
           <option value="export">Export selected to CSV</option>
         </Select>
@@ -136,7 +140,7 @@ export function BulkIncidentsBar({
               className="h-8 min-w-[12rem]"
               disabled={pending}
             >
-              <option value="">Pick classification…</option>
+              <option value="">Select classification…</option>
               {classifications.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.code ? `${c.code} · ` : ''}

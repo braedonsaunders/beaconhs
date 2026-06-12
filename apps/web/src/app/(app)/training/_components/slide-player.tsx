@@ -76,7 +76,7 @@ export function SlidePlayer({
   if (total === 0) {
     return (
       <div className="grid aspect-[16/9] w-full place-items-center rounded-lg border border-dashed border-slate-300 text-sm text-slate-400">
-        No slides yet.
+        No slides.
       </div>
     )
   }

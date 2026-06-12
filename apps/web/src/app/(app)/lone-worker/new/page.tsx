@@ -18,6 +18,7 @@ import { lwSessions, orgUnits, tenantUsers, user } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { PageContainer } from '@/components/page-layout'
+import { PersonSelectField } from '@/components/person-select-field'
 
 export const metadata = { title: 'Start lone-worker session' }
 
@@ -101,10 +102,10 @@ export default async function NewLoneWorkerPage() {
           title="Start lone-worker session"
         />
         <Alert variant="info">
-          <AlertTitle>Heads up</AlertTitle>
+          <AlertTitle>Missed check-ins</AlertTitle>
           <AlertDescription>
-            The scheduled-tick worker checks every minute. If a check-in is missed past the grace
-            period the session is marked <code>missed</code> and the supervisor is notified.
+            Check-ins are monitored every minute. If a check-in is missed past the grace period the
+            session is marked <code>missed</code> and the supervisor is notified.
           </AlertDescription>
         </Alert>
         <Card>
@@ -112,24 +113,31 @@ export default async function NewLoneWorkerPage() {
             <form action={startSession} className="space-y-4">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Field label="Worker" required className="sm:col-span-2">
-                  <Select name="workerTenantUserId" required defaultValue="">
-                    <option value="">— select —</option>
-                    {members.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.name} ({m.email})
-                      </option>
-                    ))}
-                  </Select>
+                  <PersonSelectField
+                    name="workerTenantUserId"
+                    defaultValue=""
+                    options={members.map((m) => ({
+                      value: m.id,
+                      label: m.name,
+                      hint: m.email ?? undefined,
+                    }))}
+                    placeholder="Select a worker…"
+                    clearable={false}
+                  />
                 </Field>
                 <Field label="Supervisor">
-                  <Select name="supervisorTenantUserId" defaultValue="">
-                    <option value="">—</option>
-                    {members.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.name}
-                      </option>
-                    ))}
-                  </Select>
+                  <PersonSelectField
+                    name="supervisorTenantUserId"
+                    defaultValue=""
+                    options={members.map((m) => ({
+                      value: m.id,
+                      label: m.name,
+                      hint: m.email ?? undefined,
+                    }))}
+                    placeholder="Select a supervisor…"
+                    clearable
+                    emptyLabel="—"
+                  />
                 </Field>
                 <Field label="Site">
                   <Select name="siteOrgUnitId" defaultValue="">

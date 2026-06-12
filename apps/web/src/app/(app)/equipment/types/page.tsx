@@ -175,8 +175,8 @@ export default async function EquipmentTypesPage() {
           {types.length === 0 ? (
             <EmptyState
               icon={<Boxes size={28} />}
-              title="No equipment types yet"
-              description="Add a type to start grouping your asset register and define inspection cadence."
+              title="No equipment types"
+              description="Add a type to group the asset register and define inspection cadence."
             />
           ) : (
             <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">

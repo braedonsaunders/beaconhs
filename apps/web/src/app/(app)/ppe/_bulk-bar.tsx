@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { CheckSquare, Download, HandHelping, Square, Trash2, X } from 'lucide-react'
-import { Button, Select } from '@beaconhs/ui'
+import { Button, SearchSelect, Select } from '@beaconhs/ui'
 import { bulkDiscardPpe, bulkExportPpeCsv, bulkIssuePpeToPerson } from './_actions'
 
 export type PpeHolderOption = {
@@ -123,20 +123,18 @@ export function BulkPpeBar({
         {action === 'issue' ? (
           <div className="flex items-center gap-2">
             <HandHelping size={14} className="text-slate-500" />
-            <Select
+            <SearchSelect
               value={personId}
-              onChange={(e) => setPersonId(e.target.value)}
+              onChange={setPersonId}
+              options={holders.map((h) => ({
+                value: h.id,
+                label: h.name,
+                hint: h.employeeNo ?? undefined,
+              }))}
+              placeholder="Pick holder…"
               className="h-8 min-w-[14rem]"
               disabled={pending}
-            >
-              <option value="">Pick holder…</option>
-              {holders.map((h) => (
-                <option key={h.id} value={h.id}>
-                  {h.name}
-                  {h.employeeNo ? ` · ${h.employeeNo}` : ''}
-                </option>
-              ))}
-            </Select>
+            />
           </div>
         ) : null}
 

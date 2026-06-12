@@ -62,7 +62,7 @@ export default async function InboxPage() {
       <div className="space-y-4">
         <PageHeader
           title="Inbox"
-          description="In-app notifications. Email + Web Push + SMS are wired through the worker; you'll see the in-app copy here regardless."
+          description="In-app notifications across every delivery channel."
           actions={
             <div className="flex items-center gap-2">
               <Link href="/notifications/preferences">
@@ -84,8 +84,8 @@ export default async function InboxPage() {
         {rows.length === 0 ? (
           <EmptyState
             icon={<Bell size={32} />}
-            title="Inbox zero"
-            description="You're all caught up."
+            title="No notifications"
+            description="New notifications appear here."
           />
         ) : (
           <Table>

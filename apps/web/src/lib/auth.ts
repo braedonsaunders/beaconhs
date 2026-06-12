@@ -1,3 +1,4 @@
+import { cache } from 'react'
 import { cookies, headers } from 'next/headers'
 import { auth } from '@beaconhs/auth'
 import { db } from '@beaconhs/db'
@@ -23,7 +24,9 @@ export async function requireUserId(): Promise<string> {
 }
 
 /**
- * Build the RequestContext for the active tenant.
+ * Build the RequestContext for the active tenant. Memoized per request via
+ * React cache() — the (app) layout, the page, and shared chrome (ModuleNav)
+ * all call this, but the session + role lookup runs once per render pass.
  *
  * Super-admin resolution:
  *   1. If `bhs-active-tenant` cookie set, view-as that tenant
@@ -39,7 +42,7 @@ export async function requireUserId(): Promise<string> {
  * tenant. Super-admin keeps `isSuperAdmin: true` for permission checks but
  * data is still tenant-bounded (so the UI feels like that tenant's session).
  */
-export async function getRequestContext(): Promise<RequestContext | null> {
+export const getRequestContext = cache(async (): Promise<RequestContext | null> => {
   const headerStore = await headers()
   const session = await auth.api.getSession({ headers: headerStore })
   if (!session?.user?.id) return null
@@ -146,7 +149,7 @@ export async function getRequestContext(): Promise<RequestContext | null> {
       scopes,
     })
   })
-}
+})
 
 export async function requireRequestContext(): Promise<RequestContext> {
   const ctx = await getRequestContext()

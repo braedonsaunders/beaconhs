@@ -169,8 +169,8 @@ export default async function HoursPage() {
           {rows.length === 0 ? (
             <EmptyState
               icon={<Plus size={32} />}
-              title="No periods logged yet"
-              description="Add a window — typically one entry per site per month — so the frequency-rate reports have a denominator."
+              title="No periods logged"
+              description="Add a period — typically one per site per month — to supply the worked hours behind frequency-rate reports."
             />
           ) : (
             <Table>
