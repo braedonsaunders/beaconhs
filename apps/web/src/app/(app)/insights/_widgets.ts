@@ -173,13 +173,6 @@ export const INSIGHT_WIDGETS: InsightWidgetMeta[] = [
 
   // Operations
   {
-    id: 'kpi-cs-active',
-    label: 'Active confined-space permits',
-    description: 'Currently open CS permits.',
-    category: 'operations',
-    ...KPI,
-  },
-  {
     id: 'kpi-lw-active',
     label: 'Active lone workers',
     description: 'Live lone-worker sessions.',

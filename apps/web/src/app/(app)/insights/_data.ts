@@ -59,7 +59,6 @@ export type InsightsData = {
     overdueCAs: number
     submissionsToday: number
     expiringCerts: number
-    csActive: number
     lwActive: number
     ppeOpenIssues: number
     ppeOverdue: number
@@ -106,7 +105,6 @@ export async function loadInsightsData(ctx: RequestContext): Promise<InsightsDat
       overdueCAs: m.overdueCAs,
       submissionsToday: m.submissionsToday,
       expiringCerts: m.expiringCertsCount,
-      csActive: m.csActive,
       lwActive: m.lwActive,
       ppeOpenIssues: m.ppeOpenIssues,
       ppeOverdue: m.ppeInspectionsOverdue,

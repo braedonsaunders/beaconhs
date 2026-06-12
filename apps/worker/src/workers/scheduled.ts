@@ -1,16 +1,9 @@
 import type { Job } from 'bullmq'
 import { and, eq, inArray, isNotNull, lte, sql } from 'drizzle-orm'
 import { db, withSuperAdmin } from '@beaconhs/db'
-import {
-  correctiveActions,
-  csPermits,
-  documents,
-  lwSessions,
-  trainingRecords,
-} from '@beaconhs/db/schema'
+import { correctiveActions, documents, lwSessions, trainingRecords } from '@beaconhs/db/schema'
 import {
   emitCorrectiveActionOverdue,
-  emitCsPermitExpiring,
   emitDocumentReviewDue,
   emitLoneWorkerOverdue,
   emitTrainingExpired,
@@ -27,8 +20,6 @@ export async function processScheduledTick(job: Job<ScheduledTick>): Promise<voi
   switch (job.data.kind) {
     case 'cert_expiry_scan':
       return scanCertExpiry()
-    case 'cs_permit_expiry_scan':
-      return scanCsPermitExpiry()
     case 'lone_worker_overdue_scan':
       return scanLoneWorkerOverdue()
     case 'document_review_scan':
@@ -105,31 +96,6 @@ async function scanCertExpiry(): Promise<void> {
     for (const r of expiredRows) {
       await emitTrainingExpired(r.tenantId, r.id)
     }
-  })
-}
-
-async function scanCsPermitExpiry(): Promise<void> {
-  // 1. Notify on permits expiring soon (within 24 hours) before marking expired
-  // 2. Mark active permits past expiry as 'expired'
-  await withSuperAdmin(db, async (tx) => {
-    const now = new Date()
-    const in24h = new Date(now.getTime() + 24 * 3600 * 1000)
-    const expiringSoon = await tx
-      .select({ id: csPermits.id, tenantId: csPermits.tenantId, expiresAt: csPermits.expiresAt })
-      .from(csPermits)
-      .where(and(eq(csPermits.status, 'active'), lte(csPermits.expiresAt, in24h)))
-    for (const p of expiringSoon) {
-      if (p.expiresAt > now) {
-        await emitCsPermitExpiring(p.tenantId, p.id)
-      }
-    }
-
-    const expired = await tx
-      .update(csPermits)
-      .set({ status: 'expired' })
-      .where(and(eq(csPermits.status, 'active'), lte(csPermits.expiresAt, now)))
-      .returning({ id: csPermits.id })
-    if (expired.length) console.log(`[cs_permit_expiry] expired ${expired.length} permit(s)`)
   })
 }
 

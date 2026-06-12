@@ -211,17 +211,6 @@ export function WidgetCard({ widgetId, data, todayIso }: Props) {
       )
 
     // Operational status
-    case 'op-cs-active':
-      return (
-        <CountTile
-          label="Active CS permits"
-          value={data.csActive}
-          href="/confined-space"
-          icon={ShieldCheck}
-          caption={data.csActive > 0 ? 'permits open' : 'none open'}
-          tone={data.csActive > 0 ? 'warning' : 'normal'}
-        />
-      )
     case 'op-lone-worker-active':
       return (
         <CountTile

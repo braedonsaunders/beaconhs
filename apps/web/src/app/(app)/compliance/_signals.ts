@@ -15,7 +15,6 @@
 import { and, desc, eq, inArray, isNotNull, isNull, lte, or, sql } from 'drizzle-orm'
 import {
   correctiveActions,
-  csPermits,
   documents,
   equipmentItems,
   equipmentWorkOrders,
@@ -33,7 +32,6 @@ export type SignalStatus = 'overdue' | 'expired' | 'due_soon' | 'open'
 
 export type SignalModule =
   | 'training'
-  | 'confined_space'
   | 'lone_worker'
   | 'documents'
   | 'equipment'
@@ -43,7 +41,6 @@ export type SignalModule =
 
 export const SIGNAL_MODULE_LABELS: Record<SignalModule, string> = {
   training: 'Training',
-  confined_space: 'Confined space',
   lone_worker: 'Lone worker',
   documents: 'Documents',
   equipment: 'Equipment',
@@ -137,40 +134,6 @@ export async function listDueSignals(
           dueOn: due,
           status: dueStatus(due, today, true),
           href: '/training',
-        })
-      }
-    }
-
-    // ---- Confined space: permit expiry ----
-    if (!onlyPerson) {
-      const rows = await tx
-        .select({
-          id: csPermits.id,
-          reference: csPermits.reference,
-          title: csPermits.title,
-          status: csPermits.status,
-          expiresAt: csPermits.expiresAt,
-        })
-        .from(csPermits)
-        .where(
-          and(
-            eq(csPermits.tenantId, tid),
-            inArray(csPermits.status, ['open', 'active', 'expired']),
-            lte(csPermits.expiresAt, horizonDate),
-          ),
-        )
-        .limit(500)
-      for (const r of rows) {
-        const due = isoDate(r.expiresAt)
-        out.push({
-          module: 'confined_space',
-          family: 'Permit',
-          subject: `${r.reference} — ${r.title}`,
-          personName: null,
-          personId: null,
-          dueOn: due,
-          status: r.status === 'expired' ? 'expired' : dueStatus(due, today, true),
-          href: '/confined-space',
         })
       }
     }

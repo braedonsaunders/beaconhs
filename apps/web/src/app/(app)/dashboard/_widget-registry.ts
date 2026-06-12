@@ -99,14 +99,6 @@ export const WIDGETS: Record<string, WidgetMeta> = {
   },
 
   // ---- Operational status -------------------------------------------------
-  'op-cs-active': {
-    id: 'op-cs-active',
-    category: 'operations',
-    label: 'Active confined-space permits',
-    description: 'Live count of currently-active CS permits.',
-    defaultSize: { w: 3, h: 2 },
-    minSize: { w: 2, h: 2 },
-  },
   'op-lone-worker-active': {
     id: 'op-lone-worker-active',
     category: 'operations',

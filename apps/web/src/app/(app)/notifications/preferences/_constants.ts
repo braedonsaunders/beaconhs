@@ -11,7 +11,6 @@ export const NOTIFICATION_CATEGORIES = [
   'ca',
   'training',
   'document',
-  'cs_permit',
   'lone_worker',
 ] as const
 
@@ -34,10 +33,6 @@ export const CATEGORY_LABELS: Record<NotificationCategory, { title: string; desc
     document: {
       title: 'Documents',
       description: 'Periodic-review due, new versions to acknowledge.',
-    },
-    cs_permit: {
-      title: 'Confined-space permits',
-      description: 'Permit submissions, approvals, expiry warnings.',
     },
     lone_worker: {
       title: 'Lone worker',

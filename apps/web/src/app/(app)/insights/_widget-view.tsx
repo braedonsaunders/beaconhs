@@ -128,8 +128,6 @@ export function WidgetView({ id, data }: { id: string; data: InsightsData }) {
     case 'kpi-doc-compliance':
       return <Progress label="Document compliance" pct={data.docPct} />
 
-    case 'kpi-cs-active':
-      return <Kpi label="Active CS permits" value={data.kpi.csActive} />
     case 'kpi-lw-active':
       return <Kpi label="Active lone workers" value={data.kpi.lwActive} />
     case 'kpi-ppe-issues':

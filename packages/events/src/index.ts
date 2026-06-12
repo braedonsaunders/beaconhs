@@ -17,7 +17,6 @@ import {
   caAssignedEmail,
   caCompletedEmail,
   caOverdueEmail,
-  csPermitExpiringEmail,
   documentReviewDueEmail,
   incidentReportedEmail,
   loneWorkerOverdueEmail,
@@ -28,7 +27,6 @@ import { enqueueEmail, enqueueNotification } from '@beaconhs/jobs'
 import {
   complianceObligations,
   correctiveActions,
-  csPermits,
   documents,
   incidents,
   lwSessions,
@@ -84,7 +82,6 @@ const DEFAULT_ROLES_BY_CATEGORY: Record<string, string[]> = {
   ca: ['safety_manager', 'tenant_admin'],
   training: ['safety_manager', 'tenant_admin'],
   document: ['safety_manager', 'tenant_admin'],
-  cs_permit: ['safety_manager', 'tenant_admin'],
   lone_worker: ['safety_manager', 'tenant_admin'],
   compliance: ['safety_manager', 'tenant_admin'],
 }
@@ -806,67 +803,6 @@ export async function emitLoneWorkerOverdue(tenantId: string, sessionId: string)
     }
   } catch (err) {
     logFailure('emitLoneWorkerOverdue', err)
-  }
-}
-
-// --- Confined-space permits ----------------------------------------------
-
-export async function emitCsPermitExpiring(tenantId: string, permitId: string): Promise<void> {
-  const ctx = workerEventCtx(tenantId)
-  try {
-    const permit = await ctx.db(async (tx) => {
-      const [p] = await tx.select().from(csPermits).where(eq(csPermits.id, permitId)).limit(1)
-      return p ?? null
-    })
-    if (!permit) return
-
-    const tenant = await getTenant(ctx, tenantId)
-    if (!tenant) return
-
-    const issuer = permit.issuedByTenantUserId
-      ? await tenantUserToUserId(ctx, permit.issuedByTenantUserId)
-      : null
-
-    const audience = await resolveAudience(ctx, tenantId, 'cs_permit', [issuer?.userId])
-    if (audience.length === 0) return
-
-    const linkPath = `/confined-space/${permit.id}`
-    const url = appUrl(linkPath)
-    const title = `CS permit expiring: ${permit.reference}`
-
-    await enqueueNotification({
-      tenantId,
-      userIds: audience,
-      category: 'cs_permit',
-      type: 'cs_permit.expiring',
-      title,
-      body: `${permit.title} — expires at ${permit.expiresAt.toISOString()}`,
-      linkPath,
-      data: { permitId: permit.id, expiresAt: permit.expiresAt },
-    })
-
-    const recipients = await emailsForUserIds(ctx, audience)
-    if (recipients.length > 0) {
-      const tpl = csPermitExpiringEmail({
-        tenant,
-        permit: {
-          reference: permit.reference,
-          title: permit.title,
-          expiresAt: permit.expiresAt,
-          spaceDescription: permit.spaceDescription,
-        },
-        url,
-      })
-      await enqueueEmail({
-        to: recipients,
-        subject: tpl.subject,
-        html: tpl.html,
-        text: tpl.text,
-        meta: { tenantId, category: 'cs_permit' },
-      })
-    }
-  } catch (err) {
-    logFailure('emitCsPermitExpiring', err)
   }
 }
 

@@ -32,9 +32,6 @@ export const HOOK_EVENTS = [
   'training.cert.expired',
   'ca.created',
   'ca.closed',
-  'cs.permit.opened',
-  'cs.permit.closed',
-  'cs.atmospheric.out_of_spec',
   'loneworker.session.started',
   'loneworker.checkin.missed',
 ] as const

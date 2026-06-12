@@ -5,7 +5,6 @@ import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lte, sql } 
 import type { RequestContext } from '@beaconhs/tenant'
 import {
   correctiveActions,
-  csPermits,
   documentAcknowledgments,
   documentAssignments,
   documentAssignmentAudience,
@@ -38,7 +37,6 @@ export type DashboardMetrics = {
   overdueCAs: number
   submissionsToday: number
   expiringCertsCount: number
-  csActive: number
   lwActive: number
   ppeOpenIssues: number
   ppeInspectionsOverdue: number
@@ -153,7 +151,6 @@ export async function loadDashboardMetrics(
       caOverdue,
       subRow,
       certRow,
-      csActive,
       lwActive,
       ppeOpen,
       ppeOverdue,
@@ -197,11 +194,6 @@ export async function loadDashboardMetrics(
         .select({ c: count() })
         .from(trainingRecords)
         .where(and(isNotNull(trainingRecords.expiresOn), lte(trainingRecords.expiresOn, ninetyIso)))
-        .then((r) => r[0]),
-      tx
-        .select({ c: count() })
-        .from(csPermits)
-        .where(eq(csPermits.status, 'active'))
         .then((r) => r[0]),
       tx
         .select({ c: count() })
@@ -655,7 +647,6 @@ export async function loadDashboardMetrics(
       overdueCAs: Number(caOverdue?.c ?? 0),
       submissionsToday: Number(subRow?.c ?? 0),
       expiringCertsCount: Number(certRow?.c ?? 0),
-      csActive: Number(csActive?.c ?? 0),
       lwActive: Number(lwActive?.c ?? 0),
       ppeOpenIssues: Number(ppeOpen?.c ?? 0),
       ppeInspectionsOverdue: Number(ppeOverdue?.c ?? 0),

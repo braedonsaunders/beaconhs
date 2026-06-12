@@ -323,39 +323,6 @@ export function loneWorkerOverdueEmail(args: {
   return { subject, html, text }
 }
 
-export function csPermitExpiringEmail(args: {
-  tenant: { name: string }
-  permit: {
-    reference: string
-    title: string
-    expiresAt: Date | string
-    spaceDescription?: string | null
-  }
-  url: string
-}): EmailOut {
-  const expiresAt =
-    args.permit.expiresAt instanceof Date
-      ? args.permit.expiresAt.toISOString()
-      : args.permit.expiresAt
-  const subject = `Confined-space permit expiring: ${args.permit.reference}`
-  const text =
-    `Confined-space permit ${args.permit.reference} expires at ${expiresAt} in ${args.tenant.name}.\n\n` +
-    `Title: ${args.permit.title}\n` +
-    `${args.permit.spaceDescription ? `Space: ${args.permit.spaceDescription}\n` : ''}` +
-    `\nOpen it: ${args.url}`
-  const html = shell({
-    heading: 'Confined-space permit expiring',
-    bodyHtml: `
-      <p><strong>${esc(args.permit.reference)} — ${esc(args.permit.title)}</strong> expires at <strong>${esc(expiresAt)}</strong>.</p>
-      ${args.permit.spaceDescription ? `<p>Space: ${esc(args.permit.spaceDescription)}</p>` : ''}
-      <p>Close the permit or renew before expiry.</p>`,
-    ctaLabel: 'Open in app',
-    ctaUrl: args.url,
-    ctaColor: '#ea580c',
-  })
-  return { subject, html, text }
-}
-
 // Kept for backward compat with existing callers (cert expiry).
 export function certExpiringEmail(args: {
   personName: string

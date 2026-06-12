@@ -30,7 +30,6 @@ import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
 import { TableToolbar } from '@/components/table-toolbar'
-import { TabNav, pickActiveTab } from '@/components/tab-nav'
 
 export const metadata = { title: 'Form responses' }
 
@@ -45,20 +44,6 @@ const STATUS_OPTIONS = [
   { value: 'rejected', label: 'Rejected' },
 ]
 
-// Category pivot — mirrors the four module-bound canonical templates plus an
-// "all" default. Selecting a tab filters templates by category= (and pins the
-// category param into the URL so refresh/share works).
-const CATEGORY_TABS = ['all', 'jsha', 'toolbox_talk', 'lift_plan', 'wah'] as const
-type CategoryTab = (typeof CATEGORY_TABS)[number]
-
-const CATEGORY_LABEL: Record<CategoryTab, string> = {
-  all: 'All categories',
-  jsha: 'JSHAs',
-  toolbox_talk: 'Toolbox talks',
-  lift_plan: 'Lift plans',
-  wah: 'WAH rescue plans',
-}
-
 export default async function FormResponsesPage({
   searchParams,
 }: {
@@ -72,14 +57,12 @@ export default async function FormResponsesPage({
     allowedSorts: SORTS,
   })
   const statusFilter = pickString(sp.status)
-  // Accept either `?category=…` (free-form, from the wider filter UI) or
-  // `?tab=…` (driven by the TabNav below). When the tab is anything other
-  // than "all" it overrides the category param — the tab is the canonical pivot.
-  const activeTab = pickActiveTab<CategoryTab>(sp, CATEGORY_TABS, 'all')
-  const categoryFilter = activeTab === 'all' ? pickString(sp.category) : activeTab
+  // Optional deep-link filter only: `?category=…` narrows to one template
+  // category (e.g. links from other modules). No hardcoded category pivot.
+  const categoryFilter = pickString(sp.category)
   const ctx = await requireRequestContext()
 
-  const { rows, total, statusCounts, categoryCounts } = await ctx.db(async (tx) => {
+  const { rows, total, statusCounts } = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = []
     if (statusFilter) filters.push(eq(formResponses.status, statusFilter as any))
     if (categoryFilter) filters.push(eq(formTemplates.category, categoryFilter))
@@ -131,29 +114,14 @@ export default async function FormResponsesPage({
       .select({ s: formResponses.status, c: count() })
       .from(formResponses)
       .groupBy(formResponses.status)
-    // Per-category counts, used to badge each tab.
-    const cc = await tx
-      .select({ category: formTemplates.category, c: count() })
-      .from(formResponses)
-      .innerJoin(formTemplates, eq(formTemplates.id, formResponses.templateId))
-      .groupBy(formTemplates.category)
     return {
       rows: data,
       total: Number(tot?.c ?? 0),
       statusCounts: Object.fromEntries(ss.map((x) => [x.s, Number(x.c)])),
-      categoryCounts: Object.fromEntries(
-        cc.map((x) => [x.category ?? 'uncategorised', Number(x.c)]),
-      ),
     }
   })
 
   const sortProps = { basePath: '/forms/responses', currentParams: sp, dir: params.dir }
-  const totalAcross = Object.values(categoryCounts).reduce((a, b) => a + b, 0)
-  const tabs = CATEGORY_TABS.map((key) => ({
-    key,
-    label: CATEGORY_LABEL[key],
-    count: key === 'all' ? totalAcross : (categoryCounts[key] ?? 0),
-  }))
 
   return (
     <ListPageLayout
@@ -167,13 +135,6 @@ export default async function FormResponsesPage({
                 <Button variant="outline">Export CSV</Button>
               </Link>
             }
-          />
-          <TabNav
-            basePath="/forms/responses"
-            currentParams={sp}
-            tabs={tabs}
-            active={activeTab}
-            paramKey="tab"
           />
           <TableToolbar>
             <SearchInput placeholder="Search template name…" />
@@ -198,7 +159,7 @@ export default async function FormResponsesPage({
           }
           description={
             categoryFilter
-              ? `No ${CATEGORY_LABEL[activeTab] ?? categoryFilter} responses. Fill out a template to log one.`
+              ? `No ${categoryFilter.replace(/_/g, ' ')} responses. Fill out a template to log one.`
               : 'Select a template to fill out a new form.'
           }
           action={

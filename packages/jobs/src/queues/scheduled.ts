@@ -8,7 +8,6 @@ export type ScheduledTick =
   | { kind: 'cert_expiry_scan' }
   | { kind: 'form_assignment_scan' }
   | { kind: 'document_review_scan' }
-  | { kind: 'cs_permit_expiry_scan' }
   | { kind: 'lone_worker_overdue_scan' }
   | { kind: 'report_schedule_scan' }
   | { kind: 'report_run'; tenantId: string; scheduleId: string }
@@ -42,11 +41,7 @@ export async function registerSchedules() {
     repeat: { pattern: '*/5 * * * *' },
     jobId: 'tick:reports',
   })
-  // Hourly: confined-space permit expiry + corrective-action overdue
-  await scheduledQueue.add('tick:cs_permits', { kind: 'cs_permit_expiry_scan' } as ScheduledTick, {
-    repeat: { pattern: '0 * * * *' },
-    jobId: 'tick:cs_permits',
-  })
+  // Hourly: corrective-action overdue
   await scheduledQueue.add('tick:ca_overdue', { kind: 'ca_overdue_scan' } as ScheduledTick, {
     repeat: { pattern: '0 * * * *' },
     jobId: 'tick:ca_overdue',

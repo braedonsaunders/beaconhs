@@ -13,7 +13,6 @@ import {
   Input,
   Label,
   PageHeader,
-  Select,
   Textarea,
 } from '@beaconhs/ui'
 import { formTemplates, formTemplateVersions } from '@beaconhs/db/schema'
@@ -26,30 +25,6 @@ import { eq } from 'drizzle-orm'
 import { AppTypePicker } from './_app-type-picker'
 
 export const metadata = { title: 'New app' }
-
-const CATEGORIES = [
-  { value: 'inspection', label: 'Inspection' },
-  { value: 'jsha', label: 'JSHA / Job hazard analysis' },
-  { value: 'toolbox_talk', label: 'Toolbox talk' },
-  { value: 'lift_plan', label: 'Lift plan' },
-  { value: 'wah', label: 'Working at heights' },
-  { value: 'incident_investigation', label: 'Incident investigation' },
-  { value: 'audit', label: 'Audit / observation' },
-  { value: 'checklist', label: 'Generic checklist' },
-  { value: 'custom', label: 'Custom' },
-]
-
-const MODULE_BINDINGS = [
-  { value: '', label: '— None (generic form) —' },
-  { value: 'inspections', label: 'Inspections module' },
-  { value: 'jsha', label: 'JSHAs module' },
-  { value: 'toolbox_talk', label: 'Toolbox talks module' },
-  { value: 'lift_plan', label: 'Lift plans module' },
-  { value: 'wah', label: 'Working at heights module' },
-  { value: 'incident_investigation', label: 'Incident investigation' },
-  { value: 'equipment_inspection', label: 'Equipment inspections' },
-  { value: 'ppe_inspection', label: 'PPE inspections' },
-]
 
 const CANONICAL_ICONS: Record<
   string,
@@ -98,8 +73,6 @@ async function createTemplate(formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
   const name = String(formData.get('name') ?? '').trim()
   const description = String(formData.get('description') ?? '').trim() || null
-  const category = String(formData.get('category') ?? '').trim() || null
-  const moduleBinding = String(formData.get('moduleBinding') ?? '').trim() || null
   const customKey = String(formData.get('key') ?? '').trim() || null
   if (!name) return
   const key = customKey
@@ -142,9 +115,7 @@ async function createTemplate(formData: FormData): Promise<void> {
         tenantId: ctx.tenantId,
         key,
         name,
-        category: category as any,
         description,
-        moduleBinding,
         status: 'draft',
         createdBy: ctx.userId,
       })
@@ -164,7 +135,7 @@ async function createTemplate(formData: FormData): Promise<void> {
     entityId: templateId,
     action: 'create',
     summary: `Created template "${name}"`,
-    after: { name, key, category, moduleBinding, mode: 'blank' },
+    after: { name, key, mode: 'blank' },
   })
   revalidatePath('/forms')
   redirect(`/forms/templates/${templateId}/designer`)
@@ -366,33 +337,6 @@ export default function NewTemplatePage() {
                   <p className="text-xs text-slate-500">
                     Shown in lists, on PDFs, and as the form heading.
                   </p>
-                </div>
-
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="category">Category</Label>
-                    <Select id="category" name="category" defaultValue="inspection">
-                      {CATEGORIES.map((c) => (
-                        <option key={c.value} value={c.value}>
-                          {c.label}
-                        </option>
-                      ))}
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="moduleBinding">Module binding</Label>
-                    <Select id="moduleBinding" name="moduleBinding" defaultValue="">
-                      {MODULE_BINDINGS.map((m) => (
-                        <option key={m.value} value={m.value}>
-                          {m.label}
-                        </option>
-                      ))}
-                    </Select>
-                    <p className="text-xs text-slate-500">
-                      Hides the template from the generic /forms list when bound to a specialty
-                      module.
-                    </p>
-                  </div>
                 </div>
 
                 <div className="space-y-1.5">

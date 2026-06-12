@@ -10,14 +10,13 @@ import { SearchInput } from '@/components/search-input'
 import { NavIcon } from '@/components/sidebar-nav'
 import { pickString } from '@/lib/list-params'
 import { loadNavConfig } from '@/lib/nav/resolve'
-import { FormsCategoryNav } from './_nav'
+import { FormsKindNav } from './_nav'
 import { PinFormButton } from './_pin-button'
 import { AiGenerateButton } from './_ai-generate-button'
 import { appVisibleTo, getUserRoleKeys } from './_lib/access'
 
 export const metadata = { title: 'Forms' }
 
-// A template's icon: explicit override, else a sensible per-category default.
 // Tailwind classes per app kind (badge on each card; 'form' is the default and
 // not badged to keep the grid quiet).
 const KIND_BADGE: Record<string, string> = {
@@ -27,33 +26,13 @@ const KIND_BADGE: Record<string, string> = {
   mini_app: 'bg-violet-50 text-violet-700',
 }
 
-function iconKeyForTemplate(iconKey: string | null, category: string | null): string {
-  if (iconKey) return iconKey
-  switch (category) {
-    case 'inspection':
-      return 'clipboard'
-    case 'jsha':
-      return 'radiation'
-    case 'toolbox_talk':
-      return 'message'
-    case 'incident_investigation':
-      return 'alert'
-    case 'lift_plan':
-      return 'construction'
-    case 'wah':
-      return 'shield'
-    default:
-      return 'clipboard-check'
-  }
-}
-
 export default async function FormsPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const sp = await searchParams
-  const categoryFilter = pickString(sp.category) ?? ''
+  const kindFilter = pickString(sp.kind) ?? ''
   const q = pickString(sp.q) ?? ''
   const ctx = await requireRequestContext()
   const canCreate = can(ctx, 'forms.template.create')
@@ -68,7 +47,7 @@ export default async function FormsPage({
     pinnedIds,
   } = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = [isNull(formTemplates.deletedAt)]
-    if (categoryFilter) filters.push(eq(formTemplates.category, categoryFilter))
+    if (kindFilter) filters.push(eq(formTemplates.kind, kindFilter as any))
     if (q) filters.push(ilike(formTemplates.name, `%${q}%`))
 
     const templates = await tx
@@ -131,9 +110,9 @@ export default async function FormsPage({
             <div className="space-y-1">
               <h1 className="text-2xl font-semibold">Builder</h1>
               <p className="max-w-2xl text-sm text-slate-500">
-                Your Apps — forms, wizards, inspections, checklists, toolbox talks, lift plans,
-                anything. Build with the drag-drop designer, automate with Flows, then fill, review,
-                and pin the ones your crews use most to the sidebar.
+                Your Apps — forms, wizards, checklists, registers, and mini-apps. Build with the
+                drag-drop designer, automate with Flows, then fill, review, and pin the ones your
+                crews use most to the sidebar.
               </p>
               <div className="flex flex-wrap items-center gap-4 pt-1 text-xs text-slate-500">
                 <span>
@@ -163,7 +142,7 @@ export default async function FormsPage({
           </header>
 
           <div className="flex flex-wrap items-center gap-2">
-            <FormsCategoryNav active={categoryFilter} q={q} />
+            <FormsKindNav active={kindFilter} q={q} />
             <div className="ml-auto w-full sm:w-64">
               <SearchInput placeholder="Search forms…" />
             </div>
@@ -174,18 +153,12 @@ export default async function FormsPage({
       {templates.length === 0 ? (
         <EmptyState
           icon={<ClipboardCheck size={32} />}
-          title={q || categoryFilter ? 'No matching forms' : 'No form templates'}
-          description="Create a template for inspections, JSHAs, toolbox talks, and more."
+          title={q || kindFilter ? 'No matching apps' : 'No apps yet'}
+          description="Build a form, wizard, checklist, register, or mini-app with the designer."
           action={
             canCreate ? (
-              <Link
-                href={
-                  categoryFilter
-                    ? `/forms/templates/new?category=${categoryFilter}`
-                    : '/forms/templates/new'
-                }
-              >
-                <Button>Create template</Button>
+              <Link href="/forms/templates/new">
+                <Button>Create app</Button>
               </Link>
             ) : undefined
           }
@@ -203,7 +176,7 @@ export default async function FormsPage({
               >
                 <div className="flex items-start gap-3">
                   <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-teal-50 text-teal-700 ring-1 ring-teal-100">
-                    <NavIcon iconKey={iconKeyForTemplate(t.iconKey, t.category)} size={20} />
+                    <NavIcon iconKey={t.iconKey ?? 'clipboard-check'} size={20} />
                   </span>
                   <div className="min-w-0 flex-1">
                     <Link
@@ -223,7 +196,6 @@ export default async function FormsPage({
                           {t.kind === 'mini_app' ? 'mini-app' : t.kind}
                         </span>
                       ) : null}
-                      <span>{t.category ?? 'general'}</span>
                     </div>
                   </div>
                 </div>
