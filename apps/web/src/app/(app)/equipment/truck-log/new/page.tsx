@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { asc, eq } from 'drizzle-orm'
@@ -219,11 +220,11 @@ export default async function NewTruckLogEntryPage({
                 />
               </Field>
               <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-4">
-                <a href="/equipment/truck-log">
+                <Link href="/equipment/truck-log">
                   <Button type="button" variant="outline">
                     Cancel
                   </Button>
-                </a>
+                </Link>
                 <Button type="submit">Save entry</Button>
               </div>
             </form>

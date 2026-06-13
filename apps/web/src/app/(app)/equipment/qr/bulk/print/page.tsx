@@ -1,4 +1,5 @@
 import { randomBytes } from 'crypto'
+import Link from 'next/link'
 import { revalidatePath } from 'next/cache'
 import { asc, inArray } from 'drizzle-orm'
 import QRCode from 'qrcode'
@@ -33,9 +34,9 @@ export default async function BulkQrPrintPage({
       <div className="p-12 text-center">
         <p className="text-slate-600">
           No equipment selected. Go back to{' '}
-          <a href="/equipment/qr/bulk" className="text-teal-700 underline">
+          <Link href="/equipment/qr/bulk" className="text-teal-700 underline">
             the bulk QR picker
-          </a>
+          </Link>
           .
         </p>
       </div>
@@ -122,9 +123,9 @@ export default async function BulkQrPrintPage({
           <code className="font-mono text-xs">{bulkToken}</code>
         </div>
         <div className="flex items-center gap-2">
-          <a href="/equipment/qr/bulk" className="text-teal-700 hover:underline">
+          <Link href="/equipment/qr/bulk" className="text-teal-700 hover:underline">
             Back
-          </a>
+          </Link>
           <button
             type="button"
             onClick={undefined}

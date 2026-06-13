@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { asc, eq } from 'drizzle-orm'
@@ -142,9 +143,9 @@ export default async function NewInspectionRecordPage({
             <AlertTitle>No inspection types available</AlertTitle>
             <AlertDescription>
               You need at least one published{' '}
-              <a href="/inspections/types" className="text-teal-700 hover:underline">
+              <Link href="/inspections/types" className="text-teal-700 hover:underline">
                 inspection type
-              </a>{' '}
+              </Link>{' '}
               before you can start a record. Each type bundles the criteria the inspector will
               answer.
             </AlertDescription>
