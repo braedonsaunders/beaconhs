@@ -17,7 +17,7 @@ export function SignOutButton() {
         })
       }
       disabled={pending}
-      className="rounded px-2 py-1 text-sm text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+      className="rounded px-2 py-1 text-sm whitespace-nowrap text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
     >
       {pending ? 'Signing out…' : 'Sign out'}
     </button>

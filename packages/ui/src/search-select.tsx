@@ -192,7 +192,8 @@ export function SearchSelect({
         placeholder={searchPlaceholder}
         className={cn(
           'w-full rounded-lg border border-slate-200 bg-slate-50 pr-3 pl-9 transition outline-none focus:border-teal-500 focus:bg-white focus:ring-2 focus:ring-teal-500/20 dark:border-slate-800 dark:bg-slate-900 dark:focus:bg-slate-900',
-          largeText ? 'h-11 text-[15px]' : 'h-9 text-sm',
+          // 16px below sm — anything smaller makes iOS Safari zoom on focus.
+          largeText ? 'h-11 text-base' : 'h-9 text-base sm:text-sm',
         )}
       />
     </div>

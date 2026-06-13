@@ -15,6 +15,9 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
+  // Extend under notches/home indicator; safe-area env() padding in the app
+  // shell and bottom tab bar keeps content clear of them.
+  viewportFit: 'cover',
   themeColor: '#1B2B4A',
 }
 

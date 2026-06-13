@@ -9,10 +9,11 @@ import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Menu, X } from 'lucide-react'
 import { Logo } from './brand-logo'
+import { useMobileNav } from './mobile-nav'
 import { SidebarNav, type SidebarNavGroup } from './sidebar-nav'
 
 export function MobileNavToggle({ groups }: { groups: SidebarNavGroup[] }) {
-  const [open, setOpen] = useState(false)
+  const { open, setOpen } = useMobileNav()
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
 

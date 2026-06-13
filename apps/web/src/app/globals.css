@@ -43,6 +43,25 @@
     height: 100%;
   }
 
+  /* Native-app feel on touch devices: no gray tap-highlight flash, no
+     double-tap-zoom delay on controls, no scroll-chaining/pull-to-refresh
+     bounce behind the app shell, no landscape font inflation. */
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-y: none;
+  }
+  a,
+  button,
+  input,
+  select,
+  textarea,
+  [role='button'] {
+    touch-action: manipulation;
+  }
+
   /* Custom scrollbar (Mac-style, narrow) for app-shell scroll containers */
   .app-scroll {
     scrollbar-gutter: stable;

@@ -68,12 +68,24 @@ export function DashboardGrid({
   const router = useRouter()
   const containerRef = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(1024)
+  const [isPhone, setIsPhone] = useState(false)
   const [layout, setLayout] = useState<LayoutWidget[]>(initialLayout.widgets)
   const [saving, setSaving] = useState(false)
   const [resetting, setResetting] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const baselineRef = useRef(JSON.stringify(initialLayout.widgets))
   const dirty = useMemo(() => JSON.stringify(layout) !== baselineRef.current, [layout])
+
+  // Phones get a stacked flow instead of the drag grid (see early return
+  // below) — the saved desktop geometry forces fixed row heights that waste
+  // space and clip content at a single column.
+  useLayoutEffect(() => {
+    const mq = window.matchMedia('(max-width: 639px)')
+    const apply = () => setIsPhone(mq.matches)
+    apply()
+    mq.addEventListener('change', apply)
+    return () => mq.removeEventListener('change', apply)
+  }, [])
 
   // Measure container width via ResizeObserver — required by RGL v2.
   useLayoutEffect(() => {
@@ -189,6 +201,19 @@ export function DashboardGrid({
     },
     [mode],
   )
+
+  // Stacked phone layout: widgets in saved reading order with natural
+  // heights — no fixed rows, no inner scrollbars, no dead space.
+  if (mode === 'view' && isPhone) {
+    const ordered = [...layout].sort((a, b) => a.y - b.y || a.x - b.x)
+    return (
+      <div className="space-y-4">
+        {ordered.map((w) => (
+          <div key={w.id}>{nodes[w.id] ?? null}</div>
+        ))}
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-4">

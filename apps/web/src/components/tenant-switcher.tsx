@@ -40,9 +40,9 @@ export function TenantSwitcher({
   // Don't show the picker if a regular user only has one membership.
   if (!isSuperAdmin && available.length <= 1) {
     return (
-      <span className="flex items-center gap-2 rounded-md px-2 py-1 text-sm text-slate-700 dark:text-slate-200">
-        <Building2 size={14} />
-        {current.name}
+      <span className="flex min-w-0 items-center gap-2 rounded-md px-2 py-1 text-sm text-slate-700 dark:text-slate-200">
+        <Building2 size={14} className="shrink-0" />
+        <span className="truncate">{current.name}</span>
       </span>
     )
   }
@@ -58,11 +58,11 @@ export function TenantSwitcher({
           type="button"
           onClick={() => setOpen((v) => !v)}
           disabled={pending}
-          className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800/60"
+          className="flex min-w-0 items-center gap-2 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800/60"
         >
-          <Building2 size={14} />
-          {pending ? 'Switching…' : current.name}
-          <ChevronDown size={14} className="text-slate-400 dark:text-slate-500" />
+          <Building2 size={14} className="shrink-0" />
+          <span className="truncate">{pending ? 'Switching…' : current.name}</span>
+          <ChevronDown size={14} className="shrink-0 text-slate-400 dark:text-slate-500" />
         </button>
       }
     >

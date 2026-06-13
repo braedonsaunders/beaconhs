@@ -29,7 +29,9 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
       className={cn(
         // NOTE: `block`, not `flex` — a <select> as a flex container breaks the
         // browser's native vertical centering of the value text.
-        'block h-10 w-full appearance-none rounded-md border border-slate-300 bg-white px-3 pr-9 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100',
+        // text-base below sm: anything under 16px makes iOS Safari zoom the
+        // whole viewport when the field is focused.
+        'block h-10 w-full appearance-none rounded-md border border-slate-300 bg-white px-3 pr-9 text-base text-slate-900 sm:text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100',
         'transition-shadow duration-150',
         'focus:border-teal-500 focus:ring-2 focus:ring-teal-500/40 focus:ring-offset-0 focus:outline-none',
         'focus-visible:border-teal-500 focus-visible:ring-2 focus-visible:ring-teal-500/40 focus-visible:outline-none',
