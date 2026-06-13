@@ -8,13 +8,11 @@
 import Link from 'next/link'
 import {
   AlertTriangle,
-  Bell,
   CheckCircle2,
   ClipboardList,
   GraduationCap,
   ListChecks,
   Radiation,
-  Settings,
   User,
 } from 'lucide-react'
 import { and, count, eq, gte, isNull, lte, or, sql, type SQL } from 'drizzle-orm'
@@ -291,15 +289,6 @@ export default async function MyLandingPage() {
               ? `Personal views for ${ctx.membership.displayName}.`
               : 'Personal views for your account.'
           }
-          actions={
-            <Link
-              href="/my/notifications"
-              className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
-            >
-              <Settings size={14} />
-              Notification preferences
-            </Link>
-          }
         />
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -353,24 +342,6 @@ export default async function MyLandingPage() {
               </Card>
             </Link>
           ))}
-        </div>
-
-        <div className="mt-2 rounded-md border border-slate-200 bg-white p-4">
-          <div className="flex items-center gap-3">
-            <Bell size={18} className="text-slate-500" />
-            <div className="flex-1">
-              <div className="text-sm font-medium">Notification preferences</div>
-              <div className="text-xs text-slate-500">
-                Choose how each category of notifications reaches you (in-app, email, push, SMS).
-              </div>
-            </div>
-            <Link
-              href="/my/notifications"
-              className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
-            >
-              Manage
-            </Link>
-          </div>
         </div>
       </div>
     </PageContainer>

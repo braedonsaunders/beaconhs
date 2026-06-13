@@ -893,7 +893,7 @@ function InboxList({ items }: { items: DashboardMetrics['myInbox'] }) {
       title="My inbox"
       caption={`${items.length} unread`}
       icon={Inbox}
-      href="/my/notifications"
+      href="/notifications"
       accent="slate"
     >
       {items.length === 0 ? (
