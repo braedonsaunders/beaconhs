@@ -66,7 +66,6 @@ export function DashboardGrid({
   mode: 'view' | 'edit'
 }) {
   const router = useRouter()
-  const containerRef = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(1024)
   const [viewport, setViewport] = useState<'phone' | 'tablet' | 'desktop'>('desktop')
   const [layout, setLayout] = useState<LayoutWidget[]>(initialLayout.widgets)
@@ -94,9 +93,15 @@ export function DashboardGrid({
     }
   }, [])
 
-  // Measure container width via ResizeObserver — required by RGL v2.
-  useLayoutEffect(() => {
-    const el = containerRef.current
+  // Measure container width via ResizeObserver — required by RGL v2. A ref
+  // CALLBACK (not a mount-once effect): the measured div only exists in the
+  // desktop branch, so it mounts/unmounts as the viewport crosses lg — the
+  // observer must follow the node or the grid freezes at a stale width when
+  // the window grows back to desktop.
+  const roRef = useRef<ResizeObserver | null>(null)
+  const measureRef = useCallback((el: HTMLDivElement | null) => {
+    roRef.current?.disconnect()
+    roRef.current = null
     if (!el) return
     setWidth(el.clientWidth)
     if (typeof ResizeObserver === 'undefined') return
@@ -107,7 +112,7 @@ export function DashboardGrid({
       if (next > 0) setWidth(next)
     })
     ro.observe(el)
-    return () => ro.disconnect()
+    roRef.current = ro
   }, [])
 
   // Resync local state when the server-provided layout changes (e.g. after save).
@@ -254,7 +259,7 @@ export function DashboardGrid({
             : 'w-full'
         }
       >
-        <div ref={containerRef} className="min-w-0">
+        <div ref={measureRef} className="min-w-0">
           <Responsive
             className="layout"
             width={width}
