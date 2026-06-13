@@ -78,10 +78,7 @@ export default async function ExpiringPpeReport({
       header={
         <>
           <PpeSubNav active="reports" />
-          <PageHeader
-            title="Expiring PPE"
-            description="Items whose expires-on date is approaching. Plan replacements before they hit the expired report."
-          />
+          <PageHeader title="Expiring PPE" description="Items approaching their expiry date." />
           <ReportsSubNav active="expiring" />
           <div className="flex items-center gap-2 text-xs">
             <span className="text-slate-500">Window:</span>

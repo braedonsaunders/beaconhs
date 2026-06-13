@@ -103,7 +103,7 @@ export default async function TrainingCoursesPage({
         <>
           <PageHeader
             title="Training courses"
-            description="Course catalogue. Each course can be delivered as classroom, self-paced, on-the-job, or as an external certificate."
+            description="Courses across classroom, self-paced, on-the-job, and external formats."
             actions={
               <div className="flex items-center gap-2">
                 <Link href={buildExportHref('/training/courses/export.csv', sp)}>

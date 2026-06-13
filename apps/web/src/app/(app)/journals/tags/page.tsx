@@ -25,10 +25,7 @@ export default async function JournalTagsPage() {
     <ListPageLayout
       header={
         <>
-          <PageHeader
-            title="Journal tags"
-            description="Govern the tag vocabulary for daily journals — set colours, rename, merge duplicates, and prune unused tags. Changes apply across every entry."
-          />
+          <PageHeader title="Journal tags" description="Tag vocabulary for daily journals." />
           <ModuleNav moduleKey="journals" active="tags" />
         </>
       }

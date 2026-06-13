@@ -102,7 +102,7 @@ export default async function PpePage({
           <PpeSubNav active="records" />
           <PageHeader
             title="PPE"
-            description="Issue, return, replace, and discard PPE, with scheduled inspections for inspectable types."
+            description="Issue, inspect, and track PPE through its lifecycle."
             actions={
               <div className="flex items-center gap-2">
                 <Link href={buildExportHref('/ppe/export.csv', sp)}>

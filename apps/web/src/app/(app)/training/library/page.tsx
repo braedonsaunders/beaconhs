@@ -92,7 +92,7 @@ export default async function ContentLibraryPage({
         <>
           <PageHeader
             title="Content Library"
-            description="Reusable training material — lessons, videos, files, and embeds you can drop into any course."
+            description="Reusable lessons, videos, files, and embeds."
           />
           <TrainingSubNav active="library" />
           <TableToolbar

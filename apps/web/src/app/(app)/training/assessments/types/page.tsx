@@ -164,7 +164,7 @@ export default async function AssessmentTypesPage({
         <>
           <PageHeader
             title="Assessment types"
-            description="Admin-defined quiz templates. Each has a question bank and a passing score; can optionally award a training record when linked to a course."
+            description="Quiz templates with question banks and passing scores."
             actions={
               <div className="flex items-center gap-2">
                 <Link

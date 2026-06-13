@@ -144,7 +144,7 @@ export default async function InspectionTypesPage() {
           <EquipmentSubNav active="inspection-types" />
           <PageHeader
             title="Inspection types"
-            description="Reusable inspection templates with pass/fail criteria. Items of the same equipment type share these templates. Failed answers can auto-spawn a work order."
+            description="Pass/fail inspection templates shared by equipment type."
           />
         </>
       }

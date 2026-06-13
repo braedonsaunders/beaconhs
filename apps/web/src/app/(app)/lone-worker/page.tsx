@@ -108,7 +108,7 @@ export default async function LoneWorkerPage({
         <>
           <PageHeader
             title="Lone worker"
-            description="Timer-based check-ins with auto-escalation. Workers on solo tasks open a session; the scheduler watches and pages the supervisor on missed check-ins."
+            description="Timed check-ins with automatic escalation on misses."
             actions={
               <div className="flex items-center gap-2">
                 <Link href={buildExportHref('/lone-worker/export.csv', sp)}>

@@ -198,7 +198,7 @@ export default async function EquipmentLogPage({
           <EquipmentSubNav active="log" />
           <PageHeader
             title="Equipment log"
-            description="Free-form notes log across the fleet — separate from work-order tracking. Use for shop journal entries, observations, and field notes."
+            description="Fleet notes log, separate from work orders."
           />
           <TableToolbar>
             <SearchInput placeholder="Search title or details…" />

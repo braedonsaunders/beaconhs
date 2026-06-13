@@ -140,7 +140,7 @@ export default async function SafeDistanceListPage({
         <>
           <PageHeader
             title="Safe Distance"
-            description="Engineering calc + record-keeping for electrical, drone, overhead-crane and vehicle proximity assessments."
+            description="Clearance assessments for electrical, drone, crane, and vehicle work."
             back={{ href: '/tools', label: 'All tools' }}
             actions={
               <div className="flex items-center gap-2">

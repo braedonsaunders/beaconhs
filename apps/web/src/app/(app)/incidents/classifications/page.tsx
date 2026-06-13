@@ -262,7 +262,7 @@ export default async function ClassificationsPage({
         <>
           <PageHeader
             title="Incident classifications"
-            description="Tenant-defined taxonomy used to bucket every incident. Mark a node as recordable so it feeds the TRIR / DART reports."
+            description="Incident taxonomy; recordable nodes feed TRIR and DART."
           />
           <IncidentsSubNav active="classifications" />
         </>

@@ -123,7 +123,7 @@ export default async function TrainingClassesPage({
         <>
           <PageHeader
             title="Training classes"
-            description="Scheduled instructor-led classes. Roster attendees and mark completion to write training records."
+            description="Instructor-led classes with rosters and completions."
             actions={
               <div className="flex items-center gap-2">
                 <Link href="/training/classes/calendar">

@@ -111,7 +111,7 @@ export default async function TrainingSkillsPage({
         <>
           <PageHeader
             title="Skills"
-            description="Externally-issued competencies tracked per worker. Manage skill types under their authority."
+            description="Skill types managed under their issuing authority."
             actions={
               <Link href="/training/authorities" className="text-sm text-teal-700 hover:underline">
                 Manage authorities →

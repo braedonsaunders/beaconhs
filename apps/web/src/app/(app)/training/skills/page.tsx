@@ -192,7 +192,7 @@ export default async function SkillsPage({
         <>
           <PageHeader
             title="Skills"
-            description="Externally-issued skills and certifications held across the workforce — granted by authorities, with expiry tracking."
+            description="Skills and certifications across the workforce, with expiry tracking."
           />
           <TrainingSubNav active="skills" />
           <TableToolbar>

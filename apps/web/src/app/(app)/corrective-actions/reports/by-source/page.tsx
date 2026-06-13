@@ -105,7 +105,7 @@ export default async function BySourceReport() {
           <CorrectiveActionsSubNav active="by-source" />
           <PageHeader
             title="Corrective actions by source"
-            description="Which incidents, inspections, and audits keep producing CAs — sorted by volume."
+            description="Sources producing the most corrective actions."
             back={{ href: '/corrective-actions', label: 'Back to records' }}
           />
           <div className="flex flex-wrap items-center gap-2 text-xs">

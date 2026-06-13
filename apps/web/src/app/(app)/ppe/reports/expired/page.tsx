@@ -56,10 +56,7 @@ export default async function ExpiredPpeReport({
       header={
         <>
           <PpeSubNav active="reports" />
-          <PageHeader
-            title="Expired PPE"
-            description="Items whose expires-on date has already passed. Treat each row as a removal-from-service candidate."
-          />
+          <PageHeader title="Expired PPE" description="Items past their expiry date." />
           <ReportsSubNav active="expired" />
           <form className="flex items-center gap-2 text-xs" method="get">
             <label className="text-slate-500">Type:</label>

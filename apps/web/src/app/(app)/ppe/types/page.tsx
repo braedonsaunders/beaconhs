@@ -74,7 +74,7 @@ export default async function PpeTypesPage() {
           <PpeSubNav active="types" />
           <PageHeader
             title="PPE types"
-            description="Define the catalog of PPE types your crews stock. Each type carries its own inspection criteria, sizing scheme, and scheduling cadence."
+            description="PPE catalog with criteria, sizing, and cadence per type."
             actions={
               <Link href="/ppe/types/new">
                 <Button>New PPE type</Button>

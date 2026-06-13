@@ -161,7 +161,7 @@ export default async function InspectionTypesPage({
         <>
           <PageHeader
             title="Inspection Types"
-            description="Admin-defined inspection templates. Each type bundles N criteria banks and toggles foreman / customer-signature requirements."
+            description="Inspection templates with criteria banks and signature requirements."
             actions={
               <Link href="/inspections/types?drawer=new-type" scroll={false}>
                 <Button>New type</Button>

@@ -16,7 +16,7 @@ export function PageContainer({
 }) {
   return (
     <div className="app-scroll flex-1 overflow-y-auto">
-      <FadeInBody className={cn('mx-auto w-full max-w-screen-2xl p-6', className)}>
+      <FadeInBody className={cn('mx-auto w-full max-w-screen-2xl p-4 sm:p-6', className)}>
         {children}
       </FadeInBody>
     </div>
@@ -42,11 +42,13 @@ export function ListPageLayout({
 }) {
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="border-b border-slate-200 bg-white px-4 pt-4 pb-3 sm:px-6 dark:border-slate-800 dark:bg-slate-900">
-        <FadeInHeader className="mx-auto max-w-screen-2xl space-y-2.5">{header}</FadeInHeader>
+      <div className="border-b border-slate-200 bg-white px-3 pt-3 pb-2.5 sm:px-6 sm:pt-4 sm:pb-3 dark:border-slate-800 dark:bg-slate-900">
+        <FadeInHeader className="mx-auto max-w-screen-2xl space-y-2 sm:space-y-2.5">
+          {header}
+        </FadeInHeader>
       </div>
       <div className="app-scroll min-h-0 flex-1 overflow-y-auto">
-        <FadeInBody className="mx-auto max-w-screen-2xl p-4 sm:p-6">{children}</FadeInBody>
+        <FadeInBody className="mx-auto max-w-screen-2xl p-3 sm:p-6">{children}</FadeInBody>
       </div>
     </div>
   )
@@ -80,14 +82,14 @@ export function DetailPageLayout({
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="border-b border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-        <FadeInHeader className="mx-auto max-w-screen-2xl px-4 pt-4 sm:px-6 sm:pt-5">
+        <FadeInHeader className="mx-auto max-w-screen-2xl px-3 pt-3 sm:px-6 sm:pt-5">
           {header}
-          {alerts ? <div className="mt-3 space-y-2">{alerts}</div> : null}
-          {subtabs ? <div className="mt-3 sm:mt-4">{subtabs}</div> : null}
+          {alerts ? <div className="mt-2.5 space-y-2 sm:mt-3">{alerts}</div> : null}
+          {subtabs ? <div className="mt-2.5 sm:mt-4">{subtabs}</div> : null}
         </FadeInHeader>
       </div>
       <div className="app-scroll min-h-0 flex-1 overflow-y-auto">
-        <FadeInBody className={cn('mx-auto max-w-screen-2xl p-4 sm:p-6', className)}>
+        <FadeInBody className={cn('mx-auto max-w-screen-2xl p-3 sm:p-6', className)}>
           {children}
         </FadeInBody>
       </div>

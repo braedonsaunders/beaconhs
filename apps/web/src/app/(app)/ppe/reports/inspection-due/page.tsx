@@ -81,7 +81,7 @@ export default async function InspectionDuePpeReport({
           <PpeSubNav active="reports" />
           <PageHeader
             title="PPE inspection due"
-            description="Items whose next inspection (pre-use cadence or annual recertification) falls inside the chosen window."
+            description="Items with inspections due in the selected window."
           />
           <ReportsSubNav active="inspection-due" />
           <div className="flex items-center gap-2 text-xs">

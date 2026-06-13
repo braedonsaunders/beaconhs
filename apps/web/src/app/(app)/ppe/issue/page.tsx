@@ -151,10 +151,7 @@ export default async function PpeIssuePage() {
       header={
         <>
           <PpeSubNav active="issue" />
-          <PageHeader
-            title="Issue PPE"
-            description="Hand a piece of PPE to a person, accept returns, log replacements, and discard items pulled from service."
-          />
+          <PageHeader title="Issue PPE" description="Issue, return, replace, or discard PPE." />
           <div className="flex flex-wrap gap-2 text-xs">
             <Badge variant="secondary">{inStockCount} in stock</Badge>
             <Badge variant="warning">{issuedCount} currently issued</Badge>

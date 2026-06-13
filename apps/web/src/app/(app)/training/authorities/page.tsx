@@ -103,7 +103,7 @@ export default async function TrainingAuthoritiesPage({
         <>
           <PageHeader
             title="Skill Authorities"
-            description="Bodies that issue training credentials — unions, regulators, internal QC. Each authority owns one or more skill types."
+            description="Credential-issuing bodies and their skill types."
             actions={
               <Link href="/training/authorities/new">
                 <Button>New authority</Button>

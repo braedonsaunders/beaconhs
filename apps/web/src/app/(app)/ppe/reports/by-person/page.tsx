@@ -57,10 +57,7 @@ export default async function PpeByPersonReport() {
       header={
         <>
           <PpeSubNav active="reports" />
-          <PageHeader
-            title="PPE by person"
-            description="Roster of who currently holds what. One section per person who has at least one issued item."
-          />
+          <PageHeader title="PPE by person" description="Current PPE holdings by person." />
           <ReportsSubNav active="by-person" />
           <div className="flex items-center gap-2 text-xs">
             <Badge variant="secondary">{peopleWithPpe} people</Badge>

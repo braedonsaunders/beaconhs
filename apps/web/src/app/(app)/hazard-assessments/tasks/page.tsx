@@ -217,7 +217,7 @@ export default async function TaskLibraryPage({
           <HazidSubNav pathname="/hazard-assessments/tasks" />
           <PageHeader
             title="Task library"
-            description="Reusable task templates with default hazards / controls. Crews pull these into a job-specific assessment and tweak per-site."
+            description="Reusable task templates with default hazards and controls."
             actions={
               <Link href="/hazard-assessments/tasks?drawer=new-task" scroll={false}>
                 <Button>New task</Button>

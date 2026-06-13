@@ -28,15 +28,18 @@ export function PageHeader({
           ← {back.label}
         </UiLink>
       ) : null}
-      {/* Phones stack title → description → actions; sm+ keeps the classic
-          one-row header with a truncating title. */}
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
+      {/* Phones stack title → actions and drop the description (vertical
+          space is precious); sm+ keeps the classic one-row header with a
+          truncating title and the description below it. */}
+      <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
         <div className="min-w-0 space-y-1">
           <h1 className="text-xl font-semibold text-slate-900 sm:truncate sm:text-2xl dark:text-slate-100">
             {title}
           </h1>
           {description ? (
-            <p className="text-sm text-slate-500 dark:text-slate-400">{description}</p>
+            <p className="hidden text-sm text-slate-500 sm:block dark:text-slate-400">
+              {description}
+            </p>
           ) : null}
         </div>
         {actions ? (

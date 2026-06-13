@@ -212,7 +212,7 @@ export default async function InspectionRecordsPage({
         <>
           <PageHeader
             title="Inspections"
-            description="Pass / fail / N-A criterion inspections recorded against an inspection type. Each record carries per-question photos, severity, customer signature, and auto-spawned corrective actions."
+            description="Completed inspections with results, signatures, and follow-up actions."
             actions={
               <div className="flex items-center gap-2">
                 <Link href={buildExportHref('/inspections/export.csv', sp)}>

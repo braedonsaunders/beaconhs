@@ -144,7 +144,7 @@ export default async function HazardTypesPage({
           <HazidSubNav pathname="/hazard-assessments/hazards/types" />
           <PageHeader
             title="Hazard types"
-            description="Categorical buckets (mechanical, chemical, electrical…) for organizing the hazard bank. Color is shown alongside hazards in the assessment editor."
+            description="Categories for organizing the hazard bank."
             actions={
               <Link href="/hazard-assessments/hazards/types?drawer=new-hazard-type" scroll={false}>
                 <Button>New hazard type</Button>

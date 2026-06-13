@@ -198,7 +198,7 @@ export default async function HazardSetsPage({
           <HazidSubNav pathname="/hazard-assessments/hazards/sets" />
           <PageHeader
             title="Hazard sets"
-            description="Bundles of related hazards that can be added to an assessment in one click. Assessment types can pin a default set so new assessments preload it."
+            description="Hazard bundles added to an assessment in one click."
             actions={
               <Link href="/hazard-assessments/hazards/sets?drawer=new-hazard-set" scroll={false}>
                 <Button>New hazard set</Button>

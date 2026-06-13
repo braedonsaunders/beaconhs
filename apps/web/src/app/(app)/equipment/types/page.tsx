@@ -165,7 +165,7 @@ export default async function EquipmentTypesPage() {
           <EquipmentSubNav active="types" />
           <PageHeader
             title="Equipment types"
-            description="Group equipment items by type. Each type may set a default inspection schedule, oil-change interval, and pre-use form template."
+            description="Equipment groupings with default schedules and templates."
           />
         </>
       }
