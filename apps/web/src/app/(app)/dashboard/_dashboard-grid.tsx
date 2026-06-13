@@ -68,7 +68,7 @@ export function DashboardGrid({
   const router = useRouter()
   const containerRef = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(1024)
-  const [isPhone, setIsPhone] = useState(false)
+  const [viewport, setViewport] = useState<'phone' | 'tablet' | 'desktop'>('desktop')
   const [layout, setLayout] = useState<LayoutWidget[]>(initialLayout.widgets)
   const [saving, setSaving] = useState(false)
   const [resetting, setResetting] = useState(false)
@@ -76,15 +76,22 @@ export function DashboardGrid({
   const baselineRef = useRef(JSON.stringify(initialLayout.widgets))
   const dirty = useMemo(() => JSON.stringify(layout) !== baselineRef.current, [layout])
 
-  // Phones get a stacked flow instead of the drag grid (see early return
-  // below) — the saved desktop geometry forces fixed row heights that waste
-  // space and clip content at a single column.
+  // Below lg the saved 12-col desktop geometry maps badly onto the drag
+  // grid's smaller column counts (staircase layouts, dead zones, fixed row
+  // heights clipping content). Phones get a stacked flow; tablets a 2-col
+  // masonry — both in saved reading order with natural heights. The drag
+  // grid only ever renders at desktop widths, where the geometry is native.
   useLayoutEffect(() => {
-    const mq = window.matchMedia('(max-width: 639px)')
-    const apply = () => setIsPhone(mq.matches)
+    const phone = window.matchMedia('(max-width: 639px)')
+    const tablet = window.matchMedia('(max-width: 1023px)')
+    const apply = () => setViewport(phone.matches ? 'phone' : tablet.matches ? 'tablet' : 'desktop')
     apply()
-    mq.addEventListener('change', apply)
-    return () => mq.removeEventListener('change', apply)
+    phone.addEventListener('change', apply)
+    tablet.addEventListener('change', apply)
+    return () => {
+      phone.removeEventListener('change', apply)
+      tablet.removeEventListener('change', apply)
+    }
   }, [])
 
   // Measure container width via ResizeObserver — required by RGL v2.
@@ -202,14 +209,25 @@ export function DashboardGrid({
     [mode],
   )
 
-  // Stacked phone layout: widgets in saved reading order with natural
-  // heights — no fixed rows, no inner scrollbars, no dead space.
-  if (mode === 'view' && isPhone) {
+  // Phone: single stacked flow. Tablet: 2-col masonry. Natural heights in
+  // saved reading order — no fixed rows, no inner scrollbars, no dead space.
+  if (mode === 'view' && viewport !== 'desktop') {
     const ordered = [...layout].sort((a, b) => a.y - b.y || a.x - b.x)
+    if (viewport === 'phone') {
+      return (
+        <div className="space-y-4">
+          {ordered.map((w) => (
+            <div key={w.id}>{nodes[w.id] ?? null}</div>
+          ))}
+        </div>
+      )
+    }
     return (
-      <div className="space-y-4">
+      <div className="columns-2 gap-4">
         {ordered.map((w) => (
-          <div key={w.id}>{nodes[w.id] ?? null}</div>
+          <div key={w.id} className="mb-4 break-inside-avoid">
+            {nodes[w.id] ?? null}
+          </div>
         ))}
       </div>
     )

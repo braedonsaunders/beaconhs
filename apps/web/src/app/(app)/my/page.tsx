@@ -13,18 +13,11 @@ import {
   GraduationCap,
   ListChecks,
   Radiation,
+  ShieldCheck,
   User,
 } from 'lucide-react'
 import { and, count, eq, gte, isNull, lte, or, sql, type SQL } from 'drizzle-orm'
-import {
-  Badge,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  PageHeader,
-} from '@beaconhs/ui'
+import { Badge, cn, PageHeader } from '@beaconhs/ui'
 import {
   correctiveActions,
   documentAcknowledgments,
@@ -38,19 +31,55 @@ import {
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
+import { personCompliance } from '../compliance/_hub'
 
 export const metadata = { title: 'Workspace' }
 export const dynamic = 'force-dynamic'
+
+// Every tile gets its own hue so the wall reads at a glance; urgency is
+// carried by the hint badge, not the tile colour.
+type Tone = 'rose' | 'amber' | 'teal' | 'violet' | 'sky' | 'emerald' | 'indigo'
+
+const TONES: Record<Tone, { chip: string; ghost: string }> = {
+  rose: {
+    chip: 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300',
+    ghost: 'text-rose-500/10 dark:text-rose-400/15',
+  },
+  amber: {
+    chip: 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300',
+    ghost: 'text-amber-500/10 dark:text-amber-400/15',
+  },
+  teal: {
+    chip: 'bg-teal-100 text-teal-700 dark:bg-teal-950/60 dark:text-teal-300',
+    ghost: 'text-teal-500/10 dark:text-teal-400/15',
+  },
+  violet: {
+    chip: 'bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300',
+    ghost: 'text-violet-500/10 dark:text-violet-400/15',
+  },
+  sky: {
+    chip: 'bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300',
+    ghost: 'text-sky-500/10 dark:text-sky-400/15',
+  },
+  emerald: {
+    chip: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300',
+    ghost: 'text-emerald-500/10 dark:text-emerald-400/15',
+  },
+  indigo: {
+    chip: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300',
+    ghost: 'text-indigo-500/10 dark:text-indigo-400/15',
+  },
+}
 
 type Tile = {
   href: string
   label: string
   description: string
   icon: typeof User
+  tone: Tone
   count?: number
   hint?: string
-  // Optional accent so urgent tiles (overdue tasks etc) stand out.
-  accent?: 'amber' | 'red' | 'teal'
+  hintVariant?: 'destructive' | 'warning' | 'success' | 'secondary'
 }
 
 export default async function MyLandingPage() {
@@ -211,6 +240,7 @@ export default async function MyLandingPage() {
     }
 
     return {
+      personId,
       incidents: await incidentsPromise,
       hazardAssessments: await hazardAssessmentsPromise,
       openTasks: await openTasksPromise,
@@ -223,35 +253,46 @@ export default async function MyLandingPage() {
     }
   })
 
+  // Outstanding compliance assigned to this person (obligations scoreboard).
+  const complianceRows = counts.personId ? await personCompliance(ctx, counts.personId) : []
+  const complianceOutstanding = complianceRows.filter((r) => r.status !== 'completed').length
+  const complianceUrgent = complianceRows.filter(
+    (r) => r.status === 'overdue' || r.status === 'expiring',
+  ).length
+
   const tiles: Tile[] = [
     {
-      href: '/my/incidents',
-      label: 'My incidents',
-      description: 'Incidents you reported.',
-      icon: AlertTriangle,
-      count: counts.incidents,
-    },
-    {
-      href: '/my/hazard-assessments',
-      label: 'My assessments',
-      description: 'Hazard assessments you started.',
-      icon: Radiation,
-      count: counts.hazardAssessments,
+      href: '/compliance/mine',
+      label: 'Compliance',
+      description: 'Obligations assigned to you.',
+      icon: ShieldCheck,
+      tone: 'indigo',
+      count: complianceOutstanding,
+      hint:
+        complianceUrgent > 0
+          ? `${complianceUrgent} overdue`
+          : complianceOutstanding > 0
+            ? 'outstanding'
+            : 'all clear',
+      hintVariant:
+        complianceUrgent > 0 ? 'destructive' : complianceOutstanding > 0 ? 'warning' : 'success',
     },
     {
       href: '/my/tasks',
-      label: 'My tasks',
+      label: 'Tasks',
       description: 'Open corrective actions assigned to you.',
       icon: ListChecks,
+      tone: 'teal',
       count: counts.openTasks,
       hint: counts.overdueTasks > 0 ? `${counts.overdueTasks} overdue` : undefined,
-      accent: counts.overdueTasks > 0 ? 'red' : counts.openTasks > 0 ? 'amber' : undefined,
+      hintVariant: counts.overdueTasks > 0 ? 'destructive' : undefined,
     },
     {
       href: '/my/training',
-      label: 'My training',
-      description: 'Courses, records, upcoming expirations, and assignments.',
+      label: 'Training',
+      description: 'Records, expirations, and assignments.',
       icon: GraduationCap,
+      tone: 'violet',
       count: counts.trainingRecords,
       hint:
         counts.trainingExpiring > 0
@@ -259,29 +300,47 @@ export default async function MyLandingPage() {
           : counts.trainingAssigned > 0
             ? `${counts.trainingAssigned} assigned`
             : undefined,
-      accent: counts.trainingExpiring > 0 ? 'amber' : undefined,
-    },
-    {
-      href: '/my/inspections',
-      label: 'My inspections',
-      description: 'Inspection records you carried out.',
-      icon: ClipboardList,
-      count: counts.inspections,
+      hintVariant: counts.trainingExpiring > 0 ? 'warning' : 'secondary',
     },
     {
       href: '/my/acknowledgments',
-      label: 'My acknowledgments',
-      description: 'Documents you have read and signed.',
+      label: 'Acknowledgments',
+      description: 'Documents to read and sign.',
       icon: CheckCircle2,
-      hint:
-        counts.docsOutstanding > 0 ? `${counts.docsOutstanding} outstanding` : 'None outstanding',
-      accent: counts.docsOutstanding > 0 ? 'amber' : 'teal',
+      tone: 'emerald',
+      count: counts.docsOutstanding,
+      hint: counts.docsOutstanding > 0 ? 'to acknowledge' : 'all clear',
+      hintVariant: counts.docsOutstanding > 0 ? 'warning' : 'success',
+    },
+    {
+      href: '/my/incidents',
+      label: 'Incidents',
+      description: 'Incidents you reported.',
+      icon: AlertTriangle,
+      tone: 'rose',
+      count: counts.incidents,
+    },
+    {
+      href: '/my/hazard-assessments',
+      label: 'Assessments',
+      description: 'Hazard assessments you started.',
+      icon: Radiation,
+      tone: 'amber',
+      count: counts.hazardAssessments,
+    },
+    {
+      href: '/my/inspections',
+      label: 'Inspections',
+      description: 'Inspection records you carried out.',
+      icon: ClipboardList,
+      tone: 'sky',
+      count: counts.inspections,
     },
   ]
 
   return (
     <PageContainer>
-      <div className="space-y-6">
+      <div className="space-y-5">
         <PageHeader
           title="Workspace"
           description={
@@ -291,57 +350,53 @@ export default async function MyLandingPage() {
           }
         />
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {tiles.map((tile) => (
-            <Link key={tile.href} href={tile.href as any} className="group block">
-              <Card className="h-full transition-shadow group-hover:shadow-md">
-                <CardHeader className="flex-row items-start gap-3 pb-2">
-                  <div
-                    className={
-                      tile.accent === 'red'
-                        ? 'flex h-9 w-9 items-center justify-center rounded-md bg-red-100 text-red-700'
-                        : tile.accent === 'amber'
-                          ? 'flex h-9 w-9 items-center justify-center rounded-md bg-amber-100 text-amber-700'
-                          : tile.accent === 'teal'
-                            ? 'flex h-9 w-9 items-center justify-center rounded-md bg-teal-100 text-teal-700'
-                            : 'flex h-9 w-9 items-center justify-center rounded-md bg-slate-100 text-slate-600'
-                    }
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
+          {tiles.map((tile) => {
+            const tone = TONES[tile.tone]
+            return (
+              <Link
+                key={tile.href}
+                href={tile.href as never}
+                className="group relative block overflow-hidden rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md sm:p-4 dark:border-slate-800 dark:bg-slate-900"
+              >
+                {/* oversized ghost icon bleeding off the corner */}
+                <tile.icon
+                  aria-hidden
+                  strokeWidth={1.5}
+                  className={cn(
+                    'pointer-events-none absolute -right-4 -bottom-5 h-24 w-24 -rotate-12 transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-6',
+                    tone.ghost,
+                  )}
+                />
+                <div className="relative">
+                  <span
+                    className={cn(
+                      'inline-flex h-8 w-8 items-center justify-center rounded-lg',
+                      tone.chip,
+                    )}
                   >
-                    <tile.icon size={18} />
+                    <tile.icon size={16} />
+                  </span>
+                  {typeof tile.count === 'number' ? (
+                    <div className="mt-2 text-2xl font-semibold text-slate-900 tabular-nums dark:text-slate-100">
+                      {tile.count.toLocaleString()}
+                    </div>
+                  ) : null}
+                  <div className="mt-0.5 truncate text-sm font-medium text-slate-800 dark:text-slate-100">
+                    {tile.label}
                   </div>
-                  <div className="flex-1">
-                    <CardTitle className="text-base">{tile.label}</CardTitle>
-                    <CardDescription>{tile.description}</CardDescription>
-                  </div>
-                </CardHeader>
-                <CardContent className="pt-1">
-                  <div className="flex items-baseline gap-2">
-                    {typeof tile.count === 'number' ? (
-                      <span className="text-2xl font-semibold text-slate-900 tabular-nums">
-                        {tile.count}
-                      </span>
-                    ) : null}
-                    {tile.hint ? (
-                      <Badge
-                        variant={
-                          tile.accent === 'red'
-                            ? 'destructive'
-                            : tile.accent === 'amber'
-                              ? 'warning'
-                              : tile.accent === 'teal'
-                                ? 'success'
-                                : 'secondary'
-                        }
-                        className="font-normal"
-                      >
-                        {tile.hint}
-                      </Badge>
-                    ) : null}
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
+                  <p className="mt-0.5 hidden truncate text-xs text-slate-500 sm:block dark:text-slate-400">
+                    {tile.description}
+                  </p>
+                  {tile.hint ? (
+                    <Badge variant={tile.hintVariant ?? 'secondary'} className="mt-2 font-normal">
+                      {tile.hint}
+                    </Badge>
+                  ) : null}
+                </div>
+              </Link>
+            )
+          })}
         </div>
       </div>
     </PageContainer>
