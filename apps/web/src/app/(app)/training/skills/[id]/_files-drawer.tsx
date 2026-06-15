@@ -114,13 +114,17 @@ export function SkillFilesDrawer({
             onChange={(e) => setLabel(e.currentTarget.value)}
             placeholder={uploaded?.filename ?? 'e.g. 2026 ticket scan'}
           />
-          <p className="text-[11px] text-slate-500 dark:text-slate-400">Defaults to the filename if left blank.</p>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400">
+            Defaults to the filename if left blank.
+          </p>
         </div>
         <div className="space-y-1.5">
           <Label>File</Label>
           {uploaded ? (
-            <div className="flex items-center justify-between rounded-md border border-emerald-200 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-2 text-sm">
-              <span className="font-medium text-emerald-900 dark:text-emerald-200">{uploaded.filename}</span>
+            <div className="flex items-center justify-between rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm dark:bg-emerald-500/10">
+              <span className="font-medium text-emerald-900 dark:text-emerald-200">
+                {uploaded.filename}
+              </span>
               <button
                 type="button"
                 onClick={() => setUploaded(null)}

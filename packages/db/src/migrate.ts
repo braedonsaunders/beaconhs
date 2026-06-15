@@ -36,15 +36,19 @@ async function reconcileFlattenedBaseline(db: ReturnType<typeof drizzle>) {
   )?.exists
 
   if (migrationTable) {
-    const current = firstRow<{ hash: string; created_at: number }>(
+    // If the flattened baseline is already recorded, the tracker is valid —
+    // whether the DB sits exactly at the baseline OR has later migrations
+    // (0001, 0002, …) applied on top. Trust it and let migrate() apply only
+    // what's unapplied. Resetting here would re-run every post-baseline
+    // migration from scratch and fail on the first non-idempotent CREATE.
+    // Only the genuinely stale/empty-tracker case (baseline hash absent) falls
+    // through to the reset below.
+    const baselineRecorded = firstRow<{ ok: number }>(
       await db.execute(sql`
-        select hash, created_at
-        from "drizzle"."__drizzle_migrations"
-        order by created_at desc
-        limit 1
+        select 1 as ok from "drizzle"."__drizzle_migrations" where hash = ${baseline.hash} limit 1
       `),
     )
-    if (current?.hash === baseline.hash && Number(current.created_at) === baseline.when) return
+    if (baselineRecorded) return
   }
 
   console.log('▶ Existing schema detected; reconciling flattened drizzle baseline…')

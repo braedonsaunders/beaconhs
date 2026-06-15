@@ -99,7 +99,9 @@ export function BuilderSurfaceHeader({
         {icon}
         {title}
       </div>
-      {actions ? <div className="ml-auto flex flex-wrap items-center gap-1.5">{actions}</div> : null}
+      {actions ? (
+        <div className="ml-auto flex flex-wrap items-center gap-1.5">{actions}</div>
+      ) : null}
     </div>
   )
 }
