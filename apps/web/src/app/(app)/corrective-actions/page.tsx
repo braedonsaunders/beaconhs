@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ListChecks } from 'lucide-react'
-import { and, asc, count, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm'
 import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
 import { correctiveActions, orgUnits, tenantUsers, user } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
@@ -16,7 +16,17 @@ import { RecordsTable, type RecordsTableRow } from './_records-table'
 
 export const metadata = { title: 'Corrective Actions' }
 
-const SORTS = ['reference', 'title', 'severity', 'status', 'due_on', 'assigned_on'] as const
+const SORTS = [
+  'reference',
+  'title',
+  'severity',
+  'status',
+  'due_on',
+  'assigned_on',
+  'created_at',
+  'owner',
+  'site',
+] as const
 
 const STATUS_OPTIONS = [
   { value: 'open', label: 'Open' },
@@ -40,12 +50,15 @@ export default async function CorrectiveActionsPage({
 }) {
   const sp = await searchParams
   const params = parseListParams(sp, {
-    sort: 'due_on',
-    dir: 'asc',
+    sort: 'created_at',
+    dir: 'desc',
     perPage: 25,
     allowedSorts: SORTS,
   })
-  const statusFilter = pickString(sp.status)
+  // Default the list to open actions; an explicit `status=all` (the "All
+  // statuses" chip) clears the default so every status shows.
+  const statusRaw = pickString(sp.status) ?? 'open'
+  const statusFilter = statusRaw === 'all' ? undefined : statusRaw
   const sevFilter = pickString(sp.severity)
   const ctx = await requireRequestContext()
 
@@ -64,38 +77,25 @@ export default async function CorrectiveActionsPage({
     if (sevFilter) filters.push(eq(correctiveActions.severity, sevFilter as any))
     const whereClause = filters.length > 0 ? and(...filters) : undefined
 
+    const dirFn = params.dir === 'asc' ? asc : desc
     const orderBy =
       params.sort === 'reference'
-        ? [
-            params.dir === 'asc'
-              ? asc(correctiveActions.reference)
-              : desc(correctiveActions.reference),
-          ]
+        ? [dirFn(correctiveActions.reference)]
         : params.sort === 'title'
-          ? [params.dir === 'asc' ? asc(correctiveActions.title) : desc(correctiveActions.title)]
+          ? [dirFn(correctiveActions.title)]
           : params.sort === 'severity'
-            ? [
-                params.dir === 'asc'
-                  ? asc(correctiveActions.severity)
-                  : desc(correctiveActions.severity),
-              ]
+            ? [dirFn(correctiveActions.severity)]
             : params.sort === 'status'
-              ? [
-                  params.dir === 'asc'
-                    ? asc(correctiveActions.status)
-                    : desc(correctiveActions.status),
-                ]
-              : params.sort === 'assigned_on'
-                ? [
-                    params.dir === 'asc'
-                      ? asc(correctiveActions.assignedOn)
-                      : desc(correctiveActions.assignedOn),
-                  ]
-                : [
-                    params.dir === 'asc'
-                      ? asc(correctiveActions.dueOn)
-                      : desc(correctiveActions.dueOn),
-                  ]
+              ? [dirFn(correctiveActions.status)]
+              : params.sort === 'due_on'
+                ? [dirFn(correctiveActions.dueOn)]
+                : params.sort === 'assigned_on'
+                  ? [dirFn(correctiveActions.assignedOn)]
+                  : params.sort === 'owner'
+                    ? [dirFn(sql`coalesce(${user.name}, ${tenantUsers.displayName})`)]
+                    : params.sort === 'site'
+                      ? [dirFn(orgUnits.name)]
+                      : [dirFn(correctiveActions.createdAt)]
 
     const [tot] = await tx.select({ c: count() }).from(correctiveActions).where(whereClause)
     const data = await tx
@@ -140,6 +140,7 @@ export default async function CorrectiveActionsPage({
     severity: ca.severity,
     status: ca.status,
     dueOn: ca.dueOn,
+    createdAt: new Date(ca.createdAt).toISOString().slice(0, 10),
     siteName: site?.name ?? null,
     ownerName: ownerAccount?.name ?? owner?.displayName ?? null,
     locked: ca.locked,
@@ -155,7 +156,12 @@ export default async function CorrectiveActionsPage({
             description="Standalone records, linkable to incidents, inspections, audits, JSHAs."
             actions={
               <div className="flex items-center gap-2">
-                <Link href={buildExportHref('/corrective-actions/export.csv', sp)}>
+                <Link
+                  href={buildExportHref('/corrective-actions/export.csv', {
+                    ...sp,
+                    status: statusRaw,
+                  })}
+                >
                   <Button variant="outline">Export CSV</Button>
                 </Link>
                 <Link href="/corrective-actions/new">
@@ -171,6 +177,8 @@ export default async function CorrectiveActionsPage({
               currentParams={sp}
               paramKey="status"
               label="Status"
+              allLabel="All statuses"
+              defaultValue="open"
               options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
             />
             <FilterChips
@@ -201,7 +209,15 @@ export default async function CorrectiveActionsPage({
         />
       ) : (
         <>
-          <RecordsTable rows={tableRows} owners={owners} today={today} />
+          <RecordsTable
+            rows={tableRows}
+            owners={owners}
+            today={today}
+            basePath="/corrective-actions"
+            currentParams={sp}
+            sort={params.sort}
+            dir={params.dir}
+          />
           <Pagination
             basePath="/corrective-actions"
             currentParams={sp}

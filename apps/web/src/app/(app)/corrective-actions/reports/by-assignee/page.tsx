@@ -126,10 +126,10 @@ export default async function ByAssigneeReport() {
           description="Create some corrective actions and assign owners to populate this scorecard."
         />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase">
+              <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-400">
                 <th className="px-4 py-2">Owner</th>
                 <th className="px-4 py-2 text-right">Total</th>
                 <th className="px-4 py-2 text-right">Open</th>
@@ -141,11 +141,14 @@ export default async function ByAssigneeReport() {
                 <th className="px-4 py-2 text-right">Avg days to close</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {stats.map((s) => (
-                <tr key={s.ownerId ?? 'unassigned'} className="hover:bg-slate-50/50">
+                <tr
+                  key={s.ownerId ?? 'unassigned'}
+                  className="hover:bg-slate-50/50 dark:hover:bg-slate-800/60"
+                >
                   <td className="px-4 py-2">
-                    <div className="text-slate-900">
+                    <div className="text-slate-900 dark:text-slate-100">
                       {s.ownerId ? (
                         <Link
                           href={`/corrective-actions?owner=${s.ownerId}` as any}
@@ -154,11 +157,15 @@ export default async function ByAssigneeReport() {
                           {s.ownerName}
                         </Link>
                       ) : (
-                        <span className="font-medium text-slate-600">Unassigned</span>
+                        <span className="font-medium text-slate-600 dark:text-slate-400">
+                          Unassigned
+                        </span>
                       )}
                     </div>
                     {s.ownerEmail ? (
-                      <div className="text-xs text-slate-500">{s.ownerEmail}</div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">
+                        {s.ownerEmail}
+                      </div>
                     ) : null}
                   </td>
                   <td className="px-4 py-2 text-right font-mono text-xs">{s.total}</td>
@@ -167,18 +174,18 @@ export default async function ByAssigneeReport() {
                   <td className="px-4 py-2 text-right font-mono text-xs">
                     {s.pendingVerification}
                   </td>
-                  <td className="px-4 py-2 text-right font-mono text-xs text-emerald-700">
+                  <td className="px-4 py-2 text-right font-mono text-xs text-emerald-700 dark:text-emerald-400">
                     {s.closed}
                   </td>
                   <td
-                    className={`px-4 py-2 text-right font-mono text-xs ${s.overdue > 0 ? 'font-medium text-red-700' : ''}`}
+                    className={`px-4 py-2 text-right font-mono text-xs ${s.overdue > 0 ? 'font-medium text-red-700 dark:text-red-400' : ''}`}
                   >
                     {s.overdue}
                   </td>
                   <td className="px-4 py-2 text-right">
                     <CompletionBar value={s.completionRate} />
                   </td>
-                  <td className="px-4 py-2 text-right font-mono text-xs text-slate-700">
+                  <td className="px-4 py-2 text-right font-mono text-xs text-slate-700 dark:text-slate-300">
                     {s.avgDaysToClose ?? '—'}
                   </td>
                 </tr>
@@ -196,10 +203,10 @@ function CompletionBar({ value }: { value: number }) {
   const tone = pct >= 80 ? 'bg-emerald-500' : pct >= 50 ? 'bg-amber-500' : 'bg-red-500'
   return (
     <div className="inline-flex w-32 items-center gap-2">
-      <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
+      <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
         <div className={`h-full ${tone}`} style={{ width: `${pct}%` }} />
       </div>
-      <span className="font-mono text-xs text-slate-600">{pct}%</span>
+      <span className="font-mono text-xs text-slate-600 dark:text-slate-400">{pct}%</span>
     </div>
   )
 }

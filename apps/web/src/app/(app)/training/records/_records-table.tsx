@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { CreditCard, FileText, Printer } from 'lucide-react'
 import { Badge } from '@beaconhs/ui'
+import { SortTh } from '@/components/sortable-th'
 import { CredentialDownloadButton } from '@/components/credential-download-button'
 import type { CredentialOutput } from '@/lib/credential-designs'
 import { BulkTrainingRecordsBar, HeaderSelectAll, SelectionCheckbox } from './_bulk-bar'
@@ -26,9 +27,17 @@ export type TrainingRecordsTableRow = {
 export function TrainingRecordsTable({
   rows,
   credentialOutputs,
+  basePath,
+  currentParams,
+  sort,
+  dir,
 }: {
   rows: TrainingRecordsTableRow[]
   credentialOutputs: CredentialOutput[]
+  basePath: string
+  currentParams: Record<string, string | string[] | undefined>
+  sort: string
+  dir: 'asc' | 'desc'
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
@@ -55,59 +64,82 @@ export function TrainingRecordsTable({
     setSelected(new Set())
   }
 
+  const sortProps = { basePath, currentParams, sort, dir }
+
   return (
     <>
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase">
+            <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-400">
               <th className="w-8 px-3 py-2">
                 <HeaderSelectAll allSelected={allSelected} onToggleAll={toggleAll} />
               </th>
-              <th className="px-3 py-2">Employee</th>
-              <th className="px-3 py-2">Course</th>
-              <th className="px-3 py-2">Completed</th>
-              <th className="px-3 py-2">Expires</th>
-              <th className="px-3 py-2">Source</th>
+              <SortTh column="employee" {...sortProps}>
+                Employee
+              </SortTh>
+              <SortTh column="course" {...sortProps}>
+                Course
+              </SortTh>
+              <SortTh column="completed_on" {...sortProps}>
+                Completed
+              </SortTh>
+              <SortTh column="expires_on" {...sortProps}>
+                Expires
+              </SortTh>
+              <SortTh column="source" {...sortProps}>
+                Source
+              </SortTh>
               <th className="px-3 py-2 text-right">Credential</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
             {rows.map((r) => {
               const isSelected = selected.has(r.id)
               const expiryClass =
                 r.daysToExpiry === null
                   ? 'text-slate-400'
                   : r.daysToExpiry < 0
-                    ? 'text-red-700 font-medium'
+                    ? 'text-red-700 dark:text-red-400 font-medium'
                     : r.daysToExpiry <= 30
-                      ? 'text-amber-700 font-medium'
-                      : 'text-slate-700'
+                      ? 'text-amber-700 dark:text-amber-400 font-medium'
+                      : 'text-slate-700 dark:text-slate-300'
               return (
-                <tr key={r.id} className={isSelected ? 'bg-teal-50/40' : 'hover:bg-slate-50/50'}>
+                <tr
+                  key={r.id}
+                  className={
+                    isSelected
+                      ? 'bg-teal-50/40 dark:bg-teal-500/10'
+                      : 'hover:bg-slate-50/50 dark:hover:bg-slate-800/60'
+                  }
+                >
                   <td className="w-8 px-3 py-2">
                     <SelectionCheckbox id={r.id} selected={isSelected} onToggle={toggleOne} />
                   </td>
                   <td className="px-3 py-2">
                     <Link
                       href={`/training/transcripts/${r.personId}` as any}
-                      className="font-medium text-slate-900 hover:underline"
+                      className="font-medium text-slate-900 hover:underline dark:text-slate-100"
                     >
                       {r.personLastName}, {r.personFirstName}
                     </Link>
                     {r.personEmployeeNo ? (
-                      <div className="text-xs text-slate-500">#{r.personEmployeeNo}</div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">
+                        #{r.personEmployeeNo}
+                      </div>
                     ) : null}
                   </td>
                   <td className="px-3 py-2">
                     <Link
                       href={`/training/records/${r.id}` as any}
-                      className="text-slate-700 hover:underline"
+                      className="text-slate-700 hover:underline dark:text-slate-300"
                     >
                       <span className="font-mono text-xs">{r.courseCode}</span> · {r.courseName}
                     </Link>
                   </td>
-                  <td className="px-3 py-2 text-slate-600 tabular-nums">{r.completedOn ?? '—'}</td>
+                  <td className="px-3 py-2 text-slate-600 tabular-nums dark:text-slate-400">
+                    {r.completedOn ?? '—'}
+                  </td>
                   <td className={`px-3 py-2 tabular-nums ${expiryClass}`}>
                     {r.expiresOn ?? 'Never'}
                     {r.daysToExpiry !== null && r.daysToExpiry < 0 ? (
@@ -116,7 +148,9 @@ export function TrainingRecordsTable({
                       </Badge>
                     ) : null}
                   </td>
-                  <td className="px-3 py-2 text-xs text-slate-600">{r.source.replace('_', ' ')}</td>
+                  <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-400">
+                    {r.source.replace('_', ' ')}
+                  </td>
                   <td className="px-3 py-2">
                     <div className="flex justify-end gap-1.5">
                       {credentialOutputs.map((output) => (

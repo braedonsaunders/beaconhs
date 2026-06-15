@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
+import { SortTh } from '@/components/sortable-th'
 import { SeverityBadge, StatusBadge } from './_badges'
 import {
   BulkIncidentsBar,
@@ -25,9 +26,17 @@ export type IncidentsTableRow = {
 export function IncidentsRecordsTable({
   rows,
   classifications,
+  basePath,
+  currentParams,
+  sort,
+  dir,
 }: {
   rows: IncidentsTableRow[]
   classifications: IncidentClassificationOption[]
+  basePath: string
+  currentParams: Record<string, string | string[] | undefined>
+  sort: string
+  dir: 'asc' | 'desc'
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
@@ -54,41 +63,66 @@ export function IncidentsRecordsTable({
     setSelected(new Set())
   }
 
+  const sortProps = { basePath, currentParams, sort, dir }
+
   return (
     <>
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase">
+            <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-400">
               <th className="w-8 px-3 py-2">
                 <HeaderSelectAll allSelected={allSelected} onToggleAll={toggleAll} />
               </th>
-              <th className="px-3 py-2">Ref</th>
-              <th className="px-3 py-2">Occurred</th>
-              <th className="px-3 py-2">Type</th>
-              <th className="px-3 py-2">Severity</th>
-              <th className="px-3 py-2">Status</th>
-              <th className="px-3 py-2">Title</th>
-              <th className="px-3 py-2">Site</th>
+              <SortTh column="reference" {...sortProps}>
+                Ref
+              </SortTh>
+              <SortTh column="occurred_at" {...sortProps}>
+                Occurred
+              </SortTh>
+              <SortTh column="type" {...sortProps}>
+                Type
+              </SortTh>
+              <SortTh column="severity" {...sortProps}>
+                Severity
+              </SortTh>
+              <SortTh column="status" {...sortProps}>
+                Status
+              </SortTh>
+              <SortTh column="title" {...sortProps}>
+                Title
+              </SortTh>
+              <SortTh column="site" {...sortProps}>
+                Site
+              </SortTh>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
             {rows.map((r) => {
               const isSelected = selected.has(r.id)
               return (
-                <tr key={r.id} className={isSelected ? 'bg-teal-50/40' : 'hover:bg-slate-50/50'}>
+                <tr
+                  key={r.id}
+                  className={
+                    isSelected
+                      ? 'bg-teal-50/40 dark:bg-teal-500/10'
+                      : 'hover:bg-slate-50/50 dark:hover:bg-slate-800/60'
+                  }
+                >
                   <td className="w-8 px-3 py-2">
                     <SelectionCheckbox id={r.id} selected={isSelected} onToggle={toggleOne} />
                   </td>
-                  <td className="px-3 py-2 font-mono text-xs text-slate-600">
+                  <td className="px-3 py-2 font-mono text-xs text-slate-600 dark:text-slate-400">
                     <Link href={`/incidents/${r.id}` as any} className="hover:underline">
                       {r.reference}
                     </Link>
                   </td>
-                  <td className="px-3 py-2 text-slate-600">
+                  <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
                     {new Date(r.occurredAt).toLocaleDateString()}
                   </td>
-                  <td className="px-3 py-2 text-slate-600">{r.type.replace(/_/g, ' ')}</td>
+                  <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
+                    {r.type.replace(/_/g, ' ')}
+                  </td>
                   <td className="px-3 py-2">
                     <SeverityBadge severity={r.severity} />
                   </td>
@@ -98,12 +132,14 @@ export function IncidentsRecordsTable({
                   <td className="px-3 py-2">
                     <Link
                       href={`/incidents/${r.id}` as any}
-                      className="font-medium text-slate-900 hover:underline"
+                      className="font-medium text-slate-900 hover:underline dark:text-slate-100"
                     >
                       {r.title}
                     </Link>
                   </td>
-                  <td className="px-3 py-2 text-slate-600">{r.siteName ?? '—'}</td>
+                  <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
+                    {r.siteName ?? '—'}
+                  </td>
                 </tr>
               )
             })}

@@ -16,7 +16,7 @@ import { IncidentsRecordsTable, type IncidentsTableRow } from './_records-table'
 
 export const metadata = { title: 'Incidents' }
 
-const SORTS = ['reference', 'occurred_at', 'severity', 'status', 'type'] as const
+const SORTS = ['reference', 'occurred_at', 'severity', 'status', 'type', 'title', 'site'] as const
 
 const TYPE_OPTIONS = [
   { value: 'injury', label: 'Injury' },
@@ -67,16 +67,21 @@ export default async function IncidentsPage({
     if (statusFilter) filters.push(eq(incidents.status, statusFilter as any))
     const whereClause = and(...filters)
 
+    const dirFn = params.dir === 'asc' ? asc : desc
     const orderBy =
       params.sort === 'reference'
-        ? [params.dir === 'asc' ? asc(incidents.reference) : desc(incidents.reference)]
+        ? [dirFn(incidents.reference)]
         : params.sort === 'severity'
-          ? [params.dir === 'asc' ? asc(incidents.severity) : desc(incidents.severity)]
+          ? [dirFn(incidents.severity)]
           : params.sort === 'status'
-            ? [params.dir === 'asc' ? asc(incidents.status) : desc(incidents.status)]
+            ? [dirFn(incidents.status)]
             : params.sort === 'type'
-              ? [params.dir === 'asc' ? asc(incidents.type) : desc(incidents.type)]
-              : [params.dir === 'asc' ? asc(incidents.occurredAt) : desc(incidents.occurredAt)]
+              ? [dirFn(incidents.type)]
+              : params.sort === 'title'
+                ? [dirFn(incidents.title)]
+                : params.sort === 'site'
+                  ? [dirFn(orgUnits.name)]
+                  : [dirFn(incidents.occurredAt)]
 
     const [tot] = await tx.select({ c: count() }).from(incidents).where(whereClause)
     const data = await tx
@@ -176,7 +181,14 @@ export default async function IncidentsPage({
         />
       ) : (
         <>
-          <IncidentsRecordsTable rows={tableRows} classifications={classifications} />
+          <IncidentsRecordsTable
+            rows={tableRows}
+            classifications={classifications}
+            basePath="/incidents"
+            currentParams={sp}
+            sort={params.sort}
+            dir={params.dir}
+          />
           <Pagination
             basePath="/incidents"
             currentParams={sp}

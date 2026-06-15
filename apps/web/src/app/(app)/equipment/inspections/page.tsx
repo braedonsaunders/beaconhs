@@ -150,7 +150,7 @@ export default async function EquipmentInspectionsPage() {
               </Link>
             }
           />
-          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
             <Badge variant="warning">{overduePreUse.length} pre-use overdue</Badge>
             <Badge variant="destructive">{overdueAnnual.length} annual overdue</Badge>
             <Badge variant="secondary">{recent.length} recent completions</Badge>
@@ -168,14 +168,20 @@ export default async function EquipmentInspectionsPage() {
         <div className="space-y-8">
           <section className="space-y-3">
             <div className="flex items-center gap-2">
-              <AlertTriangle size={18} className="text-amber-600" />
-              <h2 className="text-base font-semibold text-slate-900">Pre-use inspections due</h2>
-              <span className="text-xs text-slate-500">({overduePreUse.length})</span>
+              <AlertTriangle size={18} className="text-amber-600 dark:text-amber-400" />
+              <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                Pre-use inspections due
+              </h2>
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                ({overduePreUse.length})
+              </span>
             </div>
             {overduePreUse.length === 0 ? (
-              <p className="text-sm text-slate-500">No pre-use checks outstanding.</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                No pre-use checks outstanding.
+              </p>
             ) : (
-              <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+              <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -198,9 +204,13 @@ export default async function EquipmentInspectionsPage() {
                             </Link>
                           </TableCell>
                           <TableCell className="font-medium">{item.name}</TableCell>
-                          <TableCell className="text-slate-600">{type?.name ?? '—'}</TableCell>
-                          <TableCell className="text-slate-600">{site?.name ?? '—'}</TableCell>
-                          <TableCell className="text-slate-600">
+                          <TableCell className="text-slate-600 dark:text-slate-400">
+                            {type?.name ?? '—'}
+                          </TableCell>
+                          <TableCell className="text-slate-600 dark:text-slate-400">
+                            {site?.name ?? '—'}
+                          </TableCell>
+                          <TableCell className="text-slate-600 dark:text-slate-400">
                             {item.lastPreUseInspectionAt
                               ? new Date(item.lastPreUseInspectionAt).toLocaleString()
                               : 'never'}
@@ -215,7 +225,7 @@ export default async function EquipmentInspectionsPage() {
                             ) : (
                               <Link
                                 href={browseLink(item) as any}
-                                className="text-xs text-teal-700 hover:underline"
+                                className="text-xs text-teal-700 hover:underline dark:text-teal-400"
                               >
                                 Browse templates →
                               </Link>
@@ -232,18 +242,20 @@ export default async function EquipmentInspectionsPage() {
 
           <section className="space-y-3">
             <div className="flex items-center gap-2">
-              <AlertTriangle size={18} className="text-red-600" />
-              <h2 className="text-base font-semibold text-slate-900">
+              <AlertTriangle size={18} className="text-red-600 dark:text-red-400" />
+              <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
                 Annual / monthly inspections due
               </h2>
-              <span className="text-xs text-slate-500">({overdueAnnual.length})</span>
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                ({overdueAnnual.length})
+              </span>
             </div>
             {overdueAnnual.length === 0 ? (
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-slate-500 dark:text-slate-400">
                 No annual or scheduled inspections outstanding.
               </p>
             ) : (
-              <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+              <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -267,12 +279,16 @@ export default async function EquipmentInspectionsPage() {
                             </Link>
                           </TableCell>
                           <TableCell className="font-medium">{item.name}</TableCell>
-                          <TableCell className="text-slate-600">{type?.name ?? '—'}</TableCell>
-                          <TableCell className="text-slate-600">{site?.name ?? '—'}</TableCell>
-                          <TableCell className="text-slate-600">
+                          <TableCell className="text-slate-600 dark:text-slate-400">
+                            {type?.name ?? '—'}
+                          </TableCell>
+                          <TableCell className="text-slate-600 dark:text-slate-400">
+                            {site?.name ?? '—'}
+                          </TableCell>
+                          <TableCell className="text-slate-600 dark:text-slate-400">
                             {fmtDate(item.lastAnnualInspectionOn)}
                           </TableCell>
-                          <TableCell className="text-red-700">
+                          <TableCell className="text-red-700 dark:text-red-400">
                             {fmtDate(item.nextAnnualInspectionDue)}
                           </TableCell>
                           <TableCell>
@@ -285,7 +301,7 @@ export default async function EquipmentInspectionsPage() {
                             ) : (
                               <Link
                                 href={browseLink(item) as any}
-                                className="text-xs text-teal-700 hover:underline"
+                                className="text-xs text-teal-700 hover:underline dark:text-teal-400"
                               >
                                 Browse templates →
                               </Link>
@@ -303,15 +319,17 @@ export default async function EquipmentInspectionsPage() {
           <section className="space-y-3">
             <div className="flex items-center gap-2">
               <ClipboardCheck size={18} className="text-teal-600" />
-              <h2 className="text-base font-semibold text-slate-900">
+              <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
                 Recent inspection completions
               </h2>
-              <span className="text-xs text-slate-500">({recent.length})</span>
+              <span className="text-xs text-slate-500 dark:text-slate-400">({recent.length})</span>
             </div>
             {recent.length === 0 ? (
-              <p className="text-sm text-slate-500">No equipment inspections submitted.</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                No equipment inspections submitted.
+              </p>
             ) : (
-              <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+              <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -326,7 +344,7 @@ export default async function EquipmentInspectionsPage() {
                     {recent.map(({ response, template, item }) => (
                       <TableRow key={response.id}>
                         <TableCell className="font-medium">{template.name}</TableCell>
-                        <TableCell className="text-slate-600">
+                        <TableCell className="text-slate-600 dark:text-slate-400">
                           {item ? (
                             <Link href={`/equipment/${item.id}`} className="hover:underline">
                               <span className="font-mono text-xs">{item.assetTag}</span> ·{' '}
@@ -347,7 +365,7 @@ export default async function EquipmentInspectionsPage() {
                             {response.status.replace('_', ' ')}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-slate-600">
+                        <TableCell className="text-slate-600 dark:text-slate-400">
                           {response.submittedAt
                             ? new Date(response.submittedAt).toLocaleString()
                             : '—'}
@@ -355,7 +373,7 @@ export default async function EquipmentInspectionsPage() {
                         <TableCell>
                           <Link
                             href={`/forms/responses/${response.id}`}
-                            className="text-xs text-teal-700 hover:underline"
+                            className="text-xs text-teal-700 hover:underline dark:text-teal-400"
                           >
                             View →
                           </Link>

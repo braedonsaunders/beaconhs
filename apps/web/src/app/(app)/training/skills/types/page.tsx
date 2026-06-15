@@ -113,7 +113,10 @@ export default async function TrainingSkillsPage({
             title="Skills"
             description="Skill types managed under their issuing authority."
             actions={
-              <Link href="/training/authorities" className="text-sm text-teal-700 hover:underline">
+              <Link
+                href="/training/authorities"
+                className="text-sm text-teal-700 hover:underline dark:text-teal-400"
+              >
                 Manage authorities →
               </Link>
             }
@@ -166,12 +169,12 @@ export default async function TrainingSkillsPage({
                   <TableCell>
                     <Link
                       href={`/training/skills/types/${type.id}`}
-                      className="font-medium text-slate-900 hover:underline"
+                      className="font-medium text-slate-900 hover:underline dark:text-slate-100"
                     >
                       {type.name}
                     </Link>
                   </TableCell>
-                  <TableCell className="text-slate-600">
+                  <TableCell className="text-slate-600 dark:text-slate-400">
                     <Link
                       href={`/training/authorities/${authority.id}`}
                       className="hover:underline"
@@ -179,13 +182,15 @@ export default async function TrainingSkillsPage({
                       {authority.name}
                     </Link>
                   </TableCell>
-                  <TableCell className="font-mono text-xs text-slate-600">
+                  <TableCell className="font-mono text-xs text-slate-600 dark:text-slate-400">
                     {type.code ?? '—'}
                   </TableCell>
-                  <TableCell className="text-slate-600">
+                  <TableCell className="text-slate-600 dark:text-slate-400">
                     {type.validForMonths ? `${type.validForMonths} months` : 'No expiry'}
                   </TableCell>
-                  <TableCell className="text-slate-600 tabular-nums">{holders}</TableCell>
+                  <TableCell className="text-slate-600 tabular-nums dark:text-slate-400">
+                    {holders}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

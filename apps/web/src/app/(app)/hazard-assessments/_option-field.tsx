@@ -28,7 +28,7 @@ function Chip({
       disabled={disabled}
       aria-pressed={active}
       className={cn(
-        'rounded-full border px-2.5 py-1 text-xs font-medium transition-colors',
+        'inline-flex min-h-9 items-center rounded-full border px-3.5 text-sm font-medium transition-colors sm:min-h-0 sm:px-2.5 sm:py-1 sm:text-xs',
         active
           ? 'border-teal-600 bg-teal-600 text-white'
           : 'border-slate-300 bg-white text-slate-700 hover:border-teal-400 hover:text-teal-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300',

@@ -280,3 +280,57 @@
   break-before: page;
   page-break-before: always;
 }
+
+/* --- Form-fill ergonomics (jobsite / touch) ----------------------------- */
+/* Glove-friendly controls on phones (coarse pointer OR a narrow viewport) —
+   desktop mouse users keep the denser default. Scoped to `.ff-surface`, which
+   wraps the form-fill renderer and the native hazard-assessment page. */
+@media (pointer: coarse), (max-width: 640px) {
+  .ff-surface input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  .ff-surface select,
+  .ff-surface textarea {
+    min-height: 48px;
+  }
+  .ff-surface textarea {
+    min-height: 96px;
+  }
+  .ff-surface input[type='checkbox'],
+  .ff-surface input[type='radio'] {
+    width: 1.4rem;
+    height: 1.4rem;
+  }
+  .ff-surface .ff-chip {
+    min-height: 52px;
+  }
+}
+
+/* Sticky footer: clear the iOS home-gesture bar. */
+.ff-footer {
+  padding-bottom: max(env(safe-area-inset-bottom), 0.75rem);
+}
+
+/* High-contrast, large-type "field mode" for direct sunlight. Applies at any
+   size once toggled — it's a deliberate readability boost, not responsive. */
+.ff-surface.field-mode input,
+.ff-surface.field-mode select,
+.ff-surface.field-mode textarea {
+  border-width: 2px;
+  border-color: rgb(71 85 105);
+  font-size: 17px;
+}
+.ff-surface.field-mode .ff-chip {
+  border-width: 2px;
+  font-weight: 600;
+}
+.ff-surface.field-mode label {
+  color: rgb(15 23 42);
+  font-weight: 600;
+}
+.dark .ff-surface.field-mode input,
+.dark .ff-surface.field-mode select,
+.dark .ff-surface.field-mode textarea {
+  border-color: rgb(148 163 184);
+}
+.dark .ff-surface.field-mode label {
+  color: rgb(241 245 249);
+}

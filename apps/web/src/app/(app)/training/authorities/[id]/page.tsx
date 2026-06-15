@@ -177,8 +177,12 @@ export default async function AuthorityDetailPage({
             />
             {authority.notes ? (
               <div className="mt-4">
-                <div className="text-xs tracking-wide text-slate-500 uppercase">Notes</div>
-                <p className="mt-1 text-sm whitespace-pre-wrap text-slate-700">{authority.notes}</p>
+                <div className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
+                  Notes
+                </div>
+                <p className="mt-1 text-sm whitespace-pre-wrap text-slate-700 dark:text-slate-300">
+                  {authority.notes}
+                </p>
               </div>
             ) : null}
           </CardContent>
@@ -214,18 +218,20 @@ export default async function AuthorityDetailPage({
                         <TableCell>
                           <Link
                             href={`/training/skills/types/${type.id}`}
-                            className="font-medium text-slate-900 hover:underline"
+                            className="font-medium text-slate-900 hover:underline dark:text-slate-100"
                           >
                             {type.name}
                           </Link>
                         </TableCell>
-                        <TableCell className="font-mono text-xs text-slate-600">
+                        <TableCell className="font-mono text-xs text-slate-600 dark:text-slate-400">
                           {type.code ?? '—'}
                         </TableCell>
-                        <TableCell className="text-slate-600">
+                        <TableCell className="text-slate-600 dark:text-slate-400">
                           {type.validForMonths ? `${type.validForMonths} months` : 'No expiry'}
                         </TableCell>
-                        <TableCell className="text-slate-600 tabular-nums">{holderCount}</TableCell>
+                        <TableCell className="text-slate-600 tabular-nums dark:text-slate-400">
+                          {holderCount}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -244,7 +250,7 @@ export default async function AuthorityDetailPage({
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div className="space-y-1.5 sm:col-span-2">
                     <Label>
-                      Name <span className="text-red-600">*</span>
+                      Name <span className="text-red-600 dark:text-red-400">*</span>
                     </Label>
                     <Input name="name" required placeholder="e.g. Pressure Welding Certification" />
                   </div>

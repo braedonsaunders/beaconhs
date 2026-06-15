@@ -512,9 +512,11 @@ export async function openAssessmentApp(formData: FormData) {
   revalidateAssessment(assessmentId)
   const preSubmit = target.status === 'draft' || target.status === 'in_progress'
   if (preSubmit) {
-    const returnTo = encodeURIComponent(`/hazard-assessments/${assessmentId}#section-apps`)
+    // Open the app inline as a full-screen sheet over the assessment (the
+    // `?app=` param the detail page renders) instead of navigating away to the
+    // standalone fill page. The worker never leaves the assessment.
     redirect(
-      `/forms/templates/${target.templateId}/fill?responseId=${target.responseId}&returnTo=${returnTo}` as any,
+      `/hazard-assessments/${assessmentId}?app=${typeAppId}&responseId=${target.responseId}#section-apps` as any,
     )
   }
   redirect(`/forms/responses/${target.responseId}` as any)
@@ -568,13 +570,19 @@ export async function updateTextField(formData: FormData) {
     'projectOrgUnitId',
     'supervisorPersonId',
     'occurredAt',
+    'assessmentTypeId',
   ])
   if (!ALLOWED.has(field)) throw new Error('Field not allowed')
 
   // Booleans (toggles) come in as "on" / "off" / "true" / "false".
   const BOOLS = new Set(['wah'])
   // Nullable FK columns — empty string clears them.
-  const NULLABLE_IDS = new Set(['siteOrgUnitId', 'projectOrgUnitId', 'supervisorPersonId'])
+  const NULLABLE_IDS = new Set([
+    'siteOrgUnitId',
+    'projectOrgUnitId',
+    'supervisorPersonId',
+    'assessmentTypeId',
+  ])
   const DATES = new Set(['occurredAt'])
   // Array-string fields (multi-select text) come comma-separated.
   const ARRAYS = new Set(['wahCommunication', 'wahAccess', 'wahEquipment'])
@@ -1561,7 +1569,6 @@ export async function updateHazardLibrary(formData: FormData) {
     summary: 'Updated hazard',
   })
   revalidatePath('/hazard-assessments/hazards')
-  revalidatePath(`/hazard-assessments/hazards/${id}`)
 }
 
 export async function deleteHazardLibrary(formData: FormData) {
@@ -1753,7 +1760,6 @@ export async function createAssessmentType(formData: FormData) {
         hasHazards: flag('hasHazards'),
         hasPPE: flag('hasPPE'),
         hasQuestions: flag('hasQuestions'),
-        hasWAH: flag('hasWAH'),
         defaultHazardSetId: nullable(formData.get('defaultHazardSetId')),
         availableToGroupIds,
       })
@@ -1766,199 +1772,6 @@ export async function createAssessmentType(formData: FormData) {
     summary: `Created assessment type "${name}"`,
   })
   revalidatePath('/hazard-assessments/types')
-}
-
-export async function updateAssessmentType(formData: FormData) {
-  const ctx = await ctxWithTenant()
-  assertCanManageModule(ctx, 'hazid')
-  const id = String(formData.get('id') ?? '')
-  const flag = (k: string) => formData.get(k) === 'on' || formData.get(k) === 'true'
-  const updates: Record<string, unknown> = {
-    name: String(formData.get('name') ?? '').trim() || undefined,
-    description: nullable(formData.get('description')),
-    style: String(formData.get('style') ?? '').trim() || undefined,
-    hasTasks: flag('hasTasks'),
-    hasHazards: flag('hasHazards'),
-    hasPPE: flag('hasPPE'),
-    hasQuestions: flag('hasQuestions'),
-    hasWAH: flag('hasWAH'),
-    defaultHazardSetId: nullable(formData.get('defaultHazardSetId')),
-    availableToGroupIds: String(formData.get('availableToGroupIds') ?? '')
-      .split(',')
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0),
-  }
-  await ctx.db((tx) =>
-    tx.update(hazidAssessmentTypes).set(updates).where(eq(hazidAssessmentTypes.id, id)),
-  )
-  await recordAudit(ctx, {
-    entityType: 'hazid_assessment_type',
-    entityId: id,
-    action: 'update',
-    summary: 'Updated assessment type',
-  })
-  revalidatePath('/hazard-assessments/types')
-  revalidatePath(`/hazard-assessments/types/${id}`)
-}
-
-export async function deleteAssessmentType(formData: FormData) {
-  const ctx = await ctxWithTenant()
-  assertCanManageModule(ctx, 'hazid')
-  const id = String(formData.get('id') ?? '')
-  await ctx.db((tx) =>
-    tx
-      .update(hazidAssessmentTypes)
-      .set({ deletedAt: new Date() })
-      .where(eq(hazidAssessmentTypes.id, id)),
-  )
-  await recordAudit(ctx, {
-    entityType: 'hazid_assessment_type',
-    entityId: id,
-    action: 'delete',
-    summary: 'Deleted assessment type',
-  })
-  revalidatePath('/hazard-assessments/types')
-  revalidatePath(`/hazard-assessments/types/${id}`)
-}
-
-// Type-default PPE rows
-export async function addTypePPE(formData: FormData) {
-  const ctx = await ctxWithTenant()
-  assertCanManageModule(ctx, 'hazid')
-  const typeId = String(formData.get('typeId') ?? '')
-  const name = String(formData.get('name') ?? '').trim()
-  if (!typeId || !name) throw new Error('Missing fields')
-  await ctx.db(async (tx) => {
-    const [maxOrder] = await tx
-      .select({ m: max(hazidAssessmentTypePPE.entityOrder) })
-      .from(hazidAssessmentTypePPE)
-      .where(eq(hazidAssessmentTypePPE.typeId, typeId))
-    await tx.insert(hazidAssessmentTypePPE).values({
-      tenantId: ctx.tenantId,
-      typeId,
-      name,
-      description: nullable(formData.get('description')),
-      required: formData.get('required') === 'on' || formData.get('required') === 'true',
-      entityOrder: (maxOrder?.m ?? 0) + 1,
-    })
-  })
-  revalidatePath(`/hazard-assessments/types/${typeId}`)
-}
-
-export async function deleteTypePPE(formData: FormData) {
-  const ctx = await ctxWithTenant()
-  assertCanManageModule(ctx, 'hazid')
-  const id = String(formData.get('id') ?? '')
-  const typeId = String(formData.get('typeId') ?? '')
-  await ctx.db((tx) => tx.delete(hazidAssessmentTypePPE).where(eq(hazidAssessmentTypePPE.id, id)))
-  revalidatePath(`/hazard-assessments/types/${typeId}`)
-}
-
-// Type-default questions
-export async function addTypeQuestion(formData: FormData) {
-  const ctx = await ctxWithTenant()
-  assertCanManageModule(ctx, 'hazid')
-  const typeId = String(formData.get('typeId') ?? '')
-  const question = String(formData.get('question') ?? '').trim()
-  if (!typeId || !question) throw new Error('Missing fields')
-  const questionType = String(formData.get('questionType') ?? 'yes_no') as
-    | 'yes_no'
-    | 'text'
-    | 'multi_select'
-  const requiresYes = formData.get('requiresYes') === 'on' || formData.get('requiresYes') === 'true'
-  const answersRaw = String(formData.get('answers') ?? '').trim()
-  const answers = answersRaw
-    ? answersRaw
-        .split('\n')
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0)
-    : []
-  await ctx.db(async (tx) => {
-    const [maxOrder] = await tx
-      .select({ m: max(hazidAssessmentTypeQuestions.entityOrder) })
-      .from(hazidAssessmentTypeQuestions)
-      .where(eq(hazidAssessmentTypeQuestions.typeId, typeId))
-    await tx.insert(hazidAssessmentTypeQuestions).values({
-      tenantId: ctx.tenantId,
-      typeId,
-      question,
-      questionType,
-      answers,
-      requiresYes,
-      entityOrder: (maxOrder?.m ?? 0) + 1,
-    })
-  })
-  revalidatePath(`/hazard-assessments/types/${typeId}`)
-}
-
-export async function deleteTypeQuestion(formData: FormData) {
-  const ctx = await ctxWithTenant()
-  assertCanManageModule(ctx, 'hazid')
-  const id = String(formData.get('id') ?? '')
-  const typeId = String(formData.get('typeId') ?? '')
-  await ctx.db((tx) =>
-    tx.delete(hazidAssessmentTypeQuestions).where(eq(hazidAssessmentTypeQuestions.id, id)),
-  )
-  revalidatePath(`/hazard-assessments/types/${typeId}`)
-}
-
-// Type-attached builder apps
-function appKeyFromLabel(label: string) {
-  return label
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9_\-\s]/g, '')
-    .replace(/\s+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .slice(0, 60)
-}
-
-export async function addTypeApp(formData: FormData) {
-  const ctx = await ctxWithTenant()
-  assertCanManageModule(ctx, 'hazid')
-  const typeId = String(formData.get('typeId') ?? '')
-  const templateId = String(formData.get('templateId') ?? '')
-  if (!typeId || !templateId) throw new Error('Missing fields')
-
-  await ctx.db(async (tx) => {
-    const [template] = await tx
-      .select({ name: formTemplates.name, description: formTemplates.description })
-      .from(formTemplates)
-      .where(eq(formTemplates.id, templateId))
-      .limit(1)
-    if (!template) throw new Error('Form app not found')
-
-    const label = String(formData.get('label') ?? '').trim() || template.name
-    const key = appKeyFromLabel(String(formData.get('key') ?? '').trim() || label)
-    if (!key) throw new Error('App key is required')
-
-    const [maxOrder] = await tx
-      .select({ m: max(hazidAssessmentTypeApps.entityOrder) })
-      .from(hazidAssessmentTypeApps)
-      .where(eq(hazidAssessmentTypeApps.typeId, typeId))
-    await tx.insert(hazidAssessmentTypeApps).values({
-      tenantId: ctx.tenantId,
-      typeId,
-      templateId,
-      key,
-      label,
-      description: nullable(formData.get('description')) ?? template.description,
-      required: formData.get('required') === 'on' || formData.get('required') === 'true',
-      autoCreate: formData.get('autoCreate') === 'on' || formData.get('autoCreate') === 'true',
-      entityOrder: (maxOrder?.m ?? 0) + 1,
-      config: {},
-    })
-  })
-  revalidatePath(`/hazard-assessments/types/${typeId}`)
-}
-
-export async function deleteTypeApp(formData: FormData) {
-  const ctx = await ctxWithTenant()
-  assertCanManageModule(ctx, 'hazid')
-  const id = String(formData.get('id') ?? '')
-  const typeId = String(formData.get('typeId') ?? '')
-  await ctx.db((tx) => tx.delete(hazidAssessmentTypeApps).where(eq(hazidAssessmentTypeApps.id, id)))
-  revalidatePath(`/hazard-assessments/types/${typeId}`)
 }
 
 // ------------------------------------------------------------------

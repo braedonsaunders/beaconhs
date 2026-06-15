@@ -12,6 +12,7 @@
 
 import { relations } from 'drizzle-orm'
 import {
+  boolean,
   date,
   index,
   integer,
@@ -27,7 +28,7 @@ import { id, timestamps } from './_helpers'
 import { tenants, tenantUsers } from './core'
 import { people } from './org'
 import { correctiveActions } from './corrective-actions'
-import { inspectionBankCriteria } from './inspection-bank'
+import { inspectionBankResponseType } from './inspection-bank'
 import { inspectionRecords } from './inspection-records'
 
 export const inspectionCriterionAnswer = pgEnum('inspection_criterion_answer', [
@@ -53,14 +54,19 @@ export const inspectionRecordCriteria = pgTable(
     recordId: uuid('record_id')
       .notNull()
       .references(() => inspectionRecords.id, { onDelete: 'cascade' }),
-    // FK to the original bank criterion — `text` and `requiresPhoto` flags can
-    // be looked up there. We DON'T snapshot the text on the row so that
-    // wording corrections on the bank flow through automatically; if the bank
-    // is deleted we still keep the row + a snapshot of the question text.
-    criterionId: uuid('criterion_id').references(() => inspectionBankCriteria.id, {
-      onDelete: 'set null',
-    }),
+    // Provenance pointer to the inspection_type_criteria row this was
+    // materialised from. No FK — the row is fully snapshot-driven (text +
+    // group + response config below), so editing or deleting the source
+    // criterion never rewrites historical answers.
+    criterionId: uuid('criterion_id'),
     questionTextSnapshot: text('question_text_snapshot').notNull(),
+    // Snapshot of the source criterion's group + response config at
+    // materialisation time, so the fill view renders section headers and the
+    // correct response controls without joining back to the live type.
+    groupLabelSnapshot: text('group_label_snapshot'),
+    responseType: inspectionBankResponseType('response_type').default('pass_fail_na').notNull(),
+    requiresPhoto: boolean('requires_photo').default(false).notNull(),
+    requiresComment: boolean('requires_comment').default(false).notNull(),
     sequence: integer('sequence').notNull(),
 
     // Inspector's response — null until they pick one.
@@ -118,10 +124,6 @@ export const inspectionRecordCriteriaRelations = relations(inspectionRecordCrite
   record: one(inspectionRecords, {
     fields: [inspectionRecordCriteria.recordId],
     references: [inspectionRecords.id],
-  }),
-  criterion: one(inspectionBankCriteria, {
-    fields: [inspectionRecordCriteria.criterionId],
-    references: [inspectionBankCriteria.id],
   }),
   correctiveAction: one(correctiveActions, {
     fields: [inspectionRecordCriteria.correctiveActionId],

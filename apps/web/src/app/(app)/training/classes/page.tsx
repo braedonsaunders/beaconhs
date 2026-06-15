@@ -189,7 +189,7 @@ export default async function TrainingClassesPage({
                 const attCount = attendeeCounts[row.cls.id] ?? 0
                 return (
                   <TableRow key={row.cls.id}>
-                    <TableCell className="text-slate-600">
+                    <TableCell className="text-slate-600 dark:text-slate-400">
                       <div className="text-sm">{startedAt.toLocaleDateString()}</div>
                       <div className="text-xs text-slate-400">
                         {startedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -198,7 +198,7 @@ export default async function TrainingClassesPage({
                     <TableCell>
                       <Link
                         href={`/training/classes/${row.cls.id}`}
-                        className="font-medium text-slate-900 hover:underline"
+                        className="font-medium text-slate-900 hover:underline dark:text-slate-100"
                       >
                         {row.cls.title}
                       </Link>
@@ -206,12 +206,14 @@ export default async function TrainingClassesPage({
                     <TableCell>
                       <Link
                         href={`/training/courses/${row.course.id}`}
-                        className="text-sm text-teal-700 hover:underline"
+                        className="text-sm text-teal-700 hover:underline dark:text-teal-400"
                       >
                         {row.course.name}
                       </Link>
                     </TableCell>
-                    <TableCell className="text-slate-600">{row.site?.name ?? '—'}</TableCell>
+                    <TableCell className="text-slate-600 dark:text-slate-400">
+                      {row.site?.name ?? '—'}
+                    </TableCell>
                     <TableCell>
                       <Badge variant="outline">
                         {attCount}

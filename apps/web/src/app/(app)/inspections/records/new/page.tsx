@@ -78,7 +78,7 @@ async function createRecord(formData: FormData) {
 
   if (!row) throw new Error('Failed to create inspection record')
 
-  // Materialise per-criterion rows from the type's linked banks
+  // Materialise per-criterion rows from the type's own grouped criteria
   const materialised = await materialiseCriteriaForRecord(ctx, row.id, typeId)
 
   await recordAudit(ctx, {
@@ -155,8 +155,8 @@ export default async function NewInspectionRecordPage({
           <Alert variant="info">
             <AlertTitle>What happens after I submit?</AlertTitle>
             <AlertDescription>
-              We'll create the record in draft state and pre-load every criterion from each bank
-              linked to this type. You'll land on the criteria tab to start answering.
+              We'll create the record in draft state and pre-load every criterion from this type,
+              grouped into its sections. You'll land on the criteria tab to start answering.
               {defaultType.requiresForeman ? (
                 <>
                   <br />

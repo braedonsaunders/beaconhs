@@ -7,6 +7,7 @@ import {
   GetObjectCommand,
   HeadObjectCommand,
   HeadBucketCommand,
+  PutBucketPolicyCommand,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3'
@@ -34,12 +35,45 @@ const client = new S3Client({
 
 export const BUCKET = bucket
 
+// R2 exposes objects through a public bucket / custom domain configured in the
+// dashboard — never via a bucket policy. Every other S3 backend this app runs
+// against (MinIO in dev) must be anonymous-read, because the app links to
+// objects directly with publicUrl() everywhere (inline <img>, file links, …).
+const isR2 = endpoint.includes('r2.cloudflarestorage.com')
+
 /** Idempotently ensure the bucket exists (used in dev/MinIO + by the migration). */
 export async function ensureBucket(): Promise<void> {
   try {
     await client.send(new HeadBucketCommand({ Bucket: bucket }))
   } catch {
     await client.send(new CreateBucketCommand({ Bucket: bucket })).catch(() => {})
+  }
+  await ensurePublicReadPolicy()
+}
+
+/**
+ * Make the bucket anonymously readable (GetObject) so publicUrl() links resolve.
+ * No-op on R2 (public access is domain-configured there). Best-effort: if the
+ * credentials can't set a policy we swallow the error rather than break uploads.
+ */
+export async function ensurePublicReadPolicy(): Promise<void> {
+  if (isR2) return
+  const policy = JSON.stringify({
+    Version: '2012-10-17',
+    Statement: [
+      {
+        Sid: 'PublicRead',
+        Effect: 'Allow',
+        Principal: { AWS: ['*'] },
+        Action: ['s3:GetObject'],
+        Resource: [`arn:aws:s3:::${bucket}/*`],
+      },
+    ],
+  })
+  try {
+    await client.send(new PutBucketPolicyCommand({ Bucket: bucket, Policy: policy }))
+  } catch {
+    // Shared MinIO may forbid policy changes for this key — leave as-is.
   }
 }
 

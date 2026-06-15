@@ -285,7 +285,10 @@ export default async function TrainingRecordPage({
                 {
                   label: 'Person',
                   value: (
-                    <Link href={`/people/${person.id}`} className="text-teal-700 hover:underline">
+                    <Link
+                      href={`/people/${person.id}`}
+                      className="text-teal-700 hover:underline dark:text-teal-400"
+                    >
                       {person.firstName} {person.lastName}
                     </Link>
                   ),
@@ -295,7 +298,7 @@ export default async function TrainingRecordPage({
                   value: (
                     <Link
                       href={`/training/courses/${course.id}`}
-                      className="text-teal-700 hover:underline"
+                      className="text-teal-700 hover:underline dark:text-teal-400"
                     >
                       {course.code} · {course.name}
                     </Link>
@@ -315,7 +318,9 @@ export default async function TrainingRecordPage({
                   <CardTitle>Details</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm whitespace-pre-wrap text-slate-700">{record.details}</p>
+                  <p className="text-sm whitespace-pre-wrap text-slate-700 dark:text-slate-300">
+                    {record.details}
+                  </p>
                 </CardContent>
               </Card>
             ) : null}
@@ -325,13 +330,15 @@ export default async function TrainingRecordPage({
                   <CardTitle>Notes</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm whitespace-pre-wrap text-slate-700">{record.notes}</p>
+                  <p className="text-sm whitespace-pre-wrap text-slate-700 dark:text-slate-300">
+                    {record.notes}
+                  </p>
                 </CardContent>
               </Card>
             ) : null}
 
             <Section title="Renew this training">
-              <p className="mb-3 text-sm text-slate-600">
+              <p className="mb-3 text-sm text-slate-600 dark:text-slate-400">
                 Creates a new training record for the same person and course with a fresh expiry.
                 Useful for refresher courses or external recertification.
               </p>
@@ -373,7 +380,7 @@ export default async function TrainingRecordPage({
 
             {!isRevoked ? (
               <Section title="Revoke this record">
-                <p className="mb-3 text-sm text-slate-600">
+                <p className="mb-3 text-sm text-slate-600 dark:text-slate-400">
                   Marks the record and any active certificates as revoked. Verification pages will
                   return a revoked status. This action is recorded in the audit log.
                 </p>
@@ -412,7 +419,7 @@ export default async function TrainingRecordPage({
                 {credentialOutputs.map((output) => (
                   <div
                     key={output.id}
-                    className="flex min-h-44 flex-col rounded-lg border border-slate-200 bg-white p-4"
+                    className="flex min-h-44 flex-col rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
                   >
                     <div className="flex items-start gap-3">
                       <div
@@ -426,14 +433,18 @@ export default async function TrainingRecordPage({
                         <OutputIcon output={output} size={18} />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="truncate font-semibold text-slate-900">{output.name}</div>
+                        <div className="truncate font-semibold text-slate-900 dark:text-slate-100">
+                          {output.name}
+                        </div>
                         <div className="mt-1">
                           <Badge variant="secondary">{formatLabel(output.format)}</Badge>
                         </div>
                       </div>
                     </div>
-                    <p className="mt-3 line-clamp-2 text-sm text-slate-600">{output.description}</p>
-                    <div className="mt-4 text-xs text-slate-500">
+                    <p className="mt-3 line-clamp-2 text-sm text-slate-600 dark:text-slate-400">
+                      {output.description}
+                    </p>
+                    <div className="mt-4 text-xs text-slate-500 dark:text-slate-400">
                       Opens as a fresh PDF using the current design.
                     </div>
                     <div className="mt-auto pt-4">
@@ -495,15 +506,19 @@ export default async function TrainingRecordPage({
                     {certAttachments.map((a) => (
                       <TableRow key={a.id}>
                         <TableCell className="font-medium">{a.filename}</TableCell>
-                        <TableCell className="text-slate-600">{a.contentType}</TableCell>
-                        <TableCell className="text-slate-600">{humanSize(a.sizeBytes)}</TableCell>
+                        <TableCell className="text-slate-600 dark:text-slate-400">
+                          {a.contentType}
+                        </TableCell>
+                        <TableCell className="text-slate-600 dark:text-slate-400">
+                          {humanSize(a.sizeBytes)}
+                        </TableCell>
                         <TableCell>{new Date(a.createdAt).toLocaleDateString()}</TableCell>
                         <TableCell>
                           <a
                             href={publicUrl(a.r2Key)}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-xs text-teal-700 hover:underline"
+                            className="text-xs text-teal-700 hover:underline dark:text-teal-400"
                           >
                             Open →
                           </a>
@@ -547,7 +562,7 @@ function Field({
     <div className={`space-y-1.5 ${className ?? ''}`}>
       <Label>
         {label}
-        {required ? <span className="text-red-600"> *</span> : null}
+        {required ? <span className="text-red-600 dark:text-red-400"> *</span> : null}
       </Label>
       {children}
     </div>

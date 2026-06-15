@@ -99,7 +99,7 @@ function NewTypeDrawer({
         isPublished,
       })
       if (res.ok) {
-        router.push(`/inspections/types/${res.id}?tab=banks`)
+        router.push(`/inspections/types/${res.id}`)
         router.refresh()
       } else {
         setError(res.error || 'Failed to create inspection type')
@@ -112,7 +112,7 @@ function NewTypeDrawer({
       open={open}
       closeHref={closeHref}
       title="New inspection type"
-      description="Create the shell here, then link criteria banks on the detail page that opens after save."
+      description="Name it here, then build its criteria in the type builder that opens after save."
       size="lg"
       footer={
         <div className="flex justify-end gap-2">
@@ -133,10 +133,10 @@ function NewTypeDrawer({
     >
       <div className="space-y-4">
         <Alert variant="info">
-          <AlertTitle>Two-step</AlertTitle>
+          <AlertTitle>Next: build the checklist</AlertTitle>
           <AlertDescription>
-            Create the shell here, then link the criteria banks (your question pool) on the detail
-            page that opens after save.
+            After saving you'll land in the type builder, where you add questions and sections — or
+            import a saved bank.
           </AlertDescription>
         </Alert>
 

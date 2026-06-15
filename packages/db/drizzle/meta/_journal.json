@@ -15,6 +15,20 @@
       "when": 1781277549271,
       "tag": "0001_aberrant_molten_man",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1781487865487,
+      "tag": "0002_clear_lila_cheney",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1781490972548,
+      "tag": "0003_tough_rafael_vega",
+      "breakpoints": true
     }
   ]
 }

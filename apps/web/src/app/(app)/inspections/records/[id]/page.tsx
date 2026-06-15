@@ -31,7 +31,6 @@ import {
 import {
   attachments,
   correctiveActions,
-  inspectionBankCriteria,
   inspectionRecordAttachments,
   inspectionRecordCriteria,
   inspectionRecords,
@@ -68,6 +67,22 @@ const TABS = ['overview', 'criteria', 'action-taken', 'photos', 'signature', 'ac
 type Tab = (typeof TABS)[number]
 
 const STATUSES = ['draft', 'in_progress', 'submitted', 'closed'] as const
+
+// Bucket already-ordered criteria rows into contiguous runs that share a
+// snapshotted group label, so the fill / action-taken views can render section
+// headers. Rows are materialised in group order, so same-label rows are adjacent.
+function groupCriteriaByLabel<T extends { c: { groupLabelSnapshot: string | null } }>(
+  rows: T[],
+): { label: string | null; rows: T[] }[] {
+  const out: { label: string | null; rows: T[] }[] = []
+  for (const row of rows) {
+    const label = row.c.groupLabelSnapshot ?? null
+    const last = out[out.length - 1]
+    if (last && last.label === label) last.rows.push(row)
+    else out.push({ label, rows: [row] })
+  }
+  return out
+}
 
 // ----------------------------------------------------------------------------
 // Server actions
@@ -582,15 +597,10 @@ export default async function InspectionRecordDetailPage({
     const criteria = await tx
       .select({
         c: inspectionRecordCriteria,
-        bank: inspectionBankCriteria,
         assignee: people,
         ca: correctiveActions,
       })
       .from(inspectionRecordCriteria)
-      .leftJoin(
-        inspectionBankCriteria,
-        eq(inspectionBankCriteria.id, inspectionRecordCriteria.criterionId),
-      )
       .leftJoin(people, eq(people.id, inspectionRecordCriteria.assignedToPersonId))
       .leftJoin(
         correctiveActions,
@@ -645,6 +655,13 @@ export default async function InspectionRecordDetailPage({
   const failRows = criteria.filter((c) => c.c.answer === 'fail')
   const compliantPct =
     total > 0 ? Math.round((passCount / Math.max(1, passCount + failCount)) * 100) : 0
+
+  // Group criteria by their snapshotted section label for the fill view. Rows
+  // are materialised in group order, so same-label rows are already adjacent.
+  const indexById = new Map(criteria.map((row, i) => [row.c.id, i]))
+  const criteriaGroups = groupCriteriaByLabel(criteria)
+  const failGroups = groupCriteriaByLabel(failRows)
+  const multiSection = criteriaGroups.length > 1
 
   const activity =
     active === 'activity' ? await recentActivityForEntity(ctx, 'inspection_record', id, 50) : []
@@ -867,61 +884,75 @@ export default async function InspectionRecordDetailPage({
         ) : null}
 
         {active === 'criteria' ? (
-          <div className="space-y-3">
+          <div className="space-y-5">
             {criteria.length === 0 ? (
               <Alert variant="info">
-                <AlertTitle>No criteria materialised</AlertTitle>
+                <AlertTitle>No criteria</AlertTitle>
                 <AlertDescription>
-                  This record's type has no banks linked. Add some to{' '}
+                  This record's type has no criteria. Add some in{' '}
                   <Link
-                    href={`/inspections/types/${record.typeId}?tab=banks`}
+                    href={`/inspections/types/${record.typeId}`}
                     className="text-teal-700 hover:underline"
                   >
-                    /inspections/types/{record.typeId}
-                  </Link>{' '}
-                  to populate.
+                    the type builder
+                  </Link>
+                  , then start a new inspection.
                 </AlertDescription>
               </Alert>
             ) : null}
-            {criteria.map((row, i) => (
-              <CriterionCard
-                key={row.c.id}
-                rowId={row.c.id}
-                recordId={id}
-                index={i}
-                question={row.c.questionTextSnapshot}
-                answer={row.c.answer}
-                severity={row.c.severity}
-                nonComplianceDescription={row.c.nonComplianceDescription}
-                actionTaken={row.c.actionTaken}
-                compliantNote={row.c.compliantNote}
-                assignedToPersonId={row.c.assignedToPersonId}
-                assignedDueDate={row.c.assignedDueDate}
-                correctedOn={row.c.correctedOn}
-                photoAttachmentIds={row.c.photoAttachmentIds ?? []}
-                correctiveActionRef={row.ca?.reference ?? null}
-                correctiveActionId={row.c.correctiveActionId}
-                requiresPhoto={row.bank?.requiresPhoto ?? false}
-                requiresComment={row.bank?.requiresComment ?? false}
-                assignee={
-                  row.assignee
-                    ? {
-                        id: row.assignee.id,
-                        name: `${row.assignee.firstName} ${row.assignee.lastName}`,
-                      }
-                    : null
-                }
-                peopleList={peopleList.map((p) => ({
-                  id: p.id,
-                  name: `${p.firstName} ${p.lastName}`,
-                  hint: p.employeeNo ?? undefined,
-                }))}
-                criterionPhotoMap={criterionPhotoMap}
-                locked={record.locked}
-                allowCompliantNotes={type.allowCompliantNotes}
-                recordOccurredAt={record.occurredAt}
-                editHref={`${basePath}?tab=${active}&drawer=edit-criterion&id=${row.c.id}`}
-              />
+            {criteriaGroups.map((group, gi) => (
+              <div key={group.label ?? `__ungrouped_${gi}`} className="space-y-3">
+                {group.label || multiSection ? (
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-semibold tracking-wide text-slate-700 uppercase dark:text-slate-300">
+                      {group.label ?? 'Ungrouped'}
+                    </h3>
+                    <span className="text-xs text-slate-400">
+                      {group.rows.length} item{group.rows.length === 1 ? '' : 's'}
+                    </span>
+                  </div>
+                ) : null}
+                {group.rows.map((row) => (
+                  <CriterionCard
+                    key={row.c.id}
+                    rowId={row.c.id}
+                    recordId={id}
+                    index={indexById.get(row.c.id) ?? 0}
+                    question={row.c.questionTextSnapshot}
+                    answer={row.c.answer}
+                    severity={row.c.severity}
+                    nonComplianceDescription={row.c.nonComplianceDescription}
+                    actionTaken={row.c.actionTaken}
+                    compliantNote={row.c.compliantNote}
+                    assignedToPersonId={row.c.assignedToPersonId}
+                    assignedDueDate={row.c.assignedDueDate}
+                    correctedOn={row.c.correctedOn}
+                    photoAttachmentIds={row.c.photoAttachmentIds ?? []}
+                    correctiveActionRef={row.ca?.reference ?? null}
+                    correctiveActionId={row.c.correctiveActionId}
+                    requiresPhoto={row.c.requiresPhoto ?? false}
+                    requiresComment={row.c.requiresComment ?? false}
+                    assignee={
+                      row.assignee
+                        ? {
+                            id: row.assignee.id,
+                            name: `${row.assignee.firstName} ${row.assignee.lastName}`,
+                          }
+                        : null
+                    }
+                    peopleList={peopleList.map((p) => ({
+                      id: p.id,
+                      name: `${p.firstName} ${p.lastName}`,
+                      hint: p.employeeNo ?? undefined,
+                    }))}
+                    criterionPhotoMap={criterionPhotoMap}
+                    locked={record.locked}
+                    allowCompliantNotes={type.allowCompliantNotes}
+                    recordOccurredAt={record.occurredAt}
+                    editHref={`${basePath}?tab=${active}&drawer=edit-criterion&id=${row.c.id}`}
+                  />
+                ))}
+              </div>
             ))}
           </div>
         ) : null}
@@ -937,55 +968,67 @@ export default async function InspectionRecordDetailPage({
                 criterion as fail.
               </p>
             ) : (
-              <div className="space-y-3">
-                {failRows.map((row) => (
-                  <div key={row.c.id} className="rounded-md border border-slate-200 bg-white p-3">
-                    <div className="mb-2 flex items-start justify-between gap-2">
-                      <div>
-                        <div className="text-sm font-medium text-slate-900">
-                          {row.c.questionTextSnapshot}
+              <div className="space-y-5">
+                {failGroups.map((group, gi) => (
+                  <div key={group.label ?? `__ungrouped_${gi}`} className="space-y-3">
+                    {group.label || multiSection ? (
+                      <h3 className="text-sm font-semibold tracking-wide text-slate-700 uppercase dark:text-slate-300">
+                        {group.label ?? 'Ungrouped'}
+                      </h3>
+                    ) : null}
+                    {group.rows.map((row) => (
+                      <div
+                        key={row.c.id}
+                        className="rounded-md border border-slate-200 bg-white p-3"
+                      >
+                        <div className="mb-2 flex items-start justify-between gap-2">
+                          <div>
+                            <div className="text-sm font-medium text-slate-900">
+                              {row.c.questionTextSnapshot}
+                            </div>
+                            <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                              {row.c.severity ? (
+                                <Badge variant="outline">{row.c.severity}</Badge>
+                              ) : null}
+                              {row.ca?.reference ? (
+                                <Link
+                                  href={`/corrective-actions/${row.c.correctiveActionId}`}
+                                  className="text-teal-700 hover:underline"
+                                >
+                                  {row.ca.reference}
+                                </Link>
+                              ) : null}
+                            </div>
+                            {row.c.nonComplianceDescription ? (
+                              <p className="mt-1 text-xs text-slate-600">
+                                <strong>Non-compliance:</strong> {row.c.nonComplianceDescription}
+                              </p>
+                            ) : null}
+                          </div>
                         </div>
-                        <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                          {row.c.severity ? (
-                            <Badge variant="outline">{row.c.severity}</Badge>
-                          ) : null}
-                          {row.ca?.reference ? (
-                            <Link
-                              href={`/corrective-actions/${row.c.correctiveActionId}`}
-                              className="text-teal-700 hover:underline"
-                            >
-                              {row.ca.reference}
-                            </Link>
-                          ) : null}
-                        </div>
-                        {row.c.nonComplianceDescription ? (
-                          <p className="mt-1 text-xs text-slate-600">
-                            <strong>Non-compliance:</strong> {row.c.nonComplianceDescription}
-                          </p>
-                        ) : null}
+                        {!record.locked ? (
+                          <form action={setCriterionActionTaken} className="space-y-2">
+                            <input type="hidden" name="recordId" value={id} />
+                            <input type="hidden" name="rowId" value={row.c.id} />
+                            <Textarea
+                              name="value"
+                              rows={2}
+                              defaultValue={row.c.actionTaken ?? ''}
+                              placeholder="What was done to remediate?"
+                            />
+                            <div className="flex justify-end">
+                              <Button type="submit" size="sm">
+                                Save action
+                              </Button>
+                            </div>
+                          </form>
+                        ) : row.c.actionTaken ? (
+                          <p className="text-sm">{row.c.actionTaken}</p>
+                        ) : (
+                          <p className="text-xs text-slate-400">No action recorded.</p>
+                        )}
                       </div>
-                    </div>
-                    {!record.locked ? (
-                      <form action={setCriterionActionTaken} className="space-y-2">
-                        <input type="hidden" name="recordId" value={id} />
-                        <input type="hidden" name="rowId" value={row.c.id} />
-                        <Textarea
-                          name="value"
-                          rows={2}
-                          defaultValue={row.c.actionTaken ?? ''}
-                          placeholder="What was done to remediate?"
-                        />
-                        <div className="flex justify-end">
-                          <Button type="submit" size="sm">
-                            Save action
-                          </Button>
-                        </div>
-                      </form>
-                    ) : row.c.actionTaken ? (
-                      <p className="text-sm">{row.c.actionTaken}</p>
-                    ) : (
-                      <p className="text-xs text-slate-400">No action recorded.</p>
-                    )}
+                    ))}
                   </div>
                 ))}
               </div>

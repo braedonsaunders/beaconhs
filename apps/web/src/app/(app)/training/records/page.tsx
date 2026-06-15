@@ -263,7 +263,14 @@ export default async function TrainingRecordsPage({
         />
       ) : (
         <>
-          <TrainingRecordsTable rows={tableRows} credentialOutputs={credentialOutputs} />
+          <TrainingRecordsTable
+            rows={tableRows}
+            credentialOutputs={credentialOutputs}
+            basePath="/training/records"
+            currentParams={sp}
+            sort={params.sort}
+            dir={params.dir}
+          />
           <Pagination
             basePath="/training/records"
             currentParams={sp}

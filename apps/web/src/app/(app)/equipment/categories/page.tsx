@@ -150,7 +150,7 @@ export default async function EquipmentCategoriesPage() {
               description="Create a category to organise equipment types in the rate matrix."
             />
           ) : (
-            <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+            <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -182,11 +182,15 @@ export default async function EquipmentCategoriesPage() {
                             </Button>
                           </form>
                         </TableCell>
-                        <TableCell className="font-mono text-xs text-slate-500">{c.slug}</TableCell>
-                        <TableCell className="max-w-xs truncate text-sm text-slate-600">
+                        <TableCell className="font-mono text-xs text-slate-500 dark:text-slate-400">
+                          {c.slug}
+                        </TableCell>
+                        <TableCell className="max-w-xs truncate text-sm text-slate-600 dark:text-slate-400">
                           {c.description ?? '—'}
                         </TableCell>
-                        <TableCell className="text-right text-slate-600">{c.sortOrder}</TableCell>
+                        <TableCell className="text-right text-slate-600 dark:text-slate-400">
+                          {c.sortOrder}
+                        </TableCell>
                         <TableCell className="text-right">
                           <Badge variant="secondary">{used}</Badge>
                         </TableCell>

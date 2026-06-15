@@ -22,6 +22,7 @@ export function FilterChips({
   label,
   options,
   allLabel = 'All',
+  defaultValue,
 }: {
   basePath: string
   currentParams: Record<string, string | string[] | undefined>
@@ -29,11 +30,24 @@ export function FilterChips({
   label: string
   options: FilterOption[]
   allLabel?: string
+  /**
+   * When set, this value is treated as the active selection while the URL
+   * carries no param — i.e. the list defaults to this filter. Picking "All"
+   * then navigates to an explicit `all` sentinel (rather than clearing the
+   * param) so the page can tell "show everything" apart from the default.
+   */
+  defaultValue?: string
 }) {
   const [open, setOpen] = useState(false)
-  const current =
+  const raw =
     typeof currentParams[paramKey] === 'string' ? (currentParams[paramKey] as string) : undefined
+  const current = raw ?? defaultValue
   const active = options.find((o) => o.value === current)
+  const allHref = mergeHref(basePath, currentParams, {
+    [paramKey]: defaultValue ? 'all' : undefined,
+    page: 1,
+  })
+  const allActive = defaultValue ? current === 'all' : !current
 
   return (
     <Popover
@@ -75,11 +89,7 @@ export function FilterChips({
       }
     >
       <div className="max-h-72 overflow-auto" role="listbox">
-        <FilterItem
-          href={mergeHref(basePath, currentParams, { [paramKey]: undefined, page: 1 })}
-          active={!current}
-          onSelect={() => setOpen(false)}
-        >
+        <FilterItem href={allHref} active={allActive} onSelect={() => setOpen(false)}>
           {allLabel}
         </FilterItem>
         {options.map((opt) => (

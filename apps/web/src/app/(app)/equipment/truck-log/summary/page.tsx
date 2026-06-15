@@ -173,7 +173,7 @@ export default async function TruckLogSummaryPage({
               </div>
             }
           />
-          <div className="flex items-center gap-3 text-sm text-slate-500">
+          <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
             <span>Year</span>
             <form className="flex items-center gap-2" action="/equipment/truck-log/summary">
               <input
@@ -182,7 +182,7 @@ export default async function TruckLogSummaryPage({
                 min="2000"
                 max="2100"
                 defaultValue={year}
-                className="w-24 rounded border border-slate-200 px-2 py-1 text-sm"
+                className="w-24 rounded border border-slate-200 px-2 py-1 text-sm dark:border-slate-800"
               />
               <Button type="submit" variant="outline" size="sm">
                 Apply
@@ -199,13 +199,18 @@ export default async function TruckLogSummaryPage({
           description="Add equipment first, then log daily entries to populate the monthly roll-up."
         />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="sticky left-0 z-10 bg-white">Truck</TableHead>
+                <TableHead className="sticky left-0 z-10 bg-white dark:bg-slate-900">
+                  Truck
+                </TableHead>
                 {MONTHS.map((m) => (
-                  <TableHead key={m} className="text-center text-xs text-slate-500">
+                  <TableHead
+                    key={m}
+                    className="text-center text-xs text-slate-500 dark:text-slate-400"
+                  >
                     {m}
                   </TableHead>
                 ))}
@@ -218,10 +223,14 @@ export default async function TruckLogSummaryPage({
                 const totals = truckTotals.get(t.id) ?? { km: 0, hours: 0, manpower: 0, days: 0 }
                 return (
                   <TableRow key={t.id}>
-                    <TableCell className="sticky left-0 z-10 bg-white whitespace-nowrap">
+                    <TableCell className="sticky left-0 z-10 bg-white whitespace-nowrap dark:bg-slate-900">
                       <Link href={`/equipment/${t.id}`} className="hover:underline">
-                        <div className="font-mono text-xs text-slate-500">{t.assetTag}</div>
-                        <div className="text-sm font-medium text-slate-900">{t.name}</div>
+                        <div className="font-mono text-xs text-slate-500 dark:text-slate-400">
+                          {t.assetTag}
+                        </div>
+                        <div className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                          {t.name}
+                        </div>
                       </Link>
                     </TableCell>
                     {MONTHS.map((_, i) => {
@@ -236,38 +245,61 @@ export default async function TruckLogSummaryPage({
                         <TableCell key={i} className="text-center align-top">
                           <Link
                             href={`/equipment/truck-log?month=${year}-${pad2(i + 1)}` as any}
-                            className="block rounded bg-slate-50 px-1.5 py-1 text-[11px] hover:bg-teal-50"
+                            className="block rounded bg-slate-50 px-1.5 py-1 text-[11px] hover:bg-teal-50 dark:bg-slate-800"
                           >
-                            <div className="font-medium text-slate-900">{m.km} km</div>
-                            <div className="text-slate-500">{m.hours.toFixed(1)} h</div>
-                            <div className="text-slate-500">{m.manpower} men</div>
+                            <div className="font-medium text-slate-900 dark:text-slate-100">
+                              {m.km} km
+                            </div>
+                            <div className="text-slate-500 dark:text-slate-400">
+                              {m.hours.toFixed(1)} h
+                            </div>
+                            <div className="text-slate-500 dark:text-slate-400">
+                              {m.manpower} men
+                            </div>
                           </Link>
                         </TableCell>
                       )
                     })}
                     <TableCell className="text-right text-sm font-medium">
                       <div>{totals.km} km</div>
-                      <div className="text-xs text-slate-500">{totals.hours.toFixed(1)} h</div>
-                      <div className="text-xs text-slate-500">{totals.manpower} men</div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">
+                        {totals.hours.toFixed(1)} h
+                      </div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">
+                        {totals.manpower} men
+                      </div>
                     </TableCell>
                   </TableRow>
                 )
               })}
               <TableRow>
-                <TableCell className="sticky left-0 z-10 bg-slate-50 font-semibold">
+                <TableCell className="sticky left-0 z-10 bg-slate-50 font-semibold dark:bg-slate-800">
                   Totals
                 </TableCell>
                 {monthTotals.map((m, i) => (
-                  <TableCell key={i} className="bg-slate-50 text-center align-top">
-                    <div className="text-xs font-medium text-slate-900">{m.km} km</div>
-                    <div className="text-[11px] text-slate-500">{m.hours.toFixed(1)} h</div>
-                    <div className="text-[11px] text-slate-500">{m.manpower} men</div>
+                  <TableCell
+                    key={i}
+                    className="bg-slate-50 text-center align-top dark:bg-slate-800"
+                  >
+                    <div className="text-xs font-medium text-slate-900 dark:text-slate-100">
+                      {m.km} km
+                    </div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                      {m.hours.toFixed(1)} h
+                    </div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                      {m.manpower} men
+                    </div>
                   </TableCell>
                 ))}
-                <TableCell className="bg-slate-50 text-right">
+                <TableCell className="bg-slate-50 text-right dark:bg-slate-800">
                   <div className="text-sm font-semibold">{grandTotals.km} km</div>
-                  <div className="text-xs text-slate-500">{grandTotals.hours.toFixed(1)} h</div>
-                  <div className="text-xs text-slate-500">{grandTotals.manpower} men</div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">
+                    {grandTotals.hours.toFixed(1)} h
+                  </div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">
+                    {grandTotals.manpower} men
+                  </div>
                 </TableCell>
               </TableRow>
             </TableBody>

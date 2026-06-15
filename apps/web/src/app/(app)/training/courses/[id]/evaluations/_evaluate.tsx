@@ -56,7 +56,7 @@ export function EvaluationsGrid({
 
   return (
     <>
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         <Table>
           <TableHeader>
             <TableRow>
@@ -70,9 +70,13 @@ export function EvaluationsGrid({
             {rows.map((r) => (
               <TableRow key={r.enrollmentId}>
                 <TableCell>
-                  <div className="font-medium text-slate-900">{r.personName}</div>
+                  <div className="font-medium text-slate-900 dark:text-slate-100">
+                    {r.personName}
+                  </div>
                   {r.employeeNo ? (
-                    <div className="text-xs text-slate-500">#{r.employeeNo}</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                      #{r.employeeNo}
+                    </div>
                   ) : null}
                 </TableCell>
                 {lessons.map((l) => {
@@ -200,7 +204,7 @@ function EvaluateDrawer({
     >
       <div className="space-y-5">
         {cell.status === 'completed' ? (
-          <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+          <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
             Already signed off{cell.evaluatorName ? ` by ${cell.evaluatorName}` : ''}
             {cell.completedAt ? ` on ${new Date(cell.completedAt).toLocaleDateString()}` : ''}.
             Re-submitting replaces the evaluation.
@@ -213,7 +217,7 @@ function EvaluateDrawer({
             {lesson.criteria.map((c) => (
               <label
                 key={c.id}
-                className="flex items-start gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-700"
+                className="flex items-start gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:text-slate-300"
               >
                 <input
                   type="checkbox"
@@ -221,14 +225,14 @@ function EvaluateDrawer({
                   onChange={(e) =>
                     setResults((prev) => ({ ...prev, [c.id]: e.currentTarget.checked }))
                   }
-                  className="mt-0.5 h-4 w-4 rounded border-slate-300"
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 dark:border-slate-700"
                 />
                 {c.text}
               </label>
             ))}
           </div>
         ) : (
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-slate-500 dark:text-slate-400">
             This practical has no itemised criteria — sign off based on your observation.
           </p>
         )}

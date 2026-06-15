@@ -14,7 +14,7 @@ import { PeopleRecordsTable, type PeopleTableRow } from './_records-table'
 
 export const metadata = { title: 'People' }
 
-const SORTS = ['name', 'employee_no', 'hire_date', 'department', 'trade'] as const
+const SORTS = ['name', 'employee_no', 'hire_date', 'department', 'trade', 'status'] as const
 
 export default async function PeoplePage({
   searchParams,
@@ -38,18 +38,21 @@ export default async function PeoplePage({
     }
     const whereClause = and(...filters)
 
+    const dirFn = params.dir === 'asc' ? asc : desc
     const orderBy =
       params.sort === 'name'
         ? params.dir === 'asc'
           ? [asc(people.lastName), asc(people.firstName)]
           : [desc(people.lastName), desc(people.firstName)]
         : params.sort === 'employee_no'
-          ? [params.dir === 'asc' ? asc(people.employeeNo) : desc(people.employeeNo)]
+          ? [dirFn(people.employeeNo)]
           : params.sort === 'hire_date'
-            ? [params.dir === 'asc' ? asc(people.hireDate) : desc(people.hireDate)]
+            ? [dirFn(people.hireDate)]
             : params.sort === 'department'
-              ? [params.dir === 'asc' ? asc(departments.name) : desc(departments.name)]
-              : [params.dir === 'asc' ? asc(trades.name) : desc(trades.name)]
+              ? [dirFn(departments.name)]
+              : params.sort === 'status'
+                ? [dirFn(people.status)]
+                : [dirFn(trades.name)]
 
     const [tot] = await tx.select({ c: count() }).from(people).where(whereClause)
     const data = await tx
@@ -129,7 +132,15 @@ export default async function PeoplePage({
         />
       ) : (
         <>
-          <PeopleRecordsTable rows={tableRows} groups={groups} divisions={divisions} />
+          <PeopleRecordsTable
+            rows={tableRows}
+            groups={groups}
+            divisions={divisions}
+            basePath="/people"
+            currentParams={sp}
+            sort={params.sort}
+            dir={params.dir}
+          />
           <Pagination
             basePath="/people"
             currentParams={sp}

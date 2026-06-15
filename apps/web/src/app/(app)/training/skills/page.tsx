@@ -227,7 +227,7 @@ export default async function SkillsPage({
         />
       ) : (
         <>
-          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -291,18 +291,20 @@ export default async function SkillsPage({
                       <TableCell>
                         <Link
                           href={`/training/transcripts/${person.id}`}
-                          className="font-medium text-slate-900 hover:underline"
+                          className="font-medium text-slate-900 hover:underline dark:text-slate-100"
                         >
                           {person.lastName}, {person.firstName}
                         </Link>
                         {person.employeeNo ? (
-                          <div className="text-xs text-slate-500">#{person.employeeNo}</div>
+                          <div className="text-xs text-slate-500 dark:text-slate-400">
+                            #{person.employeeNo}
+                          </div>
                         ) : null}
                       </TableCell>
                       <TableCell>
                         <Link
-                          href={`/training/skills/types/${type.id}`}
-                          className="text-slate-700 hover:underline"
+                          href={`/training/skills/${assignment.id}`}
+                          className="font-medium text-slate-900 hover:underline dark:text-slate-100"
                         >
                           {type.code ? (
                             <span className="font-mono text-xs">{type.code}</span>
@@ -311,11 +313,13 @@ export default async function SkillsPage({
                           {type.name}
                         </Link>
                       </TableCell>
-                      <TableCell className="text-slate-600">{authority.name}</TableCell>
-                      <TableCell className="text-slate-600 tabular-nums">
+                      <TableCell className="text-slate-600 dark:text-slate-400">
+                        {authority.name}
+                      </TableCell>
+                      <TableCell className="text-slate-600 tabular-nums dark:text-slate-400">
                         {assignment.grantedOn}
                       </TableCell>
-                      <TableCell className="text-slate-600 tabular-nums">
+                      <TableCell className="text-slate-600 tabular-nums dark:text-slate-400">
                         {exp ?? <span className="text-slate-400">Never</span>}
                       </TableCell>
                       <TableCell>

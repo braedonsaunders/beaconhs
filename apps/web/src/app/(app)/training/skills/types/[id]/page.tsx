@@ -149,7 +149,7 @@ export default async function SkillTypeDetailPage({
                   value: (
                     <Link
                       href={`/training/authorities/${authority.id}`}
-                      className="text-teal-700 hover:underline"
+                      className="text-teal-700 hover:underline dark:text-teal-400"
                     >
                       {authority.name}
                     </Link>
@@ -174,8 +174,10 @@ export default async function SkillTypeDetailPage({
             />
             {type.description ? (
               <div className="mt-4">
-                <div className="text-xs tracking-wide text-slate-500 uppercase">Description</div>
-                <p className="mt-1 text-sm whitespace-pre-wrap text-slate-700">
+                <div className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
+                  Description
+                </div>
+                <p className="mt-1 text-sm whitespace-pre-wrap text-slate-700 dark:text-slate-300">
                   {type.description}
                 </p>
               </div>
@@ -229,13 +231,15 @@ export default async function SkillTypeDetailPage({
                       <TableCell>
                         <Link
                           href={`/people/${h.person.id}`}
-                          className="font-medium text-slate-900 hover:underline"
+                          className="font-medium text-slate-900 hover:underline dark:text-slate-100"
                         >
                           {h.person.lastName}, {h.person.firstName}
                         </Link>
                       </TableCell>
-                      <TableCell className="text-slate-600">{h.assignment.grantedOn}</TableCell>
-                      <TableCell className="text-slate-600">
+                      <TableCell className="text-slate-600 dark:text-slate-400">
+                        {h.assignment.grantedOn}
+                      </TableCell>
+                      <TableCell className="text-slate-600 dark:text-slate-400">
                         {h.assignment.expiresOn ?? '—'}
                       </TableCell>
                       <TableCell>

@@ -169,7 +169,7 @@ export default async function AssessmentTypesPage({
               <div className="flex items-center gap-2">
                 <Link
                   href="/training/assessments"
-                  className="text-sm text-teal-700 hover:underline"
+                  className="text-sm text-teal-700 hover:underline dark:text-teal-400"
                 >
                   ← Back to attempts
                 </Link>
@@ -253,17 +253,17 @@ export default async function AssessmentTypesPage({
                     <TableCell>
                       <Link
                         href={`/training/assessments/types/${type.id}`}
-                        className="font-medium text-slate-900 hover:underline"
+                        className="font-medium text-slate-900 hover:underline dark:text-slate-100"
                       >
                         {type.name}
                       </Link>
                       {type.description ? (
-                        <div className="line-clamp-1 text-xs text-slate-500">
+                        <div className="line-clamp-1 text-xs text-slate-500 dark:text-slate-400">
                           {type.description}
                         </div>
                       ) : null}
                     </TableCell>
-                    <TableCell className="text-slate-600">
+                    <TableCell className="text-slate-600 dark:text-slate-400">
                       {course ? (
                         <Link href={`/training/courses/${course.id}`} className="hover:underline">
                           <span className="font-mono text-xs">{course.code}</span>
@@ -308,7 +308,7 @@ export default async function AssessmentTypesPage({
                         <Badge variant="secondary">Inactive</Badge>
                       )}
                     </TableCell>
-                    <TableCell className="text-xs text-slate-500 tabular-nums">
+                    <TableCell className="text-xs text-slate-500 tabular-nums dark:text-slate-400">
                       {type.updatedAt ? new Date(type.updatedAt).toLocaleDateString() : '—'}
                     </TableCell>
                   </TableRow>

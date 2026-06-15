@@ -93,7 +93,7 @@ export default async function RoiReport() {
               </Link>
             }
           />
-          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
             <Badge variant="success">{fmtMoney(totalRevenue)} revenue</Badge>
             <Badge variant="warning">{fmtMoney(totalExpenses)} expenses</Badge>
             <Badge variant="secondary">{fmtMoney(totalPurchase)} purchase</Badge>
@@ -111,7 +111,7 @@ export default async function RoiReport() {
           description="Add equipment, set rates, log expenses, and capture truck-log hours to populate this report."
         />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
           <Table>
             <TableHeader>
               <TableRow>
@@ -135,21 +135,25 @@ export default async function RoiReport() {
                     </Link>
                   </TableCell>
                   <TableCell className="font-medium">{r.item.name}</TableCell>
-                  <TableCell className="text-slate-600">{r.type?.name ?? '—'}</TableCell>
+                  <TableCell className="text-slate-600 dark:text-slate-400">
+                    {r.type?.name ?? '—'}
+                  </TableCell>
                   <TableCell className="text-right">{r.hours.toFixed(1)}</TableCell>
                   <TableCell className="text-right">{fmtMoney(r.hourly)}</TableCell>
-                  <TableCell className="text-right text-emerald-700">
+                  <TableCell className="text-right text-emerald-700 dark:text-emerald-400">
                     {fmtMoney(r.revenue)}
                   </TableCell>
-                  <TableCell className="text-right text-amber-700">
+                  <TableCell className="text-right text-amber-700 dark:text-amber-400">
                     {fmtMoney(r.expenses)}
                   </TableCell>
-                  <TableCell className="text-right text-slate-600">
+                  <TableCell className="text-right text-slate-600 dark:text-slate-400">
                     {fmtMoney(r.purchase)}
                   </TableCell>
                   <TableCell
                     className={`text-right font-semibold ${
-                      r.net >= 0 ? 'text-emerald-700' : 'text-red-700'
+                      r.net >= 0
+                        ? 'text-emerald-700 dark:text-emerald-400'
+                        : 'text-red-700 dark:text-red-400'
                     }`}
                   >
                     {fmtMoney(r.net)}

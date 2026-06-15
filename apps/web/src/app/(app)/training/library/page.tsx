@@ -149,9 +149,9 @@ export default async function ContentLibraryPage({
             const used = usageMap[it.id] ?? 0
             return (
               <Link key={it.id} href={`/training/library/${it.id}`} className="group block">
-                <div className="flex h-full flex-col gap-2 rounded-lg border border-slate-200 bg-white p-4 transition-shadow group-hover:shadow-md">
+                <div className="flex h-full flex-col gap-2 rounded-lg border border-slate-200 bg-white p-4 transition-shadow group-hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+                    <span className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
                       {KIND_ICON[it.kind]}
                       {KIND_OPTIONS.find((k) => k.value === it.kind)?.label ?? it.kind}
                     </span>
@@ -159,16 +159,20 @@ export default async function ContentLibraryPage({
                       {used === 0 ? 'unused' : `in ${used} course${used === 1 ? '' : 's'}`}
                     </Badge>
                   </div>
-                  <h3 className="truncate font-semibold text-slate-900">{it.title}</h3>
+                  <h3 className="truncate font-semibold text-slate-900 dark:text-slate-100">
+                    {it.title}
+                  </h3>
                   {it.description ? (
-                    <p className="line-clamp-2 text-sm text-slate-600">{it.description}</p>
+                    <p className="line-clamp-2 text-sm text-slate-600 dark:text-slate-400">
+                      {it.description}
+                    </p>
                   ) : null}
                   {it.tags && it.tags.length > 0 ? (
                     <div className="mt-auto flex flex-wrap gap-1 pt-1">
                       {it.tags.slice(0, 4).map((t) => (
                         <span
                           key={t}
-                          className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600"
+                          className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600 dark:bg-slate-800 dark:text-slate-400"
                         >
                           {t}
                         </span>

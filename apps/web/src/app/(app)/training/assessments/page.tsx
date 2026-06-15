@@ -201,7 +201,7 @@ export default async function AssessmentsPage({
               <div className="flex items-center gap-2">
                 <Link
                   href="/training/assessments/types"
-                  className="text-sm text-teal-700 hover:underline"
+                  className="text-sm text-teal-700 hover:underline dark:text-teal-400"
                 >
                   Manage types →
                 </Link>
@@ -214,27 +214,27 @@ export default async function AssessmentsPage({
           <TrainingSubNav active="assessments" />
           <div className="flex flex-wrap items-center gap-3">
             <form className="flex items-center gap-1 text-xs">
-              <label className="flex items-center gap-1 text-slate-500">
+              <label className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
                 Completed from
                 <input
                   type="date"
                   name="dateFrom"
                   defaultValue={dateFromRaw ?? ''}
-                  className="h-8 rounded-md border border-slate-300 px-2 text-xs"
+                  className="h-8 rounded-md border border-slate-300 px-2 text-xs dark:border-slate-700"
                 />
               </label>
-              <label className="flex items-center gap-1 text-slate-500">
+              <label className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
                 to
                 <input
                   type="date"
                   name="dateTo"
                   defaultValue={dateToRaw ?? ''}
-                  className="h-8 rounded-md border border-slate-300 px-2 text-xs"
+                  className="h-8 rounded-md border border-slate-300 px-2 text-xs dark:border-slate-700"
                 />
               </label>
               <button
                 type="submit"
-                className="h-8 rounded-md border border-slate-200 px-2 text-xs hover:bg-slate-50"
+                className="h-8 rounded-md border border-slate-200 px-2 text-xs hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/60"
               >
                 Apply
               </button>
@@ -331,29 +331,31 @@ export default async function AssessmentsPage({
                     : null
                 return (
                   <TableRow key={attempt.id}>
-                    <TableCell className="text-xs text-slate-600 tabular-nums">
+                    <TableCell className="text-xs text-slate-600 tabular-nums dark:text-slate-400">
                       {when ? new Date(when).toLocaleString() : '—'}
                     </TableCell>
                     <TableCell>
                       <Link
                         href={`/training/transcripts/${person.id}`}
-                        className="font-medium text-slate-900 hover:underline"
+                        className="font-medium text-slate-900 hover:underline dark:text-slate-100"
                       >
                         {person.lastName}, {person.firstName}
                       </Link>
                       {person.employeeNo ? (
-                        <div className="text-xs text-slate-500">#{person.employeeNo}</div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400">
+                          #{person.employeeNo}
+                        </div>
                       ) : null}
                     </TableCell>
                     <TableCell>
                       <Link
                         href={`/training/assessments/${attempt.id}`}
-                        className="text-teal-700 hover:underline"
+                        className="text-teal-700 hover:underline dark:text-teal-400"
                       >
                         {type.name}
                       </Link>
                     </TableCell>
-                    <TableCell className="text-slate-600">
+                    <TableCell className="text-slate-600 dark:text-slate-400">
                       {course ? (
                         <Link href={`/training/courses/${course.id}`} className="hover:underline">
                           <span className="font-mono text-xs">{course.code}</span>
@@ -362,7 +364,7 @@ export default async function AssessmentsPage({
                         '—'
                       )}
                     </TableCell>
-                    <TableCell className="text-xs text-slate-600 tabular-nums">
+                    <TableCell className="text-xs text-slate-600 tabular-nums dark:text-slate-400">
                       {attempt.startedAt ? new Date(attempt.startedAt).toLocaleDateString() : '—'}
                     </TableCell>
                     <TableCell className="text-xs tabular-nums">
@@ -374,9 +376,9 @@ export default async function AssessmentsPage({
                           className={
                             attempt.status === 'submitted'
                               ? attempt.passed
-                                ? 'font-medium text-emerald-700'
-                                : 'font-medium text-red-700'
-                              : 'text-slate-700'
+                                ? 'font-medium text-emerald-700 dark:text-emerald-400'
+                                : 'font-medium text-red-700 dark:text-red-400'
+                              : 'text-slate-700 dark:text-slate-300'
                           }
                         >
                           {attempt.score}%
@@ -385,7 +387,7 @@ export default async function AssessmentsPage({
                         '—'
                       )}
                     </TableCell>
-                    <TableCell className="text-xs text-slate-500 tabular-nums">
+                    <TableCell className="text-xs text-slate-500 tabular-nums dark:text-slate-400">
                       ≥ {attempt.passingScore}%
                     </TableCell>
                     <TableCell>

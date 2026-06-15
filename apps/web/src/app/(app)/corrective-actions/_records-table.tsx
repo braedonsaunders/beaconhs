@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { Badge } from '@beaconhs/ui'
+import { SortTh } from '@/components/sortable-th'
 import {
   BulkReassignBar,
   HeaderSelectAll,
@@ -17,6 +18,7 @@ export type RecordsTableRow = {
   severity: 'low' | 'medium' | 'high' | 'critical'
   status: 'open' | 'in_progress' | 'pending_verification' | 'closed' | 'cancelled'
   dueOn: string | null
+  createdAt: string
   siteName: string | null
   ownerName: string | null
   locked: boolean
@@ -31,10 +33,18 @@ export function RecordsTable({
   rows,
   owners,
   today,
+  basePath,
+  currentParams,
+  sort,
+  dir,
 }: {
   rows: RecordsTableRow[]
   owners: OwnerOption[]
   today: string
+  basePath: string
+  currentParams: Record<string, string | string[] | undefined>
+  sort: string
+  dir: 'asc' | 'desc'
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
@@ -61,31 +71,57 @@ export function RecordsTable({
     setSelected(new Set())
   }
 
+  const sortProps = { basePath, currentParams, sort, dir }
+
   return (
     <>
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase">
+            <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-400">
               <th className="w-8 px-3 py-2">
                 <HeaderSelectAll allSelected={allSelected} onToggleAll={toggleAll} />
               </th>
-              <th className="px-3 py-2">Ref</th>
-              <th className="px-3 py-2">Title</th>
-              <th className="px-3 py-2">Severity</th>
-              <th className="px-3 py-2">Status</th>
-              <th className="px-3 py-2">Due</th>
-              <th className="px-3 py-2">Owner</th>
-              <th className="px-3 py-2">Site</th>
+              <SortTh column="reference" {...sortProps}>
+                Ref
+              </SortTh>
+              <SortTh column="title" {...sortProps}>
+                Title
+              </SortTh>
+              <SortTh column="severity" {...sortProps}>
+                Severity
+              </SortTh>
+              <SortTh column="status" {...sortProps}>
+                Status
+              </SortTh>
+              <SortTh column="due_on" {...sortProps}>
+                Due
+              </SortTh>
+              <SortTh column="created_at" {...sortProps}>
+                Created
+              </SortTh>
+              <SortTh column="owner" {...sortProps}>
+                Owner
+              </SortTh>
+              <SortTh column="site" {...sortProps}>
+                Site
+              </SortTh>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
             {rows.map((r) => {
               const overdue =
                 r.dueOn && r.dueOn < today && !['closed', 'cancelled'].includes(r.status)
               const isSelected = selected.has(r.id)
               return (
-                <tr key={r.id} className={isSelected ? 'bg-teal-50/40' : 'hover:bg-slate-50/50'}>
+                <tr
+                  key={r.id}
+                  className={
+                    isSelected
+                      ? 'bg-teal-50/40 dark:bg-teal-500/10'
+                      : 'hover:bg-slate-50/50 dark:hover:bg-slate-800/60'
+                  }
+                >
                   <td className="w-8 px-3 py-2">
                     <SelectionCheckbox id={r.id} selected={isSelected} onToggle={toggleOne} />
                   </td>
@@ -97,7 +133,7 @@ export function RecordsTable({
                   <td className="px-3 py-2">
                     <Link
                       href={`/corrective-actions/${r.id}` as any}
-                      className="font-medium text-slate-900 hover:underline"
+                      className="font-medium text-slate-900 hover:underline dark:text-slate-100"
                     >
                       {r.title}
                     </Link>
@@ -134,13 +170,18 @@ export function RecordsTable({
                     </Badge>
                   </td>
                   <td className="px-3 py-2">
-                    <span className={overdue ? 'font-medium text-red-700' : ''}>
+                    <span className={overdue ? 'font-medium text-red-700 dark:text-red-400' : ''}>
                       {r.dueOn ?? '—'}
                       {overdue ? ' (overdue)' : ''}
                     </span>
                   </td>
-                  <td className="px-3 py-2 text-slate-600">{r.ownerName ?? '—'}</td>
-                  <td className="px-3 py-2 text-slate-600">{r.siteName ?? '—'}</td>
+                  <td className="px-3 py-2 text-slate-600 dark:text-slate-400">{r.createdAt}</td>
+                  <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
+                    {r.ownerName ?? '—'}
+                  </td>
+                  <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
+                    {r.siteName ?? '—'}
+                  </td>
                 </tr>
               )
             })}

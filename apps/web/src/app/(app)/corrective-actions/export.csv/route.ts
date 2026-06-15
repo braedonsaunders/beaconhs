@@ -8,18 +8,29 @@ import { parseListParams, pickString } from '@/lib/list-params'
 
 export const dynamic = 'force-dynamic'
 
-const SORTS = ['reference', 'title', 'severity', 'status', 'due_on', 'assigned_on'] as const
+const SORTS = [
+  'reference',
+  'title',
+  'severity',
+  'status',
+  'due_on',
+  'assigned_on',
+  'created_at',
+  'site',
+] as const
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url)
   const sp = Object.fromEntries(url.searchParams.entries())
   const params = parseListParams(sp, {
-    sort: 'due_on',
-    dir: 'asc',
+    sort: 'created_at',
+    dir: 'desc',
     perPage: 25,
     allowedSorts: SORTS,
   })
-  const statusFilter = pickString(sp.status)
+  // Mirror the list page: default to open, `status=all` shows every status.
+  const statusRaw = pickString(sp.status) ?? 'open'
+  const statusFilter = statusRaw === 'all' ? undefined : statusRaw
   const sevFilter = pickString(sp.severity)
   const ctx = await requireRequestContext()
 
@@ -38,38 +49,23 @@ export async function GET(req: NextRequest) {
     if (sevFilter) filters.push(eq(correctiveActions.severity, sevFilter as any))
     const whereClause = filters.length > 0 ? and(...filters) : undefined
 
+    const dirFn = params.dir === 'asc' ? asc : desc
     const orderBy =
       params.sort === 'reference'
-        ? [
-            params.dir === 'asc'
-              ? asc(correctiveActions.reference)
-              : desc(correctiveActions.reference),
-          ]
+        ? [dirFn(correctiveActions.reference)]
         : params.sort === 'title'
-          ? [params.dir === 'asc' ? asc(correctiveActions.title) : desc(correctiveActions.title)]
+          ? [dirFn(correctiveActions.title)]
           : params.sort === 'severity'
-            ? [
-                params.dir === 'asc'
-                  ? asc(correctiveActions.severity)
-                  : desc(correctiveActions.severity),
-              ]
+            ? [dirFn(correctiveActions.severity)]
             : params.sort === 'status'
-              ? [
-                  params.dir === 'asc'
-                    ? asc(correctiveActions.status)
-                    : desc(correctiveActions.status),
-                ]
-              : params.sort === 'assigned_on'
-                ? [
-                    params.dir === 'asc'
-                      ? asc(correctiveActions.assignedOn)
-                      : desc(correctiveActions.assignedOn),
-                  ]
-                : [
-                    params.dir === 'asc'
-                      ? asc(correctiveActions.dueOn)
-                      : desc(correctiveActions.dueOn),
-                  ]
+              ? [dirFn(correctiveActions.status)]
+              : params.sort === 'due_on'
+                ? [dirFn(correctiveActions.dueOn)]
+                : params.sort === 'assigned_on'
+                  ? [dirFn(correctiveActions.assignedOn)]
+                  : params.sort === 'site'
+                    ? [dirFn(orgUnits.name)]
+                    : [dirFn(correctiveActions.createdAt)]
 
     return tx
       .select({ ca: correctiveActions, site: orgUnits })

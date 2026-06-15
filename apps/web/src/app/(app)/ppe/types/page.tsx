@@ -96,7 +96,7 @@ export default async function PpeTypesPage() {
           }
         />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
           <Table>
             <TableHeader>
               <TableRow>
@@ -117,12 +117,14 @@ export default async function PpeTypesPage() {
                     <TableCell>
                       <Link
                         href={`/ppe/types/${t.id}`}
-                        className="font-medium text-slate-900 hover:underline"
+                        className="font-medium text-slate-900 hover:underline dark:text-slate-100"
                       >
                         {t.name}
                       </Link>
                     </TableCell>
-                    <TableCell className="text-slate-600">{t.category ?? '—'}</TableCell>
+                    <TableCell className="text-slate-600 dark:text-slate-400">
+                      {t.category ?? '—'}
+                    </TableCell>
                     <TableCell>
                       {t.isInspectable ? (
                         <Badge variant="success">Yes</Badge>

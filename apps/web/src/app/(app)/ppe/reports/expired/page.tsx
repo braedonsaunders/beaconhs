@@ -59,7 +59,7 @@ export default async function ExpiredPpeReport({
           <PageHeader title="Expired PPE" description="Items past their expiry date." />
           <ReportsSubNav active="expired" />
           <form className="flex items-center gap-2 text-xs" method="get">
-            <label className="text-slate-500">Type:</label>
+            <label className="text-slate-500 dark:text-slate-400">Type:</label>
             <Select name="type" defaultValue={typeFilter ?? ''} className="h-8 w-56">
               <option value="">All types</option>
               {types.map((t) => (
@@ -68,7 +68,7 @@ export default async function ExpiredPpeReport({
                 </option>
               ))}
             </Select>
-            <button className="rounded border border-slate-200 px-2 py-1 hover:bg-slate-50">
+            <button className="rounded border border-slate-200 px-2 py-1 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/60">
               Filter
             </button>
           </form>
@@ -82,7 +82,7 @@ export default async function ExpiredPpeReport({
           description="Nothing in the register has hit its expiry date."
         />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
           <Table>
             <TableHeader>
               <TableRow>
@@ -100,15 +100,21 @@ export default async function ExpiredPpeReport({
                   <TableCell>
                     <Link
                       href={`/ppe/${item.id}`}
-                      className="font-medium text-slate-900 hover:underline"
+                      className="font-medium text-slate-900 hover:underline dark:text-slate-100"
                     >
                       {type.name}
                     </Link>
                   </TableCell>
-                  <TableCell className="text-slate-600">{item.serialNumber ?? '—'}</TableCell>
-                  <TableCell className="text-slate-600">{item.size ?? '—'}</TableCell>
-                  <TableCell className="text-red-700">{item.expiresOn ?? '—'}</TableCell>
-                  <TableCell className="text-slate-600">
+                  <TableCell className="text-slate-600 dark:text-slate-400">
+                    {item.serialNumber ?? '—'}
+                  </TableCell>
+                  <TableCell className="text-slate-600 dark:text-slate-400">
+                    {item.size ?? '—'}
+                  </TableCell>
+                  <TableCell className="text-red-700 dark:text-red-400">
+                    {item.expiresOn ?? '—'}
+                  </TableCell>
+                  <TableCell className="text-slate-600 dark:text-slate-400">
                     {holder ? `${holder.firstName} ${holder.lastName}` : '—'}
                   </TableCell>
                   <TableCell>

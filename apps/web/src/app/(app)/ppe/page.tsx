@@ -16,7 +16,7 @@ import { PpeRecordsTable, type PpeTableRow } from './_records-table'
 
 export const metadata = { title: 'PPE' }
 
-const SORTS = ['type', 'serial', 'size', 'status', 'holder'] as const
+const SORTS = ['type', 'serial', 'size', 'status', 'holder', 'next_inspection'] as const
 
 const STATUS_OPTIONS = [
   { value: 'in_stock', label: 'In stock' },
@@ -47,16 +47,19 @@ export default async function PpePage({
     if (statusFilter) filters.push(eq(ppeItems.status, statusFilter as any))
     const whereClause = and(...filters)
 
+    const dirFn = params.dir === 'asc' ? asc : desc
     const orderBy =
       params.sort === 'serial'
-        ? [params.dir === 'asc' ? asc(ppeItems.serialNumber) : desc(ppeItems.serialNumber)]
+        ? [dirFn(ppeItems.serialNumber)]
         : params.sort === 'size'
-          ? [params.dir === 'asc' ? asc(ppeItems.size) : desc(ppeItems.size)]
+          ? [dirFn(ppeItems.size)]
           : params.sort === 'status'
-            ? [params.dir === 'asc' ? asc(ppeItems.status) : desc(ppeItems.status)]
+            ? [dirFn(ppeItems.status)]
             : params.sort === 'holder'
-              ? [params.dir === 'asc' ? asc(people.lastName) : desc(people.lastName)]
-              : [params.dir === 'asc' ? asc(ppeTypes.name) : desc(ppeTypes.name)]
+              ? [dirFn(people.lastName)]
+              : params.sort === 'next_inspection'
+                ? [dirFn(ppeItems.nextInspectionDue)]
+                : [dirFn(ppeTypes.name)]
 
     const [tot] = await tx
       .select({ c: count() })
@@ -140,7 +143,14 @@ export default async function PpePage({
         />
       ) : (
         <>
-          <PpeRecordsTable rows={tableRows} holders={holders} />
+          <PpeRecordsTable
+            rows={tableRows}
+            holders={holders}
+            basePath="/ppe"
+            currentParams={sp}
+            sort={params.sort}
+            dir={params.dir}
+          />
           <Pagination
             basePath="/ppe"
             currentParams={sp}

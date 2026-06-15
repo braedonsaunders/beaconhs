@@ -233,7 +233,14 @@ export default async function DocumentsPage({
       ) : (
         <>
           {canManage ? (
-            <DocumentsRecordsTable rows={tableRows} books={books} />
+            <DocumentsRecordsTable
+              rows={tableRows}
+              books={books}
+              basePath="/documents"
+              currentParams={sp}
+              sort={params.sort}
+              dir={params.dir}
+            />
           ) : (
             <ReadOnlyDocumentsGrid docs={cardRows} />
           )}

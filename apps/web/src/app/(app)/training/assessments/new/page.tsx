@@ -65,7 +65,7 @@ export default async function NewAssessmentAttemptPage({
             <form action={startAssessmentAttempt} className="space-y-4">
               <div className="space-y-1.5">
                 <Label>
-                  Person <span className="text-red-600">*</span>
+                  Person <span className="text-red-600 dark:text-red-400">*</span>
                 </Label>
                 <PersonSelectField
                   name="personId"
@@ -81,7 +81,7 @@ export default async function NewAssessmentAttemptPage({
               </div>
               <div className="space-y-1.5">
                 <Label>
-                  Assessment type <span className="text-red-600">*</span>
+                  Assessment type <span className="text-red-600 dark:text-red-400">*</span>
                 </Label>
                 <Select name="typeId" required defaultValue={defaultTypeId ?? ''}>
                   <option value="" disabled>
@@ -103,7 +103,7 @@ export default async function NewAssessmentAttemptPage({
           </CardContent>
         </Card>
 
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-slate-500 dark:text-slate-400">
           The attempt opens in "in progress" status. Submitting auto-grades it from each question's
           correct answer and points value. Passing an assessment type that's linked to a course also
           writes a training record.

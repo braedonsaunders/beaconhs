@@ -234,7 +234,7 @@ export default async function EquipmentExpensesPage({
           />
           <TableToolbar>
             <SearchInput placeholder="Search vendor or description…" />
-            <form className="flex items-center gap-2 text-xs text-slate-600">
+            <form className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400">
               <input type="hidden" name="page" value="1" />
               {categoryFilter ? (
                 <input type="hidden" name="category" value={categoryFilter} />
@@ -256,7 +256,7 @@ export default async function EquipmentExpensesPage({
               options={CATEGORY_OPTIONS.map((o) => ({ ...o, count: catCounts[o.value] }))}
             />
           </TableToolbar>
-          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
             <Badge variant="secondary">{total} entries</Badge>
             <Badge variant="warning">{fmtMoney(totalAmount.toFixed(2))} total</Badge>
           </div>
@@ -276,7 +276,7 @@ export default async function EquipmentExpensesPage({
           />
         ) : (
           <>
-            <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+            <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -300,10 +300,14 @@ export default async function EquipmentExpensesPage({
                             href={`/equipment/${item.id}?tab=expenses`}
                             className="hover:underline"
                           >
-                            <div className="font-mono text-xs text-slate-500">{item.assetTag}</div>
+                            <div className="font-mono text-xs text-slate-500 dark:text-slate-400">
+                              {item.assetTag}
+                            </div>
                             <div className="text-sm font-medium">{item.name}</div>
                             {type ? (
-                              <div className="text-xs text-slate-500">{type.name}</div>
+                              <div className="text-xs text-slate-500 dark:text-slate-400">
+                                {type.name}
+                              </div>
                             ) : null}
                           </Link>
                         ) : (
@@ -313,11 +317,15 @@ export default async function EquipmentExpensesPage({
                       <TableCell>
                         <Badge variant="secondary">{e.category}</Badge>
                       </TableCell>
-                      <TableCell className="text-slate-600">{e.vendor ?? '—'}</TableCell>
-                      <TableCell className="max-w-xs truncate text-slate-600">
+                      <TableCell className="text-slate-600 dark:text-slate-400">
+                        {e.vendor ?? '—'}
+                      </TableCell>
+                      <TableCell className="max-w-xs truncate text-slate-600 dark:text-slate-400">
                         {e.description ?? '—'}
                       </TableCell>
-                      <TableCell className="text-slate-600">{site?.name ?? '—'}</TableCell>
+                      <TableCell className="text-slate-600 dark:text-slate-400">
+                        {site?.name ?? '—'}
+                      </TableCell>
                       <TableCell className="text-right font-medium">
                         {fmtMoney(e.amount, e.currency)}
                       </TableCell>

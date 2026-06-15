@@ -9,10 +9,10 @@ import { and, count, eq, or, sql } from 'drizzle-orm'
 import type { RequestContext } from '@beaconhs/tenant'
 import {
   correctiveActions,
-  inspectionBankCriteria,
   inspectionRecordCriteria,
   inspectionRecords,
-  inspectionTypeBanks,
+  inspectionTypeCriteria,
+  inspectionTypeGroups,
   inspectionTypes,
 } from '@beaconhs/db/schema'
 import { recordAudit } from '@/lib/audit'
@@ -56,9 +56,11 @@ export async function nextInspectionReference(
 }
 
 /**
- * Materialise inspection_record_criteria rows for a new inspection_record
- * by walking every bank linked to the type and inserting one row per
- * criterion in that bank.
+ * Materialise inspection_record_criteria rows for a new inspection_record by
+ * walking the type's own criteria — in group order (ungrouped last), then
+ * criterion order — and snapshotting the group label + response config onto
+ * each row so the fill view renders section headers and the right controls
+ * without joining back to the live type.
  */
 export async function materialiseCriteriaForRecord(
   ctx: RequestContext,
@@ -66,24 +68,19 @@ export async function materialiseCriteriaForRecord(
   typeId: string,
 ): Promise<number> {
   return ctx.db(async (tx) => {
-    // Pull every criterion for every bank linked to this type, in (bank
-    // sequence, criterion sequence) order so the inspector sees them grouped
-    // sensibly.
     const rows = await tx
       .select({
-        criterion: inspectionBankCriteria,
-        bankSequence: inspectionTypeBanks.sequence,
+        criterion: inspectionTypeCriteria,
+        groupLabel: inspectionTypeGroups.label,
       })
-      .from(inspectionTypeBanks)
-      .innerJoin(
-        inspectionBankCriteria,
-        eq(inspectionBankCriteria.bankId, inspectionTypeBanks.bankId),
-      )
-      .where(eq(inspectionTypeBanks.typeId, typeId))
+      .from(inspectionTypeCriteria)
+      .leftJoin(inspectionTypeGroups, eq(inspectionTypeGroups.id, inspectionTypeCriteria.groupId))
+      .where(eq(inspectionTypeCriteria.typeId, typeId))
+      // Ungrouped criteria (null group) sort last via the coalesce sentinel.
       .orderBy(
-        inspectionTypeBanks.sequence,
-        inspectionBankCriteria.sequence,
-        inspectionBankCriteria.id,
+        sql`coalesce(${inspectionTypeGroups.sequence}, 2147483647)`,
+        inspectionTypeCriteria.sequence,
+        inspectionTypeCriteria.id,
       )
     if (rows.length === 0) return 0
     await tx.insert(inspectionRecordCriteria).values(
@@ -92,8 +89,11 @@ export async function materialiseCriteriaForRecord(
         recordId,
         criterionId: r.criterion.id,
         questionTextSnapshot: r.criterion.text,
-        // Global sequence across all banks, with bank-order baked in.
-        sequence: (r.bankSequence ?? 0) * 1000 + r.criterion.sequence + i * 0,
+        groupLabelSnapshot: r.groupLabel ?? null,
+        responseType: r.criterion.responseType,
+        requiresPhoto: r.criterion.requiresPhoto,
+        requiresComment: r.criterion.requiresComment,
+        sequence: i,
       })),
     )
     return rows.length

@@ -141,7 +141,7 @@ export default async function TitleTasksPage({
               </CardHeader>
               <CardContent>
                 {tasks.length === 0 ? (
-                  <p className="text-sm text-slate-500">
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
                     No tasks. Add one with the form on the right.
                   </p>
                 ) : (
@@ -152,7 +152,7 @@ export default async function TitleTasksPage({
                       return (
                         <li
                           key={t.id}
-                          className="flex items-start gap-3 rounded border border-slate-200 px-3 py-2"
+                          className="flex items-start gap-3 rounded border border-slate-200 px-3 py-2 dark:border-slate-800"
                         >
                           <div className="flex shrink-0 flex-col items-center gap-1 pt-1">
                             <form action={reorderTitleTask}>
@@ -210,9 +210,13 @@ export default async function TitleTasksPage({
                             </form>
                           ) : (
                             <div className="min-w-0 flex-1">
-                              <div className="font-medium text-slate-900">{t.task}</div>
+                              <div className="font-medium text-slate-900 dark:text-slate-100">
+                                {t.task}
+                              </div>
                               {t.description ? (
-                                <div className="text-xs text-slate-500">{t.description}</div>
+                                <div className="text-xs text-slate-500 dark:text-slate-400">
+                                  {t.description}
+                                </div>
                               ) : null}
                               <div className="mt-1 text-xs text-slate-400">
                                 {ackCount}/{assignments.length} acknowledged
@@ -289,7 +293,7 @@ export default async function TitleTasksPage({
             </CardHeader>
             <CardContent className="overflow-x-auto">
               {assignments.length === 0 || tasks.length === 0 ? (
-                <p className="text-sm text-slate-500">
+                <p className="text-sm text-slate-500 dark:text-slate-400">
                   {assignments.length === 0
                     ? 'No one assigned to this title.'
                     : 'No tasks defined.'}
@@ -297,14 +301,14 @@ export default async function TitleTasksPage({
               ) : (
                 <table className="w-full text-xs">
                   <thead>
-                    <tr className="border-b border-slate-200 text-left">
-                      <th className="sticky left-0 z-10 bg-white px-2 py-2 font-semibold text-slate-500">
+                    <tr className="border-b border-slate-200 text-left dark:border-slate-800">
+                      <th className="sticky left-0 z-10 bg-white px-2 py-2 font-semibold text-slate-500 dark:bg-slate-900 dark:text-slate-400">
                         Person
                       </th>
                       {tasks.map((t, i) => (
                         <th
                           key={t.id}
-                          className="px-1 py-2 text-center font-normal text-slate-500"
+                          className="px-1 py-2 text-center font-normal text-slate-500 dark:text-slate-400"
                           title={t.task}
                         >
                           <div className="rotate-180 text-[10px] [writing-mode:vertical-rl]">
@@ -312,15 +316,20 @@ export default async function TitleTasksPage({
                           </div>
                         </th>
                       ))}
-                      <th className="px-2 py-2 text-right font-semibold text-slate-500">Done</th>
+                      <th className="px-2 py-2 text-right font-semibold text-slate-500 dark:text-slate-400">
+                        Done
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
                     {assignments.map(({ person }) => {
                       const done = perPersonComplete.get(person.id) ?? 0
                       return (
-                        <tr key={person.id} className="border-b border-slate-100">
-                          <td className="sticky left-0 z-10 bg-white px-2 py-1">
+                        <tr
+                          key={person.id}
+                          className="border-b border-slate-100 dark:border-slate-800"
+                        >
+                          <td className="sticky left-0 z-10 bg-white px-2 py-1 dark:bg-slate-900">
                             <Link
                               href={`/people/${person.id}?tab=title`}
                               className="font-medium hover:underline"

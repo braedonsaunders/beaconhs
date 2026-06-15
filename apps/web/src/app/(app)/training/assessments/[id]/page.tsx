@@ -134,7 +134,7 @@ export default async function AssessmentAttemptDetailPage({
               <CardTitle>Instructions</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-sm whitespace-pre-wrap text-slate-700">
+              <p className="text-sm whitespace-pre-wrap text-slate-700 dark:text-slate-300">
                 {type.preAssessmentMessage}
               </p>
             </CardContent>
@@ -147,7 +147,7 @@ export default async function AssessmentAttemptDetailPage({
               <CardTitle>Result message</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-sm whitespace-pre-wrap text-slate-700">
+              <p className="text-sm whitespace-pre-wrap text-slate-700 dark:text-slate-300">
                 {type.postAssessmentMessage}
               </p>
             </CardContent>
@@ -160,21 +160,26 @@ export default async function AssessmentAttemptDetailPage({
           </CardHeader>
           <CardContent>
             {results.length === 0 ? (
-              <p className="text-sm text-slate-500">No questions on this attempt.</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                No questions on this attempt.
+              </p>
             ) : (
               <form action={submitAction} className="space-y-4">
                 <ol className="space-y-4">
                   {results.map((r, i) => {
                     const opts = parseSnapshotOptions(r.kindSnapshot)
                     return (
-                      <li key={r.id} className="rounded-lg border border-slate-200 bg-white p-4">
+                      <li
+                        key={r.id}
+                        className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
+                      >
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0 flex-1">
-                            <div className="text-xs tracking-wide text-slate-500 uppercase">
+                            <div className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
                               Q{i + 1} · {r.kindSnapshot.replace('_', ' ')} · {r.pointsPossible}
                               pt
                             </div>
-                            <p className="mt-1 text-sm font-medium text-slate-900">
+                            <p className="mt-1 text-sm font-medium text-slate-900 dark:text-slate-100">
                               {r.promptSnapshot}
                             </p>
                           </div>
@@ -202,7 +207,7 @@ export default async function AssessmentAttemptDetailPage({
                           />
                         </div>
                         {!isInProgress && r.correctAnswerSnapshot ? (
-                          <p className="mt-2 text-xs text-slate-500">
+                          <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
                             Correct answer:{' '}
                             <span className="font-mono">{r.correctAnswerSnapshot}</span>
                           </p>
@@ -217,14 +222,14 @@ export default async function AssessmentAttemptDetailPage({
                       type="submit"
                       formAction={cancelAction}
                       formNoValidate
-                      className="inline-flex items-center rounded border border-slate-200 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+                      className="inline-flex items-center rounded border border-slate-200 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/60"
                     >
                       Cancel attempt
                     </button>
                     <Button type="submit">Submit for grading</Button>
                   </div>
                 ) : (
-                  <div className="text-xs text-slate-500">
+                  <div className="text-xs text-slate-500 dark:text-slate-400">
                     This attempt is locked. Submitted at{' '}
                     {attempt.completedAt ? new Date(attempt.completedAt).toLocaleString() : '—'}.
                   </div>
@@ -292,7 +297,7 @@ function AnswerInput({
           disabled={disabled}
           placeholder='Comma-separated, e.g. "A,C"'
         />
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-slate-500 dark:text-slate-400">
           Enter the letter values of every correct option, separated by commas.
         </p>
       </div>

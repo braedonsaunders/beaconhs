@@ -76,7 +76,7 @@ export function ExtraFieldsSection({
               description="Capture extra fields that don't fit the built-in columns — e.g. issuing union local, reference number."
             />
           ) : (
-            <ul className="divide-y divide-slate-100 text-sm">
+            <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
               {rows.map((r) => (
                 <FieldRow
                   key={r.id}
@@ -137,8 +137,10 @@ function FieldRow({
   return (
     <li className="flex items-start justify-between gap-3 py-2">
       <div className="min-w-0 flex-1">
-        <div className="text-xs tracking-wide text-slate-500 uppercase">{row.fieldKey}</div>
-        <div className="mt-0.5 text-sm break-words text-slate-800">
+        <div className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
+          {row.fieldKey}
+        </div>
+        <div className="mt-0.5 text-sm break-words text-slate-800 dark:text-slate-200">
           {row.fieldValue && row.fieldValue.length > 0 ? row.fieldValue : '—'}
         </div>
       </div>
@@ -234,7 +236,7 @@ function AddExtraFieldDrawer({
       <div className="space-y-4">
         <div className="space-y-1.5">
           <Label htmlFor="fieldKey">
-            Field name <span className="text-red-600">*</span>
+            Field name <span className="text-red-600 dark:text-red-400">*</span>
           </Label>
           <Input
             id="fieldKey"

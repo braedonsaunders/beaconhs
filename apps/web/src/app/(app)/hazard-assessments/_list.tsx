@@ -165,51 +165,18 @@ export async function AssessmentsListPage({
       .groupBy(orgUnits.id, orgUnits.name)
       .orderBy(asc(orgUnits.name))
 
-    const scopeWhere =
-      mineOnly && ctx.membership?.id
-        ? and(
-            sql`${hazidAssessments.deletedAt} is null`,
-            eq(hazidAssessments.reportedByTenantUserId, ctx.membership.id),
-          )
-        : sql`${hazidAssessments.deletedAt} is null`
-
-    const monthStart = new Date()
-    monthStart.setDate(1)
-    monthStart.setHours(0, 0, 0, 0)
-    const monthStartIso = monthStart.toISOString()
-    const [kpis] = await tx
-      .select({
-        total: count(),
-        thisMonth: sql<number>`count(*) filter (where ${hazidAssessments.occurredAt} >= ${monthStartIso})`,
-        open: sql<number>`count(*) filter (where not ${hazidAssessments.locked})`,
-        locked: sql<number>`count(*) filter (where ${hazidAssessments.locked})`,
-      })
-      .from(hazidAssessments)
-      .where(scopeWhere)
-
     return {
       rows,
       total: Number(tot?.c ?? 0),
       worstRisk,
       types: allTypes,
       sites: siteOptions,
-      kpis: {
-        thisMonth: Number(kpis?.thisMonth ?? 0),
-        open: Number(kpis?.open ?? 0),
-        locked: Number(kpis?.locked ?? 0),
-      },
     }
   })
 
-  const { rows, total, worstRisk, types, sites, kpis } = data
+  const { rows, total, worstRisk, types, sites } = data
   const sortProps = { basePath, currentParams: sp, dir: params.dir }
   const anyFilter = Boolean(params.q || typeFilter || statusFilter || siteFilter || dateFromRaw)
-
-  const KPI_TILES = [
-    { label: 'This month', value: kpis.thisMonth },
-    { label: 'In progress', value: kpis.open },
-    { label: 'Locked / complete', value: kpis.locked },
-  ]
 
   return (
     <ListPageLayout
@@ -289,22 +256,6 @@ export async function AssessmentsListPage({
       }
     >
       <div className="space-y-4 sm:space-y-5">
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
-          {KPI_TILES.map((t) => (
-            <div
-              key={t.label}
-              className="rounded-lg border border-slate-200 bg-white p-3 sm:p-4 dark:border-slate-800 dark:bg-slate-900"
-            >
-              <div className="text-[11px] tracking-wide text-slate-500 uppercase sm:text-xs">
-                {t.label}
-              </div>
-              <div className="mt-0.5 text-xl font-semibold text-slate-900 sm:mt-1 sm:text-2xl dark:text-slate-100">
-                {t.value}
-              </div>
-            </div>
-          ))}
-        </div>
-
         {rows.length === 0 ? (
           <EmptyState
             icon={<ShieldAlert size={32} />}
@@ -348,11 +299,6 @@ export async function AssessmentsListPage({
                       </div>
                       <div className="mt-2 flex flex-wrap items-center gap-1.5">
                         {worst != null ? <RiskScoreChip score={worst} /> : null}
-                        {a.wah ? (
-                          <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-800">
-                            Heights
-                          </span>
-                        ) : null}
                       </div>
                     </Link>
                   </li>
@@ -410,17 +356,7 @@ export async function AssessmentsListPage({
                           {new Date(a.occurredAt).toLocaleDateString()}
                         </TableCell>
                         <TableCell className="text-slate-600 dark:text-slate-400">
-                          <div className="flex flex-wrap items-center gap-1">
-                            {type?.name ?? '—'}
-                            {a.wah ? (
-                              <span
-                                title="Working at heights"
-                                className="rounded bg-sky-100 px-1 text-[10px] font-semibold text-sky-800"
-                              >
-                                WAH
-                              </span>
-                            ) : null}
-                          </div>
+                          {type?.name ?? '—'}
                         </TableCell>
                         <TableCell className="text-slate-600 dark:text-slate-400">
                           {site?.name ?? '—'}

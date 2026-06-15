@@ -272,7 +272,8 @@ export default async function HazardsLibraryPage({
                 <TableRow key={h.id}>
                   <TableCell>
                     <Link
-                      href={`/hazard-assessments/hazards/${h.id}`}
+                      href={`/hazard-assessments/hazards?drawer=edit-hazard&id=${h.id}`}
+                      scroll={false}
                       className="font-medium text-slate-900 hover:underline dark:text-slate-100"
                     >
                       {h.name}

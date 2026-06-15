@@ -184,7 +184,9 @@ export default async function AssessmentTypeDetailPage({
           </CardHeader>
           <CardContent>
             {questions.length === 0 ? (
-              <p className="text-sm text-slate-500">No questions. Add one with the form below.</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                No questions. Add one with the form below.
+              </p>
             ) : (
               <ol className="space-y-3">
                 {questions.map((q, i) => {
@@ -194,14 +196,19 @@ export default async function AssessmentTypeDetailPage({
                   const reorderDown = reorderAssessmentQuestion.bind(null, id, q.id, 'down')
                   const opts = Array.isArray(q.options) ? q.options : []
                   return (
-                    <li key={q.id} className="rounded-lg border border-slate-200 bg-white p-3">
+                    <li
+                      key={q.id}
+                      className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900"
+                    >
                       <details>
                         <summary className="flex cursor-pointer items-center justify-between gap-3">
                           <span className="flex min-w-0 items-center gap-2">
-                            <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-medium text-slate-700">
+                            <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-300">
                               {i + 1}
                             </span>
-                            <span className="truncate font-medium text-slate-900">{q.prompt}</span>
+                            <span className="truncate font-medium text-slate-900 dark:text-slate-100">
+                              {q.prompt}
+                            </span>
                           </span>
                           <span className="flex shrink-0 items-center gap-2">
                             <Badge variant="secondary">{KIND_LABELS[q.kind] ?? q.kind}</Badge>
@@ -210,7 +217,7 @@ export default async function AssessmentTypeDetailPage({
                               <button
                                 type="submit"
                                 disabled={i === 0}
-                                className="rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
+                                className="rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30 dark:text-slate-400 dark:hover:bg-slate-800"
                                 aria-label="Move up"
                               >
                                 <ChevronUp size={14} />
@@ -220,7 +227,7 @@ export default async function AssessmentTypeDetailPage({
                               <button
                                 type="submit"
                                 disabled={i === questions.length - 1}
-                                className="rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
+                                className="rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30 dark:text-slate-400 dark:hover:bg-slate-800"
                                 aria-label="Move down"
                               >
                                 <ChevronDown size={14} />
@@ -300,7 +307,7 @@ export default async function AssessmentTypeDetailPage({
                             <form action={deleteQ}>
                               <button
                                 type="submit"
-                                className="inline-flex items-center gap-1 rounded text-xs text-red-600 hover:underline"
+                                className="inline-flex items-center gap-1 rounded text-xs text-red-600 hover:underline dark:text-red-400"
                               >
                                 <Trash2 size={12} /> Delete question
                               </button>
@@ -383,7 +390,7 @@ export default async function AssessmentTypeDetailPage({
             <CardTitle>Take this assessment</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
               Start a new attempt — the candidate is taken directly to the question sheet.
             </p>
             <div className="mt-3">
@@ -406,12 +413,12 @@ export default async function AssessmentTypeDetailPage({
           </CardHeader>
           <CardContent>
             <form action={deleteAction}>
-              <p className="mb-2 text-xs text-slate-500">
+              <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">
                 Soft-deletes the assessment type. Existing attempts remain auditable.
               </p>
               <button
                 type="submit"
-                className="inline-flex items-center gap-1 rounded border border-red-200 px-3 py-1.5 text-xs text-red-700 hover:bg-red-50"
+                className="inline-flex items-center gap-1 rounded border border-red-200 px-3 py-1.5 text-xs text-red-700 hover:bg-red-50 dark:text-red-400"
               >
                 <XCircle size={14} /> Delete assessment type
               </button>
@@ -440,7 +447,7 @@ function Field({
     <div className="space-y-1.5">
       <Label>
         {label}
-        {required ? <span className="text-red-600"> *</span> : null}
+        {required ? <span className="text-red-600 dark:text-red-400"> *</span> : null}
       </Label>
       {children}
     </div>

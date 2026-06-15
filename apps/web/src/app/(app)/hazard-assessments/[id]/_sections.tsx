@@ -1346,10 +1346,10 @@ export function MoveButton({
       type="button"
       disabled={disabled || pending}
       onClick={go}
-      className="rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30 dark:hover:bg-slate-800"
+      className="inline-flex min-h-9 min-w-9 items-center justify-center rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30 sm:min-h-0 sm:min-w-0 dark:hover:bg-slate-800"
       aria-label={`Move ${direction}`}
     >
-      {direction === 'up' ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+      {direction === 'up' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
     </button>
   )
 }
@@ -1377,10 +1377,10 @@ export function DeleteButton({
       type="button"
       disabled={pending}
       onClick={go}
-      className="rounded p-1 text-red-600 hover:bg-red-50 disabled:opacity-30"
+      className="inline-flex min-h-9 min-w-9 items-center justify-center rounded p-1 text-red-600 hover:bg-red-50 disabled:opacity-30 sm:min-h-0 sm:min-w-0"
       aria-label="Delete"
     >
-      <Trash2 size={14} />
+      <Trash2 size={16} />
     </button>
   )
 }
@@ -1389,10 +1389,10 @@ export function EditLinkButton({ href }: { href: string }) {
   return (
     <Link
       href={href as any}
-      className="rounded p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+      className="inline-flex min-h-9 min-w-9 items-center justify-center rounded p-1 text-slate-500 hover:bg-slate-100 sm:min-h-0 sm:min-w-0 dark:hover:bg-slate-800"
       aria-label="Edit"
     >
-      <Pencil size={14} />
+      <Pencil size={16} />
     </Link>
   )
 }

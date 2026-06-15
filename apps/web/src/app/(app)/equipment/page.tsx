@@ -16,7 +16,7 @@ import { EquipmentRecordsTable, type EquipmentTableRow } from './_records-table'
 
 export const metadata = { title: 'Equipment' }
 
-const SORTS = ['asset_tag', 'name', 'status', 'site', 'holder', 'purchase_date'] as const
+const SORTS = ['asset_tag', 'name', 'type', 'status', 'site', 'holder', 'purchase_date'] as const
 
 const STATUS_OPTIONS = [
   { value: 'in_service', label: 'In service' },
@@ -66,26 +66,21 @@ export default async function EquipmentPage({
     }
     const whereClause = and(...filters)
 
+    const dirFn = params.dir === 'asc' ? asc : desc
     const orderBy =
       params.sort === 'name'
-        ? [params.dir === 'asc' ? asc(equipmentItems.name) : desc(equipmentItems.name)]
-        : params.sort === 'status'
-          ? [params.dir === 'asc' ? asc(equipmentItems.status) : desc(equipmentItems.status)]
-          : params.sort === 'site'
-            ? [params.dir === 'asc' ? asc(orgUnits.name) : desc(orgUnits.name)]
-            : params.sort === 'holder'
-              ? [params.dir === 'asc' ? asc(people.lastName) : desc(people.lastName)]
-              : params.sort === 'purchase_date'
-                ? [
-                    params.dir === 'asc'
-                      ? asc(equipmentItems.purchaseDate)
-                      : desc(equipmentItems.purchaseDate),
-                  ]
-                : [
-                    params.dir === 'asc'
-                      ? asc(equipmentItems.assetTag)
-                      : desc(equipmentItems.assetTag),
-                  ]
+        ? [dirFn(equipmentItems.name)]
+        : params.sort === 'type'
+          ? [dirFn(equipmentTypes.name)]
+          : params.sort === 'status'
+            ? [dirFn(equipmentItems.status)]
+            : params.sort === 'site'
+              ? [dirFn(orgUnits.name)]
+              : params.sort === 'holder'
+                ? [dirFn(people.lastName)]
+                : params.sort === 'purchase_date'
+                  ? [dirFn(equipmentItems.purchaseDate)]
+                  : [dirFn(equipmentItems.assetTag)]
 
     const [tot] = await tx.select({ c: count() }).from(equipmentItems).where(whereClause)
     const data = await tx
@@ -191,7 +186,15 @@ export default async function EquipmentPage({
         />
       ) : (
         <>
-          <EquipmentRecordsTable rows={tableRows} sites={sites} holders={holders} />
+          <EquipmentRecordsTable
+            rows={tableRows}
+            sites={sites}
+            holders={holders}
+            basePath="/equipment"
+            currentParams={sp}
+            sort={params.sort}
+            dir={params.dir}
+          />
           <Pagination
             basePath="/equipment"
             currentParams={sp}

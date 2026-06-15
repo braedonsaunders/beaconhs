@@ -148,9 +148,9 @@ export function RecordsBrowser({
     ).toString()
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-slate-50/40">
+    <div className="flex h-full min-h-0 flex-col bg-slate-50/40 dark:bg-slate-900/40">
       {/* Toolbar */}
-      <div className="shrink-0 space-y-2 border-b border-slate-200 bg-white px-4 py-2.5 sm:px-6">
+      <div className="shrink-0 space-y-2 border-b border-slate-200 bg-white px-4 py-2.5 sm:px-6 dark:border-slate-800 dark:bg-slate-900">
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-[180px] flex-1">
             <Search size={15} className="absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" />
@@ -158,7 +158,7 @@ export function RecordsBrowser({
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Search journals…"
-              className="h-9 w-full rounded-lg border border-slate-300 bg-white pr-3 pl-9 text-sm transition outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/25"
+              className="h-9 w-full rounded-lg border border-slate-300 bg-white pr-3 pl-9 text-sm transition outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/25 dark:border-slate-700 dark:bg-slate-900"
             />
           </div>
 
@@ -194,7 +194,7 @@ export function RecordsBrowser({
             value={filters.from ?? ''}
             onChange={(e) => setFilters((f) => ({ ...f, from: e.target.value || undefined }))}
             aria-label="From date"
-            className="h-9 rounded-lg border border-slate-300 bg-white px-2 text-sm text-slate-700 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/25"
+            className="h-9 rounded-lg border border-slate-300 bg-white px-2 text-sm text-slate-700 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/25 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
           />
           <span className="text-xs text-slate-400">→</span>
           <input
@@ -202,7 +202,7 @@ export function RecordsBrowser({
             value={filters.to ?? ''}
             onChange={(e) => setFilters((f) => ({ ...f, to: e.target.value || undefined }))}
             aria-label="To date"
-            className="h-9 rounded-lg border border-slate-300 bg-white px-2 text-sm text-slate-700 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/25"
+            className="h-9 rounded-lg border border-slate-300 bg-white px-2 text-sm text-slate-700 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/25 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
           />
 
           <select
@@ -214,7 +214,7 @@ export function RecordsBrowser({
               }))
             }
             aria-label="Status"
-            className="h-9 rounded-lg border border-slate-300 bg-white px-2 text-sm text-slate-700 outline-none focus:border-teal-500"
+            className="h-9 rounded-lg border border-slate-300 bg-white px-2 text-sm text-slate-700 outline-none focus:border-teal-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
           >
             <option value="">Any status</option>
             <option value="submitted">Submitted</option>
@@ -230,7 +230,7 @@ export function RecordsBrowser({
               }))
             }
             aria-label="Type"
-            className="h-9 rounded-lg border border-slate-300 bg-white px-2 text-sm text-slate-700 outline-none focus:border-teal-500"
+            className="h-9 rounded-lg border border-slate-300 bg-white px-2 text-sm text-slate-700 outline-none focus:border-teal-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
           >
             <option value="">Any type</option>
             <option value="worker">Worker</option>
@@ -257,7 +257,7 @@ export function RecordsBrowser({
                 setFilters({})
                 setQ('')
               }}
-              className="inline-flex h-9 items-center gap-1 rounded-lg px-2 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+              className="inline-flex h-9 items-center gap-1 rounded-lg px-2 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800"
             >
               <X size={13} /> Clear
             </button>
@@ -266,14 +266,14 @@ export function RecordsBrowser({
 
         {/* Count + export + view toggle */}
         <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-500">
+          <span className="text-xs text-slate-500 dark:text-slate-400">
             {busy ? (
               <span className="inline-flex items-center gap-1">
                 <Loader2 size={12} className="animate-spin" /> Loading…
               </span>
             ) : (
               <>
-                <span className="font-semibold text-slate-700">
+                <span className="font-semibold text-slate-700 dark:text-slate-300">
                   {(total ?? items.length).toLocaleString()}
                 </span>{' '}
                 {total === 1 ? 'journal' : 'journals'}
@@ -284,12 +284,12 @@ export function RecordsBrowser({
           <div className="ml-auto flex items-center gap-2">
             <a
               href={exportHref}
-              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/60"
               title="Export filtered results to CSV"
             >
               <Download size={13} /> Export
             </a>
-            <div className="flex items-center gap-0.5 rounded-lg bg-slate-100 p-0.5">
+            <div className="flex items-center gap-0.5 rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800">
               <ViewBtn
                 active={view === 'split'}
                 onClick={() => setView('split')}
@@ -322,7 +322,7 @@ export function RecordsBrowser({
           <div className="flex h-full min-h-0">
             <div
               onScroll={onScroll}
-              className="app-scroll w-[360px] shrink-0 overflow-y-auto border-r border-slate-200 bg-white"
+              className="app-scroll w-[360px] shrink-0 overflow-y-auto border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"
             >
               {items.map((it) => (
                 <SplitRow
@@ -341,8 +341,8 @@ export function RecordsBrowser({
         ) : view === 'table' ? (
           <div onScroll={onScroll} className="app-scroll h-full overflow-y-auto">
             <table className="w-full border-collapse text-sm">
-              <thead className="sticky top-0 z-10 bg-slate-50/95 text-left text-[11px] tracking-wide text-slate-400 uppercase backdrop-blur">
-                <tr className="border-b border-slate-200">
+              <thead className="sticky top-0 z-10 bg-slate-50/95 text-left text-[11px] tracking-wide text-slate-400 uppercase backdrop-blur dark:bg-slate-900/80">
+                <tr className="border-b border-slate-200 dark:border-slate-800">
                   <th className="px-4 py-2 font-medium">Author</th>
                   <th className="px-3 py-2 font-medium">Date</th>
                   <th className="px-3 py-2 font-medium">Site</th>
@@ -402,7 +402,7 @@ export function RecordsBrowser({
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 32, stiffness: 320, mass: 0.8 }}
-              className="absolute top-0 right-0 h-full w-[92%] max-w-xl border-l border-slate-200 bg-white shadow-2xl"
+              className="absolute top-0 right-0 h-full w-[92%] max-w-xl border-l border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900"
             >
               <RecordReader
                 entry={reader}
@@ -434,21 +434,21 @@ function SplitRow({
       type="button"
       onClick={onClick}
       className={cn(
-        'flex w-full items-start gap-2.5 border-b border-slate-100 px-3 py-2.5 text-left transition-colors',
-        active ? 'bg-teal-50' : 'hover:bg-slate-50',
+        'flex w-full items-start gap-2.5 border-b border-slate-100 px-3 py-2.5 text-left transition-colors dark:border-slate-800',
+        active ? 'bg-teal-50 dark:bg-teal-500/10' : 'hover:bg-slate-50 dark:hover:bg-slate-800/60',
       )}
     >
       <Avatar name={item.authorName} size={30} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-2">
-          <span className="truncate text-sm font-medium text-slate-800">
+          <span className="truncate text-sm font-medium text-slate-800 dark:text-slate-200">
             {item.authorName ?? 'Unassigned'}
           </span>
           <span className="shrink-0 text-[11px] text-slate-400">
             {formatLongDate(item.entryDate)}
           </span>
         </div>
-        <p className="truncate text-xs text-slate-500">{item.snippet || '—'}</p>
+        <p className="truncate text-xs text-slate-500 dark:text-slate-400">{item.snippet || '—'}</p>
         <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-slate-400">
           {item.siteName ? <span className="truncate">{item.siteName}</span> : null}
           {item.photoCount > 0 ? (
@@ -478,23 +478,23 @@ function TableRow({
     <tr
       onClick={onClick}
       className={cn(
-        'cursor-pointer border-b border-slate-100 transition-colors',
-        active ? 'bg-teal-50' : 'hover:bg-slate-50',
+        'cursor-pointer border-b border-slate-100 transition-colors dark:border-slate-800',
+        active ? 'bg-teal-50 dark:bg-teal-500/10' : 'hover:bg-slate-50 dark:hover:bg-slate-800/60',
       )}
     >
       <td className="px-4 py-2">
         <div className="flex items-center gap-2">
           <Avatar name={item.authorName} size={26} />
-          <span className="truncate font-medium text-slate-800">
+          <span className="truncate font-medium text-slate-800 dark:text-slate-200">
             {item.authorName ?? 'Unassigned'}
           </span>
         </div>
       </td>
-      <td className="px-3 py-2 whitespace-nowrap text-slate-500">
+      <td className="px-3 py-2 whitespace-nowrap text-slate-500 dark:text-slate-400">
         {formatLongDate(item.entryDate)}
       </td>
-      <td className="px-3 py-2 text-slate-500">{item.siteName ?? '—'}</td>
-      <td className="max-w-[24rem] px-3 py-2 text-slate-500">
+      <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{item.siteName ?? '—'}</td>
+      <td className="max-w-[24rem] px-3 py-2 text-slate-500 dark:text-slate-400">
         <span className="line-clamp-1">{item.snippet || '—'}</span>
       </td>
       <td className="px-3 py-2">
@@ -547,12 +547,12 @@ function CardItem({
     <button
       type="button"
       onClick={onClick}
-      className="flex flex-col gap-2 overflow-hidden rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition-shadow hover:shadow-md"
+      className="flex flex-col gap-2 overflow-hidden rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition-shadow hover:shadow-md dark:border-slate-800 dark:bg-slate-900"
     >
       <div className="flex items-center gap-2.5">
         <Avatar name={item.authorName} size={34} />
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-semibold text-slate-900">
+          <div className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
             {item.authorName ?? 'Unassigned'}
           </div>
           <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
@@ -576,7 +576,9 @@ function CardItem({
           {status.label}
         </span>
       </div>
-      <p className="line-clamp-3 text-sm text-slate-600">{item.snippet || 'No content.'}</p>
+      <p className="line-clamp-3 text-sm text-slate-600 dark:text-slate-400">
+        {item.snippet || 'No content.'}
+      </p>
       {item.tags.length > 0 || item.photoCount > 0 ? (
         <div className="mt-auto flex flex-wrap items-center gap-1.5 pt-1">
           {item.tags.slice(0, 4).map((t) => {
@@ -636,7 +638,9 @@ function ViewBtn({
       title={label}
       className={cn(
         'grid h-7 w-8 place-items-center rounded-md transition-colors',
-        active ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800',
+        active
+          ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100'
+          : 'text-slate-500 hover:text-slate-800 dark:text-slate-400',
       )}
     >
       {children}

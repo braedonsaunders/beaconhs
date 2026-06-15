@@ -196,68 +196,86 @@ export default async function OshaLogPage({
 
   if (isPrint) {
     return (
-      <div className="bg-white p-8 text-xs text-slate-900 print:p-0">
-        <header className="mb-6 border-b border-slate-300 pb-3">
+      <div className="bg-white p-8 text-xs text-slate-900 dark:bg-slate-900 dark:text-slate-100 print:p-0">
+        <header className="mb-6 border-b border-slate-300 pb-3 dark:border-slate-700">
           <h1 className="text-lg font-bold tracking-wide uppercase">
             OSHA Form 300A — Summary of Work-Related Injuries and Illnesses
           </h1>
-          <div className="mt-1 text-xs text-slate-600">
+          <div className="mt-1 text-xs text-slate-600 dark:text-slate-400">
             Range: {startYmd} → {endYmd} · Generated {new Date().toLocaleString()}
           </div>
         </header>
         <table className="w-full border-collapse text-xs">
           <thead>
-            <tr className="bg-slate-100 text-left">
-              <th className="border border-slate-300 px-2 py-1">Case #</th>
-              <th className="border border-slate-300 px-2 py-1">Date</th>
-              <th className="border border-slate-300 px-2 py-1">Employee</th>
-              <th className="border border-slate-300 px-2 py-1">Job title</th>
-              <th className="border border-slate-300 px-2 py-1">Classification</th>
-              <th className="border border-slate-300 px-2 py-1">Description</th>
-              <th className="border border-slate-300 px-2 py-1 text-right">Days away</th>
-              <th className="border border-slate-300 px-2 py-1 text-right">Days rest.</th>
-              <th className="border border-slate-300 px-2 py-1">Outcome</th>
+            <tr className="bg-slate-100 text-left dark:bg-slate-800">
+              <th className="border border-slate-300 px-2 py-1 dark:border-slate-700">Case #</th>
+              <th className="border border-slate-300 px-2 py-1 dark:border-slate-700">Date</th>
+              <th className="border border-slate-300 px-2 py-1 dark:border-slate-700">Employee</th>
+              <th className="border border-slate-300 px-2 py-1 dark:border-slate-700">Job title</th>
+              <th className="border border-slate-300 px-2 py-1 dark:border-slate-700">
+                Classification
+              </th>
+              <th className="border border-slate-300 px-2 py-1 dark:border-slate-700">
+                Description
+              </th>
+              <th className="border border-slate-300 px-2 py-1 text-right dark:border-slate-700">
+                Days away
+              </th>
+              <th className="border border-slate-300 px-2 py-1 text-right dark:border-slate-700">
+                Days rest.
+              </th>
+              <th className="border border-slate-300 px-2 py-1 dark:border-slate-700">Outcome</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => (
               <tr key={r.caseNumber}>
-                <td className="border border-slate-300 px-2 py-1 font-mono">{r.caseNumber}</td>
-                <td className="border border-slate-300 px-2 py-1">
+                <td className="border border-slate-300 px-2 py-1 font-mono dark:border-slate-700">
+                  {r.caseNumber}
+                </td>
+                <td className="border border-slate-300 px-2 py-1 dark:border-slate-700">
                   {r.occurredAt.toLocaleDateString()}
                 </td>
-                <td className="border border-slate-300 px-2 py-1">{r.employeeName ?? '—'}</td>
-                <td className="border border-slate-300 px-2 py-1">{r.jobTitle ?? '—'}</td>
-                <td className="border border-slate-300 px-2 py-1">
+                <td className="border border-slate-300 px-2 py-1 dark:border-slate-700">
+                  {r.employeeName ?? '—'}
+                </td>
+                <td className="border border-slate-300 px-2 py-1 dark:border-slate-700">
+                  {r.jobTitle ?? '—'}
+                </td>
+                <td className="border border-slate-300 px-2 py-1 dark:border-slate-700">
                   {r.classificationCode ?? '—'} {r.classification ?? ''}
                 </td>
-                <td className="border border-slate-300 px-2 py-1">{r.description}</td>
-                <td className="border border-slate-300 px-2 py-1 text-right tabular-nums">
+                <td className="border border-slate-300 px-2 py-1 dark:border-slate-700">
+                  {r.description}
+                </td>
+                <td className="border border-slate-300 px-2 py-1 text-right tabular-nums dark:border-slate-700">
                   {r.daysAway}
                 </td>
-                <td className="border border-slate-300 px-2 py-1 text-right tabular-nums">
+                <td className="border border-slate-300 px-2 py-1 text-right tabular-nums dark:border-slate-700">
                   {r.daysRestricted}
                 </td>
-                <td className="border border-slate-300 px-2 py-1">{outcomeLabel(r.outcome)}</td>
+                <td className="border border-slate-300 px-2 py-1 dark:border-slate-700">
+                  {outcomeLabel(r.outcome)}
+                </td>
               </tr>
             ))}
           </tbody>
           <tfoot>
-            <tr className="bg-slate-50 font-medium">
-              <td className="border border-slate-300 px-2 py-1" colSpan={6}>
+            <tr className="bg-slate-50 font-medium dark:bg-slate-800">
+              <td className="border border-slate-300 px-2 py-1 dark:border-slate-700" colSpan={6}>
                 TOTAL ({totals.cases ?? 0} cases)
               </td>
-              <td className="border border-slate-300 px-2 py-1 text-right tabular-nums">
+              <td className="border border-slate-300 px-2 py-1 text-right tabular-nums dark:border-slate-700">
                 {totals.daysAway ?? 0}
               </td>
-              <td className="border border-slate-300 px-2 py-1 text-right tabular-nums">
+              <td className="border border-slate-300 px-2 py-1 text-right tabular-nums dark:border-slate-700">
                 {totals.daysRestricted ?? 0}
               </td>
-              <td className="border border-slate-300 px-2 py-1"></td>
+              <td className="border border-slate-300 px-2 py-1 dark:border-slate-700"></td>
             </tr>
           </tfoot>
         </table>
-        <p className="mt-4 text-xs text-slate-500">
+        <p className="mt-4 text-xs text-slate-500 dark:text-slate-400">
           Generated by BeaconHS. Recordable cases per OSHA 29 CFR 1904.7.
         </p>
       </div>
@@ -330,7 +348,10 @@ export default async function OshaLogPage({
               <TableBody>
                 {rows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center text-sm text-slate-500">
+                    <TableCell
+                      colSpan={8}
+                      className="text-center text-sm text-slate-500 dark:text-slate-400"
+                    >
                       No recordable incidents in this range.
                     </TableCell>
                   </TableRow>
@@ -340,18 +361,20 @@ export default async function OshaLogPage({
                       <TableCell className="font-mono text-xs">
                         <Link
                           href={`/incidents/${r.incidentId}`}
-                          className="text-teal-700 hover:underline"
+                          className="text-teal-700 hover:underline dark:text-teal-400"
                         >
                           {r.caseNumber}
                         </Link>
                       </TableCell>
-                      <TableCell className="text-slate-600">
+                      <TableCell className="text-slate-600 dark:text-slate-400">
                         {r.occurredAt.toLocaleDateString()}
                       </TableCell>
                       <TableCell>
                         <div>{r.employeeName ?? <span className="text-slate-400">—</span>}</div>
                         {r.jobTitle ? (
-                          <div className="text-xs text-slate-500">{r.jobTitle}</div>
+                          <div className="text-xs text-slate-500 dark:text-slate-400">
+                            {r.jobTitle}
+                          </div>
                         ) : null}
                       </TableCell>
                       <TableCell>
@@ -368,7 +391,7 @@ export default async function OshaLogPage({
                           <span className="text-xs text-slate-400">Unclassified</span>
                         )}
                       </TableCell>
-                      <TableCell className="max-w-md text-sm text-slate-700">
+                      <TableCell className="max-w-md text-sm text-slate-700 dark:text-slate-300">
                         {r.description}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">{r.daysAway}</TableCell>
@@ -399,10 +422,12 @@ function SummaryCard({
 }) {
   return (
     <div
-      className={`rounded-lg border bg-white px-4 py-3 ${tone === 'destructive' && value > 0 ? 'border-red-300 bg-red-50' : 'border-slate-200'} `}
+      className={`rounded-lg border bg-white px-4 py-3 dark:bg-slate-900 ${tone === 'destructive' && value > 0 ? 'border-red-300 bg-red-50 dark:bg-red-500/10' : 'border-slate-200 dark:border-slate-800'} `}
     >
-      <div className="text-xs tracking-wide text-slate-500 uppercase">{label}</div>
-      <div className="mt-0.5 text-2xl font-semibold text-slate-900 tabular-nums">
+      <div className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
+        {label}
+      </div>
+      <div className="mt-0.5 text-2xl font-semibold text-slate-900 tabular-nums dark:text-slate-100">
         {value.toLocaleString()}
       </div>
     </div>

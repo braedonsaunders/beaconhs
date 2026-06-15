@@ -150,16 +150,20 @@ export default async function TrainingAuthoritiesPage({
                   <TableCell>
                     <Link
                       href={`/training/authorities/${authority.id}`}
-                      className="font-medium text-slate-900 hover:underline"
+                      className="font-medium text-slate-900 hover:underline dark:text-slate-100"
                     >
                       {authority.name}
                     </Link>
                   </TableCell>
-                  <TableCell className="font-mono text-xs text-slate-600">
+                  <TableCell className="font-mono text-xs text-slate-600 dark:text-slate-400">
                     {authority.code ?? '—'}
                   </TableCell>
-                  <TableCell className="text-slate-600">{authority.jurisdiction ?? '—'}</TableCell>
-                  <TableCell className="text-slate-600 tabular-nums">{typeCount}</TableCell>
+                  <TableCell className="text-slate-600 dark:text-slate-400">
+                    {authority.jurisdiction ?? '—'}
+                  </TableCell>
+                  <TableCell className="text-slate-600 tabular-nums dark:text-slate-400">
+                    {typeCount}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

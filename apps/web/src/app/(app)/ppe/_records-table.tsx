@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { Badge } from '@beaconhs/ui'
+import { SortTh } from '@/components/sortable-th'
 import { BulkPpeBar, HeaderSelectAll, SelectionCheckbox, type PpeHolderOption } from './_bulk-bar'
 
 export type PpeTableRow = {
@@ -18,9 +19,17 @@ export type PpeTableRow = {
 export function PpeRecordsTable({
   rows,
   holders,
+  basePath,
+  currentParams,
+  sort,
+  dir,
 }: {
   rows: PpeTableRow[]
   holders: PpeHolderOption[]
+  basePath: string
+  currentParams: Record<string, string | string[] | undefined>
+  sort: string
+  dir: 'asc' | 'desc'
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
@@ -47,35 +56,56 @@ export function PpeRecordsTable({
     setSelected(new Set())
   }
 
+  const sortProps = { basePath, currentParams, sort, dir }
+
   return (
     <>
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase">
+            <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-400">
               <th className="w-8 px-3 py-2">
                 <HeaderSelectAll allSelected={allSelected} onToggleAll={toggleAll} />
               </th>
-              <th className="px-3 py-2">Type</th>
-              <th className="px-3 py-2">Serial #</th>
-              <th className="px-3 py-2">Size</th>
-              <th className="px-3 py-2">Status</th>
-              <th className="px-3 py-2">Holder</th>
-              <th className="px-3 py-2">Next inspection</th>
+              <SortTh column="type" {...sortProps}>
+                Type
+              </SortTh>
+              <SortTh column="serial" {...sortProps}>
+                Serial #
+              </SortTh>
+              <SortTh column="size" {...sortProps}>
+                Size
+              </SortTh>
+              <SortTh column="status" {...sortProps}>
+                Status
+              </SortTh>
+              <SortTh column="holder" {...sortProps}>
+                Holder
+              </SortTh>
+              <SortTh column="next_inspection" {...sortProps}>
+                Next inspection
+              </SortTh>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
             {rows.map((r) => {
               const isSelected = selected.has(r.id)
               return (
-                <tr key={r.id} className={isSelected ? 'bg-teal-50/40' : 'hover:bg-slate-50/50'}>
+                <tr
+                  key={r.id}
+                  className={
+                    isSelected
+                      ? 'bg-teal-50/40 dark:bg-teal-500/10'
+                      : 'hover:bg-slate-50/50 dark:hover:bg-slate-800/60'
+                  }
+                >
                   <td className="w-8 px-3 py-2">
                     <SelectionCheckbox id={r.id} selected={isSelected} onToggle={toggleOne} />
                   </td>
                   <td className="px-3 py-2">
                     <Link
                       href={`/ppe/${r.id}` as any}
-                      className="font-medium text-slate-900 hover:underline"
+                      className="font-medium text-slate-900 hover:underline dark:text-slate-100"
                     >
                       {r.typeName}
                     </Link>
@@ -95,8 +125,12 @@ export function PpeRecordsTable({
                       {r.status.replace('_', ' ')}
                     </Badge>
                   </td>
-                  <td className="px-3 py-2 text-slate-600">{r.holderName ?? '—'}</td>
-                  <td className="px-3 py-2 text-slate-600">{r.nextInspectionDue ?? '—'}</td>
+                  <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
+                    {r.holderName ?? '—'}
+                  </td>
+                  <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
+                    {r.nextInspectionDue ?? '—'}
+                  </td>
                 </tr>
               )
             })}

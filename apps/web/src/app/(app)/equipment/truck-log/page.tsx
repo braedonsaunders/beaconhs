@@ -145,14 +145,16 @@ export default async function TruckLogPage({
                   ← Previous
                 </Button>
               </Link>
-              <div className="text-sm font-medium text-slate-700">{fmtMonthLabel(year, month)}</div>
+              <div className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                {fmtMonthLabel(year, month)}
+              </div>
               <Link href={`/equipment/truck-log?month=${monthParamNext}` as any}>
                 <Button variant="outline" size="sm">
                   Next →
                 </Button>
               </Link>
             </div>
-            <div className="text-xs text-slate-500">
+            <div className="text-xs text-slate-500 dark:text-slate-400">
               {entries.length} entries · {displayTrucks.length} trucks
             </div>
           </div>
@@ -171,13 +173,18 @@ export default async function TruckLogPage({
           }
         />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="sticky left-0 z-10 bg-white">Truck</TableHead>
+                <TableHead className="sticky left-0 z-10 bg-white dark:bg-slate-900">
+                  Truck
+                </TableHead>
                 {Array.from({ length: totalDays }, (_, i) => i + 1).map((d) => (
-                  <TableHead key={d} className="px-1 text-center text-[11px] text-slate-500">
+                  <TableHead
+                    key={d}
+                    className="px-1 text-center text-[11px] text-slate-500 dark:text-slate-400"
+                  >
                     {d}
                   </TableHead>
                 ))}
@@ -190,10 +197,14 @@ export default async function TruckLogPage({
                 const total = totalsByTruck.get(t.id) ?? 0
                 return (
                   <TableRow key={t.id}>
-                    <TableCell className="sticky left-0 z-10 bg-white whitespace-nowrap">
+                    <TableCell className="sticky left-0 z-10 bg-white whitespace-nowrap dark:bg-slate-900">
                       <Link href={`/equipment/${t.id}`} className="hover:underline">
-                        <div className="font-mono text-xs text-slate-500">{t.assetTag}</div>
-                        <div className="text-sm font-medium text-slate-900">{t.name}</div>
+                        <div className="font-mono text-xs text-slate-500 dark:text-slate-400">
+                          {t.assetTag}
+                        </div>
+                        <div className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                          {t.name}
+                        </div>
                       </Link>
                     </TableCell>
                     {Array.from({ length: totalDays }, (_, i) => i + 1).map((d) => {
@@ -215,7 +226,7 @@ export default async function TruckLogPage({
                         <TableCell key={d} className="px-1 text-center align-middle">
                           <Link
                             href={`/equipment/truck-log/${cell.id}` as any}
-                            className="block rounded bg-teal-50 px-1.5 py-1 text-[11px] font-medium text-teal-800 hover:bg-teal-100"
+                            className="block rounded bg-teal-50 px-1.5 py-1 text-[11px] font-medium text-teal-800 hover:bg-teal-100 dark:bg-teal-500/10 dark:text-teal-200"
                           >
                             {cell.km ?? '·'}
                           </Link>

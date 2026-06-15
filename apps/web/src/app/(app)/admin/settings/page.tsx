@@ -151,7 +151,7 @@ export default async function AdminSettingsPage() {
               {tenant.branding.logoUrl ? (
                 <div className="sm:col-span-2">
                   <Label className="text-xs">Preview</Label>
-                  <div className="mt-1 flex items-center gap-3 rounded-md border border-slate-200 bg-white p-3">
+                  <div className="mt-1 flex items-center gap-3 rounded-md border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
                     <img src={tenant.branding.logoUrl} alt="" className="h-8" />
                     <span
                       className="font-semibold"
@@ -175,7 +175,7 @@ export default async function AdminSettingsPage() {
                 {KNOWN_LANGUAGES.map((l) => (
                   <label
                     key={l.value}
-                    className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm"
+                    className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm dark:border-slate-800"
                   >
                     <input
                       type="checkbox"
@@ -190,7 +190,7 @@ export default async function AdminSettingsPage() {
                 <select
                   name="defaultLanguage"
                   defaultValue={tenant.defaultLanguage}
-                  className="h-10 w-32 rounded-md border border-slate-300 bg-white px-3 text-sm"
+                  className="h-10 w-32 rounded-md border border-slate-300 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900"
                 >
                   {KNOWN_LANGUAGES.map((l) => (
                     <option key={l.value} value={l.value}>
@@ -211,7 +211,7 @@ export default async function AdminSettingsPage() {
               {LEVELS.map((lvl) => (
                 <label
                   key={lvl}
-                  className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm"
+                  className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm dark:border-slate-800"
                 >
                   <input type="checkbox" name={`lvl_${lvl}`} defaultChecked={hierarchy[lvl]} />
                   {lvl}
@@ -277,9 +277,12 @@ function RiskMatrixPreview({
       <table className="text-xs">
         <thead>
           <tr>
-            <th className="border-b border-slate-200 p-2" />
+            <th className="border-b border-slate-200 p-2 dark:border-slate-800" />
             {lik.map((l) => (
-              <th key={l} className="border-b border-slate-200 p-2 text-left text-slate-500">
+              <th
+                key={l}
+                className="border-b border-slate-200 p-2 text-left text-slate-500 dark:border-slate-800 dark:text-slate-400"
+              >
                 {l}
               </th>
             ))}
@@ -288,7 +291,9 @@ function RiskMatrixPreview({
         <tbody>
           {sev.map((s, sIdx) => (
             <tr key={s}>
-              <th className="border-r border-slate-200 p-2 text-left text-slate-500">{s}</th>
+              <th className="border-r border-slate-200 p-2 text-left text-slate-500 dark:border-slate-800 dark:text-slate-400">
+                {s}
+              </th>
               {lik.map((_, lIdx) => {
                 const cell = matrix.cells[`${sIdx}:${lIdx}`]
                 return (

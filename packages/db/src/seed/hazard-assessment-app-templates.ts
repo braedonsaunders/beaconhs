@@ -8,6 +8,7 @@ import type { FormSchemaV1 } from '../schema/forms'
 
 export const HAZID_CONFINED_SPACE_APP_KEY = 'hazid-confined-space-entry-plan'
 export const HAZID_ARC_FLASH_APP_KEY = 'hazid-arc-flash-work-plan'
+export const HAZID_FALL_PROTECTION_APP_KEY = 'hazid-fall-protection-plan'
 
 const submitterStep = (key: string, title: string) => ({
   key,
@@ -23,6 +24,48 @@ const yesNo = (id: string, label: string, required = true) => ({
 })
 
 const opt = (value: string, label: string) => ({ value, label: { en: label } })
+const optsFrom = (values: readonly string[]) => values.map((v) => opt(v, v))
+
+// Working-at-heights vocabularies (mirror the retired native WAH sub-form).
+const WAH_TYPE_OPTIONS = [
+  'Ladder',
+  'Step ladder',
+  'Scaffold',
+  'Elevated work platform (EWP)',
+  'Scissor lift',
+  'Boom lift',
+  'Roof work',
+  'Suspended access',
+  'Leading edge',
+]
+const WAH_ACCESS_OPTIONS = [
+  'Extension ladder',
+  'Step ladder',
+  'Scaffold stair tower',
+  'Scissor lift',
+  'Boom lift',
+  'Fixed stairs / platform',
+  'Man basket',
+]
+const WAH_COMMUNICATION_OPTIONS = [
+  'Radio',
+  'Hand signals',
+  'Verbal / line of sight',
+  'Spotter',
+  'Air horn / whistle',
+  'Phone',
+]
+const WAH_EQUIPMENT_OPTIONS = [
+  'Full-body harness',
+  'Shock-absorbing lanyard',
+  'Self-retracting lifeline (SRL)',
+  'Engineered anchor point',
+  'Horizontal lifeline',
+  'Guardrails',
+  'Travel restraint',
+  'Safety net',
+  'Ladder tie-off',
+]
 
 export const HAZID_CONFINED_SPACE_APP_SCHEMA: FormSchemaV1 = {
   schemaVersion: 1,
@@ -391,6 +434,122 @@ async function ensureTemplate(
   return tmpl
 }
 
+export const HAZID_FALL_PROTECTION_APP_SCHEMA: FormSchemaV1 = {
+  schemaVersion: 1,
+  title: { en: 'Fall Protection Plan' },
+  description: {
+    en: 'Working-at-heights plan: access method, communication, fall-protection equipment, anchorage, and rescue.',
+  },
+  sections: [
+    {
+      id: 'wah_setup',
+      title: { en: 'Work at heights' },
+      step: 'setup',
+      fields: [
+        { id: 'site', type: 'site_picker', label: { en: 'Site' }, required: true },
+        {
+          id: 'work_description',
+          type: 'textarea',
+          label: { en: 'Work description' },
+          required: true,
+        },
+        {
+          id: 'wah_type',
+          type: 'select',
+          label: { en: 'Type of work at heights' },
+          required: true,
+          validation: { options: optsFrom(WAH_TYPE_OPTIONS) },
+        },
+        { id: 'permit_number', type: 'text', label: { en: 'Permit number (if applicable)' } },
+        { id: 'supervisor', type: 'person_picker', label: { en: 'Supervisor' }, required: true },
+        {
+          id: 'workers',
+          type: 'multi_person_picker',
+          label: { en: 'Workers at height' },
+          required: true,
+        },
+        {
+          id: 'work_date',
+          type: 'date',
+          label: { en: 'Date' },
+          required: true,
+          defaultValue: { kind: 'today' },
+        },
+      ],
+    },
+    {
+      id: 'wah_access',
+      title: { en: 'Access & communication' },
+      step: 'access',
+      fields: [
+        {
+          id: 'access_methods',
+          type: 'multi_select',
+          label: { en: 'Access methods' },
+          required: true,
+          validation: { options: optsFrom(WAH_ACCESS_OPTIONS) },
+        },
+        {
+          id: 'communication',
+          type: 'multi_select',
+          label: { en: 'Communication' },
+          required: true,
+          validation: { options: optsFrom(WAH_COMMUNICATION_OPTIONS) },
+        },
+      ],
+    },
+    {
+      id: 'wah_protection',
+      title: { en: 'Fall protection' },
+      step: 'protection',
+      fields: [
+        {
+          id: 'equipment',
+          type: 'multi_select',
+          label: { en: 'Fall-protection equipment' },
+          required: true,
+          validation: { options: optsFrom(WAH_EQUIPMENT_OPTIONS) },
+        },
+        yesNo('anchor_rated', 'Anchor points rated and adequate for the load?'),
+        yesNo('equipment_inspected', 'Harnesses, lanyards, and SRLs inspected before use?'),
+        yesNo(
+          'hierarchy_applied',
+          'Guardrails / travel restraint used before fall arrest where practical?',
+        ),
+        {
+          id: 'rescue_plan',
+          type: 'textarea',
+          label: { en: 'Rescue plan' },
+          required: true,
+          helpText: { en: 'How will a suspended worker be rescued, and by whom?' },
+        },
+      ],
+    },
+    {
+      id: 'wah_signoff',
+      title: { en: 'Sign-off' },
+      step: 'signoff',
+      fields: [
+        yesNo('workers_briefed', 'All workers briefed on this plan and the rescue procedure?'),
+        {
+          id: 'supervisor_signature',
+          type: 'signature',
+          label: { en: 'Supervisor signature' },
+          required: true,
+        },
+      ],
+    },
+  ],
+  workflow: {
+    steps: [
+      submitterStep('setup', 'Setup'),
+      submitterStep('access', 'Access'),
+      submitterStep('protection', 'Fall protection'),
+      submitterStep('signoff', 'Sign-off'),
+    ],
+  },
+}
+
 export async function seedHazardAssessmentAppTemplates(tx: DrizzleTx, tenantId: string) {
   const confinedSpace = await ensureTemplate(tx, {
     tenantId,
@@ -408,6 +567,18 @@ export async function seedHazardAssessmentAppTemplates(tx: DrizzleTx, tenantId: 
       'Embedded hazard-assessment app for arc-flash study details, boundaries, controls, PPE, and sign-off.',
     schema: HAZID_ARC_FLASH_APP_SCHEMA,
   })
+  const fallProtection = await ensureTemplate(tx, {
+    tenantId,
+    key: HAZID_FALL_PROTECTION_APP_KEY,
+    name: 'Fall Protection Plan',
+    description:
+      'Embedded hazard-assessment app for working-at-heights: access, communication, fall-protection equipment, anchorage, and rescue.',
+    schema: HAZID_FALL_PROTECTION_APP_SCHEMA,
+  })
 
-  return { confinedSpaceTemplateId: confinedSpace.id, arcFlashTemplateId: arcFlash.id }
+  return {
+    confinedSpaceTemplateId: confinedSpace.id,
+    arcFlashTemplateId: arcFlash.id,
+    fallProtectionTemplateId: fallProtection.id,
+  }
 }

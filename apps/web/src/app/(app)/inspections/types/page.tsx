@@ -14,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from '@beaconhs/ui'
-import { inspectionTypeBanks, inspectionTypes } from '@beaconhs/db/schema'
+import { inspectionTypeCriteria, inspectionTypes } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { requireModuleManage, assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
@@ -132,10 +132,10 @@ export default async function InspectionTypesPage({
     const data = await tx
       .select({
         type: inspectionTypes,
-        bankCount: sql<number>`count(distinct ${inspectionTypeBanks.bankId})`.mapWith(Number),
+        criteriaCount: sql<number>`count(${inspectionTypeCriteria.id})`.mapWith(Number),
       })
       .from(inspectionTypes)
-      .leftJoin(inspectionTypeBanks, eq(inspectionTypeBanks.typeId, inspectionTypes.id))
+      .leftJoin(inspectionTypeCriteria, eq(inspectionTypeCriteria.typeId, inspectionTypes.id))
       .where(whereClause)
       .groupBy(inspectionTypes.id)
       .orderBy(...orderBy)
@@ -161,7 +161,7 @@ export default async function InspectionTypesPage({
         <>
           <PageHeader
             title="Inspection Types"
-            description="Inspection templates with criteria banks and signature requirements."
+            description="Inspection templates with their own grouped criteria and signature requirements."
             actions={
               <Link href="/inspections/types?drawer=new-type" scroll={false}>
                 <Button>New type</Button>
@@ -186,7 +186,7 @@ export default async function InspectionTypesPage({
         <EmptyState
           icon={<ClipboardList size={32} />}
           title={params.q ? `No types match "${params.q}"` : 'No inspection types'}
-          description="Create a type, link criteria banks, and reuse it for every inspection of that kind."
+          description="Create a type, build its criteria into sections, and reuse it for every inspection of that kind."
           action={
             <Link href="/inspections/types?drawer=new-type" scroll={false}>
               <Button>New type</Button>
@@ -201,7 +201,7 @@ export default async function InspectionTypesPage({
                 <SortableTh {...sortProps} column="name" active={params.sort === 'name'}>
                   Name
                 </SortableTh>
-                <TableHead>Banks</TableHead>
+                <TableHead>Criteria</TableHead>
                 <TableHead>Requires</TableHead>
                 <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>
                   Status
@@ -216,7 +216,7 @@ export default async function InspectionTypesPage({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map(({ type, bankCount }) => (
+              {rows.map(({ type, criteriaCount }) => (
                 <TableRow key={type.id}>
                   <TableCell>
                     <Link
@@ -231,7 +231,7 @@ export default async function InspectionTypesPage({
                       </div>
                     ) : null}
                   </TableCell>
-                  <TableCell className="text-slate-600 tabular-nums">{bankCount}</TableCell>
+                  <TableCell className="text-slate-600 tabular-nums">{criteriaCount}</TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
                       {type.requiresForeman ? <Badge variant="secondary">Foreman</Badge> : null}

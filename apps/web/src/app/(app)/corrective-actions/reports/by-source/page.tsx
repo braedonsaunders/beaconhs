@@ -127,10 +127,10 @@ export default async function BySourceReport() {
           description="CAs created without a source record won't appear here."
         />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase">
+              <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-400">
                 <th className="px-4 py-2">Source type</th>
                 <th className="px-4 py-2">Source</th>
                 <th className="px-4 py-2 text-right">Total</th>
@@ -139,11 +139,11 @@ export default async function BySourceReport() {
                 <th className="px-4 py-2 text-right">Cost impact</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {rows.map((r) => (
                 <tr
                   key={`${r.sourceEntityType}:${r.sourceEntityId ?? '_'}`}
-                  className="hover:bg-slate-50/50"
+                  className="hover:bg-slate-50/50 dark:hover:bg-slate-800/60"
                 >
                   <td className="px-4 py-2">
                     <Badge variant="outline">{r.sourceEntityType.replace(/_/g, ' ')}</Badge>
@@ -152,23 +152,23 @@ export default async function BySourceReport() {
                     {r.sourceHref ? (
                       <Link
                         href={r.sourceHref as any}
-                        className="inline-flex items-center gap-1 text-teal-700 hover:underline"
+                        className="inline-flex items-center gap-1 text-teal-700 hover:underline dark:text-teal-400"
                       >
                         <LinkIcon size={11} />
                         {r.sourceLabel}
                       </Link>
                     ) : (
-                      <span className="text-slate-700">{r.sourceLabel}</span>
+                      <span className="text-slate-700 dark:text-slate-300">{r.sourceLabel}</span>
                     )}
                   </td>
                   <td className="px-4 py-2 text-right font-mono text-xs">{r.total}</td>
-                  <td className="px-4 py-2 text-right font-mono text-xs text-amber-700">
+                  <td className="px-4 py-2 text-right font-mono text-xs text-amber-700 dark:text-amber-400">
                     {r.open}
                   </td>
-                  <td className="px-4 py-2 text-right font-mono text-xs text-emerald-700">
+                  <td className="px-4 py-2 text-right font-mono text-xs text-emerald-700 dark:text-emerald-400">
                     {r.closed}
                   </td>
-                  <td className="px-4 py-2 text-right font-mono text-xs text-slate-700">
+                  <td className="px-4 py-2 text-right font-mono text-xs text-slate-700 dark:text-slate-300">
                     {r.costImpact > 0 ? formatMoney(r.costImpact) : '—'}
                   </td>
                 </tr>

@@ -13,15 +13,30 @@ export const dynamic = 'force-dynamic'
 type Bucket = '<7d' | '7-30d' | '30-60d' | '60+d'
 
 const BUCKETS: { key: Bucket; label: string; tone: string; help: string }[] = [
-  { key: '<7d', label: '< 7 days', tone: 'bg-emerald-100 text-emerald-900', help: 'Fresh' },
-  { key: '7-30d', label: '7–30 days', tone: 'bg-amber-100 text-amber-900', help: 'Warming up' },
+  {
+    key: '<7d',
+    label: '< 7 days',
+    tone: 'bg-emerald-100 dark:bg-emerald-500/15 text-emerald-900 dark:text-emerald-200',
+    help: 'Fresh',
+  },
+  {
+    key: '7-30d',
+    label: '7–30 days',
+    tone: 'bg-amber-100 dark:bg-amber-500/15 text-amber-900 dark:text-amber-200',
+    help: 'Warming up',
+  },
   {
     key: '30-60d',
     label: '30–60 days',
-    tone: 'bg-orange-100 text-orange-900',
+    tone: 'bg-orange-100 dark:bg-orange-500/15 text-orange-900 dark:text-orange-200',
     help: 'Getting stale',
   },
-  { key: '60+d', label: '60+ days', tone: 'bg-red-100 text-red-900', help: 'Hot potato' },
+  {
+    key: '60+d',
+    label: '60+ days',
+    tone: 'bg-red-100 dark:bg-red-500/15 text-red-900 dark:text-red-200',
+    help: 'Hot potato',
+  },
 ]
 
 type Row = {
@@ -119,14 +134,19 @@ export default async function AgingReport() {
           />
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {BUCKETS.map((b) => (
-              <div key={b.key} className="rounded-lg border border-slate-200 bg-white px-4 py-3">
+              <div
+                key={b.key}
+                className="rounded-lg border border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900"
+              >
                 <div className="flex items-center justify-between">
-                  <span className="text-xs tracking-wide text-slate-500 uppercase">{b.label}</span>
+                  <span className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
+                    {b.label}
+                  </span>
                   <Badge className={b.tone} variant="default">
                     {counts[b.key]}
                   </Badge>
                 </div>
-                <div className="mt-1 text-xs text-slate-500">{b.help}</div>
+                <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">{b.help}</div>
               </div>
             ))}
           </div>
@@ -147,20 +167,20 @@ export default async function AgingReport() {
             return (
               <section
                 key={b.key}
-                className="overflow-hidden rounded-lg border border-slate-200 bg-white"
+                className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"
               >
-                <header className="flex items-center justify-between border-b border-slate-200 bg-slate-50/60 px-4 py-2.5">
+                <header className="flex items-center justify-between border-b border-slate-200 bg-slate-50/60 px-4 py-2.5 dark:border-slate-800 dark:bg-slate-900/80">
                   <div className="flex items-center gap-2">
                     <Badge className={b.tone} variant="default">
                       {b.label}
                     </Badge>
-                    <span className="text-xs text-slate-500">{b.help}</span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">{b.help}</span>
                   </div>
                   <Badge variant="secondary">{rowsInBucket.length} open</Badge>
                 </header>
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-slate-100 text-left text-xs tracking-wide text-slate-500 uppercase">
+                    <tr className="border-b border-slate-100 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:text-slate-400">
                       <th className="px-4 py-2">Ref</th>
                       <th className="px-4 py-2">Title</th>
                       <th className="px-4 py-2">Severity</th>
@@ -171,9 +191,9 @@ export default async function AgingReport() {
                       <th className="px-4 py-2 text-right">Age (days)</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                     {rowsInBucket.map((r) => (
-                      <tr key={r.id} className="hover:bg-slate-50/50">
+                      <tr key={r.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/60">
                         <td className="px-4 py-2 font-mono text-xs">
                           <Link
                             href={`/corrective-actions/${r.id}` as any}
@@ -185,7 +205,7 @@ export default async function AgingReport() {
                         <td className="px-4 py-2">
                           <Link
                             href={`/corrective-actions/${r.id}` as any}
-                            className="font-medium text-slate-900 hover:underline"
+                            className="font-medium text-slate-900 hover:underline dark:text-slate-100"
                           >
                             {r.title}
                           </Link>
@@ -206,10 +226,16 @@ export default async function AgingReport() {
                         <td className="px-4 py-2">
                           <Badge variant="warning">{r.status.replace('_', ' ')}</Badge>
                         </td>
-                        <td className="px-4 py-2 text-slate-600">{r.ownerName ?? '—'}</td>
-                        <td className="px-4 py-2 text-slate-600">{r.siteName ?? '—'}</td>
-                        <td className="px-4 py-2 text-slate-600">{r.assignedOn ?? '—'}</td>
-                        <td className="px-4 py-2 text-right font-mono text-xs font-medium text-slate-900">
+                        <td className="px-4 py-2 text-slate-600 dark:text-slate-400">
+                          {r.ownerName ?? '—'}
+                        </td>
+                        <td className="px-4 py-2 text-slate-600 dark:text-slate-400">
+                          {r.siteName ?? '—'}
+                        </td>
+                        <td className="px-4 py-2 text-slate-600 dark:text-slate-400">
+                          {r.assignedOn ?? '—'}
+                        </td>
+                        <td className="px-4 py-2 text-right font-mono text-xs font-medium text-slate-900 dark:text-slate-100">
                           {r.ageDays}
                         </td>
                       </tr>

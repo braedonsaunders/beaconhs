@@ -40,7 +40,8 @@ import {
   inspectionBanks,
   inspectionRecordCriteria,
   inspectionRecords,
-  inspectionTypeBanks,
+  inspectionTypeCriteria,
+  inspectionTypeGroups,
   inspectionTypes,
   notifications,
   orgUnits,
@@ -1848,9 +1849,9 @@ function build5x5() {
 
 /**
  * Idempotently seed 3 sample inspection types (Site Walk, Equipment Daily,
- * Crew Toolbox), linking each one to the existing seeded inspection_banks
- * where the categories line up. Safe to re-run — keyed off the unique
- * (tenant_id, name) index on inspection_types so we never insert twice.
+ * Crew Toolbox), importing the existing seeded inspection_banks' criteria into
+ * a group on each type where the categories line up. Safe to re-run — keyed off
+ * the unique (tenant_id, name) index on inspection_types so we never insert twice.
  */
 export async function seedInspectionTypes(tx: any, tenantId: string): Promise<void> {
   // Idempotency guard
@@ -1911,7 +1912,7 @@ export async function seedInspectionTypes(tx: any, tenantId: string): Promise<vo
   ] as const
 
   let createdTypes = 0
-  let linkedBanks = 0
+  let importedGroups = 0
   for (const sample of samples) {
     const [type] = await tx
       .insert(inspectionTypes)
@@ -1930,23 +1931,47 @@ export async function seedInspectionTypes(tx: any, tenantId: string): Promise<vo
       .returning()
     if (!type) continue
     createdTypes += 1
+    // Import each bank's criteria into its own group on the type. Banks are now
+    // just a library — the type owns the resulting groups + criteria outright.
     for (let i = 0; i < sample.bankIds.length; i++) {
-      await tx
-        .insert(inspectionTypeBanks)
+      const bankId = sample.bankIds[i]
+      if (!bankId) continue
+      const bank = banks.find((b: { id: string }) => b.id === bankId)
+      const [group] = await tx
+        .insert(inspectionTypeGroups)
         .values({
           tenantId,
           typeId: type.id,
-          bankId: sample.bankIds[i],
           sequence: i,
+          label: bank?.name ?? 'Imported criteria',
         })
-        .onConflictDoNothing({
-          target: [inspectionTypeBanks.typeId, inspectionTypeBanks.bankId],
-        })
-      linkedBanks += 1
+        .returning()
+      const bankCriteria = await tx
+        .select()
+        .from(inspectionBankCriteria)
+        .where(eq(inspectionBankCriteria.bankId, bankId))
+        .orderBy(inspectionBankCriteria.sequence)
+      if (bankCriteria.length > 0) {
+        await tx.insert(inspectionTypeCriteria).values(
+          bankCriteria.map((c: any, j: number) => ({
+            tenantId,
+            typeId: type.id,
+            groupId: group?.id ?? null,
+            sequence: j,
+            text: c.text,
+            responseType: c.responseType,
+            requiresPhoto: c.requiresPhoto,
+            requiresComment: c.requiresComment,
+            sourceBankId: bankId,
+            sourceBankCriterionId: c.id,
+          })),
+        )
+      }
+      importedGroups += 1
     }
   }
   console.log(
-    `  · inspection types: ${createdTypes} created, ${linkedBanks} bank link${linkedBanks === 1 ? '' : 's'}`,
+    `  · inspection types: ${createdTypes} created, ${importedGroups} group${importedGroups === 1 ? '' : 's'} imported`,
   )
 }
 
@@ -3637,22 +3662,22 @@ export async function seedInspectionRecords(tx: any, tenantId: string): Promise<
       .returning({ id: inspectionRecords.id })
     if (!rec) continue
     created++
-    // Pull the bank criteria attached to this type via inspection_type_banks
-    const bankLinks = await tx
-      .select({ bankId: inspectionTypeBanks.bankId })
-      .from(inspectionTypeBanks)
-      .where(eq(inspectionTypeBanks.typeId, type.id))
-    const bankIds = bankLinks.map((b: any) => b.bankId)
-    if (bankIds.length === 0) continue
+    // Pull the type's own criteria (with their group label + response config),
+    // in group then criterion order.
     const criteria = await tx
-      .select({ id: inspectionBankCriteria.id, text: inspectionBankCriteria.text })
-      .from(inspectionBankCriteria)
-      .where(
-        sql`${inspectionBankCriteria.bankId} IN (${sql.join(
-          bankIds.map((x: any) => sql`${x}`),
-          sql`, `,
-        )})`,
-      )
+      .select({
+        id: inspectionTypeCriteria.id,
+        text: inspectionTypeCriteria.text,
+        responseType: inspectionTypeCriteria.responseType,
+        requiresPhoto: inspectionTypeCriteria.requiresPhoto,
+        requiresComment: inspectionTypeCriteria.requiresComment,
+        groupLabel: inspectionTypeGroups.label,
+      })
+      .from(inspectionTypeCriteria)
+      .leftJoin(inspectionTypeGroups, eq(inspectionTypeGroups.id, inspectionTypeCriteria.groupId))
+      .where(eq(inspectionTypeCriteria.typeId, type.id))
+      .orderBy(inspectionTypeGroups.sequence, inspectionTypeCriteria.sequence)
+    if (criteria.length === 0) continue
     for (let j = 0; j < criteria.length; j++) {
       const answer = j === 0 && i === 1 ? 'fail' : j % 5 === 4 ? 'n_a' : 'pass'
       await tx.insert(inspectionRecordCriteria).values({
@@ -3660,6 +3685,10 @@ export async function seedInspectionRecords(tx: any, tenantId: string): Promise<
         recordId: rec.id,
         criterionId: criteria[j].id,
         questionTextSnapshot: criteria[j].text,
+        groupLabelSnapshot: criteria[j].groupLabel ?? null,
+        responseType: criteria[j].responseType,
+        requiresPhoto: criteria[j].requiresPhoto,
+        requiresComment: criteria[j].requiresComment,
         sequence: j + 1,
         answer,
         severity: answer === 'fail' ? 'high' : null,

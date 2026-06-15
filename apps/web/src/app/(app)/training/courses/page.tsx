@@ -174,19 +174,21 @@ export default async function TrainingCoursesPage({
                   <TableCell>
                     <Link
                       href={`/training/courses/${c.id}`}
-                      className="font-medium text-slate-900 hover:underline"
+                      className="font-medium text-slate-900 hover:underline dark:text-slate-100"
                     >
                       {c.name}
                     </Link>
                   </TableCell>
-                  <TableCell className="font-mono text-xs text-slate-600">{c.code}</TableCell>
-                  <TableCell className="text-slate-600">
+                  <TableCell className="font-mono text-xs text-slate-600 dark:text-slate-400">
+                    {c.code}
+                  </TableCell>
+                  <TableCell className="text-slate-600 dark:text-slate-400">
                     {c.deliveryType.replace(/_/g, ' ')}
                   </TableCell>
-                  <TableCell className="text-slate-600">
+                  <TableCell className="text-slate-600 dark:text-slate-400">
                     {c.validForMonths ? `${c.validForMonths} months` : 'No expiry'}
                   </TableCell>
-                  <TableCell className="text-slate-600">
+                  <TableCell className="text-slate-600 dark:text-slate-400">
                     {c.durationMinutes ? `${c.durationMinutes} min` : '—'}
                   </TableCell>
                 </TableRow>

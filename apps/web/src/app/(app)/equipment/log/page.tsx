@@ -210,7 +210,7 @@ export default async function EquipmentLogPage({
               options={KIND_OPTIONS.map((o) => ({ ...o, count: kindCounts[o.value] }))}
             />
           </TableToolbar>
-          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
             <Badge variant="secondary">{total} entries</Badge>
           </div>
         </>
@@ -229,7 +229,7 @@ export default async function EquipmentLogPage({
           />
         ) : (
           <>
-            <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+            <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -248,10 +248,14 @@ export default async function EquipmentLogPage({
                       <TableCell>
                         {item ? (
                           <Link href={`/equipment/${item.id}?tab=log`} className="hover:underline">
-                            <div className="font-mono text-xs text-slate-500">{item.assetTag}</div>
+                            <div className="font-mono text-xs text-slate-500 dark:text-slate-400">
+                              {item.assetTag}
+                            </div>
                             <div className="text-sm font-medium">{item.name}</div>
                             {type ? (
-                              <div className="text-xs text-slate-500">{type.name}</div>
+                              <div className="text-xs text-slate-500 dark:text-slate-400">
+                                {type.name}
+                              </div>
                             ) : null}
                           </Link>
                         ) : (
@@ -263,11 +267,11 @@ export default async function EquipmentLogPage({
                       </TableCell>
                       <TableCell>
                         {log.title ? <div className="font-medium">{log.title}</div> : null}
-                        <div className="max-w-xl text-xs whitespace-pre-wrap text-slate-600">
+                        <div className="max-w-xl text-xs whitespace-pre-wrap text-slate-600 dark:text-slate-400">
                           {log.details}
                         </div>
                       </TableCell>
-                      <TableCell className="text-slate-600">
+                      <TableCell className="text-slate-600 dark:text-slate-400">
                         {person ? `${person.firstName} ${person.lastName}` : '—'}
                       </TableCell>
                       <TableCell>

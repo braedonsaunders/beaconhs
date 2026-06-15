@@ -315,7 +315,7 @@ export default async function TrainingClassPage({
               value: course ? (
                 <Link
                   href={`/training/courses/${course.id}`}
-                  className="text-teal-700 hover:underline"
+                  className="text-teal-700 hover:underline dark:text-teal-400"
                 >
                   {course.code} · {course.name}
                 </Link>
@@ -348,7 +348,7 @@ export default async function TrainingClassPage({
                     description="Use the form below to add people to this class roster."
                   />
                 ) : (
-                  <ul className="divide-y divide-slate-100 text-sm">
+                  <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
                     {attendees.map((row) => (
                       <li key={row.att.id} className="flex items-center justify-between gap-3 py-2">
                         <div className="min-w-0">
@@ -359,7 +359,7 @@ export default async function TrainingClassPage({
                             {row.person.lastName}, {row.person.firstName}
                           </Link>
                           {row.person.jobTitle ? (
-                            <span className="ml-2 text-xs text-slate-500">
+                            <span className="ml-2 text-xs text-slate-500 dark:text-slate-400">
                               {row.person.jobTitle}
                             </span>
                           ) : null}
@@ -391,7 +391,7 @@ export default async function TrainingClassPage({
             {!isCompleted ? (
               <Section title="Add an attendee">
                 {availablePeople.length === 0 ? (
-                  <p className="text-sm text-slate-500">
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
                     Every active person is already on this roster.
                   </p>
                 ) : (
@@ -428,7 +428,7 @@ export default async function TrainingClassPage({
             </CardHeader>
             <CardContent>
               {isCompleted ? (
-                <p className="text-sm text-slate-600">
+                <p className="text-sm text-slate-600 dark:text-slate-400">
                   Class was marked complete on {new Date(cls.completedAt!).toLocaleString()}.
                   Training records have been created for everyone who passed.
                 </p>
@@ -441,19 +441,19 @@ export default async function TrainingClassPage({
               ) : (
                 <form action={markClassComplete} className="space-y-3 text-sm">
                   <input type="hidden" name="classId" value={id} />
-                  <div className="overflow-hidden rounded-md border border-slate-200">
+                  <div className="overflow-hidden rounded-md border border-slate-200 dark:border-slate-800">
                     <table className="w-full text-sm">
-                      <thead className="bg-slate-50">
-                        <tr className="text-left text-xs tracking-wide text-slate-500 uppercase">
+                      <thead className="bg-slate-50 dark:bg-slate-800">
+                        <tr className="text-left text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
                           <th className="px-3 py-2">Person</th>
                           <th className="w-24 px-3 py-2">Grade %</th>
                           <th className="w-20 px-3 py-2 text-center">Passed</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-100 bg-white">
+                      <tbody className="divide-y divide-slate-100 bg-white dark:divide-slate-800 dark:bg-slate-900">
                         {attendees.map((row) => (
                           <tr key={row.att.id}>
-                            <td className="px-3 py-2 font-medium text-slate-900">
+                            <td className="px-3 py-2 font-medium text-slate-900 dark:text-slate-100">
                               {row.person.lastName}, {row.person.firstName}
                             </td>
                             <td className="px-3 py-2">
@@ -470,7 +470,7 @@ export default async function TrainingClassPage({
                                 type="checkbox"
                                 name={`passed__${row.person.id}`}
                                 defaultChecked
-                                className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                                className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-700"
                               />
                             </td>
                           </tr>
@@ -478,7 +478,7 @@ export default async function TrainingClassPage({
                       </tbody>
                     </table>
                   </div>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
                     Checking "Passed" creates a training record for the person. Grades are optional.
                   </p>
                   <div className="flex justify-end">

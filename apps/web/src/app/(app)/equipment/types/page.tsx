@@ -179,7 +179,7 @@ export default async function EquipmentTypesPage() {
               description="Add a type to group the asset register and define inspection cadence."
             />
           ) : (
-            <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+            <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -200,37 +200,43 @@ export default async function EquipmentTypesPage() {
                     return (
                       <TableRow key={type.id}>
                         <TableCell>
-                          <div className="font-medium text-slate-900">{type.name}</div>
+                          <div className="font-medium text-slate-900 dark:text-slate-100">
+                            {type.name}
+                          </div>
                           {type.description ? (
-                            <div className="text-xs text-slate-500">{type.description}</div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400">
+                              {type.description}
+                            </div>
                           ) : null}
                         </TableCell>
-                        <TableCell className="text-slate-600">
+                        <TableCell className="text-slate-600 dark:text-slate-400">
                           {cat?.name ?? type.category ?? '—'}
                         </TableCell>
-                        <TableCell className="text-slate-600">
+                        <TableCell className="text-slate-600 dark:text-slate-400">
                           {preUse?.templateKey ? (
-                            <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs">
+                            <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs dark:bg-slate-800">
                               {preUse.templateKey}
                             </code>
                           ) : (
                             '—'
                           )}
                         </TableCell>
-                        <TableCell className="text-slate-600">{sched?.everyDays ?? '—'}</TableCell>
-                        <TableCell className="text-slate-600">
+                        <TableCell className="text-slate-600 dark:text-slate-400">
+                          {sched?.everyDays ?? '—'}
+                        </TableCell>
+                        <TableCell className="text-slate-600 dark:text-slate-400">
                           {type.defaultOilChangeIntervalMonths ?? '—'}
                         </TableCell>
-                        <TableCell className="text-right text-slate-600">
+                        <TableCell className="text-right text-slate-600 dark:text-slate-400">
                           <Badge variant="secondary">{n}</Badge>
                         </TableCell>
                         <TableCell>
                           <div className="flex justify-end gap-2">
                             <details className="relative">
-                              <summary className="cursor-pointer list-none text-xs text-teal-700 hover:underline">
+                              <summary className="cursor-pointer list-none text-xs text-teal-700 hover:underline dark:text-teal-400">
                                 Edit
                               </summary>
-                              <div className="absolute right-0 z-10 mt-1 w-[28rem] rounded-md border border-slate-200 bg-white p-4 shadow-lg">
+                              <div className="absolute right-0 z-10 mt-1 w-[28rem] rounded-md border border-slate-200 bg-white p-4 shadow-lg dark:border-slate-800 dark:bg-slate-900">
                                 <form action={updateType} className="space-y-3">
                                   <input type="hidden" name="id" value={type.id} />
                                   <div className="grid grid-cols-2 gap-3">

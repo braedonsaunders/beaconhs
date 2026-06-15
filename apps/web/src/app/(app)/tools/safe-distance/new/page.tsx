@@ -179,7 +179,7 @@ export default async function NewSafeDistancePage({
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-2 border-t border-slate-200 pt-4">
+              <div className="flex items-center justify-end gap-2 border-t border-slate-200 pt-4 dark:border-slate-800">
                 <Button variant="outline" type="reset">
                   Reset
                 </Button>
@@ -195,7 +195,7 @@ export default async function NewSafeDistancePage({
           </CardHeader>
           <CardContent>
             <table className="w-full text-sm">
-              <thead className="border-b border-slate-200 text-left text-xs tracking-wide text-slate-500 uppercase">
+              <thead className="border-b border-slate-200 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:text-slate-400">
                 <tr>
                   <th className="px-2 py-1">Voltage range (kV)</th>
                   <th className="px-2 py-1">Required distance (m)</th>
@@ -208,11 +208,11 @@ export default async function NewSafeDistancePage({
                     ? `< ${row.maxVoltageKv} kV`
                     : `≥ 750 kV`
                   return (
-                    <tr key={i} className="border-b border-slate-100">
-                      <td className="px-2 py-1.5 text-slate-700">
+                    <tr key={i} className="border-b border-slate-100 dark:border-slate-800">
+                      <td className="px-2 py-1.5 text-slate-700 dark:text-slate-300">
                         {i === 0 ? `< ${row.maxVoltageKv} kV` : `${lower} – ${upperLabel}`}
                       </td>
-                      <td className="px-2 py-1.5 font-medium text-slate-900">
+                      <td className="px-2 py-1.5 font-medium text-slate-900 dark:text-slate-100">
                         {row.requiredDistanceM} m
                       </td>
                     </tr>
@@ -220,7 +220,7 @@ export default async function NewSafeDistancePage({
                 })}
               </tbody>
             </table>
-            <p className="mt-3 text-xs text-slate-500">
+            <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
               Source: IEEE C2 / CSA Z462 abbreviated limits of approach. Always check the local AHJ
               for jurisdiction-specific overrides.
             </p>

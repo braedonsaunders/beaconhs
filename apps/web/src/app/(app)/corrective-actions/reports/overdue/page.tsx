@@ -116,20 +116,22 @@ export default async function OverdueReport() {
           {groups.map((g) => (
             <section
               key={g.ownerTenantUserId ?? 'unassigned'}
-              className="overflow-hidden rounded-lg border border-slate-200 bg-white"
+              className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"
             >
-              <header className="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/60 px-4 py-2.5">
+              <header className="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/60 px-4 py-2.5 dark:border-slate-800 dark:bg-slate-900/80">
                 <div>
-                  <div className="text-sm font-semibold text-slate-900">{g.ownerName}</div>
+                  <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    {g.ownerName}
+                  </div>
                   {g.ownerEmail ? (
-                    <div className="text-xs text-slate-500">{g.ownerEmail}</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">{g.ownerEmail}</div>
                   ) : null}
                 </div>
                 <Badge variant="destructive">{g.rows.length} overdue</Badge>
               </header>
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-slate-100 text-left text-xs tracking-wide text-slate-500 uppercase">
+                  <tr className="border-b border-slate-100 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:text-slate-400">
                     <th className="px-4 py-2">Ref</th>
                     <th className="px-4 py-2">Title</th>
                     <th className="px-4 py-2">Severity</th>
@@ -139,9 +141,9 @@ export default async function OverdueReport() {
                     <th className="px-4 py-2">Site</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {g.rows.map((r) => (
-                    <tr key={r.id} className="hover:bg-slate-50/50">
+                    <tr key={r.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/60">
                       <td className="px-4 py-2 font-mono text-xs">
                         <Link
                           href={`/corrective-actions/${r.id}` as any}
@@ -153,7 +155,7 @@ export default async function OverdueReport() {
                       <td className="px-4 py-2">
                         <Link
                           href={`/corrective-actions/${r.id}` as any}
-                          className="font-medium text-slate-900 hover:underline"
+                          className="font-medium text-slate-900 hover:underline dark:text-slate-100"
                         >
                           {r.title}
                         </Link>
@@ -174,9 +176,15 @@ export default async function OverdueReport() {
                       <td className="px-4 py-2">
                         <Badge variant="warning">{r.status.replace('_', ' ')}</Badge>
                       </td>
-                      <td className="px-4 py-2 text-slate-700">{r.dueOn ?? '—'}</td>
-                      <td className="px-4 py-2 font-medium text-red-700">{r.daysOverdue}</td>
-                      <td className="px-4 py-2 text-slate-600">{r.siteName ?? '—'}</td>
+                      <td className="px-4 py-2 text-slate-700 dark:text-slate-300">
+                        {r.dueOn ?? '—'}
+                      </td>
+                      <td className="px-4 py-2 font-medium text-red-700 dark:text-red-400">
+                        {r.daysOverdue}
+                      </td>
+                      <td className="px-4 py-2 text-slate-600 dark:text-slate-400">
+                        {r.siteName ?? '—'}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

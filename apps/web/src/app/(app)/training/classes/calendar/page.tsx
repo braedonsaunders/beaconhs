@@ -199,7 +199,7 @@ export default async function TrainingClassesCalendarPage({
                   <ChevronLeft size={14} />
                 </Button>
               </Link>
-              <div className="min-w-[10rem] text-center text-sm font-medium text-slate-800">
+              <div className="min-w-[10rem] text-center text-sm font-medium text-slate-800 dark:text-slate-200">
                 {monthLabel(year, month)}
               </div>
               <Link
@@ -223,15 +223,15 @@ export default async function TrainingClassesCalendarPage({
                 </Link>
               ) : null}
             </div>
-            <div className="text-xs text-slate-500">
+            <div className="text-xs text-slate-500 dark:text-slate-400">
               {rows.length} class{rows.length === 1 ? '' : 'es'} this view
             </div>
           </div>
         </>
       }
     >
-      <div className="rounded-lg border border-slate-200 bg-white">
-        <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50 text-[11px] font-medium tracking-wide text-slate-500 uppercase">
+      <div className="rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+        <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50 text-[11px] font-medium tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:bg-slate-800 dark:text-slate-400">
           {DOW.map((d) => (
             <div key={d} className="px-2 py-2 text-center">
               {d}
@@ -246,9 +246,11 @@ export default async function TrainingClassesCalendarPage({
               <div
                 key={cell.iso + idx}
                 className={[
-                  'min-h-[110px] border-r border-b border-slate-100 p-1.5',
+                  'min-h-[110px] border-r border-b border-slate-100 p-1.5 dark:border-slate-800',
                   idx % 7 === 6 ? 'border-r-0' : '',
-                  cell.inMonth ? 'bg-white' : 'bg-slate-50/60',
+                  cell.inMonth
+                    ? 'bg-white dark:bg-slate-900'
+                    : 'bg-slate-50/60 dark:bg-slate-900/80',
                 ].join(' ')}
               >
                 <div className="mb-1 flex items-center justify-between">
@@ -258,7 +260,7 @@ export default async function TrainingClassesCalendarPage({
                       cell.isToday
                         ? 'bg-teal-600 text-white'
                         : cell.inMonth
-                          ? 'text-slate-700'
+                          ? 'text-slate-700 dark:text-slate-300'
                           : 'text-slate-400',
                     ].join(' ')}
                   >
@@ -277,13 +279,13 @@ export default async function TrainingClassesCalendarPage({
                         className={[
                           'block truncate rounded px-1.5 py-0.5 text-[11px] leading-tight transition-colors',
                           c.cancelled
-                            ? 'bg-slate-100 text-slate-500 line-through hover:bg-slate-200'
+                            ? 'bg-slate-100 text-slate-500 line-through hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400'
                             : c.completed
-                              ? 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
-                              : 'bg-teal-50 text-teal-900 hover:bg-teal-100',
+                              ? 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-500/10'
+                              : 'bg-teal-50 text-teal-900 hover:bg-teal-100 dark:bg-teal-500/10 dark:text-teal-200',
                         ].join(' ')}
                       >
-                        <span className="text-[10px] text-slate-500 tabular-nums">
+                        <span className="text-[10px] text-slate-500 tabular-nums dark:text-slate-400">
                           {c.start.toLocaleTimeString([], {
                             hour: '2-digit',
                             minute: '2-digit',
@@ -304,7 +306,7 @@ export default async function TrainingClassesCalendarPage({
       </div>
 
       {rows.length === 0 ? (
-        <div className="mt-4 flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+        <div className="mt-4 flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-400">
           <CalendarDays size={14} className="text-slate-400" />
           <span>No classes scheduled in {monthLabel(year, month)}.</span>
           <Badge variant="outline" className="ml-auto">

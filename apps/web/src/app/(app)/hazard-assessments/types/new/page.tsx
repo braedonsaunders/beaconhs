@@ -85,7 +85,6 @@ export default async function NewAssessmentTypePage() {
                 <CheckRow name="hasHazards" label="Hazards" defaultChecked />
                 <CheckRow name="hasPPE" label="PPE" defaultChecked />
                 <CheckRow name="hasQuestions" label="Questions & Answers" defaultChecked />
-                <CheckRow name="hasWAH" label="Fall Protection (Working at Heights)" />
               </fieldset>
               {groups.length > 0 ? (
                 <div className="space-y-1.5">

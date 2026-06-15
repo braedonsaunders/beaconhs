@@ -242,7 +242,7 @@ export default async function CheckInOutPage() {
             title="Check in / out"
             description="Hand a piece of equipment to a person + destination. Returns clear the holder and mark it available again."
           />
-          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
             <Badge variant={openCount > 0 ? 'warning' : 'secondary'}>
               {openCount} currently out
             </Badge>
@@ -279,7 +279,7 @@ export default async function CheckInOutPage() {
               description="Every asset is at base."
             />
           ) : (
-            <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+            <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -299,26 +299,36 @@ export default async function CheckInOutPage() {
                         <TableCell>
                           {item ? (
                             <Link href={`/equipment/${item.id}`} className="hover:underline">
-                              <div className="font-mono text-xs text-slate-500">
+                              <div className="font-mono text-xs text-slate-500 dark:text-slate-400">
                                 {item.assetTag}
                               </div>
                               <div className="text-sm font-medium">{item.name}</div>
                               {type ? (
-                                <div className="text-xs text-slate-500">{type.name}</div>
+                                <div className="text-xs text-slate-500 dark:text-slate-400">
+                                  {type.name}
+                                </div>
                               ) : null}
                             </Link>
                           ) : (
                             '—'
                           )}
                         </TableCell>
-                        <TableCell className="text-slate-700">
+                        <TableCell className="text-slate-700 dark:text-slate-300">
                           {holder ? `${holder.firstName} ${holder.lastName}` : '—'}
                         </TableCell>
-                        <TableCell className="text-slate-600">{dest?.name ?? '—'}</TableCell>
-                        <TableCell className="text-slate-600">
+                        <TableCell className="text-slate-600 dark:text-slate-400">
+                          {dest?.name ?? '—'}
+                        </TableCell>
+                        <TableCell className="text-slate-600 dark:text-slate-400">
                           {new Date(co.checkedOutAt).toLocaleDateString()}
                         </TableCell>
-                        <TableCell className={overdue ? 'text-red-700' : 'text-slate-600'}>
+                        <TableCell
+                          className={
+                            overdue
+                              ? 'text-red-700 dark:text-red-400'
+                              : 'text-slate-600 dark:text-slate-400'
+                          }
+                        >
                           {co.expectedReturnOn ?? '—'}
                           {overdue ? (
                             <Badge variant="destructive" className="ml-1">
@@ -368,7 +378,7 @@ export default async function CheckInOutPage() {
                   </option>
                 ))}
               </Select>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 Only items flagged available are shown ({available.length}).
               </p>
             </div>
@@ -426,7 +436,7 @@ export default async function CheckInOutPage() {
               description="All items are checked out or out of service."
             />
           ) : (
-            <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+            <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -445,8 +455,12 @@ export default async function CheckInOutPage() {
                         </Link>
                       </TableCell>
                       <TableCell className="font-medium">{item.name}</TableCell>
-                      <TableCell className="text-slate-600">{type?.name ?? '—'}</TableCell>
-                      <TableCell className="text-slate-600">{site?.name ?? '—'}</TableCell>
+                      <TableCell className="text-slate-600 dark:text-slate-400">
+                        {type?.name ?? '—'}
+                      </TableCell>
+                      <TableCell className="text-slate-600 dark:text-slate-400">
+                        {site?.name ?? '—'}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

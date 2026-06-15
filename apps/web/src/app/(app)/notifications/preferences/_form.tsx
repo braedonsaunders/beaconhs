@@ -63,9 +63,9 @@ export function PreferencesForm({ initial }: { initial: Cell[] }) {
 
   return (
     <div className="space-y-4">
-      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-left text-xs tracking-wider text-slate-500 uppercase">
+          <thead className="bg-slate-50 text-left text-xs tracking-wider text-slate-500 uppercase dark:bg-slate-800 dark:text-slate-400">
             <tr>
               <th className="px-4 py-3 font-medium">Category</th>
               {NOTIFICATION_CHANNELS.map((ch) => (
@@ -75,14 +75,18 @@ export function PreferencesForm({ initial }: { initial: Cell[] }) {
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
             {NOTIFICATION_CATEGORIES.map((category) => {
               const meta = CATEGORY_LABELS[category]
               return (
                 <tr key={category}>
                   <td className="px-4 py-3 align-top">
-                    <div className="font-medium text-slate-900">{meta.title}</div>
-                    <div className="text-xs text-slate-500">{meta.description}</div>
+                    <div className="font-medium text-slate-900 dark:text-slate-100">
+                      {meta.title}
+                    </div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                      {meta.description}
+                    </div>
                   </td>
                   {NOTIFICATION_CHANNELS.map((channel) => {
                     const key = `${category}:${channel}`
@@ -92,7 +96,7 @@ export function PreferencesForm({ initial }: { initial: Cell[] }) {
                         <label className="inline-flex cursor-pointer items-center justify-center">
                           <input
                             type="checkbox"
-                            className="h-4 w-4 cursor-pointer rounded border-slate-300 text-teal-700 focus:ring-teal-600"
+                            className="h-4 w-4 cursor-pointer rounded border-slate-300 text-teal-700 focus:ring-teal-600 dark:border-slate-700 dark:text-teal-400"
                             checked={checked}
                             onChange={() => toggle(category, channel)}
                             aria-label={`${meta.title} via ${CHANNEL_LABELS[channel]}`}
@@ -109,7 +113,7 @@ export function PreferencesForm({ initial }: { initial: Cell[] }) {
       </div>
 
       <div className="flex items-center justify-between gap-3">
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-slate-500 dark:text-slate-400">
           Unchecked combinations are silently skipped by the notification dispatcher. In-app rows
           still land in your inbox, but external channels are suppressed.
         </p>

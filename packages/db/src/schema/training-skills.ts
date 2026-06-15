@@ -12,7 +12,7 @@ import { relations } from 'drizzle-orm'
 import { date, index, integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
 import { id, timestamps } from './_helpers'
 import { attachments } from './attachments'
-import { tenants, tenantUsers } from './core'
+import { tenants, tenantUsers, users } from './core'
 import { people } from './org'
 
 export const trainingSkillAuthorities = pgTable(
@@ -107,6 +107,59 @@ export const trainingSkillCertificates = pgTable(
   (t) => ({
     assignmentIdx: index('training_skill_certificates_assignment_idx').on(t.skillAssignmentId),
     tokenIdx: index('training_skill_certificates_token_idx').on(t.verifyToken),
+  }),
+)
+
+// Supporting files uploaded against a skill assignment — scanned certificate,
+// renewal letter, ID copy, proof-of-competency photos, etc. Mirrors
+// `person_files`: a per-assignment index over the raw `attachments` row with a
+// human label + `kind` tag, cascade-deleted with the assignment while the
+// underlying attachment stays put for the audit trail.
+export const trainingSkillAssignmentFiles = pgTable(
+  'training_skill_assignment_files',
+  {
+    id: id(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    skillAssignmentId: uuid('skill_assignment_id')
+      .notNull()
+      .references(() => trainingSkillAssignments.id, { onDelete: 'cascade' }),
+    attachmentId: uuid('attachment_id').references(() => attachments.id, {
+      onDelete: 'set null',
+    }),
+    label: text('label').notNull(),
+    kind: text('kind').notNull(), // 'certificate' | 'evidence' | 'photo' | 'other'
+    uploadedAt: timestamp('uploaded_at', { withTimezone: true }).defaultNow().notNull(),
+    uploadedBy: text('uploaded_by').references(() => users.id, { onDelete: 'set null' }),
+    ...timestamps,
+  },
+  (t) => ({
+    tenantIdx: index('training_skill_assignment_files_tenant_idx').on(t.tenantId),
+    assignmentIdx: index('training_skill_assignment_files_assignment_idx').on(t.skillAssignmentId),
+    kindIdx: index('training_skill_assignment_files_kind_idx').on(t.tenantId, t.kind),
+  }),
+)
+
+export const trainingSkillAssignmentFilesRelations = relations(
+  trainingSkillAssignmentFiles,
+  ({ one }) => ({
+    tenant: one(tenants, {
+      fields: [trainingSkillAssignmentFiles.tenantId],
+      references: [tenants.id],
+    }),
+    assignment: one(trainingSkillAssignments, {
+      fields: [trainingSkillAssignmentFiles.skillAssignmentId],
+      references: [trainingSkillAssignments.id],
+    }),
+    attachment: one(attachments, {
+      fields: [trainingSkillAssignmentFiles.attachmentId],
+      references: [attachments.id],
+    }),
+    uploader: one(users, {
+      fields: [trainingSkillAssignmentFiles.uploadedBy],
+      references: [users.id],
+    }),
   }),
 )
 

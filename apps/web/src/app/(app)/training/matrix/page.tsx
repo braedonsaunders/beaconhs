@@ -169,7 +169,7 @@ export default async function TrainingMatrixPage({
                 </Link>
                 <a
                   href="javascript:window.print()"
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50"
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800/60"
                 >
                   Print
                 </a>
@@ -206,19 +206,22 @@ export default async function TrainingMatrixPage({
               />
             ) : null}
           </div>
-          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
             <span className="inline-flex items-center gap-1.5">
-              <span className="inline-block h-3 w-3 rounded-sm bg-green-200" /> Valid
+              <span className="inline-block h-3 w-3 rounded-sm bg-green-200 dark:bg-green-500/20" />{' '}
+              Valid
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <span className="inline-block h-3 w-3 rounded-sm bg-amber-200" /> Expiring (≤
+              <span className="inline-block h-3 w-3 rounded-sm bg-amber-200 dark:bg-amber-500/20" />{' '}
+              Expiring (≤
               {EXPIRING_WINDOW_DAYS}d)
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <span className="inline-block h-3 w-3 rounded-sm bg-red-200" /> Expired
+              <span className="inline-block h-3 w-3 rounded-sm bg-red-200 dark:bg-red-500/20" />{' '}
+              Expired
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <span className="inline-block h-3 w-3 rounded-sm border border-slate-200 bg-white" />
+              <span className="inline-block h-3 w-3 rounded-sm border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900" />
               Never taken
             </span>
           </div>
@@ -226,24 +229,24 @@ export default async function TrainingMatrixPage({
       }
     >
       {peopleRows.length === 0 || coursesRows.length === 0 ? (
-        <div className="rounded-lg border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
+        <div className="rounded-lg border border-slate-200 bg-white p-8 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
           {peopleRows.length === 0
             ? 'No active people match the current filters.'
             : 'No courses defined.'}
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
           <table className="min-w-full border-separate border-spacing-0 text-xs">
             <thead>
-              <tr className="bg-slate-50">
-                <th className="sticky left-0 z-10 border-b border-slate-200 bg-slate-50 px-3 py-2 text-left font-semibold text-slate-700">
+              <tr className="bg-slate-50 dark:bg-slate-800">
+                <th className="sticky left-0 z-10 border-b border-slate-200 bg-slate-50 px-3 py-2 text-left font-semibold text-slate-700 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-300">
                   Person
                 </th>
                 {coursesRows.map((c) => (
                   <th
                     key={c.id}
                     title={c.name}
-                    className="rotate-text-sticky max-w-[120px] truncate border-b border-l border-slate-200 bg-slate-50 px-2 py-2 text-left font-medium text-slate-700"
+                    className="rotate-text-sticky max-w-[120px] truncate border-b border-l border-slate-200 bg-slate-50 px-2 py-2 text-left font-medium text-slate-700 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-300"
                   >
                     <Link href={`/training/courses/${c.id}`} className="hover:underline">
                       {c.code}
@@ -251,8 +254,8 @@ export default async function TrainingMatrixPage({
                   </th>
                 ))}
               </tr>
-              <tr className="bg-slate-50">
-                <th className="sticky left-0 z-10 border-b border-slate-200 bg-slate-50 px-3 py-1 text-left text-[10px] font-medium tracking-wide text-slate-500 uppercase">
+              <tr className="bg-slate-50 dark:bg-slate-800">
+                <th className="sticky left-0 z-10 border-b border-slate-200 bg-slate-50 px-3 py-1 text-left text-[10px] font-medium tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:bg-slate-800 dark:text-slate-400">
                   {peopleRows.length} people
                 </th>
                 {coursesRows.map((c) => {
@@ -260,11 +263,11 @@ export default async function TrainingMatrixPage({
                   return (
                     <th
                       key={c.id}
-                      className="border-b border-l border-slate-200 bg-slate-50 px-1 py-1 text-[10px] font-normal text-slate-500"
+                      className="border-b border-l border-slate-200 bg-slate-50 px-1 py-1 text-[10px] font-normal text-slate-500 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-400"
                     >
-                      <span className="text-green-700">{s.valid}</span>/
-                      <span className="text-amber-700">{s.expiring}</span>/
-                      <span className="text-red-700">{s.expired}</span>
+                      <span className="text-green-700 dark:text-green-400">{s.valid}</span>/
+                      <span className="text-amber-700 dark:text-amber-400">{s.expiring}</span>/
+                      <span className="text-red-700 dark:text-red-400">{s.expired}</span>
                     </th>
                   )
                 })}
@@ -272,10 +275,10 @@ export default async function TrainingMatrixPage({
             </thead>
             <tbody>
               {peopleRows.map((p) => (
-                <tr key={p.id} className="hover:bg-slate-50">
+                <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/60">
                   <th
                     scope="row"
-                    className="sticky left-0 z-10 border-b border-slate-100 bg-white px-3 py-1.5 text-left font-normal text-slate-800 hover:bg-slate-50"
+                    className="sticky left-0 z-10 border-b border-slate-100 bg-white px-3 py-1.5 text-left font-normal text-slate-800 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800/60"
                   >
                     <Link href={`/training/transcripts/${p.id}`} className="hover:underline">
                       {p.lastName}, {p.firstName}
@@ -304,14 +307,15 @@ export default async function TrainingMatrixPage({
 }
 
 function cellClass(cell: CellState | undefined): string {
-  if (!cell) return 'border-b border-l border-slate-100 px-2 py-1.5 text-center text-slate-300'
+  if (!cell)
+    return 'border-b border-l border-slate-100 dark:border-slate-800 px-2 py-1.5 text-center text-slate-300'
   if (cell.kind === 'valid')
-    return 'border-b border-l border-slate-100 bg-green-50 px-2 py-1.5 text-center text-green-700'
+    return 'border-b border-l border-slate-100 dark:border-slate-800 bg-green-50 dark:bg-green-500/10 px-2 py-1.5 text-center text-green-700 dark:text-green-400'
   if (cell.kind === 'expiring')
-    return 'border-b border-l border-slate-100 bg-amber-50 px-2 py-1.5 text-center text-amber-700'
+    return 'border-b border-l border-slate-100 dark:border-slate-800 bg-amber-50 dark:bg-amber-500/10 px-2 py-1.5 text-center text-amber-700 dark:text-amber-400'
   if (cell.kind === 'expired')
-    return 'border-b border-l border-slate-100 bg-red-50 px-2 py-1.5 text-center text-red-700'
-  return 'border-b border-l border-slate-100 px-2 py-1.5 text-center text-slate-300'
+    return 'border-b border-l border-slate-100 dark:border-slate-800 bg-red-50 dark:bg-red-500/10 px-2 py-1.5 text-center text-red-700 dark:text-red-400'
+  return 'border-b border-l border-slate-100 dark:border-slate-800 px-2 py-1.5 text-center text-slate-300'
 }
 
 function cellGlyph(cell: CellState | undefined): React.ReactNode {

@@ -32,10 +32,12 @@ import {
   Link as LinkIcon,
   List,
   MapPin,
+  Minus,
   Plus,
   ScanLine,
   ShieldCheck,
   Sparkles,
+  Sun,
   Trash2,
   X,
 } from 'lucide-react'
@@ -152,7 +154,29 @@ export function FormRenderer({
   const [errors, setErrors] = useState<Map<string, string>>(new Map())
   const [serverError, setServerError] = useState<string | null>(null)
   const [pending, start] = useTransition()
+  // High-contrast, large-type "field mode" for direct sunlight. Persisted.
+  const [fieldMode, setFieldMode] = useState(false)
   const appliedDefaults = useRef<Set<string>>(new Set())
+
+  // Restore the persisted field-mode preference on mount, and expose a toggle.
+  useEffect(() => {
+    try {
+      setFieldMode(localStorage.getItem('bhs_field_mode') === '1')
+    } catch {
+      /* storage unavailable — default off */
+    }
+  }, [])
+  const toggleFieldMode = useCallback(() => {
+    setFieldMode((on) => {
+      const next = !on
+      try {
+        localStorage.setItem('bhs_field_mode', next ? '1' : '0')
+      } catch {
+        /* ignore */
+      }
+      return next
+    })
+  }, [])
 
   // --- Autosave state -------------------------------------------------------
   //
@@ -669,6 +693,7 @@ export function FormRenderer({
 
   return (
     <WizardLayout
+      className={`ff-surface${fieldMode ? 'field-mode' : ''}`}
       header={
         <div className="space-y-3">
           <Link
@@ -680,6 +705,19 @@ export function FormRenderer({
           <div className="flex items-center justify-between gap-2">
             <h1 className="truncate text-xl font-semibold">{templateName}</h1>
             <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={toggleFieldMode}
+                aria-pressed={fieldMode}
+                title="High-contrast field mode"
+                className={`inline-flex h-8 w-8 items-center justify-center rounded-full border ${
+                  fieldMode
+                    ? 'border-amber-400 bg-amber-100 text-amber-700 dark:border-amber-500 dark:bg-amber-900/40 dark:text-amber-200'
+                    : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400'
+                }`}
+              >
+                <Sun size={15} />
+              </button>
               <SaveStatus
                 status={saveStatus}
                 lastSavedAt={lastSavedAt}
@@ -744,18 +782,29 @@ export function FormRenderer({
               <AlertDescription>{serverError}</AlertDescription>
             </Alert>
           ) : null}
-          <div className="flex items-center justify-between gap-2">
-            <Button variant="outline" onClick={back} disabled={stepIndex === 0}>
-              <ChevronLeft size={14} />
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="lg"
+              onClick={back}
+              disabled={stepIndex === 0}
+              className="h-12 px-4"
+            >
+              <ChevronLeft size={16} />
               Back
             </Button>
             {stepIndex < totalSteps - 1 ? (
-              <Button onClick={next}>
-                Next <ChevronRight size={14} />
+              <Button onClick={next} size="lg" className="h-12 flex-1 text-base">
+                Next <ChevronRight size={16} />
               </Button>
             ) : (
-              <Button onClick={submit} disabled={pending}>
-                <Check size={14} />
+              <Button
+                onClick={submit}
+                disabled={pending}
+                size="lg"
+                className="h-12 flex-1 text-base"
+              >
+                <Check size={16} />
                 {pending ? 'Submitting…' : 'Submit'}
               </Button>
             )}
@@ -991,7 +1040,10 @@ function RepeatingSection({
             values: { ...evalCtx.values, ...row },
           }
           return (
-            <div key={i} className="rounded-md border border-slate-200 bg-slate-50/50 p-3">
+            <div
+              key={i}
+              className="rounded-lg border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-700 dark:bg-slate-800/40"
+            >
               <div className="mb-2 flex items-center justify-between">
                 <div className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
                   {formatRowLabel(section, i, row)}
@@ -999,11 +1051,11 @@ function RepeatingSection({
                 <button
                   type="button"
                   onClick={() => onRemove(i)}
-                  className="text-slate-400 hover:text-red-500"
-                  title="Remove row"
+                  className="ff-chip flex h-9 w-9 items-center justify-center rounded-md text-slate-400 hover:bg-red-50 hover:text-red-500 disabled:opacity-30 dark:hover:bg-red-950/40"
+                  title="Remove"
                   disabled={rows.length <= min}
                 >
-                  <Trash2 size={14} />
+                  <Trash2 size={16} />
                 </button>
               </div>
               <div className="space-y-3">
@@ -1027,8 +1079,14 @@ function RepeatingSection({
           )
         })
       )}
-      <Button variant="outline" onClick={onAdd} disabled={max !== undefined && rows.length >= max}>
-        <Plus size={14} />
+      <Button
+        variant="outline"
+        size="lg"
+        onClick={onAdd}
+        disabled={max !== undefined && rows.length >= max}
+        className="ff-chip h-12 w-full border-dashed"
+      >
+        <Plus size={16} />
         Add row
       </Button>
     </div>
@@ -1152,6 +1210,25 @@ function FieldInput({
                   ? 'url'
                   : 'text'
           }
+          inputMode={
+            field.type === 'email'
+              ? 'email'
+              : field.type === 'phone'
+                ? 'tel'
+                : field.type === 'url'
+                  ? 'url'
+                  : 'text'
+          }
+          autoComplete={
+            field.type === 'email'
+              ? 'email'
+              : field.type === 'phone'
+                ? 'tel'
+                : field.type === 'url'
+                  ? 'url'
+                  : 'off'
+          }
+          enterKeyHint="next"
         />
       )
     case 'textarea':
@@ -1164,14 +1241,9 @@ function FieldInput({
         />
       )
     case 'number':
+      return <NumberStepper field={field} value={value} onChange={onChange} />
     case 'rating':
-      return (
-        <Input
-          type="number"
-          value={(value as number | string) ?? ''}
-          onChange={(e) => onChange(e.target.value === '' ? '' : Number(e.target.value))}
-        />
-      )
+      return <RatingButtons field={field} value={value} onChange={onChange} />
     case 'slider': {
       const c = (field.config ?? {}) as { min?: number; max?: number; step?: number; unit?: string }
       const min = c.min ?? 0
@@ -1313,8 +1385,7 @@ function FieldInput({
           onChange={(e) => onChange(e.target.value)}
         />
       )
-    case 'select':
-    case 'radio': {
+    case 'select': {
       const opts = field.validation?.options ?? []
       return (
         <Select value={(value as string) ?? ''} onChange={(e) => onChange(e.target.value)}>
@@ -1327,69 +1398,139 @@ function FieldInput({
         </Select>
       )
     }
+    case 'radio': {
+      // Big tappable chips — far easier than a dropdown with gloves on.
+      const opts = field.validation?.options ?? []
+      const cur = (value as string) ?? ''
+      return (
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {opts.map((o) => {
+            const sel = cur === o.value
+            return (
+              <button
+                key={o.value}
+                type="button"
+                aria-pressed={sel}
+                onClick={() => onChange(sel ? '' : o.value)}
+                className={`ff-chip flex min-h-[48px] items-center gap-2.5 rounded-md border px-4 text-left text-sm font-medium ${
+                  sel
+                    ? 'border-teal-500 bg-teal-50 text-teal-900 dark:border-teal-600 dark:bg-teal-950/40 dark:text-teal-100'
+                    : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'
+                }`}
+              >
+                <span
+                  className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${
+                    sel ? 'border-teal-600' : 'border-slate-300 dark:border-slate-600'
+                  }`}
+                >
+                  {sel ? <span className="h-2.5 w-2.5 rounded-full bg-teal-600" /> : null}
+                </span>
+                {o.label?.en ?? o.value}
+              </button>
+            )
+          })}
+        </div>
+      )
+    }
     case 'multi_select':
     case 'checkbox_group': {
       const opts = field.validation?.options ?? []
       const arr = Array.isArray(value) ? (value as string[]) : []
       return (
-        <div className="space-y-1">
-          {opts.map((o) => (
-            <label key={o.value} className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={arr.includes(o.value)}
-                onChange={(e) =>
-                  onChange(e.target.checked ? [...arr, o.value] : arr.filter((v) => v !== o.value))
-                }
-              />
-              {o.label?.en ?? o.value}
-            </label>
-          ))}
+        <div className="space-y-2">
+          {opts.map((o) => {
+            const sel = arr.includes(o.value)
+            return (
+              <button
+                key={o.value}
+                type="button"
+                aria-pressed={sel}
+                onClick={() => onChange(sel ? arr.filter((v) => v !== o.value) : [...arr, o.value])}
+                className={`ff-chip flex min-h-[48px] w-full items-center gap-3 rounded-md border px-4 text-left text-sm font-medium ${
+                  sel
+                    ? 'border-teal-500 bg-teal-50 text-teal-900 dark:border-teal-600 dark:bg-teal-950/40 dark:text-teal-100'
+                    : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'
+                }`}
+              >
+                <span
+                  className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 ${
+                    sel
+                      ? 'border-teal-600 bg-teal-600 text-white'
+                      : 'border-slate-300 dark:border-slate-600'
+                  }`}
+                >
+                  {sel ? <Check size={13} /> : null}
+                </span>
+                {o.label?.en ?? o.value}
+              </button>
+            )
+          })}
         </div>
       )
     }
     case 'pass_fail_na':
       return (
-        <div className="flex gap-2">
-          {['pass', 'fail', 'n_a'].map((v) => (
-            <button
-              key={v}
-              type="button"
-              onClick={() => onChange(v)}
-              className={`rounded-md border px-3 py-1.5 text-xs font-medium ${
-                value === v
-                  ? v === 'pass'
-                    ? 'border-emerald-500 bg-emerald-100 text-emerald-900'
-                    : v === 'fail'
-                      ? 'border-red-500 bg-red-100 text-red-900'
-                      : 'border-slate-400 bg-slate-100 text-slate-700'
-                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-              }`}
-            >
-              {v.toUpperCase().replace('_', '/')}
-            </button>
-          ))}
+        <div className="grid grid-cols-3 gap-2">
+          {(
+            [
+              { v: 'pass', label: 'Pass' },
+              { v: 'fail', label: 'Fail' },
+              { v: 'n_a', label: 'N/A' },
+            ] as const
+          ).map(({ v, label }) => {
+            const sel = value === v
+            const tone = sel
+              ? v === 'pass'
+                ? 'border-emerald-500 bg-emerald-100 text-emerald-900 dark:border-emerald-500 dark:bg-emerald-900/40 dark:text-emerald-100'
+                : v === 'fail'
+                  ? 'border-red-500 bg-red-100 text-red-900 dark:border-red-500 dark:bg-red-900/40 dark:text-red-100'
+                  : 'border-slate-400 bg-slate-100 text-slate-800 dark:border-slate-400 dark:bg-slate-700/60 dark:text-slate-100'
+              : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
+            return (
+              <button
+                key={v}
+                type="button"
+                aria-pressed={sel}
+                onClick={() => onChange(sel ? '' : v)}
+                className={`ff-chip flex min-h-[48px] flex-col items-center justify-center gap-0.5 rounded-md border text-sm font-semibold ${tone}`}
+              >
+                {v === 'pass' ? <Check size={18} /> : v === 'fail' ? <X size={18} /> : null}
+                {label}
+              </button>
+            )
+          })}
         </div>
       )
     case 'yes_no_comment': {
       const v = (value as { answer?: string; comment?: string } | undefined) ?? {}
       return (
         <div className="space-y-2">
-          <div className="flex gap-2">
-            {['yes', 'no'].map((opt) => (
-              <button
-                key={opt}
-                type="button"
-                onClick={() => onChange({ ...v, answer: opt })}
-                className={`rounded-md border px-3 py-1.5 text-xs font-medium ${
-                  v.answer === opt
-                    ? 'border-teal-500 bg-teal-100 text-teal-900'
-                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                }`}
-              >
-                {opt.toUpperCase()}
-              </button>
-            ))}
+          <div className="grid grid-cols-2 gap-2">
+            {(
+              [
+                { opt: 'yes', label: 'Yes' },
+                { opt: 'no', label: 'No' },
+              ] as const
+            ).map(({ opt, label }) => {
+              const sel = v.answer === opt
+              const tone = sel
+                ? opt === 'yes'
+                  ? 'border-emerald-500 bg-emerald-100 text-emerald-900 dark:border-emerald-500 dark:bg-emerald-900/40 dark:text-emerald-100'
+                  : 'border-red-500 bg-red-100 text-red-900 dark:border-red-500 dark:bg-red-900/40 dark:text-red-100'
+                : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
+              return (
+                <button
+                  key={opt}
+                  type="button"
+                  aria-pressed={sel}
+                  onClick={() => onChange({ ...v, answer: opt })}
+                  className={`ff-chip flex min-h-[48px] items-center justify-center gap-2 rounded-md border text-sm font-semibold ${tone}`}
+                >
+                  {opt === 'yes' ? <Check size={18} /> : <X size={18} />}
+                  {label}
+                </button>
+              )
+            })}
           </div>
           {v.answer === 'no' ? (
             <Textarea
@@ -1404,26 +1545,45 @@ function FieldInput({
     }
     case 'traffic_light':
       return (
-        <div className="flex gap-2">
+        <div className="grid grid-cols-3 gap-2">
           {[
-            { v: 'green', label: 'Green', tone: 'bg-emerald-500' },
-            { v: 'yellow', label: 'Yellow', tone: 'bg-amber-400' },
-            { v: 'red', label: 'Red', tone: 'bg-red-500' },
-          ].map((opt) => (
-            <button
-              key={opt.v}
-              type="button"
-              onClick={() => onChange(opt.v)}
-              className={`flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-medium ${
-                value === opt.v
-                  ? 'border-teal-500 bg-teal-50'
-                  : 'border-slate-200 bg-white hover:bg-slate-50'
-              }`}
-            >
-              <span className={`inline-block h-3 w-3 rounded-full ${opt.tone}`} />
-              {opt.label}
-            </button>
-          ))}
+            {
+              v: 'green',
+              label: 'Green',
+              dot: 'bg-emerald-500',
+              sel: 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40',
+            },
+            {
+              v: 'yellow',
+              label: 'Yellow',
+              dot: 'bg-amber-400',
+              sel: 'border-amber-500 bg-amber-50 dark:bg-amber-950/40',
+            },
+            {
+              v: 'red',
+              label: 'Red',
+              dot: 'bg-red-500',
+              sel: 'border-red-500 bg-red-50 dark:bg-red-950/40',
+            },
+          ].map((opt) => {
+            const sel = value === opt.v
+            return (
+              <button
+                key={opt.v}
+                type="button"
+                aria-pressed={sel}
+                onClick={() => onChange(sel ? '' : opt.v)}
+                className={`ff-chip flex min-h-[48px] flex-col items-center justify-center gap-1 rounded-md border text-sm font-medium ${
+                  sel
+                    ? `${opt.sel} text-slate-900 dark:text-slate-100`
+                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
+                }`}
+              >
+                <span className={`inline-block h-4 w-4 rounded-full ${opt.dot}`} />
+                {opt.label}
+              </button>
+            )
+          })}
         </div>
       )
     case 'person_picker':
@@ -1577,6 +1737,102 @@ function FieldInput({
   }
 }
 
+// --- Number stepper + rating (big touch targets) ---------------------------
+
+// Numeric entry with −/+ steppers either side of a centred field. The keypad
+// is forced via inputMode='decimal' (we avoid type='number' so custom styling
+// and the steppers behave consistently across iOS Safari).
+function NumberStepper({
+  field,
+  value,
+  onChange,
+}: {
+  field: FormField
+  value: unknown
+  onChange: (v: unknown) => void
+}) {
+  const c = (field.config ?? {}) as { min?: number; max?: number; step?: number; unit?: string }
+  const step = c.step ?? 1
+  const num =
+    typeof value === 'number' ? value : value === '' || value == null ? null : Number(value)
+  const clamp = (n: number) => {
+    let v = n
+    if (c.min !== undefined) v = Math.max(c.min, v)
+    if (c.max !== undefined) v = Math.min(c.max, v)
+    return Number(v.toFixed(6))
+  }
+  const bump = (dir: -1 | 1) => onChange(clamp((num ?? 0) + dir * step))
+  const btn =
+    'ff-chip flex w-14 shrink-0 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 active:scale-95 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'
+  return (
+    <div className="flex items-stretch gap-2">
+      <button type="button" className={btn} onClick={() => bump(-1)} aria-label="Decrease">
+        <Minus size={18} />
+      </button>
+      <div className="relative flex-1">
+        <Input
+          type="text"
+          inputMode="decimal"
+          enterKeyHint="next"
+          className="h-full text-center text-lg font-semibold"
+          value={num ?? ''}
+          onChange={(e) => {
+            const raw = e.target.value.replace(/[^0-9.-]/g, '')
+            if (raw === '' || raw === '-' || raw === '.') return onChange(raw === '' ? '' : raw)
+            const n = Number(raw)
+            onChange(Number.isNaN(n) ? '' : n)
+          }}
+        />
+        {c.unit ? (
+          <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm text-slate-400">
+            {c.unit}
+          </span>
+        ) : null}
+      </div>
+      <button type="button" className={btn} onClick={() => bump(1)} aria-label="Increase">
+        <Plus size={18} />
+      </button>
+    </div>
+  )
+}
+
+// 1..max rating as big tappable buttons. Tap again to clear.
+function RatingButtons({
+  field,
+  value,
+  onChange,
+}: {
+  field: FormField
+  value: unknown
+  onChange: (v: unknown) => void
+}) {
+  const c = (field.config ?? {}) as { max?: number }
+  const max = c.max ?? 5
+  const cur = typeof value === 'number' ? value : null
+  return (
+    <div className="flex flex-wrap gap-2">
+      {Array.from({ length: max }, (_, i) => i + 1).map((n) => {
+        const sel = cur === n
+        return (
+          <button
+            key={n}
+            type="button"
+            aria-pressed={sel}
+            onClick={() => onChange(sel ? '' : n)}
+            className={`ff-chip flex h-12 min-w-12 flex-1 items-center justify-center rounded-md border text-lg font-semibold ${
+              sel
+                ? 'border-teal-500 bg-teal-600 text-white'
+                : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'
+            }`}
+          >
+            {n}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 // --- Table field ------------------------------------------------------------
 
 function TableField({
@@ -1621,81 +1877,143 @@ function TableField({
   }
 
   return (
-    <div className="overflow-x-auto rounded-md border border-slate-200">
-      <table className="w-full border-collapse text-sm">
-        <thead>
-          <tr className="bg-slate-50">
-            {rowMode === 'fixed' ? (
-              <th className="border-b border-slate-200 px-2 py-1.5 text-left text-xs font-semibold text-slate-600" />
-            ) : null}
-            {columns.map((c) => (
-              <th
-                key={c.key}
-                className="border-b border-slate-200 px-2 py-1.5 text-left text-xs font-semibold text-slate-600"
-              >
-                {c.label || c.key}
-              </th>
-            ))}
-            {rowMode === 'addable' ? <th className="w-8 border-b border-slate-200" /> : null}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.length === 0 ? (
-            <tr>
-              <td
-                colSpan={columns.length + 1}
-                className="px-2 py-3 text-center text-xs text-slate-400"
-              >
-                No rows. Add one below.
-              </td>
+    <div className="space-y-2">
+      {/* Desktop / wide: full table */}
+      <div className="hidden overflow-x-auto rounded-md border border-slate-200 sm:block dark:border-slate-700">
+        <table className="w-full border-collapse text-sm">
+          <thead>
+            <tr className="bg-slate-50 dark:bg-slate-800/60">
+              {rowMode === 'fixed' ? (
+                <th className="border-b border-slate-200 px-2 py-1.5 text-left text-xs font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300" />
+              ) : null}
+              {columns.map((c) => (
+                <th
+                  key={c.key}
+                  className="border-b border-slate-200 px-2 py-1.5 text-left text-xs font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300"
+                >
+                  {c.label || c.key}
+                </th>
+              ))}
+              {rowMode === 'addable' ? (
+                <th className="w-8 border-b border-slate-200 dark:border-slate-700" />
+              ) : null}
             </tr>
-          ) : (
-            rows.map((row, i) => (
-              <tr key={i} className="border-b border-slate-100 last:border-b-0">
-                {rowMode === 'fixed' ? (
-                  <td className="px-2 py-1 text-xs font-medium whitespace-nowrap text-slate-700">
-                    {fixedRows[i]?.label ?? `Row ${i + 1}`}
-                  </td>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={columns.length + 1}
+                  className="px-2 py-3 text-center text-xs text-slate-400"
+                >
+                  No rows. Add one below.
+                </td>
+              </tr>
+            ) : (
+              rows.map((row, i) => (
+                <tr
+                  key={i}
+                  className="border-b border-slate-100 last:border-b-0 dark:border-slate-800"
+                >
+                  {rowMode === 'fixed' ? (
+                    <td className="px-2 py-1 text-xs font-medium whitespace-nowrap text-slate-700 dark:text-slate-300">
+                      {fixedRows[i]?.label ?? `Row ${i + 1}`}
+                    </td>
+                  ) : null}
+                  {columns.map((c) => (
+                    <td key={c.key} className="px-1.5 py-1 align-top">
+                      <TableCell
+                        column={c}
+                        value={row[c.key]}
+                        onChange={(v) => setCell(i, c.key, v)}
+                      />
+                    </td>
+                  ))}
+                  {rowMode === 'addable' ? (
+                    <td className="px-1 py-1 text-center align-middle">
+                      <button
+                        type="button"
+                        onClick={() => removeRow(i)}
+                        disabled={rows.length <= minRows}
+                        title="Remove row"
+                        className="rounded p-1 text-slate-400 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-30"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
+                  ) : null}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+        {rowMode === 'addable' ? (
+          <div className="border-t border-slate-200 p-1.5 dark:border-slate-700">
+            <button
+              type="button"
+              onClick={addRow}
+              disabled={maxRows != null && rows.length >= maxRows}
+              className="flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-teal-700 hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Plus size={13} /> Add row
+            </button>
+          </div>
+        ) : null}
+      </div>
+
+      {/* Mobile: one card per row — never a horizontal scroll on a phone. */}
+      <div className="space-y-3 sm:hidden">
+        {rows.length === 0 ? (
+          <p className="text-sm text-slate-500">No rows yet.</p>
+        ) : (
+          rows.map((row, i) => (
+            <div
+              key={i}
+              className="rounded-lg border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-700 dark:bg-slate-800/40"
+            >
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
+                  {rowMode === 'fixed' ? (fixedRows[i]?.label ?? `Row ${i + 1}`) : `Row ${i + 1}`}
+                </span>
+                {rowMode === 'addable' ? (
+                  <button
+                    type="button"
+                    onClick={() => removeRow(i)}
+                    disabled={rows.length <= minRows}
+                    title="Remove row"
+                    className="ff-chip flex h-9 w-9 items-center justify-center rounded-md text-slate-400 hover:bg-red-50 hover:text-red-500 disabled:opacity-30 dark:hover:bg-red-950/40"
+                  >
+                    <Trash2 size={16} />
+                  </button>
                 ) : null}
+              </div>
+              <div className="space-y-2.5">
                 {columns.map((c) => (
-                  <td key={c.key} className="px-1.5 py-1 align-top">
+                  <div key={c.key} className="space-y-1">
+                    <label className="text-xs font-medium text-slate-500">{c.label || c.key}</label>
                     <TableCell
                       column={c}
                       value={row[c.key]}
                       onChange={(v) => setCell(i, c.key, v)}
+                      mobile
                     />
-                  </td>
+                  </div>
                 ))}
-                {rowMode === 'addable' ? (
-                  <td className="px-1 py-1 text-center align-middle">
-                    <button
-                      type="button"
-                      onClick={() => removeRow(i)}
-                      disabled={rows.length <= minRows}
-                      title="Remove row"
-                      className="rounded p-1 text-slate-400 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-30"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </td>
-                ) : null}
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-      {rowMode === 'addable' ? (
-        <div className="border-t border-slate-200 p-1.5">
+              </div>
+            </div>
+          ))
+        )}
+        {rowMode === 'addable' ? (
           <button
             type="button"
             onClick={addRow}
             disabled={maxRows != null && rows.length >= maxRows}
-            className="flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-teal-700 hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-40"
+            className="ff-chip flex min-h-[48px] w-full items-center justify-center gap-2 rounded-md border border-dashed border-slate-300 text-sm font-medium text-teal-700 hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-600 dark:text-teal-300"
           >
-            <Plus size={13} /> Add row
+            <Plus size={16} /> Add row
           </button>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
     </div>
   )
 }
@@ -1704,45 +2022,54 @@ function TableCell({
   column,
   value,
   onChange,
+  mobile,
 }: {
   column: TableColumn
   value: unknown
   onChange: (v: unknown) => void
+  // In the mobile card view cells are full-width; drop the compact h-8 so the
+  // shared .ff-surface touch sizing (48px) applies.
+  mobile?: boolean
 }) {
+  const sizeCls = mobile ? '' : 'h-8 text-sm'
   switch (column.type) {
     case 'number':
       return (
         <Input
-          type="number"
-          className="h-8 text-sm"
+          type="text"
+          inputMode="decimal"
+          className={sizeCls}
           value={(value as number | string | null) ?? ''}
-          onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))}
+          onChange={(e) => {
+            const raw = e.target.value.replace(/[^0-9.-]/g, '')
+            onChange(raw === '' || Number.isNaN(Number(raw)) ? null : Number(raw))
+          }}
         />
       )
     case 'date':
       return (
         <Input
           type="date"
-          className="h-8 text-sm"
+          className={sizeCls}
           value={(value as string) ?? ''}
           onChange={(e) => onChange(e.target.value)}
         />
       )
     case 'checkbox':
       return (
-        <div className="flex h-8 items-center justify-center">
+        <div className={`flex items-center ${mobile ? 'h-10' : 'h-8 justify-center'}`}>
           <input
             type="checkbox"
             checked={!!value}
             onChange={(e) => onChange(e.target.checked)}
-            className="h-4 w-4"
+            className="h-5 w-5"
           />
         </div>
       )
     case 'select':
       return (
         <Select
-          className="h-8 text-sm"
+          className={sizeCls}
           value={(value as string) ?? ''}
           onChange={(e) => onChange(e.target.value)}
         >
@@ -1757,7 +2084,7 @@ function TableCell({
     default:
       return (
         <Input
-          className="h-8 text-sm"
+          className={sizeCls}
           value={(value as string) ?? ''}
           onChange={(e) => onChange(e.target.value)}
         />

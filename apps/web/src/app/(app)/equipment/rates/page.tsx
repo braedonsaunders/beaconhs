@@ -142,7 +142,7 @@ export default async function EquipmentRatesPage() {
             title="Equipment rates"
             description="Billing rates by equipment type. Drives the ROI and monthly charges reports."
           />
-          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
             <Badge variant="secondary">{rows.length} types</Badge>
             <Badge variant={filled > 0 ? 'success' : 'warning'}>{filled} with rates set</Badge>
             <Badge variant="secondary">
@@ -160,7 +160,7 @@ export default async function EquipmentRatesPage() {
         />
       ) : (
         <Section title="Rate matrix" defaultOpen>
-          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -178,32 +178,34 @@ export default async function EquipmentRatesPage() {
                 {rows.map(({ type, cat, rate }) => (
                   <TableRow key={type.id}>
                     <TableCell>
-                      <div className="font-medium text-slate-900">{type.name}</div>
+                      <div className="font-medium text-slate-900 dark:text-slate-100">
+                        {type.name}
+                      </div>
                     </TableCell>
-                    <TableCell className="text-slate-600">
+                    <TableCell className="text-slate-600 dark:text-slate-400">
                       {cat?.name ?? type.category ?? '—'}
                     </TableCell>
-                    <TableCell className="text-right text-slate-700">
+                    <TableCell className="text-right text-slate-700 dark:text-slate-300">
                       {fmtMoney(rate?.hourly, rate?.currency ?? 'CAD')}
                     </TableCell>
-                    <TableCell className="text-right text-slate-700">
+                    <TableCell className="text-right text-slate-700 dark:text-slate-300">
                       {fmtMoney(rate?.daily, rate?.currency ?? 'CAD')}
                     </TableCell>
-                    <TableCell className="text-right text-slate-700">
+                    <TableCell className="text-right text-slate-700 dark:text-slate-300">
                       {fmtMoney(rate?.weekly, rate?.currency ?? 'CAD')}
                     </TableCell>
-                    <TableCell className="text-right text-slate-700">
+                    <TableCell className="text-right text-slate-700 dark:text-slate-300">
                       {fmtMoney(rate?.monthly, rate?.currency ?? 'CAD')}
                     </TableCell>
-                    <TableCell className="text-right text-xs text-slate-500">
+                    <TableCell className="text-right text-xs text-slate-500 dark:text-slate-400">
                       {rate?.currency ?? '—'}
                     </TableCell>
                     <TableCell>
                       <details className="relative">
-                        <summary className="cursor-pointer list-none text-xs text-teal-700 hover:underline">
+                        <summary className="cursor-pointer list-none text-xs text-teal-700 hover:underline dark:text-teal-400">
                           <DollarSign size={12} className="inline" /> Edit
                         </summary>
-                        <div className="absolute right-0 z-10 mt-1 w-[28rem] rounded-md border border-slate-200 bg-white p-4 shadow-lg">
+                        <div className="absolute right-0 z-10 mt-1 w-[28rem] rounded-md border border-slate-200 bg-white p-4 shadow-lg dark:border-slate-800 dark:bg-slate-900">
                           <form action={upsertRate} className="space-y-3">
                             <input type="hidden" name="typeId" value={type.id} />
                             <div className="grid grid-cols-2 gap-3">

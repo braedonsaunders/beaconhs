@@ -105,7 +105,7 @@ export default async function FleetAssetsReport() {
           description="Add equipment to populate the fleet report."
         />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
           <Table>
             <TableHeader>
               <TableRow>
@@ -131,7 +131,9 @@ export default async function FleetAssetsReport() {
                     </Link>
                   </TableCell>
                   <TableCell className="font-medium">{item.name}</TableCell>
-                  <TableCell className="text-slate-600">{type?.name ?? '—'}</TableCell>
+                  <TableCell className="text-slate-600 dark:text-slate-400">
+                    {type?.name ?? '—'}
+                  </TableCell>
                   <TableCell>
                     <Badge
                       variant={
@@ -145,17 +147,19 @@ export default async function FleetAssetsReport() {
                       {item.status.replace('_', ' ')}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-slate-600">{site?.name ?? '—'}</TableCell>
-                  <TableCell className="text-slate-600">
+                  <TableCell className="text-slate-600 dark:text-slate-400">
+                    {site?.name ?? '—'}
+                  </TableCell>
+                  <TableCell className="text-slate-600 dark:text-slate-400">
                     {holder ? `${holder.firstName} ${holder.lastName}` : '—'}
                   </TableCell>
                   <TableCell className="text-right">{Number(hoursYtd).toFixed(1)}</TableCell>
                   <TableCell className="text-right">{Number(kmYtd).toLocaleString()}</TableCell>
                   <TableCell className="text-right">{fmtMoney(expensesYtd)}</TableCell>
-                  <TableCell className="text-slate-600">
+                  <TableCell className="text-slate-600 dark:text-slate-400">
                     {item.lastAnnualInspectionOn ?? '—'}
                   </TableCell>
-                  <TableCell className="text-slate-600">
+                  <TableCell className="text-slate-600 dark:text-slate-400">
                     {item.nextAnnualInspectionDue ?? '—'}
                   </TableCell>
                 </TableRow>

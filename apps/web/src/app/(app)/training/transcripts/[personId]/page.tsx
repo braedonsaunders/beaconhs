@@ -124,7 +124,7 @@ export default async function TranscriptDetailPage({
           actions={
             <a
               href="javascript:window.print()"
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50"
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800/60"
             >
               Print transcript
             </a>
@@ -163,7 +163,7 @@ export default async function TranscriptDetailPage({
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <ul className="divide-y divide-slate-100 text-sm">
+              <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
                 {expiring.map((row) => {
                   const days = row.rec.expiresOn
                     ? Math.round(
@@ -175,11 +175,11 @@ export default async function TranscriptDetailPage({
                       <span>
                         <Link
                           href={`/training/courses/${row.course.id}`}
-                          className="font-medium text-slate-900 hover:underline"
+                          className="font-medium text-slate-900 hover:underline dark:text-slate-100"
                         >
                           {row.course.name}
                         </Link>
-                        <span className="ml-2 text-xs text-slate-500">
+                        <span className="ml-2 text-xs text-slate-500 dark:text-slate-400">
                           expires {row.rec.expiresOn}
                         </span>
                       </span>
@@ -202,7 +202,7 @@ export default async function TranscriptDetailPage({
           </CardHeader>
           <CardContent>
             {records.length === 0 ? (
-              <p className="text-sm text-slate-500">No training records.</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">No training records.</p>
             ) : (
               <Table>
                 <TableHeader>
@@ -226,7 +226,7 @@ export default async function TranscriptDetailPage({
                         <TableCell>
                           <Link
                             href={`/training/courses/${row.course.id}`}
-                            className="font-medium text-slate-900 hover:underline"
+                            className="font-medium text-slate-900 hover:underline dark:text-slate-100"
                           >
                             {row.course.name}
                           </Link>
@@ -243,10 +243,10 @@ export default async function TranscriptDetailPage({
                         <TableCell className="tabular-nums">
                           {row.rec.grade != null ? `${row.rec.grade}%` : '—'}
                         </TableCell>
-                        <TableCell className="text-xs text-slate-500">
+                        <TableCell className="text-xs text-slate-500 dark:text-slate-400">
                           {row.rec.source.replace('_', ' ')}
                         </TableCell>
-                        <TableCell className="text-xs text-slate-500">
+                        <TableCell className="text-xs text-slate-500 dark:text-slate-400">
                           {row.rec.instructor ?? '—'}
                         </TableCell>
                       </TableRow>
@@ -266,7 +266,7 @@ export default async function TranscriptDetailPage({
           </CardHeader>
           <CardContent>
             {attempts.length === 0 ? (
-              <p className="text-sm text-slate-500">No assessment attempts.</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">No assessment attempts.</p>
             ) : (
               <Table>
                 <TableHeader>
@@ -283,7 +283,7 @@ export default async function TranscriptDetailPage({
                       <TableCell>
                         <Link
                           href={`/training/assessments/${a.id}`}
-                          className="font-medium text-slate-900 hover:underline"
+                          className="font-medium text-slate-900 hover:underline dark:text-slate-100"
                         >
                           {t.name}
                         </Link>
@@ -323,7 +323,7 @@ export default async function TranscriptDetailPage({
           </CardHeader>
           <CardContent>
             {skills.length === 0 ? (
-              <p className="text-sm text-slate-500">No skills awarded.</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">No skills awarded.</p>
             ) : (
               <Table>
                 <TableHeader>
@@ -346,12 +346,14 @@ export default async function TranscriptDetailPage({
                         <TableCell>
                           <Link
                             href={`/training/skills/types/${type.id}`}
-                            className="font-medium text-slate-900 hover:underline"
+                            className="font-medium text-slate-900 hover:underline dark:text-slate-100"
                           >
                             {type.name}
                           </Link>
                         </TableCell>
-                        <TableCell className="text-slate-600">{auth.name}</TableCell>
+                        <TableCell className="text-slate-600 dark:text-slate-400">
+                          {auth.name}
+                        </TableCell>
                         <TableCell className="tabular-nums">{sk.grantedOn}</TableCell>
                         <TableCell className="tabular-nums">
                           {sk.expiresOn ?? '—'}{' '}

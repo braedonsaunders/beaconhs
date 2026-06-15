@@ -93,7 +93,7 @@ export default async function BulkQrPage({
               Apply filters
             </Button>
           </form>
-          <div className="text-xs text-slate-500">
+          <div className="text-xs text-slate-500 dark:text-slate-400">
             <Badge variant="secondary">{rows.length} items</Badge>
           </div>
         </>
@@ -101,7 +101,7 @@ export default async function BulkQrPage({
     >
       <Section title="Pick equipment for the QR sheet" defaultOpen>
         <form action="/equipment/qr/bulk/print" method="GET" className="space-y-4">
-          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -132,8 +132,10 @@ export default async function BulkQrPage({
                         {item.name}
                       </Link>
                     </TableCell>
-                    <TableCell className="text-slate-600">{type?.name ?? '—'}</TableCell>
-                    <TableCell className="font-mono text-xs text-slate-500">
+                    <TableCell className="text-slate-600 dark:text-slate-400">
+                      {type?.name ?? '—'}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-slate-500 dark:text-slate-400">
                       {item.qrToken.slice(0, 12)}…
                     </TableCell>
                   </TableRow>
@@ -141,8 +143,8 @@ export default async function BulkQrPage({
               </TableBody>
             </Table>
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
-            <div className="text-slate-600">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm dark:border-slate-800 dark:bg-slate-800">
+            <div className="text-slate-600 dark:text-slate-400">
               Selections become a printable 4×3 grid (12 labels per page) sized for adhesive vinyl
               asset tags.
             </div>

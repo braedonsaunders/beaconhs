@@ -8,12 +8,12 @@
 import Link from 'next/link'
 import { useState } from 'react'
 import { Button } from '@beaconhs/ui'
-import { Copy, FileText, Lock, Mail, MoreHorizontal, Pencil, Trash2, Unlock } from 'lucide-react'
+import { Copy, FileText, Lock, Mail, MoreHorizontal, Trash2, Unlock } from 'lucide-react'
 
 export function AssessmentHeaderActions({
   id,
   locked,
-  editHref,
+  canManage,
   pdfHref,
   emailHref,
   deleteHref,
@@ -23,7 +23,7 @@ export function AssessmentHeaderActions({
 }: {
   id: string
   locked: boolean
-  editHref: string
+  canManage: boolean
   pdfHref: string
   emailHref: string
   deleteHref: string
@@ -57,11 +57,6 @@ export function AssessmentHeaderActions({
     <>
       {/* Desktop: the full row */}
       <div className="hidden items-center gap-2 sm:flex">
-        <Link href={editHref as any}>
-          <Button variant="outline" disabled={locked}>
-            Edit
-          </Button>
-        </Link>
         <Link href={pdfHref as any}>
           <Button variant="outline">
             <FileText size={14} /> Print / PDF
@@ -79,11 +74,13 @@ export function AssessmentHeaderActions({
           </Button>
         </form>
         {lockForm}
-        <Link href={deleteHref as any} scroll={false}>
-          <Button variant="outline" className="text-red-600 hover:bg-red-50">
-            <Trash2 size={14} /> Delete
-          </Button>
-        </Link>
+        {canManage ? (
+          <Link href={deleteHref as any} scroll={false}>
+            <Button variant="outline" className="text-red-600 hover:bg-red-50">
+              <Trash2 size={14} /> Delete
+            </Button>
+          </Link>
+        ) : null}
       </div>
 
       {/* Phone: Lock/Unlock + a More sheet */}
@@ -107,9 +104,6 @@ export function AssessmentHeaderActions({
               onClick={() => setOpen(false)}
             />
             <div className="fixed inset-x-3 bottom-3 z-50 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
-              <Link href={editHref as any} className={menuItem} onClick={() => setOpen(false)}>
-                <Pencil size={15} /> Edit details
-              </Link>
               <Link href={pdfHref as any} className={menuItem} onClick={() => setOpen(false)}>
                 <FileText size={15} /> Print / PDF
               </Link>
@@ -127,14 +121,16 @@ export function AssessmentHeaderActions({
                   <Copy size={15} /> Copy assessment
                 </button>
               </form>
-              <Link
-                href={deleteHref as any}
-                scroll={false}
-                className={`${menuItem} border-t border-slate-100 text-red-600 dark:border-slate-800 dark:text-red-400`}
-                onClick={() => setOpen(false)}
-              >
-                <Trash2 size={15} /> Delete
-              </Link>
+              {canManage ? (
+                <Link
+                  href={deleteHref as any}
+                  scroll={false}
+                  className={`${menuItem} border-t border-slate-100 text-red-600 dark:border-slate-800 dark:text-red-400`}
+                  onClick={() => setOpen(false)}
+                >
+                  <Trash2 size={15} /> Delete
+                </Link>
+              ) : null}
             </div>
           </>
         ) : null}

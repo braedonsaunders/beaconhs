@@ -15,7 +15,8 @@ import { recordAudit } from '@/lib/audit'
 type OwnerType = 'skill' | 'skill_type' | 'authority'
 
 const PATH_FOR_OWNER: Record<OwnerType, (id: string) => string> = {
-  skill: (id) => `/training/skills/types/${id}`,
+  // `skill` = a per-person skill assignment; its detail page is /training/skills/[id].
+  skill: (id) => `/training/skills/${id}`,
   skill_type: (id) => `/training/skills/types/${id}`,
   authority: (id) => `/training/authorities/${id}`,
 }

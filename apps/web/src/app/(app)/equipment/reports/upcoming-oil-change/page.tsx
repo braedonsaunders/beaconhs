@@ -79,18 +79,18 @@ export default async function UpcomingOilChange({
               </Link>
             }
           />
-          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
             <Badge variant="destructive">{overdueCount} overdue</Badge>
             <Badge variant="secondary">{rows.length - overdueCount} due soon</Badge>
             <form className="ml-auto flex items-center gap-2">
-              <label className="text-xs text-slate-600">Horizon (days)</label>
+              <label className="text-xs text-slate-600 dark:text-slate-400">Horizon (days)</label>
               <input
                 type="number"
                 name="days"
                 min={1}
                 max={180}
                 defaultValue={days}
-                className="h-8 w-20 rounded border border-slate-200 px-2 text-sm"
+                className="h-8 w-20 rounded border border-slate-200 px-2 text-sm dark:border-slate-800"
               />
               <Button type="submit" variant="outline" size="sm">
                 Apply
@@ -107,7 +107,7 @@ export default async function UpcomingOilChange({
           description="No equipment is flagged for an oil change in this window."
         />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
           <Table>
             <TableHeader>
               <TableRow>
@@ -132,13 +132,25 @@ export default async function UpcomingOilChange({
                       </Link>
                     </TableCell>
                     <TableCell className="font-medium">{item.name}</TableCell>
-                    <TableCell className="text-slate-600">{type?.name ?? '—'}</TableCell>
-                    <TableCell className="text-slate-600">{site?.name ?? '—'}</TableCell>
-                    <TableCell className="text-slate-600">
+                    <TableCell className="text-slate-600 dark:text-slate-400">
+                      {type?.name ?? '—'}
+                    </TableCell>
+                    <TableCell className="text-slate-600 dark:text-slate-400">
+                      {site?.name ?? '—'}
+                    </TableCell>
+                    <TableCell className="text-slate-600 dark:text-slate-400">
                       {holder ? `${holder.firstName} ${holder.lastName}` : '—'}
                     </TableCell>
-                    <TableCell className="text-slate-600">{item.lastOilChangeOn ?? '—'}</TableCell>
-                    <TableCell className={overdue ? 'font-medium text-red-700' : 'text-slate-700'}>
+                    <TableCell className="text-slate-600 dark:text-slate-400">
+                      {item.lastOilChangeOn ?? '—'}
+                    </TableCell>
+                    <TableCell
+                      className={
+                        overdue
+                          ? 'font-medium text-red-700 dark:text-red-400'
+                          : 'text-slate-700 dark:text-slate-300'
+                      }
+                    >
                       {item.nextOilChangeDue ?? 'unscheduled'}
                       {overdue ? (
                         <Badge variant="destructive" className="ml-2">
@@ -146,7 +158,7 @@ export default async function UpcomingOilChange({
                         </Badge>
                       ) : null}
                     </TableCell>
-                    <TableCell className="text-slate-600">
+                    <TableCell className="text-slate-600 dark:text-slate-400">
                       {item.oilChangeIntervalMonths ?? '—'}
                     </TableCell>
                   </TableRow>

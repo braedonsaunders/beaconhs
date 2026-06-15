@@ -186,19 +186,21 @@ export default async function ChargesReport({
             <div className="flex items-center gap-2">
               <Link
                 href={`/equipment/reports/charges?month=${prev}` as any}
-                className="text-xs text-teal-700 hover:underline"
+                className="text-xs text-teal-700 hover:underline dark:text-teal-400"
               >
                 ← Previous
               </Link>
-              <div className="text-sm font-medium text-slate-700">{fmtMonth(year, month)}</div>
+              <div className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                {fmtMonth(year, month)}
+              </div>
               <Link
                 href={`/equipment/reports/charges?month=${next}` as any}
-                className="text-xs text-teal-700 hover:underline"
+                className="text-xs text-teal-700 hover:underline dark:text-teal-400"
               >
                 Next →
               </Link>
             </div>
-            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
               <Badge variant="success">{fmtMoney(totalRevenue)} revenue</Badge>
               <Badge variant="warning">{fmtMoney(totalExpenses)} expenses</Badge>
               <Badge variant="secondary">{fmtMoney(totalCharges)} chargeable</Badge>
@@ -214,7 +216,7 @@ export default async function ChargesReport({
           description="No equipment expenses or truck-log hours fell within this month."
         />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
           <Table>
             <TableHeader>
               <TableRow>
@@ -232,10 +234,10 @@ export default async function ChargesReport({
                   <TableCell className="font-medium">{r.name}</TableCell>
                   <TableCell className="text-right">{r.equipmentCount}</TableCell>
                   <TableCell className="text-right">{r.hours.toFixed(1)}</TableCell>
-                  <TableCell className="text-right text-emerald-700">
+                  <TableCell className="text-right text-emerald-700 dark:text-emerald-400">
                     {fmtMoney(r.revenue)}
                   </TableCell>
-                  <TableCell className="text-right text-amber-700">
+                  <TableCell className="text-right text-amber-700 dark:text-amber-400">
                     {fmtMoney(r.expenses)}
                   </TableCell>
                   <TableCell className="text-right font-semibold">

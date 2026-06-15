@@ -157,12 +157,12 @@ export default async function TranscriptsListPage({
                   <TableCell>
                     <Link
                       href={`/training/transcripts/${person.id}`}
-                      className="font-medium text-slate-900 hover:underline"
+                      className="font-medium text-slate-900 hover:underline dark:text-slate-100"
                     >
                       {person.lastName}, {person.firstName}
                     </Link>
                   </TableCell>
-                  <TableCell className="font-mono text-xs text-slate-600">
+                  <TableCell className="font-mono text-xs text-slate-600 dark:text-slate-400">
                     {person.employeeNo ?? '—'}
                   </TableCell>
                   <TableCell className="tabular-nums">

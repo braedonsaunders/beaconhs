@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm'
 import {
   Alert,
   AlertDescription,
@@ -10,11 +10,28 @@ import {
   DetailHeader,
   UrlDrawer,
 } from '@beaconhs/ui'
-import { CheckCircle2, FileText, Lock, PlayCircle, Plus, Trash2 } from 'lucide-react'
+import {
+  AlertTriangle,
+  Building2,
+  Camera,
+  CheckCircle2,
+  FileText,
+  HelpCircle,
+  History,
+  LayoutGrid,
+  ListChecks,
+  Lock,
+  PenLine,
+  PlayCircle,
+  Plus,
+  Shield,
+  Trash2,
+} from 'lucide-react'
 import {
   attachments,
   formResponses,
   formTemplates,
+  formTemplateVersions,
   hazidAssessmentAppResponses,
   hazidAssessmentHazards,
   hazidAssessmentPPE,
@@ -35,14 +52,18 @@ import {
 import { publicUrl } from '@beaconhs/storage'
 import { revalidatePath } from 'next/cache'
 import { requireRequestContext } from '@/lib/auth'
+import { canManageModule } from '@/lib/module-admin/guard'
 import { recentActivityForEntity } from '@/lib/audit'
 import { pickString } from '@/lib/list-params'
 import { GenericSendEmailDialog } from '@/components/send-email-dialog'
 import { sendHazidEmail } from './_send-email'
 import { ActivityFeed } from '@/components/activity-feed'
 import { DetailPageLayout } from '@/components/page-layout'
+import { loadEntitiesForPickers } from '@/app/(app)/forms/_lib/entity-loader'
+import { FormRenderer } from '@/app/(app)/forms/templates/[id]/fill/form-renderer'
+import type { EntityAttrsByField, FormSchemaV1 } from '@beaconhs/forms-core'
 import { PhotoGallery } from '@/components/photo-gallery'
-import { Section } from '@/components/section'
+import { PremiumSection as Section } from './_premium-section'
 import {
   addHazard,
   addHazardSet,
@@ -88,7 +109,6 @@ import {
   HazardRow,
   PPERow,
   QuestionRow,
-  SubFormToggle,
   TaskRow,
 } from './_sections'
 import { AssessmentHeaderActions } from './_header-actions'
@@ -97,9 +117,7 @@ import { LiveDateTime, LiveField, LivePersonSelect, LiveSelect } from '../_live-
 import { localDatetimeValue } from '../_datetime'
 import { AddSignatureDrawerBody } from '../_signature-form'
 import { HazidPhotoUploader } from '../_photo-uploader'
-import { MultiOptionField, SingleOptionField } from '../_option-field'
 import { RiskScoreBadge } from '../_risk'
-import { WAH_ACCESS, WAH_COMMUNICATION, WAH_EQUIPMENT, WAH_TYPES } from '../_choices'
 
 export const dynamic = 'force-dynamic'
 
@@ -146,6 +164,7 @@ export default async function HazidAssessmentDetailPage({
   const sp = await searchParams
   const ctx = await requireRequestContext()
   const drawerKey = pickString(sp.drawer) ?? ''
+  const appParam = pickString(sp.app) ?? ''
   const editTaskId = pickString(sp.taskId) ?? ''
   const editHazardId = pickString(sp.hazardId) ?? ''
   const editPPEId = pickString(sp.ppeId) ?? ''
@@ -266,6 +285,11 @@ export default async function HazidAssessmentDetailPage({
       .from(orgUnits)
       .where(eq(orgUnits.level, 'project'))
       .orderBy(asc(orgUnits.name))
+    const typeOptions = await tx
+      .select({ id: hazidAssessmentTypes.id, name: hazidAssessmentTypes.name })
+      .from(hazidAssessmentTypes)
+      .where(isNull(hazidAssessmentTypes.deletedAt))
+      .orderBy(asc(hazidAssessmentTypes.name))
 
     const hazardLibrary = wantHazardLibrary
       ? await tx
@@ -311,6 +335,7 @@ export default async function HazidAssessmentDetailPage({
       referencedHazards,
       siteOptions,
       projectOptions,
+      typeOptions,
     }
   })
 
@@ -337,8 +362,103 @@ export default async function HazidAssessmentDetailPage({
     referencedHazards,
     siteOptions,
     projectOptions,
+    typeOptions,
   } = data
+  // Single unified page: anyone in the tenant edits an unlocked assessment;
+  // module managers additionally get the destructive actions (delete).
+  const canManage = canManageModule(ctx, 'hazid')
   const activity = await recentActivityForEntity(ctx, 'hazid_assessment', id, 25)
+
+  // Inline app fill: when `?app=<typeAppId>` is present we render the embedded
+  // Builder app full-screen over the assessment (no navigating away). Reuses
+  // the same FormRenderer the standalone fill page uses.
+  let appFill: {
+    templateId: string
+    templateName: string
+    version: number
+    schema: FormSchemaV1
+    sites: { id: string; name: string }[]
+    people: { id: string; firstName: string; lastName: string; employeeNo: string | null }[]
+    entitiesByField: EntityAttrsByField
+    currentUser: { personId: string | null; name: string | null }
+    responseId: string
+    initialValues: Record<string, unknown>
+    initialRows: Record<string, Array<Record<string, unknown>>>
+    initialStepIndex: number
+    resumeOk: boolean
+  } | null = null
+  if (appParam) {
+    const typeApp = typeApps.find((t) => t.app.id === appParam)
+    const linked = appResponses.find((r) => r.link.typeAppId === appParam)
+    if (typeApp && linked) {
+      const loaded = await ctx.db(async (tx) => {
+        const [version] = await tx
+          .select()
+          .from(formTemplateVersions)
+          .where(eq(formTemplateVersions.templateId, typeApp.app.templateId))
+          .orderBy(desc(formTemplateVersions.version))
+          .limit(1)
+        if (!version) return null
+        const [sitesList, allPeople, currentPersonRow] = await Promise.all([
+          tx
+            .select({ id: orgUnits.id, name: orgUnits.name })
+            .from(orgUnits)
+            .where(eq(orgUnits.level, 'site'))
+            .orderBy(asc(orgUnits.name)),
+          tx
+            .select({
+              id: people.id,
+              firstName: people.firstName,
+              lastName: people.lastName,
+              employeeNo: people.employeeNo,
+            })
+            .from(people)
+            .where(eq(people.status, 'active'))
+            .orderBy(asc(people.lastName), asc(people.firstName)),
+          tx
+            .select({ id: people.id, firstName: people.firstName, lastName: people.lastName })
+            .from(people)
+            .where(eq(people.userId, ctx.userId ?? ''))
+            .limit(1),
+        ])
+        return { version, sitesList, allPeople, currentPerson: currentPersonRow[0] ?? null }
+      })
+      if (loaded) {
+        const resp = linked.response
+        const resumeOk =
+          (resp.status === 'draft' || resp.status === 'in_progress') && resp.draftData !== null
+        const draft = resp.draftData
+        const initialValues = resumeOk ? (draft?.values ?? {}) : {}
+        const initialRows = resumeOk ? (draft?.rows ?? {}) : {}
+        const initialStepIndex = resumeOk ? (resp.draftStepIndex ?? 0) : 0
+        const entitiesByField = await loadEntitiesForPickers(
+          ctx,
+          loaded.version.schema,
+          initialValues,
+        )
+        appFill = {
+          templateId: typeApp.app.templateId,
+          templateName: typeApp.app.label || typeApp.template.name,
+          version: loaded.version.version,
+          schema: loaded.version.schema,
+          sites: loaded.sitesList,
+          people: loaded.allPeople,
+          entitiesByField,
+          currentUser: {
+            personId: loaded.currentPerson?.id ?? null,
+            name: loaded.currentPerson
+              ? `${loaded.currentPerson.firstName} ${loaded.currentPerson.lastName}`
+              : (ctx.membership?.displayName ?? null),
+          },
+          responseId: resp.id,
+          initialValues,
+          initialRows,
+          initialStepIndex,
+          resumeOk,
+        }
+      }
+    }
+  }
 
   const galleryPhotos = photos.map((p) => ({
     id: p.link.id,
@@ -379,7 +499,6 @@ export default async function HazidAssessmentDetailPage({
   const requiredEmbeddedDone = requiredEmbeddedApps.filter((item) => item.done).length
 
   const locked = a.locked
-  const showWAH = type?.hasWAH && a.wah
   const showPPE = type?.hasPPE ?? true
   const showQ = type?.hasQuestions ?? true
   const showTasks = type?.hasTasks ?? true
@@ -434,6 +553,12 @@ export default async function HazidAssessmentDetailPage({
     })
   readiness.push({ label: 'Signatures collected', done: signedCount, total: signatures.length })
 
+  // Overall completion across every readiness metric — drives the hero ring.
+  const overallTotal = readiness.reduce((acc, r) => acc + r.total, 0)
+  const overallDone = readiness.reduce((acc, r) => acc + Math.min(r.done, r.total), 0)
+  const overallPct = overallTotal > 0 ? Math.round((overallDone / overallTotal) * 100) : 0
+  const ringCirc = 2 * Math.PI * 26
+
   // One-page form: these drive the sticky jump-nav (scroll, not navigation).
   const sectionItems: SectionNavItem[] = [
     { id: 'overview', label: 'Overview' },
@@ -480,7 +605,6 @@ export default async function HazidAssessmentDetailPage({
           },
         ]
       : []),
-    ...(type?.hasWAH ? [{ id: 'wah', label: 'Heights' }] : []),
     { id: 'photos', label: 'Photos', count: photos.length },
     {
       id: 'signatures',
@@ -527,14 +651,13 @@ export default async function HazidAssessmentDetailPage({
                 ) : (
                   <Badge variant="secondary">In progress</Badge>
                 )}
-                {showWAH ? <Badge variant="outline">Working at heights</Badge> : null}
               </div>
             }
             actions={
               <AssessmentHeaderActions
                 id={id}
                 locked={locked}
-                editHref={`/hazard-assessments/${id}/edit`}
+                canManage={canManage}
                 pdfHref={`/hazard-assessments/${id}/pdf`}
                 emailHref={`/hazard-assessments/${id}?send=1`}
                 deleteHref={drawerHref('confirm-delete')}
@@ -576,45 +699,51 @@ export default async function HazidAssessmentDetailPage({
       }
       subtabs={<SectionNav sections={sectionItems} />}
     >
-      <div className="space-y-5">
+      <div className="ff-surface space-y-5">
         <section id="section-overview" className="scroll-mt-2 space-y-5">
           <>
             {/* Readiness strip — at-a-glance completeness + worst residual risk */}
-            <div
-              className={`grid grid-cols-2 gap-3 pb-3 ${
-                requiredEmbeddedApps.length > 0 ? 'lg:grid-cols-3 xl:grid-cols-6' : 'lg:grid-cols-5'
-              }`}
-            >
-              {readiness.map((r) => {
-                const complete = r.total > 0 && r.done >= r.total
-                const pct = r.total > 0 ? Math.round((r.done / r.total) * 100) : 0
-                return (
-                  <div
-                    key={r.label}
-                    className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900"
-                  >
-                    <div className="text-[11px] tracking-wide text-slate-500 uppercase">
-                      {r.label}
-                    </div>
-                    <div className="mt-1 flex items-baseline gap-1">
-                      <span
-                        className={`text-xl font-semibold ${complete ? 'text-emerald-600' : 'text-slate-900 dark:text-slate-100'}`}
-                      >
-                        {r.done}
-                      </span>
-                      <span className="text-sm text-slate-400">/ {r.total}</span>
-                    </div>
-                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                      <div
-                        className={`h-full rounded-full ${complete ? 'bg-emerald-500' : 'bg-teal-500'}`}
-                        style={{ width: `${Math.min(100, pct)}%` }}
-                      />
-                    </div>
+            {/* Overview hero — overall completion ring + worst residual risk */}
+            <div className="flex flex-col gap-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:bg-slate-900">
+              <div className="flex items-center gap-4">
+                <div className="relative h-16 w-16 shrink-0">
+                  <svg viewBox="0 0 64 64" className="h-16 w-16 -rotate-90">
+                    <circle
+                      cx="32"
+                      cy="32"
+                      r="26"
+                      fill="none"
+                      strokeWidth="6"
+                      className="stroke-slate-200 dark:stroke-slate-700"
+                    />
+                    <circle
+                      cx="32"
+                      cy="32"
+                      r="26"
+                      fill="none"
+                      strokeWidth="6"
+                      strokeLinecap="round"
+                      strokeDasharray={ringCirc}
+                      strokeDashoffset={ringCirc * (1 - overallPct / 100)}
+                      className={overallPct >= 100 ? 'stroke-emerald-500' : 'stroke-teal-500'}
+                    />
+                  </svg>
+                  <span className="absolute inset-0 flex items-center justify-center text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    {overallPct}%
+                  </span>
+                </div>
+                <div className="min-w-0">
+                  <div className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                    {overallDone} of {overallTotal} steps complete
                   </div>
-                )
-              })}
-              <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
-                <div className="text-[11px] tracking-wide text-slate-500 uppercase">
+                  <div className="mt-0.5 truncate text-sm text-slate-500 dark:text-slate-400">
+                    {type?.name ?? 'Hazard assessment'}
+                    {site ? ` · ${site.name}` : ''}
+                  </div>
+                </div>
+              </div>
+              <div className="rounded-xl bg-slate-50 px-4 py-3 dark:bg-slate-800/50">
+                <div className="text-[11px] font-medium tracking-wide text-slate-500 uppercase">
                   Highest residual risk
                 </div>
                 <div className="mt-1.5">
@@ -623,17 +752,64 @@ export default async function HazidAssessmentDetailPage({
                     severity={highestResidual?.s ?? null}
                   />
                 </div>
-                <div className="mt-1.5 text-[11px] text-slate-500">
-                  Across {applicableHazards.length} applicable hazard
-                  {applicableHazards.length === 1 ? '' : 's'}
-                </div>
               </div>
             </div>
 
-            <Section title="General Information" subtitle="Who, what, where, when">
+            {/* Readiness tiles */}
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              {readiness.map((r) => {
+                const complete = r.total > 0 && r.done >= r.total
+                const pct = r.total > 0 ? Math.round((r.done / r.total) * 100) : 0
+                return (
+                  <div
+                    key={r.label}
+                    className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"
+                  >
+                    <div className="flex items-baseline justify-between">
+                      <span
+                        className={`text-2xl font-semibold ${complete ? 'text-emerald-600' : 'text-slate-900 dark:text-slate-100'}`}
+                      >
+                        {r.done}
+                        <span className="text-sm font-normal text-slate-400">/{r.total}</span>
+                      </span>
+                      {complete ? (
+                        <CheckCircle2 size={18} className="text-emerald-500" />
+                      ) : (
+                        <span className="text-xs font-medium text-slate-400">{pct}%</span>
+                      )}
+                    </div>
+                    <div className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+                      {r.label}
+                    </div>
+                    <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                      <div
+                        className={`h-full rounded-full ${complete ? 'bg-emerald-500' : 'bg-teal-500'}`}
+                        style={{ width: `${Math.min(100, pct)}%` }}
+                      />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            <Section
+              title="General Information"
+              subtitle="Who, what, where, when"
+              icon={<Building2 size={20} />}
+              tone="slate"
+            >
               {/* Live fields — the input on the page IS the field; everything
                   auto-saves, nothing hides behind an edit step. */}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <LiveSelect
+                  id={a.id}
+                  field="assessmentTypeId"
+                  label="Assessment type"
+                  initialValue={a.assessmentTypeId}
+                  options={typeOptions.map((t) => ({ value: t.id, label: t.name }))}
+                  disabled={locked}
+                  updateAction={updateTextField}
+                />
                 <LiveDateTime
                   id={a.id}
                   field="occurredAt"
@@ -698,25 +874,18 @@ export default async function HazidAssessmentDetailPage({
                   placeholder="Describe the work to be performed."
                 />
               </div>
-              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                {type?.hasWAH ? (
-                  <SubFormToggle
-                    id={a.id}
-                    field="wah"
-                    initial={a.wah}
-                    label="Working at heights applies"
-                    disabled={locked}
-                    toggleAction={updateTextField}
-                  />
-                ) : null}
-              </div>
             </Section>
           </>
         </section>
 
         {showPPE ? (
           <section id="section-ppe" className="scroll-mt-2">
-            <Section title={`Personal Protective Equipment (${ppe.length})`} defaultOpen>
+            <Section
+              title={`Personal Protective Equipment (${ppe.length})`}
+              defaultOpen
+              icon={<Shield size={20} />}
+              tone="blue"
+            >
               <div className="space-y-3">
                 {locked ? null : (
                   <div className="flex items-center justify-end">
@@ -754,7 +923,12 @@ export default async function HazidAssessmentDetailPage({
 
         {showQ ? (
           <section id="section-questions" className="scroll-mt-2">
-            <Section title={`Questions & Answers (${questions.length})`} defaultOpen>
+            <Section
+              title={`Questions & Answers (${questions.length})`}
+              defaultOpen
+              icon={<HelpCircle size={20} />}
+              tone="purple"
+            >
               <div className="space-y-3">
                 {locked ? null : (
                   <div className="flex items-center justify-end">
@@ -795,7 +969,12 @@ export default async function HazidAssessmentDetailPage({
 
         {showTasks ? (
           <section id="section-tasks" className="scroll-mt-2">
-            <Section title={`Tasks (${tasks.length})`} defaultOpen>
+            <Section
+              title={`Tasks (${tasks.length})`}
+              defaultOpen
+              icon={<ListChecks size={20} />}
+              tone="teal"
+            >
               <div className="space-y-3">
                 {locked ? null : (
                   <div className="flex items-center justify-end">
@@ -834,7 +1013,12 @@ export default async function HazidAssessmentDetailPage({
 
         {showHazards ? (
           <section id="section-hazards" className="scroll-mt-2">
-            <Section title={`Hazards (${hazards.length})`} defaultOpen>
+            <Section
+              title={`Hazards (${hazards.length})`}
+              defaultOpen
+              icon={<AlertTriangle size={20} />}
+              tone="amber"
+            >
               <div className="space-y-3">
                 {locked ? null : (
                   <div className="flex flex-wrap items-center justify-end gap-2">
@@ -886,6 +1070,8 @@ export default async function HazidAssessmentDetailPage({
               title={`Assessment apps (${embeddedApps.length})`}
               subtitle="Builder-powered specialty forms attached by this assessment type"
               defaultOpen
+              icon={<LayoutGrid size={20} />}
+              tone="indigo"
             >
               <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
                 {embeddedApps.map((item) => {
@@ -938,10 +1124,15 @@ export default async function HazidAssessmentDetailPage({
                           <PlayCircle size={18} className="shrink-0 text-slate-400" />
                         )}
                       </div>
-                      <form action={openAssessmentApp} className="mt-4 flex justify-end">
+                      <form action={openAssessmentApp} className="mt-4">
                         <input type="hidden" name="assessmentId" value={id} />
                         <input type="hidden" name="typeAppId" value={item.app.id} />
-                        <Button type="submit" size="sm" disabled={locked && !item.response}>
+                        <Button
+                          type="submit"
+                          disabled={locked && !item.response}
+                          className="ff-chip w-full sm:w-auto sm:min-w-32"
+                        >
+                          {item.done ? <CheckCircle2 size={16} /> : <PlayCircle size={16} />}
                           {buttonLabel}
                         </Button>
                       </form>
@@ -953,80 +1144,13 @@ export default async function HazidAssessmentDetailPage({
           </section>
         ) : null}
 
-        {type?.hasWAH ? (
-          <section id="section-wah" className="scroll-mt-2">
-            <Section title="Fall Protection Plan (Working at Heights)" defaultOpen={a.wah}>
-              <div className="space-y-3">
-                {!a.wah ? (
-                  <Alert variant="info">
-                    <AlertTitle>WAH sub-form not enabled</AlertTitle>
-                    <AlertDescription>
-                      Turn on "Working at heights applies" in the Overview section to fill this out.
-                    </AlertDescription>
-                  </Alert>
-                ) : null}
-                <SingleOptionField
-                  id={a.id}
-                  field="wahType"
-                  label="Work-at-heights type"
-                  options={WAH_TYPES}
-                  initialValue={a.wahType}
-                  disabled={locked || !a.wah}
-                  updateAction={updateTextField}
-                  allowClear
-                />
-                <MultiOptionField
-                  id={a.id}
-                  field="wahCommunication"
-                  label="Communication"
-                  options={WAH_COMMUNICATION}
-                  initialSelected={a.wahCommunication ?? []}
-                  disabled={locked || !a.wah}
-                  updateAction={updateTextField}
-                />
-                <MultiOptionField
-                  id={a.id}
-                  field="wahAccess"
-                  label="Access methods"
-                  options={WAH_ACCESS}
-                  initialSelected={a.wahAccess ?? []}
-                  disabled={locked || !a.wah}
-                  updateAction={updateTextField}
-                />
-                <MultiOptionField
-                  id={a.id}
-                  field="wahEquipment"
-                  label="Fall-protection equipment"
-                  options={WAH_EQUIPMENT}
-                  initialSelected={a.wahEquipment ?? []}
-                  disabled={locked || !a.wah}
-                  updateAction={updateTextField}
-                />
-                <LiveField
-                  id={a.id}
-                  field="wahRescue"
-                  initialValue={a.wahRescue}
-                  label="Rescue plan"
-                  multiline
-                  disabled={locked || !a.wah}
-                  updateAction={updateTextField}
-                  placeholder="How will a suspended worker be rescued?"
-                />
-                <LiveField
-                  id={a.id}
-                  field="wahPermitNumber"
-                  initialValue={a.wahPermitNumber}
-                  label="WAH permit number (if applicable)"
-                  disabled={locked || !a.wah}
-                  updateAction={updateTextField}
-                />
-              </div>
-            </Section>
-          </section>
-        ) : null}
-
         <section id="section-photos" className="scroll-mt-2">
-          <Section title={`Photos & files (${photos.length})`} defaultOpen={photos.length > 0}>
+          <Section
+            title={`Photos & files (${photos.length})`}
+            defaultOpen={photos.length > 0}
+            icon={<Camera size={20} />}
+            tone="slate"
+          >
             <div className="space-y-3">
               <PhotoGallery photos={galleryPhotos} />
               {!locked ? (
@@ -1053,7 +1177,12 @@ export default async function HazidAssessmentDetailPage({
         </section>
 
         <section id="section-signatures" className="scroll-mt-2">
-          <Section title={`Sign-off (${signatures.length})`} defaultOpen>
+          <Section
+            title={`Sign-off (${signatures.length})`}
+            defaultOpen
+            icon={<PenLine size={20} />}
+            tone="emerald"
+          >
             <div className="space-y-3">
               {locked ? null : (
                 <div className="flex items-center justify-end">
@@ -1126,11 +1255,38 @@ export default async function HazidAssessmentDetailPage({
         </section>
 
         <section id="section-activity" className="scroll-mt-2">
-          <Section title={`Activity (${activity.length})`} defaultOpen={false}>
+          <Section
+            title={`Activity (${activity.length})`}
+            defaultOpen={false}
+            icon={<History size={20} />}
+            tone="slate"
+          >
             <ActivityFeed entries={activity} />
           </Section>
         </section>
       </div>
+
+      {/* Inline embedded-app fill — full-screen sheet over the assessment. */}
+      {appFill ? (
+        <div className="fixed inset-0 z-[60] bg-white dark:bg-slate-950">
+          <FormRenderer
+            templateId={appFill.templateId}
+            templateName={appFill.templateName}
+            version={appFill.version}
+            schema={appFill.schema}
+            sites={appFill.sites}
+            people={appFill.people}
+            entitiesByField={appFill.entitiesByField}
+            currentUser={appFill.currentUser}
+            initialResponseId={appFill.responseId}
+            initialValues={appFill.initialValues}
+            initialRows={appFill.initialRows}
+            initialStepIndex={appFill.initialStepIndex}
+            isResumed={appFill.resumeOk}
+            returnTo={`/hazard-assessments/${id}#section-apps`}
+          />
+        </div>
+      ) : null}
 
       {/* ============================================================== */}
       {/* Drawers — one per drawer key. Each is `open` only when the URL */}

@@ -84,7 +84,6 @@ export default async function AssessmentTypesPage() {
                     {r.hasQuestions ? <Badge variant="secondary">Q&amp;A</Badge> : null}
                     {r.hasTasks ? <Badge variant="secondary">Tasks</Badge> : null}
                     {r.hasHazards ? <Badge variant="secondary">Hazards</Badge> : null}
-                    {r.hasWAH ? <Badge variant="outline">WAH</Badge> : null}
                   </div>
                 </TableCell>
                 <TableCell className="text-slate-600 dark:text-slate-400">

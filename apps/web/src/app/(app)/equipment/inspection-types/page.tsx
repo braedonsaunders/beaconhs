@@ -158,7 +158,7 @@ export default async function InspectionTypesPage() {
               description="Add a template below, then add pass/fail criteria from its detail page."
             />
           ) : (
-            <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+            <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -184,10 +184,12 @@ export default async function InspectionTypesPage() {
                             {t.name}
                           </Link>
                           {t.description ? (
-                            <div className="text-xs text-slate-500">{t.description}</div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400">
+                              {t.description}
+                            </div>
                           ) : null}
                         </TableCell>
-                        <TableCell className="text-slate-600">
+                        <TableCell className="text-slate-600 dark:text-slate-400">
                           {applies?.name ?? <span className="text-slate-400 italic">any</span>}
                         </TableCell>
                         <TableCell>

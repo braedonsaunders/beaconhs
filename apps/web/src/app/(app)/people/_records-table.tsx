@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { Badge } from '@beaconhs/ui'
+import { SortTh } from '@/components/sortable-th'
 import {
   BulkPeopleBar,
   HeaderSelectAll,
@@ -26,10 +27,18 @@ export function PeopleRecordsTable({
   rows,
   groups,
   divisions,
+  basePath,
+  currentParams,
+  sort,
+  dir,
 }: {
   rows: PeopleTableRow[]
   groups: GroupOption[]
   divisions: DivisionOption[]
+  basePath: string
+  currentParams: Record<string, string | string[] | undefined>
+  sort: string
+  dir: 'asc' | 'desc'
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
@@ -56,43 +65,72 @@ export function PeopleRecordsTable({
     setSelected(new Set())
   }
 
+  const sortProps = { basePath, currentParams, sort, dir }
+
   return (
     <>
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase">
+            <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-400">
               <th className="w-8 px-3 py-2">
                 <HeaderSelectAll allSelected={allSelected} onToggleAll={toggleAll} />
               </th>
-              <th className="px-3 py-2">Name</th>
-              <th className="px-3 py-2">Employee #</th>
-              <th className="px-3 py-2">Department</th>
-              <th className="px-3 py-2">Trade</th>
-              <th className="px-3 py-2">Hire date</th>
-              <th className="px-3 py-2">Status</th>
+              <SortTh column="name" {...sortProps}>
+                Name
+              </SortTh>
+              <SortTh column="employee_no" {...sortProps}>
+                Employee #
+              </SortTh>
+              <SortTh column="department" {...sortProps}>
+                Department
+              </SortTh>
+              <SortTh column="trade" {...sortProps}>
+                Trade
+              </SortTh>
+              <SortTh column="hire_date" {...sortProps}>
+                Hire date
+              </SortTh>
+              <SortTh column="status" {...sortProps}>
+                Status
+              </SortTh>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
             {rows.map((r) => {
               const isSelected = selected.has(r.id)
               return (
-                <tr key={r.id} className={isSelected ? 'bg-teal-50/40' : 'hover:bg-slate-50/50'}>
+                <tr
+                  key={r.id}
+                  className={
+                    isSelected
+                      ? 'bg-teal-50/40 dark:bg-teal-500/10'
+                      : 'hover:bg-slate-50/50 dark:hover:bg-slate-800/60'
+                  }
+                >
                   <td className="w-8 px-3 py-2">
                     <SelectionCheckbox id={r.id} selected={isSelected} onToggle={toggleOne} />
                   </td>
                   <td className="px-3 py-2">
                     <Link
                       href={`/people/${r.id}` as any}
-                      className="font-medium text-slate-900 hover:underline"
+                      className="font-medium text-slate-900 hover:underline dark:text-slate-100"
                     >
                       {r.lastName}, {r.firstName}
                     </Link>
                   </td>
-                  <td className="px-3 py-2 text-slate-600">{r.employeeNo ?? '—'}</td>
-                  <td className="px-3 py-2 text-slate-600">{r.departmentName ?? '—'}</td>
-                  <td className="px-3 py-2 text-slate-600">{r.tradeName ?? '—'}</td>
-                  <td className="px-3 py-2 text-slate-600">{r.hireDate ?? '—'}</td>
+                  <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
+                    {r.employeeNo ?? '—'}
+                  </td>
+                  <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
+                    {r.departmentName ?? '—'}
+                  </td>
+                  <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
+                    {r.tradeName ?? '—'}
+                  </td>
+                  <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
+                    {r.hireDate ?? '—'}
+                  </td>
                   <td className="px-3 py-2">
                     <Badge
                       variant={
