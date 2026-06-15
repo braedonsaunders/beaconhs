@@ -1,21 +1,17 @@
-// /incidents/injury-types — flat CRUD over the tenant's injury-type
-// taxonomy.  Each incident_injury row picks one of these.
+// /incidents/injury-types — flat CRUD over the tenant's injury-type taxonomy.
+// Each incident_injury row picks one of these.
 //
-// Single-page admin: table on the left, inline-add form on the right.
+// Standard table primitive for the list; create + edit happen in a right-side
+// flyout (?drawer=new | ?drawer=<id>). Archive / delete stay as row actions.
 
+import Link from 'next/link'
 import { revalidatePath } from 'next/cache'
 import { Plus, Trash2, Archive, ArchiveRestore } from 'lucide-react'
-import { asc, eq, count, sql } from 'drizzle-orm'
+import { asc, desc, eq, count, sql } from 'drizzle-orm'
 import {
   Badge,
   Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
   EmptyState,
-  Input,
-  Label,
   PageHeader,
   Table,
   TableBody,
@@ -23,87 +19,84 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-  Textarea,
 } from '@beaconhs/ui'
 import { incidentInjuries, incidentInjuryTypes } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { requireModuleManage, assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
+import { mergeHref, parseListParams, pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
+import { SortableTh } from '@/components/sortable-th'
 import { IncidentsSubNav } from '../_sub-nav'
+import { InjuryTypeDrawer } from './_drawers'
 
 export const metadata = { title: 'Injury types' }
 export const dynamic = 'force-dynamic'
 
-async function createInjuryType(formData: FormData): Promise<void> {
+const BASE = '/incidents/injury-types'
+const SORTS = ['name', 'osha', 'status'] as const
+
+async function saveInjuryType(input: {
+  id?: string
+  name: string
+  oshaCode: string | null
+  description: string | null
+}): Promise<{ ok: true } | { ok: false; error: string }> {
   'use server'
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'incidents')
-  const name = String(formData.get('name') ?? '').trim()
-  if (!name) return
-  const description = String(formData.get('description') ?? '').trim() || null
-  const oshaCode = String(formData.get('oshaCode') ?? '').trim() || null
+  const name = input.name.trim()
+  if (!name) return { ok: false, error: 'Name is required.' }
 
-  const [row] = await ctx.db((tx) =>
-    tx
-      .insert(incidentInjuryTypes)
-      .values({
-        tenantId: ctx.tenantId,
-        name,
-        description,
-        oshaCode,
-        createdByTenantUserId: ctx.membership?.id ?? null,
-      })
-      .returning(),
-  )
-  if (row) {
+  if (input.id) {
+    const before = await ctx.db(async (tx) => {
+      const [row] = await tx
+        .select()
+        .from(incidentInjuryTypes)
+        .where(eq(incidentInjuryTypes.id, input.id!))
+        .limit(1)
+      return row ?? null
+    })
+    if (!before) return { ok: false, error: 'Injury type not found.' }
+    await ctx.db((tx) =>
+      tx
+        .update(incidentInjuryTypes)
+        .set({ name, description: input.description, oshaCode: input.oshaCode })
+        .where(eq(incidentInjuryTypes.id, input.id!)),
+    )
     await recordAudit(ctx, {
       entityType: 'incident_injury_type',
-      entityId: row.id,
-      action: 'create',
-      summary: `Added injury type "${name}"`,
-      after: { name, oshaCode },
+      entityId: input.id,
+      action: 'update',
+      summary: `Updated "${name}"`,
+      before: { name: before.name, description: before.description, oshaCode: before.oshaCode },
+      after: { name, description: input.description, oshaCode: input.oshaCode },
     })
+  } else {
+    const [row] = await ctx.db((tx) =>
+      tx
+        .insert(incidentInjuryTypes)
+        .values({
+          tenantId: ctx.tenantId,
+          name,
+          description: input.description,
+          oshaCode: input.oshaCode,
+          createdByTenantUserId: ctx.membership?.id ?? null,
+        })
+        .returning(),
+    )
+    if (row) {
+      await recordAudit(ctx, {
+        entityType: 'incident_injury_type',
+        entityId: row.id,
+        action: 'create',
+        summary: `Added injury type "${name}"`,
+        after: { name, oshaCode: input.oshaCode },
+      })
+    }
   }
-  revalidatePath('/incidents/injury-types')
-}
-
-async function updateInjuryType(formData: FormData): Promise<void> {
-  'use server'
-  const ctx = await requireRequestContext()
-  assertCanManageModule(ctx, 'incidents')
-  const id = String(formData.get('id') ?? '')
-  if (!id) return
-  const name = String(formData.get('name') ?? '').trim()
-  if (!name) return
-  const description = String(formData.get('description') ?? '').trim() || null
-  const oshaCode = String(formData.get('oshaCode') ?? '').trim() || null
-
-  const before = await ctx.db(async (tx) => {
-    const [row] = await tx
-      .select()
-      .from(incidentInjuryTypes)
-      .where(eq(incidentInjuryTypes.id, id))
-      .limit(1)
-    return row ?? null
-  })
-  if (!before) return
-
-  await ctx.db((tx) =>
-    tx
-      .update(incidentInjuryTypes)
-      .set({ name, description, oshaCode })
-      .where(eq(incidentInjuryTypes.id, id)),
-  )
-  await recordAudit(ctx, {
-    entityType: 'incident_injury_type',
-    entityId: id,
-    action: 'update',
-    summary: `Updated "${name}"`,
-    before: { name: before.name, description: before.description, oshaCode: before.oshaCode },
-    after: { name, description, oshaCode },
-  })
-  revalidatePath('/incidents/injury-types')
+  revalidatePath(BASE)
+  return { ok: true }
 }
 
 async function toggleArchive(formData: FormData): Promise<void> {
@@ -123,7 +116,7 @@ async function toggleArchive(formData: FormData): Promise<void> {
     summary: next ? 'Restored from archive' : 'Archived',
     after: { isActive: !!next },
   })
-  revalidatePath('/incidents/injury-types')
+  revalidatePath(BASE)
 }
 
 async function deleteInjuryType(formData: FormData): Promise<void> {
@@ -157,7 +150,7 @@ async function deleteInjuryType(formData: FormData): Promise<void> {
       summary: 'Deleted injury type',
     })
   }
-  revalidatePath('/incidents/injury-types')
+  revalidatePath(BASE)
 }
 
 export default async function InjuryTypesPage({
@@ -166,12 +159,20 @@ export default async function InjuryTypesPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const sp = await searchParams
-  const editingId =
-    typeof sp.edit === 'string' ? sp.edit : Array.isArray(sp.edit) ? sp.edit[0] : undefined
+  const params = parseListParams(sp, { sort: 'name', dir: 'asc', allowedSorts: SORTS })
+  const drawerParam = pickString(sp.drawer)
   const ctx = await requireModuleManage('incidents')
 
+  const dir = params.dir === 'asc' ? asc : desc
+  const orderBy =
+    params.sort === 'osha'
+      ? dir(incidentInjuryTypes.oshaCode)
+      : params.sort === 'status'
+        ? dir(incidentInjuryTypes.isActive)
+        : dir(incidentInjuryTypes.name)
+
   const { rows, usageById } = await ctx.db(async (tx) => {
-    const all = await tx.select().from(incidentInjuryTypes).orderBy(asc(incidentInjuryTypes.name))
+    const all = await tx.select().from(incidentInjuryTypes).orderBy(orderBy)
     const usage = await tx
       .select({ id: incidentInjuries.injuryTypeId, c: count() })
       .from(incidentInjuries)
@@ -182,186 +183,145 @@ export default async function InjuryTypesPage({
     return { rows: all, usageById: usageMap }
   })
 
+  const editing =
+    drawerParam && drawerParam !== 'new' ? (rows.find((r) => r.id === drawerParam) ?? null) : null
+  const mode: 'new' | 'edit' | null = drawerParam === 'new' ? 'new' : editing ? 'edit' : null
+  const closeHref = mergeHref(BASE, sp, { drawer: undefined })
+  const sortProps = { basePath: BASE, currentParams: sp, dir: params.dir }
+
   return (
     <ListPageLayout
       header={
         <>
           <PageHeader
             title="Injury types"
-            description="Flat list of injury labels (laceration, strain, fracture, burn, …). Used by every injury row on every incident."
+            description="Injury labels (laceration, strain, fracture, burn, …) used by every injury row on every incident."
+            actions={
+              <Link href={mergeHref(BASE, sp, { drawer: 'new' }) as any} scroll={false}>
+                <Button>
+                  <Plus size={14} /> New injury type
+                </Button>
+              </Link>
+            }
           />
           <IncidentsSubNav active="injury-types" />
         </>
       }
     >
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
-        <div className="space-y-4">
-          {rows.length === 0 ? (
-            <EmptyState
-              icon={<Plus size={32} />}
-              title="No injury types"
-              description="Add labels such as laceration, strain, fracture, burn, or chemical exposure."
-            />
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>OSHA code</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Used</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((r) =>
-                  editingId === r.id ? (
-                    <TableRow key={r.id}>
-                      <TableCell colSpan={5}>
-                        <form action={updateInjuryType} className="space-y-2">
-                          <input type="hidden" name="id" value={r.id} />
-                          <div className="grid grid-cols-[1fr_140px] gap-2">
-                            <Input name="name" required defaultValue={r.name} />
-                            <Input
-                              name="oshaCode"
-                              defaultValue={r.oshaCode ?? ''}
-                              placeholder="OSHA code"
-                            />
-                          </div>
-                          <Textarea
-                            name="description"
-                            rows={2}
-                            defaultValue={r.description ?? ''}
-                          />
-                          <div className="flex items-center gap-2">
-                            <Button type="submit" size="sm">
-                              Save
-                            </Button>
-                            <a
-                              href="/incidents/injury-types"
-                              className="text-sm text-slate-500 hover:underline"
-                            >
-                              Cancel
-                            </a>
-                          </div>
-                        </form>
-                      </TableCell>
-                    </TableRow>
+      {rows.length === 0 ? (
+        <EmptyState
+          icon={<Plus size={32} />}
+          title="No injury types"
+          description="Add labels such as laceration, strain, fracture, burn, or chemical exposure."
+          action={
+            <Link href={mergeHref(BASE, sp, { drawer: 'new' }) as any} scroll={false}>
+              <Button>New injury type</Button>
+            </Link>
+          }
+        />
+      ) : (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <SortableTh {...sortProps} column="name" active={params.sort === 'name'}>
+                Name
+              </SortableTh>
+              <SortableTh {...sortProps} column="osha" active={params.sort === 'osha'}>
+                OSHA code
+              </SortableTh>
+              <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>
+                Status
+              </SortableTh>
+              <TableHead className="text-right">Used</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((r) => (
+              <TableRow key={r.id}>
+                <TableCell>
+                  <Link
+                    href={mergeHref(BASE, sp, { drawer: r.id }) as any}
+                    scroll={false}
+                    className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                  >
+                    {r.name}
+                  </Link>
+                  {r.description ? (
+                    <div className="mt-0.5 line-clamp-1 text-xs text-slate-500 dark:text-slate-400">
+                      {r.description}
+                    </div>
+                  ) : null}
+                </TableCell>
+                <TableCell>
+                  {r.oshaCode ? (
+                    <Badge variant="outline" className="font-mono text-xs">
+                      {r.oshaCode}
+                    </Badge>
                   ) : (
-                    <TableRow key={r.id}>
-                      <TableCell>
-                        <div className="font-medium text-slate-900">{r.name}</div>
-                        {r.description ? (
-                          <div className="text-xs text-slate-500">{r.description}</div>
-                        ) : null}
-                      </TableCell>
-                      <TableCell>
-                        {r.oshaCode ? (
-                          <Badge variant="outline" className="font-mono text-xs">
-                            {r.oshaCode}
-                          </Badge>
-                        ) : (
-                          <span className="text-xs text-slate-400">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {r.isActive ? (
-                          <Badge variant="success">Active</Badge>
-                        ) : (
-                          <Badge variant="outline" className="border-amber-300 text-amber-800">
-                            Archived
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-slate-600 tabular-nums">
-                        {usageById[r.id] ?? 0}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="inline-flex items-center gap-1">
-                          <a
-                            href={`/incidents/injury-types?edit=${r.id}`}
-                            className="text-xs text-teal-700 hover:underline"
-                          >
-                            Edit
-                          </a>
-                          <form action={toggleArchive} className="inline">
-                            <input type="hidden" name="id" value={r.id} />
-                            <input
-                              type="hidden"
-                              name="isActive"
-                              value={r.isActive ? 'false' : 'true'}
-                            />
-                            <button
-                              type="submit"
-                              className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                              title={r.isActive ? 'Archive' : 'Restore'}
-                            >
-                              {r.isActive ? <Archive size={14} /> : <ArchiveRestore size={14} />}
-                            </button>
-                          </form>
-                          <form action={deleteInjuryType} className="inline">
-                            <input type="hidden" name="id" value={r.id} />
-                            <button
-                              type="submit"
-                              className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700"
-                              title={
-                                (usageById[r.id] ?? 0) > 0
-                                  ? `${usageById[r.id]} injuries — will archive instead`
-                                  : 'Delete'
-                              }
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </form>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ),
-                )}
-              </TableBody>
-            </Table>
-          )}
-        </div>
+                    <span className="text-xs text-slate-400">—</span>
+                  )}
+                </TableCell>
+                <TableCell>
+                  {r.isActive ? (
+                    <Badge variant="success">Active</Badge>
+                  ) : (
+                    <Badge variant="outline" className="border-amber-300 text-amber-800">
+                      Archived
+                    </Badge>
+                  )}
+                </TableCell>
+                <TableCell className="text-right text-slate-600 tabular-nums dark:text-slate-400">
+                  {usageById[r.id] ?? 0}
+                </TableCell>
+                <TableCell className="text-right">
+                  <div className="inline-flex items-center gap-1">
+                    <Link
+                      href={mergeHref(BASE, sp, { drawer: r.id }) as any}
+                      scroll={false}
+                      className="rounded px-2 py-1 text-xs text-teal-700 hover:bg-teal-50 hover:underline dark:text-teal-400 dark:hover:bg-teal-500/10"
+                    >
+                      Edit
+                    </Link>
+                    <form action={toggleArchive} className="inline">
+                      <input type="hidden" name="id" value={r.id} />
+                      <input type="hidden" name="isActive" value={r.isActive ? 'false' : 'true'} />
+                      <button
+                        type="submit"
+                        className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                        title={r.isActive ? 'Archive' : 'Restore'}
+                      >
+                        {r.isActive ? <Archive size={14} /> : <ArchiveRestore size={14} />}
+                      </button>
+                    </form>
+                    <form action={deleteInjuryType} className="inline">
+                      <input type="hidden" name="id" value={r.id} />
+                      <button
+                        type="submit"
+                        className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-500/10 dark:hover:text-red-400"
+                        title={
+                          (usageById[r.id] ?? 0) > 0
+                            ? `${usageById[r.id]} injuries — will archive instead`
+                            : 'Delete'
+                        }
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </form>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
 
-        <div className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Add injury type</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <form action={createInjuryType} className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="name">Name *</Label>
-                  <Input id="name" name="name" required placeholder="e.g. Laceration" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="oshaCode">OSHA code</Label>
-                  <Input
-                    id="oshaCode"
-                    name="oshaCode"
-                    placeholder="Optional, e.g. CUT"
-                    maxLength={8}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="description">Description</Label>
-                  <Textarea
-                    id="description"
-                    name="description"
-                    rows={2}
-                    placeholder="Optional notes"
-                  />
-                </div>
-                <div className="flex justify-end">
-                  <Button type="submit">
-                    <Plus size={14} /> Add
-                  </Button>
-                </div>
-              </form>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+      <InjuryTypeDrawer
+        mode={mode}
+        editing={editing}
+        closeHref={closeHref}
+        saveAction={saveInjuryType}
+      />
     </ListPageLayout>
   )
 }

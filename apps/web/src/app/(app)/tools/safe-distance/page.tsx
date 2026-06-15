@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Ruler } from 'lucide-react'
+import { Gauge } from 'lucide-react'
 import { and, asc, count, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
 import {
   Badge,
@@ -22,20 +22,35 @@ import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
 import { TableToolbar } from '@/components/table-toolbar'
-import { formatDistance, SAFE_DISTANCE_TYPE_LABELS } from './_lib'
+import {
+  formatDistance,
+  formatVolume,
+  SAFE_DISTANCE_METHOD_LABELS,
+  type SafeDistanceMethod,
+  type SafeDistanceUnit,
+} from './_lib'
 
 export const metadata = { title: 'Safe Distance' }
 
-const SORTS = ['reference', 'occurred_at', 'type', 'complies'] as const
+const SORTS = ['reference', 'occurred_at', 'name', 'method'] as const
 
-const TYPE_OPTIONS = (['electrical', 'drone', 'overhead_crane', 'vehicle', 'other'] as const).map(
-  (v) => ({ value: v, label: SAFE_DISTANCE_TYPE_LABELS[v] }),
-)
+const METHOD_OPTIONS = (['nasa', 'asme', 'lloyds'] as const).map((v) => ({
+  value: v,
+  label: SAFE_DISTANCE_METHOD_LABELS[v],
+}))
 
-const COMPLIES_OPTIONS = [
-  { value: 'yes', label: 'Compliant' },
-  { value: 'no', label: 'Non-compliant' },
-]
+function chosenResult(rec: {
+  method: SafeDistanceMethod
+  resultNasa: string
+  resultAsme: string
+  resultLloyds: string
+}): string {
+  return rec.method === 'nasa'
+    ? rec.resultNasa
+    : rec.method === 'asme'
+      ? rec.resultAsme
+      : rec.resultLloyds
+}
 
 export default async function SafeDistanceListPage({
   searchParams,
@@ -49,29 +64,25 @@ export default async function SafeDistanceListPage({
     perPage: 25,
     allowedSorts: SORTS,
   })
-  const typeFilter = pickString(sp.type)
-  const compliesFilter = pickString(sp.complies)
-  const siteFilter = pickString(sp.site)
+  const methodFilter = pickString(sp.method)
 
   const ctx = await requireRequestContext()
 
-  const { rows, total, typeCounts, compliesCounts, sites } = await ctx.db(async (tx) => {
+  const { rows, total, methodCounts } = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = []
     if (params.q) {
       const term = `%${params.q}%`
       const cond = or(
         ilike(safeDistanceRecords.reference, term),
-        ilike(safeDistanceRecords.sourceDescription, term),
+        ilike(safeDistanceRecords.name, term),
+        ilike(safeDistanceRecords.description, term),
         ilike(safeDistanceRecords.notes, term),
       )
       if (cond) filters.push(cond)
     }
-    if (typeFilter && TYPE_OPTIONS.some((o) => o.value === typeFilter)) {
-      filters.push(eq(safeDistanceRecords.type, typeFilter as any))
+    if (methodFilter && METHOD_OPTIONS.some((o) => o.value === methodFilter)) {
+      filters.push(eq(safeDistanceRecords.method, methodFilter as SafeDistanceMethod))
     }
-    if (compliesFilter === 'yes') filters.push(eq(safeDistanceRecords.complies, true))
-    if (compliesFilter === 'no') filters.push(eq(safeDistanceRecords.complies, false))
-    if (siteFilter) filters.push(eq(safeDistanceRecords.siteOrgUnitId, siteFilter))
     const whereClause = filters.length > 0 ? and(...filters) : undefined
 
     const orderBy =
@@ -81,13 +92,13 @@ export default async function SafeDistanceListPage({
               ? asc(safeDistanceRecords.reference)
               : desc(safeDistanceRecords.reference),
           ]
-        : params.sort === 'type'
-          ? [params.dir === 'asc' ? asc(safeDistanceRecords.type) : desc(safeDistanceRecords.type)]
-          : params.sort === 'complies'
+        : params.sort === 'name'
+          ? [params.dir === 'asc' ? asc(safeDistanceRecords.name) : desc(safeDistanceRecords.name)]
+          : params.sort === 'method'
             ? [
                 params.dir === 'asc'
-                  ? asc(safeDistanceRecords.complies)
-                  : desc(safeDistanceRecords.complies),
+                  ? asc(safeDistanceRecords.method)
+                  : desc(safeDistanceRecords.method),
               ]
             : [
                 params.dir === 'asc'
@@ -105,30 +116,15 @@ export default async function SafeDistanceListPage({
       .limit(params.perPage)
       .offset((params.page - 1) * params.perPage)
 
-    const tc = await tx
-      .select({ t: safeDistanceRecords.type, c: count() })
+    const mc = await tx
+      .select({ m: safeDistanceRecords.method, c: count() })
       .from(safeDistanceRecords)
-      .groupBy(safeDistanceRecords.type)
-    const cc = await tx
-      .select({ c: safeDistanceRecords.complies, n: count() })
-      .from(safeDistanceRecords)
-      .groupBy(safeDistanceRecords.complies)
-    const siteRows = await tx
-      .select({ id: orgUnits.id, name: orgUnits.name })
-      .from(orgUnits)
-      .where(eq(orgUnits.level, 'site'))
-      .orderBy(orgUnits.name)
-      .limit(50)
+      .groupBy(safeDistanceRecords.method)
 
     return {
       rows: data,
       total: Number(tot?.c ?? 0),
-      typeCounts: Object.fromEntries(tc.map((x) => [x.t, Number(x.c)])),
-      compliesCounts: {
-        yes: Number(cc.find((r) => r.c === true)?.n ?? 0),
-        no: Number(cc.find((r) => r.c === false)?.n ?? 0),
-      },
-      sites: siteRows,
+      methodCounts: Object.fromEntries(mc.map((x) => [x.m, Number(x.c)])),
     }
   })
 
@@ -140,7 +136,7 @@ export default async function SafeDistanceListPage({
         <>
           <PageHeader
             title="Safe Distance"
-            description="Clearance assessments for electrical, drone, crane, and vehicle work."
+            description="Pneumatic pressure-test stand-off — NASA-Glenn, ASME PCC-2, and Lloyd's Register."
             back={{ href: '/tools', label: 'All tools' }}
             actions={
               <div className="flex items-center gap-2">
@@ -154,46 +150,23 @@ export default async function SafeDistanceListPage({
             }
           />
           <TableToolbar>
-            <SearchInput placeholder="Search reference, description, notes…" />
+            <SearchInput placeholder="Search reference, name, notes…" />
             <FilterChips
               basePath="/tools/safe-distance"
               currentParams={sp}
-              paramKey="type"
-              label="Type"
-              options={TYPE_OPTIONS.map((o) => ({ ...o, count: typeCounts[o.value] }))}
+              paramKey="method"
+              label="Method"
+              options={METHOD_OPTIONS.map((o) => ({ ...o, count: methodCounts[o.value] }))}
             />
-            <FilterChips
-              basePath="/tools/safe-distance"
-              currentParams={sp}
-              paramKey="complies"
-              label="Compliance"
-              options={COMPLIES_OPTIONS.map((o) => ({
-                ...o,
-                count: o.value === 'yes' ? compliesCounts.yes : compliesCounts.no,
-              }))}
-            />
-            {sites.length > 0 ? (
-              <FilterChips
-                basePath="/tools/safe-distance"
-                currentParams={sp}
-                paramKey="site"
-                label="Site"
-                options={sites.map((s) => ({ value: s.id, label: s.name }))}
-              />
-            ) : null}
           </TableToolbar>
         </>
       }
     >
       {rows.length === 0 ? (
         <EmptyState
-          icon={<Ruler size={32} />}
-          title={
-            params.q || typeFilter || compliesFilter || siteFilter
-              ? 'No assessments match these filters'
-              : 'No safe-distance assessments'
-          }
-          description="Create one to record the required vs. actual clearance for an electrical, drone, crane, or vehicle proximity assessment."
+          icon={<Gauge size={32} />}
+          title={params.q || methodFilter ? 'No assessments match these filters' : 'No assessments'}
+          description="Create a pressure-test assessment to calculate the minimum safe stand-off distance for a piping system under pneumatic test."
           action={
             <Link href="/tools/safe-distance/new">
               <Button>New assessment</Button>
@@ -208,21 +181,21 @@ export default async function SafeDistanceListPage({
                 <SortableTh {...sortProps} column="reference" active={params.sort === 'reference'}>
                   Ref
                 </SortableTh>
+                <SortableTh {...sortProps} column="name" active={params.sort === 'name'}>
+                  Name
+                </SortableTh>
                 <SortableTh
                   {...sortProps}
                   column="occurred_at"
                   active={params.sort === 'occurred_at'}
                 >
-                  Occurred
+                  Date
                 </SortableTh>
-                <SortableTh {...sortProps} column="type" active={params.sort === 'type'}>
-                  Type
+                <SortableTh {...sortProps} column="method" active={params.sort === 'method'}>
+                  Method
                 </SortableTh>
-                <TableHead>Required</TableHead>
-                <TableHead>Actual</TableHead>
-                <SortableTh {...sortProps} column="complies" active={params.sort === 'complies'}>
-                  Compliance
-                </SortableTh>
+                <TableHead>Total volume</TableHead>
+                <TableHead>Safe distance</TableHead>
                 <TableHead>Site</TableHead>
               </TableRow>
             </TableHeader>
@@ -234,32 +207,31 @@ export default async function SafeDistanceListPage({
                       {rec.reference}
                     </Link>
                   </TableCell>
-                  <TableCell className="text-slate-700">
+                  <TableCell>
+                    <Link
+                      href={`/tools/safe-distance/${rec.id}`}
+                      className="font-medium hover:underline"
+                    >
+                      {rec.name}
+                    </Link>
+                  </TableCell>
+                  <TableCell className="text-slate-700 dark:text-slate-300">
                     {rec.occurredAt ? new Date(rec.occurredAt).toISOString().slice(0, 10) : '—'}
                   </TableCell>
                   <TableCell>
                     <Badge variant="secondary">
-                      {
-                        SAFE_DISTANCE_TYPE_LABELS[
-                          rec.type as keyof typeof SAFE_DISTANCE_TYPE_LABELS
-                        ]
-                      }
+                      {SAFE_DISTANCE_METHOD_LABELS[rec.method as SafeDistanceMethod]}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-slate-700">
-                    {formatDistance(rec.requiredDistanceM)}
+                  <TableCell className="text-slate-700 dark:text-slate-300">
+                    {formatVolume(rec.totalVolume, rec.unit as SafeDistanceUnit)}
                   </TableCell>
-                  <TableCell className="text-slate-700">
-                    {formatDistance(rec.actualDistanceM)}
+                  <TableCell className="font-medium text-slate-900 dark:text-slate-100">
+                    {formatDistance(chosenResult(rec), rec.unit as SafeDistanceUnit)}
                   </TableCell>
-                  <TableCell>
-                    {rec.complies ? (
-                      <Badge variant="success">Compliant</Badge>
-                    ) : (
-                      <Badge variant="destructive">Non-compliant</Badge>
-                    )}
+                  <TableCell className="text-slate-600 dark:text-slate-400">
+                    {site?.name ?? '—'}
                   </TableCell>
-                  <TableCell className="text-slate-600">{site?.name ?? '—'}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

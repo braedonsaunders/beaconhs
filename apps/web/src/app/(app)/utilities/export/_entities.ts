@@ -93,7 +93,7 @@ export const EXPORTABLE_ENTITIES: ExportEntity[] = [
   {
     key: 'safe-distance',
     label: 'Safe-distance assessments',
-    description: 'Safe-distance records with required / actual / compliance.',
+    description: 'Pressure-test stand-off records — method, test pressure, volume, results.',
     csvHref: '/tools/safe-distance/export.csv',
     groupLabel: 'Tools',
   },

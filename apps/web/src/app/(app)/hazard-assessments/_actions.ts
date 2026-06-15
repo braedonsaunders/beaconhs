@@ -297,12 +297,6 @@ export async function createAssessment(formData: FormData): Promise<{ id: string
           .set({
             jobScope: src.jobScope,
             locationOnSite: src.locationOnSite,
-            wah: src.wah,
-            wahType: src.wahType,
-            wahCommunication: src.wahCommunication,
-            wahAccess: src.wahAccess,
-            wahEquipment: src.wahEquipment,
-            wahRescue: src.wahRescue,
           })
           .where(eq(hazidAssessments.id, row.id))
 
@@ -557,13 +551,6 @@ export async function updateTextField(formData: FormData) {
   if (!id || !field) throw new Error('Missing id/field')
   const ALLOWED = new Set([
     'jobScope',
-    'wahRescue',
-    'wahPermitNumber',
-    'wahType',
-    'wahAccess',
-    'wahEquipment',
-    'wahCommunication',
-    'wah',
     // General-info fields editable inline on the single-page form
     'locationOnSite',
     'siteOrgUnitId',
@@ -575,7 +562,7 @@ export async function updateTextField(formData: FormData) {
   if (!ALLOWED.has(field)) throw new Error('Field not allowed')
 
   // Booleans (toggles) come in as "on" / "off" / "true" / "false".
-  const BOOLS = new Set(['wah'])
+  const BOOLS = new Set<string>()
   // Nullable FK columns — empty string clears them.
   const NULLABLE_IDS = new Set([
     'siteOrgUnitId',
@@ -585,7 +572,7 @@ export async function updateTextField(formData: FormData) {
   ])
   const DATES = new Set(['occurredAt'])
   // Array-string fields (multi-select text) come comma-separated.
-  const ARRAYS = new Set(['wahCommunication', 'wahAccess', 'wahEquipment'])
+  const ARRAYS = new Set<string>()
 
   let val: unknown = value
   if (BOOLS.has(field)) val = value === 'on' || value === 'true' || value === '1'
@@ -741,14 +728,6 @@ export async function copyAssessment(formData: FormData) {
         reportedByTenantUserId: ctx.membership?.id ?? null,
         assessmentTypeId: src.assessmentTypeId,
         jobScope,
-        // WAH
-        wah: src.wah,
-        wahType: src.wahType,
-        wahCommunication: src.wahCommunication,
-        wahAccess: src.wahAccess,
-        wahEquipment: src.wahEquipment,
-        wahRescue: src.wahRescue,
-        wahPermitNumber: src.wahPermitNumber,
         // Lock state — always start as draft / in-progress.
         inProgress: true,
         locked: false,

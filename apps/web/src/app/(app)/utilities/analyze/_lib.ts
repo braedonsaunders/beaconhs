@@ -160,33 +160,33 @@ export async function runAnalyzer(ctx: RequestContext): Promise<Finding[]> {
       })),
     })
 
-    // ---- Safe-distance records flagged non-compliant + not yet linked to a CA ----
-    const sdOpen = await tx
+    // ---- Pressure-test assessments with no piping (zero system volume) ----
+    const sdEmpty = await tx
       .select({
         id: safeDistanceRecords.id,
         reference: safeDistanceRecords.reference,
-        sourceDescription: safeDistanceRecords.sourceDescription,
+        name: safeDistanceRecords.name,
       })
       .from(safeDistanceRecords)
       .where(
         and(
-          eq(safeDistanceRecords.complies, false),
+          sql`${safeDistanceRecords.totalVolume}::numeric = 0`,
           eq(safeDistanceRecords.locked, false),
           isNull(safeDistanceRecords.deletedAt),
         ),
       )
       .limit(2000)
     findings.push({
-      key: 'sd-noncompliant-open',
-      title: 'Non-compliant safe-distance records still unlocked',
+      key: 'sd-empty',
+      title: 'Pressure-test assessments with no pipe segments',
       description:
-        'Each non-compliant assessment should drive a follow-up (engineering review or CA) before the record is locked.',
+        'A safe-distance record with no piping has zero system volume and no meaningful result. Add the pipe schedule or remove the record.',
       severity: 'medium',
-      count: sdOpen.length,
-      sampleHref: '/tools/safe-distance?complies=no',
-      samples: sdOpen.slice(0, 10).map((s) => ({
+      count: sdEmpty.length,
+      sampleHref: '/tools/safe-distance',
+      samples: sdEmpty.slice(0, 10).map((s) => ({
         id: s.id,
-        label: `${s.reference} — ${s.sourceDescription ?? ''}`,
+        label: `${s.reference} — ${s.name}`,
       })),
     })
 

@@ -265,6 +265,7 @@ export type AppOverview = {
   category: string | null
   iconKey: string | null
   emailOnSubmit: boolean
+  surfaceAsTool: boolean
 }
 
 export function FormDesigner({
@@ -3039,6 +3040,7 @@ function OverviewPanel({
 }) {
   const [n, setN] = useState(name)
   const [description, setDescription] = useState(overview?.description ?? '')
+  const [surfaceAsTool, setSurfaceAsTool] = useState(overview?.surfaceAsTool ?? false)
   const [pending, start] = useTransition()
   const save = () => {
     if (n.trim().length < 2) {
@@ -3046,7 +3048,12 @@ function OverviewPanel({
       return
     }
     start(async () => {
-      const res = await updateAppOverview({ templateId, name: n.trim(), description })
+      const res = await updateAppOverview({
+        templateId,
+        name: n.trim(),
+        description,
+        surfaceAsTool,
+      })
       if (!res.ok) {
         toast.error(res.error ?? 'Could not save')
         return
@@ -3071,6 +3078,23 @@ function OverviewPanel({
           onChange={(e) => setDescription(e.target.value)}
         />
       </LabeledField>
+      <label className="flex items-start gap-2 rounded-md border border-slate-200 p-3 text-sm dark:border-slate-700">
+        <input
+          type="checkbox"
+          checked={surfaceAsTool}
+          onChange={(e) => setSurfaceAsTool(e.target.checked)}
+          className="mt-0.5 h-4 w-4"
+        />
+        <span>
+          <span className="font-medium text-slate-800 dark:text-slate-200">
+            Show in the Tools catalogue
+          </span>
+          <span className="block text-xs text-slate-500 dark:text-slate-400">
+            Lists this app under <span className="font-mono">/tools</span> as a calculator or
+            utility. Takes effect once the app is published.
+          </span>
+        </span>
+      </label>
       <Button onClick={save} disabled={pending} className="w-full">
         {pending ? 'Saving…' : 'Save overview'}
       </Button>

@@ -114,6 +114,7 @@ export default async function FormDesignerPage({
         category: data.tmpl.category,
         iconKey: data.tmpl.iconKey,
         emailOnSubmit: data.tmpl.emailOnSubmit,
+        surfaceAsTool: data.tmpl.surfaceAsTool,
       }}
       allowedRoles={data.tmpl.allowedRoles ?? []}
       roles={data.tenantRoles}

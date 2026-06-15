@@ -256,17 +256,48 @@ export function FormRenderer({
   // every section's rows under its section id so cross-step sum_section works,
   // and the per-picker entity-attr maps that `entity_attr` reads from.
   const evalCtx = useMemo<EvalContext>(() => {
-    return {
-      values,
-      rows: rowsByStep,
-      entities: entitiesByField,
-      requestContext: {
-        now: new Date(),
-        currentUserPersonId: currentUser.personId,
-        currentUserName: currentUser.name,
-      },
+    const requestContext = {
+      now: new Date(),
+      currentUserPersonId: currentUser.personId,
+      currentUserName: currentUser.name,
     }
-  }, [values, rowsByStep, entitiesByField, currentUser])
+    // Materialize per-row computed (formula/calc) fields into the rows the
+    // evaluator sees, so `sum_section` / `avg_section` can roll up a computed
+    // column. Consistent with the read-time-projection model: computed values
+    // are never persisted (buildPayload uses the raw rows) — only derived here
+    // for evaluation + display. Pure derivation, so no setState / loop risk.
+    const materializedRows: Record<string, Array<Record<string, unknown>>> = {}
+    for (const sec of schema.sections) {
+      if (!sec.repeating) continue
+      const raw = rowsByStep[sec.id] ?? []
+      const formulaFields = sec.fields.filter(
+        (f) => (f.type === 'formula' || f.type === 'calc') && f.formula,
+      )
+      if (formulaFields.length === 0) {
+        materializedRows[sec.id] = raw
+        continue
+      }
+      materializedRows[sec.id] = raw.map((row) => {
+        const rowCtx: EvalContext = {
+          values: { ...values, ...row },
+          rows: rowsByStep,
+          entities: entitiesByField,
+          requestContext,
+        }
+        const merged: Record<string, unknown> = { ...row }
+        for (const f of formulaFields) {
+          const computed = evaluateFormulaTree(f.formula as FormulaExpression, rowCtx)
+          if (computed !== null && computed !== undefined) merged[f.id] = computed
+        }
+        return merged
+      })
+    }
+    // Carry through any rows for sections not in the schema (defensive).
+    for (const [k, v] of Object.entries(rowsByStep)) {
+      if (!(k in materializedRows)) materializedRows[k] = v
+    }
+    return { values, rows: materializedRows, entities: entitiesByField, requestContext }
+  }, [values, rowsByStep, entitiesByField, currentUser, schema])
 
   // Apply default values on first render of a step. Tracked via a ref so we
   // don't re-apply when the user clears the field intentionally.
@@ -550,6 +581,8 @@ export function FormRenderer({
             // Per-row visibility is evaluated against the row's own values.
             const rowCtx: EvalContext = { ...evalCtx, values: { ...evalCtx.values, ...rows[i] } }
             if (f.showIf && !evaluateLogicRule(f.showIf, rowCtx)) continue
+            // Computed fields are derived, never user-validated.
+            if (f.type === 'formula' || f.type === 'calc') continue
             const error = validateOne(f, rows[i]![f.id])
             if (error) errs.set(`${sec.id}.${i}.${f.id}`, error)
           }

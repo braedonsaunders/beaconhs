@@ -51,6 +51,27 @@ const OPS: OpDef[] = [
   { kind: 'divide', label: 'Divide (a ÷ b)', group: 'math', description: 'a divided by b' },
   { kind: 'min', label: 'Minimum', group: 'math', description: 'Smallest of a list' },
   { kind: 'max', label: 'Maximum', group: 'math', description: 'Largest of a list' },
+  { kind: 'power', label: 'Power (aᵇ)', group: 'math', description: 'Raise a base to an exponent' },
+  {
+    kind: 'root',
+    label: 'Root (ⁿ√a)',
+    group: 'math',
+    description: 'nth root — degree 2 is a square root, 3 a cube root',
+  },
+  { kind: 'abs', label: 'Absolute value', group: 'math', description: 'Distance from zero' },
+  { kind: 'round', label: 'Round', group: 'math', description: 'Round to N decimal places' },
+  {
+    kind: 'floor',
+    label: 'Round down (floor)',
+    group: 'math',
+    description: 'Largest integer ≤ value',
+  },
+  {
+    kind: 'ceil',
+    label: 'Round up (ceil)',
+    group: 'math',
+    description: 'Smallest integer ≥ value',
+  },
   // Section
   {
     kind: 'sum_section',
@@ -444,6 +465,87 @@ function NodeBody({
         </div>
       )
 
+    case 'power':
+    case 'root': {
+      const isPower = value.kind === 'power'
+      const left = isPower ? value.base : value.of
+      const right = isPower ? value.exponent : value.degree
+      return (
+        <div className="space-y-1">
+          <div>
+            <div className="text-[10px] font-semibold text-slate-500">
+              {isPower ? 'Base' : 'Value'}
+            </div>
+            <Node
+              value={left}
+              allFields={allFields}
+              repeatingSections={repeatingSections}
+              pickerFields={pickerFields}
+              onChange={(next) =>
+                onChange(isPower ? { ...value, base: next } : { ...value, of: next })
+              }
+              showClear={false}
+            />
+          </div>
+          <div>
+            <div className="text-[10px] font-semibold text-slate-500">
+              {isPower ? 'Exponent' : 'Degree (2 = √, 3 = ∛)'}
+            </div>
+            <Node
+              value={right}
+              allFields={allFields}
+              repeatingSections={repeatingSections}
+              pickerFields={pickerFields}
+              onChange={(next) =>
+                onChange(isPower ? { ...value, exponent: next } : { ...value, degree: next })
+              }
+              showClear={false}
+            />
+          </div>
+        </div>
+      )
+    }
+
+    case 'abs':
+    case 'floor':
+    case 'ceil':
+      return (
+        <Node
+          value={value.of}
+          allFields={allFields}
+          repeatingSections={repeatingSections}
+          pickerFields={pickerFields}
+          onChange={(next) => onChange({ ...value, of: next })}
+          showClear={false}
+        />
+      )
+
+    case 'round':
+      return (
+        <div className="space-y-1">
+          <Node
+            value={value.of}
+            allFields={allFields}
+            repeatingSections={repeatingSections}
+            pickerFields={pickerFields}
+            onChange={(next) => onChange({ ...value, of: next })}
+            showClear={false}
+          />
+          <div className="flex items-center gap-1">
+            <Label className="text-[10px]">Decimal places</Label>
+            <Input
+              type="number"
+              min="0"
+              className="h-7 w-20 text-xs"
+              value={String(value.places ?? 0)}
+              onChange={(e) =>
+                onChange({ ...value, places: Math.max(0, Math.floor(Number(e.target.value) || 0)) })
+              }
+            />
+          </div>
+        </div>
+      )
+
     case 'sum_section':
     case 'avg_section':
     case 'min_section':
@@ -656,6 +758,24 @@ function makeDefault(kind: FormulaExpression['kind']): FormulaExpression {
         left: { kind: 'literal', value: 0 },
         right: { kind: 'literal', value: 1 },
       }
+    case 'power':
+      return {
+        kind: 'power',
+        base: { kind: 'literal', value: 0 },
+        exponent: { kind: 'literal', value: 2 },
+      }
+    case 'root':
+      return {
+        kind: 'root',
+        of: { kind: 'literal', value: 0 },
+        degree: { kind: 'literal', value: 2 },
+      }
+    case 'abs':
+    case 'floor':
+    case 'ceil':
+      return { kind, of: { kind: 'literal', value: 0 } }
+    case 'round':
+      return { kind: 'round', of: { kind: 'literal', value: 0 }, places: 0 }
     case 'sum_section':
     case 'avg_section':
     case 'min_section':

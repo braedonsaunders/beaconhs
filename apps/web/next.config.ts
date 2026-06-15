@@ -53,6 +53,9 @@ const nextConfig: NextConfig = {
       ...moved('inspections', 'inspection'),
       ...moved('documents', 'document'),
       ...moved('training', 'training'),
+      // The Tools landing once linked the bulk-QR generator at /equipment/bulk-qr;
+      // the real route is /equipment/qr/bulk. Preserve any stale bookmarks / PDFs.
+      { source: '/equipment/bulk-qr', destination: '/equipment/qr/bulk', permanent: false },
     ]
   },
 }

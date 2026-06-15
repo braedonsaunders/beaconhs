@@ -183,9 +183,9 @@ export const hazidAssessmentTypes = pgTable(
     hasHazards: boolean('has_hazards').default(true).notNull(),
     hasPPE: boolean('has_ppe').default(true).notNull(),
     hasQuestions: boolean('has_questions').default(true).notNull(),
-    hasWAH: boolean('has_wah').default(false).notNull(),
-    hasCS: boolean('has_cs').default(false).notNull(),
-    hasArcFlash: boolean('has_arc_flash').default(false).notNull(),
+    // Working-at-Heights, Confined Space, and Arc Flash are Builder Apps now,
+    // not native sections — so there are no has_wah / has_cs / has_arc_flash
+    // toggles on the type.
 
     // Optional default hazard set to seed the hazard list with.
     defaultHazardSetId: uuid('default_hazard_set_id').references(() => hazidHazardSets.id, {

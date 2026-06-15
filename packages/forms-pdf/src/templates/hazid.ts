@@ -2,16 +2,17 @@
 //
 // Mirrors the platform hazid schema (packages/db/src/schema/hazid-assessments.ts).
 // Renders a single full assessment in a formal letterhead-style layout
-// suitable for compliance / regulator submission. Includes all 9 sections:
+// suitable for compliance / regulator submission. Sections:
 //   1. General + classification info
 //   2. PPE manifest
 //   3. Question & Answer
 //   4. Tasks
 //   5. Hazards & controls
-//   6. Working at Heights sub-form (when wah=true)
-//   7. Confined Space sub-form (when confinedSpace=true, with atmospheric + entry log)
-//   8. Arc Flash sub-form (when arcFlash=true)
-//   9. Signatures + photos
+//   6. Signatures + photos
+//
+// Specialty work plans (Working at Heights, Confined Space, Arc Flash) are no
+// longer native sub-forms — they are Builder Apps (form templates) attached to
+// the assessment type, and render through the forms PDF path.
 
 export type HazidRenderInput = {
   tenantName: string
@@ -28,31 +29,6 @@ export type HazidRenderInput = {
     typeName?: string | null
     supervisorName?: string | null
     jobScope?: string | null
-    wah: boolean
-    wahType?: string | null
-    wahCommunication?: string[]
-    wahAccess?: string[]
-    wahEquipment?: string[]
-    wahRescue?: string | null
-    wahPermitNumber?: string | null
-    confinedSpace: boolean
-    csType?: string | null
-    csDescription?: string | null
-    csCommunication?: string[]
-    csCommunicationRescue?: string[]
-    csRescue?: string[]
-    csWorkPerformed?: string | null
-    csDiagramBase64?: string | null
-    csRescueStyle?: string | null
-    csRescueProcedure?: string | null
-    csPermitNumber?: string | null
-    arcFlash: boolean
-    arcFlashLevel?: string | null
-    arcFlashBoundary?: string | null
-    arcFlashIncidentEnergy?: string | null
-    arcFlashEquipment?: string[]
-    arcFlashProcedures?: string | null
-    arcFlashQualifiedPerson?: string | null
   }
   ppe: {
     name: string
@@ -85,21 +61,6 @@ export type HazidRenderInput = {
     signedAt?: string | Date | null
   }[]
   photos: { url: string; caption?: string | null }[]
-  atmospheric: {
-    time: string | Date
-    sensorIdentifier?: string | null
-    sensor1Reading?: string | null
-    sensor2Reading?: string | null
-    sensor3Reading?: string | null
-    sensor4Reading?: string | null
-    distance?: string | null
-    notes?: string | null
-  }[]
-  entries: {
-    name: string
-    timeIn?: string | Date | null
-    timeOut?: string | Date | null
-  }[]
   generatedAt?: string | Date
 }
 
@@ -180,105 +141,6 @@ export function renderHazidHtml(input: HazidRenderInput): string {
           </tbody>
         </table>`
 
-  const wahHtml = a.wah
-    ? `<section class="page-break">
-        <h2>Working at Heights</h2>
-        <table class="info-table">
-          <tr><td class="lbl">Type</td><td class="val" colspan="3">${esc(a.wahType ?? '—')}</td></tr>
-          <tr><td class="lbl">Communication</td><td class="val" colspan="3">${esc((a.wahCommunication ?? []).join(', ') || '—')}</td></tr>
-          <tr><td class="lbl">Access</td><td class="val" colspan="3">${esc((a.wahAccess ?? []).join(', ') || '—')}</td></tr>
-          <tr><td class="lbl">Equipment</td><td class="val" colspan="3">${esc((a.wahEquipment ?? []).join(', ') || '—')}</td></tr>
-          <tr><td class="lbl">Rescue plan</td><td class="val" colspan="3">${esc(a.wahRescue ?? '—')}</td></tr>
-          <tr><td class="lbl">Permit #</td><td class="val" colspan="3">${esc(a.wahPermitNumber ?? '—')}</td></tr>
-        </table>
-      </section>`
-    : ''
-
-  const atmosphericHtml =
-    input.atmospheric.length === 0
-      ? ''
-      : `<h3 class="sub">Atmospheric readings</h3>
-        <table class="data-table">
-          <thead><tr><th>Time</th><th>Sensor</th><th>O₂</th><th>LEL</th><th>CO</th><th>H₂S</th><th>Distance</th><th>Notes</th></tr></thead>
-          <tbody>
-          ${input.atmospheric
-            .map(
-              (r) => `<tr>
-                <td>${esc(fmtDateTime(r.time))}</td>
-                <td>${esc(r.sensorIdentifier ?? '—')}</td>
-                <td>${esc(r.sensor1Reading ?? '—')}</td>
-                <td>${esc(r.sensor2Reading ?? '—')}</td>
-                <td>${esc(r.sensor3Reading ?? '—')}</td>
-                <td>${esc(r.sensor4Reading ?? '—')}</td>
-                <td>${esc(r.distance ?? '—')}</td>
-                <td>${esc(r.notes ?? '—')}</td>
-              </tr>`,
-            )
-            .join('')}
-          </tbody>
-        </table>`
-
-  const entriesHtml =
-    input.entries.length === 0
-      ? ''
-      : `<h3 class="sub">Entry log</h3>
-        <table class="data-table">
-          <thead><tr><th>Person</th><th>Time in</th><th>Time out</th></tr></thead>
-          <tbody>
-          ${input.entries
-            .map(
-              (e) => `<tr>
-                <td>${esc(e.name)}</td>
-                <td>${e.timeIn ? esc(fmtDateTime(e.timeIn)) : '—'}</td>
-                <td>${e.timeOut ? esc(fmtDateTime(e.timeOut)) : '—'}</td>
-              </tr>`,
-            )
-            .join('')}
-          </tbody>
-        </table>`
-
-  const csHtml = a.confinedSpace
-    ? `<section class="page-break">
-        <h2>Confined Space</h2>
-        <table class="info-table">
-          <tr>
-            <td class="lbl">Type</td><td class="val">${esc(a.csType ?? '—')}</td>
-            <td class="lbl">Permit #</td><td class="val">${esc(a.csPermitNumber ?? '—')}</td>
-          </tr>
-          <tr><td class="lbl">Description</td><td class="val" colspan="3">${esc(a.csDescription ?? '—')}</td></tr>
-          <tr><td class="lbl">Work performed</td><td class="val" colspan="3">${esc(a.csWorkPerformed ?? '—')}</td></tr>
-          <tr><td class="lbl">Attendant-Entrant comms</td><td class="val" colspan="3">${esc((a.csCommunication ?? []).join(', ') || '—')}</td></tr>
-          <tr><td class="lbl">Attendant-Rescue comms</td><td class="val" colspan="3">${esc((a.csCommunicationRescue ?? []).join(', ') || '—')}</td></tr>
-          <tr><td class="lbl">Rescue equipment</td><td class="val" colspan="3">${esc((a.csRescue ?? []).join(', ') || '—')}</td></tr>
-          <tr><td class="lbl">Rescue style</td><td class="val" colspan="3">${esc(a.csRescueStyle ?? '—')}</td></tr>
-          <tr><td class="lbl">Rescue procedure</td><td class="val" colspan="3">${esc(a.csRescueProcedure ?? '—')}</td></tr>
-        </table>
-        ${
-          a.csDiagramBase64
-            ? `<div class="diagram"><img src="${esc(a.csDiagramBase64)}" alt="Space diagram"/></div>`
-            : ''
-        }
-        ${atmosphericHtml}
-        ${entriesHtml}
-      </section>`
-    : ''
-
-  const arcFlashHtml = a.arcFlash
-    ? `<section class="page-break">
-        <h2>Arc Flash</h2>
-        <table class="info-table">
-          <tr>
-            <td class="lbl">HRC level</td><td class="val">${esc(a.arcFlashLevel ?? '—')}</td>
-            <td class="lbl">Boundary</td><td class="val">${esc(a.arcFlashBoundary ?? '—')}</td>
-          </tr>
-          <tr><td class="lbl">Incident energy</td><td class="val" colspan="3">${esc(a.arcFlashIncidentEnergy ?? '—')}</td></tr>
-          <tr><td class="lbl">Required PPE</td><td class="val" colspan="3">${esc((a.arcFlashEquipment ?? []).join(', ') || '—')}</td></tr>
-          <tr><td class="lbl">Procedures</td><td class="val" colspan="3">${esc(a.arcFlashProcedures ?? '—')}</td></tr>
-          <tr><td class="lbl">Qualified person</td><td class="val" colspan="3">${esc(a.arcFlashQualifiedPerson ?? '—')}</td></tr>
-        </table>
-      </section>`
-    : ''
-
   const signaturesHtml =
     input.signatures.length === 0
       ? '<p class="muted">No signatures recorded.</p>'
@@ -352,8 +214,6 @@ export function renderHazidHtml(input: HazidRenderInput): string {
     .qlist .q { font-weight: 600; }
     .qlist .req { font-weight: 400; color: #b80; font-size: 8.5pt; font-style: italic; }
     .qlist .a { margin-top: 2px; color: #444; font-size: 10pt; }
-    .diagram { margin: 8px 0; }
-    .diagram img { max-width: 100%; max-height: 320px; border: 1px solid #ccc; }
     .photo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
     .photo-grid figure { margin: 0; border: 1px solid #ddd; padding: 4px; background: #fff; }
     .photo-grid img { max-width: 100%; height: 130px; object-fit: cover; display: block; }
@@ -386,9 +246,6 @@ export function renderHazidHtml(input: HazidRenderInput): string {
   </div>
   <div class="badge-row">
     <span class="badge ${a.locked ? 'locked' : 'in-progress'}">${a.locked ? 'LOCKED' : 'IN PROGRESS'}</span>
-    ${a.wah ? '<span class="badge">WAH</span>' : ''}
-    ${a.confinedSpace ? '<span class="badge">CONFINED SPACE</span>' : ''}
-    ${a.arcFlash ? '<span class="badge">ARC FLASH</span>' : ''}
   </div>
 
   <section>
@@ -431,10 +288,6 @@ export function renderHazidHtml(input: HazidRenderInput): string {
     <h2>Hazards &amp; Controls</h2>
     ${hazardsHtml}
   </section>
-
-  ${wahHtml}
-  ${csHtml}
-  ${arcFlashHtml}
 
   <section>
     <h2>Signatures</h2>

@@ -1,6 +1,5 @@
 import { randomBytes } from 'crypto'
 import Link from 'next/link'
-import { revalidatePath } from 'next/cache'
 import { asc, inArray } from 'drizzle-orm'
 import QRCode from 'qrcode'
 import { equipmentItems } from '@beaconhs/db/schema'
@@ -74,7 +73,9 @@ export default async function BulkQrPrintPage({
     summary: `Generated bulk QR sheet for ${items.length} items`,
     metadata: { bulkToken, itemIds: items.map((i) => i.id) },
   })
-  revalidatePath('/equipment/qr/bulk')
+  // NOTE: do NOT revalidatePath() here — Next 16 throws when revalidation runs
+  // during render. The picker page is `force-dynamic`, so it re-reads the
+  // stamped tokens on its next visit anyway.
 
   const appUrl = process.env.APP_URL ?? 'http://localhost:3000'
   const labels = await Promise.all(

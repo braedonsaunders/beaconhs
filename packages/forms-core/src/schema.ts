@@ -48,6 +48,15 @@ export type FormulaExpression =
   | { kind: 'divide'; left: FormulaExpression; right: FormulaExpression }
   | { kind: 'min'; of: FormulaExpression[] }
   | { kind: 'max'; of: FormulaExpression[] }
+  // Scientific math. `power` = base^exponent; `root` = of^(1/degree) with sign
+  // preserved for odd roots (cube root of a negative stays negative); `round`
+  // rounds to `places` decimals (default 0). All guard against NaN/∞ → 0.
+  | { kind: 'power'; base: FormulaExpression; exponent: FormulaExpression }
+  | { kind: 'root'; of: FormulaExpression; degree: FormulaExpression }
+  | { kind: 'abs'; of: FormulaExpression }
+  | { kind: 'round'; of: FormulaExpression; places?: number }
+  | { kind: 'floor'; of: FormulaExpression }
+  | { kind: 'ceil'; of: FormulaExpression }
   // sum / count / avg / min / max a field across all rows of a repeating
   // section ("rollups").
   | { kind: 'sum_section'; sectionKey: string; rowFieldKey: string }
@@ -84,6 +93,24 @@ export const formulaExpressionSchema: z.ZodType<FormulaExpression> = z.lazy(() =
     }),
     z.object({ kind: z.literal('min'), of: z.array(formulaExpressionSchema) }),
     z.object({ kind: z.literal('max'), of: z.array(formulaExpressionSchema) }),
+    z.object({
+      kind: z.literal('power'),
+      base: formulaExpressionSchema,
+      exponent: formulaExpressionSchema,
+    }),
+    z.object({
+      kind: z.literal('root'),
+      of: formulaExpressionSchema,
+      degree: formulaExpressionSchema,
+    }),
+    z.object({ kind: z.literal('abs'), of: formulaExpressionSchema }),
+    z.object({
+      kind: z.literal('round'),
+      of: formulaExpressionSchema,
+      places: z.number().int().optional(),
+    }),
+    z.object({ kind: z.literal('floor'), of: formulaExpressionSchema }),
+    z.object({ kind: z.literal('ceil'), of: formulaExpressionSchema }),
     z.object({
       kind: z.literal('sum_section'),
       sectionKey: z.string(),

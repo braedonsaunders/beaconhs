@@ -1,26 +1,56 @@
 'use server'
 
-// Server actions for the Safe Distance tool.
+// Server actions for the Safe Distance pressure-test tool.
 //
-// All mutations record an audit-log entry so the activity tab of the detail
-// page tells a coherent story. Locking semantics mirror corrective-actions:
-//   - records can be edited freely while `locked = false`
-//   - lockRecord() flips it to true and any subsequent edit/delete short-
-//     circuits with an error
-//   - unlocking is a separate action so the operator has to consciously
-//     re-open a sealed assessment
+// The save action is AUTHORITATIVE: it recomputes total volume + all three
+// method distances server-side from the submitted inputs, so the client's live
+// preview can never persist a fabricated result. Pipe segments are replaced
+// wholesale on each save (delete-all + re-insert) inside the tenant tx.
+//
+// Locking semantics mirror corrective-actions: records edit freely while
+// `locked = false`; locking seals the assessment and any edit/delete short-
+// circuits with an error until it is explicitly unlocked.
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { and, count, eq, sql } from 'drizzle-orm'
-import { safeDistanceRecords } from '@beaconhs/db/schema'
+import { count, eq, sql } from 'drizzle-orm'
+import { safeDistanceRecords, safeDistanceSegments } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
-import { computeRequiredDistanceM, type SafeDistanceType } from './_lib'
+import {
+  computeSafeDistance,
+  segmentVolumeM3,
+  type SafeDistanceMethod,
+  type SafeDistanceSegmentUnit,
+  type SafeDistanceUnit,
+} from './_lib'
 
 export type ActionResult = { ok: true } | { ok: false; error: string }
 
-const TYPES = ['electrical', 'drone', 'overhead_crane', 'vehicle', 'other'] as const
+const METHODS: SafeDistanceMethod[] = ['nasa', 'asme', 'lloyds']
+const UNITS: SafeDistanceUnit[] = ['metric', 'imperial']
+const SEGMENT_UNITS: SafeDistanceSegmentUnit[] = ['inch', 'feet', 'mm', 'cm', 'm']
+
+export type SegmentInput = {
+  name?: string | null
+  unit: SafeDistanceSegmentUnit
+  lengthValue: number
+  internalDiameter: number
+}
+
+export type SaveSafeDistanceInput = {
+  id: string
+  name: string
+  method: SafeDistanceMethod
+  unit: SafeDistanceUnit
+  testPressure: number
+  description?: string | null
+  siteOrgUnitId?: string | null
+  supervisorTenantUserId?: string | null
+  operatorPersonId?: string | null
+  notes?: string | null
+  segments: SegmentInput[]
+}
 
 async function loadRecord(ctx: Awaited<ReturnType<typeof requireRequestContext>>, id: string) {
   return ctx.db(async (tx) => {
@@ -44,19 +74,15 @@ function safeTenantUserId(ctx: Awaited<ReturnType<typeof requireRequestContext>>
   return id
 }
 
-function parseNumber(raw: FormDataEntryValue | null): number | null {
-  if (raw === null) return null
-  const s = String(raw).trim()
-  if (!s) return null
-  const n = Number(s)
-  return Number.isFinite(n) ? n : null
+function num(v: unknown): number {
+  const n = typeof v === 'string' ? Number(v) : typeof v === 'number' ? v : NaN
+  return Number.isFinite(n) ? n : 0
 }
 
 /**
  * Generate the next SD-YYYY-NNNN reference within the tenant for the current
- * calendar year. Uses the existing `safe_distance_records` count for the year
- * + 1 — the unique index on (tenantId, reference) protects against the
- * extremely unlikely race where two creators land at exactly the same number.
+ * calendar year. The unique index on (tenantId, reference) protects against the
+ * unlikely race where two creators land on the same number.
  */
 async function nextReference(
   ctx: Awaited<ReturnType<typeof requireRequestContext>>,
@@ -77,37 +103,22 @@ async function nextReference(
 // ---------- Create ------------------------------------------------------
 
 /**
- * Create a new safe-distance record. The required distance is recomputed
- * server-side from `type` + `voltageKv` so the client cannot fabricate a
- * lower threshold; the operator may override `requiredDistanceMOverride` only
- * for the 'other' type (where there is no canonical lookup).
+ * Create a new pressure-test assessment from the /new form, then redirect to
+ * the calculator editor where the operator adds pipe segments.
  */
 export async function createSafeDistanceRecord(formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
-  const type = String(formData.get('type') ?? '') as SafeDistanceType
-  if (!TYPES.includes(type)) throw new Error('Invalid type')
 
+  const name = String(formData.get('name') ?? '').trim() || 'New pressure test'
+  const methodRaw = String(formData.get('method') ?? 'nasa') as SafeDistanceMethod
+  const method = METHODS.includes(methodRaw) ? methodRaw : 'nasa'
+  const unitRaw = String(formData.get('unit') ?? 'imperial') as SafeDistanceUnit
+  const unit = UNITS.includes(unitRaw) ? unitRaw : 'imperial'
+  const testPressure = num(formData.get('testPressure'))
+  const description = String(formData.get('description') ?? '').trim() || null
   const siteOrgUnitId = String(formData.get('siteOrgUnitId') ?? '').trim() || null
-  const sourceDescription = String(formData.get('sourceDescription') ?? '').trim() || null
   const supervisorTenantUserId = String(formData.get('supervisorTenantUserId') ?? '').trim() || null
   const operatorPersonId = String(formData.get('operatorPersonId') ?? '').trim() || null
-  const notes = String(formData.get('notes') ?? '').trim() || null
-  const voltageKv = parseNumber(formData.get('sourceVoltageKv'))
-  const heightM = parseNumber(formData.get('heightM'))
-  const actualDistanceM = parseNumber(formData.get('actualDistanceM'))
-  if (actualDistanceM === null || actualDistanceM < 0) {
-    throw new Error('Actual distance is required')
-  }
-
-  // Required distance: always server-computed for known types. For 'other',
-  // the form supplies a manual value (the only place we trust the client).
-  let requiredDistanceM = computeRequiredDistanceM({ type, voltageKv, heightM })
-  if (type === 'other') {
-    const manual = parseNumber(formData.get('requiredDistanceMOverride'))
-    if (manual !== null && manual >= 0) requiredDistanceM = manual
-  }
-
-  const complies = actualDistanceM >= requiredDistanceM
 
   const reference = await nextReference(ctx)
 
@@ -117,18 +128,15 @@ export async function createSafeDistanceRecord(formData: FormData): Promise<void
       .values({
         tenantId: ctx.tenantId!,
         reference,
-        type,
+        name,
+        method,
+        unit,
+        testPressure: String(testPressure),
+        description,
         siteOrgUnitId,
-        sourceVoltageKv: voltageKv !== null ? String(voltageKv) : null,
-        heightM: heightM !== null ? String(heightM) : null,
-        sourceDescription,
-        requiredDistanceM: String(requiredDistanceM),
-        actualDistanceM: String(actualDistanceM),
-        complies,
         supervisorTenantUserId,
         operatorPersonId,
         occurredAt: new Date(),
-        notes,
       })
       .returning(),
   )
@@ -139,97 +147,103 @@ export async function createSafeDistanceRecord(formData: FormData): Promise<void
     entityType: 'safe_distance_record',
     entityId: row.id,
     action: 'create',
-    summary: `Created ${row.reference} (${type})`,
-    after: {
-      type,
-      requiredDistanceM,
-      actualDistanceM,
-      complies,
-    },
+    summary: `Created ${row.reference} (${name})`,
+    after: { name, method, unit },
   })
   revalidatePath('/tools/safe-distance')
   redirect(`/tools/safe-distance/${row.id}`)
 }
 
-// ---------- Update ------------------------------------------------------
+// ---------- Save (authoritative recompute) ------------------------------
 
 /**
- * Update measurement fields on an unlocked record. Re-computes
- * `requiredDistanceM` + `complies` server-side from the new inputs so the two
- * can never drift.
+ * Persist the calculator: update parent fields, recompute total volume + all
+ * three method distances server-side, and replace the pipe segments. Returns
+ * the freshly computed results so the editor can reflect the canonical values.
  */
-export async function updateSafeDistanceRecord(formData: FormData): Promise<ActionResult> {
+export async function saveSafeDistanceRecord(
+  input: SaveSafeDistanceInput,
+): Promise<ActionResult & { results?: ReturnType<typeof computeSafeDistance> }> {
   const ctx = await requireRequestContext()
-  const id = String(formData.get('id') ?? '')
+  const id = input.id
   if (!id) return { ok: false, error: 'Missing id' }
   const rec = await loadRecord(ctx, id)
   if (!rec) return { ok: false, error: 'Record not found' }
   const lockErr = assertNotLocked(rec)
   if (lockErr) return lockErr
 
-  const sourceDescription = String(formData.get('sourceDescription') ?? '').trim() || null
-  const supervisorTenantUserId = String(formData.get('supervisorTenantUserId') ?? '').trim() || null
-  const operatorPersonId = String(formData.get('operatorPersonId') ?? '').trim() || null
-  const siteOrgUnitId = String(formData.get('siteOrgUnitId') ?? '').trim() || null
-  const notes = String(formData.get('notes') ?? '').trim() || null
-  const voltageKv = parseNumber(formData.get('sourceVoltageKv'))
-  const heightM = parseNumber(formData.get('heightM'))
-  const actualDistanceM = parseNumber(formData.get('actualDistanceM'))
-  if (actualDistanceM === null || actualDistanceM < 0) {
-    return { ok: false, error: 'Actual distance is required' }
-  }
+  const method = METHODS.includes(input.method) ? input.method : 'nasa'
+  const unit = UNITS.includes(input.unit) ? input.unit : 'imperial'
+  const segments = (input.segments ?? []).map((s) => ({
+    name: (s.name ?? '').trim() || null,
+    unit: SEGMENT_UNITS.includes(s.unit) ? s.unit : ('inch' as SafeDistanceSegmentUnit),
+    lengthValue: num(s.lengthValue),
+    internalDiameter: num(s.internalDiameter),
+  }))
 
-  let requiredDistanceM = computeRequiredDistanceM({
-    type: rec.type as SafeDistanceType,
-    voltageKv,
-    heightM,
+  const results = computeSafeDistance({
+    method,
+    unit,
+    testPressure: num(input.testPressure),
+    segments,
   })
-  if (rec.type === 'other') {
-    const manual = parseNumber(formData.get('requiredDistanceMOverride'))
-    if (manual !== null && manual >= 0) requiredDistanceM = manual
-  }
-  const complies = actualDistanceM >= requiredDistanceM
 
-  await ctx.db((tx) =>
-    tx
+  await ctx.db(async (tx) => {
+    await tx
       .update(safeDistanceRecords)
       .set({
-        sourceVoltageKv: voltageKv !== null ? String(voltageKv) : null,
-        heightM: heightM !== null ? String(heightM) : null,
-        sourceDescription,
-        requiredDistanceM: String(requiredDistanceM),
-        actualDistanceM: String(actualDistanceM),
-        complies,
-        supervisorTenantUserId,
-        operatorPersonId,
-        siteOrgUnitId,
-        notes,
+        name: input.name.trim() || 'Pressure test',
+        method,
+        unit,
+        testPressure: String(num(input.testPressure)),
+        description: (input.description ?? '').trim() || null,
+        siteOrgUnitId: (input.siteOrgUnitId ?? '').trim() || null,
+        supervisorTenantUserId: (input.supervisorTenantUserId ?? '').trim() || null,
+        operatorPersonId: (input.operatorPersonId ?? '').trim() || null,
+        notes: (input.notes ?? '').trim() || null,
+        totalVolume: String(results.totalVolume),
+        resultNasa: String(results.nasa),
+        resultAsme: String(results.asme),
+        resultLloyds: String(results.lloyds),
       })
-      .where(eq(safeDistanceRecords.id, id)),
-  )
+      .where(eq(safeDistanceRecords.id, id))
+
+    // Replace segments wholesale — simpler + atomic vs. per-row diffing.
+    await tx.delete(safeDistanceSegments).where(eq(safeDistanceSegments.recordId, id))
+    if (segments.length > 0) {
+      await tx.insert(safeDistanceSegments).values(
+        segments.map((s, i) => ({
+          tenantId: ctx.tenantId!,
+          recordId: id,
+          name: s.name,
+          unit: s.unit,
+          lengthValue: String(s.lengthValue),
+          internalDiameter: String(s.internalDiameter),
+          volumeM3: String(segmentVolumeM3(s.lengthValue, s.internalDiameter, s.unit)),
+          sortOrder: i,
+        })),
+      )
+    }
+  })
 
   await recordAudit(ctx, {
     entityType: 'safe_distance_record',
     entityId: id,
     action: 'update',
-    summary: 'Edited measurement',
-    before: {
-      requiredDistanceM: rec.requiredDistanceM,
-      actualDistanceM: rec.actualDistanceM,
-      complies: rec.complies,
-    },
+    summary: `Updated calculation (${segments.length} segment${segments.length === 1 ? '' : 's'})`,
     after: {
-      requiredDistanceM,
-      actualDistanceM,
-      complies,
+      method,
+      unit,
+      totalVolume: results.totalVolume,
+      chosen: results.chosen,
     },
   })
   revalidatePath(`/tools/safe-distance/${id}`)
   revalidatePath('/tools/safe-distance')
-  return { ok: true }
+  return { ok: true, results }
 }
 
-// ---------- Lock / unlock / delete --------------------------------------
+// ---------- Lock / unlock / delete ------------------------------------
 
 export async function lockSafeDistanceRecord(id: string): Promise<ActionResult> {
   const ctx = await requireRequestContext()
@@ -295,10 +309,7 @@ export async function deleteSafeDistanceRecord(id: string): Promise<ActionResult
   return { ok: true }
 }
 
-/**
- * Form-action wrapper around delete + redirect, used by the detail page's
- * Delete button which needs a void-returning server action.
- */
+/** Form-action wrapper around delete + redirect for the detail page button. */
 export async function deleteSafeDistanceRecordAndRedirect(formData: FormData): Promise<void> {
   const id = String(formData.get('id') ?? '')
   if (!id) return
@@ -306,9 +317,7 @@ export async function deleteSafeDistanceRecordAndRedirect(formData: FormData): P
   redirect('/tools/safe-distance')
 }
 
-/**
- * Form-action wrapper around lock/unlock for use inside <form action={…}>.
- */
+/** Form-action wrapper around lock/unlock for use inside <form action={…}>. */
 export async function toggleLockSafeDistanceRecord(formData: FormData): Promise<void> {
   const id = String(formData.get('id') ?? '')
   const desired = String(formData.get('desired') ?? '') === 'true'
@@ -317,14 +326,41 @@ export async function toggleLockSafeDistanceRecord(formData: FormData): Promise<
   else await unlockSafeDistanceRecord(id)
 }
 
-// Helper so the new-record form's submit can be a void-returning action.
-export async function createSafeDistanceRecordForm(formData: FormData): Promise<void> {
-  await createSafeDistanceRecord(formData)
-}
-
-// Helper so the edit form's submit can return void.
-export async function updateSafeDistanceRecordForm(formData: FormData): Promise<void> {
-  await updateSafeDistanceRecord(formData)
+/**
+ * Form-action wrapper around `saveSafeDistanceRecord` so the calculator editor
+ * can submit via a plain <form>. Segments arrive as a JSON string in the
+ * `segments` field. Stays on the page (no redirect) — revalidation refreshes
+ * the server-computed results.
+ */
+export async function saveSafeDistanceRecordForm(formData: FormData): Promise<void> {
   const id = String(formData.get('id') ?? '')
-  if (id) redirect(`/tools/safe-distance/${id}`)
+  if (!id) return
+  let segments: SegmentInput[] = []
+  try {
+    const raw = String(formData.get('segments') ?? '[]')
+    const parsed = JSON.parse(raw)
+    if (Array.isArray(parsed)) {
+      segments = parsed.map((s: Record<string, unknown>) => ({
+        name: typeof s.name === 'string' ? s.name : null,
+        unit: s.unit as SafeDistanceSegmentUnit,
+        lengthValue: num(s.lengthValue),
+        internalDiameter: num(s.internalDiameter),
+      }))
+    }
+  } catch {
+    segments = []
+  }
+  await saveSafeDistanceRecord({
+    id,
+    name: String(formData.get('name') ?? ''),
+    method: String(formData.get('method') ?? 'nasa') as SafeDistanceMethod,
+    unit: String(formData.get('unit') ?? 'imperial') as SafeDistanceUnit,
+    testPressure: num(formData.get('testPressure')),
+    description: String(formData.get('description') ?? ''),
+    siteOrgUnitId: String(formData.get('siteOrgUnitId') ?? ''),
+    supervisorTenantUserId: String(formData.get('supervisorTenantUserId') ?? ''),
+    operatorPersonId: String(formData.get('operatorPersonId') ?? ''),
+    notes: String(formData.get('notes') ?? ''),
+    segments,
+  })
 }

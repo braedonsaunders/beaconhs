@@ -16,27 +16,18 @@ import {
 } from '@beaconhs/ui'
 import { orgUnits, people, tenantUsers, user as userTable } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
-import { pickString } from '@/lib/list-params'
 import { PageContainer } from '@/components/page-layout'
 import { PersonSelectField } from '@/components/person-select-field'
-import { createSafeDistanceRecordForm } from '../_actions'
+import { createSafeDistanceRecord } from '../_actions'
 import {
-  DRONE_DEFAULT_CLEARANCE_M,
-  ELECTRICAL_TABLE,
-  SAFE_DISTANCE_TYPE_LABELS,
-  VEHICLE_DEFAULT_CLEARANCE_M,
+  pressureUnitLabel,
+  SAFE_DISTANCE_METHOD_LABELS,
+  SAFE_DISTANCE_METHOD_SUBTITLES,
 } from '../_lib'
-import { NewSafeDistanceForm } from './_form'
 
-export const metadata = { title: 'New safe-distance assessment' }
+export const metadata = { title: 'New pressure-test assessment' }
 
-export default async function NewSafeDistancePage({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
-}) {
-  const sp = await searchParams
-  const presetType = pickString(sp.type) ?? 'electrical'
+export default async function NewSafeDistancePage() {
   const ctx = await requireRequestContext()
 
   const { sites, supervisors, operators } = await ctx.db(async (tx) => {
@@ -47,11 +38,7 @@ export default async function NewSafeDistancePage({
       .orderBy(asc(orgUnits.name))
       .limit(200)
     const sv = await tx
-      .select({
-        id: tenantUsers.id,
-        name: tenantUsers.displayName,
-        email: userTable.email,
-      })
+      .select({ id: tenantUsers.id, name: tenantUsers.displayName, email: userTable.email })
       .from(tenantUsers)
       .leftJoin(userTable, eq(userTable.id, tenantUsers.userId))
       .where(eq(tenantUsers.status, 'active'))
@@ -88,30 +75,17 @@ export default async function NewSafeDistancePage({
     <PageContainer>
       <div className="mx-auto max-w-3xl space-y-6">
         <PageHeader
-          title="New safe-distance assessment"
-          description="Select an assessment type to calculate the minimum required distance."
+          title="New pressure-test assessment"
+          description="Name the system and pick a method and unit. You'll add pipe segments on the next screen."
           back={{ href: '/tools/safe-distance', label: 'All assessments' }}
         />
 
         <Alert>
-          <AlertTitle>How required distance is calculated</AlertTitle>
+          <AlertTitle>About this calculator</AlertTitle>
           <AlertDescription>
-            <ul className="ml-4 list-disc space-y-1 text-sm">
-              <li>
-                <strong>Electrical / overhead crane:</strong> IEEE C2 / CSA limits-of-approach table
-                — pick a kV and the required clearance is set automatically.
-              </li>
-              <li>
-                <strong>Drone:</strong> Transport Canada minimum {DRONE_DEFAULT_CLEARANCE_M} m from
-                non-involved people.
-              </li>
-              <li>
-                <strong>Vehicle:</strong> {VEHICLE_DEFAULT_CLEARANCE_M} m baseline stand-off.
-              </li>
-              <li>
-                <strong>Other:</strong> enter the required distance manually.
-              </li>
-            </ul>
+            Estimates the minimum personnel stand-off for a pneumatic (compressed-gas) pressure
+            test. All three standards are computed for every assessment — the chosen method governs
+            the headline figure. Always confirm against the governing test procedure.
           </AlertDescription>
         </Alert>
 
@@ -120,8 +94,58 @@ export default async function NewSafeDistancePage({
             <CardTitle>Assessment details</CardTitle>
           </CardHeader>
           <CardContent>
-            <form action={createSafeDistanceRecordForm} className="space-y-5">
-              <NewSafeDistanceForm initialType={presetType} />
+            <form action={createSafeDistanceRecord} className="space-y-5">
+              <div className="space-y-2">
+                <Label htmlFor="name">System name</Label>
+                <Input
+                  id="name"
+                  name="name"
+                  defaultValue=""
+                  placeholder='e.g. North header — 6" line'
+                />
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="space-y-2">
+                  <Label htmlFor="method">Calculation method</Label>
+                  <Select id="method" name="method" defaultValue="nasa">
+                    {(['nasa', 'asme', 'lloyds'] as const).map((m) => (
+                      <option key={m} value={m}>
+                        {SAFE_DISTANCE_METHOD_LABELS[m]} — {SAFE_DISTANCE_METHOD_SUBTITLES[m]}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="unit">Result unit</Label>
+                  <Select id="unit" name="unit" defaultValue="imperial">
+                    <option value="imperial">Imperial (psi / ft³ / ft)</option>
+                    <option value="metric">Metric (bar / m³ / m)</option>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="testPressure">Test pressure</Label>
+                  <Input
+                    id="testPressure"
+                    name="testPressure"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    defaultValue="0"
+                    placeholder={pressureUnitLabel('imperial')}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="description">Description</Label>
+                <Textarea
+                  id="description"
+                  name="description"
+                  rows={2}
+                  placeholder="System, medium, test procedure reference…"
+                />
+              </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
@@ -135,7 +159,6 @@ export default async function NewSafeDistancePage({
                     ))}
                   </Select>
                 </div>
-
                 <div className="space-y-2">
                   <Label htmlFor="supervisorTenantUserId">Supervisor (sign-off)</Label>
                   <PersonSelectField
@@ -151,7 +174,6 @@ export default async function NewSafeDistancePage({
                     emptyLabel="— None —"
                   />
                 </div>
-
                 <div className="space-y-2 sm:col-span-2">
                   <Label htmlFor="operatorPersonId">Operator</Label>
                   <PersonSelectField
@@ -169,70 +191,13 @@ export default async function NewSafeDistancePage({
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="notes">Notes</Label>
-                <Textarea
-                  id="notes"
-                  name="notes"
-                  rows={3}
-                  placeholder="Additional context, controls in place, witnesses…"
-                />
-              </div>
-
               <div className="flex items-center justify-end gap-2 border-t border-slate-200 pt-4 dark:border-slate-800">
-                <Button variant="outline" type="reset">
-                  Reset
-                </Button>
-                <Button type="submit">Create assessment</Button>
+                <Button type="submit">Create &amp; add segments</Button>
               </div>
             </form>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Electrical limits-of-approach reference</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <table className="w-full text-sm">
-              <thead className="border-b border-slate-200 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:text-slate-400">
-                <tr>
-                  <th className="px-2 py-1">Voltage range (kV)</th>
-                  <th className="px-2 py-1">Required distance (m)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ELECTRICAL_TABLE.map((row, i) => {
-                  const lower = i === 0 ? 0 : ELECTRICAL_TABLE[i - 1]!.maxVoltageKv
-                  const upperLabel = Number.isFinite(row.maxVoltageKv)
-                    ? `< ${row.maxVoltageKv} kV`
-                    : `≥ 750 kV`
-                  return (
-                    <tr key={i} className="border-b border-slate-100 dark:border-slate-800">
-                      <td className="px-2 py-1.5 text-slate-700 dark:text-slate-300">
-                        {i === 0 ? `< ${row.maxVoltageKv} kV` : `${lower} – ${upperLabel}`}
-                      </td>
-                      <td className="px-2 py-1.5 font-medium text-slate-900 dark:text-slate-100">
-                        {row.requiredDistanceM} m
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-            <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
-              Source: IEEE C2 / CSA Z462 abbreviated limits of approach. Always check the local AHJ
-              for jurisdiction-specific overrides.
-            </p>
           </CardContent>
         </Card>
       </div>
     </PageContainer>
   )
 }
-
-// The list of types is reused in the client form too, but the page-level
-// const helps keep the page declaration tight.
-export const SAFE_DISTANCE_TYPE_OPTIONS = Object.entries(SAFE_DISTANCE_TYPE_LABELS).map(
-  ([value, label]) => ({ value, label }),
-)

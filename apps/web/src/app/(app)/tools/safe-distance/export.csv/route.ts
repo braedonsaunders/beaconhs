@@ -5,10 +5,16 @@ import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { csvFilename, csvResponse } from '@/lib/csv'
 import { parseListParams, pickString } from '@/lib/list-params'
+import {
+  pressureUnitLabel,
+  SAFE_DISTANCE_METHOD_LABELS,
+  type SafeDistanceMethod,
+  type SafeDistanceUnit,
+} from '../_lib'
 
 export const dynamic = 'force-dynamic'
 
-const SORTS = ['reference', 'occurred_at', 'type', 'complies'] as const
+const SORTS = ['reference', 'occurred_at', 'name', 'method'] as const
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url)
@@ -19,9 +25,7 @@ export async function GET(req: NextRequest) {
     perPage: 25,
     allowedSorts: SORTS,
   })
-  const typeFilter = pickString(sp.type)
-  const compliesFilter = pickString(sp.complies)
-  const siteFilter = pickString(sp.site)
+  const methodFilter = pickString(sp.method)
   const ctx = await requireRequestContext()
 
   const rows = await ctx.db(async (tx) => {
@@ -30,15 +34,14 @@ export async function GET(req: NextRequest) {
       const term = `%${params.q}%`
       const cond = or(
         ilike(safeDistanceRecords.reference, term),
-        ilike(safeDistanceRecords.sourceDescription, term),
+        ilike(safeDistanceRecords.name, term),
+        ilike(safeDistanceRecords.description, term),
         ilike(safeDistanceRecords.notes, term),
       )
       if (cond) filters.push(cond)
     }
-    if (typeFilter) filters.push(eq(safeDistanceRecords.type, typeFilter as any))
-    if (compliesFilter === 'yes') filters.push(eq(safeDistanceRecords.complies, true))
-    if (compliesFilter === 'no') filters.push(eq(safeDistanceRecords.complies, false))
-    if (siteFilter) filters.push(eq(safeDistanceRecords.siteOrgUnitId, siteFilter))
+    if (methodFilter)
+      filters.push(eq(safeDistanceRecords.method, methodFilter as SafeDistanceMethod))
     const whereClause = filters.length > 0 ? and(...filters) : undefined
 
     const orderBy =
@@ -48,13 +51,13 @@ export async function GET(req: NextRequest) {
               ? asc(safeDistanceRecords.reference)
               : desc(safeDistanceRecords.reference),
           ]
-        : params.sort === 'type'
-          ? [params.dir === 'asc' ? asc(safeDistanceRecords.type) : desc(safeDistanceRecords.type)]
-          : params.sort === 'complies'
+        : params.sort === 'name'
+          ? [params.dir === 'asc' ? asc(safeDistanceRecords.name) : desc(safeDistanceRecords.name)]
+          : params.sort === 'method'
             ? [
                 params.dir === 'asc'
-                  ? asc(safeDistanceRecords.complies)
-                  : desc(safeDistanceRecords.complies),
+                  ? asc(safeDistanceRecords.method)
+                  : desc(safeDistanceRecords.method),
               ]
             : [
                 params.dir === 'asc'
@@ -77,12 +80,7 @@ export async function GET(req: NextRequest) {
     summary: `Exported ${rows.length} safe-distance records to CSV`,
     metadata: {
       format: 'csv',
-      filters: {
-        q: params.q ?? null,
-        type: typeFilter ?? null,
-        complies: compliesFilter ?? null,
-        site: siteFilter ?? null,
-      },
+      filters: { q: params.q ?? null, method: methodFilter ?? null },
     },
   })
 
@@ -90,14 +88,16 @@ export async function GET(req: NextRequest) {
     filename: csvFilename('safe-distance'),
     headers: [
       'Reference',
-      'Occurred at',
-      'Type',
-      'Source description',
-      'Source voltage (kV)',
-      'Height (m)',
-      'Required (m)',
-      'Actual (m)',
-      'Compliant',
+      'Date',
+      'Name',
+      'Method',
+      'Unit',
+      'Test pressure',
+      'Pressure unit',
+      'Total volume',
+      'NASA (dist)',
+      'ASME (dist)',
+      "Lloyd's (dist)",
       'Site',
       'Locked',
       'Notes',
@@ -105,13 +105,15 @@ export async function GET(req: NextRequest) {
     rows: rows.map(({ rec, site }) => [
       rec.reference,
       rec.occurredAt ? new Date(rec.occurredAt).toISOString() : '',
-      rec.type,
-      rec.sourceDescription ?? '',
-      rec.sourceVoltageKv ?? '',
-      rec.heightM ?? '',
-      rec.requiredDistanceM ?? '',
-      rec.actualDistanceM ?? '',
-      rec.complies ? 'Yes' : 'No',
+      rec.name,
+      SAFE_DISTANCE_METHOD_LABELS[rec.method as SafeDistanceMethod],
+      rec.unit,
+      rec.testPressure ?? '',
+      pressureUnitLabel(rec.unit as SafeDistanceUnit),
+      rec.totalVolume ?? '',
+      rec.resultNasa ?? '',
+      rec.resultAsme ?? '',
+      rec.resultLloyds ?? '',
       site?.name ?? '',
       rec.locked ? 'Yes' : 'No',
       rec.notes ?? '',

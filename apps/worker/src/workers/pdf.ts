@@ -10,7 +10,6 @@ import type { Job } from 'bullmq'
 import { and, asc, desc, eq } from 'drizzle-orm'
 import { db, loadEntitiesForFormPickers, withTenant, type Database } from '@beaconhs/db'
 import {
-  atmosphericSensors,
   attachments,
   caCompleteSteps,
   caPhotos,
@@ -26,8 +25,6 @@ import {
   formResponses,
   formTemplateVersions,
   formTemplates,
-  hazidAssessmentCSAtmospheric,
-  hazidAssessmentCSEntries,
   hazidAssessmentHazards,
   hazidAssessmentPPE,
   hazidAssessmentPhotos,
@@ -738,14 +735,6 @@ type HazidLoadedAssessment = {
     link: typeof hazidAssessmentPhotos.$inferSelect
     att: typeof attachments.$inferSelect
   }[]
-  atmospheric: {
-    row: typeof hazidAssessmentCSAtmospheric.$inferSelect
-    sensor: typeof atmosphericSensors.$inferSelect | null
-  }[]
-  entries: {
-    row: typeof hazidAssessmentCSEntries.$inferSelect
-    person: typeof people.$inferSelect | null
-  }[]
 }
 
 // Loads everything needed to render a single HazID assessment as a PDF, using
@@ -820,22 +809,6 @@ async function loadHazidAssessment(
     .innerJoin(attachments, eq(attachments.id, hazidAssessmentPhotos.attachmentId))
     .where(eq(hazidAssessmentPhotos.assessmentId, assessmentId))
 
-  const atmospheric = await tx
-    .select({ row: hazidAssessmentCSAtmospheric, sensor: atmosphericSensors })
-    .from(hazidAssessmentCSAtmospheric)
-    .leftJoin(
-      atmosphericSensors,
-      eq(atmosphericSensors.id, hazidAssessmentCSAtmospheric.atmosphericSensorId),
-    )
-    .where(eq(hazidAssessmentCSAtmospheric.assessmentId, assessmentId))
-    .orderBy(asc(hazidAssessmentCSAtmospheric.time))
-
-  const entries = await tx
-    .select({ row: hazidAssessmentCSEntries, person: people })
-    .from(hazidAssessmentCSEntries)
-    .leftJoin(people, eq(people.id, hazidAssessmentCSEntries.personId))
-    .where(eq(hazidAssessmentCSEntries.assessmentId, assessmentId))
-
   return {
     ...row,
     projectName,
@@ -845,8 +818,6 @@ async function loadHazidAssessment(
     questions,
     signatures,
     photos,
-    atmospheric,
-    entries,
   }
 }
 
@@ -870,31 +841,6 @@ function toHazidRenderInput(data: HazidLoadedAssessment): HazidRenderInput {
       typeName: data.type?.name ?? null,
       supervisorName: personName(data.supervisor),
       jobScope: a.jobScope,
-      wah: a.wah,
-      wahType: a.wahType,
-      wahCommunication: a.wahCommunication ?? [],
-      wahAccess: a.wahAccess ?? [],
-      wahEquipment: a.wahEquipment ?? [],
-      wahRescue: a.wahRescue,
-      wahPermitNumber: a.wahPermitNumber,
-      confinedSpace: a.confinedSpace,
-      csType: a.csType,
-      csDescription: a.csDescription,
-      csCommunication: a.csCommunication ?? [],
-      csCommunicationRescue: a.csCommunicationRescue ?? [],
-      csRescue: a.csRescue ?? [],
-      csWorkPerformed: a.csWorkPerformed,
-      csDiagramBase64: a.csDiagramBase64,
-      csRescueStyle: a.csRescueStyle,
-      csRescueProcedure: a.csRescueProcedure,
-      csPermitNumber: a.csPermitNumber,
-      arcFlash: a.arcFlash,
-      arcFlashLevel: a.arcFlashLevel,
-      arcFlashBoundary: a.arcFlashBoundary,
-      arcFlashIncidentEnergy: a.arcFlashIncidentEnergy,
-      arcFlashEquipment: a.arcFlashEquipment ?? [],
-      arcFlashProcedures: a.arcFlashProcedures,
-      arcFlashQualifiedPerson: a.arcFlashQualifiedPerson,
     },
     ppe: data.ppe.map((p) => ({
       name: p.name,
@@ -929,21 +875,6 @@ function toHazidRenderInput(data: HazidLoadedAssessment): HazidRenderInput {
     photos: data.photos.map((p) => ({
       url: publicUrl(p.att.r2Key),
       caption: p.link.caption,
-    })),
-    atmospheric: data.atmospheric.map((r) => ({
-      time: r.row.time,
-      sensorIdentifier: r.sensor?.identifier ?? null,
-      sensor1Reading: r.row.sensor1Reading,
-      sensor2Reading: r.row.sensor2Reading,
-      sensor3Reading: r.row.sensor3Reading,
-      sensor4Reading: r.row.sensor4Reading,
-      distance: r.row.distance,
-      notes: r.row.notes,
-    })),
-    entries: data.entries.map((e) => ({
-      name: e.person ? personName(e.person)! : (e.row.externalName ?? 'Unknown'),
-      timeIn: e.row.timeIn,
-      timeOut: e.row.timeOut,
     })),
     generatedAt: new Date(),
   }

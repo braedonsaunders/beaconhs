@@ -219,6 +219,39 @@ export function evaluateFormulaTree(
       return Math.max(...expr.of.map((e) => coerceNumber(evaluateFormulaTree(e, ctx))))
     }
 
+    case 'power': {
+      const r = Math.pow(
+        coerceNumber(evaluateFormulaTree(expr.base, ctx)),
+        coerceNumber(evaluateFormulaTree(expr.exponent, ctx)),
+      )
+      return Number.isFinite(r) ? r : 0
+    }
+
+    case 'root': {
+      const b = coerceNumber(evaluateFormulaTree(expr.of, ctx))
+      const d = coerceNumber(evaluateFormulaTree(expr.degree, ctx))
+      if (d === 0) return 0
+      // Preserve sign so odd roots of negatives work (e.g. cube root of −8 = −2)
+      // and even roots of negatives don't produce NaN.
+      const r = Math.sign(b) * Math.pow(Math.abs(b), 1 / d)
+      return Number.isFinite(r) ? r : 0
+    }
+
+    case 'abs':
+      return Math.abs(coerceNumber(evaluateFormulaTree(expr.of, ctx)))
+
+    case 'round': {
+      const places = Number.isFinite(expr.places) ? (expr.places as number) : 0
+      const factor = Math.pow(10, places)
+      return Math.round(coerceNumber(evaluateFormulaTree(expr.of, ctx)) * factor) / factor
+    }
+
+    case 'floor':
+      return Math.floor(coerceNumber(evaluateFormulaTree(expr.of, ctx)))
+
+    case 'ceil':
+      return Math.ceil(coerceNumber(evaluateFormulaTree(expr.of, ctx)))
+
     case 'sum_section': {
       const rows = ctx.rows[expr.sectionKey] ?? []
       return rows.reduce<number>((acc, row) => acc + coerceNumber(row[expr.rowFieldKey]), 0)

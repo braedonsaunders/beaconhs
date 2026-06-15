@@ -186,6 +186,7 @@ export const TENANT_SCOPED_TABLES = [
   'hazid_assessment_types',
   'hazid_assessment_type_ppe',
   'hazid_assessment_type_questions',
+  'hazid_assessment_type_apps',
   'hazid_assessments',
   'hazid_assessment_tasks',
   'hazid_assessment_hazards',
@@ -193,8 +194,6 @@ export const TENANT_SCOPED_TABLES = [
   'hazid_assessment_ppe',
   'hazid_assessment_questions',
   'hazid_assessment_photos',
-  'hazid_assessment_cs_atmospheric',
-  'hazid_assessment_cs_entries',
   'hazid_signed_reports',
   // Daily Journals (individual field-safety log)
   'journal_entries',
@@ -205,9 +204,10 @@ export const TENANT_SCOPED_TABLES = [
   'journal_assignment_dispatches',
   // User-buildable Insights dashboards
   'insight_dashboards',
-  // Safe Distance tool — engineering calc + record-keeping for safe-distance
-  // assessments (electrical / drone / overhead-crane proximity).
+  // Safe Distance tool — pneumatic pressure-test stored-energy standoff
+  // calculator (parent record + its pipe segments).
   'safe_distance_records',
+  'safe_distance_segments',
   // Incidents — supporting sub-tables
   'incident_attachments',
   'incident_classifications',

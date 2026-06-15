@@ -11,7 +11,7 @@
 //                              expose an "Edit" link that points to the
 //                              edit-* drawer, plus inline reorder + delete
 //                              buttons.
-//   - Small button helpers     (MoveButton / DeleteButton / SubFormToggle).
+//   - Small button helpers     (MoveButton / DeleteButton).
 //
 // Each Add* form dispatches its server action via `useTransition` and on
 // success navigates to the section's tab URL (drops the `?drawer=…` param)
@@ -1394,52 +1394,6 @@ export function EditLinkButton({ href }: { href: string }) {
     >
       <Pencil size={16} />
     </Link>
-  )
-}
-
-// ============================================================================
-// Sub-form toggle (WAH/CS/AF)
-// ============================================================================
-
-export function SubFormToggle({
-  id,
-  field,
-  initial,
-  label,
-  disabled,
-  toggleAction,
-}: {
-  id: string
-  field: 'wah'
-  initial: boolean
-  label: string
-  disabled?: boolean
-  toggleAction: (formData: FormData) => Promise<void>
-}) {
-  const [pending, start] = useTransition()
-  function go(next: boolean) {
-    const fd = new FormData()
-    fd.set('id', id)
-    fd.set('field', field)
-    fd.set('value', next ? 'on' : '')
-    start(async () => {
-      await toggleAction(fd)
-    })
-  }
-  return (
-    <div className="flex items-center justify-between rounded-md border border-slate-200 bg-slate-50/40 px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-800/30">
-      <div className="font-medium text-slate-700 dark:text-slate-300">{label}</div>
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          disabled={pending || disabled}
-          onClick={() => go(!initial)}
-          className={`min-h-9 rounded-full border px-4 text-sm sm:min-h-0 sm:px-3 sm:py-0.5 sm:text-xs ${initial ? 'border-teal-600 bg-teal-50 text-teal-800' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400'}`}
-        >
-          {pending ? '…' : initial ? 'On' : 'Off'}
-        </button>
-      </div>
-    </div>
   )
 }
 

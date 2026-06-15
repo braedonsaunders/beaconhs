@@ -494,6 +494,79 @@ describe('evaluateFormulaTree', () => {
 })
 
 // =========================================================================
+// Scientific math operators (power / root / abs / round / floor / ceil)
+// =========================================================================
+
+describe('evaluateFormulaTree — scientific math', () => {
+  const lit = (value: number): FormulaExpression => ({ kind: 'literal', value })
+
+  it('power raises base to exponent', () => {
+    expect(evaluateFormulaTree({ kind: 'power', base: lit(2), exponent: lit(10) }, makeCtx())).toBe(
+      1024,
+    )
+    expect(
+      evaluateFormulaTree({ kind: 'power', base: lit(9), exponent: lit(0.5) }, makeCtx()),
+    ).toBe(3)
+  })
+
+  it('power guards NaN (even root of a negative) → 0', () => {
+    expect(
+      evaluateFormulaTree({ kind: 'power', base: lit(-1), exponent: lit(0.5) }, makeCtx()),
+    ).toBe(0)
+  })
+
+  it('root takes the nth root, preserving sign for odd roots', () => {
+    expect(
+      evaluateFormulaTree({ kind: 'root', of: lit(9), degree: lit(2) }, makeCtx()),
+    ).toBeCloseTo(3, 9)
+    expect(
+      evaluateFormulaTree({ kind: 'root', of: lit(27), degree: lit(3) }, makeCtx()),
+    ).toBeCloseTo(3, 9)
+    // cube root of −8 = −2 (not NaN)
+    expect(
+      evaluateFormulaTree({ kind: 'root', of: lit(-8), degree: lit(3) }, makeCtx()),
+    ).toBeCloseTo(-2, 9)
+  })
+
+  it('root by degree 0 short-circuits to 0', () => {
+    expect(evaluateFormulaTree({ kind: 'root', of: lit(9), degree: lit(0) }, makeCtx())).toBe(0)
+  })
+
+  it('abs returns magnitude', () => {
+    expect(evaluateFormulaTree({ kind: 'abs', of: lit(-5) }, makeCtx())).toBe(5)
+    expect(evaluateFormulaTree({ kind: 'abs', of: lit(5) }, makeCtx())).toBe(5)
+  })
+
+  it('round honours places; defaults to 0 decimals', () => {
+    expect(evaluateFormulaTree({ kind: 'round', of: lit(3.14159), places: 2 }, makeCtx())).toBe(
+      3.14,
+    )
+    expect(evaluateFormulaTree({ kind: 'round', of: lit(123.456) }, makeCtx())).toBe(123)
+  })
+
+  it('floor + ceil round toward −∞ / +∞', () => {
+    expect(evaluateFormulaTree({ kind: 'floor', of: lit(2.9) }, makeCtx())).toBe(2)
+    expect(evaluateFormulaTree({ kind: 'ceil', of: lit(2.1) }, makeCtx())).toBe(3)
+  })
+
+  it('composes a pythagorean hypotenuse: root(a²+b², 2)', () => {
+    const ctx = makeCtx({ values: { a: 3, b: 4 } })
+    const hyp: FormulaExpression = {
+      kind: 'root',
+      degree: lit(2),
+      of: {
+        kind: 'sum',
+        of: [
+          { kind: 'power', base: { kind: 'field_ref', fieldKey: 'a' }, exponent: lit(2) },
+          { kind: 'power', base: { kind: 'field_ref', fieldKey: 'b' }, exponent: lit(2) },
+        ],
+      },
+    }
+    expect(evaluateFormulaTree(hyp, ctx)).toBeCloseTo(5, 9)
+  })
+})
+
+// =========================================================================
 // Default-value resolver
 // =========================================================================
 

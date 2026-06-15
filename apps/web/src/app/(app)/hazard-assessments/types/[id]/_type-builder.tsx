@@ -53,7 +53,6 @@ export type BuilderType = {
   hasHazards: boolean
   hasPPE: boolean
   hasQuestions: boolean
-  hasWAH: boolean
   availableToGroupIds: string[]
 }
 export type PPE = {
@@ -778,7 +777,6 @@ function SettingsPanel({
   const [hasHazards, setHasHazards] = React.useState(type.hasHazards)
   const [hasPPE, setHasPPE] = React.useState(type.hasPPE)
   const [hasQuestions, setHasQuestions] = React.useState(type.hasQuestions)
-  const [hasWAH, setHasWAH] = React.useState(type.hasWAH)
   const [groupIds, setGroupIds] = React.useState<string[]>(type.availableToGroupIds)
 
   function toggleGroup(id: string) {
@@ -797,7 +795,6 @@ function SettingsPanel({
           hasHazards,
           hasPPE,
           hasQuestions,
-          hasWAH,
           availableToGroupIds: groupIds,
         })
         toast.success('Saved')
@@ -852,7 +849,6 @@ function SettingsPanel({
         <CheckRow label="Hazards" checked={hasHazards} onChange={setHasHazards} />
         <CheckRow label="PPE" checked={hasPPE} onChange={setHasPPE} />
         <CheckRow label="Questions & Answers" checked={hasQuestions} onChange={setHasQuestions} />
-        <CheckRow label="Fall Protection" checked={hasWAH} onChange={setHasWAH} />
       </fieldset>
       {groups.length > 0 ? (
         <div className="space-y-1.5">

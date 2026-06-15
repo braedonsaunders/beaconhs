@@ -64,6 +64,7 @@ export async function updateAppOverview(args: {
   category?: string | null
   iconKey?: string | null
   emailOnSubmit?: boolean
+  surfaceAsTool?: boolean
 }): Promise<{ ok: boolean; error?: string }> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'forms.template.create')
@@ -82,6 +83,7 @@ export async function updateAppOverview(args: {
           : { category: (args.category?.trim() || null) as never }),
         ...(args.iconKey === undefined ? {} : { iconKey: args.iconKey?.trim() || null }),
         ...(args.emailOnSubmit === undefined ? {} : { emailOnSubmit: args.emailOnSubmit }),
+        ...(args.surfaceAsTool === undefined ? {} : { surfaceAsTool: args.surfaceAsTool }),
         updatedAt: new Date(),
       })
       .where(eq(formTemplates.id, args.templateId)),

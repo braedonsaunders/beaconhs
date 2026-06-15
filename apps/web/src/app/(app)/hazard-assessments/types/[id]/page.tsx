@@ -99,7 +99,6 @@ export default async function AssessmentTypeDetailPage({
               {type.hasQuestions ? <Badge variant="secondary">Q&amp;A</Badge> : null}
               {type.hasTasks ? <Badge variant="secondary">Tasks</Badge> : null}
               {type.hasHazards ? <Badge variant="secondary">Hazards</Badge> : null}
-              {type.hasWAH ? <Badge variant="outline">Fall protection</Badge> : null}
             </div>
           }
         />
@@ -117,7 +116,6 @@ export default async function AssessmentTypeDetailPage({
           hasHazards: type.hasHazards,
           hasPPE: type.hasPPE,
           hasQuestions: type.hasQuestions,
-          hasWAH: type.hasWAH,
           availableToGroupIds: type.availableToGroupIds ?? [],
         }}
         ppe={ppe}

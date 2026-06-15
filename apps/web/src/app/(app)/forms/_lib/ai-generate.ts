@@ -65,6 +65,7 @@ type FormSchemaV1 = {
         options?: Array<{ value: string; label: { en: string } }>
         min?: number; max?: number; minLength?: number; maxLength?: number
       }
+      formula?: FormulaExpression  // ONLY for computed fields (type "calc"); see grammar below
     }>
   }>
   workflow: { steps: Array<{ key: string; title: { en: string }; assignee: { type: "expression"; expr: "$submitter" } }> }
@@ -73,8 +74,26 @@ type FormSchemaV1 = {
 FieldType catalogue (use the EXACT type strings):
 ${FIELD_CATALOGUE}
 
+Computed fields — use type "calc" with a \`formula\` (a JSON expression tree). Never mark a computed field required or give it validation. FormulaExpression:
+  { kind: "literal", value: number | string }
+  { kind: "field_ref", fieldKey: string }                       // another field's id in this form
+  { kind: "sum" | "product" | "min" | "max", of: FormulaExpression[] }
+  { kind: "subtract" | "divide", left: FormulaExpression, right: FormulaExpression }
+  { kind: "power", base: FormulaExpression, exponent: FormulaExpression }
+  { kind: "root", of: FormulaExpression, degree: FormulaExpression }   // degree 2 = square root, 3 = cube root
+  { kind: "abs" | "floor" | "ceil", of: FormulaExpression }
+  { kind: "round", of: FormulaExpression, places?: number }
+  { kind: "sum_section" | "avg_section" | "min_section" | "max_section", sectionKey: string, rowFieldKey: string }
+  { kind: "count_section", sectionKey: string }
+  { kind: "if", condition: LogicRule, then: FormulaExpression, else: FormulaExpression }
+  { kind: "concat", of: FormulaExpression[], separator?: string }
+Example — a "total" field that adds two number fields a + b:
+  { "type":"calc", "id":"total", "label":{"en":"Total"}, "formula":{"kind":"sum","of":[{"kind":"field_ref","fieldKey":"a"},{"kind":"field_ref","fieldKey":"b"}]} }
+For a total ACROSS the rows of a repeating section, use sum_section with the section's id and the row field's id.
+
 Rules:
 - Every section id and field id must be unique snake_case.
+- For a value derived from other fields (totals, conversions, scores), add a type "calc" field with a \`formula\` rather than asking the user to compute it.
 - For radio/select/multi_select/checkbox_group fields you MUST include validation.options.
 - Use pass_fail_na for inspection checkpoints, signature for sign-offs, person_picker/site_picker for people/sites, photo for evidence.
 - Group fields into sensible sections. Keep i18n labels under the "en" key.

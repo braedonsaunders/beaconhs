@@ -112,7 +112,6 @@ export default async function NewHazardAssessmentPage() {
     hasHazards: t.hasHazards,
     hasPPE: t.hasPPE,
     hasQuestions: t.hasQuestions,
-    hasWAH: t.hasWAH,
   }))
 
   return (

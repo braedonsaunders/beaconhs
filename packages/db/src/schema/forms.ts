@@ -63,6 +63,9 @@ export const formTemplates = pgTable(
     // When true, submitting a response auto-emails a recap to the configured
     // notification recipients (generic version of the old toolbox email recap).
     emailOnSubmit: boolean('email_on_submit').default(false).notNull(),
+    // When true, this published template also appears in the /tools catalogue as
+    // a user-built tool (calculator / utility), alongside the native tools.
+    surfaceAsTool: boolean('surface_as_tool').default(false).notNull(),
     createdBy: text('created_by').references(() => users.id),
     ...timestamps,
     ...softDelete,

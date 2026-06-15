@@ -20,7 +20,6 @@ import {
   index,
   integer,
   jsonb,
-  numeric,
   pgEnum,
   pgTable,
   text,
@@ -40,14 +39,11 @@ import {
 } from './hazid-libraries'
 import { formResponses, formTemplates } from './forms'
 import { orgUnits, people } from './org'
-import { atmosphericSensors } from './sensors'
 
 // ----------------------------------------------------------------------------
 // Sub-form-related enums
 // ----------------------------------------------------------------------------
 
-export const hazidCSType = pgEnum('hazid_cs_type', ['paper', 'integrated'])
-export const hazidCSRescueStyle = pgEnum('hazid_cs_rescue_style', ['entry', 'non_entry'])
 export const hazidSignatureType = pgEnum('hazid_signature_type', ['internal', 'external'])
 export const hazidPpeAnswer = pgEnum('hazid_ppe_answer', ['yes', 'no', 'na'])
 
@@ -91,40 +87,11 @@ export const hazidAssessments = pgTable(
     }),
     jobScope: text('job_scope'),
 
-    // -------------------- Working-at-Heights ---------------------------------
-    wah: boolean('wah').default(false).notNull(),
-    wahType: text('wah_type'),
-    wahCommunication: jsonb('wah_communication').$type<string[]>().default([]).notNull(),
-    wahAccess: jsonb('wah_access').$type<string[]>().default([]).notNull(),
-    wahEquipment: jsonb('wah_equipment').$type<string[]>().default([]).notNull(),
-    wahRescue: text('wah_rescue'),
-    wahPermitNumber: text('wah_permit_number'),
-
-    // -------------------- Confined Space -------------------------------------
-    confinedSpace: boolean('confined_space').default(false).notNull(),
-    csType: hazidCSType('cs_type'),
-    csDescription: text('cs_description'),
-    csCommunication: jsonb('cs_communication').$type<string[]>().default([]).notNull(),
-    csCommunicationRescue: jsonb('cs_communication_rescue').$type<string[]>().default([]).notNull(),
-    csRescue: jsonb('cs_rescue').$type<string[]>().default([]).notNull(),
-    csWorkPerformed: text('cs_work_performed'),
-    csDiagramBase64: text('cs_diagram_base64'),
-    csRescueStyle: hazidCSRescueStyle('cs_rescue_style'),
-    csRescueProcedure: text('cs_rescue_procedure'),
-    csAtmosphericSensorId: uuid('cs_atmospheric_sensor_id').references(
-      () => atmosphericSensors.id,
-      { onDelete: 'set null' },
-    ),
-    csPermitNumber: text('cs_permit_number'),
-
-    // -------------------- Arc Flash ------------------------------------------
-    arcFlash: boolean('arc_flash').default(false).notNull(),
-    arcFlashLevel: text('arc_flash_level'),
-    arcFlashBoundary: text('arc_flash_boundary'),
-    arcFlashIncidentEnergy: text('arc_flash_incident_energy'),
-    arcFlashEquipment: jsonb('arc_flash_equipment').$type<string[]>().default([]).notNull(),
-    arcFlashProcedures: text('arc_flash_procedures'),
-    arcFlashQualifiedPerson: text('arc_flash_qualified_person'),
+    // NOTE: Working-at-Heights, Confined Space, and Arc Flash are no longer
+    // native sub-forms — each is now a Builder App
+    // (hazid-fall-protection-plan / hazid-confined-space-entry-plan /
+    // hazid-arc-flash-work-plan) attached to the assessment type like any
+    // other app, so they carry no columns on this table.
 
     // -------------------- Lock state -----------------------------------------
     inProgress: boolean('in_progress').default(true).notNull(),
@@ -375,61 +342,9 @@ export const hazidAssessmentAppResponses = pgTable(
   }),
 )
 
-// ----------------------------------------------------------------------------
-// Confined-space atmospheric readings
-// ----------------------------------------------------------------------------
-export const hazidAssessmentCSAtmospheric = pgTable(
-  'hazid_assessment_cs_atmospheric',
-  {
-    id: id(),
-    tenantId: uuid('tenant_id')
-      .notNull()
-      .references(() => tenants.id, { onDelete: 'cascade' }),
-    assessmentId: uuid('assessment_id')
-      .notNull()
-      .references(() => hazidAssessments.id, { onDelete: 'cascade' }),
-    atmosphericSensorId: uuid('atmospheric_sensor_id').references(() => atmosphericSensors.id, {
-      onDelete: 'set null',
-    }),
-    time: timestamp('time', { withTimezone: true }).notNull(),
-    sensor1Reading: numeric('sensor_1_reading'),
-    sensor2Reading: numeric('sensor_2_reading'),
-    sensor3Reading: numeric('sensor_3_reading'),
-    sensor4Reading: numeric('sensor_4_reading'),
-    distance: text('distance'),
-    notes: text('notes'),
-    ...timestamps,
-  },
-  (t) => ({
-    assessmentIdx: index('hazid_assessment_cs_atmospheric_assessment_idx').on(t.assessmentId),
-    tenantIdx: index('hazid_assessment_cs_atmospheric_tenant_idx').on(t.tenantId),
-  }),
-)
-
-// ----------------------------------------------------------------------------
-// Confined-space entry log
-// ----------------------------------------------------------------------------
-export const hazidAssessmentCSEntries = pgTable(
-  'hazid_assessment_cs_entries',
-  {
-    id: id(),
-    tenantId: uuid('tenant_id')
-      .notNull()
-      .references(() => tenants.id, { onDelete: 'cascade' }),
-    assessmentId: uuid('assessment_id')
-      .notNull()
-      .references(() => hazidAssessments.id, { onDelete: 'cascade' }),
-    personId: uuid('person_id').references(() => people.id, { onDelete: 'set null' }),
-    externalName: text('external_name'),
-    timeIn: timestamp('time_in', { withTimezone: true }),
-    timeOut: timestamp('time_out', { withTimezone: true }),
-    ...timestamps,
-  },
-  (t) => ({
-    assessmentIdx: index('hazid_assessment_cs_entries_assessment_idx').on(t.assessmentId),
-    tenantIdx: index('hazid_assessment_cs_entries_tenant_idx').on(t.tenantId),
-  }),
-)
+// NOTE: the native confined-space atmospheric-readings + entry-log tables were
+// removed — confined space is now the hazid-confined-space-entry-plan Builder
+// App, which stores its readings/entries in its own form response.
 
 // ----------------------------------------------------------------------------
 // Signed report bundles — list of completed assessments combined into one PDF.
@@ -519,10 +434,6 @@ export const hazidAssessmentsRelations = relations(hazidAssessments, ({ one, man
     fields: [hazidAssessments.assessmentTypeId],
     references: [hazidAssessmentTypes.id],
   }),
-  atmosphericSensor: one(atmosphericSensors, {
-    fields: [hazidAssessments.csAtmosphericSensorId],
-    references: [atmosphericSensors.id],
-  }),
   lockedBy: one(tenantUsers, {
     fields: [hazidAssessments.lockedByTenantUserId],
     references: [tenantUsers.id],
@@ -535,8 +446,6 @@ export const hazidAssessmentsRelations = relations(hazidAssessments, ({ one, man
   questions: many(hazidAssessmentQuestions),
   photos: many(hazidAssessmentPhotos),
   appResponses: many(hazidAssessmentAppResponses),
-  atmosphericReadings: many(hazidAssessmentCSAtmospheric),
-  entries: many(hazidAssessmentCSEntries),
 }))
 
 export const hazidAssessmentTasksRelations = relations(hazidAssessmentTasks, ({ one }) => ({
@@ -637,39 +546,6 @@ export const hazidAssessmentAppResponsesRelations = relations(
     }),
   }),
 )
-
-export const hazidAssessmentCSAtmosphericRelations = relations(
-  hazidAssessmentCSAtmospheric,
-  ({ one }) => ({
-    tenant: one(tenants, {
-      fields: [hazidAssessmentCSAtmospheric.tenantId],
-      references: [tenants.id],
-    }),
-    assessment: one(hazidAssessments, {
-      fields: [hazidAssessmentCSAtmospheric.assessmentId],
-      references: [hazidAssessments.id],
-    }),
-    sensor: one(atmosphericSensors, {
-      fields: [hazidAssessmentCSAtmospheric.atmosphericSensorId],
-      references: [atmosphericSensors.id],
-    }),
-  }),
-)
-
-export const hazidAssessmentCSEntriesRelations = relations(hazidAssessmentCSEntries, ({ one }) => ({
-  tenant: one(tenants, {
-    fields: [hazidAssessmentCSEntries.tenantId],
-    references: [tenants.id],
-  }),
-  assessment: one(hazidAssessments, {
-    fields: [hazidAssessmentCSEntries.assessmentId],
-    references: [hazidAssessments.id],
-  }),
-  person: one(people, {
-    fields: [hazidAssessmentCSEntries.personId],
-    references: [people.id],
-  }),
-}))
 
 export const hazidSignedReportsRelations = relations(hazidSignedReports, ({ one }) => ({
   tenant: one(tenants, { fields: [hazidSignedReports.tenantId], references: [tenants.id] }),

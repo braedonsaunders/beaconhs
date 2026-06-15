@@ -16,7 +16,6 @@ export type TypeCard = {
   hasHazards: boolean
   hasPPE: boolean
   hasQuestions: boolean
-  hasWAH: boolean
 }
 
 function SectionChip({ label, tone }: { label: string; tone?: 'amber' | 'red' | 'sky' }) {
@@ -89,7 +88,6 @@ export function TypePicker({
                 {t.hasQuestions ? <SectionChip label="Questions" /> : null}
                 {t.hasTasks ? <SectionChip label="Tasks" /> : null}
                 {t.hasHazards ? <SectionChip label="Hazards" /> : null}
-                {t.hasWAH ? <SectionChip label="Heights" tone="sky" /> : null}
               </div>
             </button>
           )

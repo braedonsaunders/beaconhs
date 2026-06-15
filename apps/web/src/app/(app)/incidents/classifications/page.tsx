@@ -1,39 +1,41 @@
-// /incidents/classifications — tenant admin defines the hierarchical
-// taxonomy used to bucket incidents.
+// /incidents/classifications — tenant admin defines the hierarchical taxonomy
+// used to bucket incidents. Depth-2 in practice; the `recordable` flag drives
+// every TRIR/DART rollup downstream.
 //
-// Tree is rendered as a nested list (depth-2 in practice).  Per-row inline
-// form lets an admin create child nodes without leaving the page.  The
-// `recordable` flag is what drives every TRIR/DART rollup downstream.
-//
-// All mutations recordAudit (entityType='incident_classification').
+// Standard table primitive for the list (parents with indented children);
+// create + edit happen in a right-side flyout (?drawer=new[&parent=<id>] |
+// ?drawer=<id>). Archive / delete stay as row actions. All mutations
+// recordAudit (entityType='incident_classification').
 
+import Link from 'next/link'
 import { revalidatePath } from 'next/cache'
 import { Plus, Trash2, Archive, ArchiveRestore } from 'lucide-react'
-import { asc, eq } from 'drizzle-orm'
+import { asc, eq, count, sql } from 'drizzle-orm'
 import {
   Badge,
   Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
   EmptyState,
-  Input,
-  Label,
   PageHeader,
-  Select,
-  Textarea,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from '@beaconhs/ui'
 import { incidentClassifications, incidents } from '@beaconhs/db/schema'
-import { count, sql } from 'drizzle-orm'
 import { requireRequestContext } from '@/lib/auth'
 import { requireModuleManage, assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
+import { mergeHref, pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
 import { IncidentsSubNav } from '../_sub-nav'
+import { ClassificationDrawer, type ClassificationEditing } from './_drawers'
 
 export const metadata = { title: 'Incident classifications' }
 export const dynamic = 'force-dynamic'
+
+const BASE = '/incidents/classifications'
 
 type ClassificationRow = {
   id: string
@@ -46,18 +48,61 @@ type ClassificationRow = {
   sortOrder: number | null
 }
 
-async function createClassification(formData: FormData): Promise<void> {
+async function saveClassification(input: {
+  id?: string
+  parentId: string | null
+  name: string
+  code: string | null
+  description: string | null
+  isRecordable: boolean
+}): Promise<{ ok: true } | { ok: false; error: string }> {
   'use server'
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'incidents')
-  const name = String(formData.get('name') ?? '').trim()
-  if (!name) return
-  const parentId = String(formData.get('parentId') ?? '').trim() || null
-  const description = String(formData.get('description') ?? '').trim() || null
-  const code = String(formData.get('code') ?? '').trim() || null
-  const isRecordable = formData.get('isRecordable') === 'on' ? 1 : 0
+  const name = input.name.trim()
+  if (!name) return { ok: false, error: 'Name is required.' }
+  const isRecordable = input.isRecordable ? 1 : 0
 
-  // Belt-and-braces sort-order: append at the end of the parent's children.
+  if (input.id) {
+    const before = await ctx.db(async (tx) => {
+      const [row] = await tx
+        .select()
+        .from(incidentClassifications)
+        .where(eq(incidentClassifications.id, input.id!))
+        .limit(1)
+      return row ?? null
+    })
+    if (!before) return { ok: false, error: 'Classification not found.' }
+    await ctx.db((tx) =>
+      tx
+        .update(incidentClassifications)
+        .set({ name, description: input.description, code: input.code, isRecordable })
+        .where(eq(incidentClassifications.id, input.id!)),
+    )
+    await recordAudit(ctx, {
+      entityType: 'incident_classification',
+      entityId: input.id,
+      action: 'update',
+      summary: `Updated "${name}"`,
+      before: {
+        name: before.name,
+        description: before.description,
+        code: before.code,
+        isRecordable: !!before.isRecordable,
+      },
+      after: {
+        name,
+        description: input.description,
+        code: input.code,
+        isRecordable: !!isRecordable,
+      },
+    })
+    revalidatePath(BASE)
+    return { ok: true }
+  }
+
+  const parentId = input.parentId || null
+  // Append at the end of the parent's children.
   const sortOrder = await ctx.db(async (tx) => {
     const [tail] = await tx
       .select({ s: sql<number>`coalesce(max(${incidentClassifications.sortOrder}), 0)` })
@@ -77,8 +122,8 @@ async function createClassification(formData: FormData): Promise<void> {
         tenantId: ctx.tenantId,
         parentId,
         name,
-        description,
-        code,
+        description: input.description,
+        code: input.code,
         isRecordable,
         sortOrder,
         createdByTenantUserId: ctx.membership?.id ?? null,
@@ -91,54 +136,11 @@ async function createClassification(formData: FormData): Promise<void> {
       entityId: row.id,
       action: 'create',
       summary: `Created classification "${name}"${parentId ? ' (child)' : ''}`,
-      after: { name, parentId, code, isRecordable: !!isRecordable },
+      after: { name, parentId, code: input.code, isRecordable: !!isRecordable },
     })
   }
-  revalidatePath('/incidents/classifications')
-}
-
-async function updateClassification(formData: FormData): Promise<void> {
-  'use server'
-  const ctx = await requireRequestContext()
-  assertCanManageModule(ctx, 'incidents')
-  const id = String(formData.get('id') ?? '')
-  if (!id) return
-  const name = String(formData.get('name') ?? '').trim()
-  const description = String(formData.get('description') ?? '').trim() || null
-  const code = String(formData.get('code') ?? '').trim() || null
-  const isRecordable = formData.get('isRecordable') === 'on' ? 1 : 0
-  if (!name) return
-
-  const before = await ctx.db(async (tx) => {
-    const [row] = await tx
-      .select()
-      .from(incidentClassifications)
-      .where(eq(incidentClassifications.id, id))
-      .limit(1)
-    return row ?? null
-  })
-  if (!before) return
-
-  await ctx.db((tx) =>
-    tx
-      .update(incidentClassifications)
-      .set({ name, description, code, isRecordable })
-      .where(eq(incidentClassifications.id, id)),
-  )
-  await recordAudit(ctx, {
-    entityType: 'incident_classification',
-    entityId: id,
-    action: 'update',
-    summary: `Updated "${name}"`,
-    before: {
-      name: before.name,
-      description: before.description,
-      code: before.code,
-      isRecordable: !!before.isRecordable,
-    },
-    after: { name, description, code, isRecordable: !!isRecordable },
-  })
-  revalidatePath('/incidents/classifications')
+  revalidatePath(BASE)
+  return { ok: true }
 }
 
 async function toggleArchive(formData: FormData): Promise<void> {
@@ -161,7 +163,7 @@ async function toggleArchive(formData: FormData): Promise<void> {
     summary: next ? 'Restored from archive' : 'Archived',
     after: { isActive: !!next },
   })
-  revalidatePath('/incidents/classifications')
+  revalidatePath(BASE)
 }
 
 async function deleteClassification(formData: FormData): Promise<void> {
@@ -170,13 +172,12 @@ async function deleteClassification(formData: FormData): Promise<void> {
   assertCanManageModule(ctx, 'incidents')
   const id = String(formData.get('id') ?? '')
   if (!id) return
-  // Refuse if any incidents reference this classification — admin must
-  // re-tag them first.  Cheaper than a soft delete + tombstone migration.
+  // Refuse a hard delete if any incidents reference this classification — fall
+  // back to archive. Cheaper than a soft delete + tombstone migration.
   const [{ usage } = { usage: 0 }] = await ctx.db((tx) =>
     tx.select({ usage: count() }).from(incidents).where(eq(incidents.classificationId, id)),
   )
   if (Number(usage ?? 0) > 0) {
-    // Fall back to archive — safest outcome.  The UI flags the path.
     await ctx.db((tx) =>
       tx
         .update(incidentClassifications)
@@ -200,7 +201,7 @@ async function deleteClassification(formData: FormData): Promise<void> {
       summary: 'Deleted classification',
     })
   }
-  revalidatePath('/incidents/classifications')
+  revalidatePath(BASE)
 }
 
 export default async function ClassificationsPage({
@@ -209,14 +210,7 @@ export default async function ClassificationsPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const sp = await searchParams
-  const editingId =
-    typeof sp.edit === 'string' ? sp.edit : Array.isArray(sp.edit) ? sp.edit[0] : undefined
-  const createChildOf =
-    typeof sp.childOf === 'string'
-      ? sp.childOf
-      : Array.isArray(sp.childOf)
-        ? sp.childOf[0]
-        : undefined
+  const drawerParam = pickString(sp.drawer)
   const ctx = await requireModuleManage('incidents')
 
   const { rows, usageById } = await ctx.db(async (tx) => {
@@ -238,10 +232,7 @@ export default async function ClassificationsPage({
         asc(incidentClassifications.name),
       )
     const usage = await tx
-      .select({
-        cId: incidents.classificationId,
-        c: count(),
-      })
+      .select({ cId: incidents.classificationId, c: count() })
       .from(incidents)
       .where(sql`${incidents.classificationId} is not null`)
       .groupBy(incidents.classificationId)
@@ -252,9 +243,25 @@ export default async function ClassificationsPage({
 
   const roots = rows.filter((r) => r.parentId === null)
   const childrenOf = (id: string) => rows.filter((r) => r.parentId === id)
-  const allOptions = [{ id: '', label: '— top level —' }].concat(
+
+  const parentOptions = [{ id: '', label: '— top level —' }].concat(
     roots.map((r) => ({ id: r.id, label: r.name })),
   )
+  const editingRow =
+    drawerParam && drawerParam !== 'new' ? rows.find((r) => r.id === drawerParam) : undefined
+  const editing: ClassificationEditing | null = editingRow
+    ? {
+        id: editingRow.id,
+        name: editingRow.name,
+        code: editingRow.code,
+        description: editingRow.description,
+        isRecordable: !!editingRow.isRecordable,
+      }
+    : null
+  const mode: 'new' | 'edit' | null = drawerParam === 'new' ? 'new' : editing ? 'edit' : null
+  const defaultParentId = mode === 'new' ? (pickString(sp.parent) ?? '') : ''
+  const closeHref = mergeHref(BASE, sp, { drawer: undefined, parent: undefined })
+  const newHref = mergeHref(BASE, sp, { drawer: 'new', parent: undefined })
 
   return (
     <ListPageLayout
@@ -262,270 +269,217 @@ export default async function ClassificationsPage({
         <>
           <PageHeader
             title="Incident classifications"
-            description="Incident taxonomy; recordable nodes feed TRIR and DART."
+            description="Incident taxonomy; recordable nodes feed TRIR and DART. Codes appear on the OSHA-300 log and CSV exports."
+            actions={
+              <Link href={newHref as any} scroll={false}>
+                <Button>
+                  <Plus size={14} /> New classification
+                </Button>
+              </Link>
+            }
           />
           <IncidentsSubNav active="classifications" />
         </>
       }
     >
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_400px]">
-        <div className="space-y-4">
-          {roots.length === 0 ? (
-            <EmptyState
-              icon={<Plus size={32} />}
-              title="No classifications"
-              description="Add a top-level classification. Child categories can be nested underneath."
-            />
-          ) : (
-            <ul className="space-y-3">
-              {roots.map((root) => (
-                <ClassificationNode
-                  key={root.id}
-                  node={root}
-                  childNodes={childrenOf(root.id)}
-                  usageById={usageById}
-                  editingId={editingId}
-                />
-              ))}
-            </ul>
-          )}
-        </div>
+      {roots.length === 0 ? (
+        <EmptyState
+          icon={<Plus size={32} />}
+          title="No classifications"
+          description="Add a top-level classification. Child categories can be nested underneath."
+          action={
+            <Link href={newHref as any} scroll={false}>
+              <Button>New classification</Button>
+            </Link>
+          }
+        />
+      ) : (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead>Code</TableHead>
+              <TableHead>Recordable</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-right">Used</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {roots.map((root) => (
+              <ClassificationRows
+                key={root.id}
+                node={root}
+                childNodes={childrenOf(root.id)}
+                usageById={usageById}
+                sp={sp}
+                toggleArchive={toggleArchive}
+                deleteClassification={deleteClassification}
+              />
+            ))}
+          </TableBody>
+        </Table>
+      )}
 
-        <div className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Add classification</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <form action={createClassification} className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="parentId">Parent</Label>
-                  <Select id="parentId" name="parentId" defaultValue={createChildOf ?? ''}>
-                    {allOptions.map((opt) => (
-                      <option key={opt.id} value={opt.id}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="name">Name *</Label>
-                  <Input id="name" name="name" required placeholder="e.g. Slip / trip / fall" />
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="code">Code</Label>
-                    <Input id="code" name="code" placeholder="STF" maxLength={6} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="block">&nbsp;</Label>
-                    <label className="flex items-center gap-2 text-sm">
-                      <input type="checkbox" name="isRecordable" defaultChecked />
-                      Recordable
-                    </label>
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="description">Description</Label>
-                  <Textarea id="description" name="description" rows={2} />
-                </div>
-                <div className="flex justify-end">
-                  <Button type="submit">
-                    <Plus size={14} /> Add
-                  </Button>
-                </div>
-              </form>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>How this is used</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm text-slate-600">
-              <p>
-                Every incident has a <strong>classification</strong>. Pick this when reporting or
-                investigating. The TRIR / DART / OSHA-log reports roll up only nodes flagged
-                <Badge variant="secondary" className="mr-1 ml-1">
-                  recordable
-                </Badge>
-                — so leave non-recordable categories (near-miss, environmental, security) unflagged.
-              </p>
-              <p>
-                Codes are surfaced on the OSHA-300 PDF and in CSV exports. Use 2-6 uppercase
-                letters.
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+      <ClassificationDrawer
+        mode={mode}
+        editing={editing}
+        parentOptions={parentOptions}
+        defaultParentId={defaultParentId}
+        closeHref={closeHref}
+        saveAction={saveClassification}
+      />
     </ListPageLayout>
   )
 }
 
-function ClassificationNode({
+function ClassificationRows({
   node,
   childNodes,
   usageById,
-  editingId,
+  sp,
+  toggleArchive,
+  deleteClassification,
 }: {
   node: ClassificationRow
   childNodes: ClassificationRow[]
   usageById: Record<string, number>
-  editingId: string | undefined
+  sp: Record<string, string | string[] | undefined>
+  toggleArchive: (formData: FormData) => Promise<void>
+  deleteClassification: (formData: FormData) => Promise<void>
 }) {
-  const isEditing = editingId === node.id
-  const usage = usageById[node.id] ?? 0
   return (
-    <li
-      className={`rounded-lg border ${node.isActive ? 'border-slate-200 bg-white' : 'border-slate-200 bg-slate-50'} `}
-    >
-      <div className="flex items-start justify-between gap-3 p-3">
-        <div className="min-w-0 flex-1">
-          {isEditing ? (
-            <form action={updateClassification} className="space-y-2">
-              <input type="hidden" name="id" value={node.id} />
-              <div className="grid grid-cols-[1fr_120px] gap-2">
-                <Input name="name" defaultValue={node.name} required />
-                <Input name="code" defaultValue={node.code ?? ''} placeholder="Code" />
-              </div>
-              <Textarea name="description" rows={2} defaultValue={node.description ?? ''} />
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" name="isRecordable" defaultChecked={!!node.isRecordable} />
-                Recordable
-              </label>
-              <div className="flex items-center gap-2">
-                <Button type="submit" size="sm">
-                  Save
-                </Button>
-                <a
-                  href="/incidents/classifications"
-                  className="text-sm text-slate-500 hover:underline"
-                >
-                  Cancel
-                </a>
-              </div>
-            </form>
-          ) : (
-            <>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-medium text-slate-900">{node.name}</span>
-                {node.code ? (
-                  <Badge variant="outline" className="font-mono text-xs">
-                    {node.code}
-                  </Badge>
-                ) : null}
-                {node.isRecordable ? <Badge variant="secondary">Recordable</Badge> : null}
-                {!node.isActive ? (
-                  <Badge variant="outline" className="border-amber-300 text-amber-800">
-                    Archived
-                  </Badge>
-                ) : null}
-                {usage > 0 ? (
-                  <span className="text-xs text-slate-500">
-                    {usage} incident{usage === 1 ? '' : 's'}
-                  </span>
-                ) : null}
-              </div>
-              {node.description ? (
-                <p className="mt-0.5 text-xs text-slate-500">{node.description}</p>
-              ) : null}
-            </>
-          )}
+    <>
+      <ClassificationRow
+        node={node}
+        depth={0}
+        usage={usageById[node.id] ?? 0}
+        sp={sp}
+        toggleArchive={toggleArchive}
+        deleteClassification={deleteClassification}
+      />
+      {childNodes.map((c) => (
+        <ClassificationRow
+          key={c.id}
+          node={c}
+          depth={1}
+          usage={usageById[c.id] ?? 0}
+          sp={sp}
+          toggleArchive={toggleArchive}
+          deleteClassification={deleteClassification}
+        />
+      ))}
+    </>
+  )
+}
+
+function ClassificationRow({
+  node,
+  depth,
+  usage,
+  sp,
+  toggleArchive,
+  deleteClassification,
+}: {
+  node: ClassificationRow
+  depth: number
+  usage: number
+  sp: Record<string, string | string[] | undefined>
+  toggleArchive: (formData: FormData) => Promise<void>
+  deleteClassification: (formData: FormData) => Promise<void>
+}) {
+  const editHref = mergeHref(BASE, sp, { drawer: node.id, parent: undefined })
+  const childHref = mergeHref(BASE, sp, { drawer: 'new', parent: node.id })
+  return (
+    <TableRow className={node.isActive ? undefined : 'opacity-70'}>
+      <TableCell>
+        <div className={depth > 0 ? 'flex items-center gap-2 pl-6' : 'flex items-center gap-2'}>
+          {depth > 0 ? <span className="text-slate-300 dark:text-slate-600">└</span> : null}
+          <Link
+            href={editHref as any}
+            scroll={false}
+            className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+          >
+            {node.name}
+          </Link>
         </div>
-        {isEditing ? null : (
-          <div className="flex items-center gap-1">
-            <a
-              href={`/incidents/classifications?edit=${node.id}`}
-              className="text-xs text-teal-700 hover:underline"
-            >
-              Edit
-            </a>
-            <a
-              href={`/incidents/classifications?childOf=${node.id}#add`}
-              className="text-xs text-teal-700 hover:underline"
+        {node.description ? (
+          <div
+            className={`mt-0.5 line-clamp-1 text-xs text-slate-500 dark:text-slate-400 ${depth > 0 ? 'pl-12' : ''}`}
+          >
+            {node.description}
+          </div>
+        ) : null}
+      </TableCell>
+      <TableCell>
+        {node.code ? (
+          <Badge variant="outline" className="font-mono text-xs">
+            {node.code}
+          </Badge>
+        ) : (
+          <span className="text-xs text-slate-400">—</span>
+        )}
+      </TableCell>
+      <TableCell>
+        {node.isRecordable ? (
+          <Badge variant="secondary">Recordable</Badge>
+        ) : (
+          <span className="text-xs text-slate-400">—</span>
+        )}
+      </TableCell>
+      <TableCell>
+        {node.isActive ? (
+          <Badge variant="success">Active</Badge>
+        ) : (
+          <Badge variant="outline" className="border-amber-300 text-amber-800">
+            Archived
+          </Badge>
+        )}
+      </TableCell>
+      <TableCell className="text-right text-slate-600 tabular-nums dark:text-slate-400">
+        {usage}
+      </TableCell>
+      <TableCell className="text-right">
+        <div className="inline-flex items-center gap-1">
+          <Link
+            href={editHref as any}
+            scroll={false}
+            className="rounded px-2 py-1 text-xs text-teal-700 hover:bg-teal-50 hover:underline dark:text-teal-400 dark:hover:bg-teal-500/10"
+          >
+            Edit
+          </Link>
+          {depth === 0 ? (
+            <Link
+              href={childHref as any}
+              scroll={false}
+              className="rounded px-2 py-1 text-xs text-teal-700 hover:bg-teal-50 hover:underline dark:text-teal-400 dark:hover:bg-teal-500/10"
             >
               + Child
-            </a>
-            <form action={toggleArchive} className="inline">
-              <input type="hidden" name="id" value={node.id} />
-              <input type="hidden" name="isActive" value={node.isActive ? 'false' : 'true'} />
-              <button
-                type="submit"
-                className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                title={node.isActive ? 'Archive' : 'Restore'}
-              >
-                {node.isActive ? <Archive size={14} /> : <ArchiveRestore size={14} />}
-              </button>
-            </form>
-            <form action={deleteClassification} className="inline">
-              <input type="hidden" name="id" value={node.id} />
-              <button
-                type="submit"
-                className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700"
-                title={usage > 0 ? `${usage} incidents — will archive instead` : 'Delete'}
-              >
-                <Trash2 size={14} />
-              </button>
-            </form>
-          </div>
-        )}
-      </div>
-      {childNodes.length > 0 ? (
-        <ul className="space-y-1.5 border-t border-slate-100 bg-slate-50/30 p-2 pl-8">
-          {childNodes.map((c) => (
-            <li
-              key={c.id}
-              className="flex items-center justify-between rounded border border-slate-100 bg-white px-3 py-1.5 text-sm"
+            </Link>
+          ) : null}
+          <form action={toggleArchive} className="inline">
+            <input type="hidden" name="id" value={node.id} />
+            <input type="hidden" name="isActive" value={node.isActive ? 'false' : 'true'} />
+            <button
+              type="submit"
+              className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+              title={node.isActive ? 'Archive' : 'Restore'}
             >
-              <div className="flex flex-wrap items-center gap-2">
-                <span>{c.name}</span>
-                {c.code ? (
-                  <Badge variant="outline" className="font-mono text-xs">
-                    {c.code}
-                  </Badge>
-                ) : null}
-                {c.isRecordable ? <Badge variant="secondary">Recordable</Badge> : null}
-                {!c.isActive ? (
-                  <Badge variant="outline" className="border-amber-300 text-amber-800">
-                    Archived
-                  </Badge>
-                ) : null}
-                {(usageById[c.id] ?? 0) > 0 ? (
-                  <span className="text-xs text-slate-500">{usageById[c.id]} incidents</span>
-                ) : null}
-              </div>
-              <div className="flex items-center gap-1">
-                <a
-                  href={`/incidents/classifications?edit=${c.id}`}
-                  className="text-xs text-teal-700 hover:underline"
-                >
-                  Edit
-                </a>
-                <form action={toggleArchive} className="inline">
-                  <input type="hidden" name="id" value={c.id} />
-                  <input type="hidden" name="isActive" value={c.isActive ? 'false' : 'true'} />
-                  <button
-                    type="submit"
-                    className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                  >
-                    {c.isActive ? <Archive size={12} /> : <ArchiveRestore size={12} />}
-                  </button>
-                </form>
-                <form action={deleteClassification} className="inline">
-                  <input type="hidden" name="id" value={c.id} />
-                  <button
-                    type="submit"
-                    className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700"
-                  >
-                    <Trash2 size={12} />
-                  </button>
-                </form>
-              </div>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </li>
+              {node.isActive ? <Archive size={14} /> : <ArchiveRestore size={14} />}
+            </button>
+          </form>
+          <form action={deleteClassification} className="inline">
+            <input type="hidden" name="id" value={node.id} />
+            <button
+              type="submit"
+              className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-500/10 dark:hover:text-red-400"
+              title={usage > 0 ? `${usage} incidents — will archive instead` : 'Delete'}
+            >
+              <Trash2 size={14} />
+            </button>
+          </form>
+        </div>
+      </TableCell>
+    </TableRow>
   )
 }

@@ -59,6 +59,7 @@ import {
   tenants,
   tenantUsers,
   safeDistanceRecords,
+  safeDistanceSegments,
   trades,
   trainingCourses,
   trainingRecords,
@@ -213,6 +214,15 @@ async function main() {
             'Monthly incident counts by severity for the last 12 calendar months. Useful for board packs.',
           category: 'incidents',
           queryKind: 'incidents_trend_12m',
+        },
+        {
+          slug: 'osha_300_log',
+          kind: 'built_in',
+          name: 'OSHA 300 Recordable Log',
+          description:
+            'OSHA 300/300A-style log of recordable incidents in the configured window (default last 12 months): case number, employee, classification, days away / restricted, and outcome. Export to PDF for filing.',
+          category: 'incidents',
+          queryKind: 'osha_300_log',
         },
       ])
       .onConflictDoNothing({ target: reportDefinitions.slug })
@@ -2647,12 +2657,13 @@ export async function seedPpeTypesWithCriteria(
 }
 
 /**
- * Idempotently insert 3 sample safe-distance records — one electrical, one
- * drone, one vehicle — for the given tenant. Skips if any reference matching
- * 'SD-SEED-%' already exists, so re-seeds are safe.
+ * Idempotently insert 3 sample pressure-test safe-distance records — covering
+ * each governing method (NASA, ASME, Lloyd's) — for the given tenant. Skips if
+ * any reference matching 'SD-SEED-%' already exists, so re-seeds are safe.
  *
- * Reference convention mirrors `seedToolboxJournals`: SEED prefix keeps these
- * obviously distinguishable from real user-created records (SD-YYYY-NNNN).
+ * Result columns are precomputed from the pipe segments + test pressure using
+ * the same formulas as the app's `_lib.ts` (see tools/safe-distance). The SEED
+ * prefix keeps these obviously distinct from real records (SD-YYYY-NNNN).
  */
 export async function seedSafeDistanceRecords(tx: any, tenantId: string): Promise<void> {
   const existing = await tx
@@ -2692,66 +2703,121 @@ export async function seedSafeDistanceRecords(tx: any, tenantId: string): Promis
   const samples = [
     {
       offset: 1,
-      type: 'electrical' as const,
       reference: 'SD-SEED-1',
-      sourceVoltageKv: '13.8',
-      heightM: null as string | null,
-      sourceDescription: 'Energised 13.8 kV overhead line crossing the south lay-down yard',
-      requiredDistanceM: '3.05',
-      actualDistanceM: '5.20',
-      complies: true,
-      notes:
-        'Spotter posted while material handler worked under the line. Distance verified with laser rangefinder before each pick.',
+      name: 'North header — 6" line',
+      method: 'nasa' as const,
+      unit: 'imperial' as const,
+      testPressure: '150',
+      description: 'Hydro/pneumatic proof of the 6" north header run prior to tie-in.',
+      totalVolume: '3.9270',
+      resultNasa: '23.6653',
+      resultAsme: '98.4252',
+      resultLloyds: '10.1488',
+      segments: [
+        {
+          name: 'Header run',
+          unit: 'inch' as const,
+          length: '240',
+          diameter: '6',
+          volM3: '0.111199997',
+        },
+      ],
+      notes: 'Exclusion zone set to the NASA-Glenn figure. Bleed-down valve manned throughout.',
     },
     {
       offset: 4,
-      type: 'drone' as const,
       reference: 'SD-SEED-2',
-      sourceVoltageKv: null as string | null,
-      heightM: '45.00',
-      sourceDescription: "DJI Mavic 3 — bird's eye survey over the muster point",
-      requiredDistanceM: '30.00',
-      actualDistanceM: '45.00',
-      complies: true,
+      name: 'Compressor skid manifold',
+      method: 'asme' as const,
+      unit: 'metric' as const,
+      testPressure: '50',
+      description: 'High-pressure pneumatic test of the compressor skid manifold.',
+      totalVolume: '0.8482',
+      resultNasa: '32.1848',
+      resultAsme: '30.0000',
+      resultLloyds: '10.9628',
+      segments: [
+        {
+          name: 'Manifold',
+          unit: 'm' as const,
+          length: '12',
+          diameter: '0.3',
+          volM3: '0.848230016',
+        },
+      ],
       notes:
-        'All ground personnel cleared back to the muster trailer 50 m from flight path. Pre-flight checklist signed.',
+        'ASME PCC-2 governs. Hard barricade to 30 m, no personnel inside during pressurisation.',
     },
     {
       offset: 9,
-      type: 'vehicle' as const,
       reference: 'SD-SEED-3',
-      sourceVoltageKv: null as string | null,
-      heightM: null as string | null,
-      sourceDescription:
-        'Pickup parked near excavation edge — slope failure risk during heavy rain',
-      requiredDistanceM: '2.00',
-      actualDistanceM: '1.20',
-      complies: false,
-      notes:
-        'Vehicle relocated 6 m back from the edge after assessment. CA created to barricade the edge.',
+      name: 'Test loop — 8" + 4"',
+      method: 'lloyds' as const,
+      unit: 'imperial' as const,
+      testPressure: '300',
+      description: 'Combined loop: 8" main plus a 4" branch.',
+      totalVolume: '11.3447',
+      resultNasa: '51.6803',
+      resultAsme: '98.4252',
+      resultLloyds: '18.7792',
+      segments: [
+        {
+          name: '8" main',
+          unit: 'inch' as const,
+          length: '360',
+          diameter: '8',
+          volM3: '0.296533324',
+        },
+        {
+          name: '4" branch',
+          unit: 'inch' as const,
+          length: '120',
+          diameter: '4',
+          volM3: '0.024711110',
+        },
+      ],
+      notes: "Lloyd's Register figure adopted as the governing stand-off for this loop.",
     },
   ]
 
   let inserted = 0
   for (const s of samples) {
-    await tx.insert(safeDistanceRecords).values({
-      tenantId,
-      reference: s.reference,
-      type: s.type,
-      siteOrgUnitId: siteId,
-      sourceVoltageKv: s.sourceVoltageKv as any,
-      heightM: s.heightM as any,
-      sourceDescription: s.sourceDescription,
-      requiredDistanceM: s.requiredDistanceM as any,
-      actualDistanceM: s.actualDistanceM as any,
-      complies: s.complies,
-      supervisorTenantUserId: supervisorId,
-      operatorPersonId: operatorId,
-      occurredAt: new Date(now.getTime() - s.offset * dayMs),
-      notes: s.notes,
-      attachmentIds: [],
-      locked: s.complies, // compliant + signed-off records get locked
-    })
+    const [rec] = await tx
+      .insert(safeDistanceRecords)
+      .values({
+        tenantId,
+        reference: s.reference,
+        name: s.name,
+        method: s.method,
+        unit: s.unit,
+        testPressure: s.testPressure,
+        description: s.description,
+        siteOrgUnitId: siteId,
+        supervisorTenantUserId: supervisorId,
+        operatorPersonId: operatorId,
+        totalVolume: s.totalVolume,
+        resultNasa: s.resultNasa,
+        resultAsme: s.resultAsme,
+        resultLloyds: s.resultLloyds,
+        occurredAt: new Date(now.getTime() - s.offset * dayMs),
+        notes: s.notes,
+        attachmentIds: [],
+      })
+      .returning({ id: safeDistanceRecords.id })
+    if (rec?.id) {
+      await tx.insert(safeDistanceSegments).values(
+        s.segments.map((seg, i) => ({
+          tenantId,
+          recordId: rec.id,
+          name: seg.name,
+          unit: seg.unit,
+          lengthValue: seg.length,
+          internalDiameter: seg.diameter,
+          volumeM3: seg.volM3,
+          sortOrder: i,
+        })),
+      )
+    }
     inserted++
   }
 
@@ -3440,7 +3506,6 @@ export async function seedHazidLibraries(tx: any, tenantId: string): Promise<voi
         hasHazards: true,
         hasPPE: true,
         hasQuestions: true,
-        hasWAH: true,
         defaultHazardSetId: hazardSetByName.get('Outdoor work — summer') ?? null,
       },
       {
@@ -3451,7 +3516,6 @@ export async function seedHazidLibraries(tx: any, tenantId: string): Promise<voi
         hasHazards: true,
         hasPPE: true,
         hasQuestions: false,
-        hasWAH: false,
       },
       {
         tenantId,
@@ -3462,7 +3526,6 @@ export async function seedHazidLibraries(tx: any, tenantId: string): Promise<voi
         hasHazards: true,
         hasPPE: true,
         hasQuestions: true,
-        hasWAH: false,
         defaultHazardSetId: hazardSetByName.get('Confined space entry') ?? null,
       },
       {
@@ -3474,7 +3537,6 @@ export async function seedHazidLibraries(tx: any, tenantId: string): Promise<voi
         hasHazards: true,
         hasPPE: true,
         hasQuestions: true,
-        hasWAH: false,
         defaultHazardSetId: hazardSetByName.get('Welding / hot work') ?? null,
       },
     ])

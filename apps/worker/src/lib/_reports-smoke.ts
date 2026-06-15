@@ -19,7 +19,12 @@ async function main() {
   }
   console.log(`Tenant: ${tenant.name} (${tenant.id})\n`)
 
-  for (const queryKind of ['incidents_summary', 'safety_kpi_summary', 'incidents_trend_12m']) {
+  for (const queryKind of [
+    'incidents_summary',
+    'safety_kpi_summary',
+    'incidents_trend_12m',
+    'osha_300_log',
+  ]) {
     const range = computeRangeFor(queryKind, { days: 30 })
     const result = await withTenant(db, tenant.id, (tx) =>
       runReport(tx, { queryKind, filters: { days: 30 }, range }),

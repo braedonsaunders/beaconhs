@@ -13,6 +13,7 @@ import {
   queryIncidentsTrend12m,
   queryInspectionsCompleted,
   queryLoneWorkerSummary,
+  queryOsha300Log,
   queryOverdueRollup,
   querySafetyKpiSummary,
   querySiteScorecard,
@@ -58,6 +59,8 @@ export async function runReport(tx: Database, input: RunReportInput): Promise<Re
       return queryDocumentComplianceSnapshot(tx, filters)
     case 'incidents_trend_12m':
       return queryIncidentsTrend12m(tx, filters)
+    case 'osha_300_log':
+      return queryOsha300Log(tx, filters, range)
     case 'custom_query':
       return runCustomQuery(tx, customQuery ?? null, { maxRows: input.maxRows })
     default:
@@ -113,6 +116,10 @@ function defaultLookbackDays(queryKind: string): number {
       return 30
     case 'site_scorecard':
       return 30
+    case 'osha_300_log':
+      // OSHA 300/300A logs are filed per calendar year — default to a rolling
+      // 12-month window; the viewer's range picker can narrow it.
+      return 365
     case 'lone_worker_summary':
       return 7
     default:

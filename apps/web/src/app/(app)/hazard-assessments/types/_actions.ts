@@ -48,7 +48,6 @@ export async function updateAssessmentType(input: {
   hasHazards: boolean
   hasPPE: boolean
   hasQuestions: boolean
-  hasWAH: boolean
   availableToGroupIds: string[]
 }) {
   const ctx = await manageCtx()
@@ -66,7 +65,6 @@ export async function updateAssessmentType(input: {
         hasHazards: input.hasHazards,
         hasPPE: input.hasPPE,
         hasQuestions: input.hasQuestions,
-        hasWAH: input.hasWAH,
         availableToGroupIds: input.availableToGroupIds,
       })
       .where(eq(hazidAssessmentTypes.id, input.id)),

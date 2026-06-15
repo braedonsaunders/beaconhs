@@ -16,6 +16,9 @@ import {
   equipmentItems,
   formResponses,
   formTemplates,
+  incidentClassifications,
+  incidentInjuries,
+  incidentLostTimeEvents,
   incidents,
   inspectionRecords,
   lwSessions,
@@ -1161,5 +1164,168 @@ export async function queryIncidentsTrend12m(
     ],
     charts,
     rowCount: total,
+  }
+}
+
+// --- osha_300_log -----------------------------------------------------------
+// OSHA 300/300A-style log: one row per recordable incident in range, with the
+// case number, employee, classification, days away / restricted, and outcome.
+// "Recordable" = linked classification has isRecordable=1, or (unclassified and
+// severity <> no_injury) — the same heuristic the legacy frequency report used.
+
+type Osha300Outcome = 'death' | 'days_away' | 'restricted' | 'medical' | 'first_aid' | 'other'
+
+const OSHA_OUTCOME_LABEL: Record<Osha300Outcome, string> = {
+  death: 'Fatality',
+  days_away: 'Days away',
+  restricted: 'Restricted',
+  medical: 'Medical aid',
+  first_aid: 'First aid',
+  other: 'Other',
+}
+
+export async function queryOsha300Log(
+  tx: Database,
+  _filters: Filters,
+  range: ReportRange,
+): Promise<ReportRunResult> {
+  const incRows = await tx
+    .select({ inc: incidents, cls: incidentClassifications })
+    .from(incidents)
+    .leftJoin(incidentClassifications, eq(incidentClassifications.id, incidents.classificationId))
+    .where(
+      and(
+        gte(incidents.occurredAt, range.from),
+        lte(incidents.occurredAt, range.to),
+        sql`(
+          (${incidentClassifications.isRecordable} = 1)
+          or (${incidents.classificationId} is null and ${incidents.severity} <> 'no_injury')
+        )`,
+      ),
+    )
+    .orderBy(asc(incidents.occurredAt))
+
+  const incidentIds = incRows.map((r) => r.inc.id)
+
+  const injuryByIncident = new Map<string, { personName: string | null; jobTitle: string | null }>()
+  const lostByIncident = new Map<string, { daysAway: number; daysRestricted: number }>()
+
+  if (incidentIds.length > 0) {
+    const injRows = await tx
+      .select({ inj: incidentInjuries, person: people })
+      .from(incidentInjuries)
+      .leftJoin(people, eq(people.id, incidentInjuries.personId))
+      .where(inArray(incidentInjuries.incidentId, incidentIds))
+      .orderBy(asc(incidentInjuries.createdAt))
+    for (const r of injRows) {
+      if (!injuryByIncident.has(r.inj.incidentId)) {
+        const name = r.person ? `${r.person.lastName}, ${r.person.firstName}` : r.inj.personName
+        injuryByIncident.set(r.inj.incidentId, {
+          personName: name,
+          jobTitle: r.person?.jobTitle ?? null,
+        })
+      }
+    }
+
+    const ltRows = await tx
+      .select({
+        incidentId: incidentLostTimeEvents.incidentId,
+        status: incidentLostTimeEvents.status,
+        days: sql<number>`coalesce(${incidentLostTimeEvents.validTo}, current_date) - ${incidentLostTimeEvents.validFrom}`.mapWith(
+          Number,
+        ),
+      })
+      .from(incidentLostTimeEvents)
+      .where(inArray(incidentLostTimeEvents.incidentId, incidentIds))
+    for (const r of ltRows) {
+      const acc = lostByIncident.get(r.incidentId) ?? { daysAway: 0, daysRestricted: 0 }
+      if (r.status === 'off_work') acc.daysAway += Number(r.days)
+      else if (r.status === 'restricted_duty') acc.daysRestricted += Number(r.days)
+      lostByIncident.set(r.incidentId, acc)
+    }
+  }
+
+  let daysAwayTotal = 0
+  let daysRestrictedTotal = 0
+  let fatalities = 0
+  const byOutcome = new Map<Osha300Outcome, number>()
+
+  const logRows = incRows.map((row) => {
+    const inj = injuryByIncident.get(row.inc.id)
+    const lt = lostByIncident.get(row.inc.id) ?? { daysAway: 0, daysRestricted: 0 }
+    const outcome: Osha300Outcome =
+      row.inc.severity === 'fatality'
+        ? 'death'
+        : lt.daysAway > 0
+          ? 'days_away'
+          : lt.daysRestricted > 0
+            ? 'restricted'
+            : row.inc.severity === 'medical_aid'
+              ? 'medical'
+              : row.inc.severity === 'first_aid_only'
+                ? 'first_aid'
+                : 'other'
+    daysAwayTotal += lt.daysAway
+    daysRestrictedTotal += lt.daysRestricted
+    if (outcome === 'death') fatalities += 1
+    byOutcome.set(outcome, (byOutcome.get(outcome) ?? 0) + 1)
+    const classification = row.cls
+      ? `${row.cls.code ? `${row.cls.code} ` : ''}${row.cls.name}`
+      : 'Unclassified'
+    return [
+      row.inc.reference,
+      row.inc.occurredAt.toISOString().slice(0, 10),
+      inj?.personName ?? null,
+      inj?.jobTitle ?? null,
+      classification,
+      row.inc.title,
+      lt.daysAway,
+      lt.daysRestricted,
+      OSHA_OUTCOME_LABEL[outcome],
+    ]
+  })
+
+  const groups: ReportGroup[] = [
+    {
+      title: 'Recordable incidents',
+      subtitle: range.label,
+      columns: [
+        'Case #',
+        'Date',
+        'Employee',
+        'Job title',
+        'Classification',
+        'Description',
+        'Days away',
+        'Days rest.',
+        'Outcome',
+      ],
+      rows: logRows,
+      isEmpty: logRows.length === 0,
+    },
+  ]
+
+  const charts: ReportChartSpec[] = []
+  if (logRows.length > 0) {
+    const entries = [...byOutcome.entries()].sort((a, b) => b[1] - a[1])
+    charts.push({
+      id: 'by-outcome',
+      title: 'Recordable cases by outcome',
+      type: 'bar',
+      xLabels: entries.map(([o]) => OSHA_OUTCOME_LABEL[o]),
+      series: [{ name: 'Cases', data: entries.map(([, c]) => c) }],
+    })
+  }
+
+  return {
+    groups,
+    summary: [
+      { label: 'Cases', value: logRows.length },
+      { label: 'Days away', value: daysAwayTotal },
+      { label: 'Days restricted', value: daysRestrictedTotal },
+      { label: 'Fatalities', value: fatalities },
+    ],
+    charts,
+    rowCount: logRows.length,
   }
 }

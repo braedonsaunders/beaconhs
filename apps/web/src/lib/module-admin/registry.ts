@@ -78,7 +78,10 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
     permission: 'incidents.read.all',
     tabs: [
       { key: 'records', label: 'Records', href: '/incidents' },
-      { key: 'reports', label: 'Reports', href: '/incidents/reports/frequency' },
+      // No Reports tab — incident reporting lives in the global engines: TRIR /
+      // DART / severity trends are Insights widgets, and the "OSHA 300
+      // Recordable Log" + "Incidents Trend" are built-ins in the global /reports
+      // engine.
     ],
     sections: [
       {
