@@ -12,46 +12,25 @@ function firstRow<T = Record<string, unknown>>(result: unknown): T | undefined {
   return rows[0]
 }
 
-function baselineMigration() {
-  const journal = JSON.parse(readFileSync('drizzle/meta/_journal.json', 'utf8')) as {
-    entries?: { tag: string; when: number }[]
-  }
-  const entry = journal.entries?.[0]
-  if (!entry) throw new Error('No baseline migration found in drizzle journal')
-  const hash = createHash('sha256')
-    .update(readFileSync(`drizzle/${entry.tag}.sql`, 'utf8'))
-    .digest('hex')
-  return { ...entry, hash }
-}
-
-async function reconcileFlattenedBaseline(db: ReturnType<typeof drizzle>) {
+// Keep drizzle's migration tracker in sync with the journal WITHOUT running any
+// SQL, so the file-based migrator never fights the schema.
+//
+// Why: this app's schema is applied out-of-band by `db:push` (local dev
+// iteration + the CI schema check) — drizzle-kit push records NOTHING in
+// `drizzle.__drizzle_migrations`. So on a long-lived DB the file-based migrator
+// drifts BEHIND the real schema, and `migrate()` tries to re-create
+// already-present objects → "relation already exists" → red deploy. Recording
+// every journal migration as applied makes `migrate()` a guaranteed no-op; the
+// RLS + view steps in main() still run every deploy.
+//
+// A FRESH DB (no app schema yet) is left untouched so `migrate()` builds the
+// whole schema from the migration files the normal way.
+async function reconcileMigrationTracker(db: ReturnType<typeof drizzle>) {
   const appTable = firstRow<{ exists: string | null }>(
     await db.execute(sql`select to_regclass('public.tenants')::text as exists`),
   )?.exists
   if (!appTable) return
 
-  const baseline = baselineMigration()
-  const migrationTable = firstRow<{ exists: string | null }>(
-    await db.execute(sql`select to_regclass('drizzle.__drizzle_migrations')::text as exists`),
-  )?.exists
-
-  if (migrationTable) {
-    // If the flattened baseline is already recorded, the tracker is valid —
-    // whether the DB sits exactly at the baseline OR has later migrations
-    // (0001, 0002, …) applied on top. Trust it and let migrate() apply only
-    // what's unapplied. Resetting here would re-run every post-baseline
-    // migration from scratch and fail on the first non-idempotent CREATE.
-    // Only the genuinely stale/empty-tracker case (baseline hash absent) falls
-    // through to the reset below.
-    const baselineRecorded = firstRow<{ ok: number }>(
-      await db.execute(sql`
-        select 1 as ok from "drizzle"."__drizzle_migrations" where hash = ${baseline.hash} limit 1
-      `),
-    )
-    if (baselineRecorded) return
-  }
-
-  console.log('▶ Existing schema detected; reconciling flattened drizzle baseline…')
   await db.execute(sql`create schema if not exists "drizzle"`)
   await db.execute(sql`
     create table if not exists "drizzle"."__drizzle_migrations" (
@@ -60,12 +39,23 @@ async function reconcileFlattenedBaseline(db: ReturnType<typeof drizzle>) {
       created_at bigint
     )
   `)
-  await db.execute(sql`delete from "drizzle"."__drizzle_migrations"`)
-  await db.execute(sql`
-    insert into "drizzle"."__drizzle_migrations" ("hash", "created_at")
-    values (${baseline.hash}, ${baseline.when})
-  `)
-  console.log(`✔ Baseline reconciled: ${baseline.tag}`)
+  const journal = JSON.parse(readFileSync('drizzle/meta/_journal.json', 'utf8')) as {
+    entries?: { tag: string; when: number }[]
+  }
+  for (const entry of journal.entries ?? []) {
+    const hash = createHash('sha256')
+      .update(readFileSync(`drizzle/${entry.tag}.sql`, 'utf8'))
+      .digest('hex')
+    // Idempotent: only inserts the row if this migration isn't recorded yet.
+    await db.execute(sql`
+      insert into "drizzle"."__drizzle_migrations" ("hash", "created_at")
+      select ${hash}, ${entry.when}
+      where not exists (
+        select 1 from "drizzle"."__drizzle_migrations" where hash = ${hash}
+      )
+    `)
+  }
+  console.log('✔ Migration tracker reconciled to journal (schema is push-managed)')
 }
 
 async function main() {
@@ -75,7 +65,7 @@ async function main() {
   const migrationClient = postgres(url, { max: 1 })
   const db = drizzle(migrationClient)
 
-  await reconcileFlattenedBaseline(db)
+  await reconcileMigrationTracker(db)
 
   console.log('▶ Running drizzle migrations…')
   await migrate(db, { migrationsFolder: './drizzle' })
