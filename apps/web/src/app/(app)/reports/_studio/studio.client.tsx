@@ -1,27 +1,48 @@
 'use client'
 
-// The report studio — replaces the old single-form builder. Left: numbered
-// config sections (data source → columns → filters → shape → chart). Right:
-// a sticky live preview that re-runs the report (server action, RLS-scoped,
-// row-capped) as the definition changes.
+// The report studio — a 1/3 ▸ 2/3 split (BuilderShell) shared with the
+// inspection-type / app / document builders. LEFT rail = authoring (name → data
+// source → Rows|Summarize → columns/group-by+measures → filters → chart). RIGHT
+// surface = a debounced live preview (server action, RLS-scoped, row-capped)
+// rendered as a paginated table + chart.
 //
-// Filters use react-querybuilder for the nested and/or tree UI, restyled via
-// controlClassnames to match the design system; its rule JSON is converted
-// to/from the engine's ReportRuleGroup shape at the boundary.
+// Data sources are the full DISCOVERED catalog (every tenant-scoped table),
+// passed in from the server page. Filters use react-querybuilder for the nested
+// and/or tree, restyled to fit the rail; its JSON converts to/from the engine's
+// ReportRuleGroup at the boundary.
 
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { QueryBuilder, type Field, type RuleGroupType, type RuleType } from 'react-querybuilder'
 import { Button, Input, Label, Select, Textarea, cn } from '@beaconhs/ui'
-import { Loader2, Play } from 'lucide-react'
+import { Eye, FileText, Loader2, Plus, Trash2 } from 'lucide-react'
 import type {
+  ReportAggFn,
   ReportChartType,
   ReportCustomQuery,
+  ReportMeasure,
   ReportRule,
   ReportRuleGroup,
+  ReportTemporalBin,
 } from '@beaconhs/db/schema'
-import type { ReportEntity, ReportOperatorMeta } from '@beaconhs/reports'
+import {
+  REPORT_ENTITY_MAP,
+  type ReportEntity,
+  type ReportEntityColumn,
+  type ReportOperatorMeta,
+} from '@beaconhs/reports/entities'
+import {
+  BuilderRailHeader,
+  BuilderScroll,
+  BuilderShell,
+  BuilderSurfaceHeader,
+} from '@/components/builder/builder-shell'
 import { ReportChart } from '../_components/report-chart'
+import { PaginatedReportTable } from '../_components/paginated-report-table.client'
 import { previewCustomReport, type StudioPreviewResult } from './actions'
+
+type QueryMode = 'rows' | 'summarize'
+type BreakoutRow = { column: string; bin?: ReportTemporalBin }
+type MeasureRow = { fn: ReportAggFn; column?: string }
 
 const CHART_CHOICES: { key: ReportChartType | 'none'; label: string }[] = [
   { key: 'none', label: 'No chart' },
@@ -32,10 +53,31 @@ const CHART_CHOICES: { key: ReportChartType | 'none'; label: string }[] = [
   { key: 'donut', label: 'Donut' },
 ]
 
+const AGG_FNS: { value: ReportAggFn; label: string; needsColumn: boolean }[] = [
+  { value: 'count', label: 'Count of rows', needsColumn: false },
+  { value: 'sum', label: 'Sum of', needsColumn: true },
+  { value: 'avg', label: 'Average of', needsColumn: true },
+  { value: 'min', label: 'Min of', needsColumn: true },
+  { value: 'max', label: 'Max of', needsColumn: true },
+  { value: 'count_distinct', label: 'Distinct count of', needsColumn: true },
+]
+
+const TEMPORAL_BINS: ReportTemporalBin[] = ['day', 'week', 'month', 'quarter', 'year']
+
+const isNumberCol = (c: ReportEntityColumn) => c.kind === 'number'
+const isTemporalCol = (c: ReportEntityColumn) => c.kind === 'date' || c.kind === 'timestamp'
+
+const sectionCls =
+  'rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900'
+const headCls =
+  'mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400'
+const selectCls =
+  'h-9 w-full rounded-md border border-slate-300 bg-white px-2 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100'
+
 export function ReportStudio({
   entities,
   operators,
-  mode,
+  intent,
   initialName,
   initialDescription,
   initialEntityKey,
@@ -45,7 +87,7 @@ export function ReportStudio({
 }: {
   entities: ReportEntity[]
   operators: ReportOperatorMeta[]
-  mode: 'create' | 'edit'
+  intent: 'create' | 'edit'
   initialName?: string
   initialDescription?: string
   initialEntityKey?: string | null
@@ -53,17 +95,45 @@ export function ReportStudio({
   cloneFromId?: string | null
   action: (formData: FormData) => Promise<void>
 }) {
-  const fallbackEntity = entities[0]!.key
+  // Build the working catalog: the discovered list, plus the legacy static
+  // entity being edited if its key isn't in the discovered set (so old saved
+  // reports still open without the picker exploding to all legacy entries).
+  const catalog = useMemo(() => {
+    const startKey = initialQuery?.entity ?? initialEntityKey ?? null
+    if (startKey && !entities.some((e) => e.key === startKey) && REPORT_ENTITY_MAP[startKey]) {
+      return [REPORT_ENTITY_MAP[startKey]!, ...entities]
+    }
+    return entities
+  }, [entities, initialQuery?.entity, initialEntityKey])
+
+  const fallbackEntity = catalog[0]!.key
   const [entityKey, setEntityKey] = useState<string>(
     initialQuery?.entity ??
-      (initialEntityKey && entities.some((e) => e.key === initialEntityKey)
+      (initialEntityKey && catalog.some((e) => e.key === initialEntityKey)
         ? initialEntityKey
         : fallbackEntity),
   )
-  const entity = useMemo(() => entities.find((e) => e.key === entityKey)!, [entities, entityKey])
+  const entity = useMemo(
+    () => catalog.find((e) => e.key === entityKey) ?? catalog[0]!,
+    [catalog, entityKey],
+  )
+
+  // Entity picker grouped by category (discovery order).
+  const entityGroups = useMemo(() => {
+    const m = new Map<string, ReportEntity[]>()
+    for (const e of catalog) {
+      const arr = m.get(e.category) ?? []
+      arr.push(e)
+      m.set(e.category, arr)
+    }
+    return [...m.entries()]
+  }, [catalog])
 
   const [name, setName] = useState(initialName ?? '')
   const [description, setDescription] = useState(initialDescription ?? '')
+  const [queryMode, setQueryMode] = useState<QueryMode>(
+    initialQuery?.mode === 'summarize' ? 'summarize' : 'rows',
+  )
   const [columns, setColumns] = useState<Set<string>>(
     () =>
       new Set(
@@ -71,6 +141,12 @@ export function ReportStudio({
           ? initialQuery.columns
           : entity.columns.slice(0, 5).map((c) => c.key),
       ),
+  )
+  const [breakouts, setBreakouts] = useState<BreakoutRow[]>(() =>
+    (initialQuery?.breakouts ?? []).map((b) => ({ column: b.column, bin: b.bin })),
+  )
+  const [measures, setMeasures] = useState<MeasureRow[]>(() =>
+    (initialQuery?.measures ?? []).map((m) => ({ fn: m.fn, column: m.column })),
   )
   const [rqbQuery, setRqbQuery] = useState<RuleGroupType>(() => fromEngineGroup(initialQuery))
   const [groupBy, setGroupBy] = useState<string>(initialQuery?.groupBy ?? '')
@@ -86,16 +162,17 @@ export function ReportStudio({
   )
   const [chartDimension, setChartDimension] = useState<string>(initialQuery?.chart?.dimension ?? '')
 
-  // react-querybuilder assigns random ids to groups/rules, which can never
-  // match between SSR and hydration — render it client-only behind a mount
-  // gate (the rest of the studio still server-renders).
+  // react-querybuilder assigns random ids, which never match between SSR and
+  // hydration — render it client-only behind a mount gate.
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
 
   function changeEntity(newKey: string) {
-    const newEnt = entities.find((e) => e.key === newKey)!
+    const newEnt = catalog.find((e) => e.key === newKey)!
     setEntityKey(newKey)
     setColumns(new Set(newEnt.columns.slice(0, 5).map((c) => c.key)))
+    setBreakouts([])
+    setMeasures([])
     setRqbQuery({ combinator: 'and', rules: [] })
     setGroupBy('')
     setSortCol(newEnt.defaultSort?.column ?? '')
@@ -115,9 +192,40 @@ export function ReportStudio({
 
   const customQuery: ReportCustomQuery = useMemo(() => {
     const filtersV2 = toEngineGroup(rqbQuery, entity)
+    if (queryMode === 'summarize') {
+      const bks = breakouts.filter((b) => b.column)
+      const mss: ReportMeasure[] = measures
+        .filter((m) => m.fn === 'count' || m.column)
+        .map((m) => ({ fn: m.fn, ...(m.fn === 'count' ? {} : { column: m.column }) }))
+      const chartDim =
+        chartType !== 'none'
+          ? bks.some((b) => b.column === chartDimension)
+            ? chartDimension
+            : bks[0]?.column
+          : null
+      return {
+        entity: entityKey,
+        mode: 'summarize',
+        columns: [],
+        breakouts: bks,
+        measures: mss.length ? mss : [{ fn: 'count' }],
+        filters: [],
+        filtersV2,
+        chart:
+          chartType !== 'none' && chartDim
+            ? { type: chartType, dimension: chartDim, metric: 'count' }
+            : null,
+        groupBy: null,
+        sort: null,
+        limit,
+      }
+    }
     return {
-      entity: entityKey as ReportCustomQuery['entity'],
+      entity: entityKey,
+      mode: 'rows',
       columns: Array.from(columns),
+      breakouts: [],
+      measures: [],
       filters: [],
       filtersV2,
       chart:
@@ -131,7 +239,10 @@ export function ReportStudio({
   }, [
     entityKey,
     entity,
+    queryMode,
     columns,
+    breakouts,
+    measures,
     rqbQuery,
     groupBy,
     sortCol,
@@ -147,18 +258,19 @@ export function ReportStudio({
   const [isPreviewing, startPreview] = useTransition()
   const previewKey = useMemo(() => JSON.stringify(customQuery), [customQuery])
   const latest = useRef(previewKey)
+  const hasSomething =
+    queryMode === 'rows' ? columns.size > 0 : breakouts.length > 0 || measures.length > 0
   useEffect(() => {
     latest.current = previewKey
-    if (columns.size === 0) return
+    if (!hasSomething) return
     const t = setTimeout(() => {
       startPreview(async () => {
         const res = await previewCustomReport(JSON.parse(previewKey))
-        // Drop stale responses — only the latest config's preview lands.
         if (latest.current === previewKey) setPreview(res)
       })
     }, 600)
     return () => clearTimeout(t)
-  }, [previewKey, columns.size])
+  }, [previewKey, hasSomething])
 
   const fields: Field[] = useMemo(
     () => entity.columns.map((c) => ({ name: c.key, label: c.label })),
@@ -177,345 +289,552 @@ export function ReportStudio({
     }
   }, [entity, operators])
 
-  const canSave = name.trim().length > 0 && columns.size > 0
+  const canSave =
+    name.trim().length > 0 &&
+    (queryMode === 'rows'
+      ? columns.size > 0
+      : measures.some((m) => m.fn === 'count' || m.column) || breakouts.some((b) => b.column))
+
   const inputCls =
     'h-8 rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-900 focus:border-teal-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100'
   const tinyBtn =
     'inline-flex h-8 items-center rounded-md border border-slate-200 bg-white px-2.5 text-xs text-slate-700 transition-colors hover:border-teal-400 hover:text-teal-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'
 
   return (
-    <div className="grid gap-6 lg:grid-cols-5">
-      {/* ------------------------------------------------ config column */}
-      <form action={action} className="space-y-5 lg:col-span-3">
-        <input type="hidden" name="customQuery" value={JSON.stringify(customQuery)} />
-        <input type="hidden" name="cloneFromId" value={cloneFromId ?? ''} />
+    <form action={action} className="flex h-full min-h-0 flex-col">
+      <input type="hidden" name="customQuery" value={JSON.stringify(customQuery)} />
+      <input type="hidden" name="cloneFromId" value={cloneFromId ?? ''} />
 
-        <Section title="Name">
-          <div className="space-y-3">
-            <div className="space-y-1.5">
-              <Label>
-                Report name <span className="text-red-600">*</span>
-              </Label>
-              <Input
-                name="name"
-                required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. High-severity incidents this quarter"
+      <div className="min-h-0 flex-1">
+        <BuilderShell
+          left={
+            <>
+              <BuilderRailHeader
+                icon={<FileText size={15} />}
+                title={intent === 'edit' ? 'Edit report' : 'New report'}
+                subtitle="Configure data, shape, and chart"
               />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Description</Label>
-              <Textarea
-                name="description"
-                rows={2}
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Shown in the report library."
-              />
-            </div>
-          </div>
-        </Section>
-
-        <Section step={1} title="Data source">
-          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-            {entities.map((e) => (
-              <button
-                key={e.key}
-                type="button"
-                onClick={() => changeEntity(e.key)}
-                className={cn(
-                  'rounded-lg border p-3 text-left transition-colors',
-                  e.key === entityKey
-                    ? 'border-teal-700 bg-teal-50 dark:border-teal-500 dark:bg-teal-950/40'
-                    : 'border-slate-200 bg-white hover:border-teal-400 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-teal-600',
-                )}
-              >
-                <div className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                  {e.label}
+              <BuilderScroll className="space-y-3">
+                {/* Name */}
+                <div className={sectionCls}>
+                  <div className="space-y-2.5">
+                    <div className="space-y-1.5">
+                      <Label>
+                        Report name <span className="text-red-600">*</span>
+                      </Label>
+                      <Input
+                        name="name"
+                        required
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder="e.g. High-severity incidents this quarter"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Description</Label>
+                      <Textarea
+                        name="description"
+                        rows={2}
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                        placeholder="Shown in the report library."
+                      />
+                    </div>
+                  </div>
                 </div>
-                <div className="mt-0.5 line-clamp-2 text-xs text-slate-500 dark:text-slate-400">
-                  {e.description}
+
+                {/* Data source */}
+                <div className={sectionCls}>
+                  <h3 className={headCls}>Data source</h3>
+                  <select
+                    value={entityKey}
+                    onChange={(e) => changeEntity(e.target.value)}
+                    className={selectCls}
+                  >
+                    {entityGroups.map(([cat, ents]) => (
+                      <optgroup key={cat} label={cat}>
+                        {ents.map((en) => (
+                          <option key={en.key} value={en.key}>
+                            {en.label}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                  {entity.description ? (
+                    <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+                      {entity.description}
+                    </p>
+                  ) : null}
+                  <div className="mt-3 inline-flex rounded-md border border-slate-200 p-0.5 dark:border-slate-700">
+                    {(['rows', 'summarize'] as QueryMode[]).map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => setQueryMode(m)}
+                        className={cn(
+                          'rounded px-3 py-1 text-xs font-medium transition',
+                          queryMode === m
+                            ? 'bg-teal-600 text-white'
+                            : 'text-slate-500 hover:text-slate-800 dark:text-slate-400',
+                        )}
+                      >
+                        {m === 'rows' ? 'Detail rows' : 'Summarize'}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </button>
-            ))}
-          </div>
-        </Section>
 
-        <Section step={2} title="Columns" hint="Shown in the result table and exports.">
-          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-            {entity.columns.map((c) => (
-              <label
-                key={c.key}
-                className={cn(
-                  'flex items-center gap-2 rounded border px-2 py-1.5 text-sm transition-colors',
-                  columns.has(c.key)
-                    ? 'border-teal-700 bg-teal-50 text-slate-900 dark:border-teal-500 dark:bg-teal-950/40 dark:text-slate-100'
-                    : 'border-slate-200 bg-white text-slate-600 hover:border-teal-400 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300',
+                {/* Rows mode: columns + sort + limit */}
+                {queryMode === 'rows' ? (
+                  <>
+                    <div className={sectionCls}>
+                      <h3 className={headCls}>Columns</h3>
+                      <div className="grid grid-cols-1 gap-1">
+                        {entity.columns.map((c) => (
+                          <label
+                            key={c.key}
+                            className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={columns.has(c.key)}
+                              onChange={() => toggleColumn(c.key)}
+                              className="h-3.5 w-3.5"
+                            />
+                            <span className="truncate">{c.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className={sectionCls}>
+                      <h3 className={headCls}>Sort & limit</h3>
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-2 gap-2">
+                          <Select value={sortCol} onChange={(e) => setSortCol(e.target.value)}>
+                            <option value="">— No sort —</option>
+                            {entity.columns.map((c) => (
+                              <option key={c.key} value={c.key}>
+                                {c.label}
+                              </option>
+                            ))}
+                          </Select>
+                          <Select
+                            value={sortDir}
+                            onChange={(e) => setSortDir(e.target.value as 'asc' | 'desc')}
+                          >
+                            <option value="desc">Descending</option>
+                            <option value="asc">Ascending</option>
+                          </Select>
+                        </div>
+                        <div className="space-y-1">
+                          <Label>Group rows into sections by</Label>
+                          <Select value={groupBy} onChange={(e) => setGroupBy(e.target.value)}>
+                            <option value="">— No grouping —</option>
+                            {entity.columns.map((c) => (
+                              <option key={c.key} value={c.key}>
+                                {c.label}
+                              </option>
+                            ))}
+                          </Select>
+                        </div>
+                        <div className="space-y-1">
+                          <Label>Row limit</Label>
+                          <Input
+                            type="number"
+                            min={1}
+                            max={10000}
+                            value={limit}
+                            onChange={(e) => setLimit(Number(e.target.value) || 1000)}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  // Summarize mode: breakouts + measures
+                  <>
+                    <RailList
+                      title="Group by"
+                      addLabel="Add group"
+                      items={breakouts}
+                      onAdd={() =>
+                        setBreakouts((b) => [...b, { column: entity.columns[0]?.key ?? '' }])
+                      }
+                      onRemove={(i) => setBreakouts((b) => b.filter((_, j) => j !== i))}
+                      render={(b, i) => (
+                        <BreakoutEditor
+                          cols={entity.columns}
+                          row={b}
+                          onChange={(next) =>
+                            setBreakouts((bs) => bs.map((x, j) => (j === i ? next : x)))
+                          }
+                        />
+                      )}
+                    />
+                    <RailList
+                      title="Measures"
+                      addLabel="Add measure"
+                      items={measures}
+                      onAdd={() => setMeasures((m) => [...m, { fn: 'count' }])}
+                      onRemove={(i) => setMeasures((m) => m.filter((_, j) => j !== i))}
+                      render={(m, i) => (
+                        <MeasureEditor
+                          cols={entity.columns}
+                          row={m}
+                          onChange={(next) =>
+                            setMeasures((ms) => ms.map((x, j) => (j === i ? next : x)))
+                          }
+                        />
+                      )}
+                    />
+                    <div className={sectionCls}>
+                      <Label>Row limit</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={10000}
+                        value={limit}
+                        onChange={(e) => setLimit(Number(e.target.value) || 1000)}
+                        className="mt-1"
+                      />
+                    </div>
+                  </>
                 )}
-              >
-                <input
-                  type="checkbox"
-                  checked={columns.has(c.key)}
-                  onChange={() => toggleColumn(c.key)}
-                  className="h-3.5 w-3.5"
-                />
-                <span className="truncate">{c.label}</span>
-              </label>
-            ))}
-          </div>
-        </Section>
 
-        <Section step={3} title="Filters" hint="Combine rules with AND/OR groups.">
-          {!mounted ? (
-            <div className="h-24 animate-pulse rounded-lg border border-slate-200 bg-slate-50/70 dark:border-slate-800 dark:bg-slate-900/50" />
-          ) : (
-            <QueryBuilder
-              fields={fields}
-              query={rqbQuery}
-              onQueryChange={setRqbQuery}
-              getOperators={getOperators}
-              controlClassnames={{
-                queryBuilder: 'space-y-2',
-                ruleGroup:
-                  'space-y-2 rounded-lg border border-slate-200 bg-slate-50/70 p-2.5 dark:border-slate-800 dark:bg-slate-900/50',
-                header: 'flex flex-wrap items-center gap-1.5',
-                body: 'space-y-1.5',
-                rule: 'flex flex-wrap items-center gap-1.5',
-                combinators: inputCls,
-                fields: cn(inputCls, 'max-w-44'),
-                operators: cn(inputCls, 'max-w-44'),
-                value: cn(inputCls, 'flex-1 min-w-32'),
-                addRule: tinyBtn,
-                addGroup: tinyBtn,
-                removeRule: cn(tinyBtn, 'hover:border-red-300 hover:text-red-600'),
-                removeGroup: cn(tinyBtn, 'hover:border-red-300 hover:text-red-600'),
-              }}
-              translations={{
-                addRule: { label: '+ Rule', title: 'Add rule' },
-                addGroup: { label: '+ Group', title: 'Add group' },
-                removeRule: { label: '×', title: 'Remove rule' },
-                removeGroup: { label: '×', title: 'Remove group' },
-              }}
-            />
-          )}
-          <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">
-            List values are comma-separated.
-          </p>
-        </Section>
+                {/* Filters */}
+                <div className={sectionCls}>
+                  <h3 className={headCls}>Filters</h3>
+                  {!mounted ? (
+                    <div className="h-16 animate-pulse rounded-lg border border-slate-200 bg-slate-50/70 dark:border-slate-800 dark:bg-slate-900/50" />
+                  ) : (
+                    <QueryBuilder
+                      fields={fields}
+                      query={rqbQuery}
+                      onQueryChange={setRqbQuery}
+                      getOperators={getOperators}
+                      controlClassnames={{
+                        queryBuilder: 'space-y-2',
+                        ruleGroup:
+                          'space-y-2 rounded-lg border border-slate-200 bg-slate-50/70 p-2 dark:border-slate-800 dark:bg-slate-900/50',
+                        header: 'flex flex-wrap items-center gap-1.5',
+                        body: 'space-y-1.5',
+                        rule: 'flex flex-wrap items-center gap-1.5',
+                        combinators: inputCls,
+                        fields: cn(inputCls, 'max-w-full'),
+                        operators: cn(inputCls, 'max-w-full'),
+                        value: cn(inputCls, 'min-w-24 flex-1'),
+                        addRule: tinyBtn,
+                        addGroup: tinyBtn,
+                        removeRule: cn(tinyBtn, 'hover:border-red-300 hover:text-red-600'),
+                        removeGroup: cn(tinyBtn, 'hover:border-red-300 hover:text-red-600'),
+                      }}
+                      translations={{
+                        addRule: { label: '+ Rule', title: 'Add rule' },
+                        addGroup: { label: '+ Group', title: 'Add group' },
+                        removeRule: { label: '×', title: 'Remove rule' },
+                        removeGroup: { label: '×', title: 'Remove group' },
+                      }}
+                    />
+                  )}
+                  <p className="mt-2 text-[11px] text-slate-400 dark:text-slate-500">
+                    List values are comma-separated.
+                  </p>
+                </div>
 
-        <Section step={4} title="Shape" hint="Section grouping, ordering, and the row cap.">
-          <div className="grid gap-3 sm:grid-cols-4">
-            <div className="space-y-1.5">
-              <Label>Group rows by</Label>
-              <Select value={groupBy} onChange={(e) => setGroupBy(e.target.value)}>
-                <option value="">— No grouping —</option>
-                {entity.columns.map((c) => (
-                  <option key={c.key} value={c.key}>
-                    {c.label}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Sort by</Label>
-              <Select value={sortCol} onChange={(e) => setSortCol(e.target.value)}>
-                <option value="">— None —</option>
-                {entity.columns.map((c) => (
-                  <option key={c.key} value={c.key}>
-                    {c.label}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Direction</Label>
-              <Select
-                value={sortDir}
-                onChange={(e) => setSortDir(e.target.value as 'asc' | 'desc')}
-              >
-                <option value="asc">Ascending</option>
-                <option value="desc">Descending</option>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Row limit</Label>
-              <Input
-                type="number"
-                min={1}
-                max={10000}
-                value={limit}
-                onChange={(e) => setLimit(Number(e.target.value) || 1000)}
+                {/* Chart */}
+                <div className={sectionCls}>
+                  <h3 className={headCls}>Chart</h3>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {CHART_CHOICES.map((c) => (
+                      <button
+                        key={c.key}
+                        type="button"
+                        onClick={() => {
+                          setChartType(c.key as ReportChartType | 'none')
+                          if (c.key !== 'none' && !chartDimension) {
+                            const preferred =
+                              queryMode === 'summarize'
+                                ? breakouts[0]?.column
+                                : (
+                                    entity.columns.find((col) => col.kind === 'enum') ??
+                                    entity.columns[0]
+                                  )?.key
+                            setChartDimension(preferred ?? '')
+                          }
+                        }}
+                        className={cn(
+                          'inline-flex items-center rounded-full border px-2.5 py-1 text-xs transition-colors',
+                          chartType === c.key
+                            ? 'border-teal-700 bg-teal-700 text-white'
+                            : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200',
+                        )}
+                      >
+                        {c.label}
+                      </button>
+                    ))}
+                  </div>
+                  {chartType !== 'none' ? (
+                    <Select
+                      className="mt-2"
+                      value={chartDimension}
+                      onChange={(e) => setChartDimension(e.target.value)}
+                    >
+                      <option value="">Pick a column…</option>
+                      {(queryMode === 'summarize'
+                        ? breakouts
+                            .filter((b) => b.column)
+                            .map((b) => entity.columns.find((c) => c.key === b.column)!)
+                            .filter(Boolean)
+                        : entity.columns
+                      ).map((c) => (
+                        <option key={c.key} value={c.key}>
+                          {c.label}
+                        </option>
+                      ))}
+                    </Select>
+                  ) : null}
+                </div>
+              </BuilderScroll>
+            </>
+          }
+          right={
+            <>
+              <BuilderSurfaceHeader
+                icon={<Eye size={15} className="text-teal-600" />}
+                title="Live preview"
+                actions={
+                  <>
+                    {isPreviewing ? (
+                      <span className="flex items-center gap-1.5 text-xs text-slate-400">
+                        <Loader2 size={12} className="animate-spin" /> running…
+                      </span>
+                    ) : preview?.ok ? (
+                      <span className="text-xs text-slate-400">
+                        {preview.result.rowCount} row{preview.result.rowCount === 1 ? '' : 's'}
+                      </span>
+                    ) : null}
+                    <Button type="submit" size="sm" disabled={!canSave}>
+                      {intent === 'edit' ? 'Save changes' : 'Save report'}
+                    </Button>
+                  </>
+                }
               />
-            </div>
-          </div>
-        </Section>
-
-        <Section step={5} title="Chart" hint="Optional. Row counts by column value.">
-          <div className="flex flex-wrap items-center gap-1.5">
-            {CHART_CHOICES.map((c) => (
-              <button
-                key={c.key}
-                type="button"
-                onClick={() => {
-                  setChartType(c.key as ReportChartType | 'none')
-                  if (c.key !== 'none' && !chartDimension) {
-                    const preferred =
-                      entity.columns.find((col) => col.kind === 'enum') ?? entity.columns[0]
-                    setChartDimension(preferred?.key ?? '')
-                  }
-                }}
-                className={cn(
-                  'inline-flex items-center rounded-full border px-2.5 py-1 text-xs transition-colors',
-                  chartType === c.key
-                    ? 'border-teal-700 bg-teal-700 text-white'
-                    : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200',
+              <BuilderScroll className="space-y-3 lg:p-6">
+                {preview?.ok ? <ReportSummaryStrip summary={preview.result.summary} /> : null}
+                {!preview ? (
+                  <p className="py-16 text-center text-sm text-slate-400">
+                    Preview updates automatically as you build.
+                  </p>
+                ) : !preview.ok ? (
+                  <div className="rounded-xl border border-dashed border-rose-300 bg-rose-50/40 px-4 py-8 text-center text-sm text-rose-600 dark:border-rose-500/30 dark:bg-rose-500/5 dark:text-rose-400">
+                    {preview.error}
+                  </div>
+                ) : (
+                  <>
+                    {preview.result.charts[0] ? (
+                      <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+                        <ReportChart spec={preview.result.charts[0]} height={240} />
+                      </div>
+                    ) : null}
+                    {preview.result.groups.map((g, i) => (
+                      <div key={`${g.title}-${i}`} className="space-y-1.5">
+                        {preview.result.groups.length > 1 || queryMode === 'rows' ? (
+                          <div className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                            {g.title}
+                            {g.subtitle ? (
+                              <span className="ml-1.5 font-normal text-slate-400">
+                                {g.subtitle}
+                              </span>
+                            ) : null}
+                          </div>
+                        ) : null}
+                        {g.rows.length ? (
+                          <PaginatedReportTable
+                            columns={g.columns}
+                            rows={g.rows}
+                            initialPageSize={10}
+                            dense
+                          />
+                        ) : (
+                          <p className="rounded-lg border border-slate-200 px-3 py-6 text-center text-xs text-slate-400 dark:border-slate-800">
+                            No rows matched.
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                    <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                      Preview is capped at 25 rows. Saved reports use the configured row limit.
+                    </p>
+                  </>
                 )}
+              </BuilderScroll>
+            </>
+          }
+        />
+      </div>
+    </form>
+  )
+}
+
+// --- summary strip -----------------------------------------------------------
+
+function ReportSummaryStrip({ summary }: { summary: { label: string; value: string | number }[] }) {
+  if (!summary.length) return null
+  return (
+    <div className="flex flex-wrap gap-2">
+      {summary.map((s) => (
+        <div
+          key={s.label}
+          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 dark:border-slate-800 dark:bg-slate-900"
+        >
+          <div className="text-[10px] tracking-wide text-slate-500 uppercase dark:text-slate-400">
+            {s.label}
+          </div>
+          <div className="text-sm font-semibold text-slate-900 tabular-nums dark:text-slate-100">
+            {s.value}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// --- rail building blocks ----------------------------------------------------
+
+function RailList<T>({
+  title,
+  addLabel,
+  items,
+  onAdd,
+  onRemove,
+  render,
+}: {
+  title: string
+  addLabel: string
+  items: T[]
+  onAdd: () => void
+  onRemove: (i: number) => void
+  render: (item: T, i: number) => React.ReactNode
+}) {
+  return (
+    <div className={sectionCls}>
+      <div className="mb-2 flex items-center justify-between">
+        <h3 className={cn(headCls, 'mb-0')}>{title}</h3>
+        <button
+          type="button"
+          onClick={onAdd}
+          className="inline-flex items-center gap-1 text-xs font-medium text-teal-600 hover:text-teal-700"
+        >
+          <Plus size={13} /> {addLabel}
+        </button>
+      </div>
+      <div className="space-y-2">
+        {items.length === 0 ? (
+          <p className="text-[11px] text-slate-400 dark:text-slate-500">None.</p>
+        ) : (
+          items.map((it, i) => (
+            <div key={i} className="flex items-start gap-1.5">
+              <div className="flex-1">{render(it, i)}</div>
+              <button
+                type="button"
+                onClick={() => onRemove(i)}
+                className="mt-1 text-slate-300 hover:text-rose-500"
               >
-                {c.label}
+                <Trash2 size={13} />
               </button>
-            ))}
-            {chartType !== 'none' ? (
-              <Select
-                className="ml-2 max-w-52"
-                value={chartDimension}
-                onChange={(e) => setChartDimension(e.target.value)}
-              >
-                <option value="">Pick a column…</option>
-                {entity.columns.map((c) => (
-                  <option key={c.key} value={c.key}>
-                    {c.label}
-                  </option>
-                ))}
-              </Select>
-            ) : null}
-          </div>
-        </Section>
-
-        <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">
-          <Button type="submit" disabled={!canSave}>
-            {mode === 'edit' ? 'Save changes' : 'Save report'}
-          </Button>
-        </div>
-      </form>
-
-      {/* ------------------------------------------------ preview column */}
-      <div className="lg:col-span-2">
-        <div className="space-y-3 lg:sticky lg:top-4">
-          <div className="flex items-center justify-between">
-            <h3 className="flex items-center gap-1.5 text-sm font-semibold text-slate-900 dark:text-slate-100">
-              <Play size={14} className="text-teal-600" />
-              Live preview
-            </h3>
-            {isPreviewing ? (
-              <span className="flex items-center gap-1.5 text-xs text-slate-400">
-                <Loader2 size={12} className="animate-spin" /> running…
-              </span>
-            ) : preview?.ok ? (
-              <span className="text-xs text-slate-400">
-                {preview.result.rowCount} row{preview.result.rowCount === 1 ? '' : 's'}
-              </span>
-            ) : null}
-          </div>
-
-          <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
-            {!preview ? (
-              <p className="py-10 text-center text-sm text-slate-400">
-                Preview updates automatically.
-              </p>
-            ) : !preview.ok ? (
-              <p className="py-6 text-center text-sm text-red-600 dark:text-red-400">
-                {preview.error}
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {preview.result.charts[0] ? (
-                  <ReportChart spec={preview.result.charts[0]} height={190} />
-                ) : null}
-                <PreviewTable groups={preview.result.groups} />
-              </div>
-            )}
-          </div>
-          <p className="text-xs text-slate-400 dark:text-slate-500">
-            Preview is limited to 25 rows. Saved reports use the configured row limit.
-          </p>
-        </div>
+            </div>
+          ))
+        )}
       </div>
     </div>
   )
 }
 
-function Section({
-  step,
-  title,
-  hint,
-  children,
+function BreakoutEditor({
+  cols,
+  row,
+  onChange,
 }: {
-  step?: number
-  title: string
-  hint?: string
-  children: React.ReactNode
+  cols: ReportEntityColumn[]
+  row: BreakoutRow
+  onChange: (next: BreakoutRow) => void
 }) {
+  const col = cols.find((c) => c.key === row.column)
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-      <div className="mb-3 flex items-baseline gap-2">
-        {typeof step === 'number' ? (
-          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-teal-700 text-[11px] font-semibold text-white">
-            {step}
-          </span>
-        ) : null}
-        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
-        {hint ? <span className="text-xs text-slate-400 dark:text-slate-500">{hint}</span> : null}
-      </div>
-      {children}
-    </section>
+    <div className="space-y-1">
+      <select
+        value={row.column}
+        onChange={(e) => onChange({ column: e.target.value, bin: undefined })}
+        className={cn(selectCls, 'h-8 text-xs')}
+      >
+        {cols.map((c) => (
+          <option key={c.key} value={c.key}>
+            {c.label}
+          </option>
+        ))}
+      </select>
+      {col && isTemporalCol(col) ? (
+        <select
+          value={row.bin ?? ''}
+          onChange={(e) =>
+            onChange({
+              ...row,
+              bin: (e.target.value || undefined) as ReportTemporalBin | undefined,
+            })
+          }
+          className={cn(selectCls, 'h-8 text-xs')}
+        >
+          <option value="">No bucket</option>
+          {TEMPORAL_BINS.map((u) => (
+            <option key={u} value={u}>
+              by {u}
+            </option>
+          ))}
+        </select>
+      ) : null}
+    </div>
   )
 }
 
-function PreviewTable({
-  groups,
+function MeasureEditor({
+  cols,
+  row,
+  onChange,
 }: {
-  groups: { title: string; columns: string[]; rows: (string | number | null | undefined)[][] }[]
+  cols: ReportEntityColumn[]
+  row: MeasureRow
+  onChange: (next: MeasureRow) => void
 }) {
-  const g = groups[0]
-  if (!g || g.rows.length === 0) {
-    return <p className="py-4 text-center text-xs text-slate-400">No rows matched.</p>
-  }
-  const rows = g.rows.slice(0, 8)
-  const cols = g.columns.slice(0, 5)
+  const def = AGG_FNS.find((a) => a.value === row.fn)
+  const fieldCols = row.fn === 'sum' || row.fn === 'avg' ? cols.filter(isNumberCol) : cols
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-left text-xs">
-        <thead>
-          <tr className="border-b border-slate-200 text-slate-500 dark:border-slate-700 dark:text-slate-400">
-            {cols.map((c) => (
-              <th key={c} className="py-1.5 pr-3 font-medium whitespace-nowrap">
-                {c}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, ri) => (
-            <tr key={ri} className="border-b border-slate-100 last:border-0 dark:border-slate-800">
-              {cols.map((_, ci) => (
-                <td
-                  key={ci}
-                  className="max-w-40 truncate py-1.5 pr-3 text-slate-700 dark:text-slate-300"
-                >
-                  {row[ci] === null || typeof row[ci] === 'undefined' || row[ci] === ''
-                    ? '—'
-                    : String(row[ci])}
-                </td>
-              ))}
-            </tr>
+    <div className="space-y-1">
+      <select
+        value={row.fn}
+        onChange={(e) => onChange({ ...row, fn: e.target.value as ReportAggFn })}
+        className={cn(selectCls, 'h-8 text-xs')}
+      >
+        {AGG_FNS.map((a) => (
+          <option key={a.value} value={a.value}>
+            {a.label}
+          </option>
+        ))}
+      </select>
+      {def?.needsColumn ? (
+        <select
+          value={row.column ?? ''}
+          onChange={(e) => onChange({ ...row, column: e.target.value })}
+          className={cn(selectCls, 'h-8 text-xs')}
+        >
+          <option value="">Pick a column…</option>
+          {fieldCols.map((c) => (
+            <option key={c.key} value={c.key}>
+              {c.label}
+            </option>
           ))}
-        </tbody>
-      </table>
-      {groups.length > 1 ? (
-        <p className="mt-1.5 text-[11px] text-slate-400">
-          +{groups.length - 1} more section{groups.length === 2 ? '' : 's'} when grouped.
-        </p>
+        </select>
       ) : null}
     </div>
   )
@@ -523,13 +842,12 @@ function PreviewTable({
 
 // --- RQB ⇄ engine conversion -------------------------------------------------
 
-/** react-querybuilder rule JSON → the engine's stored ReportRuleGroup. Values
- *  are coerced per operator/column kind (comma lists, day counts, numbers). */
+/** react-querybuilder rule JSON → the engine's stored ReportRuleGroup. */
 function toEngineGroup(group: RuleGroupType, entity: ReportEntity): ReportRuleGroup | null {
   function walkGroup(g: RuleGroupType): ReportRuleGroup {
     const rules: (ReportRule | ReportRuleGroup)[] = []
     for (const r of g.rules) {
-      if (typeof r === 'string') continue // independent-combinator mode unused
+      if (typeof r === 'string') continue
       if ('rules' in r) {
         const sub = walkGroup(r as RuleGroupType)
         if (sub.rules.length) rules.push(sub)
@@ -571,8 +889,8 @@ function toEngineGroup(group: RuleGroupType, entity: ReportEntity): ReportRuleGr
   return out.rules.length ? out : null
 }
 
-/** Stored plan → react-querybuilder state. Migrates v1 flat filters when no
- *  v2 tree exists so older definitions open cleanly in the studio. */
+/** Stored plan → react-querybuilder state. Migrates v1 flat filters when no v2
+ *  tree exists so older definitions open cleanly. */
 function fromEngineGroup(q: ReportCustomQuery | null | undefined): RuleGroupType {
   if (q?.filtersV2 && q.filtersV2.rules.length) {
     return walk(q.filtersV2)

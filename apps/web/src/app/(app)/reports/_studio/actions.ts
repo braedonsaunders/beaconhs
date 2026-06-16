@@ -11,6 +11,7 @@ import { eq } from 'drizzle-orm'
 import { db, withSuperAdmin } from '@beaconhs/db'
 import { reportDefinitions } from '@beaconhs/db/schema'
 import { computeRangeFor, runReport, type ReportRunResult } from '@beaconhs/reports'
+import { discoverEntityMap } from '@beaconhs/analytics/server'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { validateCustomQuery } from './validate'
@@ -151,6 +152,7 @@ export async function previewCustomReport(payload: unknown): Promise<StudioPrevi
         range,
         customQuery,
         maxRows: PREVIEW_MAX_ROWS,
+        entityMap: discoverEntityMap(),
       }),
     )
     return { ok: true, result, rangeLabel: range.label }

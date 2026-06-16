@@ -4,6 +4,7 @@
 // get emailed.
 
 import { computeRangeFor, rangeModeFor, runReport, type ReportRunResult } from '@beaconhs/reports'
+import { discoverEntityMap } from '@beaconhs/analytics/server'
 import type { RequestContext } from '@beaconhs/tenant'
 import type { ReportDefinitionRow } from './_definitions'
 
@@ -18,8 +19,9 @@ export type ViewerRun = {
 
 export const VIEWER_RANGE_CHOICES = [7, 14, 30, 90, 365]
 
-/** Viewer cap on custom-query rows; exports run uncapped (to the plan limit). */
-const VIEWER_MAX_ROWS = 500
+/** Viewer cap on custom-query rows; exports run uncapped (to the plan limit).
+ *  Tables paginate client-side, so a larger cap is cheap to browse in-app. */
+const VIEWER_MAX_ROWS = 2000
 
 export async function runReportForViewer(
   ctx: RequestContext,
@@ -44,6 +46,7 @@ export async function runReportForViewer(
         range,
         customQuery: definition.customQuery,
         maxRows: opts.maxRows ?? VIEWER_MAX_ROWS,
+        entityMap: discoverEntityMap(),
       }),
     )
     return { result, rangeLabel: range.label, rangeMode: mode, days, error: null }

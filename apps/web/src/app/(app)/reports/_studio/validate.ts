@@ -1,21 +1,38 @@
 // Server-side sanitiser for the studio's customQuery payload. Client JSON is
 // untrusted: entity/columns/operators must resolve through the engine
-// whitelists, the filter tree is depth/size-capped, and the chart config is
+// whitelists, the filter tree is depth/size-capped, and aggregation specs are
 // normalised. Shared by create, update, and preview actions.
+//
+// The entity whitelist is the DISCOVERED catalog (every tenant-scoped table,
+// from @beaconhs/analytics/server) unioned with the legacy static registry for
+// back-compat — so any table the builder offers is queryable, and old saved
+// reports keep resolving.
 
 import {
+  REPORT_AGG_FNS,
   REPORT_CHART_TYPES,
-  REPORT_CUSTOM_ENTITIES,
   REPORT_FILTER_OPERATORS,
+  REPORT_TEMPORAL_BINS,
+  type ReportBreakout,
   type ReportChartConfig,
   type ReportCustomQuery,
+  type ReportMeasure,
   type ReportRule,
   type ReportRuleGroup,
 } from '@beaconhs/db/schema'
-import { REPORT_ENTITY_MAP } from '@beaconhs/reports'
+import { REPORT_ENTITY_MAP, type ReportEntity } from '@beaconhs/reports'
+import { discoverEntityMap } from '@beaconhs/analytics/server'
 
 const MAX_DEPTH = 5
 const MAX_RULES = 60
+const MAX_BREAKOUTS = 6
+const MAX_MEASURES = 8
+
+/** Resolve an entity key against the discovered catalog, falling back to the
+ *  static registry for legacy keys. */
+function resolveEntity(key: string): ReportEntity | null {
+  return discoverEntityMap()[key] ?? REPORT_ENTITY_MAP[key] ?? null
+}
 
 export function validateCustomQuery(raw: unknown): ReportCustomQuery {
   if (!raw || typeof raw !== 'object') {
@@ -23,16 +40,60 @@ export function validateCustomQuery(raw: unknown): ReportCustomQuery {
   }
   const q = raw as Record<string, unknown>
   const entity = String(q.entity ?? '')
-  if (!REPORT_CUSTOM_ENTITIES.includes(entity as never)) {
+  const entityMeta = resolveEntity(entity)
+  if (!entityMeta) {
     throw new Error(`Invalid entity: ${entity}`)
   }
-  const entityMeta = REPORT_ENTITY_MAP[entity]!
   const validColumn = (c: unknown): c is string =>
     typeof c === 'string' && entityMeta.columns.some((col) => col.key === c)
 
+  const mode: 'rows' | 'summarize' = q.mode === 'summarize' ? 'summarize' : 'rows'
+
   const columns = Array.isArray(q.columns) ? (q.columns as unknown[]).filter(validColumn) : []
-  if (columns.length === 0) {
+
+  // Summarize: group-by breakouts + aggregate measures.
+  const breakouts: ReportBreakout[] = Array.isArray(q.breakouts)
+    ? (q.breakouts as unknown[])
+        .flatMap((b) => {
+          if (!b || typeof b !== 'object') return []
+          const o = b as Record<string, unknown>
+          if (!validColumn(o.column)) return []
+          const bin = REPORT_TEMPORAL_BINS.includes(o.bin as never)
+            ? (o.bin as ReportBreakout['bin'])
+            : undefined
+          return [{ column: o.column, ...(bin ? { bin } : {}) }]
+        })
+        .slice(0, MAX_BREAKOUTS)
+    : []
+
+  let measures: ReportMeasure[] = Array.isArray(q.measures)
+    ? (q.measures as unknown[])
+        .flatMap((m) => {
+          if (!m || typeof m !== 'object') return []
+          const o = m as Record<string, unknown>
+          const fn = String(o.fn ?? '')
+          if (!REPORT_AGG_FNS.includes(fn as never)) return []
+          if (fn !== 'count' && !validColumn(o.column)) return []
+          const label = typeof o.label === 'string' && o.label.trim() ? o.label.trim() : undefined
+          return [
+            {
+              fn: fn as ReportMeasure['fn'],
+              ...(fn === 'count' ? {} : { column: o.column as string }),
+              ...(label ? { label } : {}),
+            },
+          ]
+        })
+        .slice(0, MAX_MEASURES)
+    : []
+
+  if (mode === 'rows' && columns.length === 0) {
     throw new Error('Pick at least one column to include')
+  }
+  if (mode === 'summarize') {
+    if (measures.length === 0) measures = [{ fn: 'count' }]
+    if (breakouts.length === 0 && measures.length === 0) {
+      throw new Error('Add a group-by or a measure to summarize')
+    }
   }
 
   // v1 flat filters (kept for backwards compatibility with older clients).
@@ -83,13 +144,21 @@ export function validateCustomQuery(raw: unknown): ReportCustomQuery {
   const filtersV2 = q.filtersV2 ? sanitizeGroup(q.filtersV2, 1) : null
   const filtersV2Final = filtersV2 && filtersV2.rules.length ? filtersV2 : null
 
-  // Chart.
+  // Chart. In summarize mode the dimension must be one of the breakouts.
   let chart: ReportChartConfig | null = null
   if (q.chart && typeof q.chart === 'object') {
     const c = q.chart as Record<string, unknown>
     const type = String(c.type ?? '')
-    if (REPORT_CHART_TYPES.includes(type as never) && validColumn(c.dimension)) {
-      chart = { type: type as ReportChartConfig['type'], dimension: c.dimension, metric: 'count' }
+    const dimOk =
+      mode === 'summarize'
+        ? breakouts.some((b) => b.column === c.dimension)
+        : validColumn(c.dimension)
+    if (REPORT_CHART_TYPES.includes(type as never) && dimOk) {
+      chart = {
+        type: type as ReportChartConfig['type'],
+        dimension: c.dimension as string,
+        metric: 'count',
+      }
     }
   }
 
@@ -110,8 +179,11 @@ export function validateCustomQuery(raw: unknown): ReportCustomQuery {
     : 1000
 
   return {
-    entity: entity as ReportCustomQuery['entity'],
+    entity,
+    mode,
     columns,
+    breakouts,
+    measures,
     filters,
     filtersV2: filtersV2Final,
     chart,
