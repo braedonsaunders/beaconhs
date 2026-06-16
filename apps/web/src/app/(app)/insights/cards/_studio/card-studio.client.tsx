@@ -146,6 +146,9 @@ export function CardStudio({
 
   const entity = entityMap[entityKey]
   const cols = entity?.columns ?? []
+  // Source columns + every column reachable through a single-hop FK relation, so
+  // group-bys / measures / filters can pick a related field ("Site → Name").
+  const fields = useMemo(() => buildFields(entity, entityMap), [entity, entityMap])
 
   const ast = useMemo<BhqlQuery>(() => {
     const filter: ReportRuleGroup | null = filters.length
@@ -495,7 +498,7 @@ export function CardStudio({
                 onRemove={(i) => setBreakouts((b) => b.filter((_, j) => j !== i))}
                 render={(b, i) => (
                   <BreakoutEditor
-                    cols={cols}
+                    fields={fields}
                     row={b}
                     onChange={(next) =>
                       setBreakouts((bs) => bs.map((x, j) => (j === i ? next : x)))
@@ -510,7 +513,7 @@ export function CardStudio({
                 onRemove={(i) => setMeasures((m) => m.filter((_, j) => j !== i))}
                 render={(m, i) => (
                   <MeasureEditor
-                    cols={cols}
+                    fields={fields}
                     row={m}
                     onChange={(next) => setMeasures((ms) => ms.map((x, j) => (j === i ? next : x)))}
                   />
@@ -525,8 +528,8 @@ export function CardStudio({
                       onChange={(e) => setPivotOn(e.target.checked)}
                     />
                     Pivot — rows ={' '}
-                    {cols.find((c) => c.key === breakouts[0]?.field)?.label ?? '1st group'}, columns
-                    = {cols.find((c) => c.key === breakouts[1]?.field)?.label ?? '2nd group'}
+                    {fieldCol(fields, breakouts[0]?.field ?? '')?.label ?? '1st group'}, columns ={' '}
+                    {fieldCol(fields, breakouts[1]?.field ?? '')?.label ?? '2nd group'}
                   </label>
                 </div>
               ) : null}
@@ -543,7 +546,7 @@ export function CardStudio({
             onRemove={(i) => setFilters((f) => f.filter((_, j) => j !== i))}
             render={(f, i) => (
               <FilterEditor
-                cols={cols}
+                fields={fields}
                 row={f}
                 onChange={(next) => setFilters((fs) => fs.map((x, j) => (j === i ? next : x)))}
               />
@@ -669,16 +672,90 @@ function RailList<T>({
   )
 }
 
+/** A pickable field: a column on the source entity, or one reached by following
+ *  a foreign-key relation (value = "<via>.<column>", grouped under the relation). */
+type FieldChoice = { value: string; label: string; group: string | null; col: AnalyticsColumn }
+
+/** Source-entity columns + every column reachable via a single-hop FK relation.
+ *  This is what makes cross-table cards self-serve: "Journals → Site → Name" with
+ *  no view. Relations only ever target RLS-safe entities (enforced at discovery). */
+function buildFields(
+  entity: AnalyticsEntity | undefined,
+  entityMap: Record<string, AnalyticsEntity>,
+): FieldChoice[] {
+  if (!entity) return []
+  const out: FieldChoice[] = entity.columns.map((c) => ({
+    value: c.key,
+    label: c.label,
+    group: null,
+    col: c,
+  }))
+  for (const rel of entity.relations ?? []) {
+    const target = entityMap[rel.target]
+    if (!target) continue
+    for (const c of target.columns) {
+      if (c.semanticType === 'pk') continue // the id itself isn't a useful related field
+      out.push({ value: `${rel.via}.${c.key}`, label: c.label, group: rel.label, col: c })
+    }
+  }
+  return out
+}
+
+const fieldCol = (fields: FieldChoice[], value: string): AnalyticsColumn | undefined =>
+  fields.find((f) => f.value === value)?.col
+
+/** <option>/<optgroup> list for a field <select>: local columns first, then one
+ *  optgroup per relation. `predicate` filters by column (e.g. numeric-only). */
+function FieldOptions({
+  fields,
+  predicate,
+  placeholder,
+}: {
+  fields: FieldChoice[]
+  predicate?: (c: AnalyticsColumn) => boolean
+  placeholder?: string
+}) {
+  const filtered = predicate ? fields.filter((f) => predicate(f.col)) : fields
+  const groups = new Map<string, FieldChoice[]>()
+  for (const f of filtered) {
+    if (f.group == null) continue
+    const arr = groups.get(f.group) ?? []
+    arr.push(f)
+    groups.set(f.group, arr)
+  }
+  return (
+    <>
+      {placeholder ? <option value="">{placeholder}</option> : null}
+      {filtered
+        .filter((f) => f.group == null)
+        .map((f) => (
+          <option key={f.value} value={f.value}>
+            {f.label}
+          </option>
+        ))}
+      {[...groups.entries()].map(([g, opts]) => (
+        <optgroup key={g} label={`→ ${g}`}>
+          {opts.map((f) => (
+            <option key={f.value} value={f.value}>
+              {f.label}
+            </option>
+          ))}
+        </optgroup>
+      ))}
+    </>
+  )
+}
+
 function BreakoutEditor({
-  cols,
+  fields,
   row,
   onChange,
 }: {
-  cols: AnalyticsColumn[]
+  fields: FieldChoice[]
   row: BreakoutRow
   onChange: (next: BreakoutRow) => void
 }) {
-  const col = cols.find((c) => c.key === row.field)
+  const col = fieldCol(fields, row.field)
   return (
     <div className="space-y-1">
       <select
@@ -686,11 +763,7 @@ function BreakoutEditor({
         onChange={(e) => onChange({ ...row, field: e.target.value, bin: undefined })}
         className={selectCls}
       >
-        {cols.map((c) => (
-          <option key={c.key} value={c.key}>
-            {c.label}
-          </option>
-        ))}
+        <FieldOptions fields={fields} />
       </select>
       {col?.canBinTemporal ? (
         <select
@@ -715,16 +788,12 @@ function BreakoutEditor({
   )
 }
 
-function fieldOptionsFor(cols: AnalyticsColumn[], fn: BhqlAggFn): AnalyticsColumn[] {
-  return fn === 'sum' || fn === 'avg' ? cols.filter((c) => c.canMeasure) : cols
-}
-
 function ConditionRow({
-  cols,
+  fields,
   where,
   onChange,
 }: {
-  cols: AnalyticsColumn[]
+  fields: FieldChoice[]
   where?: MeasureWhere
   onChange: (w: MeasureWhere | undefined) => void
 }) {
@@ -732,7 +801,7 @@ function ConditionRow({
     return (
       <button
         type="button"
-        onClick={() => onChange({ field: cols[0]?.key ?? '', op: 'eq', value: '' })}
+        onClick={() => onChange({ field: fields[0]?.value ?? '', op: 'eq', value: '' })}
         className="text-[11px] font-medium text-teal-600 hover:text-teal-700"
       >
         + only where…
@@ -757,11 +826,7 @@ function ConditionRow({
         onChange={(e) => onChange({ ...where, field: e.target.value })}
         className={cn(selectCls, 'h-7 text-xs')}
       >
-        {cols.map((c) => (
-          <option key={c.key} value={c.key}>
-            {c.label}
-          </option>
-        ))}
+        <FieldOptions fields={fields} />
       </select>
       <div className="flex gap-1">
         <select
@@ -789,11 +854,11 @@ function ConditionRow({
 }
 
 function MeasureEditor({
-  cols,
+  fields,
   row,
   onChange,
 }: {
-  cols: AnalyticsColumn[]
+  fields: FieldChoice[]
   row: MeasureRow
   onChange: (next: MeasureRow) => void
 }) {
@@ -816,16 +881,15 @@ function MeasureEditor({
           onChange={(e) => onChange({ ...row, field: e.target.value })}
           className={cn(selectCls, 'h-8 text-xs')}
         >
-          <option value="">Pick a field…</option>
-          {fieldOptionsFor(cols, row.fn).map((c) => (
-            <option key={c.key} value={c.key}>
-              {c.label}
-            </option>
-          ))}
+          <FieldOptions
+            fields={fields}
+            placeholder="Pick a field…"
+            predicate={(c) => (row.fn === 'sum' || row.fn === 'avg' ? c.canMeasure : true)}
+          />
         </select>
       ) : null}
       <ConditionRow
-        cols={cols}
+        fields={fields}
         where={row.where}
         onChange={(w) => onChange({ ...row, where: w })}
       />
@@ -867,16 +931,17 @@ function MeasureEditor({
               onChange={(e) => onChange({ ...row, denField: e.target.value })}
               className={cn(selectCls, 'h-8 text-xs')}
             >
-              <option value="">Pick a field…</option>
-              {fieldOptionsFor(cols, row.denFn).map((c) => (
-                <option key={c.key} value={c.key}>
-                  {c.label}
-                </option>
-              ))}
+              <FieldOptions
+                fields={fields}
+                placeholder="Pick a field…"
+                predicate={(c) =>
+                  row.denFn === 'sum' || row.denFn === 'avg' ? c.canMeasure : true
+                }
+              />
             </select>
           ) : null}
           <ConditionRow
-            cols={cols}
+            fields={fields}
             where={row.denWhere}
             onChange={(w) => onChange({ ...row, denWhere: w })}
           />
@@ -896,11 +961,11 @@ function MeasureEditor({
 }
 
 function FilterEditor({
-  cols,
+  fields,
   row,
   onChange,
 }: {
-  cols: AnalyticsColumn[]
+  fields: FieldChoice[]
   row: FilterRow
   onChange: (next: FilterRow) => void
 }) {
@@ -912,11 +977,7 @@ function FilterEditor({
         onChange={(e) => onChange({ ...row, field: e.target.value })}
         className={cn(selectCls, 'h-8 text-xs')}
       >
-        {cols.map((c) => (
-          <option key={c.key} value={c.key}>
-            {c.label}
-          </option>
-        ))}
+        <FieldOptions fields={fields} />
       </select>
       <div className="flex gap-1">
         <select
