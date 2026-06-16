@@ -309,6 +309,63 @@ async function main() {
     console.log(`[multihop] ${t.name}: journals by PARENT site → ${rows.join(', ') || '(no rows)'}`)
   }
 
+  // Widget conversions: a conditional-aggregate ratio (training %) and the new
+  // relative-date operators (overdue / this-month), exactly as the seeded
+  // built-in cards use them.
+  const trainingPctQuery: BhqlQuery = {
+    version: 'bhql/1',
+    display: 'table',
+    stages: [
+      {
+        source: 'training_audience_assignment_records',
+        aggregations: [
+          { fn: 'count', alias: 'total' },
+          {
+            fn: 'count',
+            alias: 'completed',
+            filter: {
+              combinator: 'and',
+              rules: [{ field: 'status', op: 'eq', value: 'completed' }],
+            },
+          },
+          {
+            kind: 'calc',
+            alias: 'pct',
+            numerator: 'completed',
+            denominator: 'total',
+            multiplier: 100,
+          },
+        ],
+      },
+    ],
+  }
+  const overdueQuery: BhqlQuery = {
+    version: 'bhql/1',
+    display: 'table',
+    stages: [
+      {
+        source: 'corrective_actions',
+        filter: {
+          combinator: 'and',
+          rules: [
+            { field: 'closed_at', op: 'is_null' },
+            { field: 'due_on', op: 'before_now' },
+          ],
+        },
+        aggregations: [{ fn: 'count', alias: 'count' }],
+      },
+    ],
+  }
+  for (const t of ts) {
+    const tp = await withTenant(db, t.id, (tx) => runBhql(tx, validateBhql(trainingPctQuery)))
+    const od = await withTenant(db, t.id, (tx) => runBhql(tx, validateBhql(overdueQuery)))
+    const tpRow = tp.shape === 'flat' ? tp.rows[0] : undefined
+    const odRow = od.shape === 'flat' ? od.rows[0] : undefined
+    console.log(
+      `[widgets] ${t.name}: training%=${tpRow?.pct ?? 'n/a'} (of ${tpRow?.total ?? 0}); overdue CAs=${odRow?.count ?? 'n/a'}`,
+    )
+  }
+
   // RLS: the same count under each tenant should be independently scoped.
   console.log('\n[rls] per-tenant incident counts (proves tenant isolation):')
   for (const t of ts) {

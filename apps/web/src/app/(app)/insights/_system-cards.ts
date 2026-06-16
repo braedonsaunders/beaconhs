@@ -6,7 +6,7 @@ import 'server-only'
 // of truth: the Overview references the same card rows (via the systemKey→id map)
 // rather than a separate hard-coded query.
 
-import { and, eq, inArray, isNull } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { insightCards, type BhqlQuery } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 import { BUILTIN_QUERIES, INSIGHT_WIDGET_MAP } from './_widgets'
@@ -40,24 +40,46 @@ export async function ensureSystemCards(ctx: RequestContext): Promise<Map<string
     vizSettings: insightCards.vizSettings,
   }
 
-  const existing = await ctx.db((tx) =>
-    tx
+  // Select + de-dupe + insert in ONE transaction, guarded by a per-tenant
+  // advisory lock: ensureSystemCards runs on both /insights and /insights/library,
+  // and a fresh server can fire several first-loads at once — without the lock the
+  // select-then-insert races and double-seeds. The lock releases at commit.
+  const byName = await ctx.db(async (tx) => {
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtext(${ctx.tenantId} || ':insight-system'))`,
+    )
+
+    const existing = await tx
       .select(select)
       .from(insightCards)
       .where(
         and(
           eq(insightCards.tenantId, ctx.tenantId),
+          isNull(insightCards.createdBy), // system cards only
           isNull(insightCards.deletedAt),
           inArray(insightCards.name, names),
         ),
-      ),
-  )
-  const byName = new Map(existing.map((c) => [c.name, c]))
+      )
+      .orderBy(asc(insightCards.createdAt))
 
-  const missing = defs.filter((d) => !byName.has(d.name))
-  if (missing.length > 0) {
-    const inserted = await ctx.db((tx) =>
-      tx
+    // Keep the oldest card per name; soft-delete any duplicates (self-heals rows
+    // a previous unlocked seed may have double-inserted).
+    const keep = new Map<string, (typeof existing)[number]>()
+    const dupeIds: string[] = []
+    for (const c of existing) {
+      if (keep.has(c.name)) dupeIds.push(c.id)
+      else keep.set(c.name, c)
+    }
+    if (dupeIds.length > 0) {
+      await tx
+        .update(insightCards)
+        .set({ deletedAt: new Date() })
+        .where(inArray(insightCards.id, dupeIds))
+    }
+
+    const missing = defs.filter((d) => !keep.has(d.name))
+    if (missing.length > 0) {
+      const inserted = await tx
         .insert(insightCards)
         .values(
           missing.map((d) => ({
@@ -72,10 +94,11 @@ export async function ensureSystemCards(ctx: RequestContext): Promise<Map<string
             publishedAt: new Date(),
           })),
         )
-        .returning(select),
-    )
-    for (const c of inserted) byName.set(c.name, c)
-  }
+        .returning(select)
+      for (const c of inserted) keep.set(c.name, c)
+    }
+    return keep
+  })
 
   const map = new Map<string, SystemCard>()
   for (const d of defs) {
