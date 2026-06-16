@@ -13,6 +13,8 @@ import { toast } from 'sonner'
 import { Button, cn } from '@beaconhs/ui'
 import {
   VIZ_LIST,
+  parseExpression,
+  serializeExpression,
   type AnalyticsColumn,
   type AnalyticsEntity,
   type BhqlResult,
@@ -23,11 +25,13 @@ import type {
   BhqlAnyMeasure,
   BhqlBin,
   BhqlBreakout,
+  BhqlExpr,
   BhqlExprMeasure,
   BhqlMeasure,
   BhqlQuery,
   ReportRuleGroup,
 } from '@beaconhs/db/schema'
+import { ExpressionField, exprLabel, type ExprField } from './expression-field.client'
 import { VizRenderer } from '../../_viz/viz-renderer.client'
 import { VizIcon } from '../../_viz/viz-icon'
 import { createCard, generateCard, previewCard, updateCard } from '../_actions'
@@ -48,6 +52,9 @@ type MeasureRow = {
   denField?: string
   denWhere?: MeasureWhere
   multiplier?: number
+  /** When set, this is a CUSTOM-EXPRESSION measure (a formula that may contain
+   *  aggregates, e.g. days-since) — the structured fn/field/ratio are ignored. */
+  expr?: BhqlExpr
 }
 
 const FILTER_OPS: { value: FilterOp; label: string; needsValue: boolean }[] = [
@@ -213,7 +220,12 @@ export function CardStudio({
     const mss: BhqlAnyMeasure[] = []
     const outputAliases: string[] = []
     for (const m of measures) {
-      if (m.calc) {
+      if (m.expr) {
+        // Custom-expression (formula) measure — emitted verbatim as a BhqlExprMeasure.
+        const a = uniq('expr')
+        mss.push({ kind: 'expr', alias: a, expr: m.expr })
+        outputAliases.push(a)
+      } else if (m.calc) {
         const numAlias = uniq('num')
         mss.push({
           fn: m.fn,
@@ -912,8 +924,59 @@ function MeasureEditor({
   row: MeasureRow
   onChange: (next: MeasureRow) => void
 }) {
+  const labelForField = (key: string) => {
+    const f = fields.find((x) => x.value === key)
+    return f ? exprLabel(f) : key
+  }
+  const resolveColumn = (label: string) => {
+    const lc = label.trim().toLowerCase()
+    return (
+      fields.find((x) => x.label.toLowerCase() === lc || exprLabel(x).toLowerCase() === lc)
+        ?.value ?? null
+    )
+  }
+  const [exprText, setExprText] = useState(() =>
+    row.expr ? serializeExpression(row.expr, { labelForField }) : '',
+  )
+
+  // Custom-expression (formula) measure — a Metabase-style "custom aggregation".
+  if (row.expr !== undefined) {
+    return (
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] font-semibold tracking-wide text-violet-500 uppercase">
+            ƒx Custom aggregation
+          </span>
+          <button
+            type="button"
+            onClick={() => onChange({ fn: 'count' })}
+            className="text-[11px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+          >
+            ← simple measure
+          </button>
+        </div>
+        <ExpressionField
+          value={exprText}
+          fields={fields}
+          onChange={(t) => {
+            setExprText(t)
+            const r = parseExpression(t, { resolveColumn })
+            if (r.ok) onChange({ ...row, expr: r.expr })
+          }}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-1.5">
+      <button
+        type="button"
+        onClick={() => onChange({ ...row, calc: false, expr: { ex: 'agg', fn: 'count' } })}
+        className="text-[11px] font-medium text-violet-600 hover:text-violet-700 dark:text-violet-400"
+      >
+        ƒx Custom expression
+      </button>
       <select
         value={row.fn}
         onChange={(e) => onChange({ ...row, fn: e.target.value as BhqlAggFn })}
@@ -1125,7 +1188,8 @@ function decodeQuery(query: BhqlQuery | null): {
   // silently decomposing into two plain measures with the ratio lost. Custom
   // (expr) measures are carried through verbatim (no structured editor yet).
   const aggs = stage.aggregations ?? []
-  const extraAggs = aggs.filter((m): m is BhqlExprMeasure => m.kind === 'expr')
+  // Custom-expression measures decode into editable rows (below), not passthrough.
+  const extraAggs: BhqlExprMeasure[] = []
   const baseByAlias = new Map<string, BhqlMeasure>()
   const consumed = new Set<string>()
   for (const m of aggs) {
@@ -1151,7 +1215,10 @@ function decodeQuery(query: BhqlQuery | null): {
         denWhere: groupToWhere(den?.filter),
         multiplier: m.multiplier ?? 1,
       })
-    } else if (m.kind !== 'expr' && !consumed.has(m.alias)) {
+    } else if (m.kind === 'expr') {
+      // Custom-expression measure → an editable formula row (fn is a placeholder).
+      measures.push({ fn: 'count', expr: m.expr })
+    } else if (!consumed.has(m.alias)) {
       measures.push({ fn: m.fn, field: m.field, where: groupToWhere(m.filter) })
     }
   }
