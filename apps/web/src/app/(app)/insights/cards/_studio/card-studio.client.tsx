@@ -104,6 +104,7 @@ export type CardStudioInitial = {
   name: string
   query: BhqlQuery | null
   vizType: string
+  vizSettings?: Record<string, unknown>
 }
 
 export function CardStudio({
@@ -255,6 +256,19 @@ export function CardStudio({
     }
   }, [entityKey, mode, columns, breakouts, measures, filters, pivotOn, cols])
 
+  // Viz settings for BOTH the live preview and the saved card. A scalar/progress
+  // card's value is pinned to the primary output column — the calc (ratio) is
+  // emitted last, and buildAst regenerates aliases on every render, so a stored
+  // alias would go stale and the scalar would fall back to the raw numerator.
+  const vizSettings = useMemo<Record<string, unknown>>(() => {
+    const s: Record<string, unknown> = { ...(initial.vizSettings ?? {}) }
+    const primaryAlias = ast.stages[0]?.aggregations?.at(-1)?.alias
+    if ((vizType === 'scalar' || vizType === 'progress') && primaryAlias) {
+      s.valueField = primaryAlias
+    }
+    return s
+  }, [ast, vizType, initial.vizSettings])
+
   // Debounced live preview (drops stale responses).
   const [result, setResult] = useState<BhqlResult | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
@@ -326,7 +340,7 @@ export function CardStudio({
 
   async function save() {
     setSaving(true)
-    const payload = { name, query: ast, vizType, vizSettings: {} }
+    const payload = { name, query: ast, vizType, vizSettings }
     const r = initial.id
       ? await updateCard({ id: initial.id, ...payload })
       : await createCard(payload)
@@ -591,7 +605,12 @@ export function CardStudio({
                   {previewError}
                 </div>
               ) : result ? (
-                <VizRenderer vizType={vizType} result={result} label={name} />
+                <VizRenderer
+                  vizType={vizType}
+                  result={result}
+                  settings={vizSettings}
+                  label={name}
+                />
               ) : (
                 <div className="grid h-full place-items-center text-xs text-slate-400">
                   Building preview…
@@ -976,9 +995,42 @@ function decodeQuery(query: BhqlQuery | null): {
     }
   }
   const breakouts = (stage.breakouts ?? []).map((b) => ({ field: b.field, bin: b.bin }))
-  const measures = (stage.aggregations ?? [])
-    .filter((m): m is BhqlMeasure => (m as { kind?: string }).kind !== 'calc')
-    .map((m) => ({ fn: m.fn, field: m.field, where: groupToWhere(m.filter) }))
+
+  // Reconstruct measures. A calc (ratio) measure is re-hydrated into ONE row —
+  // fn/field/where from its numerator base, denFn/denField/denWhere from its
+  // denominator base, plus the multiplier — and the consumed base measures are
+  // dropped, so an edited ratio card round-trips through buildAst() instead of
+  // silently decomposing into two plain measures with the ratio lost.
+  const aggs = stage.aggregations ?? []
+  const baseByAlias = new Map<string, BhqlMeasure>()
+  const consumed = new Set<string>()
+  for (const m of aggs) {
+    if (m.kind === 'calc') {
+      consumed.add(m.numerator)
+      if (m.denominator) consumed.add(m.denominator)
+    } else {
+      baseByAlias.set(m.alias, m)
+    }
+  }
+  const measures: MeasureRow[] = []
+  for (const m of aggs) {
+    if (m.kind === 'calc') {
+      const num = baseByAlias.get(m.numerator)
+      const den = m.denominator ? baseByAlias.get(m.denominator) : undefined
+      measures.push({
+        fn: num?.fn ?? 'count',
+        field: num?.field,
+        where: groupToWhere(num?.filter),
+        calc: true,
+        denFn: den?.fn,
+        denField: den?.field,
+        denWhere: groupToWhere(den?.filter),
+        multiplier: m.multiplier ?? 1,
+      })
+    } else if (!consumed.has(m.alias)) {
+      measures.push({ fn: m.fn, field: m.field, where: groupToWhere(m.filter) })
+    }
+  }
   const isSummarize = breakouts.length > 0 || measures.length > 0
   return {
     entityKey: stage.source,

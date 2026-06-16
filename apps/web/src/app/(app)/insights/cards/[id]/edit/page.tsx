@@ -16,7 +16,13 @@ export default async function EditCardPage({ params }: { params: Promise<{ id: s
   if (!card) notFound()
   return (
     <CardStudio
-      initial={{ id: card.id, name: card.name, query: card.query, vizType: card.vizType }}
+      initial={{
+        id: card.id,
+        name: card.name,
+        query: card.query,
+        vizType: card.vizType,
+        vizSettings: card.vizSettings,
+      }}
       entities={discoverEntities()}
     />
   )
