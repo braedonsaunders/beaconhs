@@ -88,6 +88,11 @@ export default async function ReportViewerPage({
   })
 
   const isCustom = definition.kind === 'custom'
+  // Every report is editable: custom edits in place; a built-in opens an
+  // editable copy you own (the original stays in the catalogue).
+  const editHref = isCustom
+    ? `/reports/definitions/${id}/edit`
+    : `/reports/definitions/new?from=${id}`
   const runBound = runOnceFromDefinition.bind(null, id)
   const deleteBound = deleteDefinition.bind(null, id)
   const exportBase = `/reports/definitions/${id}/export${run.days ? `?days=${run.days}` : ''}`
@@ -114,6 +119,12 @@ export default async function ReportViewerPage({
                   Email PDF
                 </Button>
               </form>
+              <Link href={editHref as never}>
+                <Button variant="outline" size="sm">
+                  <Pencil size={14} className="mr-1.5" />
+                  Edit
+                </Button>
+              </Link>
               <Link href={`/reports/schedules/new?definitionId=${definition.id}`}>
                 <Button size="sm">
                   <Calendar size={14} className="mr-1.5" />
@@ -325,18 +336,16 @@ export default async function ReportViewerPage({
               <MetaItem label="Updated">{formatDateTime(definition.updatedAt)}</MetaItem>
             </dl>
             <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">
-              {isCustom ? (
-                <Link href={`/reports/definitions/${definition.id}/edit` as never}>
-                  <Button variant="outline" size="sm">
-                    <Pencil size={14} className="mr-1.5" />
-                    Edit report
-                  </Button>
-                </Link>
-              ) : null}
+              <Link href={editHref as never}>
+                <Button variant="outline" size="sm">
+                  <Pencil size={14} className="mr-1.5" />
+                  {isCustom ? 'Edit report' : 'Edit a copy'}
+                </Button>
+              </Link>
               <Link href={`/reports/definitions/new?from=${definition.id}` as never}>
                 <Button variant="outline" size="sm">
                   <Copy size={14} className="mr-1.5" />
-                  Clone as custom
+                  Duplicate
                 </Button>
               </Link>
               {isCustom ? (

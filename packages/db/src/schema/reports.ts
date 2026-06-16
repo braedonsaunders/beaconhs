@@ -35,8 +35,10 @@ import { tenants } from './core'
 
 export const reportDefinitionKind = pgEnum('report_definition_kind', ['built_in', 'custom'])
 
-/** The set of entities a custom report can target. Kept narrow on purpose —
- *  each value maps to a query plan in `apps/worker/src/workers/reports.ts`. */
+/** Legacy curated entity keys. Custom reports may now target ANY discovered
+ *  tenant-scoped entity (see @beaconhs/analytics/server discoverEntities); this
+ *  list is retained as the static back-compat registry so reports saved against
+ *  these keys keep resolving (the executor falls back to REPORT_ENTITY_MAP). */
 export const REPORT_CUSTOM_ENTITIES = [
   'incidents',
   'corrective_actions',
@@ -74,8 +76,8 @@ export const REPORT_FILTER_OPERATORS = [
   'is_not_null',
   'contains',
   'between_days_ago',
-  // Relative-date operators (no value) -- anchored to the server clock at
-  // compile time, so this-month / overdue cards stay correct without a param.
+  // Relative-date operators (no value) — anchored to the server clock at compile
+  // time, so "this month" / "overdue" cards stay correct without a parameter.
   'since_today',
   'this_week',
   'this_month',
@@ -111,7 +113,8 @@ export const REPORT_CHART_TYPES = ['bar', 'line', 'area', 'pie', 'donut'] as con
 export type ReportChartType = (typeof REPORT_CHART_TYPES)[number]
 
 /** Optional chart rendered above the result table in the report viewer.
- *  v1 metric is always a row count per distinct `dimension` value. */
+ *  In rows mode the metric is a row count per distinct `dimension` value; in
+ *  summarize mode it plots the first measure against the `dimension` breakout. */
 export type ReportChartConfig = {
   type: ReportChartType
   /** Column whose distinct values form the category axis / slices. */
@@ -119,9 +122,42 @@ export type ReportChartConfig = {
   metric: 'count'
 }
 
+/** Aggregate functions a Summarize-mode measure can use. */
+export const REPORT_AGG_FNS = ['count', 'count_distinct', 'sum', 'avg', 'min', 'max'] as const
+export type ReportAggFn = (typeof REPORT_AGG_FNS)[number]
+
+/** Temporal buckets for a Summarize-mode breakout on a date/timestamp column. */
+export const REPORT_TEMPORAL_BINS = ['day', 'week', 'month', 'quarter', 'year'] as const
+export type ReportTemporalBin = (typeof REPORT_TEMPORAL_BINS)[number]
+
+/** A group-by dimension in Summarize mode. A date/timestamp column can be
+ *  bucketed by `bin` (e.g. month) before grouping. */
+export type ReportBreakout = {
+  column: string
+  bin?: ReportTemporalBin
+}
+
+/** An aggregate column in Summarize mode. `column` is omitted only for `count`. */
+export type ReportMeasure = {
+  fn: ReportAggFn
+  column?: string
+  /** Optional display label; defaults to a humanised "<fn> of <column>". */
+  label?: string
+}
+
 export type ReportCustomQuery = {
-  entity: ReportCustomEntity
+  /** Entity key — validated at runtime against the discovered catalog (plus the
+   *  legacy static registry for back-compat). Loosened from the narrow
+   *  ReportCustomEntity union so every discovered tenant-scoped table is
+   *  targetable; the single-table executor still resolves it from a whitelist. */
+  entity: string
+  /** 'rows' (default) = detail rows; 'summarize' = GROUP BY breakouts + measures. */
+  mode?: 'rows' | 'summarize'
   columns: string[]
+  /** Summarize mode: group-by dimensions (with optional temporal bucketing). */
+  breakouts?: ReportBreakout[]
+  /** Summarize mode: aggregate columns. */
+  measures?: ReportMeasure[]
   filters?: ReportCustomFilter[]
   /** Nested and/or filter tree; takes precedence over `filters` when set. */
   filtersV2?: ReportRuleGroup | null

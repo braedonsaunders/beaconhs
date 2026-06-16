@@ -11,18 +11,11 @@ import {
   CardHeader,
   CardTitle,
   EmptyState,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
 } from '@beaconhs/ui'
 import { Inbox } from 'lucide-react'
 import type { ReportRunResult } from '@beaconhs/reports'
 import { ReportChart } from './report-chart'
-
-const GROUP_ROW_CAP = 100
+import { PaginatedReportTable } from './paginated-report-table.client'
 
 export function ReportSummaryCards({ summary }: { summary: ReportRunResult['summary'] }) {
   if (!summary.length) return null
@@ -68,80 +61,33 @@ export function ReportCharts({
   )
 }
 
-export function ReportGroupTables({
-  groups,
-  rowCap = GROUP_ROW_CAP,
-  capNote = 'Export to view all rows.',
-}: {
-  groups: ReportRunResult['groups']
-  rowCap?: number
-  capNote?: string
-}) {
+export function ReportGroupTables({ groups }: { groups: ReportRunResult['groups'] }) {
   if (!groups.length) return null
   return (
     <div className="space-y-4">
-      {groups.map((g, i) => {
-        const shown = g.rows.slice(0, rowCap)
-        const hidden = g.rows.length - shown.length
-        return (
-          <Card key={`${g.title}-${i}`}>
-            <CardHeader>
-              <CardTitle className="text-sm">
-                {g.title}
-                {g.subtitle ? (
-                  <span className="ml-2 font-normal text-slate-400">{g.subtitle}</span>
-                ) : null}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {g.isEmpty || g.rows.length === 0 ? (
-                <EmptyState
-                  icon={<Inbox size={24} />}
-                  title="No data"
-                  description="No records for the selected range."
-                />
-              ) : (
-                <>
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          {g.columns.map((c) => (
-                            <TableHead key={c}>{c}</TableHead>
-                          ))}
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {shown.map((row, ri) => (
-                          <TableRow key={ri}>
-                            {row.map((cell, ci) => (
-                              <TableCell
-                                key={ci}
-                                className="max-w-[28rem] truncate text-slate-600 dark:text-slate-300"
-                              >
-                                {cell === null || typeof cell === 'undefined' || cell === '' ? (
-                                  <span className="text-slate-300 dark:text-slate-600">—</span>
-                                ) : (
-                                  String(cell)
-                                )}
-                              </TableCell>
-                            ))}
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                  {hidden > 0 ? (
-                    <p className="mt-2 text-xs text-slate-400">
-                      Showing {shown.length} of {g.rows.length} rows. {capNote}
-                    </p>
-                  ) : null}
-                </>
-              )}
-            </CardContent>
-          </Card>
-        )
-      })}
+      {groups.map((g, i) => (
+        <Card key={`${g.title}-${i}`}>
+          <CardHeader>
+            <CardTitle className="text-sm">
+              {g.title}
+              {g.subtitle ? (
+                <span className="ml-2 font-normal text-slate-400">{g.subtitle}</span>
+              ) : null}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {g.isEmpty || g.rows.length === 0 ? (
+              <EmptyState
+                icon={<Inbox size={24} />}
+                title="No data"
+                description="No records for the selected range."
+              />
+            ) : (
+              <PaginatedReportTable columns={g.columns} rows={g.rows} />
+            )}
+          </CardContent>
+        </Card>
+      ))}
     </div>
   )
 }

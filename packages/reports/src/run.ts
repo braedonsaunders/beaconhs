@@ -5,6 +5,7 @@
 
 import type { Database } from '@beaconhs/db'
 import type { ReportCustomQuery } from '@beaconhs/db/schema'
+import type { ReportEntity } from './entities'
 import {
   queryCorrectiveActionsOpen,
   queryDocumentComplianceSnapshot,
@@ -30,6 +31,9 @@ export type RunReportInput = {
   customQuery?: ReportCustomQuery | null
   /** Viewer/preview cap; scheduled runs leave it unset. Custom queries only. */
   maxRows?: number
+  /** Discovered entity whitelist injected by the caller (web/worker) so custom
+   *  reports can target any tenant-scoped table. Falls back to the static map. */
+  entityMap?: Record<string, ReportEntity>
 }
 
 export async function runReport(tx: Database, input: RunReportInput): Promise<ReportRunResult> {
@@ -62,7 +66,10 @@ export async function runReport(tx: Database, input: RunReportInput): Promise<Re
     case 'osha_300_log':
       return queryOsha300Log(tx, filters, range)
     case 'custom_query':
-      return runCustomQuery(tx, customQuery ?? null, { maxRows: input.maxRows })
+      return runCustomQuery(tx, customQuery ?? null, {
+        maxRows: input.maxRows,
+        entityMap: input.entityMap,
+      })
     default:
       throw new Error(`Unknown queryKind: ${queryKind}`)
   }

@@ -96,6 +96,8 @@ export function compileRule(
       const fromDate = new Date(Date.now() - days * 24 * 3600 * 1000)
       return sql`${colSql} >= ${fromDate.toISOString()}`
     }
+    // Relative-date ops compile to pure SQL (no bound param) so they re-anchor to
+    // the DB clock on every run. date_trunc keeps them index-friendly.
     case 'since_today':
       return sql.join([colSql, sql.raw(" >= date_trunc('day', now())")], sql.raw(''))
     case 'this_week':

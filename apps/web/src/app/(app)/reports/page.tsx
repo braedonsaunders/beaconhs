@@ -67,7 +67,7 @@ export default async function ReportsPage() {
               <Link href={'/reports/definitions/new' as never}>
                 <Button variant="outline">
                   <Sparkles size={14} className="mr-1.5" />
-                  New custom report
+                  New report
                 </Button>
               </Link>
               <Link href="/reports/schedules/new">
@@ -252,7 +252,7 @@ export default async function ReportsPage() {
               <EmptyState
                 icon={<FileText size={24} />}
                 title="No reports available"
-                description="Create a custom report to get started."
+                description="Create a report to get started."
               />
             ) : (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">

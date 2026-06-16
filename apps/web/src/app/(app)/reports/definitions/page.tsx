@@ -4,7 +4,7 @@
 
 import Link from 'next/link'
 import { Badge, Button, EmptyState, Input, PageHeader } from '@beaconhs/ui'
-import { BarChart3, Plus, Search } from 'lucide-react'
+import { BarChart3, Pencil, Plus, Search } from 'lucide-react'
 import { requireRequestContext } from '@/lib/auth'
 import { ListPageLayout } from '@/components/page-layout'
 import { FilterChips } from '@/components/filter-bar'
@@ -57,7 +57,7 @@ export default async function ReportLibraryPage({
               <Link href={'/reports/definitions/new' as never}>
                 <Button>
                   <Plus size={14} className="mr-1.5" />
-                  New custom report
+                  New report
                 </Button>
               </Link>
             }
@@ -106,13 +106,11 @@ export default async function ReportLibraryPage({
           icon={<BarChart3 size={28} />}
           title={all.length === 0 ? 'No reports available' : 'No matching reports'}
           description={
-            all.length === 0
-              ? 'Create a custom report to get started.'
-              : 'Adjust the search or filters.'
+            all.length === 0 ? 'Create a report to get started.' : 'Adjust the search or filters.'
           }
           action={
             <Link href={'/reports/definitions/new' as never}>
-              <Button variant="outline">Build a custom report</Button>
+              <Button variant="outline">New report</Button>
             </Link>
           }
         />
@@ -156,6 +154,18 @@ function DefinitionCard({ definition: d }: { definition: ReportDefinitionRow }) 
         <Link href={`/reports/definitions/${d.id}` as never}>
           <Button variant="outline" size="sm">
             View
+          </Button>
+        </Link>
+        <Link
+          href={
+            (d.kind === 'custom'
+              ? `/reports/definitions/${d.id}/edit`
+              : `/reports/definitions/new?from=${d.id}`) as never
+          }
+        >
+          <Button variant="ghost" size="sm">
+            <Pencil size={13} className="mr-1.5" />
+            Edit
           </Button>
         </Link>
         <Link href={`/reports/schedules/new?definitionId=${d.id}`}>

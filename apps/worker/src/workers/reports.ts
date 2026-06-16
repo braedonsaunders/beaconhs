@@ -21,6 +21,7 @@ import {
 } from '@beaconhs/db/schema'
 import { enqueueEmail, type ReportRunJobData } from '@beaconhs/jobs'
 import { computeRangeFor, runReport } from '@beaconhs/reports'
+import { discoverEntityMap } from '@beaconhs/analytics/server'
 import { renderReportPdf } from '@beaconhs/forms-pdf'
 import { newAttachmentKey, publicUrl, putObject } from '@beaconhs/storage'
 
@@ -67,6 +68,7 @@ export async function processReportRun(job: Job<ReportRunJobData>): Promise<void
         filters: ctx.schedule.filters,
         range,
         customQuery: (ctx.definition.customQuery as ReportCustomQuery | null) ?? null,
+        entityMap: discoverEntityMap(),
       }),
     )
 
