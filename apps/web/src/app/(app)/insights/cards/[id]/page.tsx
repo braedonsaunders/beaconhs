@@ -32,6 +32,7 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
       <PageHeader
         title={card.name}
         description={card.description ?? undefined}
+        back={{ href: '/insights/library', label: 'Library' }}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <span

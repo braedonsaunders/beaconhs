@@ -5,6 +5,7 @@ import { Button, PageHeader } from '@beaconhs/ui'
 import { requireRequestContext } from '@/lib/auth'
 import { canCreateInsights, canViewInsights } from '../_access'
 import { loadCardsForPalette } from '../cards/_data'
+import { ensureSystemCards } from '../_system-cards'
 import { loadLibrary } from './_data'
 import { LibraryTabs } from './_library-tabs.client'
 
@@ -14,6 +15,9 @@ export const metadata = { title: 'Library · Insights' }
 export default async function LibraryPage() {
   const ctx = await requireRequestContext()
   if (!canViewInsights(ctx)) redirect('/dashboard')
+  // Seed the built-in BHQL cards (idempotent) so the Library is populated even
+  // when this page is the first one the user lands on.
+  await ensureSystemCards(ctx)
   const [cards, lib] = await Promise.all([loadCardsForPalette(ctx), loadLibrary(ctx)])
 
   return (

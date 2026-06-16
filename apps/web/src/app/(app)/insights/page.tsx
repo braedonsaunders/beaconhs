@@ -10,6 +10,7 @@ import {
 import { discoverEntities } from '@beaconhs/analytics/server'
 import { loadCardsForPalette, type CardRow } from './cards/_data'
 import { resolveParamValues } from './_params'
+import { ensureSystemCards } from './_system-cards'
 import { BUILTIN_QUERIES, INSIGHT_WIDGET_MAP } from './_widgets'
 import { InsightsWorkspace } from './_workspace'
 
@@ -25,8 +26,12 @@ export default async function InsightsPage({
   if (!canViewInsights(ctx)) redirect('/dashboard')
 
   const sp = await searchParams
+  // Materialize the BHQL built-ins as real published Cards (idempotent), then
+  // load everything: dashboards remap their built-in widget keys onto these card
+  // ids, and the palette/library pick them up as published cards.
+  const systemCards = await ensureSystemCards(ctx)
   const [dashboards, data, paletteCards] = await Promise.all([
-    loadDashboards(ctx),
+    loadDashboards(ctx, systemCards),
     loadInsightsData(ctx),
     loadCardsForPalette(ctx),
   ])

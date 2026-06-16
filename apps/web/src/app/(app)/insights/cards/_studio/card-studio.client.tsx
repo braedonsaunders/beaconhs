@@ -6,8 +6,9 @@
 // a BHQL AST, previews it (debounced, under RLS) and saves it as a Card.
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { BarChart3, Loader2, Plus, Save, Sparkles, Trash2 } from 'lucide-react'
+import { ArrowLeft, BarChart3, Loader2, Plus, Save, Sparkles, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button, cn } from '@beaconhs/ui'
 import {
@@ -344,6 +345,12 @@ export function CardStudio({
     <div className="flex h-full min-h-0 flex-col bg-slate-50/40 dark:bg-slate-950">
       {/* Header */}
       <div className="flex items-center gap-2 border-b border-slate-200 bg-white px-4 py-2 dark:border-slate-800 dark:bg-slate-900">
+        <Link
+          href="/insights/library"
+          className="flex h-9 shrink-0 items-center gap-1 rounded-md px-2 text-xs text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+        >
+          <ArrowLeft size={14} /> Library
+        </Link>
         <BarChart3 size={16} className="text-teal-600" />
         <input
           value={name}

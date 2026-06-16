@@ -80,7 +80,17 @@ export type InsightDashboardRow = {
 
 /** The user's /insights tabs = their OWN dashboards + the published dashboards
  *  they've pinned from the library. A default is created on first visit. */
-export async function loadDashboards(ctx: RequestContext): Promise<InsightDashboardRow[]> {
+export async function loadDashboards(
+  ctx: RequestContext,
+  systemCards: Map<string, { id: string }>,
+): Promise<InsightDashboardRow[]> {
+  // Remap built-in widget keys onto their real system-card ids so the Overview
+  // renders (and persists on save) as actual Cards, not hard-coded widgets.
+  const remap = (layout: InsightDashboardLayout): InsightDashboardLayout => ({
+    widgets: layout.widgets.map((w) =>
+      systemCards.has(w.id) ? { ...w, id: systemCards.get(w.id)!.id } : w,
+    ),
+  })
   const owned = await ctx.db((tx) =>
     tx
       .select({
@@ -143,7 +153,7 @@ export async function loadDashboards(ctx: RequestContext): Promise<InsightDashbo
           {
             id: created.id,
             name: created.name,
-            layout: created.layout,
+            layout: remap(created.layout),
             params: [],
             paramMap: {},
             owned: true,
@@ -157,7 +167,7 @@ export async function loadDashboards(ctx: RequestContext): Promise<InsightDashbo
     ...owned.map((r) => ({
       id: r.id,
       name: r.name,
-      layout: r.layout,
+      layout: remap(r.layout),
       params: r.params,
       paramMap: r.paramMap,
       owned: true,
@@ -166,7 +176,7 @@ export async function loadDashboards(ctx: RequestContext): Promise<InsightDashbo
     ...pinned.map((r) => ({
       id: r.id,
       name: r.name,
-      layout: r.layout,
+      layout: remap(r.layout),
       params: r.params,
       paramMap: r.paramMap,
       owned: false,
