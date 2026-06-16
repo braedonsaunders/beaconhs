@@ -9,10 +9,9 @@
 // Each tab is a URL-driven sub-page reachable via ?tab=… so deep-linking
 // from /ppe/types just works.
 
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { ArrowDown, ArrowUp, Camera, Pencil, Plus, ShieldCheck, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, Camera, Plus, ShieldCheck, Trash2 } from 'lucide-react'
 import { and, asc, count, eq } from 'drizzle-orm'
 import {
   Badge,
@@ -44,12 +43,61 @@ export const dynamic = 'force-dynamic'
 const TABS = ['general', 'inspection-criteria', 'sizing-scheme'] as const
 type Tab = (typeof TABS)[number]
 
+const CATEGORY_OPTIONS = [
+  { value: '', label: '— None —' },
+  { value: 'head', label: 'Head protection' },
+  { value: 'eye', label: 'Eye protection' },
+  { value: 'hand', label: 'Hand protection' },
+  { value: 'foot', label: 'Foot protection' },
+  { value: 'fall', label: 'Fall protection' },
+  { value: 'respiratory', label: 'Respiratory protection' },
+  { value: 'hearing', label: 'Hearing protection' },
+  { value: 'high_vis', label: 'High visibility' },
+  { value: 'other', label: 'Other' },
+]
+
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   return { title: `PPE type · ${id.slice(0, 8)}` }
 }
 
 // --- Server actions -----------------------------------------------------
+
+/** Update the type's general attributes inline on the detail page (stays on
+ *  the page — no redirect). This is the single edit surface; /[id]/edit only
+ *  redirects here. */
+async function updateType(formData: FormData) {
+  'use server'
+  const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'ppe')
+  const id = String(formData.get('id') ?? '').trim()
+  const name = String(formData.get('name') ?? '').trim()
+  const category = String(formData.get('category') ?? '').trim() || null
+  const isInspectable = formData.get('isInspectable') === 'on'
+  const everyDaysRaw = String(formData.get('everyDays') ?? '').trim()
+  if (!id || !name) return
+  await ctx.db((tx) =>
+    tx
+      .update(ppeTypes)
+      .set({
+        name,
+        category,
+        isInspectable,
+        inspectionSchedule:
+          isInspectable && everyDaysRaw ? { everyDays: Number(everyDaysRaw) } : null,
+      })
+      .where(eq(ppeTypes.id, id)),
+  )
+  await recordAudit(ctx, {
+    entityType: 'ppe_type',
+    entityId: id,
+    action: 'update',
+    summary: `Updated PPE type "${name}"`,
+    after: { name, category, isInspectable, everyDays: everyDaysRaw || null },
+  })
+  revalidatePath(`/ppe/types/${id}`)
+  revalidatePath('/ppe/types')
+}
 
 async function addCriterion(formData: FormData) {
   'use server'
@@ -282,13 +330,6 @@ export default async function PpeTypeDetailPage({
               </Badge>
             </div>
           }
-          actions={
-            <Link href={`/ppe/types/${id}/edit`}>
-              <Button size="sm" variant="outline">
-                <Pencil size={12} /> Edit type
-              </Button>
-            </Link>
-          }
         />
       }
       subtabs={
@@ -310,40 +351,82 @@ export default async function PpeTypeDetailPage({
     >
       <div className="space-y-5">
         {active === 'general' ? (
-          <Section title="General">
-            <DetailGrid
-              rows={[
-                { label: 'Name', value: type.name },
-                { label: 'Category', value: type.category ?? '—' },
-                {
-                  label: 'Inspectable',
-                  value: type.isInspectable ? 'Yes' : 'No',
-                },
-                {
-                  label: 'Inspection cadence',
-                  value: type.inspectionSchedule?.everyDays
-                    ? `Every ${type.inspectionSchedule.everyDays} days`
-                    : '—',
-                },
-                {
-                  label: 'Sizing scheme',
-                  value:
-                    type.sizingScheme && type.sizingScheme.length > 0
-                      ? type.sizingScheme.join(' · ')
-                      : '—',
-                },
-                { label: 'Items in register', value: itemCount },
-                {
-                  label: 'Created',
-                  value: new Date(type.createdAt).toLocaleDateString(),
-                },
-                {
-                  label: 'Last update',
-                  value: new Date(type.updatedAt).toLocaleDateString(),
-                },
-              ]}
-            />
-          </Section>
+          <>
+            <Section
+              title="General"
+              subtitle="Edit the type's basic attributes. Sizing and inspection criteria are managed in their own tabs."
+            >
+              <form action={updateType} className="space-y-4">
+                <input type="hidden" name="id" value={id} />
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label htmlFor="name">Name *</Label>
+                    <Input id="name" name="name" required defaultValue={type.name} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="category">Category</Label>
+                    <Select id="category" name="category" defaultValue={type.category ?? ''}>
+                      {CATEGORY_OPTIONS.map((c) => (
+                        <option key={c.value} value={c.value}>
+                          {c.label}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="everyDays">Inspection cadence (days)</Label>
+                    <Input
+                      id="everyDays"
+                      name="everyDays"
+                      type="number"
+                      min={1}
+                      defaultValue={type.inspectionSchedule?.everyDays ?? ''}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 sm:col-span-2">
+                    <input
+                      id="isInspectable"
+                      name="isInspectable"
+                      type="checkbox"
+                      defaultChecked={type.isInspectable}
+                      className="h-4 w-4 rounded border-slate-300"
+                    />
+                    <Label htmlFor="isInspectable" className="!mb-0">
+                      This PPE type requires periodic inspection
+                    </Label>
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <Button type="submit" size="sm">
+                    Save details
+                  </Button>
+                </div>
+              </form>
+            </Section>
+
+            <Section title="Summary">
+              <DetailGrid
+                rows={[
+                  {
+                    label: 'Sizing scheme',
+                    value:
+                      type.sizingScheme && type.sizingScheme.length > 0
+                        ? type.sizingScheme.join(' · ')
+                        : '—',
+                  },
+                  { label: 'Items in register', value: itemCount },
+                  {
+                    label: 'Created',
+                    value: new Date(type.createdAt).toLocaleDateString(),
+                  },
+                  {
+                    label: 'Last update',
+                    value: new Date(type.updatedAt).toLocaleDateString(),
+                  },
+                ]}
+              />
+            </Section>
+          </>
         ) : null}
 
         {active === 'inspection-criteria' ? (

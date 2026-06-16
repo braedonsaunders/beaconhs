@@ -18,6 +18,7 @@ import { parseListParams } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
 import { SearchInput } from '@/components/search-input'
 import { TrainingSubNav } from '../_components/training-sub-nav'
+import { createAuthority } from '../_actions/authorities'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 
@@ -105,9 +106,9 @@ export default async function TrainingAuthoritiesPage({
             title="Skill Authorities"
             description="Credential-issuing bodies and their skill types."
             actions={
-              <Link href="/training/authorities/new">
-                <Button>New authority</Button>
-              </Link>
+              <form action={createAuthority}>
+                <Button type="submit">New authority</Button>
+              </form>
             }
           />
           <TrainingSubNav active="authorities" />

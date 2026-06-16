@@ -1,10 +1,49 @@
 'use server'
 
+import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { and, asc, eq } from 'drizzle-orm'
-import { documentBookItems } from '@beaconhs/db/schema'
+import { documentBookItems, documentBooks } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+
+/**
+ * Instant-create a document book and land in its detail editor (the single
+ * view+edit surface) — no separate create form, no create drawer. A blank
+ * title defaults to a placeholder the user renames on the detail page.
+ */
+export async function createBook(formData: FormData): Promise<void> {
+  const ctx = await requireRequestContext()
+  const title = String(formData.get('title') ?? '').trim() || 'Untitled book'
+  const category = String(formData.get('category') ?? '').trim() || null
+  const description = String(formData.get('description') ?? '').trim() || null
+
+  const bookId = await ctx.db(async (tx) => {
+    const [row] = await tx
+      .insert(documentBooks)
+      .values({
+        tenantId: ctx.tenantId,
+        title,
+        name: title, // keep legacy column populated
+        description,
+        category,
+        status: 'draft',
+      })
+      .returning({ id: documentBooks.id })
+    if (!row) throw new Error('Failed to insert book')
+    return row.id
+  })
+
+  await recordAudit(ctx, {
+    entityType: 'document_book',
+    entityId: bookId,
+    action: 'create',
+    summary: `Created document book "${title}"`,
+    after: { title, category, description },
+  })
+  revalidatePath('/documents/books')
+  redirect(`/documents/books/${bookId}`)
+}
 
 /**
  * Persist an ordered list of documentIds for the given book. Renumbers all

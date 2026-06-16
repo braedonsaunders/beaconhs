@@ -12,13 +12,18 @@ import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 
+/**
+ * Instant-create a group and land in its detail editor (the single view+edit
+ * surface). Called from the list "Add group" button — no separate create form,
+ * no create drawer. A blank name defaults to a placeholder the user renames on
+ * the detail page.
+ */
 export async function createGroup(formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'people')
-  const name = String(formData.get('name') ?? '').trim()
+  const name = String(formData.get('name') ?? '').trim() || 'Untitled group'
   const description = String(formData.get('description') ?? '').trim() || null
   const color = String(formData.get('color') ?? '').trim() || null
-  if (!name) return
   const [row] = await ctx.db((tx) =>
     tx
       .insert(personGroups)

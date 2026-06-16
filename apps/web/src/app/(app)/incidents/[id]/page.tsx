@@ -71,6 +71,7 @@ import { ActivityFeed } from '@/components/activity-feed'
 import { PhotoGallery } from '@/components/photo-gallery'
 import { PhotoUploaderSection } from '@/components/photo-uploader-section'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
+import { IncidentEditTab } from './incident-edit-tab'
 import { DetailPageLayout } from '@/components/page-layout'
 import { emitIncidentStatusChanged } from '@beaconhs/events'
 import { SeverityBadge, StatusBadge } from '../_badges'
@@ -734,6 +735,7 @@ const INCIDENT_TABS = [
   'investigation',
   'photos',
   'activity',
+  'edit',
 ] as const
 type IncidentTab = (typeof INCIDENT_TABS)[number]
 
@@ -906,8 +908,9 @@ export default async function IncidentDetailPage({
           }
           actions={
             <>
-              <Link href={`/incidents/${id}/edit`}>
-                <Button variant="outline" disabled={incident.locked}>
+              <Link href={`/incidents/${id}?tab=edit`}>
+                <Button variant="outline">
+                  <Pencil size={14} />
                   Edit
                 </Button>
               </Link>
@@ -989,6 +992,7 @@ export default async function IncidentDetailPage({
             },
             { key: 'photos', label: 'Photos & files', count: photos.length },
             { key: 'activity', label: 'Activity', count: activity.length },
+            { key: 'edit', label: 'Edit' },
           ]}
         />
       }
@@ -1662,6 +1666,8 @@ export default async function IncidentDetailPage({
             <ActivityFeed entries={activity} />
           </Section>
         ) : null}
+
+        {active === 'edit' ? <IncidentEditTab incidentId={id} /> : null}
 
         <Card>
           <CardHeader>

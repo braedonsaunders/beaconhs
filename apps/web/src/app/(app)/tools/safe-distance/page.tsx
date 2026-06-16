@@ -29,6 +29,7 @@ import {
   type SafeDistanceMethod,
   type SafeDistanceUnit,
 } from './_lib'
+import { createSafeDistanceRecord } from './_actions'
 
 export const metadata = { title: 'Safe Distance' }
 
@@ -143,9 +144,11 @@ export default async function SafeDistanceListPage({
                 <Link href={buildExportHref('/tools/safe-distance/export.csv', sp)}>
                   <Button variant="outline">Export CSV</Button>
                 </Link>
-                <Link href="/tools/safe-distance/new">
-                  <Button>New assessment</Button>
-                </Link>
+                {/* Create a blank record and drop straight into the calculator
+                    editor — no separate create form. */}
+                <form action={createSafeDistanceRecord}>
+                  <Button type="submit">New assessment</Button>
+                </form>
               </div>
             }
           />
@@ -168,9 +171,9 @@ export default async function SafeDistanceListPage({
           title={params.q || methodFilter ? 'No assessments match these filters' : 'No assessments'}
           description="Create a pressure-test assessment to calculate the minimum safe stand-off distance for a piping system under pneumatic test."
           action={
-            <Link href="/tools/safe-distance/new">
-              <Button>New assessment</Button>
-            </Link>
+            <form action={createSafeDistanceRecord}>
+              <Button type="submit">New assessment</Button>
+            </form>
           }
         />
       ) : (

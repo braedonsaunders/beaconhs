@@ -19,7 +19,12 @@ import { people, personDivisionMemberships, personDivisions } from '@beaconhs/db
 import { PageContainer } from '@/components/page-layout'
 import { requireModuleManage } from '@/lib/module-admin/guard'
 import { MemberPicker } from '../../_components/member-picker'
-import { deleteDivision, setDivisionMembership, updateDivision } from '../../_actions/divisions'
+import {
+  createDivision,
+  deleteDivision,
+  setDivisionMembership,
+  updateDivision,
+} from '../../_actions/divisions'
 
 export const dynamic = 'force-dynamic'
 
@@ -149,12 +154,13 @@ export default async function DivisionDetailPage({ params }: { params: Promise<{
                   Sub-divisions
                   <Badge variant="secondary">{children.length}</Badge>
                 </CardTitle>
-                <Link href={`/people/divisions/new?parent=${row.id}`}>
-                  <Button size="sm" variant="outline">
+                <form action={createDivision}>
+                  <input type="hidden" name="parentDivisionId" value={row.id} />
+                  <Button size="sm" variant="outline" type="submit">
                     <Plus size={12} />
                     Add child
                   </Button>
-                </Link>
+                </form>
               </CardHeader>
               <CardContent>
                 {children.length === 0 ? (

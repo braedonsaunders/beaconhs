@@ -17,6 +17,7 @@ import { personGroupMemberships, personGroups } from '@beaconhs/db/schema'
 import { requireModuleManage } from '@/lib/module-admin/guard'
 import { ListPageLayout } from '@/components/page-layout'
 import { PeopleSubNav } from '../_components/people-sub-nav'
+import { createGroup } from '../_actions/groups'
 
 export const metadata = { title: 'People — Groups' }
 export const dynamic = 'force-dynamic'
@@ -45,9 +46,9 @@ export default async function GroupsPage() {
             title="Groups"
             description="Tag arbitrary people with cross-cutting labels (JHSC members, fire wardens, first-aid responders, etc.)."
             actions={
-              <Link href="/people/groups/new">
-                <Button>Add group</Button>
-              </Link>
+              <form action={createGroup}>
+                <Button type="submit">Add group</Button>
+              </form>
             }
           />
         </>
@@ -59,9 +60,9 @@ export default async function GroupsPage() {
           title="No groups"
           description="Flag people for emergency response, committee membership, or other cross-cutting groupings."
           action={
-            <Link href="/people/groups/new">
-              <Button>New group</Button>
-            </Link>
+            <form action={createGroup}>
+              <Button type="submit">New group</Button>
+            </form>
           }
         />
       ) : (

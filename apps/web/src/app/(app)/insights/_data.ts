@@ -2,51 +2,177 @@
 // metrics + the journal aggregates, trimmed to a lean serializable payload that
 // the client widgets render (charts, KPIs).
 
-import { asc, eq } from 'drizzle-orm'
-import { insightDashboards, type InsightDashboardLayout } from '@beaconhs/db/schema'
+import { and, asc, eq, isNull } from 'drizzle-orm'
+import {
+  insightDashboardPins,
+  insightDashboards,
+  type DashboardParam,
+  type DashboardParamMap,
+  type InsightDashboardLayout,
+} from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
+import { runBhql } from '@beaconhs/analytics/server'
+import type { BhqlResult } from '@beaconhs/analytics'
 import { getTenantAiConfig } from '@/lib/ai-config'
 import { loadDashboardMetrics } from '../dashboard/_metrics'
 import { getInsights } from '../journals/_insights'
+import { applyParams } from './_params'
 import { DEFAULT_INSIGHT_LAYOUT } from './_widgets'
+import type { CardRow } from './cards/_data'
 
-export type InsightDashboardRow = { id: string; name: string; layout: InsightDashboardLayout }
+/** A Card compiled for a dashboard cell (server-side, under RLS). */
+export type CardRender = {
+  id: string
+  name: string
+  vizType: string
+  vizSettings: Record<string, unknown>
+  result: BhqlResult | null
+  error: string | null
+}
 
-/** The user's insight dashboards (tabs), creating a default on first visit. */
+/** Compile each referenced Card's query in parallel (each under its own RLS tx).
+ *  When the dashboard defines parameters, `applyParams` folds the current values
+ *  into each card's filter before it is compiled, so one control fans out across
+ *  every mapped card. */
+export async function loadDashboardCardRenders(
+  ctx: RequestContext,
+  cards: Array<Pick<CardRow, 'id' | 'name' | 'query' | 'vizType' | 'vizSettings'>>,
+  opts: { paramValues?: Record<string, unknown>; paramMap?: DashboardParamMap } = {},
+): Promise<CardRender[]> {
+  const { paramValues = {}, paramMap = {} } = opts
+  return Promise.all(
+    cards.map(async (c) => {
+      try {
+        const query = applyParams(c.query, paramValues, paramMap, c.id)
+        const result = await ctx.db((tx) => runBhql(tx, query, { maxRows: 20_000 }))
+        return {
+          id: c.id,
+          name: c.name,
+          vizType: c.vizType,
+          vizSettings: c.vizSettings,
+          result,
+          error: null,
+        }
+      } catch (e) {
+        return {
+          id: c.id,
+          name: c.name,
+          vizType: c.vizType,
+          vizSettings: c.vizSettings,
+          result: null,
+          error: e instanceof Error ? e.message : 'Could not run this card.',
+        }
+      }
+    }),
+  )
+}
+
+export type InsightDashboardRow = {
+  id: string
+  name: string
+  layout: InsightDashboardLayout
+  params: DashboardParam[]
+  paramMap: DashboardParamMap
+  /** True for the user's own dashboards; false for pinned (others') ones. */
+  owned: boolean
+  status: 'draft' | 'published'
+}
+
+/** The user's /insights tabs = their OWN dashboards + the published dashboards
+ *  they've pinned from the library. A default is created on first visit. */
 export async function loadDashboards(ctx: RequestContext): Promise<InsightDashboardRow[]> {
-  const rows = await ctx.db((tx) =>
+  const owned = await ctx.db((tx) =>
     tx
       .select({
         id: insightDashboards.id,
         name: insightDashboards.name,
         sortOrder: insightDashboards.sortOrder,
         layout: insightDashboards.layout,
+        params: insightDashboards.params,
+        paramMap: insightDashboards.paramMap,
+        status: insightDashboards.status,
         createdAt: insightDashboards.createdAt,
       })
       .from(insightDashboards)
-      .where(eq(insightDashboards.userId, ctx.userId))
+      .where(and(eq(insightDashboards.userId, ctx.userId), isNull(insightDashboards.deletedAt)))
       .orderBy(asc(insightDashboards.sortOrder), asc(insightDashboards.createdAt)),
   )
-  if (rows.length > 0) {
-    return rows.map((r) => ({ id: r.id, name: r.name, layout: r.layout }))
-  }
-  const [created] = await ctx.db((tx) =>
+
+  const pinned = await ctx.db((tx) =>
     tx
-      .insert(insightDashboards)
-      .values({
-        tenantId: ctx.tenantId,
-        userId: ctx.userId,
-        name: 'Overview',
-        sortOrder: 0,
-        layout: DEFAULT_INSIGHT_LAYOUT,
-      })
-      .returning({
+      .select({
         id: insightDashboards.id,
         name: insightDashboards.name,
+        sortOrder: insightDashboardPins.sortOrder,
         layout: insightDashboards.layout,
-      }),
+        params: insightDashboards.params,
+        paramMap: insightDashboards.paramMap,
+        status: insightDashboards.status,
+      })
+      .from(insightDashboardPins)
+      .innerJoin(insightDashboards, eq(insightDashboards.id, insightDashboardPins.dashboardId))
+      .where(
+        and(
+          eq(insightDashboardPins.userId, ctx.userId),
+          eq(insightDashboards.status, 'published'),
+          isNull(insightDashboards.deletedAt),
+        ),
+      )
+      .orderBy(asc(insightDashboardPins.sortOrder)),
   )
-  return created ? [{ id: created.id, name: created.name, layout: created.layout }] : []
+
+  if (owned.length === 0 && pinned.length === 0) {
+    const [created] = await ctx.db((tx) =>
+      tx
+        .insert(insightDashboards)
+        .values({
+          tenantId: ctx.tenantId,
+          userId: ctx.userId,
+          name: 'Overview',
+          sortOrder: 0,
+          layout: DEFAULT_INSIGHT_LAYOUT,
+        })
+        .returning({
+          id: insightDashboards.id,
+          name: insightDashboards.name,
+          layout: insightDashboards.layout,
+        }),
+    )
+    return created
+      ? [
+          {
+            id: created.id,
+            name: created.name,
+            layout: created.layout,
+            params: [],
+            paramMap: {},
+            owned: true,
+            status: 'draft' as const,
+          },
+        ]
+      : []
+  }
+
+  return [
+    ...owned.map((r) => ({
+      id: r.id,
+      name: r.name,
+      layout: r.layout,
+      params: r.params,
+      paramMap: r.paramMap,
+      owned: true,
+      status: r.status,
+    })),
+    ...pinned.map((r) => ({
+      id: r.id,
+      name: r.name,
+      layout: r.layout,
+      params: r.params,
+      paramMap: r.paramMap,
+      owned: false,
+      status: r.status,
+    })),
+  ]
 }
 
 export type InsightsData = {

@@ -17,6 +17,7 @@ import { documentManagementReviews } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { ListPageLayout } from '@/components/page-layout'
 import { DocumentsSubNav } from '../_components/documents-sub-nav'
+import { createManagementReview } from './[id]/actions'
 
 export const metadata = { title: 'Management reviews' }
 export const dynamic = 'force-dynamic'
@@ -39,9 +40,9 @@ export default async function ManagementReviewsPage() {
             title="Management reviews"
             description="Annual / scheduled board reviews of the SH&S management system — discussion notes, decisions, follow-up actions and next-review dates."
             actions={
-              <Link href="/documents/management-reviews/new">
-                <Button>New review</Button>
-              </Link>
+              <form action={createManagementReview}>
+                <Button type="submit">New review</Button>
+              </form>
             }
           />
           <DocumentsSubNav active="management-reviews" />
@@ -54,9 +55,9 @@ export default async function ManagementReviewsPage() {
           title="No management reviews recorded"
           description="Capture each annual / quarterly board review of the SH&S system — the documents covered, decisions made, and follow-up actions."
           action={
-            <Link href="/documents/management-reviews/new">
-              <Button>Record first review</Button>
-            </Link>
+            <form action={createManagementReview}>
+              <Button type="submit">Record first review</Button>
+            </form>
           }
         />
       ) : (

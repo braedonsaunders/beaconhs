@@ -19,7 +19,7 @@ import {
   equipmentItems,
   equipmentWorkOrders,
   incidentPreventativeSteps,
-  lwSessions,
+  formResponses,
   people,
   ppeItems,
   ppeTypes,
@@ -142,16 +142,16 @@ export async function listDueSignals(
     if (!onlyPerson) {
       const rows = await tx
         .select({
-          id: lwSessions.id,
-          status: lwSessions.status,
-          nextCheckinDueAt: lwSessions.nextCheckinDueAt,
+          id: formResponses.id,
+          status: formResponses.monitorStatus,
+          nextCheckinDueAt: formResponses.nextCheckinDueAt,
         })
-        .from(lwSessions)
+        .from(formResponses)
         .where(
           and(
-            eq(lwSessions.tenantId, tid),
-            inArray(lwSessions.status, ['active', 'missed', 'escalated']),
-            lte(lwSessions.nextCheckinDueAt, horizonDate),
+            eq(formResponses.tenantId, tid),
+            inArray(formResponses.monitorStatus, ['active', 'missed', 'escalated']),
+            lte(formResponses.nextCheckinDueAt, horizonDate),
           ),
         )
         .limit(500)

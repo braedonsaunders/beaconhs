@@ -8,12 +8,14 @@ export type ScheduledTick =
   | { kind: 'cert_expiry_scan' }
   | { kind: 'form_assignment_scan' }
   | { kind: 'document_review_scan' }
-  | { kind: 'lone_worker_overdue_scan' }
+  | { kind: 'form_session_overdue_scan' }
   | { kind: 'report_schedule_scan' }
   | { kind: 'report_run'; tenantId: string; scheduleId: string }
   | { kind: 'ca_overdue_scan' }
   | { kind: 'compliance_scan' }
   | { kind: 'plugin_cron'; cadence: 'hourly' | 'daily' | 'weekly' }
+  | { kind: 'sync_scan' }
+  | { kind: 'sync_run'; tenantId: string; connectionId: string; trigger: 'scheduled' | 'manual' }
 
 export const scheduledQueue = new Queue<ScheduledTick>('scheduled', {
   connection,
@@ -25,15 +27,18 @@ export const scheduledQueue = new Queue<ScheduledTick>('scheduled', {
 })
 
 export async function registerSchedules() {
-  // Every minute: form assignment dispatch + lone-worker overdue scan
+  // Every minute: form assignment dispatch
   await scheduledQueue.add('tick:every_minute', { kind: 'form_assignment_scan' } as ScheduledTick, {
     repeat: { pattern: '* * * * *' },
     jobId: 'tick:form_assignment_scan',
   })
+  // Every minute: generic monitored-session overdue scan — escalates overdue
+  // check-ins for the Lone Worker app + any monitored Builder app. (Successor to
+  // the retired native lone_worker_overdue_scan.) See docs/monitored-sessions-design.md.
   await scheduledQueue.add(
-    'tick:lone_worker',
-    { kind: 'lone_worker_overdue_scan' } as ScheduledTick,
-    { repeat: { pattern: '* * * * *' }, jobId: 'tick:lone_worker_overdue' },
+    'tick:form_session',
+    { kind: 'form_session_overdue_scan' } as ScheduledTick,
+    { repeat: { pattern: '* * * * *' }, jobId: 'tick:form_session_overdue' },
   )
   // Every 5 minutes: report scheduler scan
   await scheduledQueue.add('tick:reports', { kind: 'report_schedule_scan' } as ScheduledTick, {
@@ -75,4 +80,9 @@ export async function registerSchedules() {
     { kind: 'plugin_cron', cadence: 'weekly' } as ScheduledTick,
     { repeat: { pattern: '30 7 * * 1' }, jobId: 'tick:plugin_weekly' },
   )
+  // Every 15 minutes: scan external sync connections and enqueue the ones due.
+  await scheduledQueue.add('tick:sync_scan', { kind: 'sync_scan' } as ScheduledTick, {
+    repeat: { pattern: '*/15 * * * *' },
+    jobId: 'tick:sync_scan',
+  })
 }

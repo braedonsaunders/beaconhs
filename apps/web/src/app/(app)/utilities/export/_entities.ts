@@ -84,13 +84,6 @@ export const EXPORTABLE_ENTITIES: ExportEntity[] = [
     groupLabel: 'People & assets',
   },
   {
-    key: 'lone-worker',
-    label: 'Lone-worker sessions',
-    description: 'Lone-worker session log including check-ins and escalations.',
-    csvHref: '/lone-worker/export.csv',
-    groupLabel: 'Programs',
-  },
-  {
     key: 'safe-distance',
     label: 'Safe-distance assessments',
     description: 'Pressure-test stand-off records — method, test pressure, volume, results.',

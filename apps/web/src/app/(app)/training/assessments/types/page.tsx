@@ -28,6 +28,7 @@ import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
 import { TableToolbar } from '@/components/table-toolbar'
 import { TrainingSubNav } from '../../_components/training-sub-nav'
+import { createAssessmentType } from '../../_actions/assessment-types'
 
 export const metadata = { title: 'Assessment types' }
 export const dynamic = 'force-dynamic'
@@ -173,9 +174,9 @@ export default async function AssessmentTypesPage({
                 >
                   ← Back to attempts
                 </Link>
-                <Link href="/training/assessments/types/new">
-                  <Button>New assessment type</Button>
-                </Link>
+                <form action={createAssessmentType}>
+                  <Button type="submit">New assessment type</Button>
+                </form>
               </div>
             }
           />
@@ -212,9 +213,9 @@ export default async function AssessmentTypesPage({
           title={params.q ? `No assessment types match "${params.q}"` : 'No assessment types'}
           description="Create a type to build a graded question bank."
           action={
-            <Link href="/training/assessments/types/new">
-              <Button>New assessment type</Button>
-            </Link>
+            <form action={createAssessmentType}>
+              <Button type="submit">New assessment type</Button>
+            </form>
           }
         />
       ) : (

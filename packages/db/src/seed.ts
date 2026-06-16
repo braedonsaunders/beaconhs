@@ -46,7 +46,6 @@ import {
   notifications,
   orgUnits,
   people,
-  plugins,
   ppeAnnualRecords,
   ppeInspections,
   ppeIssueReports,
@@ -1219,39 +1218,6 @@ async function main() {
         notes: 'Reviewed emergency contact list and updated. No structural changes needed.',
       })
     }
-
-    // --- Plugin catalogue (cross-tenant, but seeded once) ---------------
-    await tx
-      .insert(plugins)
-      .values([
-        {
-          key: 'netsuite-sync',
-          name: 'NetSuite People Sync',
-          description: 'Pulls employees + departments + customers from NetSuite on a daily cron.',
-          version: '0.1.0',
-          capabilities: ['sync.in', 'sync.out'],
-          manifest: {},
-        },
-        {
-          key: 'adminapp2-sync',
-          name: 'adminapp2 Master Data',
-          description:
-            'Reads internal master data (customers, projects, employees) from your internal admin app.',
-          version: '0.1.0',
-          capabilities: ['sync.in'],
-          manifest: {},
-        },
-        {
-          key: 'webhook-out',
-          name: 'Outbound Webhooks',
-          description:
-            'POSTs incident/CA/training events to a configurable URL with HMAC-signed bodies.',
-          version: '0.1.0',
-          capabilities: ['sync.out'],
-          manifest: {},
-        },
-      ])
-      .onConflictDoNothing()
 
     // --- Customer contacts ---
     await tx.insert(customerContacts).values([

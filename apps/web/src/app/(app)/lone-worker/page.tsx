@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { Timer } from 'lucide-react'
-import { and, asc, count, desc, eq, type SQL } from 'drizzle-orm'
+import { and, asc, eq, isNotNull, sql } from 'drizzle-orm'
 import {
   Alert,
   AlertDescription,
@@ -16,90 +16,62 @@ import {
   TableHeader,
   TableRow,
 } from '@beaconhs/ui'
-import { lwSessions, orgUnits, tenantUsers, user } from '@beaconhs/db/schema'
+import { formResponses, formTemplates, tenantUsers, user } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
-import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
-import { SortableTh } from '@/components/sortable-th'
-import { Pagination } from '@/components/pagination'
-import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
 
+// Lone Worker now runs on the Builder "Lone Worker" app (a monitored session).
+// This page is a thin dashboard over that app's monitored responses; starting a
+// session opens the app's filler, and each row opens the live monitor on the
+// response page. See docs/monitored-sessions-design.md.
+
 export const metadata = { title: 'Lone worker' }
+export const dynamic = 'force-dynamic'
 
-const SORTS = ['started_at', 'next_checkin_due_at', 'status'] as const
+const STATUS_BADGE: Record<
+  string,
+  { label: string; variant: 'success' | 'destructive' | 'secondary' | 'outline' }
+> = {
+  active: { label: 'Active', variant: 'success' },
+  escalated: { label: 'Escalated', variant: 'destructive' },
+  missed: { label: 'Missed', variant: 'destructive' },
+  completed: { label: 'Completed', variant: 'secondary' },
+  cancelled: { label: 'Cancelled', variant: 'outline' },
+}
 
-const STATUS_OPTIONS = [
-  { value: 'active', label: 'Active' },
-  { value: 'completed', label: 'Completed' },
-  { value: 'missed', label: 'Missed' },
-  { value: 'escalated', label: 'Escalated' },
-  { value: 'cancelled', label: 'Cancelled' },
-]
-
-export default async function LoneWorkerPage({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
-}) {
-  const sp = await searchParams
-  const params = parseListParams(sp, {
-    sort: 'started_at',
-    dir: 'desc',
-    perPage: 25,
-    allowedSorts: SORTS,
-  })
-  const statusFilter = pickString(sp.status)
+export default async function LoneWorkerPage() {
   const ctx = await requireRequestContext()
 
-  const { rows, total, statusCounts, activeCount } = await ctx.db(async (tx) => {
-    const filters: SQL<unknown>[] = []
-    if (statusFilter) filters.push(eq(lwSessions.status, statusFilter as any))
-    const whereClause = filters.length > 0 ? and(...filters) : undefined
-
-    const orderBy =
-      params.sort === 'next_checkin_due_at'
-        ? [
-            params.dir === 'asc'
-              ? asc(lwSessions.nextCheckinDueAt)
-              : desc(lwSessions.nextCheckinDueAt),
-          ]
-        : params.sort === 'status'
-          ? [params.dir === 'asc' ? asc(lwSessions.status) : desc(lwSessions.status)]
-          : [params.dir === 'asc' ? asc(lwSessions.startedAt) : desc(lwSessions.startedAt)]
-
-    const [tot] = await tx.select({ c: count() }).from(lwSessions).where(whereClause)
+  const { app, rows } = await ctx.db(async (tx) => {
+    const [appRow] = await tx
+      .select({ id: formTemplates.id })
+      .from(formTemplates)
+      .where(and(eq(formTemplates.key, 'lone_worker'), eq(formTemplates.tenantId, ctx.tenantId)))
+      .limit(1)
+    if (!appRow) return { app: null, rows: [] }
     const data = await tx
       .select({
-        session: lwSessions,
-        site: orgUnits,
-        worker: tenantUsers,
-        workerAccount: user,
+        id: formResponses.id,
+        monitorStatus: formResponses.monitorStatus,
+        nextCheckinDueAt: formResponses.nextCheckinDueAt,
+        submittedAt: formResponses.submittedAt,
+        worker: tenantUsers.displayName,
+        workerAccount: user.name,
       })
-      .from(lwSessions)
-      .leftJoin(orgUnits, eq(orgUnits.id, lwSessions.siteOrgUnitId))
-      .leftJoin(tenantUsers, eq(tenantUsers.id, lwSessions.workerTenantUserId))
+      .from(formResponses)
+      .leftJoin(tenantUsers, eq(tenantUsers.id, formResponses.submittedBy))
       .leftJoin(user, eq(user.id, tenantUsers.userId))
-      .where(whereClause)
-      .orderBy(...orderBy)
-      .limit(params.perPage)
-      .offset((params.page - 1) * params.perPage)
-    const ss = await tx
-      .select({ s: lwSessions.status, c: count() })
-      .from(lwSessions)
-      .groupBy(lwSessions.status)
-    const [activeRow] = await tx
-      .select({ c: count() })
-      .from(lwSessions)
-      .where(eq(lwSessions.status, 'active'))
-    return {
-      rows: data,
-      total: Number(tot?.c ?? 0),
-      statusCounts: Object.fromEntries(ss.map((x) => [x.s, Number(x.c)])),
-      activeCount: Number(activeRow?.c ?? 0),
-    }
+      .where(and(eq(formResponses.templateId, appRow.id), isNotNull(formResponses.monitorStatus)))
+      // Live sessions (active/escalated/missed) first, then by next check-in.
+      .orderBy(
+        sql`case when ${formResponses.monitorStatus} in ('active','escalated','missed') then 0 else 1 end`,
+        asc(formResponses.nextCheckinDueAt),
+      )
+      .limit(200)
+    return { app: appRow, rows: data }
   })
 
-  const sortProps = { basePath: '/lone-worker', currentParams: sp, dir: params.dir }
+  const startHref = app ? `/forms/templates/${app.id}/fill` : '/forms'
   const now = Date.now()
 
   return (
@@ -107,130 +79,88 @@ export default async function LoneWorkerPage({
       header={
         <>
           <PageHeader
-            title="Lone worker"
-            description="Timed check-ins with automatic escalation on misses."
+            title="Lone Worker"
+            description="Monitored lone-worker sessions — recurring check-ins with automatic overdue escalation."
             actions={
-              <div className="flex items-center gap-2">
-                <Link href={buildExportHref('/lone-worker/export.csv', sp)}>
-                  <Button variant="outline">Export CSV</Button>
-                </Link>
-                <Link href="/lone-worker/new">
-                  <Button>Start session</Button>
-                </Link>
-              </div>
+              <Link href={startHref}>
+                <Button>Start session</Button>
+              </Link>
             }
           />
-
-          {activeCount > 0 ? (
-            <Alert variant="info">
-              <AlertTitle>
-                {activeCount} active session{activeCount === 1 ? '' : 's'}
-              </AlertTitle>
-              <AlertDescription>
-                The scheduled-tick worker checks every minute and escalates any overdue session.
-              </AlertDescription>
-            </Alert>
-          ) : null}
-
-          <FilterChips
-            basePath="/lone-worker"
-            currentParams={sp}
-            paramKey="status"
-            label="Status"
-            options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
-          />
+          <Alert>
+            <AlertTitle>Runs on the Lone Worker app</AlertTitle>
+            <AlertDescription>
+              Sessions are built on the Lone Worker Builder app. The monitor scan escalates any
+              session whose check-in is overdue past its grace period.
+            </AlertDescription>
+          </Alert>
         </>
       }
     >
       {rows.length === 0 ? (
         <EmptyState
           icon={<Timer size={32} />}
-          title={statusFilter ? `No ${statusFilter} sessions` : 'No sessions'}
-          description="Open a session when a worker is working alone. Missed check-ins escalate to the supervisor automatically."
+          title="No sessions yet"
+          description="Start a monitored lone-worker session — the worker checks in on an interval and a missed check-in escalates to supervisors automatically."
           action={
-            <Link href="/lone-worker/new">
-              <Button>Start a session</Button>
+            <Link href={startHref}>
+              <Button>Start session</Button>
             </Link>
           }
         />
       ) : (
-        <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Worker</TableHead>
-                <TableHead>Site</TableHead>
-                <TableHead>Task</TableHead>
-                <SortableTh
-                  {...sortProps}
-                  column="started_at"
-                  active={params.sort === 'started_at'}
-                >
-                  Started
-                </SortableTh>
-                <SortableTh
-                  {...sortProps}
-                  column="next_checkin_due_at"
-                  active={params.sort === 'next_checkin_due_at'}
-                >
-                  Next check-in
-                </SortableTh>
-                <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>
-                  Status
-                </SortableTh>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map(({ session, site, workerAccount }) => {
-                const next = new Date(session.nextCheckinDueAt).getTime()
-                const overdue = session.status === 'active' && next < now
-                return (
-                  <TableRow key={session.id}>
-                    <TableCell className="font-medium">
-                      <Link href={`/lone-worker/${session.id}`} className="hover:underline">
-                        {workerAccount?.name ?? 'Unknown'}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="text-slate-600">{site?.name ?? '—'}</TableCell>
-                    <TableCell className="text-slate-600">{session.task ?? '—'}</TableCell>
-                    <TableCell className="text-slate-600">
-                      {new Date(session.startedAt).toLocaleString()}
-                    </TableCell>
-                    <TableCell>
-                      <span className={overdue ? 'font-medium text-red-700' : 'text-slate-600'}>
-                        {new Date(session.nextCheckinDueAt).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                        {overdue ? ' (overdue)' : ''}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={
-                          session.status === 'active'
-                            ? 'success'
-                            : session.status === 'missed' || session.status === 'escalated'
-                              ? 'destructive'
-                              : 'secondary'
-                        }
-                      >
-                        {session.status}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
-          <Pagination
-            basePath="/lone-worker"
-            currentParams={sp}
-            total={total}
-            page={params.page}
-            perPage={params.perPage}
-          />
-        </>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Worker</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Started</TableHead>
+              <TableHead>Next check-in</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((r) => {
+              const badge = STATUS_BADGE[r.monitorStatus ?? ''] ?? {
+                label: r.monitorStatus ?? '—',
+                variant: 'outline' as const,
+              }
+              const live = r.monitorStatus === 'active'
+              const overdue =
+                live && r.nextCheckinDueAt && new Date(r.nextCheckinDueAt).getTime() < now
+              return (
+                <TableRow key={r.id}>
+                  <TableCell>
+                    <Link
+                      href={`/forms/responses/${r.id}`}
+                      className="font-medium text-teal-700 hover:underline dark:text-teal-300"
+                    >
+                      {r.worker ?? r.workerAccount ?? 'Session'}
+                    </Link>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={badge.variant}>{badge.label}</Badge>
+                  </TableCell>
+                  <TableCell className="text-slate-600 dark:text-slate-400">
+                    {r.submittedAt
+                      ? new Date(r.submittedAt).toISOString().slice(0, 16).replace('T', ' ')
+                      : '—'}
+                  </TableCell>
+                  <TableCell
+                    className={
+                      overdue
+                        ? 'font-medium text-red-600 dark:text-red-400'
+                        : 'text-slate-600 dark:text-slate-400'
+                    }
+                  >
+                    {r.nextCheckinDueAt
+                      ? new Date(r.nextCheckinDueAt).toISOString().slice(0, 16).replace('T', ' ')
+                      : '—'}
+                  </TableCell>
+                </TableRow>
+              )
+            })}
+          </TableBody>
+        </Table>
       )}
     </ListPageLayout>
   )

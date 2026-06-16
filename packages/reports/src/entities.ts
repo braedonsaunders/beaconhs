@@ -5,7 +5,7 @@
 // hand-synced copies (apps/web _builder-meta.ts + apps/worker
 // reports-shared.ts whitelists).
 
-import type { ReportCustomEntity, ReportFilterOperator } from '@beaconhs/db/schema'
+import type { ReportFilterOperator } from '@beaconhs/db/schema'
 
 export type ReportColumnKind = 'text' | 'date' | 'timestamp' | 'enum' | 'uuid' | 'number'
 
@@ -19,7 +19,8 @@ export type ReportEntityColumn = {
 }
 
 export type ReportEntity = {
-  key: ReportCustomEntity
+  /** Entity key = the physical table/view name (validated against the registry). */
+  key: string
   label: string
   category: string
   /** A line of helpful text shown under the entity name in the picker. */
@@ -173,21 +174,6 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     defaultSort: { column: 'next_inspection_due', direction: 'asc' },
   },
   {
-    key: 'lone_worker',
-    label: 'Lone-worker sessions',
-    category: 'lone_worker',
-    description: 'Lone-worker check-in sessions (active, completed, missed, escalated).',
-    table: 'lw_sessions',
-    columns: [
-      { key: 'status', label: 'Status', kind: 'enum' },
-      { key: 'task', label: 'Task', kind: 'text' },
-      { key: 'started_at', label: 'Started at', kind: 'timestamp' },
-      { key: 'expected_end_at', label: 'Expected end', kind: 'timestamp' },
-      { key: 'interval_minutes', label: 'Interval (min)', kind: 'number' },
-    ],
-    defaultSort: { column: 'started_at', direction: 'desc' },
-  },
-  {
     key: 'form_responses',
     label: 'Form responses',
     category: 'forms',
@@ -217,6 +203,42 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'occurred_on', label: 'Occurred on', kind: 'date' },
     ],
     defaultSort: { column: 'occurred_on', direction: 'desc' },
+  },
+  {
+    key: 'training_matrix',
+    label: 'Training matrix',
+    category: 'training',
+    description:
+      'Person × course coverage — one row per active person and course with the latest record status (valid / expiring / expired / missing).',
+    // Join-baked view (packages/db/src/views.ts) — RLS flows through base tables.
+    table: 'report_training_matrix',
+    columns: [
+      { key: 'employee_no', label: 'Employee #', kind: 'text' },
+      { key: 'last_name', label: 'Last name', kind: 'text' },
+      { key: 'first_name', label: 'First name', kind: 'text' },
+      { key: 'person_name', label: 'Person', kind: 'text' },
+      { key: 'course_code', label: 'Course code', kind: 'text' },
+      { key: 'course_name', label: 'Course', kind: 'text' },
+      { key: 'completed_on', label: 'Completed on', kind: 'date' },
+      { key: 'expires_on', label: 'Expires on', kind: 'date' },
+      { key: 'coverage_status', label: 'Coverage', kind: 'enum' },
+    ],
+    defaultSort: { column: 'person_name', direction: 'asc' },
+  },
+  {
+    key: 'incident_rates',
+    label: 'Incident rates (TRIR / DART)',
+    category: 'incidents',
+    description:
+      'Per-month recordable + DART incident counts and hours worked. Build TRIR/DART as a calculated rate: sum(recordable) ÷ sum(hours) × 200,000.',
+    table: 'report_incident_rates',
+    columns: [
+      { key: 'month', label: 'Month', kind: 'date' },
+      { key: 'recordable_count', label: 'Recordable incidents', kind: 'number' },
+      { key: 'dart_count', label: 'DART incidents', kind: 'number' },
+      { key: 'hours_worked', label: 'Hours worked', kind: 'number' },
+    ],
+    defaultSort: { column: 'month', direction: 'asc' },
   },
 ]
 

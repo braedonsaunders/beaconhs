@@ -13,14 +13,19 @@ import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 
+/**
+ * Instant-create a division and land in its detail editor (the single
+ * view+edit surface). Called from the list "Add division" button and the
+ * detail "Add child" button — no separate create form, no create drawer.
+ * A blank name defaults to a placeholder the user renames on the detail page.
+ */
 export async function createDivision(formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'people')
-  const name = String(formData.get('name') ?? '').trim()
+  const name = String(formData.get('name') ?? '').trim() || 'Untitled division'
   const description = String(formData.get('description') ?? '').trim() || null
   const code = String(formData.get('code') ?? '').trim() || null
   const parentDivisionId = String(formData.get('parentDivisionId') ?? '').trim() || null
-  if (!name) return
   const [row] = await ctx.db((tx) =>
     tx
       .insert(personDivisions)

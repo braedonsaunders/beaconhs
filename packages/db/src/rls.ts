@@ -83,6 +83,7 @@ export const TENANT_SCOPED_TABLES = [
   'form_response_comments',
   'form_automations',
   'form_response_participants',
+  'form_response_checkins',
   'ai_conversations',
   'ai_messages',
   'incidents',
@@ -120,8 +121,6 @@ export const TENANT_SCOPED_TABLES = [
   'document_reviews',
   'document_books',
   'corrective_actions',
-  'lw_sessions',
-  'lw_checkins',
   'notifications',
   'notification_preferences',
   'webpush_subscriptions',
@@ -202,8 +201,10 @@ export const TENANT_SCOPED_TABLES = [
   'journal_tags',
   'journal_assignments',
   'journal_assignment_dispatches',
-  // User-buildable Insights dashboards
+  // User-buildable Insights dashboards + saved Cards (query+viz) + per-user pins
   'insight_dashboards',
+  'insight_cards',
+  'insight_dashboard_pins',
   // Safe Distance tool — pneumatic pressure-test stored-energy standoff
   // calculator (parent record + its pipe segments).
   'safe_distance_records',
@@ -254,4 +255,8 @@ export const TENANT_SCOPED_TABLES = [
   // elements (lookup, cascading dropdowns, data-table, KPI/chart).
   'data_sources',
   'data_source_rows',
+  // External data sync — connector instances + identity crosswalk + run ledger.
+  'sync_connections',
+  'sync_crosswalk',
+  'sync_runs',
 ] as const

@@ -1,10 +1,47 @@
 'use server'
 
+import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { eq } from 'drizzle-orm'
 import { documentManagementReviews } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+
+/**
+ * Instant-create a management review and land in its detail editor (the single
+ * view+edit surface) — no separate create form, no create drawer. Title and
+ * period end default to placeholders the user adjusts on the detail page;
+ * reviewed documents, participants and follow-up actions are attached there too.
+ */
+export async function createManagementReview(formData: FormData): Promise<void> {
+  const ctx = await requireRequestContext()
+  const title = String(formData.get('title') ?? '').trim() || 'Untitled review'
+  const periodEnd =
+    String(formData.get('periodEnd') ?? '').trim() || new Date().toISOString().slice(0, 10)
+  const id = await ctx.db(async (tx) => {
+    const [row] = await tx
+      .insert(documentManagementReviews)
+      .values({
+        tenantId: ctx.tenantId,
+        title,
+        periodEnd,
+        chairedByTenantUserId: ctx.membership?.id ?? null,
+        createdByTenantUserId: ctx.membership?.id ?? null,
+      })
+      .returning({ id: documentManagementReviews.id })
+    if (!row) throw new Error('Failed to create management review')
+    return row.id
+  })
+  await recordAudit(ctx, {
+    entityType: 'document_management_review',
+    entityId: id,
+    action: 'create',
+    summary: `Recorded management review "${title}"`,
+    after: { title, periodEnd },
+  })
+  revalidatePath('/documents/management-reviews')
+  redirect(`/documents/management-reviews/${id}`)
+}
 
 export async function updateReviewMeta(
   id: string,

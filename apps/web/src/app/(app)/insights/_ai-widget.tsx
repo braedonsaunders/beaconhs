@@ -20,16 +20,17 @@ const PERIODS = [
 ]
 
 const SENTIMENT_TONE: Record<string, string> = {
-  positive: 'bg-teal-100 text-teal-800 ring-teal-600/20',
-  steady: 'bg-teal-50 text-teal-700 ring-teal-600/15',
-  mixed: 'bg-amber-100 text-amber-800 ring-amber-600/20',
-  concerned: 'bg-orange-100 text-orange-800 ring-orange-600/20',
-  negative: 'bg-rose-100 text-rose-800 ring-rose-600/20',
+  positive: 'bg-teal-100 text-teal-800 ring-teal-600/20 dark:bg-teal-500/15 dark:text-teal-300',
+  steady: 'bg-teal-50 text-teal-700 ring-teal-600/15 dark:bg-teal-500/10 dark:text-teal-300',
+  mixed: 'bg-amber-100 text-amber-800 ring-amber-600/20 dark:bg-amber-500/15 dark:text-amber-300',
+  concerned:
+    'bg-orange-100 text-orange-800 ring-orange-600/20 dark:bg-orange-500/15 dark:text-orange-300',
+  negative: 'bg-rose-100 text-rose-800 ring-rose-600/20 dark:bg-rose-500/15 dark:text-rose-300',
 }
 const SEV_TONE: Record<string, string> = {
-  high: 'bg-rose-100 text-rose-700 ring-rose-600/20',
-  medium: 'bg-amber-100 text-amber-700 ring-amber-600/20',
-  low: 'bg-slate-100 text-slate-600 ring-slate-500/20',
+  high: 'bg-rose-100 text-rose-700 ring-rose-600/20 dark:bg-rose-500/15 dark:text-rose-300',
+  medium: 'bg-amber-100 text-amber-700 ring-amber-600/20 dark:bg-amber-500/15 dark:text-amber-300',
+  low: 'bg-slate-100 text-slate-600 ring-slate-500/20 dark:bg-slate-700 dark:text-slate-300',
 }
 
 export function JournalAnalysisWidget({ aiEnabled }: { aiEnabled: boolean }) {
@@ -60,14 +61,14 @@ export function JournalAnalysisWidget({ aiEnabled }: { aiEnabled: boolean }) {
   const a = result?.analysis
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+    <div className="flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
       {/* header */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-gradient-to-r from-teal-50/70 to-white px-3 py-2">
-        <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-800">
-          <Sparkles size={15} className="text-teal-600" /> AI journal analysis
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-gradient-to-r from-teal-50/70 to-white px-3 py-2 dark:border-slate-800 dark:from-teal-500/5 dark:to-slate-900">
+        <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-800 dark:text-slate-100">
+          <Sparkles size={15} className="text-teal-600 dark:text-teal-400" /> AI journal analysis
         </div>
         <div className="ml-auto flex items-center gap-1.5">
-          <div className="flex overflow-hidden rounded-md border border-slate-200">
+          <div className="flex overflow-hidden rounded-md border border-slate-200 dark:border-slate-700">
             {PERIODS.map((p) => (
               <button
                 key={p.days}
@@ -78,7 +79,7 @@ export function JournalAnalysisWidget({ aiEnabled }: { aiEnabled: boolean }) {
                   'px-2 py-1 text-xs font-medium transition-colors disabled:opacity-60',
                   days === p.days
                     ? 'bg-teal-600 text-white'
-                    : 'bg-white text-slate-600 hover:bg-slate-50',
+                    : 'bg-white text-slate-600 hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800',
                 )}
               >
                 {p.label}
@@ -130,7 +131,9 @@ export function JournalAnalysisWidget({ aiEnabled }: { aiEnabled: boolean }) {
               >
                 {a.sentiment.label}
               </span>
-              <p className="text-sm leading-relaxed text-slate-600">{a.summary}</p>
+              <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+                {a.summary}
+              </p>
             </div>
 
             {/* themes */}
@@ -158,7 +161,10 @@ export function JournalAnalysisWidget({ aiEnabled }: { aiEnabled: boolean }) {
               >
                 <ul className="space-y-1.5">
                   {a.issues.map((it, i) => (
-                    <li key={i} className="rounded-lg border border-slate-100 bg-slate-50/50 p-2">
+                    <li
+                      key={i}
+                      className="rounded-lg border border-slate-100 bg-slate-50/50 p-2 dark:border-slate-800 dark:bg-slate-800/40"
+                    >
                       <div className="flex items-center gap-2">
                         <span
                           className={cn(
@@ -168,7 +174,9 @@ export function JournalAnalysisWidget({ aiEnabled }: { aiEnabled: boolean }) {
                         >
                           {it.severity}
                         </span>
-                        <span className="text-xs font-semibold text-slate-800">{it.title}</span>
+                        <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                          {it.title}
+                        </span>
                         {it.site ? (
                           <span className="ml-auto shrink-0 text-[10px] text-slate-400">
                             {it.site}
@@ -190,7 +198,10 @@ export function JournalAnalysisWidget({ aiEnabled }: { aiEnabled: boolean }) {
               >
                 <ul className="space-y-1.5">
                   {a.actions.map((ac, i) => (
-                    <li key={i} className="rounded-lg border border-teal-100 bg-teal-50/40 p-2">
+                    <li
+                      key={i}
+                      className="rounded-lg border border-teal-100 bg-teal-50/40 p-2 dark:border-teal-500/20 dark:bg-teal-500/5"
+                    >
                       <div className="flex items-start gap-2">
                         <span
                           className={cn(
@@ -201,7 +212,9 @@ export function JournalAnalysisWidget({ aiEnabled }: { aiEnabled: boolean }) {
                           {ac.priority}
                         </span>
                         <div className="min-w-0 flex-1">
-                          <p className="text-xs font-semibold text-slate-800">{ac.action}</p>
+                          <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                            {ac.action}
+                          </p>
                           <p className="mt-0.5 text-[11px] leading-snug text-slate-500">
                             {ac.rationale}
                           </p>

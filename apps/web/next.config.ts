@@ -17,9 +17,13 @@ const nextConfig: NextConfig = {
     '@beaconhs/jobs',
     '@beaconhs/plugin-sdk',
     '@beaconhs/storage',
+    '@beaconhs/sync',
   ],
   serverExternalPackages: [
     'postgres',
+    // SQL drivers used by the data-sync database connector (server-only).
+    'mysql2',
+    'mssql',
     'bullmq',
     'ioredis',
     'puppeteer-core',
@@ -56,6 +60,11 @@ const nextConfig: NextConfig = {
       // The Tools landing once linked the bulk-QR generator at /equipment/bulk-qr;
       // the real route is /equipment/qr/bulk. Preserve any stale bookmarks / PDFs.
       { source: '/equipment/bulk-qr', destination: '/equipment/qr/bulk', permanent: false },
+      // Plugins retired in favour of the data-sync Integrations hub; the Library
+      // & catalogues page is gone — those catalogues now live on each module's
+      // Manage hub (and atmospheric sensors moved under Equipment).
+      { source: '/admin/plugins', destination: '/admin/integrations', permanent: false },
+      { source: '/admin/library', destination: '/admin', permanent: false },
     ]
   },
 }

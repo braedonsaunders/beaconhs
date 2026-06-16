@@ -162,10 +162,16 @@ function Shell({
   children: React.ReactNode
 }) {
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+    <div className="flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <div className="mb-1 flex items-baseline justify-between gap-2">
-        <h3 className="truncate text-sm font-semibold text-slate-800">{title}</h3>
-        {subtitle ? <span className="shrink-0 text-[11px] text-slate-400">{subtitle}</span> : null}
+        <h3 className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">
+          {title}
+        </h3>
+        {subtitle ? (
+          <span className="shrink-0 text-[11px] text-slate-400 dark:text-slate-500">
+            {subtitle}
+          </span>
+        ) : null}
       </div>
       <div className="min-h-0 flex-1">{children}</div>
     </div>
@@ -187,13 +193,19 @@ function Kpi({
 }) {
   const good = delta == null ? null : lowerIsBetter ? delta <= 0 : delta >= 0
   return (
-    <div className="flex h-full flex-col justify-between rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm">
-      <span className="text-xs font-medium tracking-wide text-slate-400 uppercase">{label}</span>
+    <div className="flex h-full flex-col justify-between rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <span className="text-xs font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">
+        {label}
+      </span>
       <div className="flex items-end gap-2">
         <span
           className={cn(
             'text-3xl font-bold tabular-nums',
-            tone === 'teal' ? 'text-teal-700' : tone === 'red' ? 'text-red-600' : 'text-slate-900',
+            tone === 'teal'
+              ? 'text-teal-700 dark:text-teal-400'
+              : tone === 'red'
+                ? 'text-red-600 dark:text-red-400'
+                : 'text-slate-900 dark:text-slate-100',
           )}
         >
           {value}
@@ -202,7 +214,7 @@ function Kpi({
           <span
             className={cn(
               'mb-1 inline-flex items-center text-xs font-medium',
-              good ? 'text-teal-600' : 'text-red-500',
+              good ? 'text-teal-600 dark:text-teal-400' : 'text-red-500 dark:text-red-400',
             )}
           >
             {delta > 0 ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}
@@ -218,13 +230,15 @@ function Progress({ label, pct }: { label: string; pct: number | null }) {
   const v = pct ?? 0
   const tone = v >= 80 ? 'bg-teal-500' : v >= 50 ? 'bg-amber-500' : 'bg-red-500'
   return (
-    <div className="flex h-full flex-col justify-between rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm">
-      <span className="text-xs font-medium tracking-wide text-slate-400 uppercase">{label}</span>
+    <div className="flex h-full flex-col justify-between rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <span className="text-xs font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">
+        {label}
+      </span>
       <div>
-        <div className="mb-1.5 text-3xl font-bold text-slate-900 tabular-nums">
+        <div className="mb-1.5 text-3xl font-bold text-slate-900 tabular-nums dark:text-slate-100">
           {pct == null ? '—' : `${Math.round(v)}%`}
         </div>
-        <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+        <div className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
           <div className={cn('h-full rounded-full', tone)} style={{ width: `${v}%` }} />
         </div>
       </div>
@@ -254,7 +268,7 @@ function AreaViz({ data }: { data: Pt[] }) {
             <stop offset="100%" stopColor={TEAL} stopOpacity={0.02} />
           </linearGradient>
         </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+        <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.18)" vertical={false} />
         <XAxis
           dataKey="x"
           tick={{ fontSize: 10, fill: '#94a3b8' }}
@@ -279,7 +293,7 @@ function LineViz({ data }: { data: Pt[] }) {
   return (
     <ResponsiveContainer width="100%" height="100%">
       <LineChart data={data} margin={{ top: 6, right: 6, left: -18, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+        <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.18)" vertical={false} />
         <XAxis
           dataKey="x"
           tick={{ fontSize: 10, fill: '#94a3b8' }}
@@ -308,7 +322,7 @@ function BarViz({ data, horizontal }: { data: Pt[]; horizontal?: boolean }) {
     return (
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} layout="vertical" margin={{ top: 4, right: 10, left: 0, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.18)" horizontal={false} />
           <XAxis
             type="number"
             tick={{ fontSize: 10, fill: '#94a3b8' }}
@@ -337,7 +351,7 @@ function BarViz({ data, horizontal }: { data: Pt[]; horizontal?: boolean }) {
   return (
     <ResponsiveContainer width="100%" height="100%">
       <BarChart data={data} margin={{ top: 6, right: 6, left: -18, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+        <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.18)" vertical={false} />
         <XAxis
           dataKey="x"
           tick={{ fontSize: 10, fill: '#94a3b8' }}

@@ -21,6 +21,7 @@ export type EquipmentTableRow = {
   siteName: string | null
   holderName: string | null
   isMissing: boolean
+  isDraft: boolean
 }
 
 export function EquipmentRecordsTable({
@@ -134,6 +135,11 @@ export function EquipmentRecordsTable({
                     {r.isMissing ? (
                       <Badge variant="destructive" className="ml-1">
                         missing
+                      </Badge>
+                    ) : null}
+                    {r.isDraft ? (
+                      <Badge variant="outline" className="ml-1">
+                        Draft
                       </Badge>
                     ) : null}
                   </td>

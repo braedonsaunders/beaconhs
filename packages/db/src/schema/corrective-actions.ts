@@ -62,6 +62,10 @@ export const correctiveActions = pgTable(
     description: text('description'),
     severity: correctiveActionSeverity('severity').default('medium').notNull(),
     status: correctiveActionStatus('status').default('open').notNull(),
+    // Draft-first: instant-created CAs start as a HIDDEN draft — excluded from
+    // lists, dashboards, compliance counts, and notifications until committed.
+    // A worker sweeps drafts untouched > 48h. Existing rows default to false.
+    isDraft: boolean('is_draft').default(false).notNull(),
     assignedByTenantUserId: uuid('assigned_by_tenant_user_id').references(() => tenantUsers.id),
     ownerTenantUserId: uuid('owner_tenant_user_id').references(() => tenantUsers.id),
     siteOrgUnitId: uuid('site_org_unit_id').references(() => orgUnits.id),

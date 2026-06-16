@@ -52,6 +52,13 @@ export const REPORT_CUSTOM_ENTITIES = [
   'lone_worker',
   'form_responses',
   'form_participants',
+  // Person × course training coverage — backed by the join-baked
+  // `report_training_matrix` view (see packages/db/src/views.ts). One row per
+  // person/course with the latest record's status, so the matrix renders as a
+  // BHQL pivot over a single entity.
+  'training_matrix',
+  // Per-month recordable/DART counts + hours — backed by `report_incident_rates`.
+  'incident_rates',
 ] as const
 export type ReportCustomEntity = (typeof REPORT_CUSTOM_ENTITIES)[number]
 

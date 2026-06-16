@@ -153,6 +153,13 @@ export const PERMISSION_CATALOGUE = [
   // Dashboards
   'dashboards.read',
   'dashboards.edit',
+  // Insights — native BI (visual query builder, Cards, dashboards, library).
+  // `read` = view /insights + the library; `create` = build/edit Cards & dashboards;
+  // `publish` = share to the permission-aware library; `manage` = admin others' Cards.
+  'insights.read',
+  'insights.create',
+  'insights.publish',
+  'insights.manage',
   // Admin
   'admin.users.manage',
   'admin.roles.manage',
@@ -163,6 +170,8 @@ export const PERMISSION_CATALOGUE = [
   'admin.audit.read',
   // Edit the per-tenant sidebar navigation (/admin/navigation).
   'admin.nav.manage',
+  // Configure external data-sync connections (/admin/integrations).
+  'admin.integrations.manage',
 ] as const
 
 export type CataloguePermission = (typeof PERMISSION_CATALOGUE)[number]
@@ -220,6 +229,7 @@ export const BUILTIN_ROLES: Record<
       'loneworker.supervise',
       'reports.read',
       'dashboards.read',
+      'insights.read',
     ],
   },
   safety_manager: {
@@ -271,6 +281,10 @@ export const BUILTIN_ROLES: Record<
       'reports.schedule',
       'dashboards.read',
       'dashboards.edit',
+      'insights.read',
+      'insights.create',
+      'insights.publish',
+      'admin.integrations.manage',
     ],
   },
   tenant_admin: {

@@ -11,7 +11,6 @@ import {
   formResponses,
   incidents,
   inspectionRecords,
-  lwSessions,
   notifications,
   orgUnits,
   people,
@@ -197,8 +196,8 @@ export async function loadDashboardMetrics(
         .then((r) => r[0]),
       tx
         .select({ c: count() })
-        .from(lwSessions)
-        .where(eq(lwSessions.status, 'active'))
+        .from(formResponses)
+        .where(eq(formResponses.monitorStatus, 'active'))
         .then((r) => r[0]),
       tx
         .select({ c: count() })

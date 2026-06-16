@@ -1,14 +1,13 @@
 import Link from 'next/link'
 import {
   ArrowUpRight,
-  Blocks,
   Boxes,
   Building2,
   Database,
   KeyRound,
-  Library,
   Mail,
   PanelLeft,
+  RefreshCw,
   ScrollText,
   SlidersHorizontal,
   Sparkles,
@@ -29,28 +28,28 @@ export const metadata = { title: 'Admin' }
 // picks them up (dynamic `bg-${x}` names would be purged).
 const ACCENTS = {
   teal: {
-    chip: 'bg-teal-50 text-teal-700 ring-teal-100',
+    chip: 'bg-teal-50 text-teal-700 ring-teal-100 dark:bg-teal-950/50 dark:text-teal-300',
     glow: 'text-teal-500',
-    border: 'hover:border-teal-300',
-    link: 'group-hover:text-teal-700',
+    border: 'hover:border-teal-300 dark:hover:border-teal-700',
+    link: 'group-hover:text-teal-700 dark:group-hover:text-teal-300',
   },
   violet: {
-    chip: 'bg-violet-50 text-violet-700 ring-violet-100',
+    chip: 'bg-violet-50 text-violet-700 ring-violet-100 dark:bg-violet-950/50 dark:text-violet-300',
     glow: 'text-violet-500',
-    border: 'hover:border-violet-300',
-    link: 'group-hover:text-violet-700',
+    border: 'hover:border-violet-300 dark:hover:border-violet-700',
+    link: 'group-hover:text-violet-700 dark:group-hover:text-violet-300',
   },
   amber: {
-    chip: 'bg-amber-50 text-amber-700 ring-amber-100',
+    chip: 'bg-amber-50 text-amber-700 ring-amber-100 dark:bg-amber-950/50 dark:text-amber-300',
     glow: 'text-amber-500',
-    border: 'hover:border-amber-300',
-    link: 'group-hover:text-amber-700',
+    border: 'hover:border-amber-300 dark:hover:border-amber-700',
+    link: 'group-hover:text-amber-700 dark:group-hover:text-amber-300',
   },
   sky: {
-    chip: 'bg-sky-50 text-sky-700 ring-sky-100',
+    chip: 'bg-sky-50 text-sky-700 ring-sky-100 dark:bg-sky-950/50 dark:text-sky-300',
     glow: 'text-sky-500',
-    border: 'hover:border-sky-300',
-    link: 'group-hover:text-sky-700',
+    border: 'hover:border-sky-300 dark:hover:border-sky-700',
+    link: 'group-hover:text-sky-700 dark:group-hover:text-sky-300',
   },
 } as const
 
@@ -116,12 +115,6 @@ const GROUPS: Group[] = [
         title: 'Data sources',
         desc: 'Reference lists + live data your apps bind to — lookups, cascades, KPIs.',
       },
-      {
-        href: '/admin/library',
-        icon: Library,
-        title: 'Library & catalogues',
-        desc: 'Inspection banks, skill authorities, skill types, atmospheric sensors.',
-      },
     ],
   },
   {
@@ -135,10 +128,10 @@ const GROUPS: Group[] = [
         desc: 'Provider, models and API key (encrypted) — powers journal AI.',
       },
       {
-        href: '/admin/plugins',
-        icon: Blocks,
-        title: 'Plugins',
-        desc: 'Enable + configure first-party integrations.',
+        href: '/admin/integrations',
+        icon: RefreshCw,
+        title: 'Integrations',
+        desc: 'Sync people, locations & equipment from NetSuite, databases, CSVs and more.',
       },
       {
         href: '/admin/api-keys',
@@ -186,8 +179,8 @@ export default async function AdminPage() {
     <PageContainer>
       <div className="space-y-8">
         <header className="space-y-1">
-          <h1 className="text-2xl font-semibold text-slate-900">Admin</h1>
-          <p className="max-w-2xl text-sm text-slate-500">
+          <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">Admin</h1>
+          <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
             Everything that configures this workspace — people, settings, integrations, and the
             audit trail.
           </p>
@@ -195,7 +188,7 @@ export default async function AdminPage() {
 
         {moduleTiles.length > 0 ? (
           <section className="space-y-3">
-            <h2 className="px-0.5 text-xs font-semibold tracking-wider text-slate-400 uppercase">
+            <h2 className="px-0.5 text-xs font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
               Module administration
             </h2>
             <AdminTileGrid tiles={moduleTiles} />
@@ -206,7 +199,7 @@ export default async function AdminPage() {
           const accent = ACCENTS[group.accent]
           return (
             <section key={group.label} className="space-y-3">
-              <h2 className="px-0.5 text-xs font-semibold tracking-wider text-slate-400 uppercase">
+              <h2 className="px-0.5 text-xs font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
                 {group.label}
               </h2>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -217,7 +210,7 @@ export default async function AdminPage() {
                       key={tile.href}
                       href={tile.href as any}
                       className={cn(
-                        'group relative block overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm',
+                        'group relative block overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900',
                         'transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md',
                         accent.border,
                       )}
@@ -243,19 +236,23 @@ export default async function AdminPage() {
                         </span>
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="font-semibold text-slate-900">{tile.title}</h3>
+                            <h3 className="font-semibold text-slate-900 dark:text-slate-100">
+                              {tile.title}
+                            </h3>
                             {tile.badge ? (
                               <Badge variant="secondary" className="text-[10px]">
                                 {tile.badge}
                               </Badge>
                             ) : null}
                           </div>
-                          <p className="mt-1 text-sm text-slate-500">{tile.desc}</p>
+                          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                            {tile.desc}
+                          </p>
                         </div>
                       </div>
                       <span
                         className={cn(
-                          'relative mt-4 inline-flex items-center gap-1 text-xs font-medium text-slate-400 transition-colors',
+                          'relative mt-4 inline-flex items-center gap-1 text-xs font-medium text-slate-400 transition-colors dark:text-slate-500',
                           accent.link,
                         )}
                       >

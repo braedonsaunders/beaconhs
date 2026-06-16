@@ -6,7 +6,7 @@
 // form_automations. Nodes are real React components, so the Condition inspector
 // reuses the existing LogicBuilder. Authoring only — execution is server-side.
 
-import { useCallback, useMemo, useRef, useState, useTransition } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import Link from 'next/link'
 import {
   addEdge,
@@ -102,6 +102,8 @@ function triggerSummary(t: TriggerData): string {
       return `Status → ${t.to}`
     case 'scheduled':
       return `Scheduled (${t.cron})`
+    case 'session_overdue':
+      return 'Session check-in overdue'
   }
 }
 
@@ -115,21 +117,24 @@ const ACTION_LABEL: Record<ActionData['action'], string> = {
   webhook: 'Webhook',
   create_response: 'Start another form',
   analyze_photos: 'Analyze photos (AI)',
+  start_monitored_session: 'Start monitored session',
 }
 
-const CARD = 'rounded-lg border bg-white px-3 py-2 text-xs shadow-sm w-48'
+const CARD = 'rounded-lg border bg-white px-3 py-2 text-xs shadow-sm w-48 dark:bg-slate-900'
 const HANDLE = { width: 9, height: 9 }
 
 function TriggerNode({ data, selected }: NodeProps) {
   const d = data as Extract<NData, { kind: 'trigger' }>
   return (
     <div
-      className={`${CARD} ${selected ? 'border-teal-500 ring-1 ring-teal-500' : 'border-emerald-300'}`}
+      className={`${CARD} ${selected ? 'border-teal-500 ring-1 ring-teal-500' : 'border-emerald-300 dark:border-emerald-700'}`}
     >
-      <div className="flex items-center gap-1.5 font-semibold text-emerald-700">
+      <div className="flex items-center gap-1.5 font-semibold text-emerald-700 dark:text-emerald-400">
         <Zap size={13} /> Trigger
       </div>
-      <div className="mt-0.5 truncate text-slate-600">{triggerSummary(d.trigger)}</div>
+      <div className="mt-0.5 truncate text-slate-600 dark:text-slate-400">
+        {triggerSummary(d.trigger)}
+      </div>
       <Handle type="source" position={Position.Right} id="next" style={HANDLE} />
     </div>
   )
@@ -139,13 +144,13 @@ function ConditionNode({ data, selected }: NodeProps) {
   const d = data as Extract<NData, { kind: 'condition' }>
   return (
     <div
-      className={`${CARD} ${selected ? 'border-teal-500 ring-1 ring-teal-500' : 'border-amber-300'}`}
+      className={`${CARD} ${selected ? 'border-teal-500 ring-1 ring-teal-500' : 'border-amber-300 dark:border-amber-700'}`}
     >
       <Handle type="target" position={Position.Left} style={HANDLE} />
-      <div className="flex items-center gap-1.5 font-semibold text-amber-700">
+      <div className="flex items-center gap-1.5 font-semibold text-amber-700 dark:text-amber-400">
         <GitBranch size={13} /> Condition
       </div>
-      <div className="mt-0.5 truncate text-slate-600">{d.label || 'If…'}</div>
+      <div className="mt-0.5 truncate text-slate-600 dark:text-slate-400">{d.label || 'If…'}</div>
       <Handle type="source" position={Position.Right} id="then" style={{ ...HANDLE, top: '38%' }} />
       <Handle type="source" position={Position.Right} id="else" style={{ ...HANDLE, top: '70%' }} />
     </div>
@@ -156,13 +161,15 @@ function GateNode({ data, selected }: NodeProps) {
   const d = data as Extract<NData, { kind: 'gate' }>
   return (
     <div
-      className={`${CARD} ${selected ? 'border-teal-500 ring-1 ring-teal-500' : 'border-violet-300'}`}
+      className={`${CARD} ${selected ? 'border-teal-500 ring-1 ring-teal-500' : 'border-violet-300 dark:border-violet-700'}`}
     >
       <Handle type="target" position={Position.Left} style={HANDLE} />
-      <div className="flex items-center gap-1.5 font-semibold text-violet-700">
+      <div className="flex items-center gap-1.5 font-semibold text-violet-700 dark:text-violet-400">
         <ShieldCheck size={13} /> Approval
       </div>
-      <div className="mt-0.5 truncate text-slate-600">{d.gate.title || 'Approve / reject'}</div>
+      <div className="mt-0.5 truncate text-slate-600 dark:text-slate-400">
+        {d.gate.title || 'Approve / reject'}
+      </div>
       <Handle
         type="source"
         position={Position.Right}
@@ -183,13 +190,15 @@ function ActionNode({ data, selected }: NodeProps) {
   const d = data as Extract<NData, { kind: 'action' }>
   return (
     <div
-      className={`${CARD} ${selected ? 'border-teal-500 ring-1 ring-teal-500' : 'border-sky-300'}`}
+      className={`${CARD} ${selected ? 'border-teal-500 ring-1 ring-teal-500' : 'border-sky-300 dark:border-sky-700'}`}
     >
       <Handle type="target" position={Position.Left} style={HANDLE} />
-      <div className="flex items-center gap-1.5 font-semibold text-sky-700">
+      <div className="flex items-center gap-1.5 font-semibold text-sky-700 dark:text-sky-400">
         <Mail size={13} /> Action
       </div>
-      <div className="mt-0.5 truncate text-slate-600">{ACTION_LABEL[d.action.action]}</div>
+      <div className="mt-0.5 truncate text-slate-600 dark:text-slate-400">
+        {ACTION_LABEL[d.action.action]}
+      </div>
       <Handle type="source" position={Position.Right} id="next" style={HANDLE} />
     </div>
   )
@@ -244,7 +253,7 @@ function MiniToggle({
         onChange(!checked)
       }}
       className={`relative inline-flex h-4 w-7 shrink-0 items-center rounded-full transition ${
-        checked ? 'bg-teal-500' : 'bg-slate-300'
+        checked ? 'bg-teal-500' : 'bg-slate-300 dark:bg-slate-600'
       } ${disabled ? 'opacity-50' : ''}`}
     >
       <span
@@ -404,6 +413,58 @@ const FLOW_TEMPLATES: FlowTemplate[] = [
       edges: [{ id: 'e1', source: 'trg', target: 'act', sourceHandle: 'next' }],
     }),
   },
+  {
+    key: 'monitored_session',
+    label: 'Monitored session (lone worker)',
+    description:
+      'On submit, start a recurring check-in timer; if a check-in is missed past the grace period, notify a role.',
+    build: () => ({
+      schemaVersion: 1,
+      nodes: [
+        {
+          id: 'trg',
+          position: { x: 60, y: 80 },
+          data: { kind: 'trigger', trigger: { trigger: 'on_submit' } },
+        },
+        {
+          id: 'mon',
+          position: { x: 380, y: 80 },
+          data: {
+            kind: 'action',
+            action: {
+              action: 'start_monitored_session',
+              intervalMinutes: 30,
+              graceMinutes: 10,
+              durationMinutes: 120,
+              requireGeo: true,
+            },
+          },
+        },
+        {
+          id: 'ovd',
+          position: { x: 60, y: 260 },
+          data: { kind: 'trigger', trigger: { trigger: 'session_overdue' } },
+        },
+        {
+          id: 'esc',
+          position: { x: 380, y: 260 },
+          data: {
+            kind: 'action',
+            action: {
+              action: 'notify_role',
+              role: '',
+              message: 'A monitored session check-in is overdue — follow up now.',
+              channel: 'in_app',
+            },
+          },
+        },
+      ],
+      edges: [
+        { id: 'e1', source: 'trg', target: 'mon', sourceHandle: 'next' },
+        { id: 'e2', source: 'ovd', target: 'esc', sourceHandle: 'next' },
+      ],
+    }),
+  },
 ]
 
 export function FlowsCanvas({
@@ -443,6 +504,18 @@ export function FlowsCanvas({
   const [showAi, setShowAi] = useState(false)
   const [aiPrompt, setAiPrompt] = useState('')
   const [showTemplates, setShowTemplates] = useState(false)
+
+  // Follow the app's dark theme so React Flow's canvas / controls / minimap /
+  // edges render dark too (the `.dark` class is toggled by the theme switcher).
+  const [isDark, setIsDark] = useState(false)
+  useEffect(() => {
+    const el = document.documentElement
+    const sync = () => setIsDark(el.classList.contains('dark'))
+    sync()
+    const obs = new MutationObserver(sync)
+    obs.observe(el, { attributes: true, attributeFilter: ['class'] })
+    return () => obs.disconnect()
+  }, [])
 
   const nodeTypes = useMemo(
     () => ({ trigger: TriggerNode, condition: ConditionNode, gate: GateNode, action: ActionNode }),
@@ -597,9 +670,9 @@ export function FlowsCanvas({
   return (
     <div className="flex h-full min-h-0">
       {/* Left rail — flows list */}
-      <aside className="flex w-60 shrink-0 flex-col border-r border-slate-200 bg-slate-50">
-        <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2">
-          <span className="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-slate-500 uppercase">
+      <aside className="flex w-60 shrink-0 flex-col border-r border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-950">
+        <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2 dark:border-slate-800">
+          <span className="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
             <Workflow size={13} /> Flows
           </span>
           {canEdit ? (
@@ -608,7 +681,7 @@ export function FlowsCanvas({
               onClick={addFlow}
               disabled={pending}
               title="New flow"
-              className="rounded p-1 text-slate-500 hover:bg-white hover:text-slate-700 disabled:opacity-50"
+              className="rounded p-1 text-slate-500 hover:bg-white hover:text-slate-700 disabled:opacity-50 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
             >
               <Plus size={15} />
             </button>
@@ -635,7 +708,9 @@ export function FlowsCanvas({
                   key={f.id}
                   onClick={() => selectFlow(f.id)}
                   className={`group flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm ${
-                    active ? 'bg-white shadow-sm ring-1 ring-teal-300' : 'hover:bg-white/70'
+                    active
+                      ? 'bg-white shadow-sm ring-1 ring-teal-300 dark:bg-slate-800 dark:ring-teal-700'
+                      : 'hover:bg-white/70 dark:hover:bg-slate-800/60'
                   }`}
                 >
                   <MiniToggle
@@ -659,7 +734,9 @@ export function FlowsCanvas({
                   ) : (
                     <span
                       className={`min-w-0 flex-1 truncate ${
-                        f.enabled ? 'text-slate-700' : 'text-slate-400 line-through'
+                        f.enabled
+                          ? 'text-slate-700 dark:text-slate-300'
+                          : 'text-slate-400 line-through dark:text-slate-500'
                       }`}
                     >
                       {f.name}
@@ -701,7 +778,7 @@ export function FlowsCanvas({
 
       {/* Main column — header + canvas */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <header className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-white px-4 py-2">
+        <header className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-white px-4 py-2 dark:border-slate-800 dark:bg-slate-900">
           <div className="flex min-w-0 items-center gap-2 text-sm">
             {embedded ? null : (
               <>
@@ -781,6 +858,7 @@ export function FlowsCanvas({
               onPaneClick={() => setSelectedNodeId(null)}
               nodeTypes={nodeTypes}
               nodesConnectable={canEdit}
+              colorMode={isDark ? 'dark' : 'light'}
               fitView
               proOptions={{ hideAttribution: true }}
             >
@@ -790,9 +868,11 @@ export function FlowsCanvas({
             </ReactFlow>
           ) : (
             <div className="flex h-full items-center justify-center">
-              <div className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center">
-                <p className="text-sm font-medium text-slate-700">No flow selected</p>
-                <p className="mt-1 max-w-xs text-xs text-slate-500">
+              <div className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center dark:border-slate-700 dark:bg-slate-900">
+                <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                  No flow selected
+                </p>
+                <p className="mt-1 max-w-xs text-xs text-slate-500 dark:text-slate-400">
                   Create a flow on the left to start building automations for this App.
                 </p>
               </div>
@@ -801,9 +881,11 @@ export function FlowsCanvas({
 
           {selectedFlowId && nodes.length === 0 ? (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-4">
-              <div className="pointer-events-auto w-full max-w-lg rounded-xl border border-dashed border-slate-300 bg-white/95 p-5 text-center shadow-sm">
-                <p className="text-sm font-semibold text-slate-700">Start with a template</p>
-                <p className="mt-1 text-xs text-slate-500">
+              <div className="pointer-events-auto w-full max-w-lg rounded-xl border border-dashed border-slate-300 bg-white/95 p-5 text-center shadow-sm dark:border-slate-700 dark:bg-slate-900/95">
+                <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                  Start with a template
+                </p>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                   Pick a common automation, or build from scratch with the toolbar / AI.
                 </p>
                 {canEdit ? (
@@ -813,10 +895,12 @@ export function FlowsCanvas({
                         key={t.key}
                         type="button"
                         onClick={() => applyTemplate(t)}
-                        className="rounded-lg border border-slate-200 bg-white p-2.5 transition hover:border-teal-400 hover:bg-teal-50/40"
+                        className="rounded-lg border border-slate-200 bg-white p-2.5 transition hover:border-teal-400 hover:bg-teal-50/40 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-teal-600 dark:hover:bg-teal-950/40"
                       >
-                        <div className="text-xs font-semibold text-slate-800">{t.label}</div>
-                        <div className="mt-0.5 text-[11px] leading-snug text-slate-500">
+                        <div className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                          {t.label}
+                        </div>
+                        <div className="mt-0.5 text-[11px] leading-snug text-slate-500 dark:text-slate-400">
                           {t.description}
                         </div>
                       </button>
@@ -866,13 +950,17 @@ export function FlowsCanvas({
               key={t.key}
               type="button"
               onClick={() => applyTemplate(t)}
-              className="block w-full rounded-lg border border-slate-200 bg-white p-3 text-left transition hover:border-teal-400 hover:bg-teal-50/40"
+              className="block w-full rounded-lg border border-slate-200 bg-white p-3 text-left transition hover:border-teal-400 hover:bg-teal-50/40 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-teal-600 dark:hover:bg-teal-950/40"
             >
-              <div className="text-sm font-semibold text-slate-800">{t.label}</div>
-              <div className="mt-0.5 text-xs leading-snug text-slate-500">{t.description}</div>
+              <div className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                {t.label}
+              </div>
+              <div className="mt-0.5 text-xs leading-snug text-slate-500 dark:text-slate-400">
+                {t.description}
+              </div>
             </button>
           ))}
-          <p className="pt-1 text-[11px] text-slate-400">
+          <p className="pt-1 text-[11px] text-slate-400 dark:text-slate-500">
             Loading a template replaces the current flow&apos;s nodes.
           </p>
         </div>
@@ -902,7 +990,7 @@ export function FlowsCanvas({
             placeholder="e.g. When the compliance score is below 80, create a high-severity CAPA and email the safety manager."
             onChange={(e) => setAiPrompt(e.target.value)}
           />
-          <p className="text-[11px] text-slate-400">
+          <p className="text-[11px] text-slate-400 dark:text-slate-500">
             Replaces the selected flow with the AI draft.
           </p>
         </div>
@@ -943,7 +1031,9 @@ function NodeInspector({
                     ? { trigger: 'status_change', to: 'submitted' }
                     : v === 'scheduled'
                       ? { trigger: 'scheduled', cron: '0 8 * * 1' }
-                      : { trigger: 'on_submit' }
+                      : v === 'session_overdue'
+                        ? { trigger: 'session_overdue' }
+                        : { trigger: 'on_submit' }
               onChange({ kind: 'trigger', trigger: next })
             }}
           >
@@ -951,6 +1041,7 @@ function NodeInspector({
             <option value="on_field_value">A field matches a condition</option>
             <option value="status_change">Status changes</option>
             <option value="scheduled">On a schedule</option>
+            <option value="session_overdue">A monitored session goes overdue</option>
           </Select>
         </Field>
         {t.trigger === 'on_field_value' ? (
@@ -1363,7 +1454,102 @@ function ActionInspector({
           ) : null}
         </>
       ) : null}
+
+      {a.action === 'start_monitored_session' ? (
+        <>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400">
+            After submit, this response becomes a live monitored session with a recurring check-in
+            timer. Escalation fires through the “A monitored session goes overdue” trigger. Set each
+            timing as a fixed value, or bind it to a submitted number field.
+          </p>
+          <MonitorNum
+            label="Check-in interval (min)"
+            value={a.intervalMinutes}
+            fieldKey={a.intervalFieldKey}
+            fieldIds={fieldIds}
+            readOnly={readOnly}
+            onValue={(v) => set({ ...a, intervalMinutes: Math.max(1, v) })}
+            onField={(k) => set({ ...a, intervalFieldKey: k })}
+          />
+          <MonitorNum
+            label="Grace period (min)"
+            value={a.graceMinutes}
+            fieldKey={a.graceFieldKey}
+            fieldIds={fieldIds}
+            readOnly={readOnly}
+            onValue={(v) => set({ ...a, graceMinutes: Math.max(0, v) })}
+            onField={(k) => set({ ...a, graceFieldKey: k })}
+          />
+          <MonitorNum
+            label="Expected duration (min)"
+            value={a.durationMinutes ?? 0}
+            fieldKey={a.durationFieldKey}
+            fieldIds={fieldIds}
+            readOnly={readOnly}
+            onValue={(v) => set({ ...a, durationMinutes: Math.max(0, v) })}
+            onField={(k) => set({ ...a, durationFieldKey: k })}
+          />
+          <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300">
+            <input
+              type="checkbox"
+              checked={!!a.requireGeo}
+              disabled={readOnly}
+              onChange={(e) => set({ ...a, requireGeo: e.target.checked })}
+            />
+            Require GPS on each check-in
+          </label>
+        </>
+      ) : null}
     </div>
+  )
+}
+
+// Number input that can be a fixed value OR bound to a submitted number field —
+// used by the start_monitored_session inspector for interval/grace/duration.
+function MonitorNum({
+  label,
+  value,
+  fieldKey,
+  fieldIds,
+  readOnly,
+  onValue,
+  onField,
+}: {
+  label: string
+  value: number
+  fieldKey: string | undefined
+  fieldIds: string[]
+  readOnly: boolean
+  onValue: (v: number) => void
+  onField: (k: string | undefined) => void
+}) {
+  return (
+    <Field label={label}>
+      <div className="flex items-center gap-1.5">
+        <Input
+          type="number"
+          min="0"
+          className="h-8 w-20"
+          value={String(value)}
+          disabled={readOnly || !!fieldKey}
+          onChange={(e) => onValue(Math.floor(Number(e.target.value) || 0))}
+        />
+        <span className="text-xs text-slate-400 dark:text-slate-500">or</span>
+        <Select
+          className="h-8 flex-1"
+          value={fieldKey ?? ''}
+          disabled={readOnly}
+          onChange={(e) => onField(e.target.value || undefined)}
+        >
+          <option value="">— fixed value —</option>
+          {fieldIds.map((f) => (
+            <option key={f} value={f}>
+              bind: {f}
+            </option>
+          ))}
+        </Select>
+      </div>
+    </Field>
   )
 }
 
@@ -1391,6 +1577,14 @@ function defaultAction(kind: ActionData['action'], fieldIds: string[]): ActionDa
       return { action: 'create_response', templateId: '' }
     case 'analyze_photos':
       return { action: 'analyze_photos', fieldId: fieldIds[0] ?? '' }
+    case 'start_monitored_session':
+      return {
+        action: 'start_monitored_session',
+        intervalMinutes: 30,
+        graceMinutes: 10,
+        durationMinutes: 120,
+        requireGeo: false,
+      }
   }
 }
 

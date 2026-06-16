@@ -63,6 +63,9 @@ export const ppeItems = pgTable(
     serialNumber: text('serial_number'),
     size: text('size'),
     status: ppeItemStatus('status').default('in_stock').notNull(),
+    // Draft-first (badged): instant-created items show in the register with a
+    // "Draft" badge until completed — never hidden. Existing rows default false.
+    isDraft: boolean('is_draft').default(false).notNull(),
     currentHolderPersonId: uuid('current_holder_person_id').references(() => people.id),
     purchaseDate: date('purchase_date'),
     expiresOn: date('expires_on'),

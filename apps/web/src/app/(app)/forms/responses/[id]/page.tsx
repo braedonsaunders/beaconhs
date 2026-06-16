@@ -29,6 +29,7 @@ import {
 } from '@beaconhs/ui'
 import {
   correctiveActions,
+  formResponseCheckins,
   formResponseComments,
   formResponseScores,
   formResponseSteps,
@@ -69,6 +70,7 @@ import { getPendingFlowGates } from './_flow-gate-actions'
 import { createCorrectiveActionFromResponse, createIncidentFromResponse } from './_spawn-actions'
 import { buildSpawnPrefill, labelForField } from './_spawn-prefill'
 import { SpawnDrawers, type SpawnDrawerKind } from './_spawn-drawers'
+import { MonitorPanel, type MonitorStatus } from './_monitor-panel'
 
 export const dynamic = 'force-dynamic'
 
@@ -169,7 +171,7 @@ export default async function FormResponsePage({
     const rejectorTu = aliasedTable(tenantUsers, 'rejector_tu')
     const rejectorUser = aliasedTable(user, 'rejector_user')
 
-    const [steps, comments, scoreRows, spawnedCAs, spawnedIncidents] = await Promise.all([
+    const [steps, comments, scoreRows, spawnedCAs, spawnedIncidents, checkins] = await Promise.all([
       tx
         .select({
           step: formResponseSteps,
@@ -218,8 +220,21 @@ export default async function FormResponsePage({
         .from(incidents)
         .where(eq(incidents.sourceFormResponseId, id))
         .orderBy(desc(incidents.reportedAt)),
+      tx
+        .select({
+          id: formResponseCheckins.id,
+          kind: formResponseCheckins.kind,
+          recordedAt: formResponseCheckins.recordedAt,
+          geoLat: formResponseCheckins.geoLat,
+          geoLng: formResponseCheckins.geoLng,
+          note: formResponseCheckins.note,
+        })
+        .from(formResponseCheckins)
+        .where(eq(formResponseCheckins.responseId, id))
+        .orderBy(desc(formResponseCheckins.recordedAt))
+        .limit(20),
     ])
-    return { ...row, steps, comments, scoreRows, spawnedCAs, spawnedIncidents }
+    return { ...row, steps, comments, scoreRows, spawnedCAs, spawnedIncidents, checkins }
   })
 
   if (!data) notFound()
@@ -236,6 +251,7 @@ export default async function FormResponsePage({
     scoreRows,
     spawnedCAs,
     spawnedIncidents,
+    checkins,
   } = data
 
   // Resolve picker-bound entity attributes so `entity_attr` formula fields
@@ -423,6 +439,25 @@ export default async function FormResponsePage({
       <div className="space-y-5">
         {active === 'response' ? (
           <>
+            {response.monitorStatus ? (
+              <MonitorPanel
+                responseId={response.id}
+                monitorStatus={response.monitorStatus as MonitorStatus}
+                nextCheckinDueAt={
+                  response.nextCheckinDueAt ? response.nextCheckinDueAt.toISOString() : null
+                }
+                intervalMinutes={response.checkinIntervalMinutes}
+                requireGeo={response.monitorRequireGeo ?? false}
+                checkins={checkins.map((c) => ({
+                  id: c.id,
+                  kind: c.kind,
+                  recordedAt: c.recordedAt.toISOString(),
+                  geoLat: c.geoLat,
+                  geoLng: c.geoLng,
+                  note: c.note,
+                }))}
+              />
+            ) : null}
             <Section title="Overview">
               <DetailGrid
                 rows={[

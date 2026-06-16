@@ -99,6 +99,9 @@ export const equipmentItems = pgTable(
     description: text('description'),
     qrToken: text('qr_token').notNull(), // unique scannable token
     status: equipmentStatus('status').default('in_service').notNull(),
+    // Draft-first (badged): instant-created items show in the register with a
+    // "Draft" badge until completed — never hidden. Existing rows default false.
+    isDraft: boolean('is_draft').default(false).notNull(),
     purchaseDate: date('purchase_date'),
     warrantyExpiresOn: date('warranty_expires_on'),
     currentSiteOrgUnitId: uuid('current_site_org_unit_id').references(() => orgUnits.id),

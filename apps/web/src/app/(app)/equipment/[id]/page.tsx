@@ -11,6 +11,7 @@ import {
   LogIn,
   LogOut,
   MapPin,
+  Pencil,
   Plus,
   QrCode,
   Search,
@@ -72,6 +73,7 @@ import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { ActivityFeed } from '@/components/activity-feed'
 import { PageContainer } from '@/components/page-layout'
 import { PersonSelectField } from '@/components/person-select-field'
+import { EquipmentEditTab } from './equipment-edit-tab'
 
 export const dynamic = 'force-dynamic'
 
@@ -87,6 +89,7 @@ const TABS = [
   'log',
   'checkouts',
   'activity',
+  'edit',
 ] as const
 type Tab = (typeof TABS)[number]
 
@@ -760,10 +763,17 @@ export default async function EquipmentDetailPage({
                 {item.status.replace('_', ' ')}
               </Badge>
               {item.isMissing ? <Badge variant="destructive">Missing</Badge> : null}
+              {item.isDraft ? <Badge variant="outline">Draft</Badge> : null}
             </div>
           }
           actions={
             <>
+              <Link href={`${basePath}?tab=edit` as any}>
+                <Button variant="outline">
+                  <Pencil size={14} />
+                  Edit
+                </Button>
+              </Link>
               <Link href={`${basePath}?tab=work_orders&drawer=new-work-order` as any}>
                 <Button variant="outline">
                   <Wrench size={14} />
@@ -892,6 +902,7 @@ export default async function EquipmentDetailPage({
                 { key: 'log', label: 'Log', count: logEntries.length },
                 { key: 'checkouts', label: 'Check-outs', count: checkouts.length },
                 { key: 'activity', label: 'Activity' },
+                { key: 'edit', label: 'Edit' },
               ]}
             />
 
@@ -1611,6 +1622,8 @@ export default async function EquipmentDetailPage({
                   </CardContent>
                 </Card>
               ) : null}
+
+              {active === 'edit' ? <EquipmentEditTab itemId={id} /> : null}
             </TabContent>
           </div>
         </div>

@@ -220,6 +220,13 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
         iconKey: 'clipboard',
         desc: 'Define the recurring inspections each asset class requires.',
       },
+      {
+        key: 'sensors',
+        label: 'Atmospheric sensors',
+        href: '/confined-space/sensors',
+        iconKey: 'radiation',
+        desc: 'Calibration register for 4-gas monitors used on confined-space entries.',
+      },
     ],
   },
   {

@@ -4,8 +4,9 @@ import { and, asc, count, desc, eq, ilike, isNull, or, type SQL } from 'drizzle-
 import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
 import { departments, people, trades } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
-import { buildExportHref, parseListParams } from '@/lib/list-params'
+import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
+import { FilterChips } from '@/components/filter-bar'
 import { Pagination } from '@/components/pagination'
 import { ListPageLayout } from '@/components/page-layout'
 import { PeopleSubNav } from './_components/people-sub-nav'
@@ -23,10 +24,11 @@ export default async function PeoplePage({
 }) {
   const sp = await searchParams
   const params = parseListParams(sp, { sort: 'name', dir: 'asc', perPage: 25, allowedSorts: SORTS })
+  const statusFilter = pickString(sp.status) ?? 'active'
   const ctx = await requireRequestContext()
 
-  const { rows, total } = await ctx.db(async (tx) => {
-    const filters: SQL<unknown>[] = [isNull(people.deletedAt)]
+  const { rows, total, statusCounts, allCount } = await ctx.db(async (tx) => {
+    const baseFilters: SQL<unknown>[] = [isNull(people.deletedAt)]
     if (params.q) {
       const term = `%${params.q}%`
       const cond = or(
@@ -34,7 +36,11 @@ export default async function PeoplePage({
         ilike(people.lastName, term),
         ilike(people.employeeNo, term),
       )
-      if (cond) filters.push(cond)
+      if (cond) baseFilters.push(cond)
+    }
+    const filters = [...baseFilters]
+    if (statusFilter !== 'all') {
+      filters.push(eq(people.status, statusFilter as 'active' | 'inactive' | 'terminated'))
     }
     const whereClause = and(...filters)
 
@@ -69,7 +75,20 @@ export default async function PeoplePage({
       .limit(params.perPage)
       .offset((params.page - 1) * params.perPage)
 
-    return { rows: data, total: Number(tot?.c ?? 0) }
+    // status distribution for the filter chips (over the search-filtered set, ignoring status itself)
+    const statusRows = await tx
+      .select({ status: people.status, c: count() })
+      .from(people)
+      .where(and(...baseFilters))
+      .groupBy(people.status)
+    const statusCounts: Record<string, number> = {}
+    let allCount = 0
+    for (const r of statusRows) {
+      statusCounts[r.status] = Number(r.c)
+      allCount += Number(r.c)
+    }
+
+    return { rows: data, total: Number(tot?.c ?? 0), statusCounts, allCount }
   })
 
   const [groups, divisions] = await Promise.all([
@@ -113,8 +132,19 @@ export default async function PeoplePage({
               </div>
             }
           />
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <SearchInput placeholder="Search by name or employee #" />
+            <FilterChips
+              basePath="/people"
+              currentParams={{ ...sp, status: statusFilter }}
+              paramKey="status"
+              label="Status"
+              options={[
+                { value: 'active', label: 'Active', count: statusCounts.active ?? 0 },
+                { value: 'inactive', label: 'Inactive', count: statusCounts.inactive ?? 0 },
+                { value: 'all', label: 'All', count: allCount },
+              ]}
+            />
           </div>
         </>
       }

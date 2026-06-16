@@ -140,7 +140,7 @@ export default async function PpeTypesPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex justify-end gap-2">
-                        <Link href={`/ppe/types/${t.id}/edit`}>
+                        <Link href={`/ppe/types/${t.id}`}>
                           <Button size="sm" variant="outline">
                             <Pencil size={12} /> Edit
                           </Button>

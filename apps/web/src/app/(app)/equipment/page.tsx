@@ -10,6 +10,7 @@ import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
 import { TableToolbar } from '@/components/table-toolbar'
+import { createEquipmentDraft } from './_draft-actions'
 import { EquipmentSubNav } from '@/components/equipment-sub-nav'
 import { listPeopleForBulkHolder, listSiteOrgUnits } from './_actions'
 import { EquipmentRecordsTable, type EquipmentTableRow } from './_records-table'
@@ -123,6 +124,7 @@ export default async function EquipmentPage({
     siteName: site?.name ?? null,
     holderName: holder ? `${holder.firstName} ${holder.lastName}` : null,
     isMissing: item.isMissing,
+    isDraft: item.isDraft,
   }))
 
   return (
@@ -144,9 +146,9 @@ export default async function EquipmentPage({
                 <Link href="/equipment/qr/bulk">
                   <Button variant="outline">Bulk QR</Button>
                 </Link>
-                <Link href="/equipment/new">
-                  <Button>Add equipment</Button>
-                </Link>
+                <form action={createEquipmentDraft}>
+                  <Button type="submit">Add equipment</Button>
+                </form>
               </div>
             }
           />
@@ -179,9 +181,9 @@ export default async function EquipmentPage({
           title={params.q || statusFilter ? 'No equipment matches these filters' : 'No equipment'}
           description="Add an asset to track inspections, transfers, and work orders."
           action={
-            <Link href="/equipment/new">
-              <Button>Add equipment</Button>
-            </Link>
+            <form action={createEquipmentDraft}>
+              <Button type="submit">Add equipment</Button>
+            </form>
           }
         />
       ) : (

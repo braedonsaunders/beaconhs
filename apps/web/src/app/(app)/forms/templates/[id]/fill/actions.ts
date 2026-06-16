@@ -2,9 +2,14 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { and, desc, eq } from 'drizzle-orm'
+import { and, desc, eq, sql } from 'drizzle-orm'
 import { z } from 'zod'
-import { formResponses, formTemplateVersions, formTemplates } from '@beaconhs/db/schema'
+import {
+  formAutomations,
+  formResponses,
+  formTemplateVersions,
+  formTemplates,
+} from '@beaconhs/db/schema'
 import { extractScores, validateResponse } from '@beaconhs/forms-core'
 import { formResponseScores } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
@@ -151,6 +156,55 @@ export async function submitFormResponse(args: {
         data: args.data,
         submittedAt: new Date(),
       })
+
+      // Monitored sessions are normally started by an on-submit Flow's
+      // `start_monitored_session` action (run-automations) — that's where the
+      // config now lives. Back-compat: a legacy template still configured via
+      // schema.monitor keeps working, UNLESS an enabled Flow already starts the
+      // session (the Flow takes precedence, so there's no double-start).
+      const monitor = version.schema.monitor
+      if (monitor?.enabled) {
+        const [flowStart] = await tx
+          .select({ id: formAutomations.id })
+          .from(formAutomations)
+          .where(
+            and(
+              eq(formAutomations.templateId, args.templateId),
+              eq(formAutomations.enabled, true),
+              sql`${formAutomations.graph}::text like '%start_monitored_session%'`,
+            ),
+          )
+          .limit(1)
+        if (!flowStart) {
+          const d = args.data as Record<string, unknown>
+          const numField = (key: string | undefined, fallback: number): number => {
+            if (key) {
+              const v = Number(d[key])
+              if (Number.isFinite(v) && v > 0) return v
+            }
+            return fallback
+          }
+          const interval = numField(monitor.intervalFieldKey, monitor.intervalMinutes)
+          const grace =
+            monitor.graceFieldKey && Number.isFinite(Number(d[monitor.graceFieldKey]))
+              ? Math.max(0, Number(d[monitor.graceFieldKey]))
+              : monitor.graceMinutes
+          const duration = numField(monitor.durationFieldKey, monitor.durationMinutes ?? 0)
+          const now = new Date()
+          await tx
+            .update(formResponses)
+            .set({
+              monitorStatus: 'active',
+              checkinIntervalMinutes: interval,
+              gracePeriodMinutes: grace,
+              monitorRequireGeo: !!monitor.requireGeo,
+              lastCheckinAt: now,
+              nextCheckinDueAt: new Date(now.getTime() + interval * 60_000),
+              expectedEndAt: duration > 0 ? new Date(now.getTime() + duration * 60_000) : null,
+            })
+            .where(eq(formResponses.id, resp.id))
+        }
+      }
     }
 
     return {

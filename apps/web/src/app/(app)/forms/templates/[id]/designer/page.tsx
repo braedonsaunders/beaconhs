@@ -9,6 +9,7 @@ import {
 } from '@beaconhs/db/schema'
 import type { FormSchemaV1 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { loadNavConfig } from '@/lib/nav/resolve'
 import { FormDesigner } from './form-designer'
 import type { FlowSummary } from '../flows/_flows-canvas'
 
@@ -53,9 +54,17 @@ export default async function FormDesignerPage({
   const sp = await searchParams
   const initialSurface = sp.surface === 'flows' ? 'flows' : 'build'
   const ctx = await requireRequestContext()
+  const canPin = can(ctx, 'admin.nav.manage')
   const data = await ctx.db(async (tx) => {
     const [tmpl] = await tx.select().from(formTemplates).where(eq(formTemplates.id, id)).limit(1)
     if (!tmpl) return null
+    // Is this app currently pinned to the sidebar? (admins only — drives the
+    // Pin toggle in the Overview panel.)
+    const pinned = canPin
+      ? (await loadNavConfig(tx)).groups
+          .flatMap((g) => g.items)
+          .some((i) => i.kind === 'form' && i.templateId === id)
+      : false
     const [versions, flows, tenantRoles] = await Promise.all([
       tx
         .select()
@@ -78,7 +87,7 @@ export default async function FormDesignerPage({
         .where(eq(rolesTable.tenantId, ctx.tenantId))
         .orderBy(asc(rolesTable.name)),
     ])
-    return { tmpl, latestVersion: versions[0] ?? null, flows, tenantRoles }
+    return { tmpl, latestVersion: versions[0] ?? null, flows, tenantRoles, pinned }
   })
 
   if (!data) notFound()
@@ -120,6 +129,8 @@ export default async function FormDesignerPage({
       roles={data.tenantRoles}
       flows={data.flows as FlowSummary[]}
       canGenerate={can(ctx, 'forms.ai.generate')}
+      canPin={canPin}
+      pinned={data.pinned}
     />
   )
 }

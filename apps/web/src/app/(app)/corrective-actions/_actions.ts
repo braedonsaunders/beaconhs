@@ -20,7 +20,7 @@ import {
   tenantUsers,
   user,
 } from '@beaconhs/db/schema'
-import { emitCorrectiveActionCompleted } from '@beaconhs/events'
+import { emitCorrectiveActionAssigned, emitCorrectiveActionCompleted } from '@beaconhs/events'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 

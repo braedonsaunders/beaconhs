@@ -1,11 +1,19 @@
 import type { Job } from 'bullmq'
 import { and, eq, inArray, isNotNull, lte, sql } from 'drizzle-orm'
 import { db, withSuperAdmin } from '@beaconhs/db'
-import { correctiveActions, documents, lwSessions, trainingRecords } from '@beaconhs/db/schema'
+import {
+  correctiveActions,
+  documents,
+  formResponseCheckins,
+  formResponses,
+  tenantUsers,
+  trainingRecords,
+  users,
+} from '@beaconhs/db/schema'
 import {
   emitCorrectiveActionOverdue,
   emitDocumentReviewDue,
-  emitLoneWorkerOverdue,
+  emitMonitoredSessionOverdue,
   emitTrainingExpired,
   emitTrainingExpiring,
 } from '@beaconhs/events'
@@ -14,13 +22,15 @@ import { scanReportSchedules } from '../lib/report-scheduler'
 import { scanFormAssignments } from '../lib/form-assignment-scanner'
 import { scanCompliance } from '../lib/compliance-scanner'
 import { runPluginCron } from '../lib/plugin-cron'
+import { runSyncConnection, scanSyncConnections } from '../lib/sync-scanner'
+import { runSessionOverdueFlows } from '../lib/session-overdue-flows'
 
 export async function processScheduledTick(job: Job<ScheduledTick>): Promise<void> {
   switch (job.data.kind) {
     case 'cert_expiry_scan':
       return scanCertExpiry()
-    case 'lone_worker_overdue_scan':
-      return scanLoneWorkerOverdue()
+    case 'form_session_overdue_scan':
+      return scanFormSessionOverdue()
     case 'document_review_scan':
       return scanDocumentReview()
     case 'ca_overdue_scan':
@@ -54,6 +64,18 @@ export async function processScheduledTick(job: Job<ScheduledTick>): Promise<voi
         '[scheduled] report_run tick is a no-op (per-run dispatch handled by reports queue)',
       )
       return
+    case 'sync_scan': {
+      const r = await scanSyncConnections()
+      console.log(`[scheduled] sync_scan: ${r.enqueued} enqueued / ${r.candidates} candidates`)
+      return
+    }
+    case 'sync_run': {
+      const r = await runSyncConnection(job.data.tenantId, job.data.connectionId, job.data.trigger)
+      console.log(
+        `[scheduled] sync_run ${job.data.connectionId.slice(0, 8)} → ${r.status} (run=${r.runId ?? 'none'})`,
+      )
+      return
+    }
   }
 }
 
@@ -86,20 +108,63 @@ async function scanCertExpiry(): Promise<void> {
   })
 }
 
-async function scanLoneWorkerOverdue(): Promise<void> {
+// Generic monitored-session overdue scan — the Builder-app successor to
+// scanLoneWorkerOverdue. A monitored response is overdue once now passes
+// nextCheckinDueAt + grace; we flip it to 'escalated', log a 'missed' check-in,
+// and fire the generic escalation. See docs/monitored-sessions-design.md.
+async function scanFormSessionOverdue(): Promise<void> {
   await withSuperAdmin(db, async (tx) => {
     const now = new Date()
+    // Compare against the DB clock (now()) — avoids worker/DB clock skew and a
+    // JS Date bind param in the raw fragment.
     const overdue = await tx
       .select({
-        id: lwSessions.id,
-        tenantId: lwSessions.tenantId,
+        id: formResponses.id,
+        tenantId: formResponses.tenantId,
+        templateId: formResponses.templateId,
+        data: formResponses.data,
+        submittedBy: formResponses.submittedBy,
       })
-      .from(lwSessions)
-      .where(and(eq(lwSessions.status, 'active'), lte(lwSessions.nextCheckinDueAt, now)))
+      .from(formResponses)
+      .where(
+        and(
+          eq(formResponses.monitorStatus, 'active'),
+          sql`${formResponses.nextCheckinDueAt} + ((coalesce(${formResponses.gracePeriodMinutes}, 0))::text || ' minutes')::interval <= now()`,
+        ),
+      )
     for (const s of overdue) {
-      // Mark missed first so we don't re-fire next minute
-      await tx.update(lwSessions).set({ status: 'missed' }).where(eq(lwSessions.id, s.id))
-      await emitLoneWorkerOverdue(s.tenantId, s.id)
+      // Flip first so we don't re-fire next minute.
+      await tx
+        .update(formResponses)
+        .set({ monitorStatus: 'escalated', escalatedAt: now })
+        .where(eq(formResponses.id, s.id))
+      await tx.insert(formResponseCheckins).values({
+        tenantId: s.tenantId,
+        responseId: s.id,
+        kind: 'missed',
+        recordedAt: now,
+      })
+      // Prefer the template's `session_overdue` Flow (custom escalation). If no
+      // flow handles it, fall back to the built-in safety-manager/admin alert.
+      let submitterEmail: string | null = null
+      if (s.submittedBy) {
+        const [u] = await tx
+          .select({ email: users.email })
+          .from(tenantUsers)
+          .innerJoin(users, eq(users.id, tenantUsers.userId))
+          .where(eq(tenantUsers.id, s.submittedBy))
+          .limit(1)
+        submitterEmail = u?.email ?? null
+      }
+      const flowRan = await runSessionOverdueFlows({
+        tx,
+        tenantId: s.tenantId,
+        responseId: s.id,
+        templateId: s.templateId,
+        data: (s.data ?? {}) as Record<string, unknown>,
+        submitterEmail,
+      })
+      if (!flowRan) await emitMonitoredSessionOverdue(s.tenantId, s.id)
     }
   })
 }

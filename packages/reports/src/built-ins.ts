@@ -21,7 +21,6 @@ import {
   incidentLostTimeEvents,
   incidents,
   inspectionRecords,
-  lwSessions,
   orgUnits,
   people,
   ppeItems,
@@ -847,18 +846,25 @@ export async function queryLoneWorkerSummary(
 ): Promise<ReportRunResult> {
   const rows = await tx
     .select({
-      id: lwSessions.id,
-      startedAt: lwSessions.startedAt,
-      endedAt: lwSessions.endedAt,
-      status: lwSessions.status,
-      task: lwSessions.task,
-      intervalMinutes: lwSessions.intervalMinutes,
+      id: formResponses.id,
+      startedAt: formResponses.submittedAt,
+      endedAt: formResponses.closedAt,
+      status: sql<string>`coalesce(${formResponses.monitorStatus}::text, 'unknown')`,
+      task: sql<string | null>`${formResponses.data}->>'task'`,
+      intervalMinutes: formResponses.checkinIntervalMinutes,
       siteName: orgUnits.name,
     })
-    .from(lwSessions)
-    .leftJoin(orgUnits, eq(orgUnits.id, lwSessions.siteOrgUnitId))
-    .where(and(gte(lwSessions.startedAt, range.from), lte(lwSessions.startedAt, range.to)))
-    .orderBy(desc(lwSessions.startedAt))
+    .from(formResponses)
+    .leftJoin(orgUnits, eq(orgUnits.id, formResponses.siteOrgUnitId))
+    .where(
+      and(
+        isNotNull(formResponses.monitorStatus),
+        isNotNull(formResponses.submittedAt),
+        gte(formResponses.submittedAt, range.from),
+        lte(formResponses.submittedAt, range.to),
+      ),
+    )
+    .orderBy(desc(formResponses.submittedAt))
 
   const byStatus = new Map<string, typeof rows>()
   for (const r of rows) {
@@ -882,7 +888,7 @@ export async function queryLoneWorkerSummary(
         subtitle: `${list.length} session(s)`,
         columns: ['Started', 'Ended', 'Task', 'Site', 'Interval (min)'],
         rows: list.map((r) => [
-          r.startedAt.toISOString().slice(0, 16).replace('T', ' '),
+          r.startedAt ? r.startedAt.toISOString().slice(0, 16).replace('T', ' ') : null,
           r.endedAt ? r.endedAt.toISOString().slice(0, 16).replace('T', ' ') : null,
           r.task ?? null,
           r.siteName ?? null,

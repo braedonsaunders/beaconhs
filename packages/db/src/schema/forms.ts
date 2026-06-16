@@ -11,6 +11,7 @@
 import { relations } from 'drizzle-orm'
 import {
   boolean,
+  doublePrecision,
   index,
   integer,
   jsonb,
@@ -237,6 +238,25 @@ export const formResponseComplianceStatus = pgEnum('form_response_compliance_sta
   'pending_review',
 ])
 
+// Monitored-session lifecycle — for apps that run a live, timed check-in session
+// (Lone Worker, permit timers, periodic checks…). A NULL `monitorStatus` on a
+// response means it's an ordinary response, not a session. See
+// docs/monitored-sessions-design.md.
+export const formMonitorStatus = pgEnum('form_monitor_status', [
+  'active',
+  'completed',
+  'missed',
+  'escalated',
+  'cancelled',
+])
+
+export const formResponseCheckinKind = pgEnum('form_response_checkin_kind', [
+  'manual',
+  'auto_prompted',
+  'missed',
+  'escalation_acknowledged',
+])
+
 export const formResponses = pgTable(
   'form_responses',
   {
@@ -292,6 +312,20 @@ export const formResponses = pgTable(
     //               rejectionReason?, rejectedAt?, rejectedBy? }],
     //     lastActionAt?, lastActionByTenantUserId?, lastReason? }
     workflowState: jsonb('workflow_state').$type<FormResponseWorkflowState | null>().default(null),
+    // --- Monitored-session fields (null ⇒ ordinary response) ---------------
+    // Set when the response is a live timed session (template monitor mode on).
+    // The overdue scan reads (monitorStatus, nextCheckinDueAt); check-in resets
+    // nextCheckinDueAt. See docs/monitored-sessions-design.md.
+    monitorStatus: formMonitorStatus('monitor_status'),
+    checkinIntervalMinutes: integer('checkin_interval_minutes'),
+    gracePeriodMinutes: integer('grace_period_minutes'),
+    // Whether check-ins must capture GPS — set by the start_monitored_session
+    // flow action (replaces schema.monitor.requireGeo).
+    monitorRequireGeo: boolean('monitor_require_geo').default(false).notNull(),
+    expectedEndAt: timestamp('expected_end_at', { withTimezone: true }),
+    nextCheckinDueAt: timestamp('next_checkin_due_at', { withTimezone: true }),
+    lastCheckinAt: timestamp('last_checkin_at', { withTimezone: true }),
+    escalatedAt: timestamp('escalated_at', { withTimezone: true }),
     ...timestamps,
     ...softDelete,
   },
@@ -306,6 +340,33 @@ export const formResponses = pgTable(
       t.sourceEntityType,
       t.sourceEntityId,
     ),
+    // Drives the every-minute overdue scan for monitored sessions.
+    monitorDueIdx: index('form_responses_monitor_due_idx').on(t.monitorStatus, t.nextCheckinDueAt),
+  }),
+)
+
+// Generic check-in log for monitored-session responses (mirrors the legacy
+// lw_checkins): one row per "I'm OK" tap, auto-prompt, or missed escalation.
+export const formResponseCheckins = pgTable(
+  'form_response_checkins',
+  {
+    id: id(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    responseId: uuid('response_id')
+      .notNull()
+      .references(() => formResponses.id, { onDelete: 'cascade' }),
+    kind: formResponseCheckinKind('kind').notNull(),
+    recordedAt: timestamp('recorded_at', { withTimezone: true }).defaultNow().notNull(),
+    geoLat: doublePrecision('geo_lat'),
+    geoLng: doublePrecision('geo_lng'),
+    note: text('note'),
+    byTenantUserId: uuid('by_tenant_user_id').references(() => tenantUsers.id),
+  },
+  (t) => ({
+    responseIdx: index('form_response_checkins_response_idx').on(t.responseId, t.recordedAt),
+    tenantIdx: index('form_response_checkins_tenant_idx').on(t.tenantId),
   }),
 )
 
@@ -459,4 +520,12 @@ export const formResponsesRelations = relations(formResponses, ({ one, many }) =
   }),
   steps: many(formResponseSteps),
   scores: many(formResponseScores),
+  checkins: many(formResponseCheckins),
+}))
+
+export const formResponseCheckinsRelations = relations(formResponseCheckins, ({ one }) => ({
+  response: one(formResponses, {
+    fields: [formResponseCheckins.responseId],
+    references: [formResponses.id],
+  }),
 }))

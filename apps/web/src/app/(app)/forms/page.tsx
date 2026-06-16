@@ -9,9 +9,7 @@ import { ListPageLayout } from '@/components/page-layout'
 import { SearchInput } from '@/components/search-input'
 import { NavIcon } from '@/components/sidebar-nav'
 import { pickString } from '@/lib/list-params'
-import { loadNavConfig } from '@/lib/nav/resolve'
 import { FormsKindNav } from './_nav'
-import { PinFormButton } from './_pin-button'
 import { AiGenerateButton } from './_ai-generate-button'
 import { appVisibleTo, getUserRoleKeys } from './_lib/access'
 
@@ -20,10 +18,10 @@ export const metadata = { title: 'Forms' }
 // Tailwind classes per app kind (badge on each card; 'form' is the default and
 // not badged to keep the grid quiet).
 const KIND_BADGE: Record<string, string> = {
-  wizard: 'bg-indigo-50 text-indigo-700',
-  checklist: 'bg-emerald-50 text-emerald-700',
-  register: 'bg-amber-50 text-amber-700',
-  mini_app: 'bg-violet-50 text-violet-700',
+  wizard: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300',
+  checklist: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
+  register: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
+  mini_app: 'bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300',
 }
 
 export default async function FormsPage({
@@ -36,7 +34,6 @@ export default async function FormsPage({
   const q = pickString(sp.q) ?? ''
   const ctx = await requireRequestContext()
   const canCreate = can(ctx, 'forms.template.create')
-  const canPin = can(ctx, 'admin.nav.manage')
   const canGenerate = can(ctx, 'forms.ai.generate')
 
   const userRoleKeys = await getUserRoleKeys(ctx)
@@ -44,7 +41,6 @@ export default async function FormsPage({
     templates: allTemplates,
     counts,
     stats,
-    pinnedIds,
   } = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = [isNull(formTemplates.deletedAt)]
     if (kindFilter) filters.push(eq(formTemplates.kind, kindFilter as any))
@@ -76,17 +72,6 @@ export default async function FormsPage({
       .where(and(isNull(formTemplates.deletedAt), eq(formTemplates.status, 'published')))
     const [resp] = await tx.select({ c: count() }).from(formResponses)
 
-    // Which templates are currently pinned to the sidebar (admins only — drives
-    // the Pin/Unpin toggle on each card).
-    const pinnedIds = canPin
-      ? (await loadNavConfig(tx)).groups
-          .flatMap((g) => g.items)
-          .reduce((acc, i) => {
-            if (i.kind === 'form') acc.add(i.templateId)
-            return acc
-          }, new Set<string>())
-      : new Set<string>()
-
     return {
       templates,
       counts: new Map(countRows.map((r) => [r.templateId, { c: Number(r.c), last: r.last }])),
@@ -95,7 +80,6 @@ export default async function FormsPage({
         published: Number(pub?.c ?? 0),
         responses: Number(resp?.c ?? 0),
       },
-      pinnedIds,
     }
   })
 
@@ -109,20 +93,23 @@ export default async function FormsPage({
           <header className="flex flex-wrap items-end justify-between gap-3">
             <div className="space-y-1">
               <h1 className="text-2xl font-semibold">Builder</h1>
-              <p className="max-w-2xl text-sm text-slate-500">
+              <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
                 Your Apps — forms, wizards, checklists, registers, and mini-apps. Build with the
                 drag-drop designer, automate with Flows, then fill, review, and pin the ones your
                 crews use most to the sidebar.
               </p>
-              <div className="flex flex-wrap items-center gap-4 pt-1 text-xs text-slate-500">
+              <div className="flex flex-wrap items-center gap-4 pt-1 text-xs text-slate-500 dark:text-slate-400">
                 <span>
-                  <strong className="text-slate-800">{stats.templates}</strong> templates
+                  <strong className="text-slate-800 dark:text-slate-200">{stats.templates}</strong>{' '}
+                  templates
                 </span>
                 <span>
-                  <strong className="text-slate-800">{stats.published}</strong> published
+                  <strong className="text-slate-800 dark:text-slate-200">{stats.published}</strong>{' '}
+                  published
                 </span>
                 <span>
-                  <strong className="text-slate-800">{stats.responses}</strong> responses
+                  <strong className="text-slate-800 dark:text-slate-200">{stats.responses}</strong>{' '}
+                  responses
                 </span>
                 <Link href="/forms/responses" className="text-teal-700 hover:underline">
                   Browse responses →
@@ -143,7 +130,7 @@ export default async function FormsPage({
 
           <div className="flex flex-wrap items-center gap-2">
             <FormsKindNav active={kindFilter} q={q} />
-            <div className="ml-auto w-full sm:w-64">
+            <div className="ml-auto w-full sm:w-72">
               <SearchInput placeholder="Search forms…" />
             </div>
           </div>
@@ -172,16 +159,16 @@ export default async function FormsPage({
             return (
               <div
                 key={t.id}
-                className="group flex flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-teal-300 hover:shadow-md"
+                className="group flex flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-teal-300 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:hover:border-teal-700"
               >
                 <div className="flex items-start gap-3">
-                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-teal-50 text-teal-700 ring-1 ring-teal-100">
+                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-teal-50 text-teal-700 ring-1 ring-teal-100 dark:bg-teal-950/40 dark:text-teal-300 dark:ring-teal-900">
                     <NavIcon iconKey={t.iconKey ?? 'clipboard-check'} size={20} />
                   </span>
                   <div className="min-w-0 flex-1">
                     <Link
                       href={`/forms/templates/${t.id}`}
-                      className="block truncate font-semibold text-slate-900 hover:text-teal-700"
+                      className="block truncate font-semibold text-slate-900 hover:text-teal-700 dark:text-slate-100 dark:hover:text-teal-400"
                     >
                       {t.name}
                     </Link>
@@ -191,7 +178,7 @@ export default async function FormsPage({
                       </Badge>
                       {t.kind && t.kind !== 'form' ? (
                         <span
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase ${KIND_BADGE[t.kind] ?? 'bg-slate-100 text-slate-600'}`}
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase ${KIND_BADGE[t.kind] ?? 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}
                         >
                           {t.kind === 'mini_app' ? 'mini-app' : t.kind}
                         </span>
@@ -201,17 +188,19 @@ export default async function FormsPage({
                 </div>
 
                 {t.description ? (
-                  <p className="mt-3 line-clamp-2 text-sm text-slate-500">{t.description}</p>
+                  <p className="mt-3 line-clamp-2 text-sm text-slate-500 dark:text-slate-400">
+                    {t.description}
+                  </p>
                 ) : null}
 
-                <div className="mt-3 flex items-center gap-2 text-xs text-slate-400">
+                <div className="mt-3 flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500">
                   <span>
                     {responseCount} response{responseCount === 1 ? '' : 's'}
                   </span>
                   {last ? <span>· last {new Date(last).toLocaleDateString()}</span> : null}
                 </div>
 
-                <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+                <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
                   <Link href={`/forms/templates/${t.id}/fill`}>
                     <Button size="sm">Fill</Button>
                   </Link>
@@ -222,7 +211,6 @@ export default async function FormsPage({
                       </Button>
                     </Link>
                   ) : null}
-                  {canPin ? <PinFormButton templateId={t.id} pinned={pinnedIds.has(t.id)} /> : null}
                 </div>
               </div>
             )

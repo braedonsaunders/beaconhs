@@ -47,6 +47,9 @@ export const triggerDataSchema = z.discriminatedUnion('trigger', [
   z.object({ trigger: z.literal('on_field_value'), rule: logicRuleSchema }),
   z.object({ trigger: z.literal('status_change'), from: z.string().optional(), to: z.string() }),
   z.object({ trigger: z.literal('scheduled'), cron: z.string(), tz: z.string().optional() }),
+  // Fires when a monitored session misses a check-in past its grace period.
+  // Dispatched by the overdue scan (apps/worker) via planAutomation(..., 'session_overdue').
+  z.object({ trigger: z.literal('session_overdue') }),
 ])
 export type TriggerData = z.infer<typeof triggerDataSchema>
 
@@ -109,6 +112,22 @@ export const actionDataSchema = z.discriminatedUnion('action', [
     // Optional: spawn a CAPA when hazards at/above `minSeverity` are found.
     createCapaOnHazard: z.boolean().optional(),
     minSeverity: z.enum(['low', 'medium', 'high']).optional(),
+  }),
+  // Turn the submitted response into a LIVE monitored session: a recurring
+  // check-in timer that escalates (via the `session_overdue` trigger) if a
+  // check-in is missed past the grace period. This is the native-flow
+  // replacement for the old per-template `schema.monitor` config — pair it with
+  // an `on_submit` trigger. interval/grace/duration can be fixed or bound to a
+  // submitted number field.
+  z.object({
+    action: z.literal('start_monitored_session'),
+    intervalMinutes: z.number().int().positive(),
+    graceMinutes: z.number().int().nonnegative(),
+    durationMinutes: z.number().int().nonnegative().optional(),
+    requireGeo: z.boolean().optional(),
+    intervalFieldKey: z.string().optional(),
+    graceFieldKey: z.string().optional(),
+    durationFieldKey: z.string().optional(),
   }),
 ])
 export type ActionData = z.infer<typeof actionDataSchema>

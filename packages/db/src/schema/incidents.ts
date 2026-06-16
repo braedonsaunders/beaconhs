@@ -65,6 +65,11 @@ export const incidents = pgTable(
     type: incidentType('type').notNull(),
     severity: incidentSeverity('severity').notNull(),
     status: incidentStatus('status').default('reported').notNull(),
+    // Draft-first: instant-created incidents start as a HIDDEN draft — excluded
+    // from lists, dashboards, compliance counts, the feed, and notifications
+    // until committed (required fields filled). A worker sweeps drafts untouched
+    // > 48h. Existing rows default to false (committed).
+    isDraft: boolean('is_draft').default(false).notNull(),
     classification: jsonb('classification').$type<Record<string, string>>().default({}).notNull(),
 
     // Brief

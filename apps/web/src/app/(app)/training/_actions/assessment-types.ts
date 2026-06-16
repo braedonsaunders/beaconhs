@@ -9,8 +9,9 @@ import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 
 /**
- * Create a new assessment type. Redirects to its detail page where the admin
- * adds questions.
+ * Instant-create an assessment type and land in its detail editor (where the
+ * admin sets the name and adds questions). Called from the list "New" button —
+ * no separate create form. A blank name defaults to a placeholder.
  */
 export async function createAssessmentType(formData: FormData) {
   const ctx = await requireRequestContext()
@@ -18,8 +19,7 @@ export async function createAssessmentType(formData: FormData) {
   if (!ctx.tenantId) throw new Error('No active tenant')
   const tenantId: string = ctx.tenantId
 
-  const name = String(formData.get('name') ?? '').trim()
-  if (!name) throw new Error('Name is required')
+  const name = String(formData.get('name') ?? '').trim() || 'Untitled assessment'
   const description = String(formData.get('description') ?? '').trim() || null
   const passingRaw = String(formData.get('passingScore') ?? '80').trim()
   const passingScore = clamp(Number(passingRaw), 0, 100)

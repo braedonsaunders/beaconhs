@@ -28,8 +28,9 @@ import {
   complianceObligations,
   correctiveActions,
   documents,
+  formResponses,
+  formTemplates,
   incidents,
-  lwSessions,
   people,
   roleAssignments,
   roles,
@@ -741,42 +742,69 @@ export async function emitDocumentReviewDue(tenantId: string, documentId: string
   }
 }
 
-// --- Lone worker ----------------------------------------------------------
+// --- Monitored sessions (Lone Worker + any monitored Builder app) --------
 
-export async function emitLoneWorkerOverdue(tenantId: string, sessionId: string): Promise<void> {
+/**
+ * Overdue escalation for a monitored-session response — the generic engine that
+ * powers Lone Worker and any future monitored app (permit timers, periodic
+ * checks…). Fired by the worker's `form_session_overdue_scan` once a session
+ * passes `nextCheckinDueAt + grace`, keyed off a `form_response`. Reuses the
+ * `lone_worker` audience category + recipient overrides. Never throws.
+ */
+export async function emitMonitoredSessionOverdue(
+  tenantId: string,
+  responseId: string,
+): Promise<void> {
   const ctx = workerEventCtx(tenantId)
   try {
-    const session = await ctx.db(async (tx) => {
-      const [s] = await tx.select().from(lwSessions).where(eq(lwSessions.id, sessionId)).limit(1)
-      return s ?? null
+    const res = await ctx.db(async (tx) => {
+      const [r] = await tx
+        .select({
+          id: formResponses.id,
+          templateId: formResponses.templateId,
+          nextCheckinDueAt: formResponses.nextCheckinDueAt,
+          startedAt: formResponses.createdAt,
+        })
+        .from(formResponses)
+        .where(eq(formResponses.id, responseId))
+        .limit(1)
+      return r ?? null
     })
-    if (!session) return
+    if (!res) return
 
     const tenant = await getTenant(ctx, tenantId)
     if (!tenant) return
 
-    const worker = await tenantUserToUserId(ctx, session.workerTenantUserId)
-    const supervisor = session.supervisorTenantUserId
-      ? await tenantUserToUserId(ctx, session.supervisorTenantUserId)
-      : null
+    const tmpl = await ctx.db(async (tx) => {
+      const [t] = await tx
+        .select({ name: formTemplates.name })
+        .from(formTemplates)
+        .where(eq(formTemplates.id, res.templateId))
+        .limit(1)
+      return t ?? null
+    })
+    const appName = tmpl?.name ?? 'Monitored session'
 
-    const audience = await resolveAudience(ctx, tenantId, 'lone_worker', [supervisor?.userId])
+    // Role-based safety net (safety_manager / tenant_admin or the tenant's
+    // configured 'lone_worker' recipients). Per-session supervisor targeting is
+    // layered on by the app in a later phase.
+    const audience = await resolveAudience(ctx, tenantId, 'lone_worker')
     if (audience.length === 0) return
 
-    const linkPath = `/lone-worker/${session.id}`
+    const linkPath = `/forms/responses/${res.id}`
     const url = appUrl(linkPath)
-    const workerName = worker?.displayName ?? 'Lone worker'
-    const title = `CRITICAL: Lone worker overdue — ${workerName}`
+    const dueAt = res.nextCheckinDueAt ?? new Date()
+    const title = `CRITICAL: ${appName} — check-in overdue`
 
     await enqueueNotification({
       tenantId,
       userIds: audience,
       category: 'lone_worker',
-      type: 'lone_worker.overdue',
+      type: 'monitored_session.overdue',
       title,
-      body: `Check-in was due at ${session.nextCheckinDueAt.toISOString()}`,
+      body: `Check-in was due at ${dueAt.toISOString()}`,
       linkPath,
-      data: { sessionId: session.id, workerUserId: worker?.userId },
+      data: { responseId: res.id, templateId: res.templateId },
       isCritical: true,
       channels: ['in_app', 'email', 'push', 'sms'],
     })
@@ -785,12 +813,8 @@ export async function emitLoneWorkerOverdue(tenantId: string, sessionId: string)
     if (recipients.length > 0) {
       const tpl = loneWorkerOverdueEmail({
         tenant,
-        session: {
-          task: session.task,
-          startedAt: session.startedAt,
-          nextCheckinDueAt: session.nextCheckinDueAt,
-        },
-        worker: { name: workerName },
+        session: { task: appName, startedAt: res.startedAt, nextCheckinDueAt: dueAt },
+        worker: { name: appName },
         url,
       })
       await enqueueEmail({
@@ -802,7 +826,7 @@ export async function emitLoneWorkerOverdue(tenantId: string, sessionId: string)
       })
     }
   } catch (err) {
-    logFailure('emitLoneWorkerOverdue', err)
+    logFailure('emitMonitoredSessionOverdue', err)
   }
 }
 

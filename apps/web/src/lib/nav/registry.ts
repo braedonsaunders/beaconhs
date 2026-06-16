@@ -34,8 +34,8 @@ export const NAV_GROUP_ORDER = [
   'Frontline',
   'Programs',
   'Assets & people',
-  'Compliance',
-  'Insight',
+  // Program oversight — obligations/compliance + analytics/dashboards + reports.
+  'Assurance',
   'Settings',
 ] as const
 
@@ -137,7 +137,7 @@ export const NAV_MODULES: NavModule[] = [
     label: 'Compliance',
     iconKey: 'check',
     requiredPermission: 'compliance.read',
-    group: 'Compliance',
+    group: 'Assurance',
   },
 
   // Insight
@@ -147,7 +147,7 @@ export const NAV_MODULES: NavModule[] = [
     label: 'Insights',
     iconKey: 'gauge',
     requiredPermission: 'reports.read',
-    group: 'Insight',
+    group: 'Assurance',
   },
   {
     key: 'reports',
@@ -155,7 +155,7 @@ export const NAV_MODULES: NavModule[] = [
     label: 'Reports',
     iconKey: 'file',
     requiredPermission: 'reports.read',
-    group: 'Insight',
+    group: 'Assurance',
   },
 
   // Settings

@@ -7,7 +7,6 @@ import {
   Folder,
   Mail,
   MapPin,
-  Pencil,
   Phone,
   Plus,
   Star,
@@ -32,7 +31,6 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-  Textarea,
 } from '@beaconhs/ui'
 import {
   customerContacts,
@@ -45,9 +43,10 @@ import {
 import { requireRequestContext } from '@/lib/auth'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { ActivityFeed } from '@/components/activity-feed'
-import { DetailGrid } from '@/components/detail-grid'
 import { DetailPageLayout } from '@/components/page-layout'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
+import { createContactFromDrawer, createProject, updateLocation } from '../_actions/locations'
+import { ContactCreateDrawer } from './_drawers'
 
 export const dynamic = 'force-dynamic'
 
@@ -80,36 +79,6 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 }
 
 // -------------------- Server actions --------------------
-
-async function addContact(formData: FormData) {
-  'use server'
-  const ctx = await requireRequestContext()
-  const orgUnitId = String(formData.get('orgUnitId') ?? '')
-  const name = String(formData.get('name') ?? '').trim()
-  const role = String(formData.get('role') ?? '').trim() || null
-  const email = String(formData.get('email') ?? '').trim() || null
-  const phone = String(formData.get('phone') ?? '').trim() || null
-  const notes = String(formData.get('notes') ?? '').trim() || null
-  const isPrimary = formData.get('isPrimary') === 'on'
-  if (!orgUnitId || !name) return
-
-  const [row] = await ctx.db((tx) =>
-    tx
-      .insert(customerContacts)
-      .values({ tenantId: ctx.tenantId, orgUnitId, name, role, email, phone, notes, isPrimary })
-      .returning(),
-  )
-  if (row) {
-    await recordAudit(ctx, {
-      entityType: 'customer_contact',
-      entityId: row.id,
-      action: 'create',
-      summary: `Added contact "${name}"`,
-      after: { name, role, email, phone, isPrimary, orgUnitId },
-    })
-  }
-  revalidatePath(`/locations/${orgUnitId}`)
-}
 
 async function deleteContact(formData: FormData) {
   'use server'
@@ -206,6 +175,7 @@ export default async function LocationDetailPage({
 }) {
   const { id } = await params
   const sp = await searchParams
+  const drawer = typeof sp.drawer === 'string' ? sp.drawer : null
   const ctx = await requireRequestContext()
 
   const data = await ctx.db(async (tx) => {
@@ -229,12 +199,12 @@ export default async function LocationDetailPage({
   const { unit, parent, children } = data
 
   if (unit.level === 'customer') {
-    return renderCustomer({ unit, children, sp, id, ctx })
+    return renderCustomer({ unit, children, sp, drawer, id, ctx })
   }
   if (unit.level === 'project') {
-    return renderProject({ unit, parent, children, sp, id, ctx })
+    return renderProject({ unit, parent, children, sp, drawer, id, ctx })
   }
-  return renderSite({ unit, parent, sp, id, ctx })
+  return renderSite({ unit, parent, sp, drawer, id, ctx })
 }
 
 // -------------------- Customer view --------------------
@@ -243,12 +213,14 @@ async function renderCustomer({
   unit,
   children,
   sp,
+  drawer,
   id,
   ctx,
 }: {
   unit: typeof orgUnits.$inferSelect
   children: (typeof orgUnits.$inferSelect)[]
   sp: Record<string, string | string[] | undefined>
+  drawer: string | null
   id: string
   ctx: Awaited<ReturnType<typeof requireRequestContext>>
 }) {
@@ -302,13 +274,6 @@ async function renderCustomer({
           title={unit.name}
           subtitle={unit.code ? `Customer · ${unit.code}` : 'Customer'}
           badge={<Badge variant="secondary">customer</Badge>}
-          actions={
-            <Link href={`${basePath}/edit` as any}>
-              <Button variant="outline">
-                <Pencil size={14} /> Edit
-              </Button>
-            </Link>
-          }
         />
       }
       subtabs={
@@ -335,6 +300,12 @@ async function renderCustomer({
       {active === 'incidents' ? <IncidentsTab rows={allIncidents} /> : null}
       {active === 'equipment' ? <EquipmentTab equipment={allEquipment} /> : null}
       {active === 'activity' ? <ActivityFeed entries={activity} /> : null}
+      <ContactCreateDrawer
+        open={drawer === 'new-contact'}
+        orgUnitId={id}
+        closeHref={`${basePath}?tab=contacts`}
+        saveAction={createContactFromDrawer}
+      />
     </DetailPageLayout>
   )
 }
@@ -346,6 +317,7 @@ async function renderProject({
   parent,
   children,
   sp,
+  drawer,
   id,
   ctx,
 }: {
@@ -353,6 +325,7 @@ async function renderProject({
   parent: typeof orgUnits.$inferSelect | null
   children: (typeof orgUnits.$inferSelect)[]
   sp: Record<string, string | string[] | undefined>
+  drawer: string | null
   id: string
   ctx: Awaited<ReturnType<typeof requireRequestContext>>
 }) {
@@ -388,13 +361,6 @@ async function renderProject({
           title={unit.name}
           subtitle={parent ? `Project under ${parent.name}` : 'Project'}
           badge={<Badge variant="secondary">project</Badge>}
-          actions={
-            <Link href={`${basePath}/edit` as any}>
-              <Button variant="outline">
-                <Pencil size={14} /> Edit
-              </Button>
-            </Link>
-          }
         />
       }
       subtabs={
@@ -419,6 +385,12 @@ async function renderProject({
       {active === 'incidents' ? <IncidentsTab rows={allIncidents} /> : null}
       {active === 'equipment' ? <EquipmentTab equipment={allEquipment} /> : null}
       {active === 'activity' ? <ActivityFeed entries={activity} /> : null}
+      <ContactCreateDrawer
+        open={drawer === 'new-contact'}
+        orgUnitId={id}
+        closeHref={`${basePath}?tab=contacts`}
+        saveAction={createContactFromDrawer}
+      />
     </DetailPageLayout>
   )
 }
@@ -429,12 +401,14 @@ async function renderSite({
   unit,
   parent,
   sp,
+  drawer,
   id,
   ctx,
 }: {
   unit: typeof orgUnits.$inferSelect
   parent: typeof orgUnits.$inferSelect | null
   sp: Record<string, string | string[] | undefined>
+  drawer: string | null
   id: string
   ctx: Awaited<ReturnType<typeof requireRequestContext>>
 }) {
@@ -468,13 +442,6 @@ async function renderSite({
           title={unit.name}
           subtitle={parent ? `${unit.level} under ${parent.name}` : unit.level}
           badge={<Badge variant="secondary">{unit.level}</Badge>}
-          actions={
-            <Link href={`${basePath}/edit` as any}>
-              <Button variant="outline">
-                <Pencil size={14} /> Edit
-              </Button>
-            </Link>
-          }
         />
       }
       subtabs={
@@ -497,6 +464,12 @@ async function renderSite({
       {active === 'incidents' ? <IncidentsTab rows={siteIncidents} /> : null}
       {active === 'equipment' ? <EquipmentTab equipment={siteEquipment} /> : null}
       {active === 'activity' ? <ActivityFeed entries={activity} /> : null}
+      <ContactCreateDrawer
+        open={drawer === 'new-contact'}
+        orgUnitId={id}
+        closeHref={`${basePath}?tab=contacts`}
+        saveAction={createContactFromDrawer}
+      />
     </DetailPageLayout>
   )
 }
@@ -504,32 +477,109 @@ async function renderSite({
 // ---------- Tab content components ----------
 
 function OverviewTab({ unit }: { unit: typeof orgUnits.$inferSelect }) {
+  const addr = unit.address ?? {}
   const mapsHref =
     unit.lat != null && unit.lng != null
       ? `https://www.google.com/maps?q=${unit.lat},${unit.lng}`
       : null
   return (
     <div className="space-y-4">
-      <DetailGrid
-        rows={[
-          { label: 'Name', value: unit.name },
-          { label: 'Code', value: unit.code ?? '—' },
-          { label: 'Level', value: unit.level },
-          { label: 'Address', value: formatFullAddress(unit.address) ?? '—' },
-          {
-            label: 'Latitude',
-            value: unit.lat != null ? unit.lat.toFixed(6) : '—',
-          },
-          {
-            label: 'Longitude',
-            value: unit.lng != null ? unit.lng.toFixed(6) : '—',
-          },
-          {
-            label: 'Geofence',
-            value: unit.geofenceMeters ? `${unit.geofenceMeters} m` : '—',
-          },
-        ]}
-      />
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Location details</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form action={updateLocation} className="space-y-4">
+            <input type="hidden" name="id" value={unit.id} />
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label htmlFor="loc-name">Name *</Label>
+                <Input id="loc-name" name="name" required defaultValue={unit.name} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="loc-code">Code</Label>
+                <Input id="loc-code" name="code" defaultValue={unit.code ?? ''} />
+              </div>
+            </div>
+
+            <div className="pt-1">
+              <h3 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-300">
+                Address
+              </h3>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label htmlFor="loc-addr1">Address line 1</Label>
+                  <Input id="loc-addr1" name="addressLine1" defaultValue={addr.line1 ?? ''} />
+                </div>
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label htmlFor="loc-addr2">Address line 2</Label>
+                  <Input id="loc-addr2" name="addressLine2" defaultValue={addr.line2 ?? ''} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="loc-city">City</Label>
+                  <Input id="loc-city" name="addressCity" defaultValue={addr.city ?? ''} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="loc-region">Region / Province</Label>
+                  <Input id="loc-region" name="addressRegion" defaultValue={addr.region ?? ''} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="loc-postal">Postal / Zip</Label>
+                  <Input id="loc-postal" name="addressPostal" defaultValue={addr.postal ?? ''} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="loc-country">Country</Label>
+                  <Input id="loc-country" name="addressCountry" defaultValue={addr.country ?? ''} />
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-1">
+              <h3 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-300">
+                Geolocation
+              </h3>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="loc-lat">Latitude</Label>
+                  <Input
+                    id="loc-lat"
+                    name="lat"
+                    type="number"
+                    step="any"
+                    defaultValue={unit.lat != null ? String(unit.lat) : ''}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="loc-lng">Longitude</Label>
+                  <Input
+                    id="loc-lng"
+                    name="lng"
+                    type="number"
+                    step="any"
+                    defaultValue={unit.lng != null ? String(unit.lng) : ''}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="loc-geo">Geofence (m)</Label>
+                  <Input
+                    id="loc-geo"
+                    name="geofenceMeters"
+                    type="number"
+                    min={0}
+                    defaultValue={unit.geofenceMeters != null ? String(unit.geofenceMeters) : ''}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end">
+              <Button type="submit" size="sm">
+                Save details
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Map</CardTitle>
@@ -585,11 +635,12 @@ function ProjectsTab({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-end">
-        <Link href={`/locations/${unit.id}/projects/new`}>
-          <Button>
+        <form action={createProject}>
+          <input type="hidden" name="parentId" value={unit.id} />
+          <Button type="submit">
             <Plus size={14} /> Add project
           </Button>
-        </Link>
+        </form>
       </div>
       {projects.length === 0 ? (
         <EmptyState
@@ -700,12 +751,19 @@ function ContactsTab({
   contacts: (typeof customerContacts.$inferSelect)[]
 }) {
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
+      <div className="flex items-center justify-end">
+        <Link href={`/locations/${unit.id}?tab=contacts&drawer=new-contact`}>
+          <Button>
+            <Plus size={14} /> Add contact
+          </Button>
+        </Link>
+      </div>
       {contacts.length === 0 ? (
         <EmptyState
           icon={<Users size={32} />}
           title="No contacts"
-          description="Add a customer contact below — site managers, client reps, emergency-only contacts."
+          description="Add a customer contact — site managers, client reps, emergency-only contacts."
         />
       ) : (
         <Table>
@@ -777,50 +835,6 @@ function ContactsTab({
           </TableBody>
         </Table>
       )}
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Add contact</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form action={addContact} className="space-y-3">
-            <input type="hidden" name="orgUnitId" value={unit.id} />
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label="Name" required>
-                <Input name="name" required />
-              </Field>
-              <Field label="Role">
-                <Input name="role" placeholder="e.g. Site Manager" />
-              </Field>
-              <Field label="Email">
-                <Input name="email" type="email" autoComplete="email" />
-              </Field>
-              <Field label="Phone">
-                <Input name="phone" type="tel" autoComplete="tel" />
-              </Field>
-              <Field label="Notes" className="sm:col-span-2">
-                <Textarea name="notes" rows={2} />
-              </Field>
-              <div className="flex items-center gap-2 sm:col-span-2">
-                <input
-                  id="contact-is-primary"
-                  type="checkbox"
-                  name="isPrimary"
-                  className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
-                />
-                <Label htmlFor="contact-is-primary" className="text-sm">
-                  Mark as primary contact
-                </Label>
-              </div>
-            </div>
-            <div className="flex justify-end">
-              <Button type="submit">
-                <Plus size={14} /> Add contact
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
     </div>
   )
 }
@@ -953,50 +967,4 @@ function severityVariant(s: string): 'success' | 'warning' | 'destructive' | 'se
   if (s === 'medical_aid') return 'warning'
   if (s === 'first_aid_only') return 'secondary'
   return 'secondary'
-}
-
-function formatFullAddress(
-  address:
-    | {
-        line1?: string
-        line2?: string
-        city?: string
-        region?: string
-        postal?: string
-        country?: string
-      }
-    | null
-    | undefined,
-): string | null {
-  if (!address) return null
-  const parts = [
-    address.line1,
-    address.line2,
-    [address.city, address.region].filter(Boolean).join(', ') || undefined,
-    address.postal,
-    address.country,
-  ].filter(Boolean) as string[]
-  return parts.length > 0 ? parts.join(' · ') : null
-}
-
-function Field({
-  label,
-  required,
-  className,
-  children,
-}: {
-  label: string
-  required?: boolean
-  className?: string
-  children: React.ReactNode
-}) {
-  return (
-    <div className={`space-y-1.5 ${className ?? ''}`}>
-      <Label>
-        {label}
-        {required ? <span className="text-red-600"> *</span> : null}
-      </Label>
-      {children}
-    </div>
-  )
 }

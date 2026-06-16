@@ -94,6 +94,7 @@ import { CanvasEditor, defaultBox } from './_canvas-editor'
 import { FlowsCanvas, type FlowSummary } from '../flows/_flows-canvas'
 import { AiAssistant } from '@/components/ai-assistant'
 import { runAppBuilderChat } from '../../../_ai-actions'
+import { PinFormButton } from '../../../_pin-button'
 import {
   BarChart3,
   Bold,
@@ -171,6 +172,10 @@ const FIELD_ICONS: Partial<Record<FieldType, React.ComponentType<{ size?: number
 // Categorized palette. The first group of each section gets prominent
 // placement at the top; rare ones live in "More" further down.
 type PaletteGroup = { label: string; types: FieldType[] }
+// One element per concept — no duplicates across groups. `long_text` is the
+// canonical multi-line text (legacy `textarea` is omitted) and `formula` is the
+// canonical computed value (legacy `calc` is omitted); both legacy types still
+// render fine on existing forms — they're just not offered for new fields.
 const PALETTE_PRIMARY: PaletteGroup[] = [
   {
     label: 'Common',
@@ -194,19 +199,8 @@ const PALETTE_PRIMARY: PaletteGroup[] = [
 ]
 const PALETTE_MORE: PaletteGroup[] = [
   {
-    label: 'Standard',
-    types: [
-      'textarea',
-      'datetime',
-      'time',
-      'gps',
-      'email',
-      'phone',
-      'url',
-      'rich_text',
-      'address',
-      'qr_scanner',
-    ],
+    label: 'Date & contact',
+    types: ['datetime', 'time', 'gps', 'address', 'email', 'phone', 'url', 'qr_scanner'],
   },
   { label: 'Choice', types: ['radio', 'multi_select', 'ranking'] },
   { label: 'Scoring', types: ['rating', 'matrix', 'yes_no_comment', 'traffic_light'] },
@@ -222,10 +216,9 @@ const PALETTE_MORE: PaletteGroup[] = [
     ],
   },
   { label: 'Media', types: ['photo_ai', 'photo_annotated', 'video', 'audio'] },
-  { label: 'Identity', types: ['typed_attestation'] },
-  { label: 'Computed', types: ['calc', 'risk_matrix'] },
+  { label: 'Computed', types: ['risk_matrix', 'typed_attestation'] },
   { label: 'Data', types: ['lookup', 'data_table', 'metric'] },
-  { label: 'Display', types: ['heading', 'paragraph', 'image', 'divider'] },
+  { label: 'Display', types: ['heading', 'paragraph', 'rich_text', 'image', 'divider'] },
 ]
 
 function newId(prefix: string): string {
@@ -253,11 +246,23 @@ const KIND_META: Record<
   'form' | 'wizard' | 'checklist' | 'register' | 'mini_app',
   { label: string; cls: string }
 > = {
-  form: { label: 'Form', cls: 'bg-teal-50 text-teal-700' },
-  wizard: { label: 'Wizard', cls: 'bg-indigo-50 text-indigo-700' },
-  checklist: { label: 'Checklist', cls: 'bg-emerald-50 text-emerald-700' },
-  register: { label: 'Register', cls: 'bg-amber-50 text-amber-700' },
-  mini_app: { label: 'Mini-app', cls: 'bg-violet-50 text-violet-700' },
+  form: { label: 'Form', cls: 'bg-teal-50 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300' },
+  wizard: {
+    label: 'Wizard',
+    cls: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300',
+  },
+  checklist: {
+    label: 'Checklist',
+    cls: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
+  },
+  register: {
+    label: 'Register',
+    cls: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
+  },
+  mini_app: {
+    label: 'Mini-app',
+    cls: 'bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300',
+  },
 }
 
 export type AppOverview = {
@@ -280,6 +285,8 @@ export function FormDesigner({
   roles = [],
   flows = [],
   canGenerate = false,
+  canPin = false,
+  pinned = false,
 }: {
   templateId: string
   templateName: string
@@ -292,6 +299,8 @@ export function FormDesigner({
   roles?: { key: string; name: string }[]
   flows?: FlowSummary[]
   canGenerate?: boolean
+  canPin?: boolean
+  pinned?: boolean
 }) {
   const router = useRouter()
   const [schema, setSchema] = useState<FormSchemaV1>(initialSchema)
@@ -609,7 +618,7 @@ export function FormDesigner({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <header className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 py-2">
+      <header className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 py-2 dark:border-slate-800 dark:bg-slate-900">
         <div className="flex min-w-0 items-center gap-3">
           <Link href="/forms" className="shrink-0 text-sm text-teal-700 hover:underline">
             ← Builder
@@ -623,7 +632,7 @@ export function FormDesigner({
                 {KIND_META[templateKind].label}
               </span>
             </div>
-            <div className="text-xs text-slate-500">
+            <div className="text-xs text-slate-500 dark:text-slate-400">
               Draft · published v{currentVersion} · {schema.sections.length} section
               {schema.sections.length === 1 ? '' : 's'}
             </div>
@@ -669,8 +678,8 @@ export function FormDesigner({
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* LEFT 1/3 — Overview / Build / Assignments / Permissions */}
-        <aside className="flex w-72 shrink-0 flex-col border-r border-slate-200 bg-white">
-          <div className="flex shrink-0 items-center gap-0.5 border-b border-slate-200 px-2 py-1.5">
+        <aside className="flex w-72 shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex shrink-0 items-center gap-0.5 border-b border-slate-200 px-2 py-1.5 dark:border-slate-800">
             <LeftTab
               active={leftTab === 'overview'}
               onClick={() => setLeftTab('overview')}
@@ -703,6 +712,8 @@ export function FormDesigner({
                 name={appName}
                 overview={overview}
                 onSaved={setAppName}
+                canPin={canPin}
+                pinned={pinned}
               />
             ) : leftTab === 'assignments' ? (
               <AssignmentsPanel templateId={templateId} />
@@ -713,19 +724,20 @@ export function FormDesigner({
                 <button
                   type="button"
                   onClick={openWorkflow}
+                  title="Sequential human stages on this form — different from Flows (automation)"
                   className={`mb-3 block w-full rounded px-2 py-1 text-left text-xs font-semibold ${
                     selection.kind === 'workflow'
-                      ? 'bg-teal-50 text-teal-900'
-                      : 'text-slate-700 hover:bg-slate-50'
+                      ? 'bg-teal-50 text-teal-900 dark:bg-teal-950/40 dark:text-teal-200'
+                      : 'text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800'
                   }`}
                 >
-                  Workflow steps ({stepsCount})
+                  Sign-off steps ({stepsCount})
                 </button>
 
-                <h3 className="mb-1 text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
+                <h3 className="mb-1 text-[10px] font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
                   Add an element
                 </h3>
-                <p className="mb-2 text-[10px] text-slate-500">
+                <p className="mb-2 text-[10px] text-slate-500 dark:text-slate-400">
                   Drag onto the canvas, or click to add to the selected section.
                 </p>
                 {[...PALETTE_PRIMARY, ...PALETTE_MORE].map((group) => (
@@ -750,8 +762,8 @@ export function FormDesigner({
         </aside>
 
         {/* RIGHT 2/3 — build surface ⟷ flows */}
-        <div className="flex min-w-0 flex-1 flex-col bg-slate-50">
-          <div className="flex shrink-0 items-center gap-1 border-b border-slate-200 bg-white px-3 py-1.5">
+        <div className="flex min-w-0 flex-1 flex-col bg-slate-50 dark:bg-slate-950">
+          <div className="flex shrink-0 items-center gap-1 border-b border-slate-200 bg-white px-3 py-1.5 dark:border-slate-800 dark:bg-slate-900">
             <SurfaceTab
               active={surface === 'build'}
               onClick={() => setSurface('build')}
@@ -767,17 +779,19 @@ export function FormDesigner({
             {surface === 'build' ? (
               <div className="ml-auto flex items-center gap-2">
                 <span
-                  className="hidden text-[10px] font-semibold tracking-wider text-slate-400 uppercase sm:block"
+                  className="hidden text-[10px] font-semibold tracking-wider text-slate-400 uppercase sm:block dark:text-slate-500"
                   title="Advanced layout — position widgets freely on a grid (Appsmith / WordPress style)"
                 >
                   Advanced layout
                 </span>
-                <div className="flex items-center rounded-md border border-slate-200 p-0.5">
+                <div className="flex items-center rounded-md border border-slate-200 p-0.5 dark:border-slate-700">
                   <button
                     type="button"
                     onClick={() => setAllCanvas(false)}
                     className={`rounded px-2 py-0.5 text-xs font-medium transition ${
-                      !canvasMode ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
+                      !canvasMode
+                        ? 'bg-slate-900 text-white dark:bg-slate-700'
+                        : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
                     }`}
                   >
                     Stacked
@@ -786,7 +800,9 @@ export function FormDesigner({
                     type="button"
                     onClick={() => setAllCanvas(true)}
                     className={`flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium transition ${
-                      canvasMode ? 'bg-violet-600 text-white' : 'text-slate-600 hover:bg-slate-100'
+                      canvasMode
+                        ? 'bg-violet-600 text-white'
+                        : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
                     }`}
                   >
                     <LayoutGrid size={12} /> Canvas
@@ -819,7 +835,7 @@ export function FormDesigner({
                   ) : null}
 
                   {/* Tabs — presentational pages for the fill experience. */}
-                  <div className="flex flex-wrap items-center gap-1 rounded-lg border border-slate-200 bg-white p-1.5">
+                  <div className="flex flex-wrap items-center gap-1 rounded-lg border border-slate-200 bg-white p-1.5 dark:border-slate-800 dark:bg-slate-900">
                     {appTabs.map((t) => (
                       <button
                         key={t.id}
@@ -833,7 +849,7 @@ export function FormDesigner({
                         className={`group flex items-center gap-1 rounded-md px-3 py-1 text-xs font-medium transition ${
                           designerTab === t.id
                             ? 'bg-teal-600 text-white'
-                            : 'text-slate-600 hover:bg-slate-100'
+                            : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
                         }`}
                       >
                         {t.title?.en ?? 'Tab'}
@@ -856,7 +872,7 @@ export function FormDesigner({
                     <button
                       type="button"
                       onClick={addTab}
-                      className="flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium text-teal-700 hover:bg-teal-50"
+                      className="flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium text-teal-700 hover:bg-teal-50 dark:text-teal-400 dark:hover:bg-teal-950/40"
                       title={appTabs.length === 0 ? 'Split this app into tabs' : 'Add a tab'}
                     >
                       <Plus size={12} /> {appTabs.length === 0 ? 'Add tabs' : 'Tab'}
@@ -868,7 +884,7 @@ export function FormDesigner({
                     return (
                       <Card
                         key={sec.id}
-                        className={`border ${active ? 'border-teal-500 ring-1 ring-teal-500' : 'border-slate-200'}`}
+                        className={`border ${active ? 'border-teal-500 ring-1 ring-teal-500' : 'border-slate-200 dark:border-slate-800'}`}
                       >
                         <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
                           <button
@@ -930,7 +946,7 @@ export function FormDesigner({
                               onDelete={(fieldId) => deleteField(sec.id, fieldId)}
                             />
                           ) : sec.fields.length === 0 ? (
-                            <div className="rounded-md border border-dashed border-slate-300 p-4 text-center text-xs text-slate-400">
+                            <div className="rounded-md border border-dashed border-slate-300 p-4 text-center text-xs text-slate-400 dark:border-slate-700 dark:text-slate-500">
                               No elements. Drag one from the left panel, or select an element to add
                               it here.
                             </div>
@@ -940,7 +956,7 @@ export function FormDesigner({
                               values={sec.fields}
                               onReorder={(fields) => reorderFields(sec.id, fields as FormField[])}
                               as="ul"
-                              className="divide-y divide-slate-100"
+                              className="divide-y divide-slate-100 dark:divide-slate-800"
                             >
                               {sec.fields.map((f, j) => (
                                 <FieldRow
@@ -1119,7 +1135,7 @@ function FieldPaletteGroup({
 }) {
   return (
     <div className="mb-3">
-      <div className="px-1 pb-1 text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
+      <div className="px-1 pb-1 text-[10px] font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
         {group.label}
       </div>
       <div className="grid grid-cols-1 gap-1">
@@ -1136,7 +1152,7 @@ function FieldPaletteGroup({
                 e.dataTransfer.effectAllowed = 'copy'
               }}
               onClick={() => onAdd(t)}
-              className="flex cursor-grab items-center gap-2 rounded border border-slate-200 px-2 py-1 text-left text-xs hover:border-teal-500 hover:bg-teal-50 active:cursor-grabbing"
+              className="flex cursor-grab items-center gap-2 rounded border border-slate-200 px-2 py-1 text-left text-xs hover:border-teal-500 hover:bg-teal-50 active:cursor-grabbing dark:border-slate-700 dark:hover:border-teal-600 dark:hover:bg-teal-950/40"
               title="Drag onto the canvas — or click to add to the selected section"
             >
               <Icon size={12} />
@@ -1166,7 +1182,7 @@ function IconButton({
       title={title}
       onClick={onClick}
       disabled={disabled}
-      className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
+      className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
     >
       {children}
     </button>
@@ -1206,20 +1222,22 @@ function FieldRow({
       dragControls={controls}
       as="li"
       className={`flex items-center justify-between gap-2 rounded px-1 py-2 ${
-        isSelected ? 'bg-teal-50' : 'bg-white'
+        isSelected ? 'bg-teal-50 dark:bg-teal-950/40' : 'bg-white dark:bg-slate-900'
       }`}
     >
       <button
         type="button"
         aria-label="Drag to reorder"
         onPointerDown={(e) => controls.start(e)}
-        className="cursor-grab touch-none rounded p-0.5 text-slate-300 hover:text-slate-500 active:cursor-grabbing"
+        className="cursor-grab touch-none rounded p-0.5 text-slate-300 hover:text-slate-500 active:cursor-grabbing dark:text-slate-600 dark:hover:text-slate-400"
       >
         <GripVertical size={14} />
       </button>
       <button type="button" onClick={onSelect} className="flex flex-1 items-center gap-2 text-left">
         <Icon size={14} />
-        <span className="w-24 truncate text-xs text-slate-400">{typeLabel}</span>
+        <span className="w-24 truncate text-xs text-slate-400 dark:text-slate-500">
+          {typeLabel}
+        </span>
         <span className="text-sm font-medium">
           {field.label?.en ?? field.id}
           {field.required || field.validation?.required ? (
@@ -1263,7 +1281,7 @@ function FormProperties({
 }) {
   return (
     <div className="space-y-3 text-sm">
-      <h3 className="text-sm font-semibold text-slate-700">App properties</h3>
+      <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">App properties</h3>
       <div className="space-y-1">
         <Label className="text-xs">Title (EN)</Label>
         <Input
@@ -1324,18 +1342,24 @@ function WorkflowEditor({
   return (
     <Card className="border-2 border-teal-500/40">
       <CardHeader>
-        <CardTitle className="text-base">Workflow steps</CardTitle>
+        <CardTitle className="text-base">Sign-off steps</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
-        <p className="text-xs text-slate-500">
-          A step is one stage of the form (e.g. "Submit", "Supervisor sign", "Manager review"). Bind
-          each section to a step in the section properties.
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          Sequential human stages of this form — e.g. <em>Worker fills</em> →{' '}
+          <em>Supervisor signs</em> → <em>Manager reviews</em>. Each step is assigned to a person
+          and can require a signature; bind a section to a step in its properties. This is{' '}
+          <strong>not</strong> automation — to send notifications, raise CAPAs, or branch on
+          answers, use the <strong>Flows</strong> tab.
         </p>
         <ul className="space-y-2">
           {steps.map((s, i) => (
-            <li key={s.key} className="rounded-md border border-slate-200 bg-white p-2">
+            <li
+              key={s.key}
+              className="rounded-md border border-slate-200 bg-white p-2 dark:border-slate-800 dark:bg-slate-900"
+            >
               <div className="flex items-start gap-2">
-                <span className="mt-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-teal-100 text-xs font-semibold text-teal-800">
+                <span className="mt-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-teal-100 text-xs font-semibold text-teal-800 dark:bg-teal-900/40 dark:text-teal-200">
                   {i + 1}
                 </span>
                 <div className="flex-1 space-y-2">
@@ -1489,10 +1513,10 @@ function FieldProperties({
 
   return (
     <div className="space-y-3 text-sm">
-      <h3 className="text-sm font-semibold text-slate-700">
+      <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
         Field — {FIELD_TYPES[field.type]?.label ?? field.type}
       </h3>
-      <div className="flex gap-1 border-b border-slate-200">
+      <div className="flex gap-1 border-b border-slate-200 dark:border-slate-800">
         {tabs
           .filter((t) => t.show)
           .map((t) => (
@@ -1502,8 +1526,8 @@ function FieldProperties({
               onClick={() => setTab(t.value)}
               className={`-mb-px border-b-2 px-2 py-1 text-xs ${
                 tab === t.value
-                  ? 'border-teal-600 font-semibold text-teal-700'
-                  : 'border-transparent text-slate-500 hover:text-slate-800'
+                  ? 'border-teal-600 font-semibold text-teal-700 dark:text-teal-400'
+                  : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
               }`}
             >
               {t.label}
@@ -2685,7 +2709,7 @@ function SectionProperties({
     .map((f) => ({ id: f.id, label: f.label?.en ?? f.id }))
   return (
     <div className="space-y-3 text-sm">
-      <h3 className="text-sm font-semibold text-slate-700">Section</h3>
+      <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Section</h3>
       <div className="space-y-1">
         <Label className="text-xs">Section ID (immutable)</Label>
         <Input value={section.id} disabled className="font-mono text-xs" />
@@ -2835,7 +2859,7 @@ function Preview({ schema }: { schema: FormSchemaV1 }) {
   }, [sections, schema.workflow.steps])
 
   return (
-    <Card className="border-2 border-dashed border-slate-300 bg-white">
+    <Card className="border-2 border-dashed border-slate-300 bg-white dark:border-slate-700 dark:bg-slate-900">
       <CardHeader>
         <CardTitle className="text-base">Preview · {schema.title?.en}</CardTitle>
         <p className="text-xs text-slate-500">
@@ -2848,8 +2872,11 @@ function Preview({ schema }: { schema: FormSchemaV1 }) {
           const stepSections = groupedByStep.get(step.key) ?? []
           if (stepSections.length === 0) return null
           return (
-            <div key={step.key} className="rounded-md border border-slate-200">
-              <div className="border-b border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700">
+            <div
+              key={step.key}
+              className="rounded-md border border-slate-200 dark:border-slate-800"
+            >
+              <div className="border-b border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:border-slate-800 dark:bg-slate-800/40 dark:text-slate-300">
                 Step · {step.title?.en ?? step.key}
               </div>
               <div className="space-y-3 p-3">
@@ -2994,8 +3021,8 @@ function LeftTab({
       aria-label={label}
       className={`flex flex-1 items-center justify-center rounded-md px-1.5 py-2 transition ${
         active
-          ? 'bg-teal-50 text-teal-700'
-          : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
+          ? 'bg-teal-50 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300'
+          : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200'
       }`}
     >
       {icon}
@@ -3019,7 +3046,9 @@ function SurfaceTab({
       type="button"
       onClick={onClick}
       className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition ${
-        active ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
+        active
+          ? 'bg-slate-900 text-white dark:bg-slate-700'
+          : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
       }`}
     >
       {icon} {label}
@@ -3032,11 +3061,15 @@ function OverviewPanel({
   name,
   overview,
   onSaved,
+  canPin = false,
+  pinned = false,
 }: {
   templateId: string
   name: string
   overview?: AppOverview
   onSaved: (name: string) => void
+  canPin?: boolean
+  pinned?: boolean
 }) {
   const [n, setN] = useState(name)
   const [description, setDescription] = useState(overview?.description ?? '')
@@ -3098,6 +3131,16 @@ function OverviewPanel({
       <Button onClick={save} disabled={pending} className="w-full">
         {pending ? 'Saving…' : 'Save overview'}
       </Button>
+      {canPin ? (
+        <div className="space-y-2 rounded-md border border-slate-200 p-3 dark:border-slate-700">
+          <div className="text-sm font-medium text-slate-800 dark:text-slate-200">Sidebar</div>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Pin this app to the left sidebar for everyone in the workspace. Takes effect once the
+            app is published.
+          </p>
+          <PinFormButton templateId={templateId} pinned={pinned} />
+        </div>
+      ) : null}
     </div>
   )
 }

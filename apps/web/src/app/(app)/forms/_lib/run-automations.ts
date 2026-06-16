@@ -378,6 +378,41 @@ export async function executeFlowPlan(
           ran.push(`analyze_photos (${analysis.hazards.length}h/${badPpe.length}ppe)`)
           break
         }
+        case 'start_monitored_session': {
+          // Turn the response into a live monitored session — the native-flow
+          // replacement for the old schema.monitor block. interval/grace/
+          // duration may be fixed or bound to a submitted number field.
+          const numField = (key: string | undefined, fallback: number): number => {
+            if (key) {
+              const v = Number(values[key])
+              if (Number.isFinite(v) && v > 0) return v
+            }
+            return fallback
+          }
+          const interval = numField(action.intervalFieldKey, action.intervalMinutes)
+          const grace =
+            action.graceFieldKey && Number.isFinite(Number(values[action.graceFieldKey]))
+              ? Math.max(0, Number(values[action.graceFieldKey]))
+              : action.graceMinutes
+          const duration = numField(action.durationFieldKey, action.durationMinutes ?? 0)
+          const now = new Date()
+          await ctx.db((tx) =>
+            tx
+              .update(formResponses)
+              .set({
+                monitorStatus: 'active',
+                checkinIntervalMinutes: interval,
+                gracePeriodMinutes: grace,
+                monitorRequireGeo: !!action.requireGeo,
+                lastCheckinAt: now,
+                nextCheckinDueAt: new Date(now.getTime() + interval * 60_000),
+                expectedEndAt: duration > 0 ? new Date(now.getTime() + duration * 60_000) : null,
+              })
+              .where(eq(formResponses.id, responseId)),
+          )
+          ran.push('start_monitored_session')
+          break
+        }
       }
     } catch {
       failed.push(`${action.action} (error)`)

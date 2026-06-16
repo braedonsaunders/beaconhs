@@ -1,7 +1,7 @@
 // Catalogue of Insights dashboard widgets. Pure data — imported by both the
 // server page and the client grid/palette.
 
-import type { InsightDashboardLayout } from '@beaconhs/db/schema'
+import type { BhqlQuery, InsightDashboardLayout } from '@beaconhs/db/schema'
 
 export type InsightWidgetCategory = 'ai' | 'journal' | 'safety' | 'compliance' | 'operations'
 
@@ -230,4 +230,159 @@ export const DEFAULT_INSIGHT_LAYOUT: InsightDashboardLayout = {
     { id: 'kpi-training-compliance', x: 0, y: 12, w: 3, h: 2 },
     { id: 'kpi-doc-compliance', x: 3, y: 12, w: 3, h: 2 },
   ],
+}
+
+/** Built-in widgets that are now real BHQL-backed cards: the dashboard runs these
+ *  queries under RLS and renders them through the SAME engine + visualization as
+ *  user-built cards (no per-tenant seeding — the keys are stable). Widgets without
+ *  an entry here still render via the legacy WidgetView (the few computed rollups
+ *  + the on-demand AI journal analysis). */
+export const BUILTIN_QUERIES: Record<
+  string,
+  { query: BhqlQuery; vizType: string; vizSettings?: Record<string, unknown> }
+> = {
+  'kpi-incidents': {
+    vizType: 'scalar',
+    query: {
+      version: 'bhql/1',
+      display: 'table',
+      pivot: null,
+      stages: [
+        {
+          source: 'incidents',
+          filter: {
+            combinator: 'and',
+            rules: [{ field: 'occurred_at', op: 'between_days_ago', value: 30 }],
+          },
+          aggregations: [{ fn: 'count', alias: 'count' }],
+        },
+      ],
+    },
+  },
+  'kpi-open-cas': {
+    vizType: 'scalar',
+    query: {
+      version: 'bhql/1',
+      display: 'table',
+      pivot: null,
+      stages: [
+        {
+          source: 'corrective_actions',
+          filter: { combinator: 'and', rules: [{ field: 'status', op: 'eq', value: 'open' }] },
+          aggregations: [{ fn: 'count', alias: 'count' }],
+        },
+      ],
+    },
+  },
+  'chart-severity': {
+    vizType: 'bar',
+    query: {
+      version: 'bhql/1',
+      display: 'table',
+      pivot: null,
+      stages: [
+        {
+          source: 'incidents',
+          breakouts: [{ field: 'severity', alias: 'severity' }],
+          aggregations: [{ fn: 'count', alias: 'count' }],
+        },
+      ],
+    },
+  },
+  'journal-total': {
+    vizType: 'scalar',
+    query: {
+      version: 'bhql/1',
+      display: 'table',
+      pivot: null,
+      stages: [{ source: 'journal_entries', aggregations: [{ fn: 'count', alias: 'count' }] }],
+    },
+  },
+  'journal-last30': {
+    vizType: 'scalar',
+    query: {
+      version: 'bhql/1',
+      display: 'table',
+      pivot: null,
+      stages: [
+        {
+          source: 'journal_entries',
+          filter: {
+            combinator: 'and',
+            rules: [{ field: 'created_at', op: 'between_days_ago', value: 30 }],
+          },
+          aggregations: [{ fn: 'count', alias: 'count' }],
+        },
+      ],
+    },
+  },
+  'journal-activity': {
+    vizType: 'area',
+    query: {
+      version: 'bhql/1',
+      display: 'table',
+      pivot: null,
+      stages: [
+        {
+          source: 'journal_entries',
+          breakouts: [
+            { field: 'created_at', alias: 'week', bin: { kind: 'temporal', unit: 'week' } },
+          ],
+          aggregations: [{ fn: 'count', alias: 'count' }],
+        },
+      ],
+    },
+  },
+  'chart-trir': {
+    vizType: 'scalar',
+    vizSettings: { valueField: 'trir', decimals: 2 },
+    query: {
+      version: 'bhql/1',
+      display: 'table',
+      pivot: null,
+      stages: [
+        {
+          source: 'incident_rates',
+          filter: {
+            combinator: 'and',
+            rules: [{ field: 'month', op: 'between_days_ago', value: 365 }],
+          },
+          aggregations: [
+            { fn: 'sum', field: 'recordable_count', alias: 'rec' },
+            { fn: 'sum', field: 'hours_worked', alias: 'hrs' },
+            {
+              kind: 'calc',
+              alias: 'trir',
+              numerator: 'rec',
+              denominator: 'hrs',
+              multiplier: 200000,
+            },
+          ],
+        },
+      ],
+    },
+  },
+  'chart-dart': {
+    vizType: 'scalar',
+    vizSettings: { valueField: 'dart', decimals: 2 },
+    query: {
+      version: 'bhql/1',
+      display: 'table',
+      pivot: null,
+      stages: [
+        {
+          source: 'incident_rates',
+          filter: {
+            combinator: 'and',
+            rules: [{ field: 'month', op: 'between_days_ago', value: 365 }],
+          },
+          aggregations: [
+            { fn: 'sum', field: 'dart_count', alias: 'd' },
+            { fn: 'sum', field: 'hours_worked', alias: 'hrs' },
+            { kind: 'calc', alias: 'dart', numerator: 'd', denominator: 'hrs', multiplier: 200000 },
+          ],
+        },
+      ],
+    },
+  },
 }

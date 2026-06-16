@@ -25,6 +25,7 @@ import { ListPageLayout } from '@/components/page-layout'
 import { TableToolbar } from '@/components/table-toolbar'
 import { DocumentsSubNav } from '../_components/documents-sub-nav'
 import { ReadOnlyBooksGrid } from './_read-only-books-grid'
+import { createBook } from './[id]/actions'
 
 export const metadata = { title: 'Document books' }
 
@@ -127,9 +128,9 @@ export default async function DocumentBooksPage({
             }
             actions={
               canManage ? (
-                <Link href="/documents/books/new">
-                  <Button>New book</Button>
-                </Link>
+                <form action={createBook}>
+                  <Button type="submit">New book</Button>
+                </form>
               ) : null
             }
           />
@@ -160,9 +161,9 @@ export default async function DocumentBooksPage({
           }
           action={
             canManage ? (
-              <Link href="/documents/books/new">
-                <Button>New book</Button>
-              </Link>
+              <form action={createBook}>
+                <Button type="submit">New book</Button>
+              </form>
             ) : undefined
           }
         />

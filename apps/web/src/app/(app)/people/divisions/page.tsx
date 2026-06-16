@@ -6,6 +6,7 @@ import { personDivisionMemberships, personDivisions } from '@beaconhs/db/schema'
 import { requireModuleManage } from '@/lib/module-admin/guard'
 import { ListPageLayout } from '@/components/page-layout'
 import { PeopleSubNav } from '../_components/people-sub-nav'
+import { createDivision } from '../_actions/divisions'
 
 export const metadata = { title: 'People — Divisions' }
 export const dynamic = 'force-dynamic'
@@ -36,9 +37,9 @@ export default async function DivisionsPage() {
             title="Divisions"
             description="Hierarchical business taxonomy (Construction → Civil → Earthworks). One person can sit in many divisions."
             actions={
-              <Link href="/people/divisions/new">
-                <Button>Add division</Button>
-              </Link>
+              <form action={createDivision}>
+                <Button type="submit">Add division</Button>
+              </form>
             }
           />
         </>
@@ -50,9 +51,9 @@ export default async function DivisionsPage() {
           title="No divisions"
           description="Divisions segment the workforce by trade-line rather than site, for matrix reporting."
           action={
-            <Link href="/people/divisions/new">
-              <Button>New division</Button>
-            </Link>
+            <form action={createDivision}>
+              <Button type="submit">New division</Button>
+            </form>
           }
         />
       ) : (
