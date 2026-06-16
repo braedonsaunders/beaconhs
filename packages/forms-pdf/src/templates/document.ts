@@ -85,7 +85,7 @@ export function renderDocumentHtml(input: DocumentRenderInput): string {
     Key: <strong>${esc(d.key)}</strong>
     ${d.category ? ` · Category: ${esc(d.category)}` : ''}
     ${d.status ? ` · Status: ${esc(d.status)}` : ''}
-    ${input.version ? ` · v${input.version.version}` : ''}
+    ${input.version && input.version.version > 0 ? ` · v${input.version.version}` : ''}
     ${input.version?.publishedAt ? ` · Published ${esc(fmtDate(input.version.publishedAt))}` : ''}
     ${d.ownerName ? ` · Owner: ${esc(d.ownerName)}` : ''}
     ${d.nextReviewOn ? ` · Next review: ${esc(fmtDate(d.nextReviewOn))}` : ''}

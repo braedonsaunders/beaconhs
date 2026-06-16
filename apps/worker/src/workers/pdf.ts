@@ -17,6 +17,7 @@ import {
   departments,
   documentBookItems,
   documentBooks,
+  documentDrafts,
   documentVersions,
   documents,
   equipmentItems,
@@ -1365,6 +1366,15 @@ async function renderDocument(tenantId: string, documentId: string): Promise<Sto
       .orderBy(desc(documentVersions.version))
       .limit(1)
 
+    // The live working draft (what the author sees in the editor). The on-demand
+    // PDF previews this so it's WYSIWYG — otherwise an unpublished doc renders
+    // empty because nothing has been snapshotted into a version yet.
+    const [draft] = await tx
+      .select({ contentHtml: documentDrafts.contentHtml })
+      .from(documentDrafts)
+      .where(eq(documentDrafts.documentId, documentId))
+      .limit(1)
+
     let publishedByName: string | null = null
     if (version?.publishedBy) {
       const [u] = await tx
@@ -1375,7 +1385,7 @@ async function renderDocument(tenantId: string, documentId: string): Promise<Sto
       publishedByName = u?.name ?? null
     }
 
-    return { ...row, version: version ?? null, publishedByName }
+    return { ...row, version: version ?? null, draft: draft ?? null, publishedByName }
   })
 
   if (!data) {
@@ -1384,6 +1394,15 @@ async function renderDocument(tenantId: string, documentId: string): Promise<Sto
 
   const d = data.d
   const t = data.tenant
+
+  // The published version is the document of record. Fall back to the live draft
+  // only when nothing has been published yet (e.g. a brand-new AI-drafted doc) so
+  // the PDF reflects the editor instead of rendering blank — without leaking a
+  // published doc's unpublished edits to readers. `version` is passed only when
+  // there's body content to render.
+  const versionHtml = data.version?.contentMarkdown?.trim() || null
+  const draftHtml = data.draft?.contentHtml?.trim() || null
+  const bodyMarkdown = versionHtml ?? draftHtml
 
   const pdf = await renderDocumentPdf({
     tenantName: t.name,
@@ -1406,13 +1425,15 @@ async function renderDocument(tenantId: string, documentId: string): Promise<Sto
         user: data.ownerUser,
       }),
     },
-    version: data.version
+    version: bodyMarkdown
       ? {
-          version: data.version.version,
-          publishedAt: data.version.publishedAt,
-          publishedBy: data.publishedByName,
-          contentMarkdown: data.version.contentMarkdown,
-          changelog: data.version.changelog,
+          // Version metadata only when rendering the published version; a draft
+          // fallback renders as an unnumbered, unpublished preview.
+          version: versionHtml ? (data.version?.version ?? 0) : 0,
+          publishedAt: versionHtml ? (data.version?.publishedAt ?? null) : null,
+          publishedBy: versionHtml ? data.publishedByName : null,
+          contentMarkdown: bodyMarkdown,
+          changelog: versionHtml ? (data.version?.changelog ?? null) : null,
         }
       : null,
     generatedAt: new Date(),
