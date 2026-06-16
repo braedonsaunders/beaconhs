@@ -14,6 +14,7 @@ export const OBLIGATION_KINDS = [
   'cert_requirement',
   'form',
   'journal',
+  'hazard_assessment',
   'equipment_inspection',
   'ppe_inspection',
   'job_title_signoff',
@@ -32,6 +33,7 @@ export type TargetKind =
   | 'equipmentType'
   | 'ppeType'
   | 'jobTitle'
+  | 'none'
 
 export type KindMeta = {
   label: string
@@ -101,6 +103,15 @@ export const KIND_META: Record<ObligationKind, KindMeta> = {
     recurrence: { recurring: true, quantity: true, threshold: true },
     target: 'journalName',
     hint: 'These people must log journal entries on this cadence.',
+  },
+  hazard_assessment: {
+    label: 'Hazard assessment',
+    subjectKind: 'per_person',
+    audience: true,
+    audienceTypes: PERSON_AUD,
+    recurrence: { recurring: true, quantity: true, threshold: true },
+    target: 'none',
+    hint: 'These people must each produce or sign a hazard assessment on this cadence.',
   },
   equipment_inspection: {
     label: 'Equipment inspection policy',

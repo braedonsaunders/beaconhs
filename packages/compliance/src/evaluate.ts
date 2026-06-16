@@ -14,6 +14,8 @@ import {
   documentAcknowledgments,
   equipmentItems,
   formResponseParticipants,
+  hazidAssessmentSignatures,
+  hazidAssessments,
   inspectionRecords,
   jobTitleTaskAcknowledgments,
   jobTitleTasks,
@@ -120,6 +122,8 @@ export async function evaluateObligation(
       return evalForm(tx, tenantId, await aud(), ob, today)
     case 'inspection':
       return evalInspection(tx, tenantId, await aud(), ob, today)
+    case 'hazard_assessment':
+      return evalHazardAssessment(tx, tenantId, await aud(), ob, today)
     case 'equipment_inspection':
       return evalEquipment(tx, tenantId, ob, today)
     case 'ppe_inspection':
@@ -397,6 +401,91 @@ async function evalInspection(
         count: n,
         expected,
       })
+    }),
+  )
+}
+
+/**
+ * Hazard-assessment frequency compliance — the legacy "Hazard ID — Signatures"
+ * report. Each person should PRODUCE (created) or SIGN a hazard assessment on
+ * the obligation's cadence; we count both per period (mirroring the legacy
+ * signatures + assessments-created tally) and compare to the expected quantity.
+ * Created = `hazid_assessments.reported_by_tenant_user_id` (person→user→member
+ * bridge); signed = `hazid_assessment_signatures.person_id` (direct), dated by
+ * the parent assessment's `occurred_at`.
+ */
+async function evalHazardAssessment(
+  tx: Tx,
+  tid: string,
+  members: ResolvedMember[],
+  ob: Ob,
+  today: string,
+): Promise<EvalResult> {
+  if (members.length === 0) return empty()
+  const ids = members.map((m) => m.personId)
+  const names = await loadNames(tx, ids)
+  const since = periodStart(ob.recurrence?.frequency, today)
+  const sinceTs = new Date(`${since}T00:00:00Z`)
+  const expected = Math.max(1, ob.recurrence?.quantity ?? 1)
+
+  // (a) Signatures BY the person in the period (dated via the parent assessment).
+  const sigByPerson = new Map<string, number>()
+  const sigRows = await tx
+    .select({ personId: hazidAssessmentSignatures.personId, c: sql<number>`count(*)::int` })
+    .from(hazidAssessmentSignatures)
+    .innerJoin(hazidAssessments, eq(hazidAssessments.id, hazidAssessmentSignatures.assessmentId))
+    .where(
+      and(
+        eq(hazidAssessmentSignatures.tenantId, tid),
+        inArray(hazidAssessmentSignatures.personId, ids),
+        gte(hazidAssessments.occurredAt, sinceTs),
+        isNull(hazidAssessments.deletedAt),
+      ),
+    )
+    .groupBy(hazidAssessmentSignatures.personId)
+  for (const r of sigRows) if (r.personId) sigByPerson.set(r.personId, Number(r.c))
+
+  // (b) Assessments CREATED by the person in the period — bridge person→user→member.
+  const userIds = members.map((m) => m.userId).filter((u): u is string => Boolean(u))
+  const personByTu = new Map<string, string>() // tenantUserId → personId
+  if (userIds.length > 0) {
+    const tus = await tx
+      .select({ id: tenantUsers.id, userId: tenantUsers.userId })
+      .from(tenantUsers)
+      .where(and(eq(tenantUsers.tenantId, tid), inArray(tenantUsers.userId, userIds)))
+    const tuByUser = new Map<string, string>()
+    for (const t of tus) if (t.userId) tuByUser.set(t.userId, t.id)
+    for (const m of members) {
+      const tu = m.userId ? tuByUser.get(m.userId) : undefined
+      if (tu) personByTu.set(tu, m.personId)
+    }
+  }
+  const createdByPerson = new Map<string, number>()
+  const tuIds = Array.from(personByTu.keys())
+  if (tuIds.length > 0) {
+    const aRows = await tx
+      .select({ tu: hazidAssessments.reportedByTenantUserId, c: sql<number>`count(*)::int` })
+      .from(hazidAssessments)
+      .where(
+        and(
+          eq(hazidAssessments.tenantId, tid),
+          inArray(hazidAssessments.reportedByTenantUserId, tuIds),
+          gte(hazidAssessments.occurredAt, sinceTs),
+          isNull(hazidAssessments.deletedAt),
+        ),
+      )
+      .groupBy(hazidAssessments.reportedByTenantUserId)
+    for (const r of aRows) {
+      const pid = r.tu ? personByTu.get(r.tu) : undefined
+      if (pid) createdByPerson.set(pid, Number(r.c))
+    }
+  }
+
+  return tally(
+    ids.map((pid) => {
+      const n = (sigByPerson.get(pid) ?? 0) + (createdByPerson.get(pid) ?? 0)
+      const status: EvalStatus = n >= expected ? 'completed' : n > 0 ? 'in_progress' : 'pending'
+      return personRow(pid, names.get(pid) ?? '(unnamed)', status, { count: n, expected })
     }),
   )
 }

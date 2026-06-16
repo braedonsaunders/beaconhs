@@ -83,6 +83,8 @@ function buildTargetRef(input: ObligationInput): { ref: ComplianceTargetRef; err
       return { ref: { formTemplateId: input.formTemplateId } }
     case 'journal':
       return { ref: {} }
+    case 'hazard_assessment':
+      return { ref: {} }
     case 'equipment_inspection':
       if (!input.equipmentTypeId) return { ref: {}, error: 'Pick an equipment type' }
       return { ref: { equipmentTypeId: input.equipmentTypeId } }
@@ -133,7 +135,8 @@ function buildAudienceRows(input: ObligationInput): {
     entityKey: a.type === 'everyone' ? '' : a.entityKey,
   }))
   if (rows.length === 0) {
-    if (input.kind === 'journal') return { rows: [{ kind: 'everyone', entityKey: '' }] }
+    if (input.kind === 'journal' || input.kind === 'hazard_assessment')
+      return { rows: [{ kind: 'everyone', entityKey: '' }] }
     return { rows, error: 'Add at least one audience target' }
   }
   return { rows }

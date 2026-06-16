@@ -222,7 +222,7 @@ export function ObligationForm({
         </CardContent>
       </Card>
 
-      {meta.target !== 'journalName' ? (
+      {meta.target !== 'journalName' && meta.target !== 'none' ? (
         <Card>
           <CardHeader>
             <CardTitle>What to require</CardTitle>

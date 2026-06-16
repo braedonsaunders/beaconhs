@@ -46,6 +46,9 @@ export const complianceSourceModule = pgEnum('compliance_source_module', [
   'permit',
   'lone_worker',
   'custom',
+  // Frequency activity: people each produce/sign a hazard assessment on a cadence
+  // (replaces the legacy "Hazard ID — Signatures" report).
+  'hazard_assessment',
 ])
 
 export const complianceSubjectKind = pgEnum('compliance_subject_kind', [
