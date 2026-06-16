@@ -124,13 +124,17 @@ function resolveField(
   entityMap: Record<string, ReportEntity>,
   ref: string,
 ): ReportEntityColumn | null {
-  const dot = ref.indexOf('.')
-  if (dot === -1) return entityColumn(entity, ref)
-  const via = ref.slice(0, dot)
-  const rel = (entity as EntityWithRelations).relations?.find((r) => r.via === via)
-  if (!rel) return null
-  const target = entityMap[rel.target]
-  return target ? entityColumn(target, ref.slice(dot + 1)) : null
+  const segs = ref.split('.')
+  if (segs.length === 1) return entityColumn(entity, ref)
+  let cur: ReportEntity = entity
+  for (let i = 0; i < segs.length - 1; i++) {
+    const rel = (cur as EntityWithRelations).relations?.find((r) => r.via === segs[i])
+    if (!rel) return null
+    const next = entityMap[rel.target]
+    if (!next) return null
+    cur = next
+  }
+  return entityColumn(cur, segs[segs.length - 1]!)
 }
 
 function checkAlias(alias: string, what: string): void {

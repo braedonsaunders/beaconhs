@@ -286,6 +286,29 @@ async function main() {
     console.log(`[joins] ${t.name}: top sites by journals → ${sites.join(', ') || '(no rows)'}`)
   }
 
+  // MULTI-HOP join: journals → site (org unit) → PARENT org unit name. Two chained
+  // LEFT JOINs (org_units.parent_id is a self-FK), resolved from one dotted ref.
+  const multiHopQuery: BhqlQuery = {
+    version: 'bhql/1',
+    display: 'table',
+    stages: [
+      {
+        source: 'journal_entries',
+        breakouts: [{ field: 'site_org_unit_id.parent_id.name', alias: 'parent_site' }],
+        aggregations: [{ fn: 'count', alias: 'entries' }],
+        orderBy: [{ ref: 'entries', direction: 'desc' }],
+        limit: 5,
+      },
+    ],
+  }
+  const validatedMulti = validateBhql(multiHopQuery)
+  for (const t of ts) {
+    const r = await withTenant(db, t.id, (tx) => runBhql(tx, validatedMulti))
+    if (r.shape !== 'flat') fail('multi-hop query should return a flat result')
+    const rows = r.rows.map((row) => `${row.parent_site ?? '(none)'}=${row.entries}`)
+    console.log(`[multihop] ${t.name}: journals by PARENT site → ${rows.join(', ') || '(no rows)'}`)
+  }
+
   // RLS: the same count under each tenant should be independently scoped.
   console.log('\n[rls] per-tenant incident counts (proves tenant isolation):')
   for (const t of ts) {

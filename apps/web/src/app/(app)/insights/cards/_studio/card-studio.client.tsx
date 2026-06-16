@@ -697,6 +697,26 @@ function buildFields(
       if (c.semanticType === 'pk') continue // the id itself isn't a useful related field
       out.push({ value: `${rel.via}.${c.key}`, label: c.label, group: rel.label, col: c })
     }
+    // Second hop: only "label-ish" columns (names/codes/categories) of the next
+    // entity, so a 2-hop path ("Site → Parent → Name") is reachable without the
+    // dropdown exploding to every column of every neighbour.
+    for (const rel2 of target.relations ?? []) {
+      const target2 = entityMap[rel2.target]
+      if (!target2 || target2.key === entity.key) continue
+      for (const c of target2.columns) {
+        const labelish =
+          c.semanticType === 'entity-name' ||
+          c.semanticType === 'category' ||
+          /^(name|code|title|label|status|type)$/.test(c.key)
+        if (!labelish) continue
+        out.push({
+          value: `${rel.via}.${rel2.via}.${c.key}`,
+          label: c.label,
+          group: `${rel.label} → ${rel2.label}`,
+          col: c,
+        })
+      }
+    }
   }
   return out
 }

@@ -45,7 +45,15 @@ function dataTypeOf(kind: ReportColumnKind): ResultDataType {
   }
 }
 
-type JoinSpec = { table: string; alias: string; localCol: string; foreignCol: string }
+type JoinSpec = {
+  table: string
+  alias: string
+  /** Alias of the table on the LEFT of the ON clause (the base table for a
+   *  first-hop join, or the parent join's alias for a deeper hop). */
+  leftAlias: string
+  localCol: string
+  foreignCol: string
+}
 
 /** Per-compilation context: the source entity, the discovered registry (for
  *  following FK relations) and the accumulating set of LEFT JOINs. */
@@ -66,29 +74,41 @@ type CompileCtx = {
  *  never join into a non-tenant-isolated table. Returns null when unresolvable
  *  (defence; the validator has already run). */
 function colSqlOf(ctx: CompileCtx, ref: string): SQL | null {
-  const dot = ref.indexOf('.')
-  if (dot === -1) {
+  const segs = ref.split('.')
+  if (segs.length === 1) {
     const col = entityColumnSql(ctx.entity, ref)
     return col ? sql.raw(`"${ctx.entity.table}"."${col}"`) : null
   }
-  const via = ref.slice(0, dot)
-  const rel = (ctx.aEntity.relations ?? []).find((r) => r.via === via)
-  if (!rel) return null
-  const targetEntity = ctx.entityMap[rel.target]
-  if (!targetEntity) return null
-  const localCol = entityColumnSql(ctx.entity, via)
-  const targetCol = entityColumnSql(targetEntity, ref.slice(dot + 1))
-  if (!localCol || !targetCol) return null
-  const alias = `j_${via}`
-  if (!ctx.joins.has(via)) {
-    ctx.joins.set(via, {
-      table: targetEntity.table,
-      alias,
-      localCol,
-      foreignCol: rel.foreignColumn,
-    })
+  // Multi-hop: walk each "via" segment, following a relation on the CURRENT
+  // entity and registering one LEFT JOIN per path prefix (so j_a then j_a__b),
+  // until the final segment names a column on the last related entity.
+  let curEntity: AnalyticsEntity = ctx.aEntity
+  let curAlias = ctx.entity.table
+  let pathKey = ''
+  for (let i = 0; i < segs.length - 1; i++) {
+    const via = segs[i]!
+    const rel = (curEntity.relations ?? []).find((r) => r.via === via)
+    if (!rel) return null
+    const target = ctx.entityMap[rel.target]
+    if (!target) return null
+    const localCol = entityColumnSql(curEntity, via)
+    if (!localCol) return null
+    pathKey = pathKey ? `${pathKey}.${via}` : via
+    const alias = `j_${pathKey.replace(/\./g, '__')}`
+    if (!ctx.joins.has(pathKey)) {
+      ctx.joins.set(pathKey, {
+        table: target.table,
+        alias,
+        leftAlias: curAlias,
+        localCol,
+        foreignCol: rel.foreignColumn,
+      })
+    }
+    curEntity = target
+    curAlias = alias
   }
-  return sql.raw(`"${alias}"."${targetCol}"`)
+  const targetCol = entityColumnSql(curEntity, segs[segs.length - 1]!)
+  return targetCol ? sql.raw(`"${curAlias}"."${targetCol}"`) : null
 }
 
 /** Resolve a field ref to physical SQL or throw (defence in depth). */
@@ -104,18 +124,22 @@ function colMetaOf(
   ctx: CompileCtx,
   ref: string,
 ): { col: ReportEntityColumn; aCol: AnalyticsColumn | null } | null {
-  const dot = ref.indexOf('.')
-  if (dot === -1) {
+  const segs = ref.split('.')
+  if (segs.length === 1) {
     const col = entityColumn(ctx.entity, ref)
     return col ? { col, aCol: analyticsColumn(ctx.aEntity, ref) } : null
   }
-  const via = ref.slice(0, dot)
-  const rel = (ctx.aEntity.relations ?? []).find((r) => r.via === via)
-  if (!rel) return null
-  const targetEntity = ctx.entityMap[rel.target]
-  if (!targetEntity) return null
-  const col = entityColumn(targetEntity, ref.slice(dot + 1))
-  return col ? { col, aCol: analyticsColumn(targetEntity, ref.slice(dot + 1)) } : null
+  let curEntity: AnalyticsEntity = ctx.aEntity
+  for (let i = 0; i < segs.length - 1; i++) {
+    const rel = (curEntity.relations ?? []).find((r) => r.via === segs[i])
+    if (!rel) return null
+    const target = ctx.entityMap[rel.target]
+    if (!target) return null
+    curEntity = target
+  }
+  const key = segs[segs.length - 1]!
+  const col = entityColumn(curEntity, key)
+  return col ? { col, aCol: analyticsColumn(curEntity, key) } : null
 }
 
 function aliased(expr: SQL, alias: string): SQL {
@@ -367,7 +391,7 @@ export function compileBhql(
   // tenant; a missing/foreign row simply yields NULL (LEFT JOIN).
   const joinClauses = [...joins.values()].map((j) =>
     sql.raw(
-      `LEFT JOIN "${j.table}" "${j.alias}" ON "${entity.table}"."${j.localCol}" = "${j.alias}"."${j.foreignCol}"`,
+      `LEFT JOIN "${j.table}" "${j.alias}" ON "${j.leftAlias}"."${j.localCol}" = "${j.alias}"."${j.foreignCol}"`,
     ),
   )
 
