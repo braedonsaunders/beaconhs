@@ -366,6 +366,102 @@ async function main() {
     )
   }
 
+  // CUSTOM EXPRESSIONS (Metabase-parity) — things that used to need a DB view,
+  // now built in pure BHQL so a user could create them in the UI.
+  // (1) "Days since last recordable" — a custom AGGREGATION: datediff over max().
+  const daysSinceQuery: BhqlQuery = {
+    version: 'bhql/1',
+    display: 'table',
+    stages: [
+      {
+        source: 'incidents',
+        aggregations: [
+          {
+            kind: 'expr',
+            alias: 'days_since',
+            expr: {
+              ex: 'call',
+              fn: 'datediff',
+              args: [
+                { ex: 'lit', value: 'day' },
+                {
+                  ex: 'agg',
+                  fn: 'max',
+                  arg: { ex: 'field', field: 'occurred_at' },
+                  filter: {
+                    combinator: 'and',
+                    rules: [
+                      {
+                        field: 'severity',
+                        op: 'in',
+                        value: ['medical_aid', 'lost_time', 'fatality'],
+                      },
+                    ],
+                  },
+                },
+                { ex: 'call', fn: 'now', args: [] },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+  }
+  // (2) CA aging buckets — a computed DIMENSION (CASE on datediff), grouped + counted.
+  const ageDays = {
+    ex: 'call' as const,
+    fn: 'datediff',
+    args: [
+      { ex: 'lit' as const, value: 'day' },
+      { ex: 'field' as const, field: 'created_at' },
+      { ex: 'call' as const, fn: 'now', args: [] },
+    ],
+  }
+  const agingQuery: BhqlQuery = {
+    version: 'bhql/1',
+    display: 'table',
+    stages: [
+      {
+        source: 'corrective_actions',
+        filter: { combinator: 'and', rules: [{ field: 'closed_at', op: 'is_null' }] },
+        breakouts: [
+          {
+            alias: 'bucket',
+            expr: {
+              ex: 'case',
+              branches: [
+                {
+                  when: { ex: 'compare', op: '<', left: ageDays, right: { ex: 'lit', value: 7 } },
+                  then: { ex: 'lit', value: '0-6 days' },
+                },
+                {
+                  when: { ex: 'compare', op: '<', left: ageDays, right: { ex: 'lit', value: 30 } },
+                  then: { ex: 'lit', value: '7-29 days' },
+                },
+                {
+                  when: { ex: 'compare', op: '<', left: ageDays, right: { ex: 'lit', value: 60 } },
+                  then: { ex: 'lit', value: '30-59 days' },
+                },
+              ],
+              else: { ex: 'lit', value: '60+ days' },
+            },
+          },
+        ],
+        aggregations: [{ fn: 'count', alias: 'count' }],
+        orderBy: [{ ref: 'count', direction: 'desc' }],
+      },
+    ],
+  }
+  for (const t of ts) {
+    const ds = await withTenant(db, t.id, (tx) => runBhql(tx, validateBhql(daysSinceQuery)))
+    const ag = await withTenant(db, t.id, (tx) => runBhql(tx, validateBhql(agingQuery)))
+    const dsv = ds.shape === 'flat' ? ds.rows[0]?.days_since : undefined
+    const agv = ag.shape === 'flat' ? ag.rows.map((r) => `${r.bucket}=${r.count}`).join(', ') : '?'
+    console.log(
+      `[expr] ${t.name}: days-since-recordable=${dsv ?? 'n/a'}; CA aging → ${agv || '(none)'}`,
+    )
+  }
+
   // RLS: the same count under each tenant should be independently scoped.
   console.log('\n[rls] per-tenant incident counts (proves tenant isolation):')
   for (const t of ts) {

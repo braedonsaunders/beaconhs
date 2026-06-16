@@ -18,7 +18,14 @@ import {
   type ReportEntityColumn,
 } from '@beaconhs/reports/entities'
 import { compileRuleGroup } from '@beaconhs/reports/filters'
-import type { BhqlBreakout, BhqlCalcMeasure, BhqlMeasure, BhqlQuery } from '@beaconhs/db/schema'
+import type {
+  BhqlBreakout,
+  BhqlCalcMeasure,
+  BhqlExpr,
+  BhqlExprMeasure,
+  BhqlMeasure,
+  BhqlQuery,
+} from '@beaconhs/db/schema'
 import { analyticsColumn, type AnalyticsColumn, type AnalyticsEntity } from '../semantic'
 import type { ResultColumn, ResultDataType } from '../result'
 import { discoverEntityMap } from './discover'
@@ -146,11 +153,245 @@ function aliased(expr: SQL, alias: string): SQL {
   return sql.join([expr, sql.raw(` AS "${alias}"`)], sql.raw(''))
 }
 
+// --- Custom-expression compiler ---------------------------------------------
+// Compiles a BhqlExpr to SQL. SECURITY: column refs go through the whitelist
+// (colSqlOrThrow), string/number literals bind as parameters, and the ONLY raw
+// fragments are operators/units/function names taken from typed unions or the
+// validated allow-lists below — no caller string ever reaches sql.raw unchecked.
+
+const EXPR_DATE_UNITS = new Set(['day', 'week', 'month', 'quarter', 'year', 'hour', 'minute'])
+const EXPR_DATE_PARTS = new Set([
+  'dow',
+  'doy',
+  'day',
+  'week',
+  'month',
+  'quarter',
+  'year',
+  'hour',
+  'minute',
+])
+/** Whitelisted scalar functions → arity (null = variadic, ≥1). */
+const EXPR_FUNCTIONS: Record<string, { min: number; max: number }> = {
+  now: { min: 0, max: 0 },
+  coalesce: { min: 2, max: 99 },
+  nullif: { min: 2, max: 2 },
+  abs: { min: 1, max: 1 },
+  round: { min: 1, max: 2 },
+  ceil: { min: 1, max: 1 },
+  floor: { min: 1, max: 1 },
+  power: { min: 2, max: 2 },
+  sqrt: { min: 1, max: 1 },
+  lower: { min: 1, max: 1 },
+  upper: { min: 1, max: 1 },
+  length: { min: 1, max: 1 },
+  trim: { min: 1, max: 1 },
+  concat: { min: 2, max: 99 },
+  datediff: { min: 3, max: 3 },
+  datetrunc: { min: 2, max: 2 },
+  datepart: { min: 2, max: 2 },
+}
+
+function paren(s: SQL): SQL {
+  return sql.join([sql.raw('('), s, sql.raw(')')], sql.raw(''))
+}
+function fnCall(name: string, args: SQL[]): SQL {
+  return sql.join([sql.raw(`${name}(`), sql.join(args, sql.raw(', ')), sql.raw(')')], sql.raw(''))
+}
+function litStr(e: BhqlExpr | undefined): string {
+  if (e && e.ex === 'lit' && typeof e.value === 'string') return e.value
+  throw new Error('expected a string-literal argument')
+}
+
+/** datediff(unit, start, end) → an integer count of whole units between two
+ *  date/timestamp expressions. `unit` is validated against EXPR_DATE_UNITS. */
+function dateDiffSql(unit: string, start: SQL, end: SQL): SQL {
+  switch (unit) {
+    case 'day':
+      return paren(sql.join([end, sql.raw('::date - '), start, sql.raw('::date')], sql.raw('')))
+    case 'week':
+      return paren(
+        sql.join(
+          [sql.raw('('), end, sql.raw('::date - '), start, sql.raw('::date) / 7')],
+          sql.raw(''),
+        ),
+      )
+    case 'hour':
+      return paren(
+        sql.join(
+          [sql.raw('EXTRACT(EPOCH FROM ('), end, sql.raw(' - '), start, sql.raw(')) / 3600')],
+          sql.raw(''),
+        ),
+      )
+    case 'minute':
+      return paren(
+        sql.join(
+          [sql.raw('EXTRACT(EPOCH FROM ('), end, sql.raw(' - '), start, sql.raw(')) / 60')],
+          sql.raw(''),
+        ),
+      )
+    case 'month':
+    case 'quarter': {
+      const months = paren(
+        sql.join(
+          [
+            sql.raw('(EXTRACT(YEAR FROM age('),
+            end,
+            sql.raw(', '),
+            start,
+            sql.raw(')) * 12 + EXTRACT(MONTH FROM age('),
+            end,
+            sql.raw(', '),
+            start,
+            sql.raw(')))::int'),
+          ],
+          sql.raw(''),
+        ),
+      )
+      return unit === 'quarter' ? paren(sql.join([months, sql.raw(' / 3')], sql.raw(''))) : months
+    }
+    case 'year':
+      return paren(
+        sql.join(
+          [sql.raw('EXTRACT(YEAR FROM age('), end, sql.raw(', '), start, sql.raw('))::int')],
+          sql.raw(''),
+        ),
+      )
+    default:
+      throw new Error(`Unknown datediff unit "${unit}"`)
+  }
+}
+
+function compileFn(ctx: CompileCtx, fn: string, args: BhqlExpr[]): SQL {
+  const meta = EXPR_FUNCTIONS[fn]
+  if (!meta) throw new Error(`Unknown function "${fn}"`)
+  if (args.length < meta.min || args.length > meta.max)
+    throw new Error(`Function "${fn}" takes ${meta.min}..${meta.max} args (got ${args.length})`)
+  if (fn === 'now') return sql.raw('now()')
+  if (fn === 'datediff') {
+    const unit = litStr(args[0])
+    if (!EXPR_DATE_UNITS.has(unit)) throw new Error(`Bad datediff unit "${unit}"`)
+    return dateDiffSql(unit, compileExpr(ctx, args[1]!), compileExpr(ctx, args[2]!))
+  }
+  if (fn === 'datetrunc') {
+    const unit = litStr(args[0])
+    if (!EXPR_DATE_UNITS.has(unit)) throw new Error(`Bad datetrunc unit "${unit}"`)
+    return sql.join(
+      [sql.raw(`date_trunc('${unit}', `), compileExpr(ctx, args[1]!), sql.raw(')')],
+      sql.raw(''),
+    )
+  }
+  if (fn === 'datepart') {
+    const part = litStr(args[0])
+    if (!EXPR_DATE_PARTS.has(part)) throw new Error(`Bad datepart "${part}"`)
+    return sql.join(
+      [sql.raw(`EXTRACT(${part} FROM `), compileExpr(ctx, args[1]!), sql.raw(')::int')],
+      sql.raw(''),
+    )
+  }
+  // Plain SQL functions whose name == the (whitelisted) key, upper-cased.
+  return fnCall(
+    fn.toUpperCase(),
+    args.map((a) => compileExpr(ctx, a)),
+  )
+}
+
+function compileAggExpr(ctx: CompileCtx, e: Extract<BhqlExpr, { ex: 'agg' }>): SQL {
+  let core: SQL
+  if (e.fn === 'count') core = sql.raw('COUNT(*)')
+  else if (e.fn === 'count_distinct')
+    core = sql.join(
+      [sql.raw('COUNT(DISTINCT '), compileExpr(ctx, e.arg!), sql.raw(')')],
+      sql.raw(''),
+    )
+  // fn is a typed BhqlAggFn union → safe to upper-case into SQL.
+  else core = fnCall(e.fn.toUpperCase(), [compileExpr(ctx, e.arg!)])
+  if (e.filter) {
+    const sub = compileRuleGroup(ctx.entity, e.filter, (c) => colSqlOf(ctx, c))
+    if (sub) core = sql.join([core, sql.raw(' FILTER (WHERE '), sub, sql.raw(')')], sql.raw(''))
+  }
+  // No blanket ::numeric cast — an aggregate keeps its natural type (e.g.
+  // max(timestamp) stays a timestamp); the enclosing expression casts as needed.
+  return paren(core)
+}
+
+function compileExpr(ctx: CompileCtx, e: BhqlExpr): SQL {
+  switch (e.ex) {
+    case 'field':
+      return colSqlOrThrow(ctx, e.field)
+    case 'lit':
+      if (e.value === null) return sql.raw('NULL')
+      if (typeof e.value === 'boolean') return sql.raw(e.value ? 'TRUE' : 'FALSE')
+      return sql`${e.value}` // string/number bind as a parameter
+    case 'arith': {
+      const right =
+        e.op === '/'
+          ? sql.join([sql.raw('NULLIF('), compileExpr(ctx, e.right), sql.raw(', 0)')], sql.raw(''))
+          : compileExpr(ctx, e.right)
+      return paren(sql.join([compileExpr(ctx, e.left), sql.raw(` ${e.op} `), right], sql.raw('')))
+    }
+    case 'compare':
+      return paren(
+        sql.join(
+          [
+            compileExpr(ctx, e.left),
+            sql.raw(` ${e.op === '!=' ? '<>' : e.op} `),
+            compileExpr(ctx, e.right),
+          ],
+          sql.raw(''),
+        ),
+      )
+    case 'logic':
+      if (e.op === 'not')
+        return paren(sql.join([sql.raw('NOT '), compileExpr(ctx, e.args[0]!)], sql.raw('')))
+      return paren(
+        sql.join(
+          e.args.map((a) => compileExpr(ctx, a)),
+          sql.raw(e.op === 'and' ? ' AND ' : ' OR '),
+        ),
+      )
+    case 'case': {
+      const parts: SQL[] = [sql.raw('CASE')]
+      for (const b of e.branches) {
+        parts.push(
+          sql.raw(' WHEN '),
+          compileExpr(ctx, b.when),
+          sql.raw(' THEN '),
+          compileExpr(ctx, b.then),
+        )
+      }
+      if (e.else !== undefined) parts.push(sql.raw(' ELSE '), compileExpr(ctx, e.else))
+      parts.push(sql.raw(' END'))
+      return sql.join(parts, sql.raw(''))
+    }
+    case 'call':
+      return compileFn(ctx, e.fn, e.args)
+    case 'agg':
+      return compileAggExpr(ctx, e)
+  }
+}
+
 function breakoutColumn(ctx: CompileCtx, b: BhqlBreakout): { select: SQL; column: ResultColumn } {
-  const meta = colMetaOf(ctx, b.field)
-  if (!meta) throw new Error(`Unknown breakout field "${b.field}"`)
+  // Computed (expression) breakout — e.g. a CASE age bucket. Grouped by the
+  // expression itself (no column metadata / temporal bin).
+  if (b.expr) {
+    return {
+      select: aliased(compileExpr(ctx, b.expr), b.alias),
+      column: {
+        key: b.alias,
+        label: humanizeAlias(b.alias),
+        role: 'dimension',
+        semanticType: 'dimension',
+        dataType: 'string',
+      },
+    }
+  }
+  const field = b.field
+  if (!field) throw new Error('A breakout needs a field or an expression')
+  const meta = colMetaOf(ctx, field)
+  if (!meta) throw new Error(`Unknown breakout field "${field}"`)
   const { col, aCol } = meta
-  const base = colSqlOrThrow(ctx, b.field)
+  const base = colSqlOrThrow(ctx, field)
 
   if (b.bin?.kind === 'temporal') {
     // unit is one of 5 validated literals — safe to inline.
@@ -309,8 +550,11 @@ export function compileBhql(
 
   const breakouts = stage.breakouts ?? []
   const allMeasures = stage.aggregations ?? []
-  const baseMeasures = allMeasures.filter((m): m is BhqlMeasure => m.kind !== 'calc')
+  const baseMeasures = allMeasures.filter(
+    (m): m is BhqlMeasure => m.kind === undefined || m.kind === 'agg',
+  )
   const calcMeasures = allMeasures.filter((m): m is BhqlCalcMeasure => m.kind === 'calc')
+  const exprMeasures = allMeasures.filter((m): m is BhqlExprMeasure => m.kind === 'expr')
   const rawColumns = stage.columns ?? []
   const isAggregate = allMeasures.length > 0 || breakouts.length > 0
 
@@ -335,7 +579,7 @@ export function compileBhql(
     // "group by X with no measures" → an implicit row count so a bare breakout
     // still yields a sensible table.
     let bases = baseMeasures
-    if (bases.length === 0 && calcMeasures.length === 0) {
+    if (bases.length === 0 && calcMeasures.length === 0 && exprMeasures.length === 0) {
       const alias = breakouts.some((b) => b.alias === 'count') ? 'n' : 'count'
       bases = [{ fn: 'count', alias }]
     }
@@ -350,6 +594,18 @@ export function compileBhql(
       const { select, column } = calcMeasureColumn(m, exprMap)
       selects.push(select)
       columns.push(column)
+    }
+    // Custom-aggregation measures — an arbitrary expression (may contain agg
+    // nodes), e.g. datediff('day', max(occurred_at), now()) for "days since".
+    for (const m of exprMeasures) {
+      selects.push(aliased(compileExpr(ctx, m.expr), m.alias))
+      columns.push({
+        key: m.alias,
+        label: humanizeAlias(m.alias),
+        role: 'measure',
+        semanticType: 'measure',
+        dataType: 'number',
+      })
     }
   } else {
     const cols = rawColumns.length ? rawColumns : entity.columns.map((c) => c.key)

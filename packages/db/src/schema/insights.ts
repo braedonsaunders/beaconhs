@@ -63,18 +63,46 @@ export type BhqlCalcMeasure = {
   multiplier?: number
 }
 
-export type BhqlAnyMeasure = BhqlMeasure | BhqlCalcMeasure
+/** A custom-aggregation measure: an arbitrary expression that may contain
+ *  aggregate nodes — e.g. `datediff('day', max(occurred_at), now())` (days since)
+ *  or `sum(hours) / count(*)`. This is the Metabase "custom aggregation". */
+export type BhqlExprMeasure = {
+  kind: 'expr'
+  alias: string
+  expr: BhqlExpr
+}
+
+export type BhqlAnyMeasure = BhqlMeasure | BhqlCalcMeasure | BhqlExprMeasure
 
 export type BhqlTemporalUnit = 'day' | 'week' | 'month' | 'quarter' | 'year'
+
+/** A computed expression over columns + literals — arithmetic, comparison,
+ *  CASE, and a whitelisted function library (date math, string, math). Powers
+ *  computed dimensions (group by an expression) and custom aggregations, so
+ *  derived values like "days since last recordable" or an age bucket are
+ *  buildable in the UI with NO database view. Compiled by @beaconhs/analytics;
+ *  every function + column + operator is whitelisted before it reaches SQL. */
+export type BhqlExpr =
+  | { ex: 'field'; field: string } // a column ref (supports a joined "via.col" path)
+  | { ex: 'lit'; value: string | number | boolean | null }
+  | { ex: 'arith'; op: '+' | '-' | '*' | '/'; left: BhqlExpr; right: BhqlExpr }
+  | { ex: 'compare'; op: '=' | '!=' | '<' | '<=' | '>' | '>='; left: BhqlExpr; right: BhqlExpr }
+  | { ex: 'logic'; op: 'and' | 'or' | 'not'; args: BhqlExpr[] }
+  | { ex: 'case'; branches: { when: BhqlExpr; then: BhqlExpr }[]; else?: BhqlExpr }
+  | { ex: 'call'; fn: string; args: BhqlExpr[] }
+  | { ex: 'agg'; fn: BhqlAggFn; arg?: BhqlExpr; filter?: ReportRuleGroup | null }
 
 /** Bucketing applied to a breakout dimension. */
 export type BhqlBin =
   | { kind: 'temporal'; unit: BhqlTemporalUnit }
   | { kind: 'numeric'; numBins: number }
 
-/** A group-by dimension, optionally bucketed. */
+/** A group-by dimension, optionally bucketed. Exactly one of `field` (a column
+ *  ref) or `expr` (a computed expression — e.g. a CASE age bucket) is set. */
 export type BhqlBreakout = {
-  field: string
+  field?: string
+  /** A computed expression to group by, instead of a plain column. */
+  expr?: BhqlExpr
   /** Output column key; unique within a stage; whitelist-safe slug. */
   alias: string
   bin?: BhqlBin

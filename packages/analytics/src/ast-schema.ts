@@ -56,9 +56,48 @@ const zBin = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('numeric'), numBins: z.number().int().min(2).max(50) }),
 ])
 
+const zAggFn = z.enum(['count', 'count_distinct', 'sum', 'avg', 'min', 'max'])
+
+/** Custom expression (recursive). Structural only; the semantic check below
+ *  whitelists functions/units and resolves every field. */
+const zExpr: z.ZodType = z.lazy(() =>
+  z.union([
+    z.object({ ex: z.literal('field'), field: z.string() }),
+    z.object({
+      ex: z.literal('lit'),
+      value: z.union([z.string(), z.number(), z.boolean(), z.null()]),
+    }),
+    z.object({
+      ex: z.literal('arith'),
+      op: z.enum(['+', '-', '*', '/']),
+      left: zExpr,
+      right: zExpr,
+    }),
+    z.object({
+      ex: z.literal('compare'),
+      op: z.enum(['=', '!=', '<', '<=', '>', '>=']),
+      left: zExpr,
+      right: zExpr,
+    }),
+    z.object({ ex: z.literal('logic'), op: z.enum(['and', 'or', 'not']), args: z.array(zExpr) }),
+    z.object({
+      ex: z.literal('case'),
+      branches: z.array(z.object({ when: zExpr, then: zExpr })),
+      else: zExpr.optional(),
+    }),
+    z.object({ ex: z.literal('call'), fn: z.string(), args: z.array(zExpr) }),
+    z.object({
+      ex: z.literal('agg'),
+      fn: zAggFn,
+      arg: zExpr.optional(),
+      filter: zRuleGroup.nullish(),
+    }),
+  ]),
+)
+
 const zMeasure = z.object({
   kind: z.literal('agg').optional(),
-  fn: z.enum(['count', 'count_distinct', 'sum', 'avg', 'min', 'max']),
+  fn: zAggFn,
   field: z.string().optional(),
   alias: z.string(),
   filter: zRuleGroup.nullish(),
@@ -72,10 +111,13 @@ const zCalcMeasure = z.object({
   multiplier: z.number().optional(),
 })
 
-const zAnyMeasure = z.union([zMeasure, zCalcMeasure])
+const zExprMeasure = z.object({ kind: z.literal('expr'), alias: z.string(), expr: zExpr })
+
+const zAnyMeasure = z.union([zMeasure, zCalcMeasure, zExprMeasure])
 
 const zBreakout = z.object({
-  field: z.string(),
+  field: z.string().optional(),
+  expr: zExpr.optional(),
   alias: z.string(),
   bin: zBin.optional(),
 })
@@ -180,6 +222,109 @@ function validateMeasure(
   // (e.g. the training-matrix coverage), since min() of one value is that value.
 }
 
+const EXPR_FNS = new Set([
+  'now',
+  'coalesce',
+  'nullif',
+  'abs',
+  'round',
+  'ceil',
+  'floor',
+  'power',
+  'sqrt',
+  'lower',
+  'upper',
+  'length',
+  'trim',
+  'concat',
+  'datediff',
+  'datetrunc',
+  'datepart',
+])
+const EXPR_UNITS = new Set(['day', 'week', 'month', 'quarter', 'year', 'hour', 'minute'])
+const EXPR_PARTS = new Set([
+  'dow',
+  'doy',
+  'day',
+  'week',
+  'month',
+  'quarter',
+  'year',
+  'hour',
+  'minute',
+])
+
+/** Semantic check for a custom expression: every function + unit is whitelisted,
+ *  every field resolves, aggregates aren't nested or used where disallowed, and
+ *  the tree isn't pathologically deep. */
+function validateExpr(
+  entity: ReportEntity,
+  entityMap: Record<string, ReportEntity>,
+  e: unknown,
+  opts: { depth?: number; insideAgg?: boolean; allowAgg?: boolean },
+): void {
+  const depth = opts.depth ?? 0
+  const insideAgg = opts.insideAgg ?? false
+  const allowAgg = opts.allowAgg ?? true
+  if (depth > 12) fail('Expression is nested too deeply')
+  const x = e as { ex: string; [k: string]: unknown }
+  const recurse = (sub: unknown, o?: { insideAgg?: boolean; allowAgg?: boolean }) =>
+    validateExpr(entity, entityMap, sub, {
+      depth: depth + 1,
+      insideAgg: o?.insideAgg ?? insideAgg,
+      allowAgg: o?.allowAgg ?? allowAgg,
+    })
+  switch (x.ex) {
+    case 'field':
+      if (!resolveField(entity, entityMap, x.field as string))
+        fail(`Unknown field "${x.field}" in expression`)
+      return
+    case 'lit':
+      return
+    case 'arith':
+    case 'compare':
+      recurse(x.left)
+      recurse(x.right)
+      return
+    case 'logic':
+      for (const a of (x.args as unknown[]) ?? []) recurse(a)
+      return
+    case 'case':
+      for (const b of (x.branches as { when: unknown; then: unknown }[]) ?? []) {
+        recurse(b.when)
+        recurse(b.then)
+      }
+      if (x.else !== undefined) recurse(x.else)
+      return
+    case 'call': {
+      const fn = x.fn as string
+      if (!EXPR_FNS.has(fn)) fail(`Unknown function "${fn}"`)
+      const args = (x.args as { ex?: string; value?: unknown }[]) ?? []
+      if (fn === 'datediff' || fn === 'datetrunc') {
+        const u = args[0]
+        if (!(u && u.ex === 'lit' && typeof u.value === 'string' && EXPR_UNITS.has(u.value)))
+          fail(`"${fn}" needs a unit literal (day, week, month, quarter, year, hour, minute)`)
+      }
+      if (fn === 'datepart') {
+        const p = args[0]
+        if (!(p && p.ex === 'lit' && typeof p.value === 'string' && EXPR_PARTS.has(p.value)))
+          fail('datepart needs a part literal (dow, day, month, quarter, year, …)')
+      }
+      for (const a of args) recurse(a)
+      return
+    }
+    case 'agg':
+      if (!allowAgg) fail('An aggregate is not allowed here — use a plain (row-level) expression')
+      if (insideAgg) fail('Cannot nest an aggregate inside another aggregate')
+      if (x.fn !== 'count' && !x.arg) fail(`${String(x.fn)} needs an argument`)
+      if (x.arg) recurse(x.arg, { insideAgg: true, allowAgg: false })
+      if (x.filter) validateFilterDepth(x.filter)
+      return
+    default:
+      fail('Invalid expression')
+  }
+}
+
 /** Parse + fully validate untrusted input into a typed BhqlQuery. Throws
  *  BhqlValidationError on any problem. */
 export function parseBhqlQuery(raw: unknown, entityMap: Record<string, ReportEntity>): BhqlQuery {
@@ -196,8 +341,10 @@ export function parseBhqlQuery(raw: unknown, entityMap: Record<string, ReportEnt
   if (!entity) fail(`Unknown source entity "${stage.source}"`)
 
   const measures = stage.aggregations ?? []
-  const baseMeasures = measures.filter((m) => (m as { kind?: string }).kind !== 'calc')
-  const calcMeasures = measures.filter((m) => (m as { kind?: string }).kind === 'calc')
+  const kindOf = (m: unknown) => (m as { kind?: string }).kind
+  const baseMeasures = measures.filter((m) => kindOf(m) === undefined || kindOf(m) === 'agg')
+  const calcMeasures = measures.filter((m) => kindOf(m) === 'calc')
+  const exprMeasures = measures.filter((m) => kindOf(m) === 'expr')
   const breakouts = stage.breakouts ?? []
   const columns = stage.columns ?? []
 
@@ -220,6 +367,14 @@ export function parseBhqlQuery(raw: unknown, entityMap: Record<string, ReportEnt
     if (!resolveField(entity, entityMap, c)) fail(`Unknown column "${c}" on ${stage.source}`)
   }
   for (const b of breakouts) {
+    // A computed-expression breakout (e.g. a CASE age bucket) — must be a plain
+    // row-level expression, never an aggregate (you can't GROUP BY an aggregate).
+    if (b.expr && b.field) fail(`Breakout "${b.alias}" can't have both a field and an expression`)
+    if (b.expr) {
+      validateExpr(entity, entityMap, b.expr, { allowAgg: false })
+      continue
+    }
+    if (!b.field) fail(`Breakout "${b.alias}" needs a field or an expression`)
     const col = resolveField(entity, entityMap, b.field)
     if (!col) fail(`Unknown field "${b.field}" on ${stage.source}`)
     if (b.bin?.kind === 'temporal' && !(col.kind === 'date' || col.kind === 'timestamp')) {
@@ -233,6 +388,10 @@ export function parseBhqlQuery(raw: unknown, entityMap: Record<string, ReportEnt
     const bm = m as BhqlMeasure
     validateMeasure(entity, entityMap, bm)
     if (bm.filter) validateFilterDepth(bm.filter)
+  }
+  // Custom-aggregation measures — an expression that may contain aggregate nodes.
+  for (const m of exprMeasures) {
+    validateExpr(entity, entityMap, (m as { expr: unknown }).expr, { allowAgg: true })
   }
   const baseAliases = new Set(baseMeasures.map((m) => m.alias))
   for (const m of calcMeasures) {

@@ -22,6 +22,8 @@ import type {
   BhqlAggFn,
   BhqlAnyMeasure,
   BhqlBin,
+  BhqlBreakout,
+  BhqlExprMeasure,
   BhqlMeasure,
   BhqlQuery,
   ReportRuleGroup,
@@ -137,6 +139,10 @@ export function CardStudio({
   const [measures, setMeasures] = useState<MeasureRow[]>(decoded.measures)
   const [filters, setFilters] = useState<FilterRow[]>(decoded.filters)
   const [pivotOn, setPivotOn] = useState(decoded.pivotOn)
+  // Computed-expression measures/breakouts (e.g. datediff, CASE buckets) are not
+  // yet editable in the structured rail — held verbatim so the card round-trips.
+  const [extraAggs, setExtraAggs] = useState<BhqlExprMeasure[]>(decoded.extraAggs)
+  const [extraBreakouts, setExtraBreakouts] = useState<BhqlBreakout[]>(decoded.extraBreakouts)
   const [vizType, setVizType] = useState<string>(initial.vizType || 'table')
   const [vizTouched, setVizTouched] = useState(Boolean(initial.id))
   const [suggestedViz, setSuggestedViz] = useState<string | null>(null)
@@ -186,9 +192,15 @@ export function CardStudio({
       used.add(a)
       return a
     }
-    const bks = breakouts
-      .filter((b) => b.field)
-      .map((b) => ({ field: b.field, alias: uniq(b.field), bin: b.bin }))
+    // Reserve passthrough (expression) aliases so generated ones don't collide.
+    for (const eb of extraBreakouts) used.add(eb.alias)
+    for (const ea of extraAggs) used.add(ea.alias)
+    const bks: BhqlBreakout[] = [
+      ...breakouts
+        .filter((b) => b.field)
+        .map((b) => ({ field: b.field, alias: uniq(b.field), bin: b.bin })),
+      ...extraBreakouts,
+    ]
     const whereToGroup = (w?: MeasureWhere): ReportRuleGroup | undefined => {
       if (!w || !w.field) return undefined
       const needsValue = w.op !== 'is_null' && w.op !== 'is_not_null'
@@ -239,6 +251,11 @@ export function CardStudio({
         outputAliases.push(a)
       }
     }
+    // Passthrough custom-expression measures (verbatim, with their own aliases).
+    for (const ea of extraAggs) {
+      mss.push(ea)
+      outputAliases.push(ea.alias)
+    }
 
     const canPivot = pivotOn && bks.length >= 2 && outputAliases.length >= 1
     const pivot = canPivot
@@ -257,7 +274,18 @@ export function CardStudio({
         { source: entityKey as never, filter, breakouts: bks, aggregations: mss, limit: 2000 },
       ],
     }
-  }, [entityKey, mode, columns, breakouts, measures, filters, pivotOn, cols])
+  }, [
+    entityKey,
+    mode,
+    columns,
+    breakouts,
+    measures,
+    filters,
+    pivotOn,
+    cols,
+    extraAggs,
+    extraBreakouts,
+  ])
 
   // Viz settings for BOTH the live preview and the saved card. A scalar/progress
   // card's value is pinned to the primary output column — the calc (ratio) is
@@ -328,6 +356,8 @@ export function CardStudio({
       setMeasures(d.measures)
       setFilters(d.filters)
       setPivotOn(d.pivotOn)
+      setExtraAggs(d.extraAggs)
+      setExtraBreakouts(d.extraBreakouts)
       setVizType(r.suggestedViz)
       setVizTouched(false)
       if (!name.trim() || name === 'Untitled card') {
@@ -1051,6 +1081,10 @@ function decodeQuery(query: BhqlQuery | null): {
   measures: MeasureRow[]
   filters: FilterRow[]
   pivotOn: boolean
+  /** Computed-expression measures/breakouts carried through edits verbatim
+   *  (no structured editor yet), so an expression card round-trips losslessly. */
+  extraAggs: BhqlExprMeasure[]
+  extraBreakouts: BhqlBreakout[]
 } {
   const stage = query?.stages?.[0]
   if (!stage) {
@@ -1061,6 +1095,8 @@ function decodeQuery(query: BhqlQuery | null): {
       measures: [],
       filters: [],
       pivotOn: false,
+      extraAggs: [],
+      extraBreakouts: [],
     }
   }
   const filters: FilterRow[] = []
@@ -1075,21 +1111,28 @@ function decodeQuery(query: BhqlQuery | null): {
       })
     }
   }
-  const breakouts = (stage.breakouts ?? []).map((b) => ({ field: b.field, bin: b.bin }))
+  // Field-based breakouts map to a structured row; computed-expression breakouts
+  // are carried through verbatim (the structured rail can't yet edit them).
+  const breakouts = (stage.breakouts ?? [])
+    .filter((b) => b.field != null)
+    .map((b) => ({ field: b.field!, bin: b.bin }))
+  const extraBreakouts = (stage.breakouts ?? []).filter((b) => b.expr != null)
 
   // Reconstruct measures. A calc (ratio) measure is re-hydrated into ONE row —
   // fn/field/where from its numerator base, denFn/denField/denWhere from its
   // denominator base, plus the multiplier — and the consumed base measures are
   // dropped, so an edited ratio card round-trips through buildAst() instead of
-  // silently decomposing into two plain measures with the ratio lost.
+  // silently decomposing into two plain measures with the ratio lost. Custom
+  // (expr) measures are carried through verbatim (no structured editor yet).
   const aggs = stage.aggregations ?? []
+  const extraAggs = aggs.filter((m): m is BhqlExprMeasure => m.kind === 'expr')
   const baseByAlias = new Map<string, BhqlMeasure>()
   const consumed = new Set<string>()
   for (const m of aggs) {
     if (m.kind === 'calc') {
       consumed.add(m.numerator)
       if (m.denominator) consumed.add(m.denominator)
-    } else {
+    } else if (m.kind !== 'expr') {
       baseByAlias.set(m.alias, m)
     }
   }
@@ -1108,11 +1151,12 @@ function decodeQuery(query: BhqlQuery | null): {
         denWhere: groupToWhere(den?.filter),
         multiplier: m.multiplier ?? 1,
       })
-    } else if (!consumed.has(m.alias)) {
+    } else if (m.kind !== 'expr' && !consumed.has(m.alias)) {
       measures.push({ fn: m.fn, field: m.field, where: groupToWhere(m.filter) })
     }
   }
-  const isSummarize = breakouts.length > 0 || measures.length > 0
+  const isSummarize =
+    breakouts.length > 0 || measures.length > 0 || extraAggs.length > 0 || extraBreakouts.length > 0
   return {
     entityKey: stage.source,
     mode: isSummarize ? 'summarize' : 'rows',
@@ -1121,5 +1165,7 @@ function decodeQuery(query: BhqlQuery | null): {
     measures,
     filters,
     pivotOn: query?.display === 'pivot' && Boolean(query.pivot),
+    extraAggs,
+    extraBreakouts,
   }
 }
