@@ -5,7 +5,7 @@
 //
 //   pnpm --filter @beaconhs/worker exec tsx --env-file=../../.env src/lib/_insights-smoke.ts
 
-import { discoverEntities, runBhql } from '@beaconhs/analytics/server'
+import { discoverEntities, runBhql, validateBhql } from '@beaconhs/analytics/server'
 import { db, withSuperAdmin, withTenant } from '@beaconhs/db'
 import type { BhqlQuery } from '@beaconhs/db/schema'
 import { tenants } from '@beaconhs/db/schema'
@@ -247,6 +247,43 @@ async function main() {
     const r = await withTenant(db, t.id, (tx) => runBhql(tx, trirQuery))
     const row = r.shape === 'flat' ? r.rows[0] : undefined
     console.log(`[rates] ${t.name}: recordables=${row?.rec} hours=${row?.hrs} TRIR=${row?.trir}`)
+  }
+
+  // FK-aware implicit join: group journals by their SITE NAME (org_units.name),
+  // resolved by following journal_entries.site_org_unit_id → org_units — no view,
+  // no hand-written SQL, no join clause in the AST. This is the self-serve
+  // cross-table primitive.
+  const je = discovered.find((e) => e.key === 'journal_entries')
+  const rels = je?.relations ?? []
+  console.log(
+    `\n[joins] journal_entries relations: ${
+      rels.map((r) => `${r.via}→${r.target}`).join(', ') || '(none)'
+    }`,
+  )
+  const siteRel = rels.find((r) => r.via === 'site_org_unit_id')
+  if (!siteRel) fail('expected a journal_entries → org_units relation via site_org_unit_id')
+  if (siteRel.target !== 'org_units')
+    fail(`site relation targets ${siteRel.target}, expected org_units`)
+
+  const joinQuery: BhqlQuery = {
+    version: 'bhql/1',
+    display: 'table',
+    stages: [
+      {
+        source: 'journal_entries',
+        breakouts: [{ field: 'site_org_unit_id.name', alias: 'site' }],
+        aggregations: [{ fn: 'count', alias: 'entries' }],
+        orderBy: [{ ref: 'entries', direction: 'desc' }],
+        limit: 5,
+      },
+    ],
+  }
+  const validatedJoin = validateBhql(joinQuery) // full validation, incl. the joined ref
+  for (const t of ts) {
+    const r = await withTenant(db, t.id, (tx) => runBhql(tx, validatedJoin))
+    if (r.shape !== 'flat') fail('join query should return a flat result')
+    const sites = r.rows.map((row) => `${row.site ?? '(none)'}=${row.entries}`)
+    console.log(`[joins] ${t.name}: top sites by journals → ${sites.join(', ') || '(no rows)'}`)
   }
 
   // RLS: the same count under each tenant should be independently scoped.

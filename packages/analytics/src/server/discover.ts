@@ -7,7 +7,7 @@
 // discovered — it never gates what's available.
 
 import { getTableColumns, getTableName, is } from 'drizzle-orm'
-import { PgTable } from 'drizzle-orm/pg-core'
+import { PgTable, getTableConfig } from 'drizzle-orm/pg-core'
 import * as schema from '@beaconhs/db/schema'
 import { TENANT_SCOPED_TABLES } from '@beaconhs/db/rls'
 import type { ReportColumnKind } from '@beaconhs/reports/entities'
@@ -16,6 +16,7 @@ import {
   deriveSemanticType,
   type AnalyticsColumn,
   type AnalyticsEntity,
+  type AnalyticsRelation,
   type SemanticType,
 } from '../semantic'
 
@@ -155,6 +156,34 @@ function categoryFor(table: string): string {
   return 'Other data'
 }
 
+/** Extract single-column foreign keys as relationships the builder/engine can
+ *  follow. SECURITY: a relation is recorded ONLY when its target table is itself
+ *  RLS-safe and not excluded — so you can never join your way into `tenants`,
+ *  the global Better-Auth `users` table, or any non-tenant-isolated table. The
+ *  caller post-filters to targets that ended up as discovered entities. */
+function relationsFor(value: PgTable, hide: Set<string>): AnalyticsRelation[] {
+  const rels: AnalyticsRelation[] = []
+  let foreignKeys: ReturnType<typeof getTableConfig>['foreignKeys']
+  try {
+    foreignKeys = getTableConfig(value).foreignKeys
+  } catch {
+    return rels
+  }
+  const seen = new Set<string>()
+  for (const fk of foreignKeys) {
+    const ref = fk.reference()
+    if (ref.columns.length !== 1 || ref.foreignColumns.length !== 1) continue // single-col FKs only
+    const via = ref.columns[0]!.name
+    const foreignColumn = ref.foreignColumns[0]!.name
+    const target = getTableName(ref.foreignTable)
+    if (hide.has(via) || seen.has(via)) continue
+    if (!RLS_SAFE.has(target) || EXCLUDE_TABLES.has(target)) continue
+    seen.add(via)
+    rels.push({ via, target, foreignColumn, label: humanize(via.replace(/_id$/, '')) })
+  }
+  return rels
+}
+
 /** Map a Drizzle column to a report column kind, or null to skip it. */
 function kindOf(col: {
   columnType?: unknown
@@ -241,6 +270,7 @@ export function discoverEntities(): AnalyticsEntity[] {
       table,
       columns,
       primary: overlay.primary ?? false,
+      relations: relationsFor(value, hide),
     })
   }
 
@@ -251,6 +281,13 @@ export function discoverEntities(): AnalyticsEntity[] {
       const category = e.category.charAt(0).toUpperCase() + e.category.slice(1)
       entities.push({ ...e, category, primary: true })
     }
+  }
+
+  // Drop relations whose target didn't end up as a discovered entity (e.g. an
+  // RLS-safe but column-less table) — the engine only ever joins real entities.
+  const keys = new Set(entities.map((e) => e.key))
+  for (const e of entities) {
+    if (e.relations?.length) e.relations = e.relations.filter((r) => keys.has(r.target))
   }
 
   // Primary entities first, then alphabetical within category.

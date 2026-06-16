@@ -15,10 +15,11 @@ import {
   entityColumnSql,
   type ReportColumnKind,
   type ReportEntity,
+  type ReportEntityColumn,
 } from '@beaconhs/reports/entities'
 import { compileRuleGroup } from '@beaconhs/reports/filters'
 import type { BhqlBreakout, BhqlCalcMeasure, BhqlMeasure, BhqlQuery } from '@beaconhs/db/schema'
-import { analyticsColumn, type AnalyticsEntity } from '../semantic'
+import { analyticsColumn, type AnalyticsColumn, type AnalyticsEntity } from '../semantic'
 import type { ResultColumn, ResultDataType } from '../result'
 import { discoverEntityMap } from './discover'
 
@@ -44,27 +45,88 @@ function dataTypeOf(kind: ReportColumnKind): ResultDataType {
   }
 }
 
-/** Quoted physical column ref for a whitelisted key. Throws if not whitelisted
- *  (defence in depth — the caller has already validated). */
-function physical(entity: ReportEntity, key: string): SQL {
-  const col = entityColumnSql(entity, key)
-  if (!col) throw new Error(`Unknown column "${key}" on ${entity.key}`)
-  return sql.raw(`"${entity.table}"."${col}"`)
+type JoinSpec = { table: string; alias: string; localCol: string; foreignCol: string }
+
+/** Per-compilation context: the source entity, the discovered registry (for
+ *  following FK relations) and the accumulating set of LEFT JOINs. */
+type CompileCtx = {
+  entity: ReportEntity
+  aEntity: AnalyticsEntity
+  entityMap: Record<string, AnalyticsEntity>
+  joins: Map<string, JoinSpec>
+}
+
+/** Resolve a field ref to a quoted physical column. A ref shaped
+ *  "<via>.<column>" follows the foreign-key relation `<via>` to `<column>` on
+ *  the related entity, registering a LEFT JOIN.
+ *
+ *  SECURITY: a relation only ever targets a discovered RLS-safe entity, and both
+ *  the local FK column and the remote column are re-derived through the entity
+ *  whitelist — no caller-supplied string reaches raw SQL unchecked, and you can
+ *  never join into a non-tenant-isolated table. Returns null when unresolvable
+ *  (defence; the validator has already run). */
+function colSqlOf(ctx: CompileCtx, ref: string): SQL | null {
+  const dot = ref.indexOf('.')
+  if (dot === -1) {
+    const col = entityColumnSql(ctx.entity, ref)
+    return col ? sql.raw(`"${ctx.entity.table}"."${col}"`) : null
+  }
+  const via = ref.slice(0, dot)
+  const rel = (ctx.aEntity.relations ?? []).find((r) => r.via === via)
+  if (!rel) return null
+  const targetEntity = ctx.entityMap[rel.target]
+  if (!targetEntity) return null
+  const localCol = entityColumnSql(ctx.entity, via)
+  const targetCol = entityColumnSql(targetEntity, ref.slice(dot + 1))
+  if (!localCol || !targetCol) return null
+  const alias = `j_${via}`
+  if (!ctx.joins.has(via)) {
+    ctx.joins.set(via, {
+      table: targetEntity.table,
+      alias,
+      localCol,
+      foreignCol: rel.foreignColumn,
+    })
+  }
+  return sql.raw(`"${alias}"."${targetCol}"`)
+}
+
+/** Resolve a field ref to physical SQL or throw (defence in depth). */
+function colSqlOrThrow(ctx: CompileCtx, ref: string): SQL {
+  const s = colSqlOf(ctx, ref)
+  if (!s) throw new Error(`Unknown field "${ref}" on ${ctx.entity.key}`)
+  return s
+}
+
+/** Column metadata (label / kind / semantic type) for a field ref, following a
+ *  FK relation for "<via>.<column>" refs. */
+function colMetaOf(
+  ctx: CompileCtx,
+  ref: string,
+): { col: ReportEntityColumn; aCol: AnalyticsColumn | null } | null {
+  const dot = ref.indexOf('.')
+  if (dot === -1) {
+    const col = entityColumn(ctx.entity, ref)
+    return col ? { col, aCol: analyticsColumn(ctx.aEntity, ref) } : null
+  }
+  const via = ref.slice(0, dot)
+  const rel = (ctx.aEntity.relations ?? []).find((r) => r.via === via)
+  if (!rel) return null
+  const targetEntity = ctx.entityMap[rel.target]
+  if (!targetEntity) return null
+  const col = entityColumn(targetEntity, ref.slice(dot + 1))
+  return col ? { col, aCol: analyticsColumn(targetEntity, ref.slice(dot + 1)) } : null
 }
 
 function aliased(expr: SQL, alias: string): SQL {
   return sql.join([expr, sql.raw(` AS "${alias}"`)], sql.raw(''))
 }
 
-function breakoutColumn(
-  entity: ReportEntity,
-  aEntity: AnalyticsEntity,
-  b: BhqlBreakout,
-): { select: SQL; column: ResultColumn } {
-  const col = entityColumn(entity, b.field)
-  if (!col) throw new Error(`Unknown breakout field "${b.field}"`)
-  const aCol = analyticsColumn(aEntity, b.field)
-  const base = physical(entity, b.field)
+function breakoutColumn(ctx: CompileCtx, b: BhqlBreakout): { select: SQL; column: ResultColumn } {
+  const meta = colMetaOf(ctx, b.field)
+  if (!meta) throw new Error(`Unknown breakout field "${b.field}"`)
+  const { col, aCol } = meta
+  const base = colSqlOrThrow(ctx, b.field)
 
   if (b.bin?.kind === 'temporal') {
     // unit is one of 5 validated literals — safe to inline.
@@ -110,11 +172,8 @@ function humanizeAlias(s: string): string {
 /** The raw (unaliased) aggregate SQL for a base measure + its result column.
  *  A conditional aggregate (`m.filter`) compiles to `<agg> FILTER (WHERE …)` so a
  *  "count of recordable incidents" / "count of compliant people" is one measure. */
-function baseMeasureExpr(
-  entity: ReportEntity,
-  m: BhqlMeasure,
-): { expr: SQL; column: ResultColumn } {
-  const colLabel = m.field ? (entityColumn(entity, m.field)?.label ?? m.field) : ''
+function baseMeasureExpr(ctx: CompileCtx, m: BhqlMeasure): { expr: SQL; column: ResultColumn } {
+  const colLabel = m.field ? (colMetaOf(ctx, m.field)?.col.label ?? m.field) : ''
   let core: SQL
   let cast: 'bigint' | 'numeric' | null = null
   let label: string
@@ -128,31 +187,31 @@ function baseMeasureExpr(
       break
     case 'count_distinct':
       core = sql.join(
-        [sql.raw('COUNT(DISTINCT '), physical(entity, m.field!), sql.raw(')')],
+        [sql.raw('COUNT(DISTINCT '), colSqlOrThrow(ctx, m.field!), sql.raw(')')],
         sql.raw(''),
       )
       cast = 'bigint'
       label = `Distinct ${colLabel}`
       break
     case 'sum':
-      core = sql.join([sql.raw('SUM('), physical(entity, m.field!), sql.raw(')')], sql.raw(''))
+      core = sql.join([sql.raw('SUM('), colSqlOrThrow(ctx, m.field!), sql.raw(')')], sql.raw(''))
       cast = 'numeric'
       label = `Sum of ${colLabel}`
       break
     case 'avg':
-      core = sql.join([sql.raw('AVG('), physical(entity, m.field!), sql.raw(')')], sql.raw(''))
+      core = sql.join([sql.raw('AVG('), colSqlOrThrow(ctx, m.field!), sql.raw(')')], sql.raw(''))
       cast = 'numeric'
       label = `Average ${colLabel}`
       break
     case 'min': {
-      core = sql.join([sql.raw('MIN('), physical(entity, m.field!), sql.raw(')')], sql.raw(''))
-      dataType = dataTypeOf(entityColumn(entity, m.field!)?.kind ?? 'number')
+      core = sql.join([sql.raw('MIN('), colSqlOrThrow(ctx, m.field!), sql.raw(')')], sql.raw(''))
+      dataType = dataTypeOf(colMetaOf(ctx, m.field!)?.col.kind ?? 'number')
       label = `Min ${colLabel}`
       break
     }
     case 'max': {
-      core = sql.join([sql.raw('MAX('), physical(entity, m.field!), sql.raw(')')], sql.raw(''))
-      dataType = dataTypeOf(entityColumn(entity, m.field!)?.kind ?? 'number')
+      core = sql.join([sql.raw('MAX('), colSqlOrThrow(ctx, m.field!), sql.raw(')')], sql.raw(''))
+      dataType = dataTypeOf(colMetaOf(ctx, m.field!)?.col.kind ?? 'number')
       label = `Max ${colLabel}`
       break
     }
@@ -161,7 +220,7 @@ function baseMeasureExpr(
   }
 
   if (m.filter) {
-    const sub = compileRuleGroup(entity, m.filter)
+    const sub = compileRuleGroup(ctx.entity, m.filter, (c) => colSqlOf(ctx, c))
     if (sub) core = sql.join([core, sql.raw(' FILTER (WHERE '), sub, sql.raw(')')], sql.raw(''))
   }
   const expr = cast ? sql.join([sql.raw('('), core, sql.raw(`)::${cast}`)], sql.raw('')) : core
@@ -219,6 +278,11 @@ export function compileBhql(
   // the semantic metadata, so it serves as both `entity` and `aEntity`.
   const entity: ReportEntity = aEntity
 
+  // Foreign-key joins are discovered lazily while resolving field refs (colSqlOf)
+  // across breakouts, measures and filters, then emitted as LEFT JOINs below.
+  const joins = new Map<string, JoinSpec>()
+  const ctx: CompileCtx = { entity, aEntity, entityMap, joins }
+
   const breakouts = stage.breakouts ?? []
   const allMeasures = stage.aggregations ?? []
   const baseMeasures = allMeasures.filter((m): m is BhqlMeasure => m.kind !== 'calc')
@@ -230,7 +294,9 @@ export function compileBhql(
   let effectiveLimit = Math.min(Math.max(Math.trunc(requested), 1), HARD_MAX)
   if (opts.maxRows) effectiveLimit = Math.min(effectiveLimit, opts.maxRows)
 
-  const where = stage.filter ? compileRuleGroup(entity, stage.filter) : null
+  const where = stage.filter
+    ? compileRuleGroup(entity, stage.filter, (c) => colSqlOf(ctx, c))
+    : null
   const whereSql = where ? sql.join([sql.raw('WHERE '), where], sql.raw('')) : null
 
   const selects: SQL[] = []
@@ -238,7 +304,7 @@ export function compileBhql(
 
   if (isAggregate) {
     for (const b of breakouts) {
-      const { select, column } = breakoutColumn(entity, aEntity, b)
+      const { select, column } = breakoutColumn(ctx, b)
       selects.push(select)
       columns.push(column)
     }
@@ -251,7 +317,7 @@ export function compileBhql(
     }
     const exprMap = new Map<string, SQL>()
     for (const m of bases) {
-      const { expr, column } = baseMeasureExpr(entity, m)
+      const { expr, column } = baseMeasureExpr(ctx, m)
       exprMap.set(m.alias, expr)
       selects.push(aliased(expr, m.alias))
       columns.push(column)
@@ -264,10 +330,10 @@ export function compileBhql(
   } else {
     const cols = rawColumns.length ? rawColumns : entity.columns.map((c) => c.key)
     for (const key of cols) {
-      const col = entityColumn(entity, key)
-      if (!col) continue
-      const aCol = analyticsColumn(aEntity, key)
-      selects.push(aliased(physical(entity, key), key))
+      const meta = colMetaOf(ctx, key)
+      if (!meta) continue
+      const { col, aCol } = meta
+      selects.push(aliased(colSqlOrThrow(ctx, key), key))
       columns.push({
         key,
         label: aCol?.label ?? col.label,
@@ -296,10 +362,20 @@ export function compileBhql(
   if (orderParts.length === 0 && isAggregate && breakouts.length) orderParts.push('1 ASC')
   const orderBy = orderParts.length ? sql.raw(`ORDER BY ${orderParts.join(', ')}`) : null
 
+  // Each discovered FK relation → one LEFT JOIN. The remote table is FORCE-RLS,
+  // so under the caller's RLS transaction it is independently scoped to the
+  // tenant; a missing/foreign row simply yields NULL (LEFT JOIN).
+  const joinClauses = [...joins.values()].map((j) =>
+    sql.raw(
+      `LEFT JOIN "${j.table}" "${j.alias}" ON "${entity.table}"."${j.localCol}" = "${j.alias}"."${j.foreignCol}"`,
+    ),
+  )
+
   const parts: (SQL | null)[] = [
     sql.raw('SELECT'),
     sql.join(selects, sql.raw(', ')),
     sql.raw(`FROM "${entity.table}"`),
+    ...joinClauses,
     whereSql,
     groupBy,
     orderBy,

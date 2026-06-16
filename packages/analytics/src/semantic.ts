@@ -50,10 +50,26 @@ export type AnalyticsColumn = ReportEntityColumn & {
   canBinNumeric: boolean
 }
 
+/** A discovered foreign-key relationship — lets the builder/engine follow a FK
+ *  to a field on a related entity ("Journals → Site → Name") without a view.
+ *  Only RLS-safe targets are ever recorded (see discover.ts). */
+export type AnalyticsRelation = {
+  /** Local foreign-key column (physical name) pointing at another entity. */
+  via: string
+  /** Target entity key (table name) — guaranteed to be a discovered RLS-safe entity. */
+  target: string
+  /** Target column the FK references (usually 'id'). */
+  foreignColumn: string
+  /** Human label for the relationship, derived from the FK column name. */
+  label: string
+}
+
 export type AnalyticsEntity = Omit<ReportEntity, 'columns'> & {
   columns: AnalyticsColumn[]
   /** Featured top-level entity (vs an auto-discovered supporting sub-table). */
   primary?: boolean
+  /** Foreign-key relationships to other entities (single-hop, RLS-safe targets). */
+  relations?: AnalyticsRelation[]
 }
 
 /** Authored annotations keyed by entity → column key. Sparse on purpose: only

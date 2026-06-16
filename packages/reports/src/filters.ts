@@ -28,16 +28,26 @@ function joinParams(values: (string | number)[]): SQL {
   )
 }
 
+/** Default physical ref for a whitelisted column on the entity's own table. */
+function defaultColumnSql(entity: ReportEntity, column: string): SQL | null {
+  const col = entityColumnSql(entity, column)
+  return col ? sql.raw(`"${entity.table}"."${col}"`) : null
+}
+
 /** Compile one leaf clause. Returns null when the clause is invalid or a
  *  no-op (unknown column, missing value) — mirroring the v1 executor's
- *  skip-don't-throw behaviour so half-built filters degrade gracefully. */
+ *  skip-don't-throw behaviour so half-built filters degrade gracefully.
+ *
+ *  `resolveColumn` lets a caller (the BHQL engine) resolve a field that may
+ *  point through a foreign-key relation; when omitted, the column is the
+ *  entity's own whitelisted column. */
 export function compileRule(
   entity: ReportEntity,
   rule: { column: string; op: string; value?: unknown },
+  resolveColumn?: (column: string) => SQL | null,
 ): SQL | null {
-  const col = entityColumnSql(entity, rule.column)
-  if (!col) return null
-  const colSql = sql.raw(`"${entity.table}"."${col}"`)
+  const colSql = resolveColumn ? resolveColumn(rule.column) : defaultColumnSql(entity, rule.column)
+  if (!colSql) return null
   const v = rule.value
   switch (rule.op) {
     case 'eq':
@@ -105,7 +115,11 @@ export function compileFlatFilters(
 
 /** v2: nested and/or tree. Throws on absurd trees (depth/size caps) since
  *  those only arise from hand-crafted payloads, not the studio UI. */
-export function compileRuleGroup(entity: ReportEntity, group: ReportRuleGroup): SQL | null {
+export function compileRuleGroup(
+  entity: ReportEntity,
+  group: ReportRuleGroup,
+  resolveColumn?: (column: string) => SQL | null,
+): SQL | null {
   let ruleCount = 0
 
   function walk(g: ReportRuleGroup, depth: number): SQL | null {
@@ -116,7 +130,7 @@ export function compileRuleGroup(entity: ReportEntity, group: ReportRuleGroup): 
       if (++ruleCount > MAX_TREE_RULES) throw new Error('Filter tree too large')
       const compiled = isRuleGroup(r)
         ? walk(r, depth + 1)
-        : compileRule(entity, { column: r.field, op: r.op, value: r.value })
+        : compileRule(entity, { column: r.field, op: r.op, value: r.value }, resolveColumn)
       if (compiled) parts.push(compiled)
     }
     if (!parts.length) return null

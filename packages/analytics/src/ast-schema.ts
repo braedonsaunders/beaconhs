@@ -10,7 +10,12 @@
 // trusts a caller-supplied physical column name.
 
 import { z } from 'zod'
-import { REPORT_OPERATORS, entityColumn, type ReportEntity } from '@beaconhs/reports/entities'
+import {
+  REPORT_OPERATORS,
+  entityColumn,
+  type ReportEntity,
+  type ReportEntityColumn,
+} from '@beaconhs/reports/entities'
 import type { BhqlMeasure, BhqlQuery, BhqlStage } from '@beaconhs/db/schema'
 
 export class BhqlValidationError extends Error {
@@ -105,6 +110,29 @@ function fail(message: string): never {
   throw new BhqlValidationError(message)
 }
 
+/** Entities discovered with FK relations (the runtime shape of the entity map). */
+type EntityWithRelations = ReportEntity & {
+  relations?: { via: string; target: string; foreignColumn: string }[]
+}
+
+/** Resolve a field ref to its column. A ref shaped "<via>.<column>" follows the
+ *  foreign-key relation `<via>` to `<column>` on the related entity; relations
+ *  only ever target RLS-safe entities (see discover.ts), so this can never
+ *  resolve into a non-tenant-isolated table. Returns null when unresolvable. */
+function resolveField(
+  entity: ReportEntity,
+  entityMap: Record<string, ReportEntity>,
+  ref: string,
+): ReportEntityColumn | null {
+  const dot = ref.indexOf('.')
+  if (dot === -1) return entityColumn(entity, ref)
+  const via = ref.slice(0, dot)
+  const rel = (entity as EntityWithRelations).relations?.find((r) => r.via === via)
+  if (!rel) return null
+  const target = entityMap[rel.target]
+  return target ? entityColumn(target, ref.slice(dot + 1)) : null
+}
+
 function checkAlias(alias: string, what: string): void {
   if (!ALIAS_RE.test(alias)) fail(`Invalid ${what} alias "${alias}" (use lower_snake_case)`)
 }
@@ -128,13 +156,17 @@ function validateFilterDepth(group: unknown): void {
   walk(group, 1)
 }
 
-function validateMeasure(entity: ReportEntity, m: BhqlMeasure): void {
+function validateMeasure(
+  entity: ReportEntity,
+  entityMap: Record<string, ReportEntity>,
+  m: BhqlMeasure,
+): void {
   if (m.fn === 'count') {
     if (m.field) fail('count takes no field')
     return
   }
   if (!m.field) fail(`${m.fn} requires a field`)
-  const col = entityColumn(entity, m.field)
+  const col = resolveField(entity, entityMap, m.field)
   if (!col) fail(`Unknown field "${m.field}" on ${entity.key}`)
   if ((m.fn === 'sum' || m.fn === 'avg') && col.kind !== 'number') {
     fail(`${m.fn} requires a numeric field (got "${m.field}")`)
@@ -178,12 +210,13 @@ export function parseBhqlQuery(raw: unknown, entityMap: Record<string, ReportEnt
     aliases.add(m.alias)
   }
 
-  // Every referenced field resolves through the whitelist; bins are eligible.
+  // Every referenced field resolves through the whitelist (local column or a
+  // single-hop FK relation "<via>.<column>"); bins are eligible.
   for (const c of columns) {
-    if (!entityColumn(entity, c)) fail(`Unknown column "${c}" on ${stage.source}`)
+    if (!resolveField(entity, entityMap, c)) fail(`Unknown column "${c}" on ${stage.source}`)
   }
   for (const b of breakouts) {
-    const col = entityColumn(entity, b.field)
+    const col = resolveField(entity, entityMap, b.field)
     if (!col) fail(`Unknown field "${b.field}" on ${stage.source}`)
     if (b.bin?.kind === 'temporal' && !(col.kind === 'date' || col.kind === 'timestamp')) {
       fail(`Field "${b.field}" can't be bucketed by time`)
@@ -194,7 +227,7 @@ export function parseBhqlQuery(raw: unknown, entityMap: Record<string, ReportEnt
   }
   for (const m of baseMeasures) {
     const bm = m as BhqlMeasure
-    validateMeasure(entity, bm)
+    validateMeasure(entity, entityMap, bm)
     if (bm.filter) validateFilterDepth(bm.filter)
   }
   const baseAliases = new Set(baseMeasures.map((m) => m.alias))
