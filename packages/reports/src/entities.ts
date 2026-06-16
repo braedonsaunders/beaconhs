@@ -294,6 +294,12 @@ export const REPORT_OPERATORS: ReportOperatorMeta[] = [
     applicableKinds: ['date', 'timestamp'],
   },
   {
+    key: 'due_within_days',
+    label: 'due within next N days',
+    needsValue: 'one',
+    applicableKinds: ['date', 'timestamp'],
+  },
+  {
     key: 'since_today',
     label: 'is today',
     needsValue: 'none',

@@ -76,6 +76,9 @@ export const REPORT_FILTER_OPERATORS = [
   'is_not_null',
   'contains',
   'between_days_ago',
+  // Forward window: col on/before now + N days (includes overdue) — drives
+  // "expiring soon / upcoming inspection" reports.
+  'due_within_days',
   // Relative-date operators (no value) — anchored to the server clock at compile
   // time, so "this month" / "overdue" cards stay correct without a parameter.
   'since_today',

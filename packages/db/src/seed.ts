@@ -223,6 +223,341 @@ async function main() {
           category: 'incidents',
           queryKind: 'osha_300_log',
         },
+        // ----- Legacy BeaconHS report parity --------------------------------
+        // Faithful ports of the legacy Laravel app's on-demand + scheduled
+        // reports, expressed as custom-query definitions over the curated
+        // entities (training_matrix / skill_assignments / equipment / ppe /
+        // corrective_actions). The matrix views pre-compute coverage_status on
+        // a 90-day "expiring" window — matching the legacy reports exactly.
+        {
+          slug: 'legacy_training_cert_matrix',
+          kind: 'built_in',
+          name: 'Training — Certificate Matrix',
+          description:
+            'Every active person × course with the latest certificate status (valid / expiring / expired / missing), grouped by person. Mirrors the legacy Training Certificates Matrix.',
+          category: 'training',
+          queryKind: 'custom_query',
+          customQuery: {
+            entity: 'training_matrix',
+            mode: 'rows',
+            columns: [
+              'person_name',
+              'employee_no',
+              'course_code',
+              'course_name',
+              'completed_on',
+              'expires_on',
+              'coverage_status',
+            ],
+            groupBy: 'person_name',
+            sort: { column: 'person_name', direction: 'asc' },
+            chart: { type: 'donut', dimension: 'coverage_status', metric: 'count' },
+            limit: 10000,
+          },
+        },
+        {
+          slug: 'legacy_training_certificates',
+          kind: 'built_in',
+          name: 'Training — Certificates',
+          description:
+            'Held training certificates (valid, expiring, or expired — excludes never-trained), grouped by course. Mirrors the legacy Training Certificates listing.',
+          category: 'training',
+          queryKind: 'custom_query',
+          customQuery: {
+            entity: 'training_matrix',
+            mode: 'rows',
+            columns: [
+              'course_name',
+              'person_name',
+              'employee_no',
+              'completed_on',
+              'expires_on',
+              'coverage_status',
+            ],
+            filtersV2: {
+              combinator: 'and',
+              rules: [
+                { field: 'coverage_status', op: 'in', value: ['valid', 'expiring', 'expired'] },
+              ],
+            },
+            groupBy: 'course_name',
+            sort: { column: 'person_name', direction: 'asc' },
+            limit: 10000,
+          },
+        },
+        {
+          slug: 'legacy_training_expired',
+          kind: 'built_in',
+          name: 'Training — Expired & Upcoming',
+          description:
+            'Training certificates that are expired or expiring within 90 days, grouped by course. Mirrors the legacy Training Certificates Expired & Upcoming report.',
+          category: 'training',
+          queryKind: 'custom_query',
+          customQuery: {
+            entity: 'training_matrix',
+            mode: 'rows',
+            columns: ['person_name', 'employee_no', 'course_name', 'expires_on', 'coverage_status'],
+            filtersV2: {
+              combinator: 'and',
+              rules: [{ field: 'coverage_status', op: 'in', value: ['expired', 'expiring'] }],
+            },
+            groupBy: 'course_name',
+            sort: { column: 'expires_on', direction: 'asc' },
+            limit: 5000,
+          },
+        },
+        {
+          slug: 'legacy_training_missing',
+          kind: 'built_in',
+          name: 'Training — Missing',
+          description:
+            'People who are missing a required course entirely or whose certificate has expired, grouped by course. Mirrors the legacy Training Certificates Missing report.',
+          category: 'training',
+          queryKind: 'custom_query',
+          customQuery: {
+            entity: 'training_matrix',
+            mode: 'rows',
+            columns: ['person_name', 'employee_no', 'course_name', 'expires_on', 'coverage_status'],
+            filtersV2: {
+              combinator: 'and',
+              rules: [{ field: 'coverage_status', op: 'in', value: ['missing', 'expired'] }],
+            },
+            groupBy: 'course_name',
+            sort: { column: 'person_name', direction: 'asc' },
+            limit: 10000,
+          },
+        },
+        {
+          slug: 'legacy_skills_matrix',
+          kind: 'built_in',
+          name: 'Skills — Matrix',
+          description:
+            'Externally-issued skills & certifications per person — authority, certificate, granted/expiry, and current status — grouped by issuing authority. Mirrors the legacy Training Skills Matrix.',
+          category: 'training',
+          queryKind: 'custom_query',
+          customQuery: {
+            entity: 'skill_assignments',
+            mode: 'rows',
+            columns: [
+              'last_name',
+              'first_name',
+              'employee_no',
+              'trade',
+              'authority',
+              'certification_name',
+              'granted_on',
+              'expires_on',
+              'status',
+            ],
+            groupBy: 'authority',
+            sort: { column: 'last_name', direction: 'asc' },
+            chart: { type: 'donut', dimension: 'status', metric: 'count' },
+            limit: 5000,
+          },
+        },
+        {
+          slug: 'legacy_skills_expired',
+          kind: 'built_in',
+          name: 'Skills — Expired & Upcoming',
+          description:
+            'Skills & certifications expiring within 90 days or already expired, grouped by certification. Mirrors the legacy Training Skills Expired & Upcoming report.',
+          category: 'training',
+          queryKind: 'custom_query',
+          customQuery: {
+            entity: 'skill_assignments',
+            mode: 'rows',
+            columns: [
+              'last_name',
+              'first_name',
+              'employee_no',
+              'authority',
+              'certification_name',
+              'expires_on',
+              'status',
+            ],
+            filtersV2: {
+              combinator: 'and',
+              rules: [{ field: 'expires_on', op: 'due_within_days', value: 90 }],
+            },
+            groupBy: 'certification_name',
+            sort: { column: 'expires_on', direction: 'asc' },
+            limit: 5000,
+          },
+        },
+        {
+          slug: 'legacy_skills_cwb',
+          kind: 'built_in',
+          name: 'Skills — CWB (Welding)',
+          description:
+            'Canadian Welding Bureau qualifications roster — qualified people with certificate, granted/expiry, and status. Mirrors the legacy CWB report (the W47 Type/Process/Position/Level fields live on each skill record).',
+          category: 'training',
+          queryKind: 'custom_query',
+          customQuery: {
+            entity: 'skill_assignments',
+            mode: 'rows',
+            columns: [
+              'last_name',
+              'first_name',
+              'employee_no',
+              'trade',
+              'certification_code',
+              'certification_name',
+              'granted_on',
+              'expires_on',
+              'status',
+            ],
+            filtersV2: {
+              combinator: 'and',
+              rules: [{ field: 'authority', op: 'eq', value: 'Canadian Welding Bureau' }],
+            },
+            sort: { column: 'last_name', direction: 'asc' },
+            limit: 5000,
+          },
+        },
+        {
+          slug: 'legacy_corrective_list',
+          kind: 'built_in',
+          name: 'Corrective Actions — List',
+          description:
+            'Every corrective action across all statuses, grouped by status and sorted by due date. Mirrors the legacy Corrective Actions List report.',
+          category: 'corrective_actions',
+          queryKind: 'custom_query',
+          customQuery: {
+            entity: 'corrective_actions',
+            mode: 'rows',
+            columns: [
+              'reference',
+              'title',
+              'severity',
+              'status',
+              'source',
+              'assigned_on',
+              'due_on',
+            ],
+            groupBy: 'status',
+            sort: { column: 'due_on', direction: 'desc' },
+            chart: { type: 'donut', dimension: 'status', metric: 'count' },
+            limit: 5000,
+          },
+        },
+        {
+          slug: 'legacy_equipment_fleet',
+          kind: 'built_in',
+          name: 'Equipment — Fleet',
+          description:
+            'All in-service equipment assets with tag, serial, status, and current site. Mirrors the legacy Equipment Fleet listing (broadened from vehicles/trailers to all in-service assets).',
+          category: 'equipment',
+          queryKind: 'custom_query',
+          customQuery: {
+            entity: 'equipment',
+            mode: 'rows',
+            columns: ['asset_tag', 'name', 'serial_number', 'status', 'current_site_org_unit_id'],
+            filtersV2: {
+              combinator: 'and',
+              rules: [{ field: 'status', op: 'eq', value: 'in_service' }],
+            },
+            sort: { column: 'asset_tag', direction: 'asc' },
+            limit: 5000,
+          },
+        },
+        {
+          slug: 'legacy_equipment_inspections',
+          kind: 'built_in',
+          name: 'Equipment — Upcoming & Overdue Inspections',
+          description:
+            'Equipment whose next annual inspection is overdue or due within 30 days, soonest first. Mirrors the legacy Equipment Upcoming Inspections report.',
+          category: 'equipment',
+          queryKind: 'custom_query',
+          customQuery: {
+            entity: 'equipment',
+            mode: 'rows',
+            columns: ['asset_tag', 'name', 'status', 'next_annual_inspection_due'],
+            filtersV2: {
+              combinator: 'and',
+              rules: [
+                { field: 'status', op: 'eq', value: 'in_service' },
+                { field: 'next_annual_inspection_due', op: 'gte', value: '2000-01-01' },
+                { field: 'next_annual_inspection_due', op: 'due_within_days', value: 30 },
+              ],
+            },
+            sort: { column: 'next_annual_inspection_due', direction: 'asc' },
+            limit: 5000,
+          },
+        },
+        {
+          slug: 'legacy_equipment_oilchange',
+          kind: 'built_in',
+          name: 'Equipment — Upcoming & Overdue Oil Changes',
+          description:
+            'Equipment whose next oil change is overdue or due within 30 days, soonest first. Mirrors the legacy Equipment Upcoming Oil Changes report.',
+          category: 'equipment',
+          queryKind: 'custom_query',
+          customQuery: {
+            entity: 'equipment',
+            mode: 'rows',
+            columns: ['asset_tag', 'name', 'status', 'next_oil_change_due'],
+            filtersV2: {
+              combinator: 'and',
+              rules: [
+                { field: 'status', op: 'eq', value: 'in_service' },
+                { field: 'next_oil_change_due', op: 'gte', value: '2000-01-01' },
+                { field: 'next_oil_change_due', op: 'due_within_days', value: 30 },
+              ],
+            },
+            sort: { column: 'next_oil_change_due', direction: 'asc' },
+            limit: 5000,
+          },
+        },
+        {
+          slug: 'legacy_ppe_list',
+          kind: 'built_in',
+          name: 'PPE — List',
+          description:
+            'All active PPE items (issued or in stock) with serial, size, status, and inspection dates. Mirrors the legacy PPE List report.',
+          category: 'ppe',
+          queryKind: 'custom_query',
+          customQuery: {
+            entity: 'ppe',
+            mode: 'rows',
+            columns: [
+              'serial_number',
+              'size',
+              'status',
+              'next_inspection_due',
+              'next_annual_inspection_due',
+              'expires_on',
+            ],
+            filtersV2: {
+              combinator: 'and',
+              rules: [{ field: 'status', op: 'in', value: ['issued', 'in_stock'] }],
+            },
+            sort: { column: 'serial_number', direction: 'asc' },
+            limit: 5000,
+          },
+        },
+        {
+          slug: 'legacy_ppe_expired',
+          kind: 'built_in',
+          name: 'PPE — Expired & Upcoming',
+          description:
+            'Active PPE whose annual inspection is overdue or due within 90 days, soonest first. Mirrors the legacy PPE Expired & Upcoming report.',
+          category: 'ppe',
+          queryKind: 'custom_query',
+          customQuery: {
+            entity: 'ppe',
+            mode: 'rows',
+            columns: ['serial_number', 'size', 'status', 'next_annual_inspection_due'],
+            filtersV2: {
+              combinator: 'and',
+              rules: [
+                { field: 'status', op: 'in', value: ['issued', 'in_stock'] },
+                { field: 'next_annual_inspection_due', op: 'due_within_days', value: 90 },
+              ],
+            },
+            sort: { column: 'next_annual_inspection_due', direction: 'asc' },
+            limit: 5000,
+          },
+        },
       ])
       .onConflictDoNothing({ target: reportDefinitions.slug })
   })

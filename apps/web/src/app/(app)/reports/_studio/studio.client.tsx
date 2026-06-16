@@ -874,7 +874,7 @@ function toEngineGroup(group: RuleGroupType, entity: ReportEntity): ReportRuleGr
         .map((x) => x.trim())
         .filter(Boolean)
     }
-    if (op === 'between_days_ago') {
+    if (op === 'between_days_ago' || op === 'due_within_days') {
       const n = Number(s)
       return Number.isFinite(n) ? n : 30
     }

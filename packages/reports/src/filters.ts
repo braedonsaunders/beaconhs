@@ -96,6 +96,14 @@ export function compileRule(
       const fromDate = new Date(Date.now() - days * 24 * 3600 * 1000)
       return sql`${colSql} >= ${fromDate.toISOString()}`
     }
+    // Forward window: due on/before now + N days — INCLUDES already-overdue
+    // rows (col < now). Drives "expiring / upcoming inspection" reports.
+    case 'due_within_days': {
+      const days = Number(v ?? 30)
+      if (!Number.isFinite(days)) return null
+      const toDate = new Date(Date.now() + days * 24 * 3600 * 1000)
+      return sql`${colSql} <= ${toDate.toISOString()}`
+    }
     // Relative-date ops compile to pure SQL (no bound param) so they re-anchor to
     // the DB clock on every run. date_trunc keeps them index-friendly.
     case 'since_today':

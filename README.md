@@ -44,14 +44,8 @@ construction — crews spread across sites, equipment that moves, certifications
 that expire, permits that have to be signed before anyone enters a space, and an
 auditor who will eventually ask for the paper trail.
 
-It began as a ground-up rewrite of a long-running production safety system and is
-now open source: **self-host it, extend it, or run it as the backbone of your
-safety program.** Everything below is built and running in the app today.
-
-> [!NOTE]
-> BeaconHS is under active development ahead of its first tagged release. The
-> module surface is complete and operational; some APIs and schema may still
-> shift before `v1.0`.
+BeaconHS is open source — **self-host it, extend it, or run it as the backbone of
+your safety program.**
 
 ## Why BeaconHS is different
 
