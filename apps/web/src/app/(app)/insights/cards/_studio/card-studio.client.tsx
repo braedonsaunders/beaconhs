@@ -39,7 +39,7 @@ import { createCard, generateCard, previewCard, updateCard } from '../_actions'
 type Mode = 'rows' | 'summarize'
 type FilterOp = 'eq' | 'neq' | 'contains' | 'gte' | 'lte' | 'in' | 'is_null' | 'is_not_null'
 type FilterRow = { field: string; op: FilterOp; value: string }
-type BreakoutRow = { field: string; bin?: BhqlBin }
+type BreakoutRow = { field: string; bin?: BhqlBin; expr?: BhqlExpr }
 type MeasureWhere = { field: string; op: FilterOp; value: string }
 type MeasureRow = {
   fn: BhqlAggFn
@@ -202,12 +202,12 @@ export function CardStudio({
     // Reserve passthrough (expression) aliases so generated ones don't collide.
     for (const eb of extraBreakouts) used.add(eb.alias)
     for (const ea of extraAggs) used.add(ea.alias)
-    const bks: BhqlBreakout[] = [
-      ...breakouts
-        .filter((b) => b.field)
-        .map((b) => ({ field: b.field, alias: uniq(b.field), bin: b.bin })),
-      ...extraBreakouts,
-    ]
+    const bks: BhqlBreakout[] = []
+    for (const b of breakouts) {
+      if (b.expr) bks.push({ expr: b.expr, alias: uniq('col') })
+      else if (b.field) bks.push({ field: b.field, alias: uniq(b.field), bin: b.bin })
+    }
+    bks.push(...extraBreakouts)
     const whereToGroup = (w?: MeasureWhere): ReportRuleGroup | undefined => {
       if (!w || !w.field) return undefined
       const needsValue = w.op !== 'is_null' && w.op !== 'is_not_null'
@@ -817,9 +817,63 @@ function BreakoutEditor({
   row: BreakoutRow
   onChange: (next: BreakoutRow) => void
 }) {
+  const labelForField = (key: string) => {
+    const f = fields.find((x) => x.value === key)
+    return f ? exprLabel(f) : key
+  }
+  const resolveColumn = (label: string) => {
+    const lc = label.trim().toLowerCase()
+    return (
+      fields.find((x) => x.label.toLowerCase() === lc || exprLabel(x).toLowerCase() === lc)
+        ?.value ?? null
+    )
+  }
+  const [exprText, setExprText] = useState(() =>
+    row.expr ? serializeExpression(row.expr, { labelForField }) : '',
+  )
+
+  // Computed-column (formula) group-by — e.g. a CASE age bucket.
+  if (row.expr !== undefined) {
+    return (
+      <div className="space-y-1">
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] font-semibold tracking-wide text-violet-500 uppercase">
+            ƒx Custom column
+          </span>
+          <button
+            type="button"
+            onClick={() => onChange({ field: fields[0]?.value ?? '' })}
+            className="text-[11px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+          >
+            ← simple field
+          </button>
+        </div>
+        <ExpressionField
+          value={exprText}
+          fields={fields}
+          placeholder='case([Age] < 7, "0-6 days", "older")'
+          onChange={(t) => {
+            setExprText(t)
+            const r = parseExpression(t, { resolveColumn })
+            if (r.ok) onChange({ ...row, expr: r.expr })
+          }}
+        />
+      </div>
+    )
+  }
+
   const col = fieldCol(fields, row.field)
   return (
     <div className="space-y-1">
+      <button
+        type="button"
+        onClick={() =>
+          onChange({ field: '', expr: { ex: 'field', field: fields[0]?.value ?? '' } })
+        }
+        className="text-[11px] font-medium text-violet-600 hover:text-violet-700 dark:text-violet-400"
+      >
+        ƒx Custom column
+      </button>
       <select
         value={row.field}
         onChange={(e) => onChange({ ...row, field: e.target.value, bin: undefined })}
@@ -1174,12 +1228,12 @@ function decodeQuery(query: BhqlQuery | null): {
       })
     }
   }
-  // Field-based breakouts map to a structured row; computed-expression breakouts
-  // are carried through verbatim (the structured rail can't yet edit them).
-  const breakouts = (stage.breakouts ?? [])
-    .filter((b) => b.field != null)
-    .map((b) => ({ field: b.field!, bin: b.bin }))
-  const extraBreakouts = (stage.breakouts ?? []).filter((b) => b.expr != null)
+  // Field breakouts → a structured row; computed-expression breakouts → an
+  // editable formula row (field left blank, expr carried for the editor).
+  const breakouts: BreakoutRow[] = (stage.breakouts ?? []).map((b) =>
+    b.expr ? { field: '', expr: b.expr } : { field: b.field ?? '', bin: b.bin },
+  )
+  const extraBreakouts: BhqlBreakout[] = []
 
   // Reconstruct measures. A calc (ratio) measure is re-hydrated into ONE row —
   // fn/field/where from its numerator base, denFn/denField/denWhere from its
