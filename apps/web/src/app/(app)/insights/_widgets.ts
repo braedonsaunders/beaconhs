@@ -385,4 +385,213 @@ export const BUILTIN_QUERIES: Record<
       ],
     },
   },
+  // Journals grouped by SITE NAME — follows the site_org_unit_id FK to org_units.
+  'journal-by-site': {
+    vizType: 'bar',
+    query: {
+      version: 'bhql/1',
+      display: 'table',
+      pivot: null,
+      stages: [
+        {
+          source: 'journal_entries',
+          breakouts: [{ field: 'site_org_unit_id.name', alias: 'site' }],
+          aggregations: [{ fn: 'count', alias: 'count' }],
+          orderBy: [{ ref: 'count', direction: 'desc' }],
+          limit: 12,
+        },
+      ],
+    },
+  },
+  // Top tags — a plain group-by on the normalized journal_entry_tags table.
+  'journal-top-topics': {
+    vizType: 'bar',
+    query: {
+      version: 'bhql/1',
+      display: 'table',
+      pivot: null,
+      stages: [
+        {
+          source: 'journal_entry_tags',
+          breakouts: [{ field: 'tag', alias: 'tag' }],
+          aggregations: [{ fn: 'count', alias: 'count' }],
+          orderBy: [{ ref: 'count', direction: 'desc' }],
+          limit: 12,
+        },
+      ],
+    },
+  },
+  'journal-people': {
+    vizType: 'scalar',
+    query: {
+      version: 'bhql/1',
+      display: 'table',
+      pivot: null,
+      stages: [
+        {
+          source: 'journal_entries',
+          aggregations: [{ fn: 'count_distinct', field: 'person_id', alias: 'count' }],
+        },
+      ],
+    },
+  },
+  'chart-top-sites': {
+    vizType: 'bar',
+    query: {
+      version: 'bhql/1',
+      display: 'table',
+      pivot: null,
+      stages: [
+        {
+          source: 'incidents',
+          filter: {
+            combinator: 'and',
+            rules: [{ field: 'occurred_at', op: 'between_days_ago', value: 90 }],
+          },
+          breakouts: [{ field: 'site_org_unit_id.name', alias: 'site' }],
+          aggregations: [{ fn: 'count', alias: 'count' }],
+          orderBy: [{ ref: 'count', direction: 'desc' }],
+          limit: 5,
+        },
+      ],
+    },
+  },
+  'kpi-overdue-cas': {
+    vizType: 'scalar',
+    query: {
+      version: 'bhql/1',
+      display: 'table',
+      pivot: null,
+      stages: [
+        {
+          source: 'corrective_actions',
+          filter: {
+            combinator: 'and',
+            rules: [
+              { field: 'closed_at', op: 'is_null' },
+              { field: 'due_on', op: 'before_now' },
+            ],
+          },
+          aggregations: [{ fn: 'count', alias: 'count' }],
+        },
+      ],
+    },
+  },
+  'kpi-submissions': {
+    vizType: 'scalar',
+    query: {
+      version: 'bhql/1',
+      display: 'table',
+      pivot: null,
+      stages: [
+        {
+          source: 'form_responses',
+          filter: { combinator: 'and', rules: [{ field: 'submitted_at', op: 'since_today' }] },
+          aggregations: [{ fn: 'count', alias: 'count' }],
+        },
+      ],
+    },
+  },
+  'kpi-inspections': {
+    vizType: 'scalar',
+    query: {
+      version: 'bhql/1',
+      display: 'table',
+      pivot: null,
+      stages: [
+        {
+          source: 'inspection_records',
+          filter: {
+            combinator: 'and',
+            rules: [
+              { field: 'occurred_at', op: 'this_month' },
+              { field: 'status', op: 'in', value: ['submitted', 'closed'] },
+            ],
+          },
+          aggregations: [{ fn: 'count', alias: 'count' }],
+        },
+      ],
+    },
+  },
+  'kpi-people': {
+    vizType: 'scalar',
+    query: {
+      version: 'bhql/1',
+      display: 'table',
+      pivot: null,
+      stages: [
+        {
+          source: 'people',
+          filter: { combinator: 'and', rules: [{ field: 'status', op: 'eq', value: 'active' }] },
+          aggregations: [{ fn: 'count', alias: 'count' }],
+        },
+      ],
+    },
+  },
+  'kpi-ppe-issues': {
+    vizType: 'scalar',
+    query: {
+      version: 'bhql/1',
+      display: 'table',
+      pivot: null,
+      stages: [
+        {
+          source: 'ppe_issue_reports',
+          filter: { combinator: 'and', rules: [{ field: 'status', op: 'eq', value: 'open' }] },
+          aggregations: [{ fn: 'count', alias: 'count' }],
+        },
+      ],
+    },
+  },
+  'kpi-lw-active': {
+    vizType: 'scalar',
+    query: {
+      version: 'bhql/1',
+      display: 'table',
+      pivot: null,
+      stages: [
+        {
+          source: 'form_responses',
+          filter: {
+            combinator: 'and',
+            rules: [{ field: 'monitor_status', op: 'eq', value: 'active' }],
+          },
+          aggregations: [{ fn: 'count', alias: 'count' }],
+        },
+      ],
+    },
+  },
+  // Training compliance % — conditional count of completed ÷ total, ×100.
+  'kpi-training-compliance': {
+    vizType: 'scalar',
+    vizSettings: { valueField: 'pct', decimals: 0 },
+    query: {
+      version: 'bhql/1',
+      display: 'table',
+      pivot: null,
+      stages: [
+        {
+          source: 'training_audience_assignment_records',
+          aggregations: [
+            { fn: 'count', alias: 'total' },
+            {
+              fn: 'count',
+              alias: 'completed',
+              filter: {
+                combinator: 'and',
+                rules: [{ field: 'status', op: 'eq', value: 'completed' }],
+              },
+            },
+            {
+              kind: 'calc',
+              alias: 'pct',
+              numerator: 'completed',
+              denominator: 'total',
+              multiplier: 100,
+            },
+          ],
+        },
+      ],
+    },
+  },
 }

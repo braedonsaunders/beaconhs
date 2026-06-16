@@ -74,6 +74,13 @@ export const REPORT_FILTER_OPERATORS = [
   'is_not_null',
   'contains',
   'between_days_ago',
+  // Relative-date operators (no value) -- anchored to the server clock at
+  // compile time, so this-month / overdue cards stay correct without a param.
+  'since_today',
+  'this_week',
+  'this_month',
+  'this_year',
+  'before_now',
 ] as const
 export type ReportFilterOperator = (typeof REPORT_FILTER_OPERATORS)[number]
 

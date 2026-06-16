@@ -96,6 +96,16 @@ export function compileRule(
       const fromDate = new Date(Date.now() - days * 24 * 3600 * 1000)
       return sql`${colSql} >= ${fromDate.toISOString()}`
     }
+    case 'since_today':
+      return sql.join([colSql, sql.raw(" >= date_trunc('day', now())")], sql.raw(''))
+    case 'this_week':
+      return sql.join([colSql, sql.raw(" >= date_trunc('week', now())")], sql.raw(''))
+    case 'this_month':
+      return sql.join([colSql, sql.raw(" >= date_trunc('month', now())")], sql.raw(''))
+    case 'this_year':
+      return sql.join([colSql, sql.raw(" >= date_trunc('year', now())")], sql.raw(''))
+    case 'before_now':
+      return sql.join([colSql, sql.raw(' < now()')], sql.raw(''))
     default:
       return null
   }

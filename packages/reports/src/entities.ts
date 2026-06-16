@@ -293,6 +293,36 @@ export const REPORT_OPERATORS: ReportOperatorMeta[] = [
     needsValue: 'one',
     applicableKinds: ['date', 'timestamp'],
   },
+  {
+    key: 'since_today',
+    label: 'is today',
+    needsValue: 'none',
+    applicableKinds: ['date', 'timestamp'],
+  },
+  {
+    key: 'this_week',
+    label: 'is this week',
+    needsValue: 'none',
+    applicableKinds: ['date', 'timestamp'],
+  },
+  {
+    key: 'this_month',
+    label: 'is this month',
+    needsValue: 'none',
+    applicableKinds: ['date', 'timestamp'],
+  },
+  {
+    key: 'this_year',
+    label: 'is this year',
+    needsValue: 'none',
+    applicableKinds: ['date', 'timestamp'],
+  },
+  {
+    key: 'before_now',
+    label: 'is in the past (overdue)',
+    needsValue: 'none',
+    applicableKinds: ['date', 'timestamp'],
+  },
 ]
 
 export function operatorsForKind(kind: ReportColumnKind): ReportOperatorMeta[] {
