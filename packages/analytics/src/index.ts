@@ -11,6 +11,7 @@
 export * from './result'
 export * from './semantic'
 export * from './ast-schema'
+export * from './expr-parser'
 export * from './viz/registry'
 export * from './viz/chart-spec'
 export * from './viz/conditional-format'
