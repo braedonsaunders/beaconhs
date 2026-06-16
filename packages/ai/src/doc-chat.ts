@@ -27,13 +27,20 @@ export function streamDocChat(
   const model = getModel(config, 'smart')
   if (!model) throw new AIDisabledError()
 
+  // Org identity rides on the config (see getTenantAiConfig). Policies need a
+  // stronger instruction than the generic orgContextLine, so it's bespoke here.
+  const orgName = config?.org?.name?.trim()
+  const orgContext = orgName
+    ? `\n\nThis document is being authored for the organization "${orgName}". Use this exact name wherever the document refers to the organization (e.g. "${orgName} is committed to…", "It is ${orgName}'s policy that…") — do NOT use a placeholder for the company/organization name. Reserve [PLACEHOLDER] only for specifics you genuinely don't have: named individuals or role-holders, site addresses, effective/revision dates, and specific figures.`
+    : ''
+
   const docContext = args.docText?.trim()
     ? `\n\nFor context, the document currently contains:\n"""\n${args.docText.slice(0, 8000)}\n"""`
     : '\n\nThe document is currently empty.'
 
   const result = streamText({
     model,
-    system: DOC_SYSTEM + docContext,
+    system: DOC_SYSTEM + orgContext + docContext,
     messages: args.messages.slice(-20).map((m) => ({ role: m.role, content: m.content })),
     temperature: 0.5,
   })

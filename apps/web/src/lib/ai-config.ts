@@ -32,22 +32,23 @@ function normProvider(p: string | undefined): AiProvider {
   return isAiProvider(p) ? p : 'anthropic'
 }
 
-async function readAi(tenantId: string): Promise<RawAi> {
+async function readAi(tenantId: string): Promise<{ ai: RawAi; orgName: string | null }> {
   return db.transaction(async (tx) => {
     await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
     const [t] = await tx
-      .select({ settings: tenants.settings })
+      .select({ settings: tenants.settings, name: tenants.name })
       .from(tenants)
       .where(eq(tenants.id, tenantId))
       .limit(1)
-    const ai = (t?.settings as Record<string, unknown> | undefined)?.ai
-    return (ai && typeof ai === 'object' ? ai : {}) as RawAi
+    const raw = (t?.settings as Record<string, unknown> | undefined)?.ai
+    const ai = (raw && typeof raw === 'object' ? raw : {}) as RawAi
+    return { ai, orgName: t?.name ?? null }
   })
 }
 
 /** UI-facing settings (no secret material). */
 export async function getTenantAiSettings(ctx: RequestContext): Promise<TenantAiSettings> {
-  const ai = await readAi(ctx.tenantId)
+  const { ai } = await readAi(ctx.tenantId)
   return {
     enabled: ai.enabled !== false,
     provider: normProvider(ai.provider),
@@ -60,7 +61,7 @@ export async function getTenantAiSettings(ctx: RequestContext): Promise<TenantAi
 
 /** Runtime config (decrypted key) for AI calls, or null when disabled/unset. */
 export async function getTenantAiConfig(ctx: RequestContext): Promise<AiConfig | null> {
-  const ai = await readAi(ctx.tenantId)
+  const { ai, orgName } = await readAi(ctx.tenantId)
   if (ai.enabled === false) return null
   if (!ai.keyCiphertext || !ai.keyNonce) return null
   const apiKey = decryptSecret({ ciphertext: ai.keyCiphertext, nonce: ai.keyNonce })
@@ -71,6 +72,10 @@ export async function getTenantAiConfig(ctx: RequestContext): Promise<AiConfig |
     modelFast: ai.modelFast || null,
     modelSmart: ai.modelSmart || null,
     baseUrl: ai.baseUrl || null,
+    // Org identity travels with the config so every AI call (policies, journal
+    // writing, Builder/Insights generation) can ground content in the real org
+    // name instead of [PLACEHOLDER]. See orgContextLine in @beaconhs/ai.
+    org: orgName ? { name: orgName } : null,
   }
 }
 

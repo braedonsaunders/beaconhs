@@ -2,7 +2,7 @@
 
 import { streamText } from 'ai'
 import { AIDisabledError, getModel, type AiConfig } from './client'
-import { JOURNAL_SYSTEM } from './prompts'
+import { JOURNAL_SYSTEM, orgContextLine } from './prompts'
 
 export type WritingMode =
   | 'tidy'
@@ -62,7 +62,7 @@ export function streamWritingAssist(
 
   const result = streamText({
     model,
-    system: JOURNAL_SYSTEM,
+    system: JOURNAL_SYSTEM + orgContextLine(config?.org),
     prompt: `${instruction}${context}\n\n---\n${args.text}`,
     temperature: 0.4,
   })

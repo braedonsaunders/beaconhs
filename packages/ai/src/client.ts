@@ -30,6 +30,13 @@ export type AiConfig = {
    * named compatible providers it is an optional override of the built-in URL.
    */
   baseUrl?: string | null
+  /**
+   * Organization (tenant) identity for prompt grounding, so generated content
+   * uses the real org name instead of a placeholder. Populated by
+   * `getTenantAiConfig`; content-generation paths inject it into the system
+   * prompt, analysis/vision paths ignore it.
+   */
+  org?: { name: string } | null
 }
 
 // How a provider's language model is constructed. The OpenAI-compatible kind

@@ -8,6 +8,7 @@
 
 import { generateText } from 'ai'
 import { getModel, type AiConfig, type ModelTier } from './client'
+import { orgContextLine } from './prompts'
 
 export async function runBuilderPrompt(
   config: AiConfig | null | undefined,
@@ -18,7 +19,7 @@ export async function runBuilderPrompt(
   try {
     const { text } = await generateText({
       model,
-      system: args.system,
+      system: args.system + orgContextLine(config?.org),
       prompt: args.prompt,
     })
     return text
