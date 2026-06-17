@@ -131,7 +131,12 @@ export function CaHeaderActions({
               onClick={() => setOpen(false)}
             />
             <div className="fixed inset-x-3 bottom-3 z-50 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
-              <Link href={pdfHref as any} target="_blank" className={menuItem} onClick={() => setOpen(false)}>
+              <Link
+                href={pdfHref as any}
+                target="_blank"
+                className={menuItem}
+                onClick={() => setOpen(false)}
+              >
                 <FileText size={15} /> PDF
               </Link>
               <Link

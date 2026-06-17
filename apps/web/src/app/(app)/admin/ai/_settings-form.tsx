@@ -282,7 +282,8 @@ export function AiSettingsForm({
             </span>
             <span className="mt-0.5 block text-xs text-slate-400">
               When a journal is submitted, generate a short summary and suggested tags in the
-              background. Keeps logs categorised without workers doing it themselves. Requires a key.
+              background. Keeps logs categorised without workers doing it themselves. Requires a
+              key.
             </span>
           </span>
         </label>

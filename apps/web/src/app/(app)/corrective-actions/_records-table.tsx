@@ -79,8 +79,7 @@ export function RecordsTable({
       {/* Phones: tappable cards (bulk-select via the leading checkbox). */}
       <MobileCardList>
         {rows.map((r) => {
-          const overdue =
-            r.dueOn && r.dueOn < today && !['closed', 'cancelled'].includes(r.status)
+          const overdue = r.dueOn && r.dueOn < today && !['closed', 'cancelled'].includes(r.status)
           return (
             <ListCard
               key={r.id}

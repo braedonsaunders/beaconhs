@@ -66,7 +66,12 @@ export function PersonDrawer({
   open: boolean
   closeHref: string
   incidentId: string
-  defaults?: { id: string; personId: string | null; personNameText: string | null; role: string | null }
+  defaults?: {
+    id: string
+    personId: string | null
+    personNameText: string | null
+    role: string | null
+  }
   action: PersonAction
   mode: 'create' | 'edit'
   people: Person[]

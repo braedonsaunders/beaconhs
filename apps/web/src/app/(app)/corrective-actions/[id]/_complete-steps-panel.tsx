@@ -38,7 +38,9 @@ const KIND_META: Record<
 export function CompleteStepsTimeline({ steps }: { steps: CompleteStep[] }) {
   return (
     <div>
-      <div className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">Timeline</div>
+      <div className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
+        Timeline
+      </div>
       {steps.length === 0 ? (
         <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">No steps recorded.</p>
       ) : (

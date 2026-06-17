@@ -94,7 +94,10 @@ export function DocumentsRecordsTable({
                   }
                 >
                   {r.type.color ? (
-                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: r.type.color }} />
+                    <span
+                      className="h-2 w-2 rounded-full"
+                      style={{ backgroundColor: r.type.color }}
+                    />
                   ) : null}
                   {r.type.name}
                 </span>

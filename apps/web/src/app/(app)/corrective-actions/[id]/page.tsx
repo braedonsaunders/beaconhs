@@ -336,7 +336,10 @@ export default async function CorrectiveActionPage({
               >
                 {ca.severity}
               </Badge>
-              <Badge variant={ca.status === 'closed' ? 'success' : 'warning'} className="capitalize">
+              <Badge
+                variant={ca.status === 'closed' ? 'success' : 'warning'}
+                className="capitalize"
+              >
                 {ca.status.replace(/_/g, ' ')}
               </Badge>
               {locked ? (
@@ -372,8 +375,8 @@ export default async function CorrectiveActionPage({
           <Alert variant="warning">
             <AlertTitle>This action is locked</AlertTitle>
             <AlertDescription>
-              Closed on {ca.closedAt ? new Date(ca.closedAt).toLocaleDateString() : '—'}. Reopen from
-              the header to edit.
+              Closed on {ca.closedAt ? new Date(ca.closedAt).toLocaleDateString() : '—'}. Reopen
+              from the header to edit.
             </AlertDescription>
           </Alert>
         ) : ca.verificationRequired && !ca.verifiedAt ? (
@@ -665,7 +668,10 @@ export default async function CorrectiveActionPage({
             defaultOpen={false}
           >
             {activity.length === 0 ? (
-              <EmptyState title="No activity yet" description="Edits and status changes show up here." />
+              <EmptyState
+                title="No activity yet"
+                description="Edits and status changes show up here."
+              />
             ) : (
               <ActivityFeed entries={activity} />
             )}

@@ -598,7 +598,7 @@ export function LiveRichText({
             <span className="text-slate-400 dark:text-slate-500">{placeholder}</span>
           ) : (
             <div
-              className="prose prose-sm prose-slate max-w-none dark:prose-invert"
+              className="prose prose-sm prose-slate dark:prose-invert max-w-none"
               dangerouslySetInnerHTML={{ __html: value }}
             />
           )}

@@ -143,12 +143,12 @@ export default async function DepartmentsPage({
                     {d.memberCount > 0 ? (
                       <Link
                         href={`/people?department=${d.id}` as any}
-                        className="tabular-nums text-slate-600 hover:underline dark:text-slate-300"
+                        className="text-slate-600 tabular-nums hover:underline dark:text-slate-300"
                       >
                         {d.memberCount}
                       </Link>
                     ) : (
-                      <span className="tabular-nums text-slate-400">0</span>
+                      <span className="text-slate-400 tabular-nums">0</span>
                     )}
                   </TableCell>
                   <TableCell className="text-right">

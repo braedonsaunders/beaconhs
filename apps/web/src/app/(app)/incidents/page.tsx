@@ -130,7 +130,7 @@ export default async function IncidentsPage({
 
   const involvedByIncident = new Map<string, string[]>()
   for (const r of involved) {
-    const name = r.firstName ? `${r.lastName}, ${r.firstName}` : (r.nameText?.trim() || null)
+    const name = r.firstName ? `${r.lastName}, ${r.firstName}` : r.nameText?.trim() || null
     if (!name) continue
     const list = involvedByIncident.get(r.incidentId) ?? []
     list.push(name)

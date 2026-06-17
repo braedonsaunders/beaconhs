@@ -65,7 +65,12 @@ import {
   type FactorCategory,
   type PrevStepStatus,
 } from './_investigation-drawers'
-import { InjuryDrawer, PersonDrawer, type InjuryInput, type PersonInput } from './_people-injury-drawers'
+import {
+  InjuryDrawer,
+  PersonDrawer,
+  type InjuryInput,
+  type PersonInput,
+} from './_people-injury-drawers'
 import { IncidentHeaderActions } from './_header-actions'
 import { pickString } from '@/lib/list-params'
 import { publicUrl } from '@beaconhs/storage'
@@ -189,7 +194,12 @@ async function updateTextField(formData: FormData) {
     'classificationId',
   ])
   const TS_REQUIRED = new Set(['occurredAt'])
-  const TS_NULLABLE = new Set(['emsArrivedAt', 'hospitalArrivedAt', 'dischargedAt', 'molNotifiedAt'])
+  const TS_NULLABLE = new Set([
+    'emsArrivedAt',
+    'hospitalArrivedAt',
+    'dischargedAt',
+    'molNotifiedAt',
+  ])
   const DATE_ONLY = new Set([
     'lostTimeFirstDay',
     'lostTimeLastDay',
@@ -1088,7 +1098,10 @@ export default async function IncidentDetailPage({
       .select()
       .from(incidentContributingFactors)
       .where(eq(incidentContributingFactors.incidentId, id))
-      .orderBy(asc(incidentContributingFactors.category), desc(incidentContributingFactors.createdAt))
+      .orderBy(
+        asc(incidentContributingFactors.category),
+        desc(incidentContributingFactors.createdAt),
+      )
     const whys = await tx
       .select()
       .from(incidentRootCauseWhys)
@@ -1114,7 +1127,9 @@ export default async function IncidentDetailPage({
     const classificationOptions = await tx
       .select({ id: incidentClassifications.id, name: incidentClassifications.name })
       .from(incidentClassifications)
-      .where(and(isNull(incidentClassifications.deletedAt), eq(incidentClassifications.isActive, 1)))
+      .where(
+        and(isNull(incidentClassifications.deletedAt), eq(incidentClassifications.isActive, 1)),
+      )
       .orderBy(asc(incidentClassifications.name))
     const injuryTypeOptions = await tx
       .select({ id: incidentInjuryTypes.id, name: incidentInjuryTypes.name })
@@ -1582,7 +1597,10 @@ export default async function IncidentDetailPage({
             ) : (
               <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
                 {involved.map((row) => (
-                  <li key={row.link.id} className="group flex items-center justify-between gap-3 py-2.5">
+                  <li
+                    key={row.link.id}
+                    className="group flex items-center justify-between gap-3 py-2.5"
+                  >
                     <div className="min-w-0 flex-1">
                       <div className="font-medium text-slate-900 dark:text-slate-100">
                         {row.person ? (
@@ -1639,73 +1657,299 @@ export default async function IncidentDetailPage({
           >
             <div className="space-y-5">
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                <LiveToggle id={id} field="criticalInjury" label="Critical injury" initialValue={incident.criticalInjury} disabled={locked} updateAction={updateTextField} />
-                <LiveToggle id={id} field="ministryOfLabourNotified" label="Ministry of Labour notified" initialValue={incident.ministryOfLabourNotified} disabled={locked} updateAction={updateTextField} />
-                <LiveToggle id={id} field="emsCalled" label="EMS called" initialValue={incident.emsCalled || incident.emsNotified} disabled={locked} updateAction={updateTextField} />
-                <LiveToggle id={id} field="firstAidGiven" label="First aid given" initialValue={incident.firstAidGiven || incident.firstAidReceived} disabled={locked} updateAction={updateTextField} />
-                <LiveToggle id={id} field="medicalAttentionReceived" label="Medical attention" initialValue={incident.medicalAttentionReceived} disabled={locked} updateAction={updateTextField} />
-                <LiveToggle id={id} field="lostTime" label="Lost time" initialValue={incident.lostTime} disabled={locked} updateAction={updateTextField} />
-                <LiveToggle id={id} field="modifiedDuty" label="Modified duty" initialValue={incident.modifiedDuty} disabled={locked} updateAction={updateTextField} />
-                <LiveToggle id={id} field="externallyReportable" label="Externally reportable" initialValue={incident.externallyReportable} disabled={locked} updateAction={updateTextField} />
-                <LiveToggle id={id} field="policeNotified" label="Police notified" initialValue={incident.policeNotified} disabled={locked} updateAction={updateTextField} />
+                <LiveToggle
+                  id={id}
+                  field="criticalInjury"
+                  label="Critical injury"
+                  initialValue={incident.criticalInjury}
+                  disabled={locked}
+                  updateAction={updateTextField}
+                />
+                <LiveToggle
+                  id={id}
+                  field="ministryOfLabourNotified"
+                  label="Ministry of Labour notified"
+                  initialValue={incident.ministryOfLabourNotified}
+                  disabled={locked}
+                  updateAction={updateTextField}
+                />
+                <LiveToggle
+                  id={id}
+                  field="emsCalled"
+                  label="EMS called"
+                  initialValue={incident.emsCalled || incident.emsNotified}
+                  disabled={locked}
+                  updateAction={updateTextField}
+                />
+                <LiveToggle
+                  id={id}
+                  field="firstAidGiven"
+                  label="First aid given"
+                  initialValue={incident.firstAidGiven || incident.firstAidReceived}
+                  disabled={locked}
+                  updateAction={updateTextField}
+                />
+                <LiveToggle
+                  id={id}
+                  field="medicalAttentionReceived"
+                  label="Medical attention"
+                  initialValue={incident.medicalAttentionReceived}
+                  disabled={locked}
+                  updateAction={updateTextField}
+                />
+                <LiveToggle
+                  id={id}
+                  field="lostTime"
+                  label="Lost time"
+                  initialValue={incident.lostTime}
+                  disabled={locked}
+                  updateAction={updateTextField}
+                />
+                <LiveToggle
+                  id={id}
+                  field="modifiedDuty"
+                  label="Modified duty"
+                  initialValue={incident.modifiedDuty}
+                  disabled={locked}
+                  updateAction={updateTextField}
+                />
+                <LiveToggle
+                  id={id}
+                  field="externallyReportable"
+                  label="Externally reportable"
+                  initialValue={incident.externallyReportable}
+                  disabled={locked}
+                  updateAction={updateTextField}
+                />
+                <LiveToggle
+                  id={id}
+                  field="policeNotified"
+                  label="Police notified"
+                  initialValue={incident.policeNotified}
+                  disabled={locked}
+                  updateAction={updateTextField}
+                />
               </div>
 
               {incident.emsCalled || incident.emsNotified ? (
                 <SubBlock title="EMS" tone="rose">
-                  <LiveDateTime id={id} field="emsArrivedAt" label="EMS arrived at" initialValue={incident.emsArrivedAt ? toLocalDatetime(incident.emsArrivedAt) : ''} disabled={locked} updateAction={updateTextField} />
+                  <LiveDateTime
+                    id={id}
+                    field="emsArrivedAt"
+                    label="EMS arrived at"
+                    initialValue={
+                      incident.emsArrivedAt ? toLocalDatetime(incident.emsArrivedAt) : ''
+                    }
+                    disabled={locked}
+                    updateAction={updateTextField}
+                  />
                 </SubBlock>
               ) : null}
 
               {incident.firstAidGiven || incident.firstAidReceived ? (
                 <SubBlock title="First aid" tone="amber">
-                  <LiveField id={id} field="firstAidProvider" label="First aid provider" initialValue={incident.firstAidProvider} disabled={locked} updateAction={updateTextField} />
-                  <LiveField id={id} field="firstAidNotes" label="First aid notes" initialValue={incident.firstAidNotes} multiline rows={2} disabled={locked} updateAction={updateTextField} />
+                  <LiveField
+                    id={id}
+                    field="firstAidProvider"
+                    label="First aid provider"
+                    initialValue={incident.firstAidProvider}
+                    disabled={locked}
+                    updateAction={updateTextField}
+                  />
+                  <LiveField
+                    id={id}
+                    field="firstAidNotes"
+                    label="First aid notes"
+                    initialValue={incident.firstAidNotes}
+                    multiline
+                    rows={2}
+                    disabled={locked}
+                    updateAction={updateTextField}
+                  />
                 </SubBlock>
               ) : null}
 
               {incident.medicalAttentionReceived ? (
                 <SubBlock title="Hospital / treatment" tone="sky">
-                  <LiveField id={id} field="hospitalName" label="Hospital" initialValue={incident.hospitalName ?? incident.treatedAtHospital} disabled={locked} updateAction={updateTextField} />
-                  <LiveField id={id} field="treatedInCity" label="City" initialValue={incident.treatedInCity} disabled={locked} updateAction={updateTextField} />
-                  <LiveField id={id} field="transportation" label="Transportation" initialValue={incident.transportation} disabled={locked} updateAction={updateTextField} />
-                  <LiveField id={id} field="attendingPhysician" label="Attending physician" initialValue={incident.attendingPhysician} disabled={locked} updateAction={updateTextField} />
-                  <LiveDateTime id={id} field="hospitalArrivedAt" label="Hospital arrived" initialValue={incident.hospitalArrivedAt ? toLocalDatetime(incident.hospitalArrivedAt) : ''} disabled={locked} updateAction={updateTextField} />
-                  <LiveDateTime id={id} field="dischargedAt" label="Discharged" initialValue={incident.dischargedAt ? toLocalDatetime(incident.dischargedAt) : ''} disabled={locked} updateAction={updateTextField} />
+                  <LiveField
+                    id={id}
+                    field="hospitalName"
+                    label="Hospital"
+                    initialValue={incident.hospitalName ?? incident.treatedAtHospital}
+                    disabled={locked}
+                    updateAction={updateTextField}
+                  />
+                  <LiveField
+                    id={id}
+                    field="treatedInCity"
+                    label="City"
+                    initialValue={incident.treatedInCity}
+                    disabled={locked}
+                    updateAction={updateTextField}
+                  />
+                  <LiveField
+                    id={id}
+                    field="transportation"
+                    label="Transportation"
+                    initialValue={incident.transportation}
+                    disabled={locked}
+                    updateAction={updateTextField}
+                  />
+                  <LiveField
+                    id={id}
+                    field="attendingPhysician"
+                    label="Attending physician"
+                    initialValue={incident.attendingPhysician}
+                    disabled={locked}
+                    updateAction={updateTextField}
+                  />
+                  <LiveDateTime
+                    id={id}
+                    field="hospitalArrivedAt"
+                    label="Hospital arrived"
+                    initialValue={
+                      incident.hospitalArrivedAt ? toLocalDatetime(incident.hospitalArrivedAt) : ''
+                    }
+                    disabled={locked}
+                    updateAction={updateTextField}
+                  />
+                  <LiveDateTime
+                    id={id}
+                    field="dischargedAt"
+                    label="Discharged"
+                    initialValue={
+                      incident.dischargedAt ? toLocalDatetime(incident.dischargedAt) : ''
+                    }
+                    disabled={locked}
+                    updateAction={updateTextField}
+                  />
                 </SubBlock>
               ) : null}
 
               {incident.ministryOfLabourNotified ? (
                 <SubBlock title="Ministry of Labour" tone="orange">
-                  <LiveDateTime id={id} field="molNotifiedAt" label="MOL notified at" initialValue={incident.molNotifiedAt ? toLocalDatetime(incident.molNotifiedAt) : ''} disabled={locked} updateAction={updateTextField} />
-                  <LiveField id={id} field="molReportNumber" label="MOL report number" initialValue={incident.molReportNumber} disabled={locked} updateAction={updateTextField} />
+                  <LiveDateTime
+                    id={id}
+                    field="molNotifiedAt"
+                    label="MOL notified at"
+                    initialValue={
+                      incident.molNotifiedAt ? toLocalDatetime(incident.molNotifiedAt) : ''
+                    }
+                    disabled={locked}
+                    updateAction={updateTextField}
+                  />
+                  <LiveField
+                    id={id}
+                    field="molReportNumber"
+                    label="MOL report number"
+                    initialValue={incident.molReportNumber}
+                    disabled={locked}
+                    updateAction={updateTextField}
+                  />
                 </SubBlock>
               ) : null}
 
               {incident.policeNotified ? (
                 <SubBlock title="Police / insurance" tone="indigo">
-                  <LiveField id={id} field="policeReportNumber" label="Police report #" initialValue={incident.policeReportNumber} disabled={locked} updateAction={updateTextField} />
-                  <LiveField id={id} field="insuranceClaimNumber" label="Insurance claim #" initialValue={incident.insuranceClaimNumber} disabled={locked} updateAction={updateTextField} />
+                  <LiveField
+                    id={id}
+                    field="policeReportNumber"
+                    label="Police report #"
+                    initialValue={incident.policeReportNumber}
+                    disabled={locked}
+                    updateAction={updateTextField}
+                  />
+                  <LiveField
+                    id={id}
+                    field="insuranceClaimNumber"
+                    label="Insurance claim #"
+                    initialValue={incident.insuranceClaimNumber}
+                    disabled={locked}
+                    updateAction={updateTextField}
+                  />
                 </SubBlock>
               ) : null}
 
               {incident.lostTime ? (
                 <SubBlock title="Lost-time summary" tone="slate">
-                  <LiveField id={id} field="lostTimeFirstDay" label="First day off" type="date" initialValue={incident.lostTimeFirstDay} disabled={locked} updateAction={updateTextField} />
-                  <LiveField id={id} field="lostTimeLastDay" label="Last day off" type="date" initialValue={incident.lostTimeLastDay} disabled={locked} updateAction={updateTextField} />
-                  <LiveField id={id} field="lostTimeDays" label="Total lost-time days" type="number" initialValue={incident.lostTimeDays != null ? String(incident.lostTimeDays) : null} disabled={locked} updateAction={updateTextField} />
+                  <LiveField
+                    id={id}
+                    field="lostTimeFirstDay"
+                    label="First day off"
+                    type="date"
+                    initialValue={incident.lostTimeFirstDay}
+                    disabled={locked}
+                    updateAction={updateTextField}
+                  />
+                  <LiveField
+                    id={id}
+                    field="lostTimeLastDay"
+                    label="Last day off"
+                    type="date"
+                    initialValue={incident.lostTimeLastDay}
+                    disabled={locked}
+                    updateAction={updateTextField}
+                  />
+                  <LiveField
+                    id={id}
+                    field="lostTimeDays"
+                    label="Total lost-time days"
+                    type="number"
+                    initialValue={
+                      incident.lostTimeDays != null ? String(incident.lostTimeDays) : null
+                    }
+                    disabled={locked}
+                    updateAction={updateTextField}
+                  />
                 </SubBlock>
               ) : null}
 
               {incident.modifiedDuty ? (
                 <SubBlock title="Modified-duty summary" tone="slate">
-                  <LiveField id={id} field="modifiedDutyFirstDay" label="First modified day" type="date" initialValue={incident.modifiedDutyFirstDay} disabled={locked} updateAction={updateTextField} />
-                  <LiveField id={id} field="modifiedDutyLastDay" label="Last modified day" type="date" initialValue={incident.modifiedDutyLastDay} disabled={locked} updateAction={updateTextField} />
-                  <LiveField id={id} field="modifiedDutyDays" label="Total modified-duty days" type="number" initialValue={incident.modifiedDutyDays != null ? String(incident.modifiedDutyDays) : null} disabled={locked} updateAction={updateTextField} />
+                  <LiveField
+                    id={id}
+                    field="modifiedDutyFirstDay"
+                    label="First modified day"
+                    type="date"
+                    initialValue={incident.modifiedDutyFirstDay}
+                    disabled={locked}
+                    updateAction={updateTextField}
+                  />
+                  <LiveField
+                    id={id}
+                    field="modifiedDutyLastDay"
+                    label="Last modified day"
+                    type="date"
+                    initialValue={incident.modifiedDutyLastDay}
+                    disabled={locked}
+                    updateAction={updateTextField}
+                  />
+                  <LiveField
+                    id={id}
+                    field="modifiedDutyDays"
+                    label="Total modified-duty days"
+                    type="number"
+                    initialValue={
+                      incident.modifiedDutyDays != null ? String(incident.modifiedDutyDays) : null
+                    }
+                    disabled={locked}
+                    updateAction={updateTextField}
+                  />
                 </SubBlock>
               ) : null}
 
               <SubBlock title="Damage & cost" tone="emerald">
-                <LiveField id={id} field="damageEstimate" label="Damage estimate (USD)" type="number" initialValue={incident.damageEstimate != null ? String(incident.damageEstimate) : null} disabled={locked} updateAction={updateTextField} />
+                <LiveField
+                  id={id}
+                  field="damageEstimate"
+                  label="Damage estimate (USD)"
+                  type="number"
+                  initialValue={
+                    incident.damageEstimate != null ? String(incident.damageEstimate) : null
+                  }
+                  disabled={locked}
+                  updateAction={updateTextField}
+                />
               </SubBlock>
             </div>
           </Section>
@@ -1729,11 +1973,17 @@ export default async function IncidentDetailPage({
             }
           >
             {injuries.length === 0 ? (
-              <EmptyState title="No injuries recorded" description="Add an injured person and their injuries." />
+              <EmptyState
+                title="No injuries recorded"
+                description="Add an injured person and their injuries."
+              />
             ) : (
               <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
                 {injuries.map((row) => (
-                  <li key={row.injury.id} className="group grid grid-cols-1 gap-2 py-3 sm:grid-cols-[1fr_1fr_auto]">
+                  <li
+                    key={row.injury.id}
+                    className="group grid grid-cols-1 gap-2 py-3 sm:grid-cols-[1fr_1fr_auto]"
+                  >
                     <div>
                       <div className="font-medium text-slate-900 dark:text-slate-100">
                         {row.person ? (
@@ -1754,10 +2004,14 @@ export default async function IncidentDetailPage({
                     <div className="text-xs text-slate-600 dark:text-slate-300">
                       {row.injury.treatment ? <p>{row.injury.treatment}</p> : null}
                       {row.injury.treatedAtFacility ? (
-                        <p className="text-slate-500 dark:text-slate-400">Treated at: {row.injury.treatedAtFacility}</p>
+                        <p className="text-slate-500 dark:text-slate-400">
+                          Treated at: {row.injury.treatedAtFacility}
+                        </p>
                       ) : null}
                       {typeof row.injury.workedHoursPriorTo === 'number' ? (
-                        <p className="text-slate-500 dark:text-slate-400">Hours worked prior: {row.injury.workedHoursPriorTo}</p>
+                        <p className="text-slate-500 dark:text-slate-400">
+                          Hours worked prior: {row.injury.workedHoursPriorTo}
+                        </p>
                       ) : null}
                     </div>
                     {!locked ? (
@@ -1799,9 +2053,30 @@ export default async function IncidentDetailPage({
             tone="amber"
           >
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
-              <LiveSeverityRating id={id} field="actualSeverity" label="Actual severity" initialValue={incident.actualSeverity} disabled={locked} updateAction={updateTextField} />
-              <LiveSeverityRating id={id} field="potentialSeverity" label="Potential severity" initialValue={incident.potentialSeverity} disabled={locked} updateAction={updateTextField} />
-              <LiveSeverityRating id={id} field="severityRating" label="Severity rating" initialValue={incident.severityRating} disabled={locked} updateAction={updateTextField} />
+              <LiveSeverityRating
+                id={id}
+                field="actualSeverity"
+                label="Actual severity"
+                initialValue={incident.actualSeverity}
+                disabled={locked}
+                updateAction={updateTextField}
+              />
+              <LiveSeverityRating
+                id={id}
+                field="potentialSeverity"
+                label="Potential severity"
+                initialValue={incident.potentialSeverity}
+                disabled={locked}
+                updateAction={updateTextField}
+              />
+              <LiveSeverityRating
+                id={id}
+                field="severityRating"
+                label="Severity rating"
+                initialValue={incident.severityRating}
+                disabled={locked}
+                updateAction={updateTextField}
+              />
             </div>
           </Section>
         </section>
@@ -1824,7 +2099,10 @@ export default async function IncidentDetailPage({
             }
           >
             {lostTime.length === 0 ? (
-              <EmptyState title="No lost-time tracking" description="Record an off-work or restricted-duty window." />
+              <EmptyState
+                title="No lost-time tracking"
+                description="Record an off-work or restricted-duty window."
+              />
             ) : (
               <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
                 {lostTime.map((e) => (
@@ -1884,7 +2162,10 @@ export default async function IncidentDetailPage({
             }
           >
             {timelineEvents.length === 0 ? (
-              <EmptyState title="No events logged" description="Add a timeline entry to reconstruct the sequence." />
+              <EmptyState
+                title="No events logged"
+                description="Add a timeline entry to reconstruct the sequence."
+              />
             ) : (
               <ol className="relative space-y-3 border-l border-slate-200 pl-5 text-sm dark:border-slate-700">
                 {timelineEvents.map((e) => (
@@ -1912,7 +2193,11 @@ export default async function IncidentDetailPage({
                           <form action={deleteEvent} className="inline">
                             <input type="hidden" name="id" value={e.id} />
                             <input type="hidden" name="incidentId" value={id} />
-                            <button type="submit" className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700" title="Delete event">
+                            <button
+                              type="submit"
+                              className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700"
+                              title="Delete event"
+                            >
                               <Trash2 size={14} />
                             </button>
                           </form>
@@ -1941,7 +2226,10 @@ export default async function IncidentDetailPage({
             }
           >
             {factors.length === 0 ? (
-              <EmptyState title="No contributing factors" description="Capture the conditions, behaviours, or system gaps." />
+              <EmptyState
+                title="No contributing factors"
+                description="Capture the conditions, behaviours, or system gaps."
+              />
             ) : (
               <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
                 {factors.map((f) => (
@@ -1950,7 +2238,9 @@ export default async function IncidentDetailPage({
                       <Badge variant="outline" className="mb-1 tracking-wide uppercase">
                         {f.category}
                       </Badge>
-                      <div className="whitespace-pre-wrap text-slate-900 dark:text-slate-100">{f.description}</div>
+                      <div className="whitespace-pre-wrap text-slate-900 dark:text-slate-100">
+                        {f.description}
+                      </div>
                     </div>
                     {!locked ? (
                       <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
@@ -1965,7 +2255,11 @@ export default async function IncidentDetailPage({
                         <form action={deleteFactor} className="inline">
                           <input type="hidden" name="id" value={f.id} />
                           <input type="hidden" name="incidentId" value={id} />
-                          <button type="submit" className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700" title="Delete factor">
+                          <button
+                            type="submit"
+                            className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700"
+                            title="Delete factor"
+                          >
                             <Trash2 size={14} />
                           </button>
                         </form>
@@ -2003,10 +2297,13 @@ export default async function IncidentDetailPage({
                 updateAction={updateTextField}
               />
               <div>
-                <div className="mb-2 text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">5-Whys chain</div>
+                <div className="mb-2 text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
+                  5-Whys chain
+                </div>
                 {whys.length === 0 ? (
                   <p className="text-sm text-slate-500 dark:text-slate-400">
-                    Optional. Drill from the surface cause toward the root by asking "why" up to five times.
+                    Optional. Drill from the surface cause toward the root by asking "why" up to
+                    five times.
                   </p>
                 ) : (
                   <ol className="space-y-2 text-sm">
@@ -2019,7 +2316,9 @@ export default async function IncidentDetailPage({
                           <span className="mr-2 inline-flex h-5 w-12 items-center justify-center rounded bg-teal-100 text-[10px] font-semibold tracking-wide text-teal-800 uppercase dark:bg-teal-950/50 dark:text-teal-300">
                             Why #{w.ordinal}
                           </span>
-                          <span className="whitespace-pre-wrap text-slate-900 dark:text-slate-100">{w.whyText}</span>
+                          <span className="whitespace-pre-wrap text-slate-900 dark:text-slate-100">
+                            {w.whyText}
+                          </span>
                         </div>
                         {!locked ? (
                           <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
@@ -2034,7 +2333,11 @@ export default async function IncidentDetailPage({
                             <form action={deleteWhy} className="inline">
                               <input type="hidden" name="id" value={w.id} />
                               <input type="hidden" name="incidentId" value={id} />
-                              <button type="submit" className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700" title="Delete why step">
+                              <button
+                                type="submit"
+                                className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700"
+                                title="Delete why step"
+                              >
                                 <Trash2 size={14} />
                               </button>
                             </form>
@@ -2064,11 +2367,17 @@ export default async function IncidentDetailPage({
             }
           >
             {prevSteps.length === 0 ? (
-              <EmptyState title="No preventative steps" description="Record the changes that will prevent recurrence." />
+              <EmptyState
+                title="No preventative steps"
+                description="Record the changes that will prevent recurrence."
+              />
             ) : (
               <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
                 {prevSteps.map((row) => (
-                  <li key={row.step.id} className="group flex items-start justify-between gap-3 py-3">
+                  <li
+                    key={row.step.id}
+                    className="group flex items-start justify-between gap-3 py-3"
+                  >
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <PrevStepStatusBadge status={row.step.status as PrevStepStatus} />
@@ -2080,13 +2389,18 @@ export default async function IncidentDetailPage({
                         {row.owner ? (
                           <span className="text-xs text-slate-500 dark:text-slate-400">
                             owner:{' '}
-                            <Link href={`/people/${row.owner.id}`} className="text-teal-700 hover:underline dark:text-teal-400">
+                            <Link
+                              href={`/people/${row.owner.id}`}
+                              className="text-teal-700 hover:underline dark:text-teal-400"
+                            >
                               {row.owner.firstName} {row.owner.lastName}
                             </Link>
                           </span>
                         ) : null}
                       </div>
-                      <div className="mt-1 whitespace-pre-wrap text-slate-900 dark:text-slate-100">{row.step.description}</div>
+                      <div className="mt-1 whitespace-pre-wrap text-slate-900 dark:text-slate-100">
+                        {row.step.description}
+                      </div>
                     </div>
                     {!locked ? (
                       <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
@@ -2101,7 +2415,11 @@ export default async function IncidentDetailPage({
                         <form action={deletePrevStep} className="inline">
                           <input type="hidden" name="id" value={row.step.id} />
                           <input type="hidden" name="incidentId" value={id} />
-                          <button type="submit" className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700" title="Delete step">
+                          <button
+                            type="submit"
+                            className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700"
+                            title="Delete step"
+                          >
                             <Trash2 size={14} />
                           </button>
                         </form>
@@ -2113,7 +2431,12 @@ export default async function IncidentDetailPage({
             )}
           </Section>
 
-          <Section title={`Linked corrective actions (${linkedCAs.length})`} icon={<ListChecks size={20} />} tone="slate" defaultOpen={false}>
+          <Section
+            title={`Linked corrective actions (${linkedCAs.length})`}
+            icon={<ListChecks size={20} />}
+            tone="slate"
+            defaultOpen={false}
+          >
             {linkedCAs.length === 0 ? (
               <div className="flex items-center justify-between text-sm text-slate-500 dark:text-slate-400">
                 <span>No corrective actions linked.</span>
@@ -2128,10 +2451,15 @@ export default async function IncidentDetailPage({
               <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
                 {linkedCAs.map((ca) => (
                   <li key={ca.id} className="flex items-center justify-between py-2">
-                    <Link href={`/corrective-actions/${ca.id}`} className="font-medium hover:underline">
+                    <Link
+                      href={`/corrective-actions/${ca.id}`}
+                      className="font-medium hover:underline"
+                    >
                       {ca.reference} · {ca.title}
                     </Link>
-                    <Badge variant={ca.status === 'closed' ? 'success' : 'warning'}>{ca.status}</Badge>
+                    <Badge variant={ca.status === 'closed' ? 'success' : 'warning'}>
+                      {ca.status}
+                    </Badge>
                   </li>
                 ))}
               </ul>
@@ -2141,7 +2469,12 @@ export default async function IncidentDetailPage({
 
         {/* ===================== PHOTOS ===================== */}
         <section id="section-photos" className="scroll-mt-2">
-          <Section title={`Photos & files (${photos.length})`} icon={<Camera size={20} />} tone="slate" defaultOpen={photos.length > 0}>
+          <Section
+            title={`Photos & files (${photos.length})`}
+            icon={<Camera size={20} />}
+            tone="slate"
+            defaultOpen={photos.length > 0}
+          >
             <div className="space-y-3">
               <PhotoGallery photos={galleryPhotos} />
               {!locked ? (
@@ -2158,7 +2491,12 @@ export default async function IncidentDetailPage({
 
         {/* ===================== ACTIVITY ===================== */}
         <section id="section-activity" className="scroll-mt-2">
-          <Section title={`Activity (${activity.length})`} icon={<History size={20} />} tone="slate" defaultOpen={false}>
+          <Section
+            title={`Activity (${activity.length})`}
+            icon={<History size={20} />}
+            tone="slate"
+            defaultOpen={false}
+          >
             <ActivityFeed entries={activity} />
           </Section>
         </section>
@@ -2390,16 +2728,31 @@ export default async function IncidentDetailPage({
         >
           <div className="space-y-1.5">
             <Label htmlFor="inc-se-subject">Subject prefix</Label>
-            <Input id="inc-se-subject" name="subjectPrefix" defaultValue="Update" placeholder="Update / Action required / FYI" />
+            <Input
+              id="inc-se-subject"
+              name="subjectPrefix"
+              defaultValue="Update"
+              placeholder="Update / Action required / FYI"
+            />
             <p className="text-xs text-slate-500">Prepended to the auto-generated subject.</p>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="inc-se-extra">Extra recipients</Label>
-            <Input id="inc-se-extra" name="extraRecipients" type="text" placeholder="ceo@example.com, hse@example.com" />
+            <Input
+              id="inc-se-extra"
+              name="extraRecipients"
+              type="text"
+              placeholder="ceo@example.com, hse@example.com"
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="inc-se-message">Personal note (optional)</Label>
-            <Textarea id="inc-se-message" name="message" rows={4} placeholder="Add context for the recipients." />
+            <Textarea
+              id="inc-se-message"
+              name="message"
+              rows={4}
+              placeholder="Add context for the recipients."
+            />
           </div>
         </form>
       </UrlDrawer>
@@ -2428,8 +2781,15 @@ export default async function IncidentDetailPage({
           <input type="hidden" name="id" value={id} />
           <div className="space-y-1.5">
             <Label htmlFor="inc-copy-title">Title for the new incident</Label>
-            <Input id="inc-copy-title" name="title" defaultValue={`Copy of ${incident.title}`} placeholder="Title for the cloned incident" />
-            <p className="text-xs text-slate-500">Leave the default ("Copy of …") or override with a more descriptive title.</p>
+            <Input
+              id="inc-copy-title"
+              name="title"
+              defaultValue={`Copy of ${incident.title}`}
+              placeholder="Title for the cloned incident"
+            />
+            <p className="text-xs text-slate-500">
+              Leave the default ("Copy of …") or override with a more descriptive title.
+            </p>
           </div>
         </form>
       </UrlDrawer>
@@ -2443,8 +2803,11 @@ export default async function IncidentDetailPage({
       >
         <div className="space-y-4">
           <p className="text-sm text-slate-600 dark:text-slate-400">
-            <span className="font-mono font-medium text-slate-900 dark:text-slate-100">{incident.reference}</span>{' '}
-            will be removed from every list and report. This is a soft delete — an administrator can recover it from the database if needed.
+            <span className="font-mono font-medium text-slate-900 dark:text-slate-100">
+              {incident.reference}
+            </span>{' '}
+            will be removed from every list and report. This is a soft delete — an administrator can
+            recover it from the database if needed.
           </p>
           <div className="flex items-center justify-end gap-2">
             <Link href={basePath as any}>
@@ -2482,7 +2845,8 @@ function SubBlock({
     sky: 'border-sky-200 bg-sky-50/50 dark:border-sky-900/40 dark:bg-sky-950/20',
     orange: 'border-orange-200 bg-orange-50/50 dark:border-orange-900/40 dark:bg-orange-950/20',
     indigo: 'border-indigo-200 bg-indigo-50/40 dark:border-indigo-900/40 dark:bg-indigo-950/20',
-    emerald: 'border-emerald-200 bg-emerald-50/50 dark:border-emerald-900/40 dark:bg-emerald-950/20',
+    emerald:
+      'border-emerald-200 bg-emerald-50/50 dark:border-emerald-900/40 dark:bg-emerald-950/20',
     slate: 'border-slate-200 bg-slate-50/50 dark:border-slate-800 dark:bg-slate-800/30',
   }
   return (

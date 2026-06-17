@@ -162,7 +162,10 @@ export function ListCard({
   return (
     <li>
       {href ? (
-        <Link href={href as any} className={cn(shell, 'active:bg-slate-50 dark:active:bg-slate-800')}>
+        <Link
+          href={href as any}
+          className={cn(shell, 'active:bg-slate-50 dark:active:bg-slate-800')}
+        >
           {content}
         </Link>
       ) : (
