@@ -40,14 +40,14 @@ export const roles = pgTable(
 // assignment. Resolved into a query predicate by recordVisibilityWhere().
 //   { type: 'tenant' }                                  — everybody in the tenant
 //   { type: 'sites', siteIds: [...] }                   — records at these sites
-//   { type: 'team', divisionIds: [...], groupIds: [...] } — a department: own + people in these divisions/groups
+//   { type: 'team', departmentIds: [...], groupIds: [...] } — a department: own + people in these departments/groups
 //   { type: 'people', personIds: [...] }                — own + a hand-picked set of people
 //   { type: 'crews', crewIds: [...] }
 //   { type: 'self' }                                    — only own records
 export type RoleScope =
   | { type: 'tenant' }
   | { type: 'sites'; siteIds: string[] }
-  | { type: 'team'; divisionIds: string[]; groupIds: string[] }
+  | { type: 'team'; departmentIds: string[]; groupIds: string[] }
   | { type: 'people'; personIds: string[] }
   | { type: 'crews'; crewIds: string[] }
   | { type: 'self' }
@@ -196,9 +196,6 @@ export const PERMISSION_CATALOGUE = [
   'compliance.read',
   'compliance.manage',
   'compliance.assign',
-  // Lone worker
-  'loneworker.start',
-  'loneworker.supervise',
   // Reports
   'reports.read',
   'reports.builder',
@@ -251,7 +248,6 @@ export const BUILTIN_ROLES: Record<
       'journals.create',
       'journals.update.own',
       'journals.submit',
-      'loneworker.start',
     ],
   },
   foreman: {
@@ -279,7 +275,6 @@ export const BUILTIN_ROLES: Record<
       'journals.assign',
       'compliance.read',
       'compliance.assign',
-      'loneworker.supervise',
       'reports.read',
       'dashboards.read',
       'insights.read',
@@ -328,7 +323,6 @@ export const BUILTIN_ROLES: Record<
       'compliance.read',
       'compliance.manage',
       'compliance.assign',
-      'loneworker.supervise',
       'reports.read',
       'reports.builder',
       'reports.schedule',

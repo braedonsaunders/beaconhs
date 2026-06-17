@@ -1,6 +1,6 @@
-// /people/manage — the People administration hub. Tiles for groups, divisions
-// and job titles, driven by the module-admin registry. Gated to people who can
-// manage the org; everyone else lands on the directory.
+// /people/manage — the People administration hub. Tiles for departments,
+// groups, job titles and the org chart, driven by the module-admin registry.
+// Gated to people who can manage the org; everyone else lands on the directory.
 
 import { redirect } from 'next/navigation'
 import { can } from '@beaconhs/tenant'

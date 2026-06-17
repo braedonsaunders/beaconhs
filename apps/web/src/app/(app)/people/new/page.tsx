@@ -135,10 +135,10 @@ export default async function NewPersonPage() {
                 </Field>
               </div>
               <Alert variant="info">
-                <AlertTitle>HRIS sync</AlertTitle>
+                <AlertTitle>More ways to add people</AlertTitle>
                 <AlertDescription>
-                  For ongoing tenants this list is typically synced from NetSuite or BambooHR via
-                  the plugin framework. Manual adds are for one-offs.
+                  Import people in bulk from a CSV, or connect an external system in Admin →
+                  Integrations to keep the directory in sync automatically.
                 </AlertDescription>
               </Alert>
               <div className="flex items-center justify-end gap-2">

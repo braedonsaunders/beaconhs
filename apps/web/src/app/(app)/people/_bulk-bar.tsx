@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { CheckSquare, Download, Layers, Square, ToggleRight, Users, X } from 'lucide-react'
 import { Button, Select } from '@beaconhs/ui'
 import {
-  bulkAssignPeopleToDivision,
+  bulkAssignPeopleToDepartment,
   bulkAssignPeopleToGroup,
   bulkExportPeopleCsv,
   bulkSetPeopleStatus,
@@ -13,7 +13,7 @@ import {
 } from './_actions/bulk'
 
 export type GroupOption = { id: string; name: string }
-export type DivisionOption = { id: string; name: string }
+export type DepartmentOption = { id: string; name: string }
 
 const STATUS_LABELS: Record<PeopleStatus, string> = {
   active: 'Active',
@@ -23,24 +23,24 @@ const STATUS_LABELS: Record<PeopleStatus, string> = {
 
 /**
  * Floating bulk-action bar on /people. Four actions: assign-to-group,
- * assign-to-division, set-status, export-selected.
+ * assign-to-department, set-status, export-selected.
  */
 export function BulkPeopleBar({
   selectedIds,
   onClear,
   groups,
-  divisions,
+  departments,
 }: {
   selectedIds: string[]
   onClear: () => void
   groups: GroupOption[]
-  divisions: DivisionOption[]
+  departments: DepartmentOption[]
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
-  const [action, setAction] = useState<'group' | 'division' | 'status' | 'export'>('group')
+  const [action, setAction] = useState<'group' | 'department' | 'status' | 'export'>('group')
   const [groupId, setGroupId] = useState('')
-  const [divisionId, setDivisionId] = useState('')
+  const [departmentId, setDepartmentId] = useState('')
   const [status, setStatus] = useState<PeopleStatus>('active')
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
@@ -72,15 +72,15 @@ export function BulkPeopleBar({
       })
       return
     }
-    if (action === 'division') {
-      if (!divisionId) {
-        setError('Pick a division.')
+    if (action === 'department') {
+      if (!departmentId) {
+        setError('Pick a department.')
         return
       }
       start(async () => {
-        const res = await bulkAssignPeopleToDivision({
+        const res = await bulkAssignPeopleToDepartment({
           personIds: selectedIds,
-          divisionId,
+          departmentId,
         })
         if (!res.ok) {
           setError(res.error)
@@ -145,7 +145,7 @@ export function BulkPeopleBar({
           disabled={pending}
         >
           <option value="group">Assign to group</option>
-          <option value="division">Assign to division</option>
+          <option value="department">Assign to department</option>
           <option value="status">Set status</option>
           <option value="export">Export selected to CSV</option>
         </Select>
@@ -169,17 +169,17 @@ export function BulkPeopleBar({
           </div>
         ) : null}
 
-        {action === 'division' ? (
+        {action === 'department' ? (
           <div className="flex items-center gap-2">
             <Layers size={14} className="text-slate-500" />
             <Select
-              value={divisionId}
-              onChange={(e) => setDivisionId(e.target.value)}
+              value={departmentId}
+              onChange={(e) => setDepartmentId(e.target.value)}
               className="h-8 min-w-[12rem]"
               disabled={pending}
             >
-              <option value="">Pick division…</option>
-              {divisions.map((d) => (
+              <option value="">Pick department…</option>
+              {departments.map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.name}
                 </option>

@@ -369,11 +369,15 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
     managePath: '/people/manage',
     iconKey: 'users',
     permission: 'admin.org.manage',
-    tabs: [
-      { key: 'directory', label: 'Directory', href: '/people' },
-      { key: 'org-chart', label: 'Org chart', href: '/people/org-chart' },
-    ],
+    tabs: [{ key: 'directory', label: 'Directory', href: '/people' }],
     sections: [
+      {
+        key: 'departments',
+        label: 'Departments',
+        href: '/people/departments',
+        iconKey: 'layers',
+        desc: 'The departments people belong to — one per person.',
+      },
       {
         key: 'groups',
         label: 'Groups',
@@ -382,18 +386,18 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
         desc: 'Cross-cutting groupings used for audiences and reporting.',
       },
       {
-        key: 'divisions',
-        label: 'Divisions',
-        href: '/people/divisions',
-        iconKey: 'layers',
-        desc: 'The organisational divisions people belong to.',
-      },
-      {
         key: 'titles',
         label: 'Job titles',
         href: '/people/titles',
         iconKey: 'label',
         desc: 'Job titles, with their task lists and acknowledgements.',
+      },
+      {
+        key: 'org-chart',
+        label: 'Org chart',
+        href: '/people/org-chart',
+        iconKey: 'users',
+        desc: 'Reporting lines across the organisation, built from each person’s manager.',
       },
     ],
   },

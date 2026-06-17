@@ -4,13 +4,13 @@ import { and, asc, count, desc, eq, ilike, isNull, or, type SQL } from 'drizzle-
 import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
 import { departments, people, trades } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
-import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
+import { buildExportHref, mergeHref, parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
 import { FilterChips } from '@/components/filter-bar'
 import { Pagination } from '@/components/pagination'
 import { ListPageLayout } from '@/components/page-layout'
 import { PeopleSubNav } from './_components/people-sub-nav'
-import { listPersonDivisionsForBulk, listPersonGroupsForBulk } from './_actions/bulk'
+import { listPersonDepartmentsForBulk, listPersonGroupsForBulk } from './_actions/bulk'
 import { PeopleRecordsTable, type PeopleTableRow } from './_records-table'
 
 export const metadata = { title: 'People' }
@@ -25,6 +25,7 @@ export default async function PeoplePage({
   const sp = await searchParams
   const params = parseListParams(sp, { sort: 'name', dir: 'asc', perPage: 25, allowedSorts: SORTS })
   const statusFilter = pickString(sp.status) ?? 'active'
+  const departmentFilter = pickString(sp.department) ?? null
   const ctx = await requireRequestContext()
 
   const { rows, total, statusCounts, allCount } = await ctx.db(async (tx) => {
@@ -38,6 +39,7 @@ export default async function PeoplePage({
       )
       if (cond) baseFilters.push(cond)
     }
+    if (departmentFilter) baseFilters.push(eq(people.departmentId, departmentFilter))
     const filters = [...baseFilters]
     if (statusFilter !== 'all') {
       filters.push(eq(people.status, statusFilter as 'active' | 'inactive' | 'terminated'))
@@ -91,10 +93,13 @@ export default async function PeoplePage({
     return { rows: data, total: Number(tot?.c ?? 0), statusCounts, allCount }
   })
 
-  const [groups, divisions] = await Promise.all([
+  const [groups, departmentOptions] = await Promise.all([
     listPersonGroupsForBulk(),
-    listPersonDivisionsForBulk(),
+    listPersonDepartmentsForBulk(),
   ])
+  const activeDepartmentName = departmentFilter
+    ? (departmentOptions.find((d) => d.id === departmentFilter)?.name ?? 'Unknown')
+    : null
 
   const tableRows: PeopleTableRow[] = rows.map(({ person, department, trade }) => ({
     id: person.id,
@@ -114,12 +119,9 @@ export default async function PeoplePage({
           <PeopleSubNav active="directory" />
           <PageHeader
             title="People"
-            description="Workers, contractors, and supervisors. Sync from an HRIS via plugins."
+            description="Your organization's directory of workers, contractors, and supervisors."
             actions={
               <div className="flex items-center gap-2">
-                <Link href="/people/org-chart">
-                  <Button variant="outline">Org chart</Button>
-                </Link>
                 <Link href="/people/import">
                   <Button variant="outline">Import people</Button>
                 </Link>
@@ -145,6 +147,17 @@ export default async function PeoplePage({
                 { value: 'all', label: 'All', count: allCount },
               ]}
             />
+            {activeDepartmentName ? (
+              <Link
+                href={mergeHref('/people', sp, { department: undefined, page: 1 }) as any}
+                className="inline-flex items-center gap-1.5 rounded-full bg-teal-50 py-1 pr-2 pl-3 text-xs font-medium text-teal-800 hover:bg-teal-100 dark:bg-teal-950/50 dark:text-teal-300 dark:hover:bg-teal-900"
+              >
+                Department: {activeDepartmentName}
+                <span aria-hidden className="text-teal-600 dark:text-teal-400">
+                  ✕
+                </span>
+              </Link>
+            ) : null}
           </div>
         </>
       }
@@ -153,7 +166,7 @@ export default async function PeoplePage({
         <EmptyState
           icon={<Users size={32} />}
           title={params.q ? `No people match "${params.q}"` : 'No people'}
-          description="Add people one at a time, import via CSV from Admin → Import, or enable the NetSuite plugin."
+          description="Add people individually, or import them in bulk from a CSV file."
           action={
             <Link href="/people/new">
               <Button>Add person</Button>
@@ -165,7 +178,7 @@ export default async function PeoplePage({
           <PeopleRecordsTable
             rows={tableRows}
             groups={groups}
-            divisions={divisions}
+            departments={departmentOptions}
             basePath="/people"
             currentParams={sp}
             sort={params.sort}

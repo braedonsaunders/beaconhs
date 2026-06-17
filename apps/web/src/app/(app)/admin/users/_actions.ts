@@ -56,7 +56,8 @@ function parseScope(raw: string): RoleScope {
       case 'team':
         return {
           type: 'team',
-          divisionIds: strArray(v.divisionIds),
+          // Accept the legacy `divisionIds` key on any not-yet-migrated stored scope.
+          departmentIds: strArray(v.departmentIds ?? v.divisionIds),
           groupIds: strArray(v.groupIds),
         }
     }

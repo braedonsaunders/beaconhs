@@ -8,7 +8,6 @@ import {
   FileText,
   HardHat,
   IdCard,
-  Layers,
   Mail,
   Paperclip,
   PenLine,
@@ -52,8 +51,6 @@ import {
   jobTitleTaskAcknowledgments,
   jobTitleTasks,
   people,
-  personDivisionMemberships,
-  personDivisions,
   personFiles,
   personGroupMemberships,
   personGroups,
@@ -78,7 +75,6 @@ import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { PersonEditTab } from './person-edit-tab'
 import { PageContainer } from '@/components/page-layout'
 import { togglePersonInGroup } from '../_actions/groups'
-import { togglePersonInDivision } from '../_actions/divisions'
 import {
   acknowledgeTitleTask,
   assignTitleToPerson,
@@ -95,7 +91,6 @@ const TABS = [
   'profile',
   'employment',
   'groups',
-  'divisions',
   'title',
   'compliance',
   'training',
@@ -149,8 +144,6 @@ export default async function PersonDetailPage({
       submittedForms,
       personGroupRows,
       allGroups,
-      personDivisionRows,
-      allDivisions,
       personTitleRows,
       allTitles,
       fileRows,
@@ -224,14 +217,6 @@ export default async function PersonDetailPage({
         .where(eq(personGroupMemberships.personId, id))
         .orderBy(asc(personGroups.name)),
       tx.select().from(personGroups).orderBy(asc(personGroups.name)),
-      // Divisions this person belongs to
-      tx
-        .select({ membership: personDivisionMemberships, division: personDivisions })
-        .from(personDivisionMemberships)
-        .innerJoin(personDivisions, eq(personDivisions.id, personDivisionMemberships.divisionId))
-        .where(eq(personDivisionMemberships.personId, id))
-        .orderBy(asc(personDivisions.name)),
-      tx.select().from(personDivisions).orderBy(asc(personDivisions.name)),
       // Titles this person holds
       tx
         .select({ assignment: personTitleAssignments, title: personTitles })
@@ -307,8 +292,6 @@ export default async function PersonDetailPage({
       submittedForms,
       personGroupRows,
       allGroups,
-      personDivisionRows,
-      allDivisions,
       personTitleRows,
       allTitles,
       titleTasks: tasksForHeldTitles,
@@ -335,8 +318,6 @@ export default async function PersonDetailPage({
     submittedForms,
     personGroupRows,
     allGroups,
-    personDivisionRows,
-    allDivisions,
     personTitleRows,
     allTitles,
     titleTasks,
@@ -575,11 +556,6 @@ export default async function PersonDetailPage({
                   count: personGroupRows.length,
                 },
                 {
-                  key: 'divisions',
-                  label: 'Divisions',
-                  count: personDivisionRows.length,
-                },
-                {
                   key: 'title',
                   label: 'Title',
                   count: personTitleRows.length,
@@ -657,14 +633,6 @@ export default async function PersonDetailPage({
 
             {active === 'groups' ? (
               <GroupsTab personId={person.id} memberships={personGroupRows} allGroups={allGroups} />
-            ) : null}
-
-            {active === 'divisions' ? (
-              <DivisionsTab
-                personId={person.id}
-                memberships={personDivisionRows}
-                allDivisions={allDivisions}
-              />
             ) : null}
 
             {active === 'title' ? (
@@ -1347,108 +1315,6 @@ function GroupsTab({
                 </li>
               ))}
             </ul>
-          </CardContent>
-        </Card>
-      ) : null}
-    </div>
-  )
-}
-
-// ---------- Divisions tab ------------------------------------------------
-
-function DivisionsTab({
-  personId,
-  memberships,
-  allDivisions,
-}: {
-  personId: string
-  memberships: {
-    membership: typeof personDivisionMemberships.$inferSelect
-    division: typeof personDivisions.$inferSelect
-  }[]
-  allDivisions: (typeof personDivisions.$inferSelect)[]
-}) {
-  const memberIds = new Set(memberships.map((m) => m.division.id))
-  const candidates = allDivisions.filter((d) => !memberIds.has(d.id))
-  const divisionById = new Map(allDivisions.map((d) => [d.id, d]))
-  function fullPath(d: typeof personDivisions.$inferSelect): string {
-    const parts: string[] = [d.name]
-    let cur: typeof personDivisions.$inferSelect | undefined = d
-    const seen = new Set<string>()
-    while (cur?.parentDivisionId && !seen.has(cur.id)) {
-      seen.add(cur.id)
-      const p = divisionById.get(cur.parentDivisionId)
-      if (!p) break
-      parts.unshift(p.name)
-      cur = p
-    }
-    return parts.join(' › ')
-  }
-  return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Layers size={16} />
-            Current divisions
-            <Badge variant="secondary">{memberships.length}</Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {memberships.length === 0 ? (
-            <p className="text-sm text-slate-500">Not in any divisions.</p>
-          ) : (
-            <ul className="space-y-1 text-sm">
-              {memberships.map(({ division }) => (
-                <li
-                  key={division.id}
-                  className="flex items-center justify-between rounded border border-slate-200 px-3 py-2"
-                >
-                  <Link
-                    href={`/people/divisions/${division.id}`}
-                    className="font-medium hover:underline"
-                  >
-                    {fullPath(division)}
-                  </Link>
-                  <form action={togglePersonInDivision} className="inline">
-                    <input type="hidden" name="divisionId" value={division.id} />
-                    <input type="hidden" name="personId" value={personId} />
-                    <Button
-                      type="submit"
-                      size="sm"
-                      variant="ghost"
-                      className="text-red-500 hover:text-red-700"
-                    >
-                      <Trash2 size={12} />
-                    </Button>
-                  </form>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
-      {candidates.length > 0 ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Add a division</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form action={togglePersonInDivision} className="flex items-end gap-2">
-              <input type="hidden" name="personId" value={personId} />
-              <div className="min-w-0 flex-1 space-y-1">
-                <Label htmlFor="divisionId">Division</Label>
-                <Select id="divisionId" name="divisionId" defaultValue="">
-                  <option value="">— select —</option>
-                  {candidates.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {fullPath(d)}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-              <Button type="submit">Add</Button>
-            </form>
           </CardContent>
         </Card>
       ) : null}

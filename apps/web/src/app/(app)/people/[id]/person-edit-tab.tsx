@@ -1,9 +1,21 @@
 import { and, asc, eq, ne } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
-import { Button, Card, CardContent, Input, Label, Select, Textarea } from '@beaconhs/ui'
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+  Button,
+  Card,
+  CardContent,
+  Input,
+  Label,
+  Select,
+  Textarea,
+} from '@beaconhs/ui'
 import { crews, departments, people, trades } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { getPersonSyncOrigin } from '@/lib/people-sync'
 import { PersonSelectField } from '@/components/person-select-field'
 
 async function savePerson(formData: FormData) {
@@ -11,38 +23,69 @@ async function savePerson(formData: FormData) {
   const ctx = await requireRequestContext()
   const id = String(formData.get('id') ?? '')
   if (!id) return
-  const before = await ctx.db(async (tx) => {
+  const { before, syncOrigin } = await ctx.db(async (tx) => {
     const [p] = await tx.select().from(people).where(eq(people.id, id)).limit(1)
-    return p
+    const origin = p ? await getPersonSyncOrigin(tx, id) : null
+    return { before: p, syncOrigin: origin }
   })
+  if (!before) return
+  // While a person is actively synced, the source system owns the identity
+  // fields — we ignore whatever the (disabled) inputs post and preserve the
+  // current values, so a stray submit can never blank a synced field.
+  const locked = syncOrigin != null
+
   const rawManagerId = String(formData.get('managerPersonId') ?? '').trim() || null
   // A person cannot be their own manager — silently drop the assignment if the
   // form tries it. (The dropdown already filters self out, but defend anyway.)
   const managerPersonId = rawManagerId && rawManagerId !== id ? rawManagerId : null
-  const patch = {
-    firstName: String(formData.get('firstName') ?? '').trim(),
-    lastName: String(formData.get('lastName') ?? '').trim(),
+
+  // App-owned fields — always editable, sync or not.
+  const appFields = {
     formalName: String(formData.get('formalName') ?? '').trim() || null,
-    jobTitle: String(formData.get('jobTitle') ?? '').trim() || null,
-    employeeNo: String(formData.get('employeeNo') ?? '').trim() || null,
-    email: String(formData.get('email') ?? '').trim() || null,
-    phone: String(formData.get('phone') ?? '').trim() || null,
-    hireDate: String(formData.get('hireDate') ?? '').trim() || null,
-    departmentId: String(formData.get('departmentId') ?? '').trim() || null,
-    tradeId: String(formData.get('tradeId') ?? '').trim() || null,
     crewId: String(formData.get('crewId') ?? '').trim() || null,
     managerPersonId,
     emergencyContactName: String(formData.get('emergencyContactName') ?? '').trim() || null,
     emergencyContactPhone: String(formData.get('emergencyContactPhone') ?? '').trim() || null,
     notes: String(formData.get('notes') ?? '').trim() || null,
-    status: String(formData.get('status') ?? 'active') as 'active' | 'inactive' | 'terminated',
   }
+
+  // Sync-owned fields — preserved verbatim when locked, read from the form otherwise.
+  const syncedFields = locked
+    ? {
+        firstName: before.firstName,
+        lastName: before.lastName,
+        jobTitle: before.jobTitle,
+        employeeNo: before.employeeNo,
+        email: before.email,
+        phone: before.phone,
+        hireDate: before.hireDate,
+        departmentId: before.departmentId,
+        tradeId: before.tradeId,
+        status: before.status,
+      }
+    : {
+        firstName: String(formData.get('firstName') ?? '').trim(),
+        lastName: String(formData.get('lastName') ?? '').trim(),
+        jobTitle: String(formData.get('jobTitle') ?? '').trim() || null,
+        employeeNo: String(formData.get('employeeNo') ?? '').trim() || null,
+        email: String(formData.get('email') ?? '').trim() || null,
+        phone: String(formData.get('phone') ?? '').trim() || null,
+        hireDate: String(formData.get('hireDate') ?? '').trim() || null,
+        departmentId: String(formData.get('departmentId') ?? '').trim() || null,
+        tradeId: String(formData.get('tradeId') ?? '').trim() || null,
+        status: String(formData.get('status') ?? 'active') as 'active' | 'inactive' | 'terminated',
+      }
+
+  // Required-field guard only applies to manual edits (synced names come from before).
+  if (!locked && (!syncedFields.firstName || !syncedFields.lastName)) return
+
+  const patch = { ...syncedFields, ...appFields }
   await ctx.db((tx) => tx.update(people).set(patch).where(eq(people.id, id)))
   await recordAudit(ctx, {
     entityType: 'person',
     entityId: id,
     action: 'update',
-    summary: 'Person edited',
+    summary: locked ? 'Person edited (synced fields preserved)' : 'Person edited',
     before: before as unknown as Record<string, unknown>,
     after: patch as unknown as Record<string, unknown>,
   })
@@ -51,9 +94,9 @@ async function savePerson(formData: FormData) {
 
 export async function PersonEditTab({ personId }: { personId: string }) {
   const ctx = await requireRequestContext()
-  const [person, depts, allTrades, allCrews, allManagers] = await ctx.db(async (tx) => {
+  const [person, depts, allTrades, allCrews, allManagers, syncOrigin] = await ctx.db(async (tx) => {
     const [p] = await tx.select().from(people).where(eq(people.id, personId)).limit(1)
-    if (!p) return [null, [], [], [], []] as const
+    if (!p) return [null, [], [], [], [], null] as const
     const d = await tx.select().from(departments).orderBy(asc(departments.name))
     const t = await tx.select().from(trades).orderBy(asc(trades.name))
     const c = await tx.select().from(crews).orderBy(asc(crews.name))
@@ -70,42 +113,68 @@ export async function PersonEditTab({ personId }: { personId: string }) {
       .from(people)
       .where(and(ne(people.id, personId), eq(people.status, 'active')))
       .orderBy(asc(people.lastName), asc(people.firstName))
-    return [p, d, t, c, m] as const
+    const origin = await getPersonSyncOrigin(tx, personId)
+    return [p, d, t, c, m, origin] as const
   })
   if (!person) return null
+  const locked = syncOrigin != null
 
   return (
     <Card>
       <CardContent className="pt-6">
+        {locked ? (
+          <Alert variant="info" className="mb-4">
+            <AlertTitle>Synced from {syncOrigin!.connectionName}</AlertTitle>
+            <AlertDescription>
+              Identity fields (name, employee #, contact, department, trade, status, hire date) are
+              kept in sync from {syncOrigin!.sourceSystem} and are read-only here — edit them at the
+              source. App-only fields below stay editable.
+            </AlertDescription>
+          </Alert>
+        ) : null}
         <form action={savePerson} className="space-y-4">
           <input type="hidden" name="id" value={personId} />
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="First name" required>
-              <Input name="firstName" required defaultValue={person.firstName} />
+              <Input name="firstName" required defaultValue={person.firstName} disabled={locked} />
             </Field>
             <Field label="Last name" required>
-              <Input name="lastName" required defaultValue={person.lastName} />
+              <Input name="lastName" required defaultValue={person.lastName} disabled={locked} />
             </Field>
             <Field label="Formal name">
               <Input name="formalName" defaultValue={person.formalName ?? ''} />
             </Field>
             <Field label="Job title">
-              <Input name="jobTitle" defaultValue={person.jobTitle ?? ''} />
+              <Input name="jobTitle" defaultValue={person.jobTitle ?? ''} disabled={locked} />
             </Field>
             <Field label="Employee #">
-              <Input name="employeeNo" defaultValue={person.employeeNo ?? ''} />
+              <Input name="employeeNo" defaultValue={person.employeeNo ?? ''} disabled={locked} />
             </Field>
             <Field label="Hire date">
-              <Input name="hireDate" type="date" defaultValue={person.hireDate ?? ''} />
+              <Input
+                name="hireDate"
+                type="date"
+                defaultValue={person.hireDate ?? ''}
+                disabled={locked}
+              />
             </Field>
             <Field label="Email">
-              <Input name="email" type="email" defaultValue={person.email ?? ''} />
+              <Input
+                name="email"
+                type="email"
+                defaultValue={person.email ?? ''}
+                disabled={locked}
+              />
             </Field>
             <Field label="Phone">
-              <Input name="phone" type="tel" defaultValue={person.phone ?? ''} />
+              <Input name="phone" type="tel" defaultValue={person.phone ?? ''} disabled={locked} />
             </Field>
             <Field label="Department">
-              <Select name="departmentId" defaultValue={person.departmentId ?? ''}>
+              <Select
+                name="departmentId"
+                defaultValue={person.departmentId ?? ''}
+                disabled={locked}
+              >
                 <option value="">—</option>
                 {depts.map((d) => (
                   <option key={d.id} value={d.id}>
@@ -115,7 +184,7 @@ export async function PersonEditTab({ personId }: { personId: string }) {
               </Select>
             </Field>
             <Field label="Trade">
-              <Select name="tradeId" defaultValue={person.tradeId ?? ''}>
+              <Select name="tradeId" defaultValue={person.tradeId ?? ''} disabled={locked}>
                 <option value="">—</option>
                 {allTrades.map((t) => (
                   <option key={t.id} value={t.id}>
@@ -149,7 +218,7 @@ export async function PersonEditTab({ personId }: { personId: string }) {
               />
             </Field>
             <Field label="Status">
-              <Select name="status" defaultValue={person.status}>
+              <Select name="status" defaultValue={person.status} disabled={locked}>
                 <option value="active">Active</option>
                 <option value="inactive">Inactive</option>
                 <option value="terminated">Terminated</option>

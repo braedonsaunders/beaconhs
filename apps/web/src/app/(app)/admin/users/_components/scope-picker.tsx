@@ -1,7 +1,7 @@
 'use client'
 
 // Data-visibility scope picker for a role assignment. Mirrors the RoleScope
-// union: tenant-wide · specific sites · a department (divisions/groups) ·
+// union: tenant-wide · specific sites · a department (departments/groups) ·
 // hand-picked people · crews · self. Multi-value scopes use a SearchSelect +
 // removable chips over ACTIVE-only option lists (per the active-people-picker
 // mandate). The chosen scope is serialized to a hidden <input> so it posts in a
@@ -24,8 +24,8 @@ const TYPE_OPTIONS: { value: ScopeType; label: string; help: string }[] = [
   },
   {
     value: 'team',
-    label: 'Department (divisions / groups)',
-    help: 'Their own records plus people in the chosen divisions or groups.',
+    label: 'Department or group',
+    help: 'Their own records plus people in the chosen departments or groups.',
   },
   {
     value: 'people',
@@ -98,7 +98,7 @@ export function ScopePicker({
   defaultScope,
   sites,
   crews,
-  divisions,
+  departments,
   groups,
   people,
 }: {
@@ -106,7 +106,7 @@ export function ScopePicker({
   defaultScope?: RoleScope
   sites: ScopeOption[]
   crews: ScopeOption[]
-  divisions: ScopeOption[]
+  departments: ScopeOption[]
   groups: ScopeOption[]
   people: ScopeOption[]
 }) {
@@ -120,8 +120,8 @@ export function ScopePicker({
   const [personIds, setPersonIds] = useState<string[]>(
     defaultScope?.type === 'people' ? defaultScope.personIds : [],
   )
-  const [divisionIds, setDivisionIds] = useState<string[]>(
-    defaultScope?.type === 'team' ? defaultScope.divisionIds : [],
+  const [departmentIds, setDepartmentIds] = useState<string[]>(
+    defaultScope?.type === 'team' ? defaultScope.departmentIds : [],
   )
   const [groupIds, setGroupIds] = useState<string[]>(
     defaultScope?.type === 'team' ? defaultScope.groupIds : [],
@@ -136,13 +136,13 @@ export function ScopePicker({
       case 'people':
         return { type, personIds }
       case 'team':
-        return { type, divisionIds, groupIds }
+        return { type, departmentIds, groupIds }
       case 'self':
         return { type }
       default:
         return { type: 'tenant' }
     }
-  }, [type, siteIds, crewIds, personIds, divisionIds, groupIds])
+  }, [type, siteIds, crewIds, personIds, departmentIds, groupIds])
 
   const help = TYPE_OPTIONS.find((t) => t.value === type)?.help
 
@@ -191,13 +191,13 @@ export function ScopePicker({
       {type === 'team' ? (
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label>Divisions</Label>
+            <Label>Departments</Label>
             <MultiChipSelect
-              options={divisions}
-              value={divisionIds}
-              onChange={setDivisionIds}
-              placeholder="Add a division…"
-              sheetTitle="Select divisions"
+              options={departments}
+              value={departmentIds}
+              onChange={setDepartmentIds}
+              placeholder="Add a department…"
+              sheetTitle="Select departments"
             />
           </div>
           <div className="space-y-1.5">

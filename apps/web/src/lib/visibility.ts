@@ -2,13 +2,14 @@
 //
 // Turns a user's role-assignment scopes (RoleScope) into a WHERE predicate over
 // a record's "owner" columns, so a limited user sees only: their own records ·
-// own + a hand-picked set of people · a department (people in chosen divisions
+// own + a hand-picked set of people · a department (people in chosen departments
 // and/or groups) · specific sites · or everybody. Each record list calls this
 // inside its query and ANDs the result into its filters.
 //
 // Super-admins and anyone holding a `tenant` scope see everything (returns
-// undefined). Division/group membership is read from the denormalised
-// people.divisionIds / people.groupIds caches, so no extra joins are needed.
+// undefined). Department membership is read from people.departmentId and group
+// membership from the denormalised people.groupIds cache, so no extra joins are
+// needed.
 
 import { eq, inArray, or, sql, type SQL } from 'drizzle-orm'
 import type { PgColumn } from 'drizzle-orm/pg-core'
@@ -86,8 +87,7 @@ export async function recordVisibilityWhere(
       )
     } else if (s.type === 'team' && cols.personCol) {
       const member: SQL[] = []
-      if (s.divisionIds.length > 0)
-        member.push(sql`jsonb_exists_any(${people.divisionIds}, ${textArray(s.divisionIds)})`)
+      if (s.departmentIds.length > 0) member.push(inArray(people.departmentId, s.departmentIds))
       if (s.groupIds.length > 0)
         member.push(sql`jsonb_exists_any(${people.groupIds}, ${textArray(s.groupIds)})`)
       const memberWhere = or(...member)

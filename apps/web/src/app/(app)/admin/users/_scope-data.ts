@@ -6,9 +6,9 @@
 import { and, asc, eq, isNull } from 'drizzle-orm'
 import {
   crews,
+  departments,
   orgUnits,
   people,
-  personDivisions,
   personGroups,
   type RoleScope,
 } from '@beaconhs/db/schema'
@@ -19,7 +19,7 @@ export type ScopeOpt = { value: string; label: string; hint?: string }
 export type ScopeOptions = {
   sites: ScopeOpt[]
   crews: ScopeOpt[]
-  divisions: ScopeOpt[]
+  departments: ScopeOpt[]
   groups: ScopeOpt[]
   people: ScopeOpt[]
 }
@@ -35,10 +35,10 @@ export async function loadScopeOptions(ctx: Ctx): Promise<ScopeOptions> {
       .select({ value: crews.id, label: crews.name })
       .from(crews)
       .orderBy(asc(crews.name))
-    const divisions = await tx
-      .select({ value: personDivisions.id, label: personDivisions.name })
-      .from(personDivisions)
-      .orderBy(asc(personDivisions.name))
+    const departmentOpts = await tx
+      .select({ value: departments.id, label: departments.name })
+      .from(departments)
+      .orderBy(asc(departments.name))
     const groups = await tx
       .select({ value: personGroups.id, label: personGroups.name })
       .from(personGroups)
@@ -56,7 +56,7 @@ export async function loadScopeOptions(ctx: Ctx): Promise<ScopeOptions> {
     return {
       sites,
       crews: crewRows,
-      divisions,
+      departments: departmentOpts,
       groups,
       people: peopleRows.map((p) => ({
         value: p.id,
@@ -87,8 +87,8 @@ export function describeScope(scope: RoleScope, opts: ScopeOptions): string {
       return `People — ${names(scope.personIds, opts.people)}`
     case 'team': {
       const parts: string[] = []
-      if (scope.divisionIds.length)
-        parts.push(`divisions: ${names(scope.divisionIds, opts.divisions)}`)
+      if (scope.departmentIds.length)
+        parts.push(`departments: ${names(scope.departmentIds, opts.departments)}`)
       if (scope.groupIds.length) parts.push(`groups: ${names(scope.groupIds, opts.groups)}`)
       return `Department — ${parts.length ? parts.join('; ') : 'none'}`
     }

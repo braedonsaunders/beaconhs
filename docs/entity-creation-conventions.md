@@ -36,7 +36,7 @@ investigation events, hazards, check-ins, expenses, signatures, complete-steps�
 
 ### Tier 3 — Small lookup / admin reference → **quick-create modal or inline-on-list**
 
-Short reference records (divisions, groups, tags, classifications, injury types, equipment
+Short reference records (departments, groups, tags, classifications, injury types, equipment
 types/categories/rates, document books, report schedules…).
 
 - A lightweight modal (or inline row on the list) capturing the few fields; edit on the
@@ -111,7 +111,7 @@ projects* (_currently page-form — see Tier 3). Journals: photos, tags_. Lone-w
 
 | Entity                     | Current                 | Action                                         |
 | -------------------------- | ----------------------- | ---------------------------------------------- |
-| People division            | page-form               | → quick-create modal on the list               |
+| People department          | page-form               | → table + drawer on the list (shipped)         |
 | People group               | page-form               | → quick-create modal                           |
 | Document book              | page-form               | → quick-create modal (title/category/desc)     |
 | Document management-review | page-form               | → quick-create modal                           |
@@ -149,7 +149,7 @@ calibrations** (likely admin-only); tenant-user **invite** flow.
 
 ## Rollout order (suggested)
 
-1. **Tier 3 modals** (fast, self-contained, high consistency win): divisions, groups, document
+1. **Tier 3 modals** (fast, self-contained, high consistency win): departments, groups, document
    books, management-reviews, report schedules, projects, contacts.
 2. **Tier 1 with existing draft state** (no schema change): inspection records, training assessment
    attempts, hazard assessments, training course/class/type/authority → drop `/new`, instant-create,

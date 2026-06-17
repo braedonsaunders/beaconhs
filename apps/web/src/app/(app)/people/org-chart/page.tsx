@@ -19,7 +19,7 @@ import { isNull, asc } from 'drizzle-orm'
 import { Users } from 'lucide-react'
 import { Badge, Button, EmptyState, PageHeader } from '@beaconhs/ui'
 import { people } from '@beaconhs/db/schema'
-import { requireRequestContext } from '@/lib/auth'
+import { requireModuleManage } from '@/lib/module-admin/guard'
 import { ListPageLayout } from '@/components/page-layout'
 import { PeopleSubNav } from '../_components/people-sub-nav'
 import { TreeNode, type OrgNode } from './_tree-node'
@@ -35,7 +35,7 @@ export default async function OrgChartPage({
   const sp = await searchParams
   const rootParam = typeof sp.root === 'string' ? sp.root : null
 
-  const ctx = await requireRequestContext()
+  const ctx = await requireModuleManage('people')
   const rows = await ctx.db((tx) =>
     tx
       .select({

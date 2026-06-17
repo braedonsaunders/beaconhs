@@ -28,7 +28,7 @@ export function MemberPicker({
   emptyMembersLabel = 'No members',
 }: {
   entityId: string
-  entityIdField: 'groupId' | 'divisionId' | 'titleId'
+  entityIdField: 'groupId' | 'titleId'
   candidates: Candidate[]
   initialMemberIds: string[]
   action: (formData: FormData) => Promise<void>

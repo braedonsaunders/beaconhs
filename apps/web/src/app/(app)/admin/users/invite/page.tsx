@@ -82,7 +82,7 @@ export default async function InviteUserPage({
               <ScopePicker
                 sites={scopeOptions.sites}
                 crews={scopeOptions.crews}
-                divisions={scopeOptions.divisions}
+                departments={scopeOptions.departments}
                 groups={scopeOptions.groups}
                 people={scopeOptions.people}
               />

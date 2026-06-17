@@ -224,9 +224,7 @@ export const TENANT_SCOPED_TABLES = [
   // Job-title task tracking
   'job_title_tasks',
   'job_title_task_acknowledgments',
-  // People — divisions / groups / titles assignments
-  'person_divisions',
-  'person_division_memberships',
+  // People — groups / titles assignments
   'person_groups',
   'person_group_memberships',
   'person_titles',

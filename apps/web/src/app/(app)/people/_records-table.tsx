@@ -9,7 +9,7 @@ import {
   BulkPeopleBar,
   HeaderSelectAll,
   SelectionCheckbox,
-  type DivisionOption,
+  type DepartmentOption,
   type GroupOption,
 } from './_bulk-bar'
 
@@ -27,7 +27,7 @@ export type PeopleTableRow = {
 export function PeopleRecordsTable({
   rows,
   groups,
-  divisions,
+  departments,
   basePath,
   currentParams,
   sort,
@@ -35,7 +35,7 @@ export function PeopleRecordsTable({
 }: {
   rows: PeopleTableRow[]
   groups: GroupOption[]
-  divisions: DivisionOption[]
+  departments: DepartmentOption[]
   basePath: string
   currentParams: Record<string, string | string[] | undefined>
   sort: string
@@ -190,7 +190,7 @@ export function PeopleRecordsTable({
         selectedIds={Array.from(selected)}
         onClear={clear}
         groups={groups}
-        divisions={divisions}
+        departments={departments}
       />
     </>
   )

@@ -79,11 +79,9 @@ import {
   hazidHazardTypes,
   hazidHazards,
   hazidTasks,
-  // People groups / divisions / titles + per-title tasks
+  // People groups / titles + per-title tasks
   jobTitleTaskAcknowledgments,
   jobTitleTasks,
-  personDivisionMemberships,
-  personDivisions,
   personGroupMemberships,
   personGroups,
   personTitleAssignments,
@@ -181,9 +179,9 @@ async function main() {
         {
           slug: 'lone_worker_weekly',
           kind: 'built_in',
-          name: 'Weekly Lone-Worker Activity',
+          name: 'Weekly Monitored Sessions',
           description:
-            'Lone-worker sessions started in the configured window, grouped by status — useful for spotting missed/escalated patterns.',
+            'Monitored sessions started in the configured window, grouped by status — useful for spotting missed/escalated patterns.',
           category: 'lone_worker',
           queryKind: 'lone_worker_summary',
         },
@@ -1854,7 +1852,7 @@ async function main() {
     // --- Incident taxonomy + hours-worked + classify existing rows -----
     await seedIncidentClassifications(tx, tenant.id)
 
-    // --- People groups + divisions + titles + job-description tasks ----
+    // --- People groups + titles + job-description tasks ----
     await seedPeopleGroupsAndTitles(tx, tenant.id)
 
     console.log(`  · tenant: ${tenant.name} (${tenant.slug})`)
@@ -3277,9 +3275,9 @@ async function seedIncidentClassifications(tx: any, tenantId: string): Promise<v
 }
 
 /**
- * Seed the four People taxonomy tables — groups, divisions, titles + their
- * job-description task lists. Includes some sample memberships and
- * acknowledgement records so the UI has data to render on first boot.
+ * Seed the People taxonomy tables — groups, titles + their job-description task
+ * lists. Includes some sample memberships and acknowledgement records so the UI
+ * has data to render on first boot.
  *
  * Idempotent guard: skips entirely if any `person_titles` rows already exist
  * for the tenant.
@@ -3351,50 +3349,6 @@ export async function seedPeopleGroupsAndTitles(tx: any, tenantId: string): Prom
   }
   if (groupMembershipRows.length > 0) {
     await tx.insert(personGroupMemberships).values(groupMembershipRows).onConflictDoNothing()
-  }
-
-  // --- Divisions (3, hierarchical) ----------------------------------------
-  const [construction] = await tx
-    .insert(personDivisions)
-    .values({
-      tenantId,
-      name: 'Construction',
-      description: 'All physical-build crews — civil, structural, mechanical.',
-      code: 'CON',
-    })
-    .returning()
-  const [civil] = await tx
-    .insert(personDivisions)
-    .values({
-      tenantId,
-      parentDivisionId: construction.id,
-      name: 'Civil',
-      description: 'Earthworks, foundations, concrete.',
-      code: 'CIV',
-    })
-    .returning()
-  const [operations] = await tx
-    .insert(personDivisions)
-    .values({
-      tenantId,
-      name: 'Operations',
-      description: 'Plant operations + maintenance.',
-      code: 'OPS',
-    })
-    .returning()
-
-  // Distribute people across divisions
-  const divisionMembershipRows: {
-    tenantId: string
-    divisionId: string
-    personId: string
-  }[] = []
-  for (const [i, p] of peopleRows.entries()) {
-    const target = i % 3 === 0 ? construction.id : i % 3 === 1 ? civil.id : operations.id
-    divisionMembershipRows.push({ tenantId, divisionId: target, personId: p.id })
-  }
-  if (divisionMembershipRows.length > 0) {
-    await tx.insert(personDivisionMemberships).values(divisionMembershipRows).onConflictDoNothing()
   }
 
   // --- Titles (6) ---------------------------------------------------------
@@ -3599,11 +3553,6 @@ export async function seedPeopleGroupsAndTitles(tx: any, tenantId: string): Prom
       FROM person_group_memberships
       WHERE person_id = people.id AND tenant_id = ${tenantId}
     ), '[]'::jsonb),
-    division_ids = COALESCE((
-      SELECT jsonb_agg(division_id ORDER BY division_id)
-      FROM person_division_memberships
-      WHERE person_id = people.id AND tenant_id = ${tenantId}
-    ), '[]'::jsonb),
     title_ids = COALESCE((
       SELECT jsonb_agg(title_id ORDER BY title_id)
       FROM person_title_assignments
@@ -3613,7 +3562,7 @@ export async function seedPeopleGroupsAndTitles(tx: any, tenantId: string): Prom
   `)
 
   console.log(
-    `  · people taxonomy: ${insertedGroups.length} groups (${groupMembershipRows.length} memberships), 3 divisions (${divisionMembershipRows.length} memberships), ${insertedTitles.length} titles (${titleAssignmentRows.length} primary assignments, ${insertedTasks.length} job-description tasks, ${ackRows.length} sample acknowledgements)`,
+    `  · people taxonomy: ${insertedGroups.length} groups (${groupMembershipRows.length} memberships), ${insertedTitles.length} titles (${titleAssignmentRows.length} primary assignments, ${insertedTasks.length} job-description tasks, ${ackRows.length} sample acknowledgements)`,
   )
 }
 
