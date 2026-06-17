@@ -62,11 +62,11 @@ export function Photos({
 
   return (
     <div className="space-y-2.5">
-      <div className="flex items-center gap-2 text-xs font-semibold tracking-wide text-slate-400 uppercase">
+      <div className="flex items-center gap-2 text-xs font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500">
         Photos
         {busy ? <Loader2 size={12} className="animate-spin text-teal-600" /> : null}
         {aiEnabled ? (
-          <span className="inline-flex items-center gap-1 rounded-full bg-teal-50 px-1.5 py-px text-[10px] font-medium text-teal-700">
+          <span className="inline-flex items-center gap-1 rounded-full bg-teal-50 px-1.5 py-px text-[10px] font-medium text-teal-700 dark:bg-teal-500/15 dark:text-teal-300">
             <Sparkles size={10} /> auto-caption
           </span>
         ) : null}
@@ -77,7 +77,7 @@ export function Photos({
           {photos.map((p) => (
             <div
               key={p.id}
-              className="group relative aspect-square overflow-hidden rounded-lg bg-slate-100 ring-1 ring-slate-200"
+              className="group relative aspect-square overflow-hidden rounded-lg bg-slate-100 ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               {p.url ? (

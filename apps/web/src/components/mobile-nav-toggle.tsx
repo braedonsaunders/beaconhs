@@ -8,9 +8,11 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Menu, X } from 'lucide-react'
+import { Badge } from '@beaconhs/ui'
 import { Logo } from './brand-logo'
 import { useMobileNav } from './mobile-nav'
 import { SidebarNav, type SidebarNavGroup } from './sidebar-nav'
+import { ThemeToggle } from './theme-toggle'
 
 export function MobileNavToggle({ groups }: { groups: SidebarNavGroup[] }) {
   const { open, setOpen } = useMobileNav()
@@ -77,6 +79,18 @@ export function MobileNavToggle({ groups }: { groups: SidebarNavGroup[] }) {
                       </button>
                     </div>
                     <SidebarNav groups={groups} />
+
+                    {/* Footer: theme switcher + build tag — mirrors the desktop
+                        rail. Safe-area padding clears the iOS home indicator. */}
+                    <div className="space-y-2 border-t border-slate-200 px-3 pt-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] dark:border-slate-800">
+                      <ThemeToggle />
+                      <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                        <span>v0.1.0</span>
+                        <Badge variant="secondary" className="font-mono text-[10px]">
+                          dev
+                        </Badge>
+                      </div>
+                    </div>
                   </motion.aside>
                 </div>
               ) : null}

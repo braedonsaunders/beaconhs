@@ -47,6 +47,7 @@ export default async function AiSettingsPage() {
                 modelSmart: s.modelSmart,
                 baseUrl: s.baseUrl,
                 hasKey: s.hasKey,
+                autoJournalAi: s.autoJournalAi,
               }}
             />
 

@@ -12,6 +12,7 @@ import {
   Loader2,
   Mail,
   MoreHorizontal,
+  NotebookPen,
   Printer,
   Send,
   Sparkles,
@@ -19,18 +20,11 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@beaconhs/ui'
-import {
-  deleteEntry,
-  emailEntry,
-  runEntryAI,
-  setEntryTags,
-  submitEntry,
-  updateEntry,
-} from './_actions'
+import { deleteEntry, emailEntry, setEntryTags, submitEntry, updateEntry } from './_actions'
 import { JournalEditor } from './_editor'
 import { MetadataBar } from './_metadata-bar'
 import { Photos } from './_photos'
-import { formatLongDate, isToday, statusMeta } from './_format'
+import { formatDate, isToday, statusMeta, textToHtml } from './_format'
 import type { EntryPatch, JournalEntryDetail, JournalOption, TagSuggestion } from './_types'
 
 type SaveState = 'idle' | 'saving' | 'saved'
@@ -44,6 +38,7 @@ export function EditorPane({
   onMutated,
   onDeleted,
   onLocalPatch,
+  onBrowse,
 }: {
   entry: JournalEntryDetail
   sites: JournalOption[]
@@ -53,10 +48,11 @@ export function EditorPane({
   onMutated: () => void
   onDeleted: () => void
   onLocalPatch: (patch: Partial<JournalEntryDetail>) => void
+  /** Open the entries drawer (mobile only — desktop shows the tree inline). */
+  onBrowse: () => void
 }) {
   const editable = !entry.locked
   const [saveState, setSaveState] = useState<SaveState>('saved')
-  const [analyzing, startAnalyze] = useTransition()
   const [submitting, startSubmit] = useTransition()
   const [menuOpen, setMenuOpen] = useState(false)
 
@@ -118,23 +114,6 @@ export function EditorPane({
     queue({ bodyHtml: html })
   }
 
-  function analyze() {
-    if (!aiEnabled) {
-      toast.error('AI isn’t configured. Add an API key to enable it.')
-      return
-    }
-    startAnalyze(async () => {
-      const r = await runEntryAI(entry.id)
-      if (!r.ok) {
-        toast.error(r.error)
-        return
-      }
-      onLocalPatch({ summary: r.meta.summary, tags: r.meta.tags })
-      toast.success('AI summarised and tagged this entry.')
-      onMutated()
-    })
-  }
-
   function submit() {
     startSubmit(async () => {
       flush()
@@ -175,13 +154,22 @@ export function EditorPane({
   const status = statusMeta(entry.status)
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-white">
+    <div className="flex h-full min-h-0 flex-col bg-white dark:bg-slate-900">
       {/* Header */}
-      <div className="flex items-center gap-3 border-b border-slate-200 px-4 py-2.5 sm:px-6">
+      <div className="flex items-center gap-2.5 border-b border-slate-200 px-3 py-2.5 sm:gap-3 sm:px-6 dark:border-slate-800">
+        {/* Mobile: open the entries drawer (replaces the old separate top bar). */}
+        <button
+          type="button"
+          onClick={onBrowse}
+          aria-label="Browse journals"
+          className="-ml-1 grid h-9 w-9 shrink-0 place-items-center rounded-md text-slate-500 hover:bg-slate-100 lg:hidden dark:text-slate-400 dark:hover:bg-slate-800"
+        >
+          <NotebookPen size={18} />
+        </button>
         <AuthorAvatar name={entry.authorName} />
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <h1 className="truncate text-base font-semibold text-slate-900">
+            <h1 className="truncate text-base font-semibold text-slate-900 dark:text-slate-100">
               {entry.authorName ?? 'Unassigned'}
             </h1>
             <span
@@ -193,33 +181,16 @@ export function EditorPane({
               {status.label}
             </span>
           </div>
-          <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-slate-400">
-            <span className="font-medium text-slate-600">
-              {isToday(entry.entryDate) ? 'Today' : formatLongDate(entry.entryDate)}
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[11px] text-slate-400 dark:text-slate-500">
+            <span className="font-medium whitespace-nowrap text-slate-600 dark:text-slate-300">
+              {isToday(entry.entryDate) ? 'Today' : formatDate(entry.entryDate)}
             </span>
-            <span className="text-slate-300">·</span>
-            <span className="font-mono">{entry.reference}</span>
+            <span className="hidden font-mono sm:inline">· {entry.reference}</span>
             <SaveBadge state={saveState} />
           </div>
         </div>
 
         <div className="ml-auto flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={analyze}
-            disabled={analyzing}
-            className={cn(
-              'inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors',
-              aiEnabled
-                ? 'border border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100'
-                : 'border border-slate-200 bg-slate-50 text-slate-400',
-            )}
-            title="Summarise & auto-tag this entry"
-          >
-            {analyzing ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
-            <span className="hidden sm:inline">{analyzing ? 'Analysing…' : 'Summarise'}</span>
-          </button>
-
           {entry.status === 'draft' ? (
             <button
               type="button"
@@ -237,32 +208,32 @@ export function EditorPane({
               type="button"
               onClick={() => setMenuOpen((v) => !v)}
               onBlur={() => setTimeout(() => setMenuOpen(false), 150)}
-              className="grid h-8 w-8 place-items-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50"
+              className="grid h-8 w-8 place-items-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
             >
               <MoreHorizontal size={15} />
             </button>
             {menuOpen ? (
-              <div className="absolute top-9 right-0 z-30 w-44 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+              <div className="absolute top-9 right-0 z-30 w-44 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800">
                 <a
                   href={`/journals/${entry.id}/print`}
                   target="_blank"
                   rel="noreferrer"
                   onClick={() => setMenuOpen(false)}
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50"
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700/60"
                 >
                   <Printer size={14} /> Print / PDF
                 </a>
                 <button
                   type="button"
                   onClick={emailRecap}
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50"
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700/60"
                 >
                   <Mail size={14} /> Email recap
                 </button>
                 <button
                   type="button"
                   onClick={del}
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-red-600 hover:bg-red-50"
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/15"
                 >
                   <Trash2 size={14} /> Delete entry
                 </button>
@@ -275,7 +246,7 @@ export function EditorPane({
       {/* Body */}
       <div className="app-scroll min-h-0 flex-1 overflow-y-auto">
         {/* Full-width controls */}
-        <div className="border-b border-slate-100 bg-slate-50/50 px-4 py-4 sm:px-6">
+        <div className="border-b border-slate-100 bg-slate-50/50 px-4 py-4 sm:px-6 dark:border-slate-800 dark:bg-slate-800/40">
           <MetadataBar
             entry={entry}
             sites={sites}
@@ -289,8 +260,8 @@ export function EditorPane({
 
         {/* AI summary — full width */}
         {entry.summary ? (
-          <div className="border-b border-slate-100 px-4 py-3 sm:px-6">
-            <div className="flex gap-2 rounded-lg border border-teal-100 bg-teal-50/50 p-3 text-sm text-slate-600">
+          <div className="border-b border-slate-100 px-4 py-3 sm:px-6 dark:border-slate-800">
+            <div className="flex gap-2 rounded-lg border border-teal-100 bg-teal-50/50 p-3 text-sm text-slate-600 dark:border-teal-500/20 dark:bg-teal-500/10 dark:text-slate-300">
               <Sparkles size={15} className="mt-0.5 shrink-0 text-teal-600" />
               <p className="leading-relaxed">{entry.summary}</p>
             </div>
@@ -302,7 +273,7 @@ export function EditorPane({
           key={entry.id}
           // Migrated entries stored their HTML in bodyText (bodyHtml empty), so
           // fall back to it; otherwise the editor renders blank.
-          initialHtml={entry.bodyHtml || entry.bodyText}
+          initialHtml={entry.bodyHtml || textToHtml(entry.bodyText)}
           editable={editable}
           aiEnabled={aiEnabled}
           onChange={(html) => onBody(html)}
@@ -345,7 +316,7 @@ function AuthorAvatar({ name }: { name: string | null }) {
     ).toUpperCase() || '?'
   let h = 0
   for (let i = 0; i < label.length; i++) h = (h * 31 + label.charCodeAt(i)) >>> 0
-  const color = name ? AVATAR_COLORS[h % AVATAR_COLORS.length] : 'bg-slate-300'
+  const color = name ? AVATAR_COLORS[h % AVATAR_COLORS.length] : 'bg-slate-300 dark:bg-slate-600'
   return (
     <span
       title={label}

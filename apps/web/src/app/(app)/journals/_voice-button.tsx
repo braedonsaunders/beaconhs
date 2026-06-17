@@ -93,8 +93,8 @@ export function VoiceButton({
       className={cn(
         'inline-flex h-8 w-8 items-center justify-center rounded-md border transition-colors',
         listening
-          ? 'animate-pulse border-red-300 bg-red-50 text-red-600'
-          : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900',
+          ? 'animate-pulse border-red-300 bg-red-50 text-red-600 dark:border-red-500/40 dark:bg-red-500/15 dark:text-red-400'
+          : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-100',
         disabled && 'cursor-not-allowed opacity-40',
         className,
       )}

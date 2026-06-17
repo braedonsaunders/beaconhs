@@ -19,7 +19,9 @@ export default async function JournalsPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="shrink-0 border-b border-slate-200 bg-white px-3 py-2 sm:px-4">
+      {/* Desktop only — on a phone the entry header + Browse drawer carry nav,
+          so the module tabs don't need a row of their own. */}
+      <div className="hidden shrink-0 border-b border-slate-200 bg-white sm:block sm:px-4 sm:py-2 dark:border-slate-800 dark:bg-slate-900">
         <ModuleNav moduleKey="journals" active="workspace" />
       </div>
       <div className="min-h-0 flex-1">

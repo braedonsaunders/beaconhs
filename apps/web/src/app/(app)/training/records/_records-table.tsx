@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { CreditCard, FileText, Printer } from 'lucide-react'
 import { Badge } from '@beaconhs/ui'
 import { SortTh } from '@/components/sortable-th'
+import { ListCard, MobileCardList } from '@/components/list-card'
 import { CredentialDownloadButton } from '@/components/credential-download-button'
 import type { CredentialOutput } from '@/lib/credential-designs'
 import { BulkTrainingRecordsBar, HeaderSelectAll, SelectionCheckbox } from './_bulk-bar'
@@ -68,7 +69,48 @@ export function TrainingRecordsTable({
 
   return (
     <>
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+      {/* Phones: tappable cards. Credential downloads live on the record page. */}
+      <MobileCardList>
+        {rows.map((r) => {
+          const expiryClass =
+            r.daysToExpiry === null
+              ? 'text-slate-400'
+              : r.daysToExpiry < 0
+                ? 'font-medium text-red-700 dark:text-red-400'
+                : r.daysToExpiry <= 30
+                  ? 'font-medium text-amber-700 dark:text-amber-400'
+                  : 'text-slate-500 dark:text-slate-400'
+          return (
+            <ListCard
+              key={r.id}
+              href={`/training/records/${r.id}`}
+              leading={
+                <SelectionCheckbox id={r.id} selected={selected.has(r.id)} onToggle={toggleOne} />
+              }
+              person={`${r.personLastName}, ${r.personFirstName}`}
+              reference={r.courseCode}
+              status={
+                r.daysToExpiry !== null && r.daysToExpiry < 0 ? (
+                  <Badge variant="destructive">Expired</Badge>
+                ) : undefined
+              }
+              title={r.courseName}
+              meta={
+                <>
+                  {r.personEmployeeNo ? `#${r.personEmployeeNo} · ` : ''}
+                  <span className={expiryClass}>
+                    {r.expiresOn ? `Expires ${r.expiresOn}` : 'No expiry'}
+                  </span>
+                  {r.completedOn ? ` · Completed ${r.completedOn}` : ''}
+                </>
+              }
+            />
+          )
+        })}
+      </MobileCardList>
+
+      {/* Tablet/desktop: full sortable table. */}
+      <div className="hidden overflow-x-auto rounded-lg border border-slate-200 bg-white sm:block dark:border-slate-800 dark:bg-slate-900">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-400">

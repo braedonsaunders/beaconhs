@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { Badge } from '@beaconhs/ui'
 import { SortTh } from '@/components/sortable-th'
+import { ListCard, MobileCardList } from '@/components/list-card'
 import {
   BulkReassignBar,
   HeaderSelectAll,
@@ -75,7 +76,63 @@ export function RecordsTable({
 
   return (
     <>
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+      {/* Phones: tappable cards (bulk-select via the leading checkbox). */}
+      <MobileCardList>
+        {rows.map((r) => {
+          const overdue =
+            r.dueOn && r.dueOn < today && !['closed', 'cancelled'].includes(r.status)
+          return (
+            <ListCard
+              key={r.id}
+              href={`/corrective-actions/${r.id}`}
+              leading={
+                <SelectionCheckbox id={r.id} selected={selected.has(r.id)} onToggle={toggleOne} />
+              }
+              reference={r.reference}
+              status={
+                <Badge
+                  variant={
+                    r.status === 'closed'
+                      ? 'success'
+                      : r.status === 'cancelled'
+                        ? 'secondary'
+                        : 'warning'
+                  }
+                >
+                  {r.status.replace('_', ' ')}
+                </Badge>
+              }
+              person={r.ownerName}
+              title={r.title}
+              meta={
+                <span className={overdue ? 'font-medium text-red-700 dark:text-red-400' : ''}>
+                  {r.dueOn ? `Due ${r.dueOn}${overdue ? ' · overdue' : ''}` : 'No due date'}
+                  {r.siteName ? ` · ${r.siteName}` : ''}
+                </span>
+              }
+              footer={
+                <>
+                  <Badge
+                    variant={
+                      r.severity === 'critical' || r.severity === 'high'
+                        ? 'destructive'
+                        : r.severity === 'medium'
+                          ? 'warning'
+                          : 'secondary'
+                    }
+                  >
+                    {r.severity}
+                  </Badge>
+                  {r.locked ? <Badge variant="outline">locked</Badge> : null}
+                </>
+              }
+            />
+          )
+        })}
+      </MobileCardList>
+
+      {/* Tablet/desktop: full sortable table. */}
+      <div className="hidden overflow-x-auto rounded-lg border border-slate-200 bg-white sm:block dark:border-slate-800 dark:bg-slate-900">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-400">

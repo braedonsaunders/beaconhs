@@ -1,8 +1,8 @@
 import Link from 'next/link'
 import { AlertTriangle } from 'lucide-react'
-import { and, asc, count, desc, eq, ilike, isNull, or, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, inArray, isNull, or, type SQL } from 'drizzle-orm'
 import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
-import { incidents, orgUnits } from '@beaconhs/db/schema'
+import { incidentPeople, incidents, orgUnits, people } from '@beaconhs/db/schema'
 import { IncidentsSubNav } from './_sub-nav'
 import { requireRequestContext } from '@/lib/auth'
 import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
@@ -52,7 +52,7 @@ export default async function IncidentsPage({
 
   const ctx = await requireRequestContext()
 
-  const { rows, total, typeCounts, statusCounts } = await ctx.db(async (tx) => {
+  const { rows, total, typeCounts, statusCounts, involved } = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = [isNull(incidents.deletedAt)]
     if (params.q) {
       const term = `%${params.q}%`
@@ -102,15 +102,40 @@ export default async function IncidentsPage({
       .from(incidents)
       .groupBy(incidents.status)
 
+    const pageIds = data.map((d) => d.incident.id)
+    const involvedRows =
+      pageIds.length > 0
+        ? await tx
+            .select({
+              incidentId: incidentPeople.incidentId,
+              firstName: people.firstName,
+              lastName: people.lastName,
+              nameText: incidentPeople.personNameText,
+            })
+            .from(incidentPeople)
+            .leftJoin(people, eq(people.id, incidentPeople.personId))
+            .where(inArray(incidentPeople.incidentId, pageIds))
+        : []
+
     return {
       rows: data,
       total: Number(tot?.c ?? 0),
       typeCounts: Object.fromEntries(types.map((t) => [t.type, Number(t.c)])),
       statusCounts: Object.fromEntries(statuses.map((s) => [s.status, Number(s.c)])),
+      involved: involvedRows,
     }
   })
 
   const classifications = await listIncidentClassifications()
+
+  const involvedByIncident = new Map<string, string[]>()
+  for (const r of involved) {
+    const name = r.firstName ? `${r.lastName}, ${r.firstName}` : (r.nameText?.trim() || null)
+    if (!name) continue
+    const list = involvedByIncident.get(r.incidentId) ?? []
+    list.push(name)
+    involvedByIncident.set(r.incidentId, list)
+  }
 
   const tableRows: IncidentsTableRow[] = rows.map(({ incident, site }) => ({
     id: incident.id,
@@ -122,6 +147,7 @@ export default async function IncidentsPage({
     title: incident.title,
     siteName: site?.name ?? null,
     locked: incident.locked,
+    involved: involvedByIncident.get(incident.id) ?? [],
   }))
 
   return (

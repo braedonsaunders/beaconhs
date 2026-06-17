@@ -160,13 +160,13 @@ export function WizardLayout({
   return (
     <div className={cn('flex h-full min-h-0 flex-col', className)}>
       <div className="border-b border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-        <FadeInHeader className="mx-auto max-w-2xl px-4 py-4 sm:px-6">{header}</FadeInHeader>
+        <FadeInHeader className="mx-auto max-w-3xl px-4 py-4 sm:px-6">{header}</FadeInHeader>
       </div>
       <div className="app-scroll min-h-0 flex-1 overflow-y-auto">
-        <FadeInBody className="mx-auto max-w-2xl p-4 sm:p-6">{children}</FadeInBody>
+        <FadeInBody className="mx-auto max-w-3xl space-y-5 p-4 sm:p-6">{children}</FadeInBody>
       </div>
       <div className="border-t border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-        <div className="ff-footer mx-auto max-w-2xl px-4 py-3 sm:px-6">{footer}</div>
+        <div className="ff-footer mx-auto max-w-3xl px-4 py-3 sm:px-6">{footer}</div>
       </div>
     </div>
   )

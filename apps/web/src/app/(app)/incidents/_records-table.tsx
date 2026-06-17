@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { SortTh } from '@/components/sortable-th'
+import { ListCard, MobileCardList } from '@/components/list-card'
 import { SeverityBadge, StatusBadge } from './_badges'
 import {
   BulkIncidentsBar,
@@ -21,6 +22,7 @@ export type IncidentsTableRow = {
   title: string
   siteName: string | null
   locked: boolean
+  involved: string[]
 }
 
 export function IncidentsRecordsTable({
@@ -67,7 +69,34 @@ export function IncidentsRecordsTable({
 
   return (
     <>
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+      {/* Phones: tappable cards (bulk-select via the leading checkbox). */}
+      <MobileCardList>
+        {rows.map((r) => (
+          <ListCard
+            key={r.id}
+            href={`/incidents/${r.id}`}
+            leading={
+              <SelectionCheckbox id={r.id} selected={selected.has(r.id)} onToggle={toggleOne} />
+            }
+            person={
+              r.involved.length
+                ? r.involved[0] + (r.involved.length > 1 ? ` +${r.involved.length - 1}` : '')
+                : undefined
+            }
+            avatarName={r.involved[0]}
+            reference={r.reference}
+            status={<StatusBadge status={r.status} />}
+            title={r.title}
+            meta={`${new Date(r.occurredAt).toLocaleDateString()} · ${r.type.replace(/_/g, ' ')}${
+              r.siteName ? ` · ${r.siteName}` : ''
+            }`}
+            footer={<SeverityBadge severity={r.severity} />}
+          />
+        ))}
+      </MobileCardList>
+
+      {/* Tablet/desktop: full sortable table. */}
+      <div className="hidden overflow-x-auto rounded-lg border border-slate-200 bg-white sm:block dark:border-slate-800 dark:bg-slate-900">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-400">

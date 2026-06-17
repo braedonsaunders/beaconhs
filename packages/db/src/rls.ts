@@ -73,6 +73,7 @@ export const TENANT_SCOPED_TABLES = [
   'tenant_users',
   'roles',
   'role_assignments',
+  'user_permission_overrides',
   'attachments',
   'form_templates',
   'form_template_versions',

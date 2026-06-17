@@ -28,12 +28,13 @@ export function PageHeader({
           ← {back.label}
         </UiLink>
       ) : null}
-      {/* Phones stack title → actions and drop the description (vertical
-          space is precious); sm+ keeps the classic one-row header with a
-          truncating title and the description below it. */}
-      <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
+      {/* One row at every breakpoint: title on the left (truncates to make
+          room), actions pinned right. Phones drop the description to keep the
+          header to a single line; sm+ shows it below and bottom-aligns the
+          actions. */}
+      <header className="flex items-center justify-between gap-3 sm:items-end sm:gap-4">
         <div className="min-w-0 space-y-1">
-          <h1 className="text-xl font-semibold text-slate-900 sm:truncate sm:text-2xl dark:text-slate-100">
+          <h1 className="truncate text-xl font-semibold text-slate-900 sm:text-2xl dark:text-slate-100">
             {title}
           </h1>
           {description ? (
@@ -43,7 +44,7 @@ export function PageHeader({
           ) : null}
         </div>
         {actions ? (
-          <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">{actions}</div>
         ) : null}
       </header>
     </div>

@@ -30,8 +30,8 @@ export default async function JournalRecordsPage() {
   ])
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-white">
-      <div className="shrink-0 border-b border-slate-200 px-4 pt-4 sm:px-6">
+    <div className="flex h-full min-h-0 flex-col bg-white dark:bg-slate-900">
+      <div className="shrink-0 border-b border-slate-200 px-4 pt-4 sm:px-6 dark:border-slate-800">
         <PageHeader
           title="Journal records"
           description="Browse and filter journal entries by person, site, and date."

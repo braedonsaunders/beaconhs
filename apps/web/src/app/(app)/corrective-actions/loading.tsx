@@ -1,5 +1,6 @@
-import { PageHeader, Skeleton, TableSkeleton } from '@beaconhs/ui'
+import { PageHeader, Skeleton } from '@beaconhs/ui'
 import { ListPageLayout } from '@/components/page-layout'
+import { RecordsSkeleton } from '@/components/records-skeleton'
 
 /**
  * Streamed loading state for /corrective-actions. Mirrors the real page
@@ -25,7 +26,7 @@ export default function Loading() {
         </>
       }
     >
-      <TableSkeleton rows={10} cols={7} />
+      <RecordsSkeleton cols={7} />
     </ListPageLayout>
   )
 }

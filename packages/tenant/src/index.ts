@@ -86,18 +86,13 @@ export function canSeeSite(ctx: RequestContext, siteId: string | null): boolean 
   return false
 }
 
-// 'self' scope: a worker should only see records where they are the subject/submitter.
-export function selfOnlyFilter(
-  ctx: RequestContext,
-):
-  | { type: 'tenant' }
-  | { type: 'self' }
-  | { type: 'sites'; siteIds: string[] }
-  | { type: 'crews'; crewIds: string[] } {
+// The single widest scope the user holds — used by older site/self gates.
+// Newer record lists should prefer recordVisibilityWhere(), which unions ALL of
+// the user's scopes (own + people + team + sites) rather than collapsing to one.
+export function selfOnlyFilter(ctx: RequestContext): RoleScope {
   if (ctx.isSuperAdmin) return { type: 'tenant' }
-  // Take the widest scope the user has.
   let widest: RoleScope | null = null
-  const order = { tenant: 4, sites: 3, crews: 2, self: 1 } as const
+  const order = { tenant: 6, sites: 5, team: 4, crews: 3, people: 2, self: 1 } as const
   for (const s of ctx.scopes) {
     if (!widest || order[s.type] > order[widest.type]) widest = s
   }

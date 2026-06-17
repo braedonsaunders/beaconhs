@@ -2,7 +2,14 @@ import { cache } from 'react'
 import { cookies, headers } from 'next/headers'
 import { auth } from '@beaconhs/auth'
 import { db } from '@beaconhs/db'
-import { roleAssignments, roles, tenants, tenantUsers, users } from '@beaconhs/db/schema'
+import {
+  roleAssignments,
+  roles,
+  tenants,
+  tenantUsers,
+  userPermissionOverrides,
+  users,
+} from '@beaconhs/db/schema'
 import { and, eq, sql } from 'drizzle-orm'
 import { makeTenantContext, UnauthorizedError, type RequestContext } from '@beaconhs/tenant'
 
@@ -136,6 +143,20 @@ export const getRequestContext = cache(async (): Promise<RequestContext | null> 
     const permissions = new Set<string>()
     const scopes = assignments.map((a) => a.assignment.scope)
     for (const a of assignments) for (const p of a.role.permissions) permissions.add(p)
+
+    // Per-user overrides layer on top of role-granted permissions: a `grant`
+    // adds a permission the user's roles don't carry; a `deny` removes one they
+    // would otherwise have. Applied grant-then-deny so an explicit deny always
+    // wins. (Admins manage these on the user's Permissions tab.)
+    const overrides = await tx
+      .select({
+        permission: userPermissionOverrides.permission,
+        effect: userPermissionOverrides.effect,
+      })
+      .from(userPermissionOverrides)
+      .where(eq(userPermissionOverrides.tenantUserId, active.membership.id))
+    for (const o of overrides) if (o.effect === 'grant') permissions.add(o.permission)
+    for (const o of overrides) if (o.effect === 'deny') permissions.delete(o.permission)
 
     return makeTenantContext(db, {
       userId,

@@ -47,13 +47,42 @@ export function relativeTime(isoTs: string): string {
   return new Date(isoTs).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
+/**
+ * Render plain text (with newlines) as safe HTML paragraphs. Migrated entries
+ * stored their body as plain text in `body_text`; feeding that straight into an
+ * HTML surface (the read-only viewer or the TipTap editor) collapses every line
+ * break. Already-HTML bodies pass through untouched.
+ */
+export function textToHtml(text: string | null | undefined): string {
+  if (!text) return ''
+  // Already HTML (editor output, or migrated rich-text) — leave as-is.
+  if (/<(p|br|div|ul|ol|li|h[1-6]|blockquote)\b/i.test(text)) return text
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  return text
+    .split(/\n{2,}/)
+    .map((para) => `<p>${esc(para).replace(/\n/g, '<br>')}</p>`)
+    .join('')
+}
+
 export function statusMeta(status: JournalStatus): { label: string; className: string } {
   switch (status) {
     case 'submitted':
-      return { label: 'Submitted', className: 'bg-teal-100 text-teal-800 ring-teal-600/20' }
+      return {
+        label: 'Submitted',
+        className:
+          'bg-teal-100 text-teal-800 ring-teal-600/20 dark:bg-teal-500/15 dark:text-teal-200 dark:ring-teal-500/25',
+      }
     case 'archived':
-      return { label: 'Archived', className: 'bg-slate-100 text-slate-600 ring-slate-500/20' }
+      return {
+        label: 'Archived',
+        className:
+          'bg-slate-100 text-slate-600 ring-slate-500/20 dark:bg-slate-500/15 dark:text-slate-300 dark:ring-slate-400/25',
+      }
     default:
-      return { label: 'Draft', className: 'bg-amber-100 text-amber-800 ring-amber-600/20' }
+      return {
+        label: 'Draft',
+        className:
+          'bg-amber-100 text-amber-800 ring-amber-600/20 dark:bg-amber-500/15 dark:text-amber-200 dark:ring-amber-500/25',
+      }
   }
 }

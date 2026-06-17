@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { Badge } from '@beaconhs/ui'
 import { SortTh } from '@/components/sortable-th'
+import { ListCard, MobileCardList } from '@/components/list-card'
 import {
   BulkEquipmentBar,
   HeaderSelectAll,
@@ -70,7 +71,38 @@ export function EquipmentRecordsTable({
 
   return (
     <>
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+      {/* Phones: tappable cards (bulk-select via the leading checkbox). */}
+      <MobileCardList>
+        {rows.map((r) => (
+          <ListCard
+            key={r.id}
+            href={`/equipment/${r.id}`}
+            leading={
+              <SelectionCheckbox id={r.id} selected={selected.has(r.id)} onToggle={toggleOne} />
+            }
+            person={r.holderName}
+            reference={r.assetTag}
+            status={
+              <Badge variant={r.status === 'in_service' ? 'success' : 'warning'}>
+                {r.status.replace('_', ' ')}
+              </Badge>
+            }
+            title={r.name}
+            meta={[r.typeName, r.siteName].filter(Boolean).join(' · ') || undefined}
+            footer={
+              r.isMissing || r.isDraft ? (
+                <>
+                  {r.isMissing ? <Badge variant="destructive">missing</Badge> : null}
+                  {r.isDraft ? <Badge variant="outline">Draft</Badge> : null}
+                </>
+              ) : null
+            }
+          />
+        ))}
+      </MobileCardList>
+
+      {/* Tablet/desktop: full sortable table. */}
+      <div className="hidden overflow-x-auto rounded-lg border border-slate-200 bg-white sm:block dark:border-slate-800 dark:bg-slate-900">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-400">

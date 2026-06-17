@@ -18,7 +18,7 @@ import { describePhoto, extractEntryMeta } from '@beaconhs/ai'
 import { presignGet } from '@beaconhs/storage'
 import type { RequestContext } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
-import { getTenantAiConfig } from '@/lib/ai-config'
+import { getTenantAiConfig, getTenantAutoJournalAi } from '@/lib/ai-config'
 import { recordAudit } from '@/lib/audit'
 import { getAuthorPersonId, htmlToText, journalCanReadAll, journalScopeWhere } from './_lib'
 import {
@@ -123,6 +123,14 @@ export async function submitEntry(id: string): Promise<ActionOk | ActionErr> {
     action: 'publish',
     summary: `Submitted ${row.reference}`,
   })
+  // Background categorisation: when enabled (Admin → AI → Automation), summarise
+  // and tag the submitted entry so logs stay organised without the worker doing
+  // it. Best-effort — never block a submit on AI.
+  try {
+    if (await getTenantAutoJournalAi(ctx)) await applyEntryAi(ctx, id)
+  } catch {
+    /* ignore AI failures on submit */
+  }
   revalidatePath('/journals')
   return { ok: true }
 }
@@ -188,21 +196,23 @@ export async function setEntryTags(input: {
 
 // ---- AI ---------------------------------------------------------------------
 
-export async function runEntryAI(
-  id: string,
-): Promise<ActionOk<{ meta: EntryMetaResult }> | ActionErr> {
-  const ctx = await requireRequestContext()
+/**
+ * Core AI extract + store for one entry: summarise the body and refresh the
+ * AI-sourced tags. Returns the meta, or null when AI is unconfigured / the entry
+ * is empty or missing. Shared by the manual action and the auto-on-submit path.
+ */
+async function applyEntryAi(ctx: RequestContext, id: string): Promise<EntryMetaResult | null> {
   const aiConfig = await getTenantAiConfig(ctx)
-  if (!aiConfig) return { ok: false, error: 'AI is not configured. Set it up under Admin → AI.' }
+  if (!aiConfig) return null
 
   const where = await scopedWhere(ctx, id)
   const [entry] = await ctx.db((tx) =>
     tx.select({ bodyText: journalEntries.bodyText }).from(journalEntries).where(where).limit(1),
   )
-  if (!entry) return { ok: false, error: 'Entry not found.' }
+  if (!entry) return null
 
   const meta = await extractEntryMeta(aiConfig, entry.bodyText ?? '')
-  if (!meta) return { ok: false, error: 'Write a little more first, then run AI.' }
+  if (!meta) return null
 
   await ctx.db(async (tx) => {
     await tx
@@ -238,6 +248,19 @@ export async function runEntryAI(
       .where(eq(journalEntries.id, id))
   })
 
+  return { summary: meta.summary, tags: meta.tags }
+}
+
+export async function runEntryAI(
+  id: string,
+): Promise<ActionOk<{ meta: EntryMetaResult }> | ActionErr> {
+  const ctx = await requireRequestContext()
+  const aiConfig = await getTenantAiConfig(ctx)
+  if (!aiConfig) return { ok: false, error: 'AI is not configured. Set it up under Admin → AI.' }
+
+  const meta = await applyEntryAi(ctx, id)
+  if (!meta) return { ok: false, error: 'Write a little more first, then run AI.' }
+
   await recordAudit(ctx, {
     entityType: 'journal_entry',
     entityId: id,
@@ -246,10 +269,7 @@ export async function runEntryAI(
     metadata: { tags: meta.tags.length },
   })
   revalidatePath('/journals')
-  return {
-    ok: true,
-    meta: { summary: meta.summary, tags: meta.tags },
-  }
+  return { ok: true, meta }
 }
 
 // ---- photos -----------------------------------------------------------------

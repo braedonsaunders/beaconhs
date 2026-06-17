@@ -156,9 +156,11 @@ export function JournalWorkspace({
   )
 
   return (
-    <div className="flex h-full min-h-0 overflow-hidden bg-slate-50/40">
+    <div className="flex h-full min-h-0 overflow-hidden bg-slate-50/40 dark:bg-slate-950">
       {/* Tree — desktop column */}
-      <aside className="hidden w-72 shrink-0 border-r border-slate-200 lg:block">{sidebar}</aside>
+      <aside className="hidden w-72 shrink-0 border-r border-slate-200 lg:block dark:border-slate-800">
+        {sidebar}
+      </aside>
 
       {/* Tree — mobile Browse flyout: right-side, animated (matches app drawers) */}
       <AnimatePresence>
@@ -177,7 +179,7 @@ export function JournalWorkspace({
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 32, stiffness: 320, mass: 0.8 }}
-              className="absolute top-0 right-0 h-full w-[88%] max-w-xs border-l border-slate-200 bg-white shadow-2xl"
+              className="absolute top-0 right-0 h-full w-[88%] max-w-xs border-l border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900"
             >
               {sidebar}
             </motion.aside>
@@ -187,28 +189,6 @@ export function JournalWorkspace({
 
       {/* Editor */}
       <main className="flex min-w-0 flex-1 flex-col">
-        {/* Mobile top bar — quick new + Browse flyout (right) */}
-        <div className="flex items-center gap-2 border-b border-slate-200 bg-white px-3 py-1.5 lg:hidden">
-          <span className="text-sm font-semibold text-slate-800">Journal</span>
-          <div className="ml-auto flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={newEntry}
-              className="inline-flex h-8 items-center gap-1 rounded-md bg-teal-700 px-2.5 text-xs font-medium text-white hover:bg-teal-800"
-            >
-              <Plus size={14} /> New
-            </button>
-            <button
-              type="button"
-              onClick={() => setTreeOpen(true)}
-              aria-label="Browse journals"
-              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-            >
-              <NotebookPen size={15} /> Browse
-            </button>
-          </div>
-        </div>
-
         <div className="min-h-0 flex-1">
           {entry ? (
             <EditorPane
@@ -220,9 +200,14 @@ export function JournalWorkspace({
               onMutated={onMutated}
               onDeleted={onDeleted}
               onLocalPatch={onLocalPatch}
+              onBrowse={() => setTreeOpen(true)}
             />
           ) : (
-            <EmptyEditor aiEnabled={data.aiEnabled} onNew={newEntry} />
+            <EmptyEditor
+              aiEnabled={data.aiEnabled}
+              onNew={newEntry}
+              onBrowse={() => setTreeOpen(true)}
+            />
           )}
         </div>
       </main>
@@ -230,26 +215,45 @@ export function JournalWorkspace({
   )
 }
 
-function EmptyEditor({ aiEnabled, onNew }: { aiEnabled: boolean; onNew: () => void }) {
+function EmptyEditor({
+  aiEnabled,
+  onNew,
+  onBrowse,
+}: {
+  aiEnabled: boolean
+  onNew: () => void
+  onBrowse: () => void
+}) {
   return (
     <div className="flex h-full flex-col items-center justify-center px-6 text-center">
-      <div className="mb-4 grid h-16 w-16 place-items-center rounded-2xl bg-teal-50 text-teal-600">
+      <div className="mb-4 grid h-16 w-16 place-items-center rounded-2xl bg-teal-50 text-teal-600 dark:bg-teal-500/15 dark:text-teal-400">
         <NotebookPen size={30} />
       </div>
-      <h2 className="text-lg font-semibold text-slate-900">Start today’s journal</h2>
-      <p className="mt-1 max-w-sm text-sm text-slate-500">
+      <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+        Start today’s journal
+      </h2>
+      <p className="mt-1 max-w-sm text-sm text-slate-500 dark:text-slate-400">
         Capture what you worked on, hazards you spotted, and what got done. Add photos, dictate by
         voice{aiEnabled ? ', and let AI tidy it up, tag it, and flag safety concerns.' : '.'}
       </p>
-      <button
-        type="button"
-        onClick={onNew}
-        className="mt-5 inline-flex items-center gap-2 rounded-lg bg-teal-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-teal-800"
-      >
-        <Plus size={16} /> New entry
-      </button>
+      <div className="mt-5 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onNew}
+          className="inline-flex items-center gap-2 rounded-lg bg-teal-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-teal-800"
+        >
+          <Plus size={16} /> New entry
+        </button>
+        <button
+          type="button"
+          onClick={onBrowse}
+          className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 lg:hidden dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+        >
+          <NotebookPen size={16} /> Browse
+        </button>
+      </div>
       {aiEnabled ? (
-        <div className="mt-3 inline-flex items-center gap-1.5 text-xs text-slate-400">
+        <div className="mt-3 inline-flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
           <Sparkles size={12} className="text-teal-500" /> AI assist is on
         </div>
       ) : null}

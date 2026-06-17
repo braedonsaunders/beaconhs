@@ -8,7 +8,7 @@ import Link from 'next/link'
 import { Briefcase, Loader2, MapPin, PenLine, X } from 'lucide-react'
 import { cn } from '@beaconhs/ui'
 import { tagSwatch } from '../_tag-colors'
-import { formatLongDate, statusMeta } from '../_format'
+import { formatLongDate, statusMeta, textToHtml } from '../_format'
 import type { JournalEntryDetail } from '../_types'
 
 const AVATAR_COLORS = [
@@ -32,7 +32,7 @@ export function Avatar({ name, size = 36 }: { name: string | null; size?: number
     ).toUpperCase() || '?'
   let h = 0
   for (let i = 0; i < label.length; i++) h = (h * 31 + label.charCodeAt(i)) >>> 0
-  const color = name ? AVATAR_COLORS[h % AVATAR_COLORS.length] : 'bg-slate-300'
+  const color = name ? AVATAR_COLORS[h % AVATAR_COLORS.length] : 'bg-slate-300 dark:bg-slate-600'
   return (
     <span
       title={label}
@@ -60,28 +60,31 @@ export function RecordReader({
 }) {
   if (loading) {
     return (
-      <div className="grid h-full place-items-center text-sm text-slate-400">
+      <div className="grid h-full place-items-center text-sm text-slate-400 dark:text-slate-500">
         <Loader2 size={18} className="animate-spin" />
       </div>
     )
   }
   if (!entry) {
     return (
-      <div className="grid h-full place-items-center px-6 text-center text-sm text-slate-400">
+      <div className="grid h-full place-items-center px-6 text-center text-sm text-slate-400 dark:text-slate-500">
         Select an entry to read it here.
       </div>
     )
   }
   const status = statusMeta(entry.status)
-  const html = entry.bodyHtml || entry.bodyText || '<p class="text-slate-400">No content.</p>'
+  const html =
+    entry.bodyHtml ||
+    textToHtml(entry.bodyText) ||
+    '<p class="text-slate-400 dark:text-slate-500">No content.</p>'
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-white">
-      <div className="flex items-start gap-3 border-b border-slate-200 px-4 py-3">
+    <div className="flex h-full min-h-0 flex-col bg-white dark:bg-slate-900">
+      <div className="flex items-start gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
         <Avatar name={entry.authorName} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <h2 className="truncate text-sm font-semibold text-slate-900">
+            <h2 className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
               {entry.authorName ?? 'Unassigned'}
             </h2>
             <span
@@ -93,13 +96,13 @@ export function RecordReader({
               {status.label}
             </span>
           </div>
-          <div className="mt-0.5 text-[11px] text-slate-400">
+          <div className="mt-0.5 text-[11px] text-slate-400 dark:text-slate-500">
             {formatLongDate(entry.entryDate)} · <span className="font-mono">{entry.reference}</span>
           </div>
         </div>
         <Link
           href={`/journals/${entry.id}` as never}
-          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
           title="Open in editor"
         >
           <PenLine size={13} /> Open
@@ -109,7 +112,7 @@ export function RecordReader({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="grid h-8 w-8 place-items-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            className="grid h-8 w-8 place-items-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
           >
             <X size={16} />
           </button>
@@ -117,7 +120,7 @@ export function RecordReader({
       </div>
 
       <div className="app-scroll min-h-0 flex-1 overflow-y-auto px-5 py-4">
-        <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+        <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
           <span className="inline-flex items-center gap-1">
             <MapPin size={12} /> {entry.siteName ?? 'No site'}
           </span>
@@ -127,7 +130,7 @@ export function RecordReader({
         </div>
 
         {entry.summary ? (
-          <p className="mb-3 rounded-lg border border-teal-100 bg-teal-50/50 p-3 text-sm leading-relaxed text-slate-600">
+          <p className="mb-3 rounded-lg border border-teal-100 bg-teal-50/50 p-3 text-sm leading-relaxed text-slate-600 dark:border-teal-500/20 dark:bg-teal-500/10 dark:text-slate-300">
             {entry.summary}
           </p>
         ) : null}
@@ -154,7 +157,7 @@ export function RecordReader({
 
         {/* eslint-disable-next-line react/no-danger */}
         <div
-          className="prose prose-slate max-w-none text-sm leading-relaxed"
+          className="prose prose-slate dark:prose-invert max-w-none text-sm leading-relaxed"
           dangerouslySetInnerHTML={{ __html: html }}
         />
 

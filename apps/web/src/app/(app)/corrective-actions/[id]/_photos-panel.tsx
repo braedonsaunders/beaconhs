@@ -31,11 +31,11 @@ export function PhotosPanel({
         <>
           <PhotoGallery photos={photos} />
           {!locked ? (
-            <div className="rounded-md border border-slate-200 bg-white">
-              <div className="border-b border-slate-200 px-3 py-2 text-xs font-semibold tracking-wide text-slate-500 uppercase">
+            <div className="rounded-md border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+              <div className="border-b border-slate-200 px-3 py-2 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:text-slate-400">
                 Captions
               </div>
-              <ul className="divide-y divide-slate-100">
+              <ul className="divide-y divide-slate-100 dark:divide-slate-800">
                 {photos.map((p) => (
                   <PhotoRow key={p.id} caId={caId} photo={p} onChanged={() => router.refresh()} />
                 ))}
@@ -44,7 +44,7 @@ export function PhotosPanel({
           ) : null}
         </>
       ) : (
-        <p className="text-sm text-slate-500">No photos attached.</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">No photos attached.</p>
       )}
       {!locked ? (
         <PhotoUploaderSection
@@ -98,7 +98,7 @@ function PhotoRow({
         className="h-10 w-10 shrink-0 rounded object-cover"
       />
       <div className="min-w-0 flex-1">
-        <div className="truncate text-xs text-slate-500">{photo.filename}</div>
+        <div className="truncate text-xs text-slate-500 dark:text-slate-400">{photo.filename}</div>
         <Input
           value={caption}
           onChange={(e) => setCaption(e.target.value)}

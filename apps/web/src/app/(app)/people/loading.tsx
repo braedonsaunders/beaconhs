@@ -1,5 +1,6 @@
-import { PageHeader, Skeleton, TableSkeleton } from '@beaconhs/ui'
+import { PageHeader, Skeleton } from '@beaconhs/ui'
 import { ListPageLayout } from '@/components/page-layout'
+import { RecordsSkeleton } from '@/components/records-skeleton'
 
 /**
  * Streamed loading state for /people.
@@ -20,7 +21,7 @@ export default function Loading() {
         </>
       }
     >
-      <TableSkeleton rows={10} cols={6} />
+      <RecordsSkeleton cols={6} />
     </ListPageLayout>
   )
 }

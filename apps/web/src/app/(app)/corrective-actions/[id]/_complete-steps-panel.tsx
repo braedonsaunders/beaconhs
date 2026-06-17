@@ -38,16 +38,19 @@ const KIND_META: Record<
 export function CompleteStepsTimeline({ steps }: { steps: CompleteStep[] }) {
   return (
     <div>
-      <div className="text-xs tracking-wide text-slate-500 uppercase">Timeline</div>
+      <div className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">Timeline</div>
       {steps.length === 0 ? (
-        <p className="mt-2 text-sm text-slate-500">No steps recorded.</p>
+        <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">No steps recorded.</p>
       ) : (
         <ol className="mt-2 space-y-2">
           {steps.map((s) => {
             const meta = KIND_META[s.kind]
             const Icon = meta.icon
             return (
-              <li key={s.id} className="rounded-md border border-slate-200 bg-white p-3 text-sm">
+              <li
+                key={s.id}
+                className="rounded-md border border-slate-200 bg-white p-3 text-sm dark:border-slate-800 dark:bg-slate-900"
+              >
                 <div className="flex items-center justify-between gap-2">
                   <span className="flex items-center gap-2">
                     <span
@@ -55,21 +58,29 @@ export function CompleteStepsTimeline({ steps }: { steps: CompleteStep[] }) {
                     >
                       <Icon size={11} />
                     </span>
-                    <span className="font-medium text-slate-900">{meta.label}</span>
+                    <span className="font-medium text-slate-900 dark:text-slate-100">
+                      {meta.label}
+                    </span>
                   </span>
-                  <span className="text-xs text-slate-500">{s.completedAt.toLocaleString()}</span>
+                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                    {s.completedAt.toLocaleString()}
+                  </span>
                 </div>
                 {s.completedByName ? (
-                  <div className="mt-1 text-xs text-slate-500">by {s.completedByName}</div>
+                  <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    by {s.completedByName}
+                  </div>
                 ) : null}
                 {s.description ? (
-                  <p className="mt-2 whitespace-pre-wrap text-slate-700">{s.description}</p>
+                  <p className="mt-2 whitespace-pre-wrap text-slate-700 dark:text-slate-300">
+                    {s.description}
+                  </p>
                 ) : null}
                 {s.signatureDataUrl ? (
                   <img
                     src={s.signatureDataUrl}
                     alt="Signature"
-                    className="mt-2 h-20 rounded border border-slate-200 bg-white object-contain"
+                    className="mt-2 h-20 rounded border border-slate-200 bg-white object-contain dark:border-slate-700"
                   />
                 ) : null}
               </li>

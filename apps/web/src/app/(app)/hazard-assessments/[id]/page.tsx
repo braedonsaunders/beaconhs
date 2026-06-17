@@ -63,7 +63,7 @@ import { loadEntitiesForPickers } from '@/app/(app)/forms/_lib/entity-loader'
 import { FormRenderer } from '@/app/(app)/forms/templates/[id]/fill/form-renderer'
 import type { EntityAttrsByField, FormSchemaV1 } from '@beaconhs/forms-core'
 import { PhotoGallery } from '@/components/photo-gallery'
-import { PremiumSection as Section } from './_premium-section'
+import { PremiumSection as Section } from '@/components/premium-section'
 import {
   addHazard,
   addHazardSet,
@@ -112,8 +112,8 @@ import {
   TaskRow,
 } from './_sections'
 import { AssessmentHeaderActions } from './_header-actions'
-import { SectionNav, type SectionNavItem } from './_section-nav'
-import { LiveDateTime, LiveField, LivePersonSelect, LiveSelect } from '../_live-field'
+import { SectionNav, type SectionNavItem } from '@/components/section-nav'
+import { LiveDateTime, LiveField, LivePersonSelect, LiveSelect } from '@/components/live-field'
 import { localDatetimeValue } from '../_datetime'
 import { AddSignatureDrawerBody } from '../_signature-form'
 import { HazidPhotoUploader } from '../_photo-uploader'
@@ -828,6 +828,7 @@ export default async function HazidAssessmentDetailPage({
                     label: `${p.lastName}, ${p.firstName}`,
                     hint: [p.firstName, p.lastName].filter(Boolean).join(' '),
                   }))}
+                  sheetTitle="Select supervisor"
                   disabled={locked}
                   updateAction={updateTextField}
                 />

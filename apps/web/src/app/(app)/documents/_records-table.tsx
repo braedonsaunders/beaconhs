@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { Badge } from '@beaconhs/ui'
 import { SortTh } from '@/components/sortable-th'
+import { ListCard, MobileCardList } from '@/components/list-card'
 import {
   BulkDocumentsBar,
   HeaderSelectAll,
@@ -64,7 +65,47 @@ export function DocumentsRecordsTable({
 
   return (
     <>
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+      {/* Phones: tappable cards (bulk-select via the leading checkbox). */}
+      <MobileCardList>
+        {rows.map((r) => (
+          <ListCard
+            key={r.id}
+            href={`/documents/${r.id}`}
+            leading={
+              <SelectionCheckbox id={r.id} selected={selected.has(r.id)} onToggle={toggleOne} />
+            }
+            status={
+              <Badge variant={r.status === 'published' ? 'success' : 'secondary'}>{r.status}</Badge>
+            }
+            title={r.title}
+            meta={
+              [r.category, r.nextReviewOn ? `Review ${r.nextReviewOn}` : null]
+                .filter(Boolean)
+                .join(' · ') || undefined
+            }
+            footer={
+              r.type ? (
+                <span
+                  className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium"
+                  style={
+                    r.type.color
+                      ? { backgroundColor: `${r.type.color}1a`, color: r.type.color }
+                      : { backgroundColor: '#f1f5f9', color: '#475569' }
+                  }
+                >
+                  {r.type.color ? (
+                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: r.type.color }} />
+                  ) : null}
+                  {r.type.name}
+                </span>
+              ) : null
+            }
+          />
+        ))}
+      </MobileCardList>
+
+      {/* Tablet/desktop: full sortable table. */}
+      <div className="hidden overflow-x-auto rounded-lg border border-slate-200 bg-white sm:block dark:border-slate-800 dark:bg-slate-900">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-400">

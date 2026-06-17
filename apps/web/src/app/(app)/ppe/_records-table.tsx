@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { Badge } from '@beaconhs/ui'
 import { SortTh } from '@/components/sortable-th'
+import { ListCard, MobileCardList } from '@/components/list-card'
 import { BulkPpeBar, HeaderSelectAll, SelectionCheckbox, type PpeHolderOption } from './_bulk-bar'
 
 export type PpeTableRow = {
@@ -60,7 +61,42 @@ export function PpeRecordsTable({
 
   return (
     <>
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+      {/* Phones: tappable cards (bulk-select via the leading checkbox). */}
+      <MobileCardList>
+        {rows.map((r) => (
+          <ListCard
+            key={r.id}
+            href={`/ppe/${r.id}`}
+            leading={
+              <SelectionCheckbox id={r.id} selected={selected.has(r.id)} onToggle={toggleOne} />
+            }
+            person={r.holderName}
+            reference={r.serialNumber ?? undefined}
+            status={
+              <Badge
+                variant={
+                  r.status === 'issued'
+                    ? 'success'
+                    : r.status === 'in_stock'
+                      ? 'secondary'
+                      : 'warning'
+                }
+              >
+                {r.status.replace('_', ' ')}
+              </Badge>
+            }
+            title={r.typeName}
+            meta={
+              [r.size, r.nextInspectionDue ? `Due ${r.nextInspectionDue}` : null]
+                .filter(Boolean)
+                .join(' · ') || undefined
+            }
+          />
+        ))}
+      </MobileCardList>
+
+      {/* Tablet/desktop: full sortable table. */}
+      <div className="hidden overflow-x-auto rounded-lg border border-slate-200 bg-white sm:block dark:border-slate-800 dark:bg-slate-900">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-400">

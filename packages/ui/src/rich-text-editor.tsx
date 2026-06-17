@@ -57,7 +57,7 @@ export function RichTextEditor({
     editorProps: {
       attributes: {
         class: cn(
-          'prose prose-sm prose-slate max-w-none focus:outline-none',
+          'prose prose-sm prose-slate max-w-none focus:outline-none dark:prose-invert',
           'min-h-[var(--rt-min-h)] px-4 py-3',
         ),
         style: `--rt-min-h: ${minHeight}`,
@@ -78,7 +78,10 @@ export function RichTextEditor({
   if (!editor) {
     return (
       <div
-        className={cn('rounded-md border border-slate-300 bg-white shadow-sm', className)}
+        className={cn(
+          'rounded-md border border-slate-300 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900',
+          className,
+        )}
         style={{ minHeight }}
       />
     )
@@ -87,7 +90,7 @@ export function RichTextEditor({
   return (
     <div
       className={cn(
-        'rounded-md border border-slate-300 bg-white shadow-sm transition-shadow',
+        'rounded-md border border-slate-300 bg-white shadow-sm transition-shadow dark:border-slate-700 dark:bg-slate-900',
         'focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-500/40',
         disabled && 'opacity-60',
         className,
@@ -104,7 +107,7 @@ export function RichTextEditor({
 
 function Toolbar({ editor, disabled }: { editor: Editor; disabled: boolean }) {
   return (
-    <div className="flex flex-wrap items-center gap-0.5 border-b border-slate-200 bg-slate-50/50 px-2 py-1">
+    <div className="flex flex-wrap items-center gap-0.5 border-b border-slate-200 bg-slate-50/50 px-2 py-1 dark:border-slate-800 dark:bg-slate-800/50">
       <Btn
         active={editor.isActive('bold')}
         disabled={disabled}
@@ -247,7 +250,9 @@ function Btn({
       aria-label={label}
       className={cn(
         'inline-flex h-7 min-w-[28px] items-center justify-center rounded px-2 text-xs font-medium transition-colors',
-        active ? 'bg-teal-100 text-teal-900' : 'text-slate-600 hover:bg-white hover:text-slate-900',
+        active
+          ? 'bg-teal-100 text-teal-900 dark:bg-teal-900/50 dark:text-teal-100'
+          : 'text-slate-600 hover:bg-white hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100',
         disabled && 'cursor-not-allowed opacity-40 hover:bg-transparent',
       )}
     >
@@ -257,5 +262,5 @@ function Btn({
 }
 
 function Sep() {
-  return <div className="mx-1 h-5 w-px bg-slate-200" />
+  return <div className="mx-1 h-5 w-px bg-slate-200 dark:bg-slate-700" />
 }

@@ -27,6 +27,7 @@ export async function saveAiSettings(formData: FormData) {
   const modelSmart = String(formData.get('modelSmart') ?? '').trim()
   const baseUrl = String(formData.get('baseUrl') ?? '').trim()
   const apiKey = String(formData.get('apiKey') ?? '').trim()
+  const autoJournalAi = formData.get('autoJournalAi') === 'on'
 
   await saveTenantAiSettings(ctx, {
     enabled,
@@ -35,6 +36,7 @@ export async function saveAiSettings(formData: FormData) {
     modelSmart,
     baseUrl,
     apiKey: apiKey || undefined,
+    autoJournalAi,
   })
   await recordAudit(ctx, {
     entityType: 'tenant',

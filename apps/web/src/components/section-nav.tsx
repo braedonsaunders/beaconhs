@@ -1,9 +1,11 @@
 'use client'
 
-// Sticky jump-nav for the single-page assessment form. The whole form lives
-// on one scrolling page (like the legacy product crews already know); these
-// chips scroll to a section instead of navigating, with a scrollspy highlight
-// and a completion tick per section.
+// Sticky jump-nav for a single-page detail form. The whole form lives on one
+// scrolling page (like the legacy product crews already know); these chips
+// scroll to a section instead of navigating, with a scrollspy highlight and a
+// completion tick per section.
+//
+// Shared primitive — used by the hazard-assessment and incident detail pages.
 
 import { useEffect, useRef, useState } from 'react'
 import { Check } from 'lucide-react'

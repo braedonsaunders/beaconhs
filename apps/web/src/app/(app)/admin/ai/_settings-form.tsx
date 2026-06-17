@@ -24,6 +24,7 @@ type Initial = {
   modelSmart: string
   baseUrl: string
   hasKey: boolean
+  autoJournalAi: boolean
 }
 
 // Reactive AI settings form: the provider selector drives the base-URL field,
@@ -264,6 +265,27 @@ export function AiSettingsForm({
             {spec.modelHint ?? 'Load this provider’s models from its API, or enter ids manually.'}
           </p>
         )}
+      </div>
+
+      <div className="space-y-2 border-t border-slate-100 pt-4">
+        <Label>Automation</Label>
+        <label className="flex items-start gap-2.5">
+          <input
+            type="checkbox"
+            name="autoJournalAi"
+            defaultChecked={initial.autoJournalAi}
+            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+          />
+          <span className="text-sm">
+            <span className="font-medium text-slate-800 dark:text-slate-100">
+              Auto-summarise &amp; tag journals
+            </span>
+            <span className="mt-0.5 block text-xs text-slate-400">
+              When a journal is submitted, generate a short summary and suggested tags in the
+              background. Keeps logs categorised without workers doing it themselves. Requires a key.
+            </span>
+          </span>
+        </label>
       </div>
 
       <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-4">

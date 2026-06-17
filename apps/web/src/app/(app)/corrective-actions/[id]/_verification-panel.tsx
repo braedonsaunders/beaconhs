@@ -39,8 +39,12 @@ export function VerificationPanel({
         </Alert>
         {verificationNotes ? (
           <div>
-            <div className="text-xs tracking-wide text-slate-500 uppercase">Verification notes</div>
-            <p className="mt-1 text-sm whitespace-pre-wrap text-slate-700">{verificationNotes}</p>
+            <div className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
+              Verification notes
+            </div>
+            <p className="mt-1 text-sm whitespace-pre-wrap text-slate-700 dark:text-slate-300">
+              {verificationNotes}
+            </p>
           </div>
         ) : null}
       </div>
@@ -66,7 +70,7 @@ export function VerificationPanel({
           stamped on the record once you sign.
         </AlertDescription>
       </Alert>
-      <Link href={`/corrective-actions/${caId}?tab=verification&drawer=verify`}>
+      <Link href={`/corrective-actions/${caId}?drawer=verify`} scroll={false}>
         <Button>
           <CheckCircle2 size={14} /> Sign verification
         </Button>

@@ -1,6 +1,6 @@
-import { PageHeader, TableSkeleton } from '@beaconhs/ui'
-import { Skeleton } from '@beaconhs/ui'
+import { PageHeader, Skeleton } from '@beaconhs/ui'
 import { ListPageLayout } from '@/components/page-layout'
+import { RecordsSkeleton } from '@/components/records-skeleton'
 
 /**
  * Streamed loading state for /incidents. Renders alongside the sticky list
@@ -28,7 +28,7 @@ export default function Loading() {
         </>
       }
     >
-      <TableSkeleton rows={10} cols={7} />
+      <RecordsSkeleton cols={7} />
     </ListPageLayout>
   )
 }

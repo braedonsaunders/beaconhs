@@ -22,6 +22,7 @@ import {
   AlertTriangle,
   Bold,
   Check,
+  ClipboardList,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -47,10 +48,6 @@ import {
   AlertTitle,
   Badge,
   Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
   Input,
   Label,
   SearchSelect,
@@ -93,6 +90,7 @@ import { SignaturePad } from '@/components/signature-pad'
 import { FileUpload, dataUrlToFile, type AttachedFile } from '@/components/file-upload'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
 import { WizardLayout } from '@/components/page-layout'
+import { PremiumSection } from '@/components/premium-section'
 import { toast } from '@/lib/toast'
 import { canvasCss, columnsCss, gridClass, resolveCanvas } from '@/app/(app)/forms/_lib/canvas'
 
@@ -100,6 +98,20 @@ type CurrentUser = {
   personId: string | null
   name: string | null
 }
+
+// Cycle a tasteful tone palette across the dynamic schema sections so the fill
+// page gets the same premium, colorful section cards as the incident /
+// hazard-assessment pages (which assign tones semantically per section).
+const SECTION_TONES = [
+  'teal',
+  'blue',
+  'purple',
+  'amber',
+  'indigo',
+  'emerald',
+  'rose',
+  'slate',
+] as const
 
 export function FormRenderer({
   templateId,
@@ -726,17 +738,19 @@ export function FormRenderer({
 
   return (
     <WizardLayout
-      className={`ff-surface${fieldMode ? 'field-mode' : ''}`}
+      className={`ff-surface ${fieldMode ? 'field-mode' : ''}`}
       header={
         <div className="space-y-3">
           <Link
             href={returnTo ?? `/forms/templates/${templateId}`}
-            className="text-xs text-teal-700 hover:underline"
+            className="inline-flex items-center gap-1 text-xs font-medium text-teal-700 hover:underline dark:text-teal-400"
           >
-            ← {returnTo ? 'Back to assessment' : 'Back to template'}
+            <ChevronLeft size={13} /> {returnTo ? 'Back to assessment' : 'Back to template'}
           </Link>
           <div className="flex items-center justify-between gap-2">
-            <h1 className="truncate text-xl font-semibold">{templateName}</h1>
+            <h1 className="truncate text-xl font-semibold text-slate-900 dark:text-slate-100">
+              {templateName}
+            </h1>
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -774,12 +788,12 @@ export function FormRenderer({
                     type="button"
                     disabled={!isClickable}
                     onClick={() => jumpTo(i)}
-                    className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 ${
+                    className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 transition-colors ${
                       isCurrent
                         ? 'border-teal-600 bg-teal-600 text-white'
                         : isCompleted
-                          ? 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
-                          : 'border-slate-200 bg-white text-slate-600'
+                          ? 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300'
+                          : 'border-slate-200 bg-white text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300'
                     } ${!isClickable ? 'cursor-not-allowed opacity-60' : ''}`}
                   >
                     <span
@@ -788,7 +802,7 @@ export function FormRenderer({
                           ? 'bg-white text-teal-700'
                           : isCompleted
                             ? 'bg-emerald-500 text-white'
-                            : 'bg-slate-200 text-slate-600'
+                            : 'bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
                       }`}
                     >
                       {isCompleted && !isCurrent ? <Check size={10} /> : i + 1}
@@ -799,7 +813,7 @@ export function FormRenderer({
               )
             })}
           </ol>
-          <div className="h-1 overflow-hidden rounded-full bg-slate-200">
+          <div className="h-1 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
             <div
               className="h-full rounded-full bg-teal-600 transition-all"
               style={{ width: `${Math.max(8, completion)}%` }}
@@ -846,37 +860,37 @@ export function FormRenderer({
       }
     >
       {stepIndex === 0 ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Site</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-1">
-              <Label>Site</Label>
-              <Select value={siteId} onChange={(e) => setSiteId(e.target.value)}>
-                <option value="">— select —</option>
-                {sites.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          </CardContent>
-        </Card>
+        <PremiumSection
+          title="Site"
+          subtitle="Where this is being recorded"
+          icon={<MapPin size={20} />}
+          tone="teal"
+        >
+          <div className="space-y-1">
+            <Label>Site</Label>
+            <Select value={siteId} onChange={(e) => setSiteId(e.target.value)}>
+              <option value="">— select —</option>
+              {sites.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </Select>
+          </div>
+        </PremiumSection>
       ) : null}
 
       {tabbed ? (
-        <div className="flex flex-wrap items-center gap-1 border-b border-slate-200 pb-2">
+        <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200 pb-2 dark:border-slate-800">
           {appTabs.map((t) => (
             <button
               key={t.id}
               type="button"
               onClick={() => setActiveTabId(t.id)}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
+              className={`rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors ${
                 t.id === activeTabId
-                  ? 'bg-teal-600 text-white'
-                  : 'text-slate-600 hover:bg-slate-100'
+                  ? 'border-teal-600 bg-teal-600 text-white'
+                  : 'border-slate-200 bg-white text-slate-600 hover:border-teal-300 hover:text-teal-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300'
               }`}
             >
               {t.title?.en ?? t.id}
@@ -886,39 +900,32 @@ export function FormRenderer({
       ) : null}
 
       {renderedSections.length === 0 ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">{step.title?.en ?? step.key}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-slate-500">
-              {tabbed
-                ? 'This tab has no sections.'
-                : 'No sections bound to this step. Submit to finalise.'}
-            </p>
-          </CardContent>
-        </Card>
+        <PremiumSection
+          title={step.title?.en ?? step.key}
+          icon={<ClipboardList size={20} />}
+          tone="slate"
+        >
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            {tabbed
+              ? 'This tab has no sections.'
+              : 'No sections bound to this step. Submit to finalise.'}
+          </p>
+        </PremiumSection>
       ) : (
-        renderedSections.map((sec) => {
+        renderedSections.map((sec, i) => {
           // Section-level visibility — completely hide the section if showIf
           // is false against the current values.
           if (sec.showIf && !evaluateLogicRule(sec.showIf, evalCtx)) return null
           return (
-            <Card key={sec.id}>
-              <CardHeader>
-                <CardTitle className="text-base">
-                  {sec.title?.en ?? sec.id}
-                  {sec.repeating ? (
-                    <Badge variant="secondary" className="ml-2">
-                      repeating
-                    </Badge>
-                  ) : null}
-                </CardTitle>
-                {sec.description?.en ? (
-                  <p className="text-xs text-slate-500">{sec.description.en}</p>
-                ) : null}
-              </CardHeader>
-              <CardContent className="space-y-4">
+            <PremiumSection
+              key={sec.id}
+              title={sec.title?.en ?? sec.id}
+              subtitle={sec.description?.en ?? (sec.repeating ? 'Repeatable section' : undefined)}
+              icon={<ClipboardList size={20} />}
+              tone={SECTION_TONES[i % SECTION_TONES.length]}
+              count={sec.repeating ? (rowsByStep[sec.id]?.length ?? 0) : undefined}
+            >
+              <div className="space-y-4">
                 {sec.repeating ? (
                   <RepeatingSection
                     section={sec}
@@ -1017,8 +1024,8 @@ export function FormRenderer({
                     )
                   })
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </PremiumSection>
           )
         })
       )}
@@ -1060,7 +1067,7 @@ function RepeatingSection({
         </Alert>
       ) : null}
       {rows.length === 0 ? (
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-slate-500 dark:text-slate-400">
           No rows.
           {min > 0 ? ` At least ${min} required.` : ''}
         </p>
@@ -1078,7 +1085,7 @@ function RepeatingSection({
               className="rounded-lg border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-700 dark:bg-slate-800/40"
             >
               <div className="mb-2 flex items-center justify-between">
-                <div className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
+                <div className="text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
                   {formatRowLabel(section, i, row)}
                 </div>
                 <button
@@ -1177,7 +1184,9 @@ function FieldRow({
           <span className="ml-2 text-[10px] font-normal text-slate-400">Looking up…</span>
         ) : null}
       </Label>
-      {field.helpText?.en ? <p className="text-xs text-slate-500">{field.helpText.en}</p> : null}
+      {field.helpText?.en ? (
+        <p className="text-xs text-slate-500 dark:text-slate-400">{field.helpText.en}</p>
+      ) : null}
       <FieldInput
         field={field}
         value={value}

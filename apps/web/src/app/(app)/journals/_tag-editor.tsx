@@ -141,8 +141,8 @@ export function TagEditor({
         className={cn(
           'flex min-h-[46px] flex-wrap items-center gap-1.5 rounded-xl border px-2 py-1.5 shadow-sm transition',
           editable
-            ? 'cursor-text border-slate-300 bg-white focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-500/25'
-            : 'border-slate-200 bg-slate-50/60',
+            ? 'cursor-text border-slate-300 bg-white focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-500/25 dark:border-slate-700 dark:bg-slate-800'
+            : 'border-slate-200 bg-slate-50/60 dark:border-slate-800 dark:bg-slate-900/40',
         )}
       >
         <AnimatePresence initial={false}>
@@ -208,10 +208,10 @@ export function TagEditor({
             // border-0 / focus:ring-0: this input is intentionally chromeless — the
             // rounded container is the visible frame. Without these it inherits the
             // @tailwindcss/forms base border (1px, square) and its own focus ring.
-            className="h-7 min-w-[9rem] flex-1 border-0 bg-transparent p-0 px-1 text-sm text-slate-800 outline-none placeholder:text-slate-400 focus:ring-0"
+            className="h-7 min-w-[9rem] flex-1 border-0 bg-transparent p-0 px-1 text-sm text-slate-800 outline-none placeholder:text-slate-400 focus:ring-0 dark:text-slate-100 dark:placeholder:text-slate-500"
           />
         ) : tags.length === 0 ? (
-          <span className="px-1 text-sm text-slate-400">No tags</span>
+          <span className="px-1 text-sm text-slate-400 dark:text-slate-500">No tags</span>
         ) : null}
       </div>
 
@@ -222,7 +222,7 @@ export function TagEditor({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.12 }}
-            className="absolute top-full left-0 z-50 mt-1.5 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl"
+            className="absolute top-full left-0 z-50 mt-1.5 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-800"
           >
             <ul id={listId} role="listbox" className="max-h-60 overflow-auto p-1">
               {matches.map((m, i) => (
@@ -245,16 +245,17 @@ export function TagEditor({
                   onPick={() => commit(query)}
                 >
                   <Plus size={13} className="shrink-0 text-teal-600" />
-                  <span className="min-w-0 flex-1 truncate text-slate-600">
-                    Create <span className="font-semibold text-teal-700">{query}</span>
+                  <span className="min-w-0 flex-1 truncate text-slate-600 dark:text-slate-300">
+                    Create{' '}
+                    <span className="font-semibold text-teal-700 dark:text-teal-300">{query}</span>
                   </span>
                 </Option>
               ) : null}
             </ul>
-            <div className="flex items-center gap-1.5 border-t border-slate-100 px-3 py-1.5 text-[11px] text-slate-400">
+            <div className="flex items-center gap-1.5 border-t border-slate-100 px-3 py-1.5 text-[11px] text-slate-400 dark:border-slate-700 dark:text-slate-500">
               <CornerDownLeft size={11} /> to add
-              <span className="text-slate-300">·</span>
-              <span className="font-medium text-slate-400">↑↓</span> to navigate
+              <span className="text-slate-300 dark:text-slate-600">·</span>
+              <span className="font-medium text-slate-400 dark:text-slate-500">↑↓</span> to navigate
             </div>
           </motion.div>
         ) : null}
@@ -289,7 +290,9 @@ function Option({
         }}
         className={cn(
           'flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm transition-colors',
-          active ? 'bg-teal-50 text-teal-900' : 'text-slate-700 hover:bg-slate-50',
+          active
+            ? 'bg-teal-50 text-teal-900 dark:bg-teal-500/15 dark:text-teal-200'
+            : 'text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700/60',
         )}
       >
         {children}
@@ -306,7 +309,9 @@ function renderMatch(label: string, query: string) {
   return (
     <>
       {label.slice(0, idx)}
-      <span className="font-semibold text-slate-900">{label.slice(idx, idx + query.length)}</span>
+      <span className="font-semibold text-slate-900 dark:text-slate-100">
+        {label.slice(idx, idx + query.length)}
+      </span>
       {label.slice(idx + query.length)}
     </>
   )

@@ -9,6 +9,7 @@ import {
   PanelLeft,
   RefreshCw,
   ScrollText,
+  ShieldCheck,
   SlidersHorizontal,
   Sparkles,
   Users,
@@ -75,8 +76,14 @@ const GROUPS: Group[] = [
       {
         href: '/admin/users',
         icon: Users,
-        title: 'Users & roles',
-        desc: 'Invite users, assign roles, manage scopes.',
+        title: 'Users',
+        desc: 'Invite people, assign roles & scopes, override individual permissions.',
+      },
+      {
+        href: '/admin/roles',
+        icon: ShieldCheck,
+        title: 'Roles & permissions',
+        desc: 'Define roles and the permissions each one grants.',
       },
       {
         href: '/admin/org',

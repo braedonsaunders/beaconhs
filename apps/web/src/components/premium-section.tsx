@@ -1,10 +1,13 @@
 'use client'
 
+// Premium collapsible section card for single-page detail forms. Shared
+// primitive — used by the hazard-assessment and incident detail pages.
+
 import { useState } from 'react'
 import { Check, ChevronDown } from 'lucide-react'
 import { cn } from '@beaconhs/ui'
 
-type Tone = 'slate' | 'blue' | 'purple' | 'teal' | 'amber' | 'indigo' | 'emerald'
+type Tone = 'slate' | 'blue' | 'purple' | 'teal' | 'amber' | 'indigo' | 'emerald' | 'rose'
 
 const TONE: Record<Tone, string> = {
   slate: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
@@ -14,13 +17,14 @@ const TONE: Record<Tone, string> = {
   amber: 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300',
   indigo: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300',
   emerald: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300',
+  rose: 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300',
 }
 
 /**
- * Premium collapsible section card for the hazard-assessment detail page.
- * Drop-in superset of the shared <Section>: same base props (title, subtitle,
- * actions, defaultOpen, children) plus an optional icon chip, tone, count pill,
- * and "done" badge. Bigger radius, soft shadow, richer header — at all widths.
+ * Premium collapsible section card for single-page detail forms. Drop-in
+ * superset of the shared <Section>: same base props (title, subtitle, actions,
+ * defaultOpen, children) plus an optional icon chip, tone, count pill, and
+ * "done" badge. Bigger radius, soft shadow, richer header — at all widths.
  */
 export function PremiumSection({
   title,

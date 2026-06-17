@@ -1,17 +1,26 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { and, asc, count, desc, eq, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, isNull, sql } from 'drizzle-orm'
 import {
+  Activity,
   AlertTriangle,
+  Building2,
+  Camera,
+  Clock,
   Copy,
   FileText,
+  Gauge,
+  HeartPulse,
+  HelpCircle,
+  History,
+  ListChecks,
   Lock,
-  Mail,
   Pencil,
   Plus,
   Trash2,
   Unlock,
+  Users,
 } from 'lucide-react'
 import {
   Alert,
@@ -19,15 +28,10 @@ import {
   AlertTitle,
   Badge,
   Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
   DetailHeader,
   EmptyState,
   Input,
   Label,
-  Select,
   Textarea,
   UrlDrawer,
 } from '@beaconhs/ui'
@@ -36,9 +40,11 @@ import {
   correctiveActions,
   departments,
   incidentAttachments,
+  incidentClassifications,
   incidentContributingFactors,
   incidentEvents,
   incidentInjuries,
+  incidentInjuryTypes,
   incidentLostTimeEvents,
   incidentPeople,
   incidentPreventativeSteps,
@@ -59,20 +65,28 @@ import {
   type FactorCategory,
   type PrevStepStatus,
 } from './_investigation-drawers'
+import { InjuryDrawer, PersonDrawer, type InjuryInput, type PersonInput } from './_people-injury-drawers'
+import { IncidentHeaderActions } from './_header-actions'
 import { pickString } from '@/lib/list-params'
 import { publicUrl } from '@beaconhs/storage'
 import { requireRequestContext } from '@/lib/auth'
+import { canManageModule } from '@/lib/module-admin/guard'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
-import { DetailGrid } from '@/components/detail-grid'
-import { Section } from '@/components/section'
-import { CheckIndicator } from '@/components/checkbox-field'
-import { SeverityRating } from '@/components/severity-rating'
 import { ActivityFeed } from '@/components/activity-feed'
 import { PhotoGallery } from '@/components/photo-gallery'
 import { PhotoUploaderSection } from '@/components/photo-uploader-section'
-import { TabNav, pickActiveTab } from '@/components/tab-nav'
-import { IncidentEditTab } from './incident-edit-tab'
 import { DetailPageLayout } from '@/components/page-layout'
+import { PremiumSection as Section } from '@/components/premium-section'
+import { SectionNav, type SectionNavItem } from '@/components/section-nav'
+import {
+  LiveDateTime,
+  LiveField,
+  LivePersonSelect,
+  LiveRichText,
+  LiveSelect,
+  LiveSeverityRating,
+  LiveToggle,
+} from '@/components/live-field'
 import { emitIncidentStatusChanged } from '@beaconhs/events'
 import { SeverityBadge, StatusBadge } from '../_badges'
 
@@ -85,6 +99,20 @@ const STATUSES = [
   'closed',
   'reopened',
 ] as const
+
+const TYPES = [
+  'injury',
+  'illness',
+  'near_miss',
+  'property_damage',
+  'environmental',
+  'security',
+  'other',
+] as const
+
+const SEVERITIES = ['first_aid_only', 'medical_aid', 'lost_time', 'fatality', 'no_injury'] as const
+
+// ---- Status & lock ---------------------------------------------------------
 
 async function updateStatus(formData: FormData) {
   'use server'
@@ -142,6 +170,159 @@ async function toggleLock(formData: FormData) {
   revalidatePath(`/incidents/${id}`)
 }
 
+// ---- Inline field editor (the single-page form's workhorse) ----------------
+
+async function updateTextField(formData: FormData) {
+  'use server'
+  const ctx = await requireRequestContext()
+  const id = String(formData.get('id') ?? '')
+  const field = String(formData.get('field') ?? '')
+  const raw = formData.get('value')
+  const value = typeof raw === 'string' ? raw : ''
+  if (!id || !field) throw new Error('Missing id/field')
+
+  const ENUMS: Record<string, readonly string[]> = { type: TYPES, severity: SEVERITIES }
+  const NULLABLE_IDS = new Set([
+    'siteOrgUnitId',
+    'departmentId',
+    'supervisorPersonId',
+    'classificationId',
+  ])
+  const TS_REQUIRED = new Set(['occurredAt'])
+  const TS_NULLABLE = new Set(['emsArrivedAt', 'hospitalArrivedAt', 'dischargedAt', 'molNotifiedAt'])
+  const DATE_ONLY = new Set([
+    'lostTimeFirstDay',
+    'lostTimeLastDay',
+    'modifiedDutyFirstDay',
+    'modifiedDutyLastDay',
+  ])
+  const INTS = new Set([
+    'actualSeverity',
+    'potentialSeverity',
+    'severityRating',
+    'lostTimeDays',
+    'modifiedDutyDays',
+  ])
+  const NUMERICS = new Set(['damageEstimate'])
+  const BOOLS = new Set([
+    'criticalInjury',
+    'ministryOfLabourNotified',
+    'emsCalled',
+    'firstAidGiven',
+    'medicalAttentionReceived',
+    'lostTime',
+    'modifiedDuty',
+    'externallyReportable',
+    'policeNotified',
+  ])
+  const TEXT_NOTNULL = new Set(['title'])
+  const TEXT = new Set([
+    'title',
+    'location',
+    'weather',
+    'foremanText',
+    'description',
+    'eventsLeadingUp',
+    'immediateActionTaken',
+    'ppeWorn',
+    'witnesses',
+    'externalPeopleInvolved',
+    'rootCause',
+    'firstAidProvider',
+    'firstAidNotes',
+    'hospitalName',
+    'treatedInCity',
+    'transportation',
+    'attendingPhysician',
+    'molReportNumber',
+    'policeReportNumber',
+    'insuranceClaimNumber',
+  ])
+
+  const allowed =
+    field in ENUMS ||
+    NULLABLE_IDS.has(field) ||
+    TS_REQUIRED.has(field) ||
+    TS_NULLABLE.has(field) ||
+    DATE_ONLY.has(field) ||
+    INTS.has(field) ||
+    NUMERICS.has(field) ||
+    BOOLS.has(field) ||
+    TEXT.has(field)
+  if (!allowed) throw new Error('Field not allowed')
+
+  // Locked incidents are read-only — mirror the legacy edit guard.
+  const before = await ctx.db(async (tx) => {
+    const [row] = await tx
+      .select({ locked: incidents.locked })
+      .from(incidents)
+      .where(eq(incidents.id, id))
+      .limit(1)
+    return row ?? null
+  })
+  if (!before) throw new Error('Incident not found')
+  if (before.locked) throw new Error('Incident is locked')
+
+  let val: unknown
+  if (field in ENUMS) {
+    if (!ENUMS[field]!.includes(value)) throw new Error('Invalid value')
+    val = value
+  } else if (NULLABLE_IDS.has(field)) {
+    val = value || null
+  } else if (TS_REQUIRED.has(field)) {
+    const d = new Date(value)
+    if (Number.isNaN(d.getTime())) throw new Error('Invalid date')
+    val = d
+  } else if (TS_NULLABLE.has(field)) {
+    if (!value) val = null
+    else {
+      const d = new Date(value)
+      if (Number.isNaN(d.getTime())) throw new Error('Invalid date')
+      val = d
+    }
+  } else if (DATE_ONLY.has(field)) {
+    val = value || null
+  } else if (INTS.has(field)) {
+    if (value.trim() === '') val = null
+    else {
+      const n = Number.parseInt(value, 10)
+      if (Number.isNaN(n)) throw new Error('Invalid number')
+      val = n
+    }
+  } else if (NUMERICS.has(field)) {
+    if (value.trim() === '') val = null
+    else {
+      if (Number.isNaN(Number(value))) throw new Error('Invalid number')
+      val = value // numeric column — drizzle expects a string
+    }
+  } else if (BOOLS.has(field)) {
+    val = value === 'true' || value === 'on' || value === '1'
+  } else {
+    // text
+    const trimmed = value.trim()
+    if (TEXT_NOTNULL.has(field) && trimmed === '') throw new Error('This field is required')
+    val = trimmed === '' ? null : value
+  }
+
+  await ctx.db((tx) =>
+    tx
+      .update(incidents)
+      .set({ [field]: val } as any)
+      .where(eq(incidents.id, id)),
+  )
+  await recordAudit(ctx, {
+    entityType: 'incident',
+    entityId: id,
+    action: 'update',
+    summary: `Updated ${field}`,
+    after: { [field]: val },
+  })
+  revalidatePath(`/incidents/${id}`)
+  revalidatePath('/incidents')
+}
+
+// ---- Photos, email, copy, delete -------------------------------------------
+
 async function attachPhotos(incidentId: string, attachmentIds: string[]) {
   'use server'
   const ctx = await requireRequestContext()
@@ -194,7 +375,6 @@ async function copyIncident(formData: FormData) {
   })
   if (!src) return
 
-  // Build a deterministic new reference: same year prefix, next sequence.
   const year = new Date().getFullYear()
   const [{ c } = { c: 0 }] = await ctx.db((tx) =>
     tx
@@ -242,6 +422,152 @@ async function copyIncident(formData: FormData) {
   }
 }
 
+async function deleteIncident(formData: FormData) {
+  'use server'
+  const ctx = await requireRequestContext()
+  if (!canManageModule(ctx, 'incidents')) throw new Error('Not authorized')
+  const id = String(formData.get('id') ?? '')
+  if (!id) return
+  await ctx.db((tx) =>
+    tx.update(incidents).set({ deletedAt: new Date() }).where(eq(incidents.id, id)),
+  )
+  await recordAudit(ctx, {
+    entityType: 'incident',
+    entityId: id,
+    action: 'delete',
+    summary: 'Deleted incident',
+  })
+  revalidatePath('/incidents')
+  redirect('/incidents')
+}
+
+// ---- People involved -------------------------------------------------------
+
+async function saveIncidentPerson(input: PersonInput): Promise<{ ok: boolean; error?: string }> {
+  'use server'
+  const ctx = await requireRequestContext()
+  if (!input.incidentId) return { ok: false, error: 'Missing incident.' }
+  if (!input.personId && !input.personNameText)
+    return { ok: false, error: 'Pick a person or type a name.' }
+  if (input.id) {
+    await ctx.db((tx) =>
+      tx
+        .update(incidentPeople)
+        .set({
+          personId: input.personId,
+          personNameText: input.personNameText,
+          role: input.role,
+        })
+        .where(eq(incidentPeople.id, input.id!)),
+    )
+    await recordAudit(ctx, {
+      entityType: 'incident',
+      entityId: input.incidentId,
+      action: 'update',
+      summary: 'Edited person involved',
+    })
+  } else {
+    await ctx.db((tx) =>
+      tx.insert(incidentPeople).values({
+        tenantId: ctx.tenantId,
+        incidentId: input.incidentId,
+        personId: input.personId,
+        personNameText: input.personNameText,
+        role: input.role,
+      }),
+    )
+    await recordAudit(ctx, {
+      entityType: 'incident',
+      entityId: input.incidentId,
+      action: 'update',
+      summary: 'Added person involved',
+    })
+  }
+  revalidatePath(`/incidents/${input.incidentId}`)
+  return { ok: true }
+}
+
+async function deleteIncidentPerson(formData: FormData) {
+  'use server'
+  const ctx = await requireRequestContext()
+  const id = String(formData.get('id') ?? '')
+  const incidentId = String(formData.get('incidentId') ?? '')
+  if (!id || !incidentId) return
+  await ctx.db((tx) => tx.delete(incidentPeople).where(eq(incidentPeople.id, id)))
+  await recordAudit(ctx, {
+    entityType: 'incident',
+    entityId: incidentId,
+    action: 'update',
+    summary: 'Removed person involved',
+  })
+  revalidatePath(`/incidents/${incidentId}`)
+}
+
+// ---- Injuries --------------------------------------------------------------
+
+async function saveIncidentInjury(input: InjuryInput): Promise<{ ok: boolean; error?: string }> {
+  'use server'
+  const ctx = await requireRequestContext()
+  if (!input.incidentId) return { ok: false, error: 'Missing incident.' }
+  if (!input.personId && !input.personName)
+    return { ok: false, error: 'Pick the injured person or type a name.' }
+  const values = {
+    personId: input.personId,
+    personName: input.personName,
+    injuryTypeId: input.injuryTypeId,
+    injuryTypes: input.injuryTypes,
+    bodyParts: input.bodyParts,
+    treatment: input.treatment,
+    treatedAtFacility: input.treatedAtFacility,
+    workedHoursPriorTo: input.workedHoursPriorTo,
+  }
+  if (input.id) {
+    await ctx.db((tx) =>
+      tx.update(incidentInjuries).set(values).where(eq(incidentInjuries.id, input.id!)),
+    )
+    await recordAudit(ctx, {
+      entityType: 'incident',
+      entityId: input.incidentId,
+      action: 'update',
+      summary: 'Edited injury',
+    })
+  } else {
+    await ctx.db((tx) =>
+      tx.insert(incidentInjuries).values({
+        tenantId: ctx.tenantId,
+        incidentId: input.incidentId,
+        ...values,
+      }),
+    )
+    await recordAudit(ctx, {
+      entityType: 'incident',
+      entityId: input.incidentId,
+      action: 'update',
+      summary: 'Added injury',
+    })
+  }
+  revalidatePath(`/incidents/${input.incidentId}`)
+  return { ok: true }
+}
+
+async function deleteIncidentInjury(formData: FormData) {
+  'use server'
+  const ctx = await requireRequestContext()
+  const id = String(formData.get('id') ?? '')
+  const incidentId = String(formData.get('incidentId') ?? '')
+  if (!id || !incidentId) return
+  await ctx.db((tx) => tx.delete(incidentInjuries).where(eq(incidentInjuries.id, id)))
+  await recordAudit(ctx, {
+    entityType: 'incident',
+    entityId: incidentId,
+    action: 'update',
+    summary: 'Removed injury',
+  })
+  revalidatePath(`/incidents/${incidentId}`)
+}
+
+// ---- Lost-time events ------------------------------------------------------
+
 async function addLostTimeEvent(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
@@ -281,7 +607,7 @@ async function addLostTimeEvent(formData: FormData) {
     })
   }
   revalidatePath(`/incidents/${incidentId}`)
-  redirect(`/incidents/${incidentId}?tab=lost-time`)
+  redirect(`/incidents/${incidentId}#section-lost-time`)
 }
 
 async function deleteLostTimeEvent(formData: FormData) {
@@ -490,32 +816,6 @@ async function deleteFactor(formData: FormData) {
 
 // ---- Investigation: root-cause whys -----------------------------------------
 
-async function saveRootCause(formData: FormData) {
-  'use server'
-  const ctx = await requireRequestContext()
-  const incidentId = String(formData.get('id') ?? '')
-  const rootCause = String(formData.get('rootCause') ?? '').trim() || null
-  if (!incidentId) return
-  const before = await ctx.db(async (tx) => {
-    const [row] = await tx
-      .select({ rootCause: incidents.rootCause })
-      .from(incidents)
-      .where(eq(incidents.id, incidentId))
-      .limit(1)
-    return row ?? null
-  })
-  await ctx.db((tx) => tx.update(incidents).set({ rootCause }).where(eq(incidents.id, incidentId)))
-  await recordAudit(ctx, {
-    entityType: 'incident',
-    entityId: incidentId,
-    action: 'update',
-    summary: rootCause ? 'Updated root cause' : 'Cleared root cause',
-    before: { rootCause: before?.rootCause ?? null },
-    after: { rootCause },
-  })
-  revalidatePath(`/incidents/${incidentId}`)
-}
-
 async function saveWhyAction(input: {
   id?: string
   incidentId: string
@@ -714,10 +1014,7 @@ async function deletePrevStep(formData: FormData) {
     entityId: incidentId,
     action: 'update',
     summary: `Removed preventative step`,
-    before: {
-      description: before.description,
-      status: before.status,
-    },
+    before: { description: before.description, status: before.status },
   })
   revalidatePath(`/incidents/${incidentId}`)
 }
@@ -726,18 +1023,6 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const { id } = await params
   return { title: `Incident · ${id.slice(0, 8)}` }
 }
-
-const INCIDENT_TABS = [
-  'overview',
-  'medical',
-  'injuries',
-  'lost-time',
-  'investigation',
-  'photos',
-  'activity',
-  'edit',
-] as const
-type IncidentTab = (typeof INCIDENT_TABS)[number]
 
 export default async function IncidentDetailPage({
   params,
@@ -748,7 +1033,6 @@ export default async function IncidentDetailPage({
 }) {
   const { id } = await params
   const sp = await searchParams
-  const active: IncidentTab = pickActiveTab(sp, INCIDENT_TABS, 'overview')
   const drawer = pickString(sp.drawer)
   const editId = pickString(sp.editId)
   const ctx = await requireRequestContext()
@@ -758,14 +1042,10 @@ export default async function IncidentDetailPage({
       .select({
         incident: incidents,
         site: orgUnits,
-        department: departments,
-        supervisor: people,
       })
       .from(incidents)
       .leftJoin(orgUnits, eq(orgUnits.id, incidents.siteOrgUnitId))
-      .leftJoin(departments, eq(departments.id, incidents.departmentId))
-      .leftJoin(people, eq(people.id, incidents.supervisorPersonId))
-      .where(eq(incidents.id, id))
+      .where(and(eq(incidents.id, id), isNull(incidents.deletedAt)))
       .limit(1)
     if (!row) return null
     const injuries = await tx
@@ -773,6 +1053,7 @@ export default async function IncidentDetailPage({
       .from(incidentInjuries)
       .leftJoin(people, eq(people.id, incidentInjuries.personId))
       .where(eq(incidentInjuries.incidentId, id))
+      .orderBy(asc(incidentInjuries.createdAt))
     const lostTime = await tx
       .select()
       .from(incidentLostTimeEvents)
@@ -783,6 +1064,7 @@ export default async function IncidentDetailPage({
       .from(incidentPeople)
       .leftJoin(people, eq(people.id, incidentPeople.personId))
       .where(eq(incidentPeople.incidentId, id))
+      .orderBy(asc(incidentPeople.createdAt))
     const linkedCAs = await tx
       .select()
       .from(correctiveActions)
@@ -793,10 +1075,7 @@ export default async function IncidentDetailPage({
         ),
       )
     const photos = await tx
-      .select({
-        link: incidentAttachments,
-        attachment: attachments,
-      })
+      .select({ link: incidentAttachments, attachment: attachments })
       .from(incidentAttachments)
       .innerJoin(attachments, eq(attachments.id, incidentAttachments.attachmentId))
       .where(eq(incidentAttachments.incidentId, id))
@@ -809,10 +1088,7 @@ export default async function IncidentDetailPage({
       .select()
       .from(incidentContributingFactors)
       .where(eq(incidentContributingFactors.incidentId, id))
-      .orderBy(
-        asc(incidentContributingFactors.category),
-        desc(incidentContributingFactors.createdAt),
-      )
+      .orderBy(asc(incidentContributingFactors.category), desc(incidentContributingFactors.createdAt))
     const whys = await tx
       .select()
       .from(incidentRootCauseWhys)
@@ -824,6 +1100,39 @@ export default async function IncidentDetailPage({
       .leftJoin(people, eq(people.id, incidentPreventativeSteps.ownerPersonId))
       .where(eq(incidentPreventativeSteps.incidentId, id))
       .orderBy(asc(incidentPreventativeSteps.status), asc(incidentPreventativeSteps.targetDate))
+
+    // Options for the inline live selects + drawers.
+    const siteOptions = await tx
+      .select({ id: orgUnits.id, name: orgUnits.name })
+      .from(orgUnits)
+      .where(eq(orgUnits.level, 'site'))
+      .orderBy(asc(orgUnits.name))
+    const departmentOptions = await tx
+      .select({ id: departments.id, name: departments.name })
+      .from(departments)
+      .orderBy(asc(departments.name))
+    const classificationOptions = await tx
+      .select({ id: incidentClassifications.id, name: incidentClassifications.name })
+      .from(incidentClassifications)
+      .where(and(isNull(incidentClassifications.deletedAt), eq(incidentClassifications.isActive, 1)))
+      .orderBy(asc(incidentClassifications.name))
+    const injuryTypeOptions = await tx
+      .select({ id: incidentInjuryTypes.id, name: incidentInjuryTypes.name })
+      .from(incidentInjuryTypes)
+      .where(and(isNull(incidentInjuryTypes.deletedAt), eq(incidentInjuryTypes.isActive, 1)))
+      .orderBy(asc(incidentInjuryTypes.sortOrder), asc(incidentInjuryTypes.name))
+    const peopleList = await tx
+      .select({
+        id: people.id,
+        firstName: people.firstName,
+        lastName: people.lastName,
+        employeeNo: people.employeeNo,
+      })
+      .from(people)
+      .where(eq(people.status, 'active'))
+      .orderBy(asc(people.lastName), asc(people.firstName))
+      .limit(500)
+
     return {
       ...row,
       injuries,
@@ -835,6 +1144,11 @@ export default async function IncidentDetailPage({
       factors,
       whys,
       prevSteps,
+      siteOptions,
+      departmentOptions,
+      classificationOptions,
+      injuryTypeOptions,
+      peopleList,
     }
   })
 
@@ -842,8 +1156,6 @@ export default async function IncidentDetailPage({
   const {
     incident,
     site,
-    department,
-    supervisor,
     injuries,
     lostTime,
     involved,
@@ -853,33 +1165,21 @@ export default async function IncidentDetailPage({
     factors,
     whys,
     prevSteps,
+    siteOptions,
+    departmentOptions,
+    classificationOptions,
+    injuryTypeOptions,
+    peopleList,
   } = data
+
+  const canManage = canManageModule(ctx, 'incidents')
+  const locked = incident.locked
+  const activity = await recentActivityForEntity(ctx, 'incident', id, 25)
 
   // Smallest unused ordinal (1..5) for adding a new "why" row.
   const usedOrdinals = new Set(whys.map((w) => w.ordinal))
   const nextWhyOrdinal = [1, 2, 3, 4, 5].find((n) => !usedOrdinals.has(n)) ?? 5
 
-  // People list (for preventative-step owner select). Limited to 200 to keep
-  // the drawer payload small; matches the cap used by the equipment work-order
-  // drawer.
-  const peopleList =
-    active === 'investigation'
-      ? await ctx.db((tx) =>
-          tx
-            .select({
-              id: people.id,
-              firstName: people.firstName,
-              lastName: people.lastName,
-              employeeNo: people.employeeNo,
-            })
-            .from(people)
-            .where(eq(people.status, 'active'))
-            .orderBy(asc(people.lastName), asc(people.firstName))
-            .limit(200),
-        )
-      : []
-
-  const activity = await recentActivityForEntity(ctx, 'incident', id, 25)
   const galleryPhotos = photos.map((p) => ({
     id: p.link.id,
     url: publicUrl(p.attachment.r2Key),
@@ -887,7 +1187,67 @@ export default async function IncidentDetailPage({
     caption: p.link.caption,
   }))
 
+  const personOpts = peopleList.map((p) => ({
+    value: p.id,
+    label: `${p.lastName}, ${p.firstName}`,
+    hint: [p.firstName, p.lastName].filter(Boolean).join(' '),
+  }))
+
+  // Investigation-progress milestones — drive the overview hero + checklist.
+  const milestones = [
+    {
+      label: 'Details captured',
+      done: Boolean(incident.title && incident.occurredAt && incident.siteOrgUnitId),
+    },
+    { label: 'People & injuries', done: involved.length > 0 || injuries.length > 0 },
+    { label: 'Timeline reconstructed', done: timelineEvents.length > 0 },
+    { label: 'Causes identified', done: factors.length > 0 },
+    { label: 'Root cause determined', done: Boolean(incident.rootCause) || whys.length > 0 },
+    { label: 'Preventative steps', done: prevSteps.length > 0 },
+    { label: 'Closed', done: incident.status === 'closed' },
+  ]
+  const doneCount = milestones.filter((m) => m.done).length
+  const pct = Math.round((doneCount / milestones.length) * 100)
+  const ringCirc = 2 * Math.PI * 26
+
+  const investigationCount =
+    timelineEvents.length + factors.length + whys.length + prevSteps.length + linkedCAs.length
+
+  const sectionItems: SectionNavItem[] = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'people', label: 'People', count: involved.length },
+    { id: 'medical', label: 'Medical' },
+    { id: 'injuries', label: 'Injuries', count: injuries.length },
+    { id: 'metrics', label: 'Key metrics' },
+    { id: 'lost-time', label: 'Lost time', count: lostTime.length },
+    { id: 'investigation', label: 'Investigation', count: investigationCount },
+    { id: 'photos', label: 'Photos', count: photos.length },
+    { id: 'activity', label: 'Activity', count: activity.length },
+  ]
+
   const basePath = `/incidents/${id}`
+  const drawerHref = (key: string, extra?: Record<string, string>) => {
+    const qp = new URLSearchParams()
+    qp.set('drawer', key)
+    if (extra) for (const [k, v] of Object.entries(extra)) qp.set(k, v)
+    return `${basePath}?${qp.toString()}`
+  }
+
+  // Edit-target lookups for the URL-driven drawers.
+  const editPersonRow =
+    drawer === 'edit-person' && editId ? involved.find((r) => r.link.id === editId) : undefined
+  const editInjuryRow =
+    drawer === 'edit-injury' && editId ? injuries.find((r) => r.injury.id === editId) : undefined
+  const editingEvent =
+    drawer === 'edit-event' && editId ? timelineEvents.find((e) => e.id === editId) : undefined
+  const editingFactor =
+    drawer === 'edit-factor' && editId ? factors.find((f) => f.id === editId) : undefined
+  const editingWhy = drawer === 'edit-why' && editId ? whys.find((w) => w.id === editId) : undefined
+  const editingPrev =
+    drawer === 'edit-prev-step' && editId
+      ? prevSteps.find((r) => r.step.id === editId)?.step
+      : undefined
+
   return (
     <DetailPageLayout
       header={
@@ -899,7 +1259,7 @@ export default async function IncidentDetailPage({
             <div className="flex items-center gap-2">
               <SeverityBadge severity={incident.severity} />
               <StatusBadge status={incident.status} />
-              {incident.locked ? (
+              {locked ? (
                 <Badge variant="outline" className="border-amber-300 text-amber-800">
                   <Lock size={10} /> Locked
                 </Badge>
@@ -907,39 +1267,25 @@ export default async function IncidentDetailPage({
             </div>
           }
           actions={
-            <>
-              <Link href={`/incidents/${id}?tab=edit`}>
-                <Button variant="outline">
-                  <Pencil size={14} />
-                  Edit
-                </Button>
-              </Link>
-              <Link href={`/incidents/${id}/pdf`}>
-                <Button variant="outline">
-                  <FileText size={14} />
-                  PDF
-                </Button>
-              </Link>
-              <Link
-                href={`/incidents/${id}?drawer=send-email${active !== 'overview' ? `&tab=${active}` : ''}`}
-                scroll={false}
-              >
-                <Button variant="outline">
-                  <Mail size={14} /> Send email
-                </Button>
-              </Link>
-              <Link href={`/incidents/${id}?drawer=copy`}>
-                <Button variant="outline" type="button">
-                  <Copy size={14} /> Copy
-                </Button>
-              </Link>
-            </>
+            <IncidentHeaderActions
+              id={id}
+              status={incident.status}
+              statuses={STATUSES}
+              locked={locked}
+              canManage={canManage}
+              pdfHref={`${basePath}/pdf`}
+              emailHref={drawerHref('send-email')}
+              copyHref={drawerHref('copy')}
+              deleteHref={drawerHref('confirm-delete')}
+              updateStatusAction={updateStatus}
+              toggleLockAction={toggleLock}
+            />
           }
         />
       }
       alerts={
         <>
-          {incident.locked ? (
+          {locked ? (
             <Alert variant="warning">
               <AlertTitle>This incident is locked</AlertTitle>
               <AlertDescription className="flex items-center justify-between">
@@ -970,686 +1316,835 @@ export default async function IncidentDetailPage({
           ) : null}
         </>
       }
-      subtabs={
-        <TabNav
-          basePath={basePath}
-          currentParams={sp}
-          active={active}
-          tabs={[
-            { key: 'overview', label: 'Overview' },
-            { key: 'medical', label: 'Medical' },
-            { key: 'injuries', label: 'Injuries', count: injuries.length },
-            { key: 'lost-time', label: 'Lost time', count: lostTime.length },
-            {
-              key: 'investigation',
-              label: 'Investigation',
-              count:
-                timelineEvents.length +
-                factors.length +
-                whys.length +
-                prevSteps.length +
-                linkedCAs.length,
-            },
-            { key: 'photos', label: 'Photos & files', count: photos.length },
-            { key: 'activity', label: 'Activity', count: activity.length },
-            { key: 'edit', label: 'Edit' },
-          ]}
-        />
-      }
+      subtabs={<SectionNav sections={sectionItems} />}
     >
       <div className="space-y-5">
-        {active === 'overview' ? (
-          <Section title="General Information" subtitle="Who, what, where, when">
-            <DetailGrid
-              rows={[
-                {
-                  label: 'Reference',
-                  value: <span className="font-mono">{incident.reference}</span>,
-                },
-                { label: 'Type', value: incident.type.replace(/_/g, ' ') },
-                { label: 'Occurred', value: new Date(incident.occurredAt).toLocaleString() },
-                { label: 'Reported', value: new Date(incident.reportedAt).toLocaleString() },
-                { label: 'Site', value: site?.name ?? '—' },
-                { label: 'Location on site', value: incident.location ?? '—' },
-                { label: 'Department', value: department?.name ?? '—' },
-                { label: 'Weather', value: incident.weather ?? '—' },
-                {
-                  label: 'Supervisor',
-                  value: supervisor ? `${supervisor.firstName} ${supervisor.lastName}` : '—',
-                },
-                { label: 'Foreman', value: incident.foremanText ?? '—' },
-              ]}
-            />
-            <div className="mt-4 space-y-3 text-sm">
-              <TextBlock label="People involved">
-                {involved.length === 0 ? (
-                  <span className="text-slate-500">—</span>
-                ) : (
-                  <ul className="flex flex-wrap gap-2">
-                    {involved.map((row) => (
-                      <li key={row.link.id}>
+        {/* ===================== OVERVIEW ===================== */}
+        <section id="section-overview" className="scroll-mt-2 space-y-5">
+          {/* Hero — investigation progress ring */}
+          <div className="flex flex-col gap-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex items-center gap-4">
+              <div className="relative h-16 w-16 shrink-0">
+                <svg viewBox="0 0 64 64" className="h-16 w-16 -rotate-90">
+                  <circle
+                    cx="32"
+                    cy="32"
+                    r="26"
+                    fill="none"
+                    strokeWidth="6"
+                    className="stroke-slate-200 dark:stroke-slate-700"
+                  />
+                  <circle
+                    cx="32"
+                    cy="32"
+                    r="26"
+                    fill="none"
+                    strokeWidth="6"
+                    strokeLinecap="round"
+                    strokeDasharray={ringCirc}
+                    strokeDashoffset={ringCirc * (1 - pct / 100)}
+                    className={pct >= 100 ? 'stroke-emerald-500' : 'stroke-teal-500'}
+                  />
+                </svg>
+                <span className="absolute inset-0 flex items-center justify-center text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  {pct}%
+                </span>
+              </div>
+              <div className="min-w-0">
+                <div className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                  {doneCount} of {milestones.length} steps complete
+                </div>
+                <div className="mt-0.5 truncate text-sm text-slate-500 dark:text-slate-400">
+                  {incident.type.replace(/_/g, ' ')}
+                  {site ? ` · ${site.name}` : ''}
+                </div>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-1 lg:grid-cols-2">
+              {milestones.map((m) => (
+                <div key={m.label} className="flex items-center gap-2 text-sm">
+                  <span
+                    className={
+                      m.done
+                        ? 'inline-flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-white'
+                        : 'inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 dark:border-slate-600'
+                    }
+                  >
+                    {m.done ? '✓' : ''}
+                  </span>
+                  <span
+                    className={
+                      m.done
+                        ? 'text-slate-700 dark:text-slate-200'
+                        : 'text-slate-400 dark:text-slate-500'
+                    }
+                  >
+                    {m.label}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <Section
+            title="General Information"
+            subtitle="Who, what, where, when"
+            icon={<Building2 size={20} />}
+            tone="slate"
+          >
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <LiveSelect
+                id={id}
+                field="type"
+                label="Type"
+                initialValue={incident.type}
+                allowEmpty={false}
+                options={TYPES.map((t) => ({ value: t, label: t.replace(/_/g, ' ') }))}
+                disabled={locked}
+                updateAction={updateTextField}
+              />
+              <LiveSelect
+                id={id}
+                field="severity"
+                label="Severity"
+                initialValue={incident.severity}
+                allowEmpty={false}
+                options={SEVERITIES.map((s) => ({ value: s, label: s.replace(/_/g, ' ') }))}
+                disabled={locked}
+                updateAction={updateTextField}
+              />
+              <div className="sm:col-span-2">
+                <LiveField
+                  id={id}
+                  field="title"
+                  label="Title"
+                  initialValue={incident.title}
+                  disabled={locked}
+                  updateAction={updateTextField}
+                />
+              </div>
+              <LiveDateTime
+                id={id}
+                field="occurredAt"
+                label="Occurred at"
+                initialValue={toLocalDatetime(incident.occurredAt)}
+                disabled={locked}
+                updateAction={updateTextField}
+              />
+              <LiveSelect
+                id={id}
+                field="siteOrgUnitId"
+                label="Site"
+                initialValue={incident.siteOrgUnitId}
+                options={siteOptions.map((s) => ({ value: s.id, label: s.name }))}
+                disabled={locked}
+                updateAction={updateTextField}
+              />
+              <LiveSelect
+                id={id}
+                field="departmentId"
+                label="Department"
+                initialValue={incident.departmentId}
+                options={departmentOptions.map((d) => ({ value: d.id, label: d.name }))}
+                disabled={locked}
+                updateAction={updateTextField}
+              />
+              <LiveSelect
+                id={id}
+                field="classificationId"
+                label="Classification"
+                initialValue={incident.classificationId}
+                options={classificationOptions.map((c) => ({ value: c.id, label: c.name }))}
+                disabled={locked}
+                updateAction={updateTextField}
+              />
+              <LiveField
+                id={id}
+                field="location"
+                label="Location on site"
+                initialValue={incident.location}
+                placeholder="Building / area / equipment"
+                disabled={locked}
+                updateAction={updateTextField}
+              />
+              <LiveField
+                id={id}
+                field="weather"
+                label="Weather"
+                initialValue={incident.weather}
+                disabled={locked}
+                updateAction={updateTextField}
+              />
+              <LivePersonSelect
+                id={id}
+                field="supervisorPersonId"
+                label="Supervisor"
+                initialValue={incident.supervisorPersonId}
+                options={personOpts}
+                sheetTitle="Select supervisor"
+                disabled={locked}
+                updateAction={updateTextField}
+              />
+              <LiveField
+                id={id}
+                field="foremanText"
+                label="Foreman"
+                initialValue={incident.foremanText}
+                disabled={locked}
+                updateAction={updateTextField}
+              />
+            </div>
+          </Section>
+
+          <Section
+            title="Narrative"
+            subtitle="The story of what happened"
+            icon={<FileText size={20} />}
+            tone="slate"
+          >
+            <div className="space-y-4">
+              <LiveRichText
+                id={id}
+                field="eventsLeadingUp"
+                label="Events leading up to the incident"
+                initialValue={incident.eventsLeadingUp}
+                disabled={locked}
+                updateAction={updateTextField}
+              />
+              <LiveRichText
+                id={id}
+                field="description"
+                label="Event details / cause"
+                initialValue={incident.description}
+                disabled={locked}
+                updateAction={updateTextField}
+              />
+              <LiveRichText
+                id={id}
+                field="immediateActionTaken"
+                label="Immediate action taken"
+                initialValue={incident.immediateActionTaken}
+                disabled={locked}
+                updateAction={updateTextField}
+              />
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <LiveRichText
+                  id={id}
+                  field="witnesses"
+                  label="Witnesses"
+                  initialValue={incident.witnesses}
+                  disabled={locked}
+                  updateAction={updateTextField}
+                />
+                <LiveRichText
+                  id={id}
+                  field="externalPeopleInvolved"
+                  label="External people involved"
+                  initialValue={incident.externalPeopleInvolved}
+                  disabled={locked}
+                  updateAction={updateTextField}
+                />
+              </div>
+              <LiveField
+                id={id}
+                field="ppeWorn"
+                label="PPE worn"
+                initialValue={incident.ppeWorn}
+                disabled={locked}
+                updateAction={updateTextField}
+              />
+            </div>
+          </Section>
+        </section>
+
+        {/* ===================== PEOPLE ===================== */}
+        <section id="section-people" className="scroll-mt-2">
+          <Section
+            title={`People involved (${involved.length})`}
+            subtitle="Employees and external parties tied to this incident"
+            icon={<Users size={20} />}
+            tone="teal"
+            actions={
+              !locked ? (
+                <Link href={drawerHref('add-person') as any} scroll={false}>
+                  <Button type="button" size="sm">
+                    <Plus size={14} /> Add person
+                  </Button>
+                </Link>
+              ) : null
+            }
+          >
+            {involved.length === 0 ? (
+              <EmptyState
+                title="No people recorded"
+                description="Add the employees, witnesses, or external parties involved."
+              />
+            ) : (
+              <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
+                {involved.map((row) => (
+                  <li key={row.link.id} className="group flex items-center justify-between gap-3 py-2.5">
+                    <div className="min-w-0 flex-1">
+                      <div className="font-medium text-slate-900 dark:text-slate-100">
                         {row.person ? (
-                          <Link
-                            href={`/people/${row.person.id}`}
-                            className="rounded-full border border-slate-200 px-2 py-0.5 text-xs hover:bg-slate-50"
-                          >
+                          <Link href={`/people/${row.person.id}`} className="hover:underline">
                             {row.person.firstName} {row.person.lastName}
                           </Link>
                         ) : (
-                          <span className="rounded-full border border-slate-200 px-2 py-0.5 text-xs">
-                            {row.link.personNameText}
-                          </span>
+                          (row.link.personNameText ?? '—')
                         )}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </TextBlock>
-              <TextBlock label="Witnesses">
-                {incident.witnesses ?? <span className="text-slate-500">—</span>}
-              </TextBlock>
-              <TextBlock label="External people involved">
-                {incident.externalPeopleInvolved ?? <span className="text-slate-500">—</span>}
-              </TextBlock>
-              <TextBlock label="Events leading up to the incident">
-                {incident.eventsLeadingUp ?? <span className="text-slate-500">—</span>}
-              </TextBlock>
-              <TextBlock label="Event details / cause">
-                {incident.description ?? <span className="text-slate-500">—</span>}
-              </TextBlock>
-              <TextBlock label="Immediate action taken">
-                {incident.immediateActionTaken ?? <span className="text-slate-500">—</span>}
-              </TextBlock>
-              <TextBlock label="PPE worn">
-                {incident.ppeWorn ?? <span className="text-slate-500">—</span>}
-              </TextBlock>
-            </div>
-          </Section>
-        ) : null}
-
-        {active === 'medical' ? (
-          <>
-            <Section title="Medical" subtitle="EMS, first aid, hospital, lost time / modified duty">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                <CheckIndicator checked={incident.criticalInjury} label="Critical injury" />
-                <CheckIndicator
-                  checked={incident.ministryOfLabourNotified}
-                  label="Ministry of Labour notified"
-                />
-                <CheckIndicator
-                  checked={incident.emsNotified || incident.emsCalled}
-                  label="EMS called"
-                />
-                <CheckIndicator
-                  checked={incident.firstAidReceived || incident.firstAidGiven}
-                  label="First aid given"
-                />
-                <CheckIndicator
-                  checked={incident.medicalAttentionReceived}
-                  label="Medical attention received"
-                />
-                <CheckIndicator checked={incident.lostTime} label="Lost time" />
-                <CheckIndicator checked={incident.modifiedDuty} label="Modified duty" />
-                <CheckIndicator
-                  checked={incident.externallyReportable}
-                  label="Externally reportable"
-                />
-                <CheckIndicator checked={incident.policeNotified} label="Police notified" />
-              </div>
-
-              {/* EMS trail */}
-              {incident.emsCalled || incident.emsNotified || incident.emsArrivedAt ? (
-                <div className="mt-4 grid grid-cols-1 gap-3 rounded-md border border-rose-200 bg-rose-50/40 p-3 text-sm sm:grid-cols-2">
-                  <FieldRow label="EMS called">
-                    {yesNo(incident.emsCalled || incident.emsNotified)}
-                  </FieldRow>
-                  <FieldRow label="EMS arrived at">
-                    {incident.emsArrivedAt ? new Date(incident.emsArrivedAt).toLocaleString() : '—'}
-                  </FieldRow>
-                </div>
-              ) : null}
-
-              {/* First-aid trail */}
-              {incident.firstAidGiven || incident.firstAidReceived ? (
-                <div className="mt-4 grid grid-cols-1 gap-3 rounded-md border border-amber-200 bg-amber-50/50 p-3 text-sm sm:grid-cols-2">
-                  <FieldRow label="First aid provider">{incident.firstAidProvider ?? '—'}</FieldRow>
-                  <FieldRow label="First aid notes">{incident.firstAidNotes ?? '—'}</FieldRow>
-                </div>
-              ) : null}
-
-              {/* Hospital trail */}
-              {incident.medicalAttentionReceived ||
-              incident.hospitalName ||
-              incident.hospitalArrivedAt ? (
-                <div className="mt-4 grid grid-cols-1 gap-3 rounded-md border border-sky-200 bg-sky-50/50 p-3 text-sm sm:grid-cols-2">
-                  <FieldRow label="Hospital">
-                    {incident.hospitalName ?? incident.treatedAtHospital ?? '—'}
-                  </FieldRow>
-                  <FieldRow label="City">{incident.treatedInCity ?? '—'}</FieldRow>
-                  <FieldRow label="Transportation">{incident.transportation ?? '—'}</FieldRow>
-                  <FieldRow label="Attending physician">
-                    {incident.attendingPhysician ?? '—'}
-                  </FieldRow>
-                  <FieldRow label="Hospital arrived">
-                    {incident.hospitalArrivedAt
-                      ? new Date(incident.hospitalArrivedAt).toLocaleString()
-                      : '—'}
-                  </FieldRow>
-                  <FieldRow label="Discharged">
-                    {incident.dischargedAt ? new Date(incident.dischargedAt).toLocaleString() : '—'}
-                  </FieldRow>
-                </div>
-              ) : null}
-
-              {/* MOL trail */}
-              {incident.ministryOfLabourNotified ||
-              incident.molNotifiedAt ||
-              incident.molReportNumber ? (
-                <div className="mt-4 grid grid-cols-1 gap-3 rounded-md border border-orange-200 bg-orange-50/50 p-3 text-sm sm:grid-cols-2">
-                  <FieldRow label="MOL notified at">
-                    {incident.molNotifiedAt
-                      ? new Date(incident.molNotifiedAt).toLocaleString()
-                      : '—'}
-                  </FieldRow>
-                  <FieldRow label="MOL report number">{incident.molReportNumber ?? '—'}</FieldRow>
-                </div>
-              ) : null}
-
-              {/* Police / insurance trail */}
-              {incident.policeNotified ||
-              incident.policeReportNumber ||
-              incident.insuranceClaimNumber ? (
-                <div className="mt-4 grid grid-cols-1 gap-3 rounded-md border border-indigo-200 bg-indigo-50/40 p-3 text-sm sm:grid-cols-2">
-                  <FieldRow label="Police report #">{incident.policeReportNumber ?? '—'}</FieldRow>
-                  <FieldRow label="Insurance claim #">
-                    {incident.insuranceClaimNumber ?? '—'}
-                  </FieldRow>
-                </div>
-              ) : null}
-
-              {/* Damage estimate (always visible if set) */}
-              {incident.damageEstimate ? (
-                <div className="mt-4 rounded-md border border-emerald-200 bg-emerald-50/50 p-3 text-sm">
-                  <FieldRow label="Damage estimate (USD)">
-                    ${Number(incident.damageEstimate).toLocaleString()}
-                  </FieldRow>
-                </div>
-              ) : null}
-
-              {/* Lost-time / modified-duty quick summary (full detail on the Lost time tab). */}
-              {incident.lostTime || incident.modifiedDuty ? (
-                <div className="mt-4 grid grid-cols-1 gap-3 rounded-md border border-slate-200 bg-slate-50/50 p-3 text-sm sm:grid-cols-2">
-                  {incident.lostTime ? (
-                    <>
-                      <FieldRow label="Lost time first day">
-                        {incident.lostTimeFirstDay ?? '—'}
-                      </FieldRow>
-                      <FieldRow label="Lost time last day">
-                        {incident.lostTimeLastDay ?? 'still ongoing'}
-                      </FieldRow>
-                      <FieldRow label="Total lost-time days">
-                        {incident.lostTimeDays ?? '—'}
-                      </FieldRow>
-                    </>
-                  ) : null}
-                  {incident.modifiedDuty ? (
-                    <>
-                      <FieldRow label="Modified duty first day">
-                        {incident.modifiedDutyFirstDay ?? '—'}
-                      </FieldRow>
-                      <FieldRow label="Modified duty last day">
-                        {incident.modifiedDutyLastDay ?? 'still ongoing'}
-                      </FieldRow>
-                      <FieldRow label="Total modified-duty days">
-                        {incident.modifiedDutyDays ?? '—'}
-                      </FieldRow>
-                    </>
-                  ) : null}
-                </div>
-              ) : null}
-            </Section>
-
-            <Section title="Key Metrics" subtitle="Actual vs potential severity (1–5)">
-              <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
-                <SeverityRating label="Actual severity" value={incident.actualSeverity} />
-                <SeverityRating label="Potential severity" value={incident.potentialSeverity} />
-                <SeverityRating label="Severity rating" value={incident.severityRating} />
-              </div>
-            </Section>
-          </>
-        ) : null}
-
-        {active === 'injuries' ? (
-          <>
-            <Section title={`Injuries (${injuries.length})`} defaultOpen={injuries.length > 0}>
-              {injuries.length === 0 ? (
-                <p className="text-sm text-slate-500">No injuries recorded.</p>
-              ) : (
-                <ul className="divide-y divide-slate-100 text-sm">
-                  {injuries.map((row) => (
-                    <li key={row.injury.id} className="grid grid-cols-1 gap-2 py-3 sm:grid-cols-2">
-                      <div>
-                        <div className="font-medium">
-                          {row.person ? (
-                            <Link href={`/people/${row.person.id}`} className="hover:underline">
-                              {row.person.firstName} {row.person.lastName}
-                            </Link>
-                          ) : (
-                            (row.injury.personName ?? '—')
-                          )}
-                        </div>
-                        <div className="text-xs text-slate-500">
-                          Body part(s): {row.injury.bodyParts.join(', ') || '—'}
-                        </div>
-                        <div className="text-xs text-slate-500">
-                          Injury type(s): {row.injury.injuryTypes.join(', ') || '—'}
-                        </div>
                       </div>
-                      <div className="text-xs text-slate-600">
-                        {row.injury.treatment ? <p>{row.injury.treatment}</p> : null}
-                        {row.injury.treatedAtFacility ? (
-                          <p className="text-slate-500">
-                            Treated at: {row.injury.treatedAtFacility}
-                          </p>
-                        ) : null}
-                        {typeof row.injury.workedHoursPriorTo === 'number' ? (
-                          <p className="text-slate-500">
-                            Hours worked prior: {row.injury.workedHoursPriorTo}
-                          </p>
-                        ) : null}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Section>
-          </>
-        ) : null}
-
-        {active === 'lost-time' ? (
-          <>
-            <Section
-              title={`Lost-time + modified-duty events (${lostTime.length})`}
-              subtitle="Off-work / restricted / full-duty transitions with explicit date windows. Used by the DART rate report."
-              defaultOpen={true}
-            >
-              {lostTime.length === 0 ? (
-                <p className="text-sm text-slate-500">
-                  No lost-time tracking. Use the form below to record an off-work or restricted-duty
-                  window.
-                </p>
-              ) : (
-                <ul className="divide-y divide-slate-100 text-sm">
-                  {lostTime.map((e) => (
-                    <li key={e.id} className="flex items-center justify-between gap-3 py-2">
-                      <div className="min-w-0 flex-1">
-                        <div className="font-medium text-slate-900">
-                          {e.status === 'off_work' ? (
-                            <Badge variant="destructive">Off work</Badge>
-                          ) : e.status === 'restricted_duty' ? (
-                            <Badge variant="warning">Restricted duty</Badge>
-                          ) : (
-                            <Badge variant="success">Full duty</Badge>
-                          )}
-                        </div>
-                        <div className="mt-0.5 text-xs text-slate-500">
-                          <span className="font-mono">{e.validFrom}</span>
-                          <span> → </span>
-                          <span className="font-mono">{e.validTo ?? 'present'}</span>
-                          {e.notes ? <span className="ml-2">· {e.notes}</span> : null}
-                        </div>
-                      </div>
-                      {!incident.locked ? (
-                        <form action={deleteLostTimeEvent} className="inline">
-                          <input type="hidden" name="id" value={e.id} />
+                      {row.link.role ? (
+                        <Badge variant="outline" className="mt-1 capitalize">
+                          {row.link.role}
+                        </Badge>
+                      ) : null}
+                    </div>
+                    {!locked ? (
+                      <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                        <Link
+                          href={drawerHref('edit-person', { editId: row.link.id }) as any}
+                          scroll={false}
+                          className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
+                          title="Edit person"
+                        >
+                          <Pencil size={14} />
+                        </Link>
+                        <form action={deleteIncidentPerson} className="inline">
+                          <input type="hidden" name="id" value={row.link.id} />
                           <input type="hidden" name="incidentId" value={id} />
                           <button
                             type="submit"
                             className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700"
-                            title="Delete row"
+                            title="Remove person"
                           >
                             <Trash2 size={14} />
                           </button>
                         </form>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {!incident.locked ? (
-                <div className="mt-4 border-t border-slate-100 pt-4">
-                  <Link href={`/incidents/${id}?tab=lost-time&drawer=add-lost-time`}>
-                    <Button size="sm">Add lost-time row</Button>
-                  </Link>
-                </div>
-              ) : null}
-            </Section>
-          </>
-        ) : null}
+                      </div>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Section>
+        </section>
 
-        {active === 'investigation' ? (
-          <>
-            {/* Step 2 — Event timeline */}
-            <Section
-              title={`Event timeline (${timelineEvents.length})`}
-              subtitle="Chronological log of what happened, in the order it happened."
-              actions={
-                !incident.locked ? (
-                  <Link href={`/incidents/${id}?tab=investigation&drawer=new-event`}>
-                    <Button size="sm" variant="outline">
-                      <Plus size={14} /> Add event
-                    </Button>
-                  </Link>
-                ) : null
-              }
-            >
-              {timelineEvents.length === 0 ? (
-                <EmptyState
-                  title="No events logged"
-                  description="Add a timeline entry to reconstruct the sequence of events."
-                />
-              ) : (
-                <ol className="relative space-y-3 border-l border-slate-200 pl-5 text-sm">
-                  {timelineEvents.map((e) => (
-                    <li key={e.id} className="group relative">
-                      <span className="absolute top-1 -left-[26px] h-2.5 w-2.5 rounded-full border-2 border-white bg-teal-500 shadow" />
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0 flex-1">
-                          <div className="font-mono text-xs text-slate-500">
-                            {new Date(e.occurredAt).toLocaleString()}
-                          </div>
-                          <div className="mt-0.5 whitespace-pre-wrap text-slate-900">
-                            {e.description}
-                          </div>
+        {/* ===================== MEDICAL ===================== */}
+        <section id="section-medical" className="scroll-mt-2">
+          <Section
+            title="Medical"
+            subtitle="EMS, first aid, hospital, notifications, lost time"
+            icon={<HeartPulse size={20} />}
+            tone="rose"
+          >
+            <div className="space-y-5">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                <LiveToggle id={id} field="criticalInjury" label="Critical injury" initialValue={incident.criticalInjury} disabled={locked} updateAction={updateTextField} />
+                <LiveToggle id={id} field="ministryOfLabourNotified" label="Ministry of Labour notified" initialValue={incident.ministryOfLabourNotified} disabled={locked} updateAction={updateTextField} />
+                <LiveToggle id={id} field="emsCalled" label="EMS called" initialValue={incident.emsCalled || incident.emsNotified} disabled={locked} updateAction={updateTextField} />
+                <LiveToggle id={id} field="firstAidGiven" label="First aid given" initialValue={incident.firstAidGiven || incident.firstAidReceived} disabled={locked} updateAction={updateTextField} />
+                <LiveToggle id={id} field="medicalAttentionReceived" label="Medical attention" initialValue={incident.medicalAttentionReceived} disabled={locked} updateAction={updateTextField} />
+                <LiveToggle id={id} field="lostTime" label="Lost time" initialValue={incident.lostTime} disabled={locked} updateAction={updateTextField} />
+                <LiveToggle id={id} field="modifiedDuty" label="Modified duty" initialValue={incident.modifiedDuty} disabled={locked} updateAction={updateTextField} />
+                <LiveToggle id={id} field="externallyReportable" label="Externally reportable" initialValue={incident.externallyReportable} disabled={locked} updateAction={updateTextField} />
+                <LiveToggle id={id} field="policeNotified" label="Police notified" initialValue={incident.policeNotified} disabled={locked} updateAction={updateTextField} />
+              </div>
+
+              {incident.emsCalled || incident.emsNotified ? (
+                <SubBlock title="EMS" tone="rose">
+                  <LiveDateTime id={id} field="emsArrivedAt" label="EMS arrived at" initialValue={incident.emsArrivedAt ? toLocalDatetime(incident.emsArrivedAt) : ''} disabled={locked} updateAction={updateTextField} />
+                </SubBlock>
+              ) : null}
+
+              {incident.firstAidGiven || incident.firstAidReceived ? (
+                <SubBlock title="First aid" tone="amber">
+                  <LiveField id={id} field="firstAidProvider" label="First aid provider" initialValue={incident.firstAidProvider} disabled={locked} updateAction={updateTextField} />
+                  <LiveField id={id} field="firstAidNotes" label="First aid notes" initialValue={incident.firstAidNotes} multiline rows={2} disabled={locked} updateAction={updateTextField} />
+                </SubBlock>
+              ) : null}
+
+              {incident.medicalAttentionReceived ? (
+                <SubBlock title="Hospital / treatment" tone="sky">
+                  <LiveField id={id} field="hospitalName" label="Hospital" initialValue={incident.hospitalName ?? incident.treatedAtHospital} disabled={locked} updateAction={updateTextField} />
+                  <LiveField id={id} field="treatedInCity" label="City" initialValue={incident.treatedInCity} disabled={locked} updateAction={updateTextField} />
+                  <LiveField id={id} field="transportation" label="Transportation" initialValue={incident.transportation} disabled={locked} updateAction={updateTextField} />
+                  <LiveField id={id} field="attendingPhysician" label="Attending physician" initialValue={incident.attendingPhysician} disabled={locked} updateAction={updateTextField} />
+                  <LiveDateTime id={id} field="hospitalArrivedAt" label="Hospital arrived" initialValue={incident.hospitalArrivedAt ? toLocalDatetime(incident.hospitalArrivedAt) : ''} disabled={locked} updateAction={updateTextField} />
+                  <LiveDateTime id={id} field="dischargedAt" label="Discharged" initialValue={incident.dischargedAt ? toLocalDatetime(incident.dischargedAt) : ''} disabled={locked} updateAction={updateTextField} />
+                </SubBlock>
+              ) : null}
+
+              {incident.ministryOfLabourNotified ? (
+                <SubBlock title="Ministry of Labour" tone="orange">
+                  <LiveDateTime id={id} field="molNotifiedAt" label="MOL notified at" initialValue={incident.molNotifiedAt ? toLocalDatetime(incident.molNotifiedAt) : ''} disabled={locked} updateAction={updateTextField} />
+                  <LiveField id={id} field="molReportNumber" label="MOL report number" initialValue={incident.molReportNumber} disabled={locked} updateAction={updateTextField} />
+                </SubBlock>
+              ) : null}
+
+              {incident.policeNotified ? (
+                <SubBlock title="Police / insurance" tone="indigo">
+                  <LiveField id={id} field="policeReportNumber" label="Police report #" initialValue={incident.policeReportNumber} disabled={locked} updateAction={updateTextField} />
+                  <LiveField id={id} field="insuranceClaimNumber" label="Insurance claim #" initialValue={incident.insuranceClaimNumber} disabled={locked} updateAction={updateTextField} />
+                </SubBlock>
+              ) : null}
+
+              {incident.lostTime ? (
+                <SubBlock title="Lost-time summary" tone="slate">
+                  <LiveField id={id} field="lostTimeFirstDay" label="First day off" type="date" initialValue={incident.lostTimeFirstDay} disabled={locked} updateAction={updateTextField} />
+                  <LiveField id={id} field="lostTimeLastDay" label="Last day off" type="date" initialValue={incident.lostTimeLastDay} disabled={locked} updateAction={updateTextField} />
+                  <LiveField id={id} field="lostTimeDays" label="Total lost-time days" type="number" initialValue={incident.lostTimeDays != null ? String(incident.lostTimeDays) : null} disabled={locked} updateAction={updateTextField} />
+                </SubBlock>
+              ) : null}
+
+              {incident.modifiedDuty ? (
+                <SubBlock title="Modified-duty summary" tone="slate">
+                  <LiveField id={id} field="modifiedDutyFirstDay" label="First modified day" type="date" initialValue={incident.modifiedDutyFirstDay} disabled={locked} updateAction={updateTextField} />
+                  <LiveField id={id} field="modifiedDutyLastDay" label="Last modified day" type="date" initialValue={incident.modifiedDutyLastDay} disabled={locked} updateAction={updateTextField} />
+                  <LiveField id={id} field="modifiedDutyDays" label="Total modified-duty days" type="number" initialValue={incident.modifiedDutyDays != null ? String(incident.modifiedDutyDays) : null} disabled={locked} updateAction={updateTextField} />
+                </SubBlock>
+              ) : null}
+
+              <SubBlock title="Damage & cost" tone="emerald">
+                <LiveField id={id} field="damageEstimate" label="Damage estimate (USD)" type="number" initialValue={incident.damageEstimate != null ? String(incident.damageEstimate) : null} disabled={locked} updateAction={updateTextField} />
+              </SubBlock>
+            </div>
+          </Section>
+        </section>
+
+        {/* ===================== INJURIES ===================== */}
+        <section id="section-injuries" className="scroll-mt-2">
+          <Section
+            title={`Injuries (${injuries.length})`}
+            subtitle="Per-person injury detail"
+            icon={<Activity size={20} />}
+            tone="rose"
+            actions={
+              !locked ? (
+                <Link href={drawerHref('add-injury') as any} scroll={false}>
+                  <Button type="button" size="sm">
+                    <Plus size={14} /> Add injury
+                  </Button>
+                </Link>
+              ) : null
+            }
+          >
+            {injuries.length === 0 ? (
+              <EmptyState title="No injuries recorded" description="Add an injured person and their injuries." />
+            ) : (
+              <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
+                {injuries.map((row) => (
+                  <li key={row.injury.id} className="group grid grid-cols-1 gap-2 py-3 sm:grid-cols-[1fr_1fr_auto]">
+                    <div>
+                      <div className="font-medium text-slate-900 dark:text-slate-100">
+                        {row.person ? (
+                          <Link href={`/people/${row.person.id}`} className="hover:underline">
+                            {row.person.firstName} {row.person.lastName}
+                          </Link>
+                        ) : (
+                          (row.injury.personName ?? '—')
+                        )}
+                      </div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">
+                        Body part(s): {row.injury.bodyParts.join(', ') || '—'}
+                      </div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">
+                        Injury type(s): {row.injury.injuryTypes.join(', ') || '—'}
+                      </div>
+                    </div>
+                    <div className="text-xs text-slate-600 dark:text-slate-300">
+                      {row.injury.treatment ? <p>{row.injury.treatment}</p> : null}
+                      {row.injury.treatedAtFacility ? (
+                        <p className="text-slate-500 dark:text-slate-400">Treated at: {row.injury.treatedAtFacility}</p>
+                      ) : null}
+                      {typeof row.injury.workedHoursPriorTo === 'number' ? (
+                        <p className="text-slate-500 dark:text-slate-400">Hours worked prior: {row.injury.workedHoursPriorTo}</p>
+                      ) : null}
+                    </div>
+                    {!locked ? (
+                      <div className="flex items-start gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                        <Link
+                          href={drawerHref('edit-injury', { editId: row.injury.id }) as any}
+                          scroll={false}
+                          className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
+                          title="Edit injury"
+                        >
+                          <Pencil size={14} />
+                        </Link>
+                        <form action={deleteIncidentInjury} className="inline">
+                          <input type="hidden" name="id" value={row.injury.id} />
+                          <input type="hidden" name="incidentId" value={id} />
+                          <button
+                            type="submit"
+                            className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700"
+                            title="Remove injury"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </form>
+                      </div>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Section>
+        </section>
+
+        {/* ===================== KEY METRICS ===================== */}
+        <section id="section-metrics" className="scroll-mt-2">
+          <Section
+            title="Key metrics"
+            subtitle="Actual vs potential severity (1–5)"
+            icon={<Gauge size={20} />}
+            tone="amber"
+          >
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+              <LiveSeverityRating id={id} field="actualSeverity" label="Actual severity" initialValue={incident.actualSeverity} disabled={locked} updateAction={updateTextField} />
+              <LiveSeverityRating id={id} field="potentialSeverity" label="Potential severity" initialValue={incident.potentialSeverity} disabled={locked} updateAction={updateTextField} />
+              <LiveSeverityRating id={id} field="severityRating" label="Severity rating" initialValue={incident.severityRating} disabled={locked} updateAction={updateTextField} />
+            </div>
+          </Section>
+        </section>
+
+        {/* ===================== LOST TIME ===================== */}
+        <section id="section-lost-time" className="scroll-mt-2">
+          <Section
+            title={`Lost-time + modified-duty events (${lostTime.length})`}
+            subtitle="Off-work / restricted / full-duty transitions with date windows. Drives the DART rate."
+            icon={<Clock size={20} />}
+            tone="blue"
+            actions={
+              !locked ? (
+                <Link href={drawerHref('add-lost-time') as any} scroll={false}>
+                  <Button type="button" size="sm">
+                    <Plus size={14} /> Add row
+                  </Button>
+                </Link>
+              ) : null
+            }
+          >
+            {lostTime.length === 0 ? (
+              <EmptyState title="No lost-time tracking" description="Record an off-work or restricted-duty window." />
+            ) : (
+              <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
+                {lostTime.map((e) => (
+                  <li key={e.id} className="flex items-center justify-between gap-3 py-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="font-medium">
+                        {e.status === 'off_work' ? (
+                          <Badge variant="destructive">Off work</Badge>
+                        ) : e.status === 'restricted_duty' ? (
+                          <Badge variant="warning">Restricted duty</Badge>
+                        ) : (
+                          <Badge variant="success">Full duty</Badge>
+                        )}
+                      </div>
+                      <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                        <span className="font-mono">{e.validFrom}</span>
+                        <span> → </span>
+                        <span className="font-mono">{e.validTo ?? 'present'}</span>
+                        {e.notes ? <span className="ml-2">· {e.notes}</span> : null}
+                      </div>
+                    </div>
+                    {!locked ? (
+                      <form action={deleteLostTimeEvent} className="inline">
+                        <input type="hidden" name="id" value={e.id} />
+                        <input type="hidden" name="incidentId" value={id} />
+                        <button
+                          type="submit"
+                          className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700"
+                          title="Delete row"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </form>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Section>
+        </section>
+
+        {/* ===================== INVESTIGATION ===================== */}
+        <section id="section-investigation" className="scroll-mt-2 space-y-5">
+          <Section
+            title={`Event timeline (${timelineEvents.length})`}
+            subtitle="Chronological log of what happened, in order."
+            icon={<ListChecks size={20} />}
+            tone="teal"
+            actions={
+              !locked ? (
+                <Link href={drawerHref('new-event') as any} scroll={false}>
+                  <Button size="sm" variant="outline">
+                    <Plus size={14} /> Add event
+                  </Button>
+                </Link>
+              ) : null
+            }
+          >
+            {timelineEvents.length === 0 ? (
+              <EmptyState title="No events logged" description="Add a timeline entry to reconstruct the sequence." />
+            ) : (
+              <ol className="relative space-y-3 border-l border-slate-200 pl-5 text-sm dark:border-slate-700">
+                {timelineEvents.map((e) => (
+                  <li key={e.id} className="group relative">
+                    <span className="absolute top-1 -left-[26px] h-2.5 w-2.5 rounded-full border-2 border-white bg-teal-500 shadow dark:border-slate-900" />
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="font-mono text-xs text-slate-500 dark:text-slate-400">
+                          {new Date(e.occurredAt).toLocaleString()}
                         </div>
-                        {!incident.locked ? (
+                        <div className="mt-0.5 whitespace-pre-wrap text-slate-900 dark:text-slate-100">
+                          {e.description}
+                        </div>
+                      </div>
+                      {!locked ? (
+                        <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                          <Link
+                            href={drawerHref('edit-event', { editId: e.id }) as any}
+                            scroll={false}
+                            className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
+                            title="Edit event"
+                          >
+                            <Pencil size={14} />
+                          </Link>
+                          <form action={deleteEvent} className="inline">
+                            <input type="hidden" name="id" value={e.id} />
+                            <input type="hidden" name="incidentId" value={id} />
+                            <button type="submit" className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700" title="Delete event">
+                              <Trash2 size={14} />
+                            </button>
+                          </form>
+                        </div>
+                      ) : null}
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </Section>
+
+          <Section
+            title={`Cause analysis (${factors.length})`}
+            subtitle="Immediate causes / contributing factors, by category."
+            icon={<AlertTriangle size={20} />}
+            tone="amber"
+            actions={
+              !locked ? (
+                <Link href={drawerHref('new-factor') as any} scroll={false}>
+                  <Button size="sm" variant="outline">
+                    <Plus size={14} /> Add factor
+                  </Button>
+                </Link>
+              ) : null
+            }
+          >
+            {factors.length === 0 ? (
+              <EmptyState title="No contributing factors" description="Capture the conditions, behaviours, or system gaps." />
+            ) : (
+              <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
+                {factors.map((f) => (
+                  <li key={f.id} className="group flex items-start justify-between gap-3 py-3">
+                    <div className="min-w-0 flex-1">
+                      <Badge variant="outline" className="mb-1 tracking-wide uppercase">
+                        {f.category}
+                      </Badge>
+                      <div className="whitespace-pre-wrap text-slate-900 dark:text-slate-100">{f.description}</div>
+                    </div>
+                    {!locked ? (
+                      <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                        <Link
+                          href={drawerHref('edit-factor', { editId: f.id }) as any}
+                          scroll={false}
+                          className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
+                          title="Edit factor"
+                        >
+                          <Pencil size={14} />
+                        </Link>
+                        <form action={deleteFactor} className="inline">
+                          <input type="hidden" name="id" value={f.id} />
+                          <input type="hidden" name="incidentId" value={id} />
+                          <button type="submit" className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700" title="Delete factor">
+                            <Trash2 size={14} />
+                          </button>
+                        </form>
+                      </div>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Section>
+
+          <Section
+            title="Root cause analysis"
+            subtitle={`Free-form root cause plus an optional 5-whys chain (${whys.length}/5).`}
+            icon={<HelpCircle size={20} />}
+            tone="purple"
+            actions={
+              !locked && whys.length < 5 ? (
+                <Link href={drawerHref('new-why') as any} scroll={false}>
+                  <Button size="sm" variant="outline">
+                    <Plus size={14} /> Add "why"
+                  </Button>
+                </Link>
+              ) : null
+            }
+          >
+            <div className="space-y-5">
+              <LiveRichText
+                id={id}
+                field="rootCause"
+                label="Root cause statement"
+                initialValue={incident.rootCause}
+                placeholder="One- or two-sentence summary of why this happened."
+                disabled={locked}
+                updateAction={updateTextField}
+              />
+              <div>
+                <div className="mb-2 text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">5-Whys chain</div>
+                {whys.length === 0 ? (
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    Optional. Drill from the surface cause toward the root by asking "why" up to five times.
+                  </p>
+                ) : (
+                  <ol className="space-y-2 text-sm">
+                    {whys.map((w) => (
+                      <li
+                        key={w.id}
+                        className="group flex items-start justify-between gap-3 rounded-md border border-slate-200 bg-slate-50/60 px-3 py-2 dark:border-slate-800 dark:bg-slate-800/40"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <span className="mr-2 inline-flex h-5 w-12 items-center justify-center rounded bg-teal-100 text-[10px] font-semibold tracking-wide text-teal-800 uppercase dark:bg-teal-950/50 dark:text-teal-300">
+                            Why #{w.ordinal}
+                          </span>
+                          <span className="whitespace-pre-wrap text-slate-900 dark:text-slate-100">{w.whyText}</span>
+                        </div>
+                        {!locked ? (
                           <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                             <Link
-                              href={`/incidents/${id}?tab=investigation&drawer=edit-event&editId=${e.id}`}
-                              className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                              title="Edit event"
+                              href={drawerHref('edit-why', { editId: w.id }) as any}
+                              scroll={false}
+                              className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
+                              title="Edit why step"
                             >
                               <Pencil size={14} />
                             </Link>
-                            <form action={deleteEvent} className="inline">
-                              <input type="hidden" name="id" value={e.id} />
+                            <form action={deleteWhy} className="inline">
+                              <input type="hidden" name="id" value={w.id} />
                               <input type="hidden" name="incidentId" value={id} />
-                              <button
-                                type="submit"
-                                className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700"
-                                title="Delete event"
-                              >
+                              <button type="submit" className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700" title="Delete why step">
                                 <Trash2 size={14} />
                               </button>
                             </form>
                           </div>
                         ) : null}
-                      </div>
-                    </li>
-                  ))}
-                </ol>
-              )}
-            </Section>
-
-            {/* Step 3 — Cause analysis */}
-            <Section
-              title={`Cause analysis (${factors.length})`}
-              subtitle="Immediate causes / contributing factors, grouped by category."
-              actions={
-                !incident.locked ? (
-                  <Link href={`/incidents/${id}?tab=investigation&drawer=new-factor`}>
-                    <Button size="sm" variant="outline">
-                      <Plus size={14} /> Add factor
-                    </Button>
-                  </Link>
-                ) : null
-              }
-            >
-              {factors.length === 0 ? (
-                <EmptyState
-                  title="No contributing factors recorded"
-                  description="Capture the conditions, behaviours, or system gaps that led to the incident."
-                />
-              ) : (
-                <ul className="divide-y divide-slate-100 text-sm">
-                  {factors.map((f) => (
-                    <li key={f.id} className="group flex items-start justify-between gap-3 py-3">
-                      <div className="min-w-0 flex-1">
-                        <Badge variant="outline" className="mb-1 tracking-wide uppercase">
-                          {f.category}
-                        </Badge>
-                        <div className="whitespace-pre-wrap text-slate-900">{f.description}</div>
-                      </div>
-                      {!incident.locked ? (
-                        <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                          <Link
-                            href={`/incidents/${id}?tab=investigation&drawer=edit-factor&editId=${f.id}`}
-                            className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                            title="Edit factor"
-                          >
-                            <Pencil size={14} />
-                          </Link>
-                          <form action={deleteFactor} className="inline">
-                            <input type="hidden" name="id" value={f.id} />
-                            <input type="hidden" name="incidentId" value={id} />
-                            <button
-                              type="submit"
-                              className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700"
-                              title="Delete factor"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </form>
-                        </div>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Section>
-
-            {/* Step 4 — Root cause analysis */}
-            <Section
-              title="Root cause analysis"
-              subtitle={`Free-form root cause plus an optional 5-whys chain (${whys.length}/5).`}
-              actions={
-                !incident.locked && whys.length < 5 ? (
-                  <Link href={`/incidents/${id}?tab=investigation&drawer=new-why`}>
-                    <Button size="sm" variant="outline">
-                      <Plus size={14} /> Add "why"
-                    </Button>
-                  </Link>
-                ) : null
-              }
-            >
-              <div className="space-y-5">
-                <form action={saveRootCause} className="space-y-2">
-                  <input type="hidden" name="id" value={id} />
-                  <Label htmlFor="root-cause-text">Root cause statement</Label>
-                  <Textarea
-                    id="root-cause-text"
-                    name="rootCause"
-                    defaultValue={incident.rootCause ?? ''}
-                    rows={3}
-                    placeholder="One- or two-sentence summary of why this happened."
-                    disabled={incident.locked}
-                  />
-                  {!incident.locked ? (
-                    <div className="flex justify-end">
-                      <Button type="submit" size="sm" variant="outline">
-                        Save root cause
-                      </Button>
-                    </div>
-                  ) : null}
-                </form>
-
-                <div>
-                  <div className="mb-2 text-xs tracking-wide text-slate-500 uppercase">
-                    5-Whys chain
-                  </div>
-                  {whys.length === 0 ? (
-                    <p className="text-sm text-slate-500">
-                      Optional. Drill from the surface cause toward the root by asking "why" up to
-                      five times.
-                    </p>
-                  ) : (
-                    <ol className="space-y-2 text-sm">
-                      {whys.map((w) => (
-                        <li
-                          key={w.id}
-                          className="group flex items-start justify-between gap-3 rounded-md border border-slate-200 bg-slate-50/60 px-3 py-2"
-                        >
-                          <div className="min-w-0 flex-1">
-                            <span className="mr-2 inline-flex h-5 w-12 items-center justify-center rounded bg-teal-100 text-[10px] font-semibold tracking-wide text-teal-800 uppercase">
-                              Why #{w.ordinal}
-                            </span>
-                            <span className="whitespace-pre-wrap text-slate-900">{w.whyText}</span>
-                          </div>
-                          {!incident.locked ? (
-                            <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                              <Link
-                                href={`/incidents/${id}?tab=investigation&drawer=edit-why&editId=${w.id}`}
-                                className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                                title="Edit why step"
-                              >
-                                <Pencil size={14} />
-                              </Link>
-                              <form action={deleteWhy} className="inline">
-                                <input type="hidden" name="id" value={w.id} />
-                                <input type="hidden" name="incidentId" value={id} />
-                                <button
-                                  type="submit"
-                                  className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700"
-                                  title="Delete why step"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </form>
-                            </div>
-                          ) : null}
-                        </li>
-                      ))}
-                    </ol>
-                  )}
-                </div>
+                      </li>
+                    ))}
+                  </ol>
+                )}
               </div>
-            </Section>
+            </div>
+          </Section>
 
-            {/* Step 5 — Preventative steps */}
-            <Section
-              title={`Preventative steps (${prevSteps.length})`}
-              subtitle="What will be done so this doesn't happen again."
-              actions={
-                !incident.locked ? (
-                  <Link href={`/incidents/${id}?tab=investigation&drawer=new-prev-step`}>
-                    <Button size="sm" variant="outline">
-                      <Plus size={14} /> Add step
-                    </Button>
-                  </Link>
-                ) : null
-              }
-            >
-              {prevSteps.length === 0 ? (
-                <EmptyState
-                  title="No preventative steps"
-                  description="Record the changes that will prevent recurrence. Steps can be promoted to a full CAPA."
-                />
-              ) : (
-                <ul className="divide-y divide-slate-100 text-sm">
-                  {prevSteps.map((row) => (
-                    <li
-                      key={row.step.id}
-                      className="group flex items-start justify-between gap-3 py-3"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <PrevStepStatusBadge status={row.step.status} />
-                          {row.step.targetDate ? (
-                            <span className="text-xs text-slate-500">
-                              due <span className="font-mono">{row.step.targetDate}</span>
-                            </span>
-                          ) : null}
-                          {row.owner ? (
-                            <span className="text-xs text-slate-500">
-                              owner:{' '}
-                              <Link
-                                href={`/people/${row.owner.id}`}
-                                className="text-teal-700 hover:underline"
-                              >
-                                {row.owner.firstName} {row.owner.lastName}
-                              </Link>
-                            </span>
-                          ) : null}
-                        </div>
-                        <div className="mt-1 whitespace-pre-wrap text-slate-900">
-                          {row.step.description}
-                        </div>
+          <Section
+            title={`Preventative steps (${prevSteps.length})`}
+            subtitle="What will be done so this doesn't happen again."
+            icon={<ListChecks size={20} />}
+            tone="emerald"
+            actions={
+              !locked ? (
+                <Link href={drawerHref('new-prev-step') as any} scroll={false}>
+                  <Button size="sm" variant="outline">
+                    <Plus size={14} /> Add step
+                  </Button>
+                </Link>
+              ) : null
+            }
+          >
+            {prevSteps.length === 0 ? (
+              <EmptyState title="No preventative steps" description="Record the changes that will prevent recurrence." />
+            ) : (
+              <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
+                {prevSteps.map((row) => (
+                  <li key={row.step.id} className="group flex items-start justify-between gap-3 py-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <PrevStepStatusBadge status={row.step.status as PrevStepStatus} />
+                        {row.step.targetDate ? (
+                          <span className="text-xs text-slate-500 dark:text-slate-400">
+                            due <span className="font-mono">{row.step.targetDate}</span>
+                          </span>
+                        ) : null}
+                        {row.owner ? (
+                          <span className="text-xs text-slate-500 dark:text-slate-400">
+                            owner:{' '}
+                            <Link href={`/people/${row.owner.id}`} className="text-teal-700 hover:underline dark:text-teal-400">
+                              {row.owner.firstName} {row.owner.lastName}
+                            </Link>
+                          </span>
+                        ) : null}
                       </div>
-                      {!incident.locked ? (
-                        <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                          <Link
-                            href={`/incidents/${id}?tab=investigation&drawer=edit-prev-step&editId=${row.step.id}`}
-                            className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                            title="Edit step"
-                          >
-                            <Pencil size={14} />
-                          </Link>
-                          <form action={deletePrevStep} className="inline">
-                            <input type="hidden" name="id" value={row.step.id} />
-                            <input type="hidden" name="incidentId" value={id} />
-                            <button
-                              type="submit"
-                              className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700"
-                              title="Delete step"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </form>
-                        </div>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Section>
+                      <div className="mt-1 whitespace-pre-wrap text-slate-900 dark:text-slate-100">{row.step.description}</div>
+                    </div>
+                    {!locked ? (
+                      <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                        <Link
+                          href={drawerHref('edit-prev-step', { editId: row.step.id }) as any}
+                          scroll={false}
+                          className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
+                          title="Edit step"
+                        >
+                          <Pencil size={14} />
+                        </Link>
+                        <form action={deletePrevStep} className="inline">
+                          <input type="hidden" name="id" value={row.step.id} />
+                          <input type="hidden" name="incidentId" value={id} />
+                          <button type="submit" className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700" title="Delete step">
+                            <Trash2 size={14} />
+                          </button>
+                        </form>
+                      </div>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Section>
 
-            <Section title={`Linked corrective actions (${linkedCAs.length})`} defaultOpen={false}>
-              {linkedCAs.length === 0 ? (
-                <div className="flex items-center justify-between text-sm text-slate-500">
-                  <span>No corrective actions linked.</span>
-                  <Link
-                    href={`/corrective-actions/new?sourceEntityType=incident&sourceEntityId=${id}`}
-                    className="text-teal-700 hover:underline"
-                  >
-                    Create one →
-                  </Link>
-                </div>
-              ) : (
-                <ul className="divide-y divide-slate-100 text-sm">
-                  {linkedCAs.map((ca) => (
-                    <li key={ca.id} className="flex items-center justify-between py-2">
-                      <Link
-                        href={`/corrective-actions/${ca.id}`}
-                        className="font-medium hover:underline"
-                      >
-                        {ca.reference} · {ca.title}
-                      </Link>
-                      <Badge variant={ca.status === 'closed' ? 'success' : 'warning'}>
-                        {ca.status}
-                      </Badge>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Section>
-          </>
-        ) : null}
+          <Section title={`Linked corrective actions (${linkedCAs.length})`} icon={<ListChecks size={20} />} tone="slate" defaultOpen={false}>
+            {linkedCAs.length === 0 ? (
+              <div className="flex items-center justify-between text-sm text-slate-500 dark:text-slate-400">
+                <span>No corrective actions linked.</span>
+                <Link
+                  href={`/corrective-actions/new?sourceEntityType=incident&sourceEntityId=${id}`}
+                  className="text-teal-700 hover:underline dark:text-teal-400"
+                >
+                  Create one →
+                </Link>
+              </div>
+            ) : (
+              <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
+                {linkedCAs.map((ca) => (
+                  <li key={ca.id} className="flex items-center justify-between py-2">
+                    <Link href={`/corrective-actions/${ca.id}`} className="font-medium hover:underline">
+                      {ca.reference} · {ca.title}
+                    </Link>
+                    <Badge variant={ca.status === 'closed' ? 'success' : 'warning'}>{ca.status}</Badge>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Section>
+        </section>
 
-        {active === 'photos' ? (
-          <Section title={`Photos & files (${photos.length})`} defaultOpen={true}>
+        {/* ===================== PHOTOS ===================== */}
+        <section id="section-photos" className="scroll-mt-2">
+          <Section title={`Photos & files (${photos.length})`} icon={<Camera size={20} />} tone="slate" defaultOpen={photos.length > 0}>
             <div className="space-y-3">
               <PhotoGallery photos={galleryPhotos} />
-              {!incident.locked ? (
+              {!locked ? (
                 <PhotoUploaderSection
                   attachAction={async (ids) => {
                     'use server'
@@ -1659,48 +2154,185 @@ export default async function IncidentDetailPage({
               ) : null}
             </div>
           </Section>
-        ) : null}
+        </section>
 
-        {active === 'activity' ? (
-          <Section title={`Activity (${activity.length})`} defaultOpen={true}>
+        {/* ===================== ACTIVITY ===================== */}
+        <section id="section-activity" className="scroll-mt-2">
+          <Section title={`Activity (${activity.length})`} icon={<History size={20} />} tone="slate" defaultOpen={false}>
             <ActivityFeed entries={activity} />
           </Section>
-        ) : null}
-
-        {active === 'edit' ? <IncidentEditTab incidentId={id} /> : null}
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Status</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form action={updateStatus} className="flex items-end gap-3">
-              <input type="hidden" name="id" value={id} />
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">Move to</label>
-                <Select name="status" defaultValue={incident.status}>
-                  {STATUSES.map((s) => (
-                    <option key={s} value={s}>
-                      {s.replace(/_/g, ' ')}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-              <Button type="submit">Update</Button>
-            </form>
-          </CardContent>
-        </Card>
+        </section>
       </div>
 
+      {/* ===================== DRAWERS ===================== */}
+
+      {/* People + injuries */}
+      <PersonDrawer
+        open={drawer === 'add-person'}
+        closeHref={`${basePath}#section-people`}
+        incidentId={id}
+        action={saveIncidentPerson}
+        mode="create"
+        people={peopleList}
+      />
+      <PersonDrawer
+        open={drawer === 'edit-person' && !!editPersonRow}
+        closeHref={`${basePath}#section-people`}
+        incidentId={id}
+        action={saveIncidentPerson}
+        mode="edit"
+        people={peopleList}
+        defaults={
+          editPersonRow
+            ? {
+                id: editPersonRow.link.id,
+                personId: editPersonRow.link.personId,
+                personNameText: editPersonRow.link.personNameText,
+                role: editPersonRow.link.role,
+              }
+            : undefined
+        }
+      />
+      <InjuryDrawer
+        open={drawer === 'add-injury'}
+        closeHref={`${basePath}#section-injuries`}
+        incidentId={id}
+        action={saveIncidentInjury}
+        mode="create"
+        people={peopleList}
+        injuryTypeOptions={injuryTypeOptions}
+      />
+      <InjuryDrawer
+        open={drawer === 'edit-injury' && !!editInjuryRow}
+        closeHref={`${basePath}#section-injuries`}
+        incidentId={id}
+        action={saveIncidentInjury}
+        mode="edit"
+        people={peopleList}
+        injuryTypeOptions={injuryTypeOptions}
+        defaults={
+          editInjuryRow
+            ? {
+                id: editInjuryRow.injury.id,
+                personId: editInjuryRow.injury.personId,
+                personName: editInjuryRow.injury.personName,
+                injuryTypeId: editInjuryRow.injury.injuryTypeId,
+                injuryTypes: editInjuryRow.injury.injuryTypes,
+                bodyParts: editInjuryRow.injury.bodyParts,
+                treatment: editInjuryRow.injury.treatment,
+                treatedAtFacility: editInjuryRow.injury.treatedAtFacility,
+                workedHoursPriorTo: editInjuryRow.injury.workedHoursPriorTo,
+              }
+            : undefined
+        }
+      />
+
+      {/* Investigation */}
+      <EventDrawer
+        open={drawer === 'new-event'}
+        closeHref={`${basePath}#section-investigation`}
+        incidentId={id}
+        action={saveEventAction}
+        mode="create"
+      />
+      <EventDrawer
+        open={drawer === 'edit-event' && !!editingEvent}
+        closeHref={`${basePath}#section-investigation`}
+        incidentId={id}
+        action={saveEventAction}
+        mode="edit"
+        defaults={
+          editingEvent
+            ? {
+                id: editingEvent.id,
+                occurredAt: toLocalDatetime(editingEvent.occurredAt),
+                description: editingEvent.description,
+              }
+            : undefined
+        }
+      />
+      <FactorDrawer
+        open={drawer === 'new-factor'}
+        closeHref={`${basePath}#section-investigation`}
+        incidentId={id}
+        action={saveFactorAction}
+        mode="create"
+      />
+      <FactorDrawer
+        open={drawer === 'edit-factor' && !!editingFactor}
+        closeHref={`${basePath}#section-investigation`}
+        incidentId={id}
+        action={saveFactorAction}
+        mode="edit"
+        defaults={
+          editingFactor
+            ? {
+                id: editingFactor.id,
+                category: editingFactor.category as FactorCategory,
+                description: editingFactor.description,
+              }
+            : undefined
+        }
+      />
+      <WhyDrawer
+        open={drawer === 'new-why' && whys.length < 5}
+        closeHref={`${basePath}#section-investigation`}
+        incidentId={id}
+        action={saveWhyAction}
+        mode="create"
+        nextOrdinal={nextWhyOrdinal}
+      />
+      <WhyDrawer
+        open={drawer === 'edit-why' && !!editingWhy}
+        closeHref={`${basePath}#section-investigation`}
+        incidentId={id}
+        action={saveWhyAction}
+        mode="edit"
+        nextOrdinal={nextWhyOrdinal}
+        defaults={
+          editingWhy
+            ? { id: editingWhy.id, ordinal: editingWhy.ordinal, whyText: editingWhy.whyText }
+            : undefined
+        }
+      />
+      <PrevStepDrawer
+        open={drawer === 'new-prev-step'}
+        closeHref={`${basePath}#section-investigation`}
+        incidentId={id}
+        action={savePrevStepAction}
+        mode="create"
+        people={peopleList}
+      />
+      <PrevStepDrawer
+        open={drawer === 'edit-prev-step' && !!editingPrev}
+        closeHref={`${basePath}#section-investigation`}
+        incidentId={id}
+        action={savePrevStepAction}
+        mode="edit"
+        people={peopleList}
+        defaults={
+          editingPrev
+            ? {
+                id: editingPrev.id,
+                description: editingPrev.description,
+                ownerPersonId: editingPrev.ownerPersonId,
+                targetDate: editingPrev.targetDate,
+                status: editingPrev.status as PrevStepStatus,
+              }
+            : undefined
+        }
+      />
+
+      {/* Lost-time add */}
       <UrlDrawer
         open={drawer === 'add-lost-time'}
-        closeHref={`/incidents/${id}?tab=lost-time`}
+        closeHref={`${basePath}#section-lost-time`}
         title="Add lost-time / modified-duty row"
         description="Record an off-work, restricted-duty, or full-duty transition with explicit date window."
         size="md"
         footer={
           <>
-            <Link href={`/incidents/${id}?tab=lost-time`}>
+            <Link href={`${basePath}#section-lost-time`}>
               <Button type="button" variant="outline">
                 Cancel
               </Button>
@@ -1727,15 +2359,16 @@ export default async function IncidentDetailPage({
         />
       </UrlDrawer>
 
+      {/* Send email */}
       <UrlDrawer
         open={drawer === 'send-email'}
-        closeHref={`/incidents/${id}${active !== 'overview' ? `?tab=${active}` : ''}`}
+        closeHref={basePath}
         title={`Send incident email · ${incident.reference}`}
-        description="Sends a structured incident summary email to every active tenant admin. Add extra comma-separated email addresses below if you want to copy specific recipients in addition."
+        description="Sends a structured incident summary email to every active tenant admin. Add extra comma-separated email addresses below to copy specific recipients."
         size="md"
         footer={
           <>
-            <Link href={`/incidents/${id}${active !== 'overview' ? `?tab=${active}` : ''}`}>
+            <Link href={basePath}>
               <Button type="button" variant="outline">
                 Cancel
               </Button>
@@ -1757,44 +2390,30 @@ export default async function IncidentDetailPage({
         >
           <div className="space-y-1.5">
             <Label htmlFor="inc-se-subject">Subject prefix</Label>
-            <Input
-              id="inc-se-subject"
-              name="subjectPrefix"
-              defaultValue="Update"
-              placeholder="Update / Action required / FYI"
-            />
+            <Input id="inc-se-subject" name="subjectPrefix" defaultValue="Update" placeholder="Update / Action required / FYI" />
             <p className="text-xs text-slate-500">Prepended to the auto-generated subject.</p>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="inc-se-extra">Extra recipients</Label>
-            <Input
-              id="inc-se-extra"
-              name="extraRecipients"
-              type="text"
-              placeholder="ceo@example.com, hse@example.com"
-            />
+            <Input id="inc-se-extra" name="extraRecipients" type="text" placeholder="ceo@example.com, hse@example.com" />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="inc-se-message">Personal note (optional)</Label>
-            <Textarea
-              id="inc-se-message"
-              name="message"
-              rows={4}
-              placeholder="Add context for the recipients — e.g. ‘Please join the 4pm post-incident review.’"
-            />
+            <Textarea id="inc-se-message" name="message" rows={4} placeholder="Add context for the recipients." />
           </div>
         </form>
       </UrlDrawer>
 
+      {/* Copy */}
       <UrlDrawer
         open={drawer === 'copy'}
-        closeHref={`/incidents/${id}`}
+        closeHref={basePath}
         title={`Copy incident · ${incident.reference}`}
-        description="Create a new incident pre-populated from this one. The new copy starts in 'reported' status with a fresh reference and reset timestamps."
+        description="Create a new incident pre-populated from this one. The copy starts in 'reported' status with a fresh reference and reset timestamps."
         size="md"
         footer={
           <>
-            <Link href={`/incidents/${id}`}>
+            <Link href={basePath}>
               <Button type="button" variant="outline">
                 Cancel
               </Button>
@@ -1809,152 +2428,77 @@ export default async function IncidentDetailPage({
           <input type="hidden" name="id" value={id} />
           <div className="space-y-1.5">
             <Label htmlFor="inc-copy-title">Title for the new incident</Label>
-            <Input
-              id="inc-copy-title"
-              name="title"
-              defaultValue={`Copy of ${incident.title}`}
-              placeholder="Title for the cloned incident"
-            />
-            <p className="text-xs text-slate-500">
-              Leave the default ("Copy of …") or override with a more descriptive title.
-            </p>
+            <Input id="inc-copy-title" name="title" defaultValue={`Copy of ${incident.title}`} placeholder="Title for the cloned incident" />
+            <p className="text-xs text-slate-500">Leave the default ("Copy of …") or override with a more descriptive title.</p>
           </div>
         </form>
       </UrlDrawer>
 
-      {/* Investigation sub-entity drawers */}
-      {active === 'investigation' ? (
-        <>
-          <EventDrawer
-            open={drawer === 'new-event'}
-            closeHref={`/incidents/${id}?tab=investigation`}
-            incidentId={id}
-            action={saveEventAction}
-            mode="create"
-          />
-          {(() => {
-            const editingEvent = editId ? timelineEvents.find((e) => e.id === editId) : undefined
-            return (
-              <EventDrawer
-                open={drawer === 'edit-event' && !!editingEvent}
-                closeHref={`/incidents/${id}?tab=investigation`}
-                incidentId={id}
-                action={saveEventAction}
-                mode="edit"
-                defaults={
-                  editingEvent
-                    ? {
-                        id: editingEvent.id,
-                        occurredAt: toLocalDatetime(editingEvent.occurredAt),
-                        description: editingEvent.description,
-                      }
-                    : undefined
-                }
-              />
-            )
-          })()}
-
-          <FactorDrawer
-            open={drawer === 'new-factor'}
-            closeHref={`/incidents/${id}?tab=investigation`}
-            incidentId={id}
-            action={saveFactorAction}
-            mode="create"
-          />
-          {(() => {
-            const editingFactor = editId ? factors.find((f) => f.id === editId) : undefined
-            return (
-              <FactorDrawer
-                open={drawer === 'edit-factor' && !!editingFactor}
-                closeHref={`/incidents/${id}?tab=investigation`}
-                incidentId={id}
-                action={saveFactorAction}
-                mode="edit"
-                defaults={
-                  editingFactor
-                    ? {
-                        id: editingFactor.id,
-                        category: editingFactor.category as FactorCategory,
-                        description: editingFactor.description,
-                      }
-                    : undefined
-                }
-              />
-            )
-          })()}
-
-          <WhyDrawer
-            open={drawer === 'new-why' && whys.length < 5}
-            closeHref={`/incidents/${id}?tab=investigation`}
-            incidentId={id}
-            action={saveWhyAction}
-            mode="create"
-            nextOrdinal={nextWhyOrdinal}
-          />
-          {(() => {
-            const editingWhy = editId ? whys.find((w) => w.id === editId) : undefined
-            return (
-              <WhyDrawer
-                open={drawer === 'edit-why' && !!editingWhy}
-                closeHref={`/incidents/${id}?tab=investigation`}
-                incidentId={id}
-                action={saveWhyAction}
-                mode="edit"
-                nextOrdinal={nextWhyOrdinal}
-                defaults={
-                  editingWhy
-                    ? {
-                        id: editingWhy.id,
-                        ordinal: editingWhy.ordinal,
-                        whyText: editingWhy.whyText,
-                      }
-                    : undefined
-                }
-              />
-            )
-          })()}
-
-          <PrevStepDrawer
-            open={drawer === 'new-prev-step'}
-            closeHref={`/incidents/${id}?tab=investigation`}
-            incidentId={id}
-            action={savePrevStepAction}
-            mode="create"
-            people={peopleList}
-          />
-          {(() => {
-            const editingPrevRow = editId ? prevSteps.find((r) => r.step.id === editId) : undefined
-            const editingPrev = editingPrevRow?.step
-            return (
-              <PrevStepDrawer
-                open={drawer === 'edit-prev-step' && !!editingPrev}
-                closeHref={`/incidents/${id}?tab=investigation`}
-                incidentId={id}
-                action={savePrevStepAction}
-                mode="edit"
-                people={peopleList}
-                defaults={
-                  editingPrev
-                    ? {
-                        id: editingPrev.id,
-                        description: editingPrev.description,
-                        ownerPersonId: editingPrev.ownerPersonId,
-                        targetDate: editingPrev.targetDate,
-                        status: editingPrev.status as PrevStepStatus,
-                      }
-                    : undefined
-                }
-              />
-            )
-          })()}
-        </>
-      ) : null}
+      {/* Delete confirmation */}
+      <UrlDrawer
+        open={drawer === 'confirm-delete'}
+        closeHref={basePath}
+        title="Delete this incident?"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600 dark:text-slate-400">
+            <span className="font-mono font-medium text-slate-900 dark:text-slate-100">{incident.reference}</span>{' '}
+            will be removed from every list and report. This is a soft delete — an administrator can recover it from the database if needed.
+          </p>
+          <div className="flex items-center justify-end gap-2">
+            <Link href={basePath as any}>
+              <Button type="button" variant="outline">
+                Cancel
+              </Button>
+            </Link>
+            <form action={deleteIncident}>
+              <input type="hidden" name="id" value={id} />
+              <Button type="submit" className="bg-red-600 text-white hover:bg-red-700">
+                <Trash2 size={14} /> Delete incident
+              </Button>
+            </form>
+          </div>
+        </div>
+      </UrlDrawer>
     </DetailPageLayout>
   )
 }
 
-function yesNo(b: boolean | null | undefined): string {
-  return b ? 'Yes' : 'No'
+// ---- presentational helpers ------------------------------------------------
+
+function SubBlock({
+  title,
+  tone,
+  children,
+}: {
+  title: string
+  tone: 'rose' | 'amber' | 'sky' | 'orange' | 'indigo' | 'emerald' | 'slate'
+  children: React.ReactNode
+}) {
+  const TONE: Record<string, string> = {
+    rose: 'border-rose-200 bg-rose-50/40 dark:border-rose-900/40 dark:bg-rose-950/20',
+    amber: 'border-amber-200 bg-amber-50/50 dark:border-amber-900/40 dark:bg-amber-950/20',
+    sky: 'border-sky-200 bg-sky-50/50 dark:border-sky-900/40 dark:bg-sky-950/20',
+    orange: 'border-orange-200 bg-orange-50/50 dark:border-orange-900/40 dark:bg-orange-950/20',
+    indigo: 'border-indigo-200 bg-indigo-50/40 dark:border-indigo-900/40 dark:bg-indigo-950/20',
+    emerald: 'border-emerald-200 bg-emerald-50/50 dark:border-emerald-900/40 dark:bg-emerald-950/20',
+    slate: 'border-slate-200 bg-slate-50/50 dark:border-slate-800 dark:bg-slate-800/30',
+  }
+  return (
+    <div className={`rounded-lg border p-3 ${TONE[tone]}`}>
+      <div className="mb-2 text-xs font-semibold tracking-wide text-slate-600 uppercase dark:text-slate-300">
+        {title}
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">{children}</div>
+    </div>
+  )
+}
+
+function PrevStepStatusBadge({ status }: { status: PrevStepStatus }) {
+  if (status === 'completed') return <Badge variant="success">Completed</Badge>
+  if (status === 'in_progress') return <Badge variant="warning">In progress</Badge>
+  return <Badge variant="outline">Planned</Badge>
 }
 
 // Convert a UTC Date into the local "YYYY-MM-DDTHH:MM" form that
@@ -1965,30 +2509,6 @@ function toLocalDatetime(d: Date | string): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
     date.getHours(),
   )}:${pad(date.getMinutes())}`
-}
-
-function PrevStepStatusBadge({ status }: { status: PrevStepStatus }) {
-  if (status === 'completed') return <Badge variant="success">Completed</Badge>
-  if (status === 'in_progress') return <Badge variant="warning">In progress</Badge>
-  return <Badge variant="outline">Planned</Badge>
-}
-
-function TextBlock({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <div className="text-xs tracking-wide text-slate-500 uppercase">{label}</div>
-      <div className="mt-0.5 whitespace-pre-wrap text-slate-900">{children}</div>
-    </div>
-  )
-}
-
-function FieldRow({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col">
-      <span className="text-xs tracking-wide text-slate-500 uppercase">{label}</span>
-      <span className="text-sm text-slate-900">{children}</span>
-    </div>
-  )
 }
 
 function formatRel(d: Date | string): string {

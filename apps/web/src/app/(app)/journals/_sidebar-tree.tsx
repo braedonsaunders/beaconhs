@@ -105,9 +105,9 @@ export function SidebarTree({
   const activeQuick = filters.status === 'draft' ? 'drafts' : 'all'
 
   return (
-    <div className="flex h-full min-h-0 w-full min-w-0 flex-col bg-white">
+    <div className="flex h-full min-h-0 w-full min-w-0 flex-col bg-white dark:bg-slate-900">
       {/* Header */}
-      <div className="space-y-2.5 border-b border-slate-200 px-3 pt-3 pb-3">
+      <div className="space-y-2.5 border-b border-slate-200 px-3 pt-3 pb-3 dark:border-slate-800">
         <button
           type="button"
           onClick={onNewEntry}
@@ -117,18 +117,21 @@ export function SidebarTree({
         </button>
 
         <div className="relative">
-          <Search size={14} className="absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400" />
+          <Search
+            size={14}
+            className="absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400 dark:text-slate-500"
+          />
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search journals…"
-            className="h-8 w-full rounded-md border border-slate-300 bg-white pr-7 pl-8 text-sm transition-shadow outline-none placeholder:text-slate-400 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/30"
+            className="h-8 w-full rounded-md border border-slate-300 bg-white pr-7 pl-8 text-sm transition-shadow outline-none placeholder:text-slate-400 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500"
           />
           {q ? (
             <button
               type="button"
               onClick={() => setQ('')}
-              className="absolute top-1/2 right-1.5 -translate-y-1/2 rounded p-0.5 text-slate-400 hover:text-slate-700"
+              className="absolute top-1/2 right-1.5 -translate-y-1/2 rounded p-0.5 text-slate-400 hover:text-slate-700 dark:text-slate-500 dark:hover:text-slate-300"
             >
               <X size={13} />
             </button>
@@ -152,7 +155,7 @@ export function SidebarTree({
         </div>
 
         {/* Group by */}
-        <div className="flex items-center gap-0.5 rounded-md bg-slate-100 p-0.5">
+        <div className="flex items-center gap-0.5 rounded-md bg-slate-100 p-0.5 dark:bg-slate-800">
           {GROUP_BY_OPTIONS.map((opt) => (
             <button
               key={opt.value}
@@ -161,8 +164,8 @@ export function SidebarTree({
               className={cn(
                 'flex-1 rounded px-1.5 py-1 text-xs font-medium transition-colors',
                 groupBy === opt.value
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-800',
+                  ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100'
+                  : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200',
               )}
             >
               {opt.label}
@@ -174,8 +177,8 @@ export function SidebarTree({
       {/* Scroll body: on-this-day + tree */}
       <div className="app-scroll min-h-0 flex-1 overflow-y-auto px-1.5 py-2">
         {data.onThisDay.length > 0 ? (
-          <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50/60 p-2">
-            <div className="mb-1 flex items-center gap-1.5 px-1 text-[11px] font-semibold tracking-wide text-amber-700 uppercase">
+          <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50/60 p-2 dark:border-amber-500/25 dark:bg-amber-500/10">
+            <div className="mb-1 flex items-center gap-1.5 px-1 text-[11px] font-semibold tracking-wide text-amber-700 uppercase dark:text-amber-300">
               <CalendarClock size={12} /> On this day
             </div>
             {data.onThisDay.slice(0, 3).map((m) => (
@@ -183,14 +186,16 @@ export function SidebarTree({
                 key={m.id}
                 type="button"
                 onClick={() => onSelect(m.id)}
-                className="flex w-full items-center gap-2 rounded px-1.5 py-1 text-left text-xs text-amber-900 hover:bg-amber-100/70"
+                className="flex w-full items-center gap-2 rounded px-1.5 py-1 text-left text-xs text-amber-900 hover:bg-amber-100/70 dark:text-amber-200 dark:hover:bg-amber-500/15"
               >
-                <span className="shrink-0 rounded bg-amber-200/70 px-1 text-[10px] font-medium">
+                <span className="shrink-0 rounded bg-amber-200/70 px-1 text-[10px] font-medium dark:bg-amber-500/25">
                   {m.yearsAgo}y
                 </span>
                 <span className="min-w-0 flex-1 truncate">
                   <span className="font-medium">{m.authorName ?? m.title ?? 'Journal'}</span>
-                  {m.snippet ? <span className="text-amber-700/80"> — {m.snippet}</span> : null}
+                  {m.snippet ? (
+                    <span className="text-amber-700/80 dark:text-amber-300/80"> — {m.snippet}</span>
+                  ) : null}
                 </span>
               </button>
             ))}
@@ -202,15 +207,16 @@ export function SidebarTree({
             {Array.from({ length: 6 }).map((_, i) => (
               <div
                 key={i}
-                className="h-6 animate-pulse rounded bg-slate-100"
+                className="h-6 animate-pulse rounded bg-slate-100 dark:bg-slate-800"
                 style={{ width: `${90 - i * 8}%` }}
               />
             ))}
           </div>
         ) : data.tree.length === 0 ? (
-          <div className="px-3 py-10 text-center text-xs text-slate-400">
-            No entries. Use <span className="font-medium text-slate-600">New entry</span> to start
-            today’s journal.
+          <div className="px-3 py-10 text-center text-xs text-slate-400 dark:text-slate-500">
+            No entries. Use{' '}
+            <span className="font-medium text-slate-600 dark:text-slate-300">New entry</span> to
+            start today’s journal.
           </div>
         ) : (
           <div className="space-y-px">
@@ -230,8 +236,8 @@ export function SidebarTree({
       </div>
 
       {/* Heatmap footer */}
-      <div className="border-t border-slate-200 px-3 py-2.5">
-        <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold tracking-wide text-slate-400 uppercase">
+      <div className="border-t border-slate-200 px-3 py-2.5 dark:border-slate-800">
+        <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500">
           <Sparkles size={11} /> Activity
         </div>
         <Heatmap data={data.heatmap} onPick={onPickDate} />
@@ -272,13 +278,17 @@ function TreeRow({
         style={{ paddingLeft: pad }}
         className={cn(
           'group flex w-full items-center gap-2 rounded-md py-1 pr-2 text-left text-sm transition-colors',
-          selected ? 'bg-teal-50 text-teal-900' : 'text-slate-700 hover:bg-slate-100',
+          selected
+            ? 'bg-teal-50 text-teal-900 dark:bg-teal-500/15 dark:text-teal-200'
+            : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
         )}
       >
         <span
           className={cn(
             'h-1.5 w-1.5 shrink-0 rounded-full',
-            node.draft ? 'border border-slate-400 bg-white' : 'bg-teal-500',
+            node.draft
+              ? 'border border-slate-400 bg-white dark:border-slate-500 dark:bg-slate-900'
+              : 'bg-teal-500',
           )}
         />
         <span className="truncate">{node.label}</span>
@@ -292,14 +302,17 @@ function TreeRow({
         type="button"
         onClick={() => onToggle(node.key)}
         style={{ paddingLeft: pad }}
-        className="flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
+        className="flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
       >
         <ChevronRight
           size={14}
-          className={cn('shrink-0 text-slate-400 transition-transform', isOpen && 'rotate-90')}
+          className={cn(
+            'shrink-0 text-slate-400 transition-transform dark:text-slate-500',
+            isOpen && 'rotate-90',
+          )}
         />
         <span className="truncate">{node.label}</span>
-        <span className="ml-auto shrink-0 text-[11px] text-slate-400 tabular-nums">
+        <span className="ml-auto shrink-0 text-[11px] text-slate-400 tabular-nums dark:text-slate-500">
           {node.count}
         </span>
       </button>
@@ -341,9 +354,9 @@ function Chip({
         'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium transition-colors',
         active
           ? danger
-            ? 'bg-red-100 text-red-700'
-            : 'bg-teal-100 text-teal-800'
-          : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
+            ? 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300'
+            : 'bg-teal-100 text-teal-800 dark:bg-teal-500/15 dark:text-teal-200'
+          : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700',
       )}
     >
       {children}
@@ -352,5 +365,9 @@ function Chip({
 }
 
 function Count({ children }: { children: React.ReactNode }) {
-  return <span className="rounded-full bg-black/5 px-1 text-[10px] tabular-nums">{children}</span>
+  return (
+    <span className="rounded-full bg-black/5 px-1 text-[10px] tabular-nums dark:bg-white/10">
+      {children}
+    </span>
+  )
 }

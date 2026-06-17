@@ -79,7 +79,10 @@ export function TagsAdmin({ initialTags }: { initialTags: ManagedTag[] }) {
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-0 flex-1">
-          <Search size={15} className="absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" />
+          <Search
+            size={15}
+            className="absolute top-1/2 left-3 -translate-y-1/2 text-slate-400 dark:text-slate-500"
+          />
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -87,7 +90,7 @@ export function TagsAdmin({ initialTags }: { initialTags: ManagedTag[] }) {
             className="pl-9"
           />
         </div>
-        <div className="hidden text-xs text-slate-500 sm:block">
+        <div className="hidden text-xs text-slate-500 sm:block dark:text-slate-400">
           {tags.length} {tags.length === 1 ? 'tag' : 'tags'} · {totalUses} use
           {totalUses === 1 ? '' : 's'}
         </div>
@@ -105,7 +108,7 @@ export function TagsAdmin({ initialTags }: { initialTags: ManagedTag[] }) {
 
       {/* Create composer */}
       {creating ? (
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <TagForm
             submitLabel="Add tag"
             pending={pending}
@@ -127,10 +130,10 @@ export function TagsAdmin({ initialTags }: { initialTags: ManagedTag[] }) {
           }
         />
       ) : (
-        <ul className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <ul className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
           {filtered.map((t) =>
             editing === t.name ? (
-              <li key={t.name} className="bg-slate-50/60 p-4">
+              <li key={t.name} className="bg-slate-50/60 p-4 dark:bg-slate-800/40">
                 <TagForm
                   submitLabel="Save changes"
                   pending={pending}
@@ -140,7 +143,7 @@ export function TagsAdmin({ initialTags }: { initialTags: ManagedTag[] }) {
                 />
               </li>
             ) : merging === t.name ? (
-              <li key={t.name} className="bg-slate-50/60 p-4">
+              <li key={t.name} className="bg-slate-50/60 p-4 dark:bg-slate-800/40">
                 <MergeRow
                   tag={t}
                   others={tags.filter((x) => x.name !== t.name)}
@@ -190,14 +193,16 @@ function TagRow({
   onDelete: () => void
 }) {
   return (
-    <li className="group flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-slate-50/70">
+    <li className="group flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-slate-50/70 dark:hover:bg-slate-800/50">
       <Chip name={tag.name} color={tag.color} />
 
       <div className="flex min-w-0 flex-1 items-center gap-2">
         {tag.description ? (
-          <span className="truncate text-sm text-slate-500">{tag.description}</span>
+          <span className="truncate text-sm text-slate-500 dark:text-slate-400">
+            {tag.description}
+          </span>
         ) : !tag.defined ? (
-          <span className="text-xs text-slate-400 italic">ad-hoc</span>
+          <span className="text-xs text-slate-400 italic dark:text-slate-500">ad-hoc</span>
         ) : null}
       </div>
 
@@ -221,14 +226,14 @@ function TagRow({
 
 function UsageMeter({ tag }: { tag: ManagedTag }) {
   if (tag.usage === 0) {
-    return <span className="text-xs text-slate-400">unused</span>
+    return <span className="text-xs text-slate-400 dark:text-slate-500">unused</span>
   }
   return (
-    <span className="flex items-center gap-1.5 text-xs text-slate-500">
-      <span className="font-medium text-slate-700">{tag.usage}</span>
+    <span className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+      <span className="font-medium text-slate-700 dark:text-slate-200">{tag.usage}</span>
       {tag.usage === 1 ? 'entry' : 'entries'}
       {tag.aiCount > 0 ? (
-        <span className="inline-flex items-center gap-0.5 rounded-full bg-teal-50 px-1.5 py-0.5 text-[10px] font-medium text-teal-700 ring-1 ring-teal-600/15 ring-inset">
+        <span className="inline-flex items-center gap-0.5 rounded-full bg-teal-50 px-1.5 py-0.5 text-[10px] font-medium text-teal-700 ring-1 ring-teal-600/15 ring-inset dark:bg-teal-500/15 dark:text-teal-300 dark:ring-teal-500/25">
           <Sparkles size={9} /> {tag.aiCount}
         </span>
       ) : null}
@@ -254,7 +259,7 @@ function MergeRow({
   const [target, setTarget] = useState('')
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
+      <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
         <span>Merge</span>
         <Chip name={tag.name} color={tag.color} />
         <span>into</span>
@@ -270,7 +275,7 @@ function MergeRow({
           />
         </div>
       </div>
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-slate-500 dark:text-slate-400">
         Every entry tagged <strong>{tag.name}</strong> will be re-tagged to the target, and{' '}
         <strong>{tag.name}</strong> will be removed.
       </p>
@@ -283,7 +288,11 @@ function MergeRow({
         >
           <GitMerge size={14} /> Merge
         </Button>
-        <button type="button" onClick={onCancel} className="text-sm text-slate-500 hover:underline">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="text-sm text-slate-500 hover:underline dark:text-slate-400"
+        >
           Cancel
         </button>
       </div>
@@ -326,7 +335,7 @@ function TagForm({
     <div className="space-y-3">
       <div className="flex flex-wrap items-end gap-3">
         <div className="min-w-[10rem] flex-1 space-y-1">
-          <label className="text-[11px] font-medium tracking-wide text-slate-400 uppercase">
+          <label className="text-[11px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">
             Name
           </label>
           <Input
@@ -344,7 +353,7 @@ function TagForm({
           />
         </div>
         <div className="space-y-1">
-          <label className="text-[11px] font-medium tracking-wide text-slate-400 uppercase">
+          <label className="text-[11px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">
             Preview
           </label>
           <div className="flex h-10 items-center">
@@ -354,15 +363,18 @@ function TagForm({
       </div>
 
       <div className="space-y-1.5">
-        <label className="text-[11px] font-medium tracking-wide text-slate-400 uppercase">
+        <label className="text-[11px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">
           Colour
         </label>
         <ColorSwatches value={color} onChange={setColor} />
       </div>
 
       <div className="space-y-1">
-        <label className="text-[11px] font-medium tracking-wide text-slate-400 uppercase">
-          Description <span className="font-normal text-slate-400 normal-case">(optional)</span>
+        <label className="text-[11px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">
+          Description{' '}
+          <span className="font-normal text-slate-400 normal-case dark:text-slate-500">
+            (optional)
+          </span>
         </label>
         <Textarea
           value={description}
@@ -376,7 +388,11 @@ function TagForm({
         <Button type="button" size="sm" disabled={pending} onClick={submit}>
           <Check size={14} /> {submitLabel}
         </Button>
-        <button type="button" onClick={onCancel} className="text-sm text-slate-500 hover:underline">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="text-sm text-slate-500 hover:underline dark:text-slate-400"
+        >
           Cancel
         </button>
       </div>
@@ -405,9 +421,11 @@ function ColorSwatches({
             title={sw.label}
             onClick={() => onChange(key)}
             className={cn(
-              'h-6 w-6 rounded-full ring-offset-2 transition',
+              'h-6 w-6 rounded-full ring-offset-2 transition dark:ring-offset-slate-900',
               sw.dot,
-              active ? 'ring-2 ring-slate-900/40' : 'ring-1 ring-black/5 hover:ring-slate-400',
+              active
+                ? 'ring-2 ring-slate-900/40 dark:ring-white/50'
+                : 'ring-1 ring-black/5 hover:ring-slate-400 dark:ring-white/10 dark:hover:ring-slate-500',
             )}
           />
         )
@@ -454,8 +472,10 @@ function IconBtn({
       aria-label={label}
       title={label}
       className={cn(
-        'grid h-8 w-8 place-items-center rounded-md text-slate-400 transition-colors disabled:opacity-40',
-        danger ? 'hover:bg-red-50 hover:text-red-600' : 'hover:bg-slate-100 hover:text-slate-700',
+        'grid h-8 w-8 place-items-center rounded-md text-slate-400 transition-colors disabled:opacity-40 dark:text-slate-500',
+        danger
+          ? 'hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/15 dark:hover:text-red-400'
+          : 'hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-300',
       )}
     >
       {children}

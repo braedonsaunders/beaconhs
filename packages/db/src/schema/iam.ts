@@ -1,5 +1,14 @@
 import { relations } from 'drizzle-orm'
-import { boolean, index, jsonb, pgTable, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
+import {
+  boolean,
+  index,
+  jsonb,
+  pgEnum,
+  pgTable,
+  text,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core'
 import { id, timestamps } from './_helpers'
 import { tenants, tenantUsers } from './core'
 
@@ -27,14 +36,19 @@ export const roles = pgTable(
   }),
 )
 
-// Scope JSON shape:
-//   { type: 'tenant' }                                 — everything in tenant
-//   { type: 'sites', siteIds: ['…','…'] }
-//   { type: 'crews', crewIds: ['…'] }
-//   { type: 'self' }                                   — only own records
+// Scope JSON shape — the configurable record-visibility window for a role
+// assignment. Resolved into a query predicate by recordVisibilityWhere().
+//   { type: 'tenant' }                                  — everybody in the tenant
+//   { type: 'sites', siteIds: [...] }                   — records at these sites
+//   { type: 'team', divisionIds: [...], groupIds: [...] } — a department: own + people in these divisions/groups
+//   { type: 'people', personIds: [...] }                — own + a hand-picked set of people
+//   { type: 'crews', crewIds: [...] }
+//   { type: 'self' }                                    — only own records
 export type RoleScope =
   | { type: 'tenant' }
   | { type: 'sites'; siteIds: string[] }
+  | { type: 'team'; divisionIds: string[]; groupIds: string[] }
+  | { type: 'people'; personIds: string[] }
   | { type: 'crews'; crewIds: string[] }
   | { type: 'self' }
 
@@ -73,6 +87,45 @@ export const roleAssignmentsRelations = relations(roleAssignments, ({ one }) => 
     references: [tenantUsers.id],
   }),
   role: one(roles, { fields: [roleAssignments.roleId], references: [roles.id] }),
+}))
+
+// Per-user permission exceptions, layered on top of role-granted permissions.
+// `grant` adds a permission the user's roles don't carry; `deny` removes one
+// they would otherwise have. Resolved in getRequestContext() after the role
+// union — denies win. Scoped to a single tenant membership (tenant_user), so a
+// user can have different overrides in each tenant they belong to.
+export const permissionOverrideEffect = pgEnum('permission_override_effect', ['grant', 'deny'])
+
+export const userPermissionOverrides = pgTable(
+  'user_permission_overrides',
+  {
+    id: id(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    tenantUserId: uuid('tenant_user_id')
+      .notNull()
+      .references(() => tenantUsers.id, { onDelete: 'cascade' }),
+    permission: text('permission').$type<PermissionKey>().notNull(),
+    effect: permissionOverrideEffect('effect').notNull(),
+    ...timestamps,
+  },
+  (t) => ({
+    userPermissionUx: uniqueIndex('user_permission_overrides_user_permission_ux').on(
+      t.tenantUserId,
+      t.permission,
+    ),
+    tenantIdx: index('user_permission_overrides_tenant_idx').on(t.tenantId),
+    userIdx: index('user_permission_overrides_user_idx').on(t.tenantUserId),
+  }),
+)
+
+export const userPermissionOverridesRelations = relations(userPermissionOverrides, ({ one }) => ({
+  tenant: one(tenants, { fields: [userPermissionOverrides.tenantId], references: [tenants.id] }),
+  tenantUser: one(tenantUsers, {
+    fields: [userPermissionOverrides.tenantUserId],
+    references: [tenantUsers.id],
+  }),
 }))
 
 // Catalogue of built-in permission keys (consumed by UI permission picker).

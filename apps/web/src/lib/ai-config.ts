@@ -17,6 +17,8 @@ type RawAi = {
   baseUrl?: string
   keyCiphertext?: string
   keyNonce?: string
+  /** Auto-summarise & categorise journal entries on submit (background). */
+  autoJournalAi?: boolean
 }
 
 export type TenantAiSettings = {
@@ -26,6 +28,7 @@ export type TenantAiSettings = {
   modelSmart: string
   baseUrl: string
   hasKey: boolean
+  autoJournalAi: boolean
 }
 
 function normProvider(p: string | undefined): AiProvider {
@@ -56,7 +59,14 @@ export async function getTenantAiSettings(ctx: RequestContext): Promise<TenantAi
     modelSmart: ai.modelSmart ?? '',
     baseUrl: ai.baseUrl ?? '',
     hasKey: Boolean(ai.keyCiphertext && ai.keyNonce),
+    autoJournalAi: ai.autoJournalAi === true,
   }
+}
+
+/** Whether journals are auto-summarised & tagged on submit (background AI). */
+export async function getTenantAutoJournalAi(ctx: RequestContext): Promise<boolean> {
+  const { ai } = await readAi(ctx.tenantId)
+  return ai.enabled !== false && ai.autoJournalAi === true
 }
 
 /** Runtime config (decrypted key) for AI calls, or null when disabled/unset. */
@@ -89,6 +99,7 @@ export async function saveTenantAiSettings(
     modelSmart: string
     baseUrl: string
     apiKey?: string
+    autoJournalAi: boolean
   },
 ): Promise<void> {
   await db.transaction(async (tx) => {
@@ -109,6 +120,7 @@ export async function saveTenantAiSettings(
       baseUrl: input.baseUrl || undefined,
       keyCiphertext: prev.keyCiphertext,
       keyNonce: prev.keyNonce,
+      autoJournalAi: input.autoJournalAi,
     }
     if (input.apiKey && input.apiKey.trim()) {
       const sealed = encryptSecret(input.apiKey.trim())
