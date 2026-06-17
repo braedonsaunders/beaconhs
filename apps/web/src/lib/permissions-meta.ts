@@ -17,7 +17,6 @@ const GROUP_LABELS: Record<string, string> = {
   journals: 'Journals',
   ca: 'Corrective actions',
   compliance: 'Compliance',
-  loneworker: 'Lone worker',
   reports: 'Reports',
   dashboards: 'Dashboards',
   insights: 'Insights',
@@ -89,9 +88,6 @@ const PERMISSION_LABELS: Record<string, string> = {
   'compliance.read': 'View compliance hub',
   'compliance.manage': 'Manage obligations',
   'compliance.assign': 'Assign obligations',
-
-  'loneworker.start': 'Start lone-worker sessions',
-  'loneworker.supervise': 'Supervise lone workers',
 
   'reports.read': 'View reports',
   'reports.builder': 'Build reports',

@@ -129,7 +129,7 @@ export function WidgetView({ id, data }: { id: string; data: InsightsData }) {
       return <Progress label="Document compliance" pct={data.docPct} />
 
     case 'kpi-lw-active':
-      return <Kpi label="Active lone workers" value={data.kpi.lwActive} />
+      return <Kpi label="Active monitored sessions" value={data.kpi.lwActive} />
     case 'kpi-ppe-issues':
       return <Kpi label="Open PPE issues" value={data.kpi.ppeOpenIssues} />
     case 'kpi-submissions':

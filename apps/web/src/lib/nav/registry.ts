@@ -102,13 +102,6 @@ export const NAV_MODULES: NavModule[] = [
   // Programs
   { key: 'training', href: '/training', label: 'Training', iconKey: 'grad', group: 'Programs' },
   { key: 'documents', href: '/documents', label: 'Documents', iconKey: 'book', group: 'Programs' },
-  {
-    key: 'lone-worker',
-    href: '/lone-worker',
-    label: 'Lone Worker',
-    iconKey: 'timer',
-    group: 'Programs',
-  },
 
   // Assets & people
   { key: 'people', href: '/people', label: 'People', iconKey: 'users', group: 'Assets & people' },

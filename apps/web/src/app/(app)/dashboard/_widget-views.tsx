@@ -214,9 +214,9 @@ export function WidgetCard({ widgetId, data, todayIso }: Props) {
     case 'op-lone-worker-active':
       return (
         <CountTile
-          label="Lone-worker sessions"
+          label="Monitored sessions"
           value={data.lwActive}
-          href="/lone-worker"
+          href="/forms/sessions"
           icon={Radio}
           caption={data.lwActive > 0 ? 'session(s) running' : 'all quiet'}
           tone={data.lwActive > 0 ? 'warning' : 'normal'}

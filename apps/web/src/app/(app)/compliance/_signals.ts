@@ -32,7 +32,7 @@ export type SignalStatus = 'overdue' | 'expired' | 'due_soon' | 'open'
 
 export type SignalModule =
   | 'training'
-  | 'lone_worker'
+  | 'monitored_session'
   | 'documents'
   | 'equipment'
   | 'ppe'
@@ -41,7 +41,7 @@ export type SignalModule =
 
 export const SIGNAL_MODULE_LABELS: Record<SignalModule, string> = {
   training: 'Training',
-  lone_worker: 'Lone worker',
+  monitored_session: 'Monitored sessions',
   documents: 'Documents',
   equipment: 'Equipment',
   ppe: 'PPE',
@@ -138,7 +138,7 @@ export async function listDueSignals(
       }
     }
 
-    // ---- Lone worker: overdue check-ins ----
+    // ---- Monitored sessions: overdue check-ins (any monitored Builder app) ----
     if (!onlyPerson) {
       const rows = await tx
         .select({
@@ -160,14 +160,14 @@ export async function listDueSignals(
         const overdue =
           r.status === 'missed' || r.status === 'escalated' || (due != null && due < today)
         out.push({
-          module: 'lone_worker',
+          module: 'monitored_session',
           family: 'Check-in',
-          subject: 'Lone-worker check-in',
+          subject: 'Monitored session check-in',
           personName: null,
           personId: null,
           dueOn: due,
           status: overdue ? 'overdue' : 'due_soon',
-          href: '/lone-worker',
+          href: '/forms/sessions',
         })
       }
     }

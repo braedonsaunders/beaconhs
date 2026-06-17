@@ -2,11 +2,7 @@ import Link from 'next/link'
 import { Timer } from 'lucide-react'
 import { and, asc, eq, isNotNull, sql } from 'drizzle-orm'
 import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
   Badge,
-  Button,
   EmptyState,
   PageHeader,
   Table,
@@ -20,12 +16,14 @@ import { formResponses, formTemplates, tenantUsers, user } from '@beaconhs/db/sc
 import { requireRequestContext } from '@/lib/auth'
 import { ListPageLayout } from '@/components/page-layout'
 
-// Lone Worker now runs on the Builder "Lone Worker" app (a monitored session).
-// This page is a thin dashboard over that app's monitored responses; starting a
-// session opens the app's filler, and each row opens the live monitor on the
-// response page. See docs/monitored-sessions-design.md.
+// Monitored sessions = any Builder-app response with a live monitor (recurring
+// check-ins + automatic overdue escalation). This dashboard is app-agnostic: it
+// spans EVERY monitored response in the tenant and assumes no specific app
+// (e.g. Lone Worker) exists — deployments without a monitored app just see the
+// empty state. A session's live monitor lives on its response page. See
+// docs/monitored-sessions-design.md.
 
-export const metadata = { title: 'Lone worker' }
+export const metadata = { title: 'Monitored sessions' }
 export const dynamic = 'force-dynamic'
 
 const STATUS_BADGE: Record<
@@ -39,80 +37,56 @@ const STATUS_BADGE: Record<
   cancelled: { label: 'Cancelled', variant: 'outline' },
 }
 
-export default async function LoneWorkerPage() {
+export default async function MonitoredSessionsPage() {
   const ctx = await requireRequestContext()
 
-  const { app, rows } = await ctx.db(async (tx) => {
-    const [appRow] = await tx
-      .select({ id: formTemplates.id })
-      .from(formTemplates)
-      .where(and(eq(formTemplates.key, 'lone_worker'), eq(formTemplates.tenantId, ctx.tenantId)))
-      .limit(1)
-    if (!appRow) return { app: null, rows: [] }
-    const data = await tx
+  const rows = await ctx.db((tx) =>
+    tx
       .select({
         id: formResponses.id,
         monitorStatus: formResponses.monitorStatus,
         nextCheckinDueAt: formResponses.nextCheckinDueAt,
         submittedAt: formResponses.submittedAt,
+        appName: formTemplates.name,
         worker: tenantUsers.displayName,
         workerAccount: user.name,
       })
       .from(formResponses)
+      .innerJoin(formTemplates, eq(formTemplates.id, formResponses.templateId))
       .leftJoin(tenantUsers, eq(tenantUsers.id, formResponses.submittedBy))
       .leftJoin(user, eq(user.id, tenantUsers.userId))
-      .where(and(eq(formResponses.templateId, appRow.id), isNotNull(formResponses.monitorStatus)))
+      .where(and(eq(formResponses.tenantId, ctx.tenantId), isNotNull(formResponses.monitorStatus)))
       // Live sessions (active/escalated/missed) first, then by next check-in.
       .orderBy(
         sql`case when ${formResponses.monitorStatus} in ('active','escalated','missed') then 0 else 1 end`,
         asc(formResponses.nextCheckinDueAt),
       )
-      .limit(200)
-    return { app: appRow, rows: data }
-  })
+      .limit(200),
+  )
 
-  const startHref = app ? `/forms/templates/${app.id}/fill` : '/forms'
   const now = Date.now()
 
   return (
     <ListPageLayout
       header={
-        <>
-          <PageHeader
-            title="Lone Worker"
-            description="Monitored lone-worker sessions — recurring check-ins with automatic overdue escalation."
-            actions={
-              <Link href={startHref}>
-                <Button>Start session</Button>
-              </Link>
-            }
-          />
-          <Alert>
-            <AlertTitle>Runs on the Lone Worker app</AlertTitle>
-            <AlertDescription>
-              Sessions are built on the Lone Worker Builder app. The monitor scan escalates any
-              session whose check-in is overdue past its grace period.
-            </AlertDescription>
-          </Alert>
-        </>
+        <PageHeader
+          title="Monitored sessions"
+          description="Live timed sessions across every monitored app — recurring check-ins with automatic overdue escalation."
+        />
       }
     >
       {rows.length === 0 ? (
         <EmptyState
           icon={<Timer size={32} />}
-          title="No sessions yet"
-          description="Start a monitored lone-worker session — the worker checks in on an interval and a missed check-in escalates to supervisors automatically."
-          action={
-            <Link href={startHref}>
-              <Button>Start session</Button>
-            </Link>
-          }
+          title="No monitored sessions"
+          description="When a worker starts a session on a monitored app, it appears here — they check in on an interval and a missed check-in escalates to supervisors automatically."
         />
       ) : (
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Worker</TableHead>
+              <TableHead>App</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Started</TableHead>
               <TableHead>Next check-in</TableHead>
@@ -136,6 +110,9 @@ export default async function LoneWorkerPage() {
                     >
                       {r.worker ?? r.workerAccount ?? 'Session'}
                     </Link>
+                  </TableCell>
+                  <TableCell className="text-slate-600 dark:text-slate-400">
+                    {r.appName ?? '—'}
                   </TableCell>
                   <TableCell>
                     <Badge variant={badge.variant}>{badge.label}</Badge>

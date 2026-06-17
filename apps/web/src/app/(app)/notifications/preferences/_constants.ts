@@ -34,9 +34,11 @@ export const CATEGORY_LABELS: Record<NotificationCategory, { title: string; desc
       title: 'Documents',
       description: 'Periodic-review due, new versions to acknowledge.',
     },
+    // Engine category key stays `lone_worker` (every monitored Builder app
+    // escalates under it); the label is generic.
     lone_worker: {
-      title: 'Lone worker',
-      description: 'Missed check-ins, escalations, session alerts.',
+      title: 'Monitored sessions',
+      description: 'Missed check-ins, escalations, and overdue session alerts.',
     },
   }
 

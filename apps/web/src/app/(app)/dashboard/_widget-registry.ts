@@ -102,8 +102,8 @@ export const WIDGETS: Record<string, WidgetMeta> = {
   'op-lone-worker-active': {
     id: 'op-lone-worker-active',
     category: 'operations',
-    label: 'Active lone-worker sessions',
-    description: 'Live count of currently-running lone-worker sessions.',
+    label: 'Active monitored sessions',
+    description: 'Live count of in-progress monitored sessions across every app.',
     defaultSize: { w: 3, h: 2 },
     minSize: { w: 2, h: 2 },
   },

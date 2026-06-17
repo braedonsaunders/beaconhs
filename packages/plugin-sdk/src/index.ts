@@ -32,8 +32,6 @@ export const HOOK_EVENTS = [
   'training.cert.expired',
   'ca.created',
   'ca.closed',
-  'loneworker.session.started',
-  'loneworker.checkin.missed',
 ] as const
 export type HookEvent = (typeof HOOK_EVENTS)[number]
 

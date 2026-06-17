@@ -876,7 +876,7 @@ export async function queryLoneWorkerSummary(
   const groups: ReportGroup[] = []
   if (rows.length === 0) {
     groups.push({
-      title: 'Lone-worker sessions',
+      title: 'Monitored sessions',
       columns: ['Started', 'Status', 'Task', 'Site', 'Interval'],
       rows: [],
       isEmpty: true,

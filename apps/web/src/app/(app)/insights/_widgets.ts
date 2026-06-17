@@ -174,8 +174,8 @@ export const INSIGHT_WIDGETS: InsightWidgetMeta[] = [
   // Operations
   {
     id: 'kpi-lw-active',
-    label: 'Active lone workers',
-    description: 'Live lone-worker sessions.',
+    label: 'Active monitored sessions',
+    description: 'Live monitored sessions across every app.',
     category: 'operations',
     ...KPI,
   },
