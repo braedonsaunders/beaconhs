@@ -205,6 +205,7 @@ export const VIZ_DEFS: Record<VizKey, VizDef> = {
     settings: [
       { key: 'stacked', label: 'Stacked', widget: 'toggle' },
       { key: 'showValues', label: 'Show values', widget: 'toggle' },
+      { key: 'colorByCategory', label: 'Color each bar', widget: 'toggle' },
     ],
   },
   row: {
@@ -229,7 +230,10 @@ export const VIZ_DEFS: Record<VizKey, VizDef> = {
       requireFlat(data)
       if (measures(data.columns).length === 0) throw new Error('Add a measure to chart')
     },
-    settings: [{ key: 'showValues', label: 'Show values', widget: 'toggle' }],
+    settings: [
+      { key: 'showValues', label: 'Show values', widget: 'toggle' },
+      { key: 'colorByCategory', label: 'Color each bar', widget: 'toggle' },
+    ],
   },
   line: {
     key: 'line',

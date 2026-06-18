@@ -15,10 +15,12 @@ import {
   VIZ_LIST,
   parseExpression,
   serializeExpression,
+  vizDef,
   type AnalyticsColumn,
   type AnalyticsEntity,
   type BhqlResult,
   type VizKey,
+  type VizSettingDef,
 } from '@beaconhs/analytics'
 import type {
   AiCardOutputShape,
@@ -577,14 +579,20 @@ export function CardStudio({
   // card's value is pinned to the primary output column — the calc (ratio) is
   // emitted last, and buildAst regenerates aliases on every render, so a stored
   // alias would go stale and the scalar would fall back to the raw numerator.
+  // User-editable viz settings (suffix, decimals, compare field, show-values,
+  // colour-each-bar, …) surfaced in the Format panel. valueField stays auto-pinned
+  // below because the scalar's source alias regenerates on every build.
+  const [userVizSettings, setUserVizSettings] = useState<Record<string, unknown>>(
+    initial.vizSettings ?? {},
+  )
   const vizSettings = useMemo<Record<string, unknown>>(() => {
-    const s: Record<string, unknown> = { ...(initial.vizSettings ?? {}) }
+    const s: Record<string, unknown> = { ...userVizSettings }
     const primaryAlias = ast.stages[0]?.aggregations?.at(-1)?.alias
     if ((vizType === 'scalar' || vizType === 'progress') && primaryAlias) {
       s.valueField = primaryAlias
     }
     return s
-  }, [ast, vizType, initial.vizSettings])
+  }, [ast, vizType, userVizSettings])
 
   // Debounced live preview (drops stale responses).
   const [result, setResult] = useState<BhqlResult | null>(null)
@@ -1008,6 +1016,21 @@ export function CardStudio({
             </div>
           </div>
           ) : null}
+
+          {!isAiCard && mode !== 'matrix' ? (
+            <VizSettingsPanel
+              vizKey={vizType}
+              settings={userVizSettings}
+              onChange={setUserVizSettings}
+              measures={
+                result?.shape === 'flat'
+                  ? result.columns
+                      .filter((c) => c.role === 'measure')
+                      .map((c) => ({ key: c.key, label: c.label }))
+                  : []
+              }
+            />
+          ) : null}
         </div>
 
         {/* RIGHT preview */}
@@ -1426,6 +1449,146 @@ function MultiplierField({ value, onChange }: { value: number; onChange: (n: num
         ))}
       </div>
     </div>
+  )
+}
+
+// Format panel — renders the active visualization's declared settings (from the
+// viz registry) as live controls bound to the card's vizSettings. This is how the
+// builder controls a scalar's % suffix / decimals / compare field, a bar's value
+// labels + per-bar colours, etc.
+function VizSettingsPanel({
+  vizKey,
+  settings,
+  onChange,
+  measures,
+}: {
+  vizKey: string
+  settings: Record<string, unknown>
+  onChange: (next: Record<string, unknown>) => void
+  measures: { key: string; label: string }[]
+}) {
+  const def = vizDef(vizKey)
+  if (!def) return null
+  // valueField is auto-pinned to the primary output for scalar/progress, and
+  // conditional-format has its own dedicated handling — both excluded here.
+  const rows = def.settings.filter(
+    (s) =>
+      s.widget !== 'conditional-format' &&
+      !((vizKey === 'scalar' || vizKey === 'progress') && s.key === 'valueField'),
+  )
+  if (rows.length === 0) return null
+  return (
+    <div className={sectionCls}>
+      <h3 className={headCls}>Format</h3>
+      <div className="space-y-2">
+        {rows.map((s) => (
+          <SettingRow
+            key={s.key}
+            def={s}
+            value={settings[s.key]}
+            onChange={(v) =>
+              onChange(
+                v === undefined
+                  ? Object.fromEntries(Object.entries(settings).filter(([k]) => k !== s.key))
+                  : { ...settings, [s.key]: v },
+              )
+            }
+            measures={measures}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function SettingRow({
+  def,
+  value,
+  onChange,
+  measures,
+}: {
+  def: VizSettingDef
+  value: unknown
+  onChange: (v: unknown) => void
+  measures: { key: string; label: string }[]
+}) {
+  const labelCls = 'text-xs text-slate-600 dark:text-slate-300'
+  if (def.widget === 'toggle') {
+    return (
+      <label className={cn('flex items-center justify-between gap-2', labelCls)}>
+        <span>{def.label}</span>
+        <input
+          type="checkbox"
+          checked={value === true}
+          onChange={(e) => onChange(e.target.checked || undefined)}
+          className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-2 focus:ring-teal-500/30 dark:border-slate-600 dark:bg-slate-800"
+        />
+      </label>
+    )
+  }
+  if (def.widget === 'color') {
+    return (
+      <label className={cn('flex items-center justify-between gap-2', labelCls)}>
+        <span>{def.label}</span>
+        <input
+          type="color"
+          value={typeof value === 'string' ? value : '#0f766e'}
+          onChange={(e) => onChange(e.target.value)}
+          className="h-7 w-10 rounded border border-slate-300 dark:border-slate-700"
+        />
+      </label>
+    )
+  }
+  if (def.widget === 'field' || def.widget === 'select') {
+    const options =
+      def.widget === 'field'
+        ? measures.map((m) => ({ value: m.key, label: m.label }))
+        : (def.options ?? [])
+    return (
+      <label className={cn('block space-y-1', labelCls)}>
+        <span>{def.label}</span>
+        <select
+          value={typeof value === 'string' ? value : ''}
+          onChange={(e) => onChange(e.target.value || undefined)}
+          className={cn(selectCls, 'h-8 text-xs')}
+        >
+          <option value="">{def.widget === 'field' ? 'None' : 'Default'}</option>
+          {options.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </label>
+    )
+  }
+  // number | text
+  return (
+    <label className={cn('block space-y-1', labelCls)}>
+      <span>{def.label}</span>
+      <input
+        type={def.widget === 'number' ? 'number' : 'text'}
+        value={
+          def.widget === 'number'
+            ? typeof value === 'number'
+              ? value
+              : ''
+            : typeof value === 'string'
+              ? value
+              : ''
+        }
+        onChange={(e) =>
+          onChange(
+            def.widget === 'number'
+              ? e.target.value === ''
+                ? undefined
+                : Number(e.target.value)
+              : e.target.value,
+          )
+        }
+        className={cn(inputCls, 'h-8 text-xs')}
+      />
+    </label>
   )
 }
 

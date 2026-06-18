@@ -209,16 +209,35 @@ function buildOption(spec: VizChartSpec): echarts.EChartsCoreOption {
     series: spec.series.map((s) => {
       const type =
         s.type ?? (spec.cartesianType === 'line' || spec.cartesianType === 'area' ? 'line' : 'bar')
+      const isBar = type === 'bar'
+      // Per-category bar colors: an explicit map wins, else cycle the palette
+      // when colorByPoint is set. Otherwise the single series keeps one color.
+      const colored = isBar && (s.pointColors != null || spec.colorByPoint)
+      const data = colored
+        ? s.data.map((v, i) => ({
+            value: v,
+            itemStyle: { color: s.pointColors?.[i] ?? PALETTE[i % PALETTE.length] },
+          }))
+        : s.data
       return {
         name: s.name,
         type,
         yAxisIndex: s.yAxisIndex ?? 0,
-        data: s.data,
-        stack: spec.stacked && type === 'bar' ? 'total' : undefined,
+        data,
+        stack: spec.stacked && isBar ? 'total' : undefined,
         smooth: type === 'line' ? 0.25 : undefined,
         areaStyle: s.areaStyle ? { opacity: 0.18 } : undefined,
         barMaxWidth: 36,
-        itemStyle: type === 'bar' ? { borderRadius: spec.stacked ? 0 : 3 } : undefined,
+        itemStyle: isBar ? { borderRadius: spec.stacked ? 0 : 3 } : undefined,
+        label:
+          isBar && spec.showValues
+            ? {
+                show: true,
+                position: horizontal ? ('right' as const) : ('top' as const),
+                color: AXIS_TEXT,
+                fontSize: 11,
+              }
+            : undefined,
         emphasis: { focus: 'series' },
         markLine: spec.markLines?.length
           ? {

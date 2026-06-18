@@ -32,16 +32,23 @@ export function ScalarCard({
 }) {
   const measures = result.columns.filter((c) => c.role === 'measure')
   const valueKey = (settings.valueField as string) || measures[0]?.key
-  const compareKey = (settings.compareField as string) || measures[1]?.key
-  const decimals = settings.decimals as number | undefined
+  // Only show a delta when the user EXPLICITLY picks a compare field — never
+  // auto-fall back to the 2nd measure (which is usually an unrelated count, e.g.
+  // comparing an 84% rate against the 912 "completed" tally → a nonsense ↓827).
+  const compareKey = (settings.compareField as string) || undefined
+  const valueCol = measures.find((m) => m.key === valueKey)
+  const isPct = valueCol?.semanticType === 'percentage'
+  const decimals = (settings.decimals as number | undefined) ?? (isPct ? 0 : undefined)
   const prefix = (settings.prefix as string) || ''
-  const suffix = (settings.suffix as string) || ''
+  // A percentage measure defaults to a "%" suffix; an explicit setting (even "")
+  // always wins so the builder can override it.
+  const suffix = settings.suffix !== undefined ? String(settings.suffix) : isPct ? '%' : ''
 
   const row = result.rows[0] ?? {}
   const value = valueKey ? row[valueKey] : null
   const compare = compareKey ? row[compareKey] : null
   const delta = typeof value === 'number' && typeof compare === 'number' ? value - compare : null
-  const measureLabel = measures.find((m) => m.key === valueKey)?.label
+  const measureLabel = valueCol?.label
 
   return (
     <div className="flex h-full flex-col justify-between rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm dark:border-slate-800 dark:bg-slate-900">

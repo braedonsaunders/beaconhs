@@ -275,7 +275,18 @@ export const BUILTIN_QUERIES: Record<
     },
   },
   'chart-severity': {
-    vizType: 'bar',
+    vizType: 'row',
+    vizSettings: {
+      showValues: true,
+      colorByCategory: true,
+      colors: {
+        fatality: '#0f172a',
+        lost_time: '#e11d48',
+        medical_aid: '#fb7185',
+        first_aid_only: '#f59e0b',
+        no_injury: '#94a3b8',
+      },
+    },
     query: {
       version: 'bhql/1',
       display: 'table',
@@ -470,7 +481,8 @@ export const BUILTIN_QUERIES: Record<
     },
   },
   'chart-top-sites': {
-    vizType: 'bar',
+    vizType: 'row',
+    vizSettings: { showValues: true, colorByCategory: true },
     query: {
       version: 'bhql/1',
       display: 'table',
@@ -600,7 +612,7 @@ export const BUILTIN_QUERIES: Record<
   // obligation FK. Replaces the decommissioned legacy assignment-records table.
   'kpi-training-compliance': {
     vizType: 'scalar',
-    vizSettings: { valueField: 'pct', decimals: 0 },
+    vizSettings: { valueField: 'pct', decimals: 0, suffix: '%' },
     query: {
       version: 'bhql/1',
       display: 'table',
@@ -645,7 +657,7 @@ export const BUILTIN_QUERIES: Record<
   // via the obligation FK. No many-to-many audience resolution, no view, no JS loop.
   'kpi-doc-compliance': {
     vizType: 'scalar',
-    vizSettings: { valueField: 'pct', decimals: 0 },
+    vizSettings: { valueField: 'pct', decimals: 0, suffix: '%' },
     query: {
       version: 'bhql/1',
       display: 'table',
@@ -715,7 +727,17 @@ export const BUILTIN_QUERIES: Record<
   // Open corrective actions bucketed by age — a computed CASE breakout (datediff
   // age vs created_at), no view.
   'chart-ca-aging': {
-    vizType: 'bar',
+    vizType: 'row',
+    vizSettings: {
+      showValues: true,
+      colorByCategory: true,
+      colors: {
+        '< 7 days': '#10b981',
+        '7–30 days': '#14b8a6',
+        '30–60 days': '#f59e0b',
+        '60+ days': '#e11d48',
+      },
+    },
     query: {
       version: 'bhql/1',
       display: 'table',
