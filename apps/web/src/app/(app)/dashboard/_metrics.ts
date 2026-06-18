@@ -8,6 +8,7 @@ import {
   complianceStatus,
   correctiveActions,
   formResponses,
+  incidentHoursPeriods,
   incidents,
   inspectionRecords,
   notifications,
@@ -229,12 +230,11 @@ export async function loadDashboardMetrics(
         .then((r) => r[0]),
     ])
 
-    // --- Safety rates ----------------------------------------------------
-    // We don't have a work-hours table — estimate using active head-count ×
-    // 2,000 hours/year over the lookback period. This matches the standard
-    // OSHA convention (200,000 hour-equivalents == 100 FTE-years).
+    // --- Safety rates (TRIR / DART) --------------------------------------
+    // Hours come from the recorded incident_hours_periods. We DO NOT estimate
+    // hours — when a tenant hasn't recorded any, the rate is null (shown as "—"),
+    // never a fabricated number. OSHA: rate = events × 200,000 ÷ hours.
     const headcount = Number(peopleCount?.c ?? 0)
-    const hours12mo = headcount * 2000
 
     // 24-month lookback so we can compute current vs prior 12-month windows
     // and also bucket the last 12 months for the sparkline.
@@ -263,6 +263,16 @@ export async function loadDashboardMetrics(
       .where(and(gte(incidents.occurredAt, twentyFourMonthsAgo), eq(incidents.lostTime, true)))
       .groupBy(sql`to_char(${incidents.occurredAt}, 'YYYY-MM')`)
 
+    // Real hours worked per month, from recorded periods (bucketed by start month).
+    const hoursMonthly = await tx
+      .select({
+        bucket: sql<string>`to_char(${incidentHoursPeriods.periodStart}, 'YYYY-MM')`,
+        h: sql<number>`COALESCE(SUM(${incidentHoursPeriods.totalHours}), 0)::float`,
+      })
+      .from(incidentHoursPeriods)
+      .where(gte(incidentHoursPeriods.periodStart, twentyFourMonthsAgo.toISOString().slice(0, 10)))
+      .groupBy(sql`to_char(${incidentHoursPeriods.periodStart}, 'YYYY-MM')`)
+
     // Build month-key list for the last 24 months, oldest -> newest. `YYYY-MM`.
     const monthKeys: string[] = []
     for (let i = 23; i >= 0; i--) {
@@ -274,33 +284,39 @@ export async function loadDashboardMetrics(
     for (const r of recordableMonthly) recordableByMonth.set(r.bucket, Number(r.c))
     const dartByMonth = new Map<string, number>()
     for (const r of dartMonthly) dartByMonth.set(r.bucket, Number(r.c))
+    const hoursByMonth = new Map<string, number>()
+    for (const r of hoursMonthly) hoursByMonth.set(r.bucket, Number(r.h))
 
     const recordable24 = monthKeys.map((k) => recordableByMonth.get(k) ?? 0)
     const dart24 = monthKeys.map((k) => dartByMonth.get(k) ?? 0)
+    const hours24 = monthKeys.map((k) => hoursByMonth.get(k) ?? 0)
 
     // Last 12 months -> current window, prior 12 -> previous window
     const recordablePrev12 = recordable24.slice(0, 12).reduce((a, b) => a + b, 0)
     const recordable12 = recordable24.slice(12).reduce((a, b) => a + b, 0)
     const dartPrev12 = dart24.slice(0, 12).reduce((a, b) => a + b, 0)
     const dart12 = dart24.slice(12).reduce((a, b) => a + b, 0)
+    const hoursPrev12 = hours24.slice(0, 12).reduce((a, b) => a + b, 0)
+    const hours12mo = hours24.slice(12).reduce((a, b) => a + b, 0)
 
     const recordableCount = recordable12
     const dartCount = dart12
-    const trir = hours12mo > 0 ? Number(((recordableCount * 200_000) / hours12mo).toFixed(2)) : null
-    const dart = hours12mo > 0 ? Number(((dartCount * 200_000) / hours12mo).toFixed(2)) : null
-    const trirPrev =
-      hours12mo > 0 ? Number(((recordablePrev12 * 200_000) / hours12mo).toFixed(2)) : null
-    const dartPrev = hours12mo > 0 ? Number(((dartPrev12 * 200_000) / hours12mo).toFixed(2)) : null
+    // Null when no hours are recorded — never a fabricated rate.
+    const rate = (events: number, hours: number): number | null =>
+      hours > 0 ? Number(((events * 200_000) / hours).toFixed(2)) : null
+    const trir = rate(recordable12, hours12mo)
+    const dart = rate(dart12, hours12mo)
+    const trirPrev = rate(recordablePrev12, hoursPrev12)
+    const dartPrev = rate(dartPrev12, hoursPrev12)
 
-    // Per-month rates for the sparkline (last 12 months only).
-    // Monthly hours = headcount * 2000 / 12 -> use 200,000/hoursMonth for rate.
-    const hoursMonth = hours12mo / 12
+    // Per-month real rates for the sparkline (last 12 months) — null where a
+    // month has no recorded hours.
     const trirTrend: ReadonlyArray<number | null> = recordable24
       .slice(12)
-      .map((n) => (hoursMonth > 0 ? Number(((n * 200_000) / hoursMonth).toFixed(2)) : null))
+      .map((n, i) => rate(n, hours24[12 + i] ?? 0))
     const dartTrend: ReadonlyArray<number | null> = dart24
       .slice(12)
-      .map((n) => (hoursMonth > 0 ? Number(((n * 200_000) / hoursMonth).toFixed(2)) : null))
+      .map((n, i) => rate(n, hours24[12 + i] ?? 0))
 
     // --- Training compliance % -------------------------------------------
     // From the unified compliance engine's materialised scoreboard
@@ -343,23 +359,18 @@ export async function loadDashboardMetrics(
     const documentCompliancePct =
       documentExpected === 0 ? null : Math.round((documentAcked / documentExpected) * 100)
 
-    // --- Synthetic compliance trends -------------------------------------
-    // We don't snapshot historical compliance %, so ease from a baseline 10
-    // points below current up to today. Generates a plausible-looking curve;
-    // replace once we materialize a snapshots table.
-    const synthTrend = (current: number | null): ReadonlyArray<number | null> => {
-      if (current === null) return Array.from({ length: 12 }, () => null)
-      const baseline = Math.max(0, current - 10)
-      const span = current - baseline
-      return Array.from({ length: 12 }, (_, i) => {
-        // ease-in-out: start slow, accelerate, settle
-        const t = i / 11
-        const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2
-        return Number((baseline + span * eased).toFixed(0))
-      })
-    }
-    const trainingComplianceTrend = synthTrend(trainingCompliancePct)
-    const documentComplianceTrend = synthTrend(documentCompliancePct)
+    // --- Compliance trends -----------------------------------------------
+    // We don't snapshot historical compliance, so there is NO trend to show —
+    // a flat null series, never a fabricated curve. Wire to a real snapshots
+    // table when one exists.
+    const trainingComplianceTrend: ReadonlyArray<number | null> = Array.from(
+      { length: 12 },
+      () => null,
+    )
+    const documentComplianceTrend: ReadonlyArray<number | null> = Array.from(
+      { length: 12 },
+      () => null,
+    )
 
     // --- CA aging --------------------------------------------------------
     const [agingRow] = await tx
