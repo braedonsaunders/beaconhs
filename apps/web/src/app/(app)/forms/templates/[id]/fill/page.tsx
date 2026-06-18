@@ -8,6 +8,7 @@ import {
   people,
   type FormResponseDraftData,
 } from '@beaconhs/db/schema'
+import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { loadEntitiesForPickers } from '@/app/(app)/forms/_lib/entity-loader'
 import { appVisibleTo, getUserRoleKeys } from '@/app/(app)/forms/_lib/access'
@@ -47,34 +48,37 @@ export default async function FillTemplatePage({
       .limit(1)
     if (!version) return null
 
-    // If a `?responseId=` param is present and points at a draft owned by
-    // this tenant, hydrate the filler with the saved draft state. Otherwise
-    // the page renders an empty form and the client lazily creates a draft
-    // row on the user's first content change.
-    let draftResponse: {
+    // If a `?responseId=` param is present and points at a response owned by
+    // this tenant, load it. Drafts/in-progress hydrate the editable filler;
+    // submitted/closed responses render read-only from their final `data`
+    // (this is the unified record page — edit if permitted, else view).
+    let responseRow: {
       id: string
+      status: string
+      data: Record<string, unknown>
       draftData: FormResponseDraftData | null
       draftStepIndex: number | null
-      status: string
     } | null = null
     if (responseIdParam) {
       const [row] = await tx
         .select({
           id: formResponses.id,
+          status: formResponses.status,
+          data: formResponses.data,
           draftData: formResponses.draftData,
           draftStepIndex: formResponses.draftStepIndex,
-          status: formResponses.status,
           templateId: formResponses.templateId,
         })
         .from(formResponses)
         .where(and(eq(formResponses.id, responseIdParam), eq(formResponses.tenantId, ctx.tenantId)))
         .limit(1)
       if (row && row.templateId === id) {
-        draftResponse = {
+        responseRow = {
           id: row.id,
+          status: row.status,
+          data: row.data ?? {},
           draftData: row.draftData,
           draftStepIndex: row.draftStepIndex,
-          status: row.status,
         }
       }
     }
@@ -109,32 +113,61 @@ export default async function FillTemplatePage({
       sites,
       people: allPeople,
       currentPerson: currentPerson[0] ?? null,
-      draftResponse,
+      responseRow,
     }
   })
 
   if (!data) notFound()
 
-  // App-level role gating — a viewer whose roles aren't allowed can't fill it.
+  // Access gating. Filling the app (creating / editing) requires the app's
+  // roles. Viewing an existing entry read-only is also allowed for reviewers
+  // with `forms.response.read.all`.
   const userRoleKeys = await getUserRoleKeys(ctx)
-  if (!appVisibleTo(ctx, data.tmpl.allowedRoles, userRoleKeys)) notFound()
+  const canFillApp = appVisibleTo(ctx, data.tmpl.allowedRoles, userRoleKeys)
+  const response = data.responseRow
+  const canView = canFillApp || can(ctx, 'forms.response.read.all')
+  if (response) {
+    if (!canView) notFound()
+  } else if (!canFillApp) {
+    // No existing entry → this is a "new entry" attempt, which needs fill access.
+    notFound()
+  }
 
-  // Resume-path: if we found a draft response AND it's still in a pre-submit
-  // state, pull the persisted values + rows back into the renderer.
-  // Submitted/closed/etc. drafts ignore the param so we don't accidentally
-  // let users re-edit completed work.
-  const resumeOk =
-    data.draftResponse !== null &&
-    data.draftResponse.draftData !== null &&
-    (data.draftResponse.status === 'draft' || data.draftResponse.status === 'in_progress')
-  const initialValues: Record<string, unknown> = resumeOk
-    ? (data.draftResponse!.draftData!.values ?? {})
-    : {}
-  const initialRows: Record<string, Array<Record<string, unknown>>> = resumeOk
-    ? (data.draftResponse!.draftData!.rows ?? {})
-    : {}
-  const initialStepIndex = resumeOk ? (data.draftResponse!.draftStepIndex ?? 0) : 0
-  const initialResponseId = data.draftResponse?.id ?? null
+  // A response is editable only while in a pre-submit state AND the user can
+  // fill the app. Submitted/closed entries (or view-only users) render
+  // read-only — the same record surface, just locked.
+  const isDraftState =
+    response !== null && (response.status === 'draft' || response.status === 'in_progress')
+  const editable = canFillApp && (response === null || isDraftState)
+  const readOnly = !editable
+  // Reviewers/admins get a link to the richer review surface (CAPA/comments/
+  // audit/sign-off) for an existing response.
+  const reviewHref =
+    response && can(ctx, 'forms.response.read.all') ? `/forms/responses/${response.id}` : null
+
+  // Hydrate the renderer: drafts from draftData; submitted/closed from the
+  // final `data` (repeating-section rows live at data[sectionId]).
+  let initialValues: Record<string, unknown> = {}
+  let initialRows: Record<string, Array<Record<string, unknown>>> = {}
+  let initialStepIndex = 0
+  if (response) {
+    if (isDraftState && response.draftData) {
+      initialValues = response.draftData.values ?? {}
+      initialRows = response.draftData.rows ?? {}
+      initialStepIndex = response.draftStepIndex ?? 0
+    } else {
+      initialValues = response.data ?? {}
+      initialRows = {}
+      for (const sec of data.version.schema.sections) {
+        const rows = response.data?.[sec.id]
+        if (sec.repeating && Array.isArray(rows)) {
+          initialRows[sec.id] = rows as Array<Record<string, unknown>>
+        }
+      }
+    }
+  }
+  const initialResponseId = response?.id ?? null
+  const resumeOk = isDraftState && !!response?.draftData
 
   // Resolve picker-bound entity attributes. We pass the resumed values map
   // (or {}) so any picker selections in the draft rehydrate with their
@@ -163,6 +196,9 @@ export default async function FillTemplatePage({
       initialStepIndex={initialStepIndex}
       isResumed={resumeOk}
       returnTo={returnTo}
+      readOnly={readOnly}
+      responseStatus={response?.status ?? null}
+      reviewHref={reviewHref}
     />
   )
 }

@@ -196,7 +196,12 @@ export const fieldTypeSchema = z.enum([
   // pickers
   'person_picker',
   'multi_person_picker', // person_picker with multiple selection
-  'site_picker',
+  // Org-unit pickers — one per level of the org_units hierarchy
+  // (customer → project → site → area). All store an org_unit id.
+  'customer_picker', // org_units at level='customer'
+  'project_picker', // org_units at level='project' (e.g. legacy "Job Number")
+  'site_picker', // org_units at level='site'
+  'area_picker', // org_units at level='area'
   'equipment_picker',
   'ppe_picker',
   'document_picker',
@@ -209,6 +214,7 @@ export const fieldTypeSchema = z.enum([
   'file',
   'video',
   'audio',
+  'sketch', // freehand diagram / drawing canvas (Excalidraw) → PNG attachment + scene
   // identity
   'signature',
   'typed_attestation',

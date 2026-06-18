@@ -16,7 +16,16 @@
 // top-level fields, plus `data[sectionId]` = `Array<Record<fieldId, value>>`
 // for repeating sections. Same convention the response-viewer already reads.
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from 'react'
 import Link from 'next/link'
 import {
   AlertTriangle,
@@ -29,6 +38,7 @@ import {
   ChevronUp,
   Cloud,
   CloudOff,
+  Eye,
   Italic,
   Link as LinkIcon,
   List,
@@ -48,6 +58,7 @@ import {
   AlertTitle,
   Badge,
   Button,
+  DetailHeader,
   Input,
   Label,
   SearchSelect,
@@ -75,6 +86,7 @@ import {
   analyzePhotos,
   createDraftResponse,
   fetchEntityAttrs,
+  listOrgUnitOptions,
   saveFormResponseDraft,
   submitFormResponse,
 } from './actions'
@@ -87,6 +99,7 @@ import {
   type DataRow,
 } from '@/app/(app)/forms/_lib/data-sources'
 import { SignaturePad } from '@/components/signature-pad'
+import { SketchPad, type SketchScene } from '@/components/sketch-pad'
 import { FileUpload, dataUrlToFile, type AttachedFile } from '@/components/file-upload'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
 import { WizardLayout } from '@/components/page-layout'
@@ -113,6 +126,11 @@ const SECTION_TONES = [
   'slate',
 ] as const
 
+// Read-only context — when true, custom (non-form-control) inputs that a
+// disabled <fieldset> can't reach (signature/sketch canvases, the rich-text
+// contentEditable) render static. Provided by FormRenderer in record/view mode.
+const FillReadOnlyContext = createContext(false)
+
 export function FormRenderer({
   templateId,
   templateName,
@@ -128,6 +146,9 @@ export function FormRenderer({
   initialStepIndex = 0,
   isResumed = false,
   returnTo = null,
+  readOnly = false,
+  responseStatus = null,
+  reviewHref = null,
 }: {
   templateId: string
   templateName: string
@@ -151,6 +172,15 @@ export function FormRenderer({
   // back, your draft was restored" toast on mount.
   isResumed?: boolean
   returnTo?: string | null
+  // When true, render as a read-only record: every input disabled, the
+  // submit/next footer hidden, autosave suppressed. Drives the unified record
+  // page for submitted entries / view-only users.
+  readOnly?: boolean
+  // The response's status — shown in the read-only banner ("submitted", …).
+  responseStatus?: string | null
+  // Admin review surface (CAPA/comments/audit) for this response, shown as a
+  // "Review" header action. Null hides it (no responseId or no permission).
+  reviewHref?: string | null
 }) {
   // Per-step progress so users can click back into completed steps.
   const [completedSteps, setCompletedSteps] = useState<Set<string>>(new Set())
@@ -469,6 +499,9 @@ export function FormRenderer({
   }, [])
 
   function markDirty() {
+    // In read-only mode nothing is editable; never flip dirty so autosave +
+    // the unload beacon stay silent.
+    if (readOnly) return
     if (!dirtyRef.current) dirtyRef.current = true
   }
 
@@ -736,300 +769,387 @@ export function FormRenderer({
 
   const completion = Math.round(((stepIndex + 1) / Math.max(1, totalSteps)) * 100)
 
+  // Single-step apps + any read-only view render with a native DetailHeader
+  // (like the hazard/incident detail pages). Multi-step editing keeps the
+  // wizard header (with its step progress strip).
+  const recordLayout = readOnly || totalSteps === 1
+  const reviewLink = reviewHref ? (
+    <Link href={reviewHref}>
+      <Button variant="outline" size="sm">
+        <Eye size={14} /> Review
+      </Button>
+    </Link>
+  ) : null
+
   return (
-    <WizardLayout
-      className={`ff-surface ${fieldMode ? 'field-mode' : ''}`}
-      header={
-        <div className="space-y-3">
-          <Link
-            href={returnTo ?? `/forms/templates/${templateId}`}
-            className="inline-flex items-center gap-1 text-xs font-medium text-teal-700 hover:underline dark:text-teal-400"
-          >
-            <ChevronLeft size={13} /> {returnTo ? 'Back to assessment' : 'Back to template'}
-          </Link>
-          <div className="flex items-center justify-between gap-2">
-            <h1 className="truncate text-xl font-semibold text-slate-900 dark:text-slate-100">
-              {templateName}
-            </h1>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={toggleFieldMode}
-                aria-pressed={fieldMode}
-                title="High-contrast field mode"
-                className={`inline-flex h-8 w-8 items-center justify-center rounded-full border ${
-                  fieldMode
-                    ? 'border-amber-400 bg-amber-100 text-amber-700 dark:border-amber-500 dark:bg-amber-900/40 dark:text-amber-200'
-                    : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400'
-                }`}
-              >
-                <Sun size={15} />
-              </button>
-              <SaveStatus
-                status={saveStatus}
-                lastSavedAt={lastSavedAt}
-                error={saveError}
-                onRetry={() => {
-                  void persistDraft({ values, rows: rowsByStep, stepIndex })
-                }}
-              />
-              <Badge variant="outline">v{version}</Badge>
-            </div>
-          </div>
-          {/* Progress strip — every workflow step as a clickable pill */}
-          <ol className="flex flex-wrap items-center gap-1 text-xs">
-            {steps.map((s, i) => {
-              const isCurrent = i === stepIndex
-              const isCompleted = completedSteps.has(s.key)
-              const isClickable = i <= stepIndex || isCompleted
-              return (
-                <li key={s.key}>
-                  <button
-                    type="button"
-                    disabled={!isClickable}
-                    onClick={() => jumpTo(i)}
-                    className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 transition-colors ${
-                      isCurrent
-                        ? 'border-teal-600 bg-teal-600 text-white'
-                        : isCompleted
-                          ? 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300'
-                          : 'border-slate-200 bg-white text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300'
-                    } ${!isClickable ? 'cursor-not-allowed opacity-60' : ''}`}
-                  >
-                    <span
-                      className={`inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold ${
-                        isCurrent
-                          ? 'bg-white text-teal-700'
-                          : isCompleted
-                            ? 'bg-emerald-500 text-white'
-                            : 'bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+    <FillReadOnlyContext.Provider value={readOnly}>
+      <WizardLayout
+        className={`ff-surface ${fieldMode ? 'field-mode' : ''}`}
+        wide={readOnly}
+        header={
+          recordLayout ? (
+            <DetailHeader
+              back={{
+                href: returnTo ?? `/forms/templates/${templateId}/records`,
+                label: returnTo ? 'Back to assessment' : 'Back',
+              }}
+              title={templateName}
+              subtitle={
+                initialResponseId ? `${initialResponseId.slice(0, 8)} · v${version}` : `v${version}`
+              }
+              badge={
+                readOnly ? (
+                  responseStatus ? (
+                    <Badge variant="secondary">{responseStatus.replace(/_/g, ' ')}</Badge>
+                  ) : null
+                ) : (
+                  <SaveStatus
+                    status={saveStatus}
+                    lastSavedAt={lastSavedAt}
+                    error={saveError}
+                    onRetry={() => {
+                      void persistDraft({ values, rows: rowsByStep, stepIndex })
+                    }}
+                  />
+                )
+              }
+              actions={
+                <>
+                  {!readOnly ? (
+                    <button
+                      type="button"
+                      onClick={toggleFieldMode}
+                      aria-pressed={fieldMode}
+                      title="High-contrast field mode"
+                      className={`inline-flex h-8 w-8 items-center justify-center rounded-full border ${
+                        fieldMode
+                          ? 'border-amber-400 bg-amber-100 text-amber-700 dark:border-amber-500 dark:bg-amber-900/40 dark:text-amber-200'
+                          : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400'
                       }`}
                     >
-                      {isCompleted && !isCurrent ? <Check size={10} /> : i + 1}
-                    </span>
-                    <span className="truncate">{s.title?.en ?? s.key}</span>
-                  </button>
-                </li>
-              )
-            })}
-          </ol>
-          <div className="h-1 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-            <div
-              className="h-full rounded-full bg-teal-600 transition-all"
-              style={{ width: `${Math.max(8, completion)}%` }}
+                      <Sun size={15} />
+                    </button>
+                  ) : null}
+                  {reviewLink}
+                </>
+              }
             />
-          </div>
-        </div>
-      }
-      footer={
-        <div className="space-y-2">
-          {serverError ? (
-            <Alert variant="destructive">
-              <AlertTitle>Submit failed</AlertTitle>
-              <AlertDescription>{serverError}</AlertDescription>
-            </Alert>
-          ) : null}
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="lg"
-              onClick={back}
-              disabled={stepIndex === 0}
-              className="h-12 px-4"
-            >
-              <ChevronLeft size={16} />
-              Back
-            </Button>
-            {stepIndex < totalSteps - 1 ? (
-              <Button onClick={next} size="lg" className="h-12 flex-1 text-base">
-                Next <ChevronRight size={16} />
-              </Button>
-            ) : (
-              <Button
-                onClick={submit}
-                disabled={pending}
-                size="lg"
-                className="h-12 flex-1 text-base"
+          ) : (
+            <div className="space-y-3">
+              <Link
+                href={returnTo ?? `/forms/templates/${templateId}/records`}
+                className="inline-flex items-center gap-1 text-xs font-medium text-teal-700 hover:underline dark:text-teal-400"
               >
-                <Check size={16} />
-                {pending ? 'Submitting…' : 'Submit'}
-              </Button>
-            )}
-          </div>
-        </div>
-      }
-    >
-      {stepIndex === 0 ? (
-        <PremiumSection
-          title="Site"
-          subtitle="Where this is being recorded"
-          icon={<MapPin size={20} />}
-          tone="teal"
-        >
-          <div className="space-y-1">
-            <Label>Site</Label>
-            <Select value={siteId} onChange={(e) => setSiteId(e.target.value)}>
-              <option value="">— select —</option>
-              {sites.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </Select>
-          </div>
-        </PremiumSection>
-      ) : null}
-
-      {tabbed ? (
-        <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200 pb-2 dark:border-slate-800">
-          {appTabs.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setActiveTabId(t.id)}
-              className={`rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors ${
-                t.id === activeTabId
-                  ? 'border-teal-600 bg-teal-600 text-white'
-                  : 'border-slate-200 bg-white text-slate-600 hover:border-teal-300 hover:text-teal-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300'
-              }`}
-            >
-              {t.title?.en ?? t.id}
-            </button>
-          ))}
-        </div>
-      ) : null}
-
-      {renderedSections.length === 0 ? (
-        <PremiumSection
-          title={step.title?.en ?? step.key}
-          icon={<ClipboardList size={20} />}
-          tone="slate"
-        >
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            {tabbed
-              ? 'This tab has no sections.'
-              : 'No sections bound to this step. Submit to finalise.'}
-          </p>
-        </PremiumSection>
-      ) : (
-        renderedSections.map((sec, i) => {
-          // Section-level visibility — completely hide the section if showIf
-          // is false against the current values.
-          if (sec.showIf && !evaluateLogicRule(sec.showIf, evalCtx)) return null
-          return (
-            <PremiumSection
-              key={sec.id}
-              title={sec.title?.en ?? sec.id}
-              subtitle={sec.description?.en ?? (sec.repeating ? 'Repeatable section' : undefined)}
-              icon={<ClipboardList size={20} />}
-              tone={SECTION_TONES[i % SECTION_TONES.length]}
-              count={sec.repeating ? (rowsByStep[sec.id]?.length ?? 0) : undefined}
-            >
-              <div className="space-y-4">
-                {sec.repeating ? (
-                  <RepeatingSection
-                    section={sec}
-                    rows={rowsByStep[sec.id] ?? []}
-                    onAdd={() => addRow(sec)}
-                    onRemove={(i) => removeRow(sec, i)}
-                    onUpdate={(i, patch) => updateRow(sec, i, patch)}
-                    people={people}
-                    evalCtx={evalCtx}
-                    errors={errors}
-                    sectionError={errors.get(`__section_${sec.id}`) ?? null}
+                <ChevronLeft size={13} /> {returnTo ? 'Back to assessment' : 'Back'}
+              </Link>
+              <div className="flex items-center justify-between gap-2">
+                <h1 className="truncate text-xl font-semibold text-slate-900 dark:text-slate-100">
+                  {templateName}
+                </h1>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={toggleFieldMode}
+                    aria-pressed={fieldMode}
+                    title="High-contrast field mode"
+                    className={`inline-flex h-8 w-8 items-center justify-center rounded-full border ${
+                      fieldMode
+                        ? 'border-amber-400 bg-amber-100 text-amber-700 dark:border-amber-500 dark:bg-amber-900/40 dark:text-amber-200'
+                        : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400'
+                    }`}
+                  >
+                    <Sun size={15} />
+                  </button>
+                  <SaveStatus
+                    status={saveStatus}
+                    lastSavedAt={lastSavedAt}
+                    error={saveError}
+                    onRetry={() => {
+                      void persistDraft({ values, rows: rowsByStep, stepIndex })
+                    }}
                   />
-                ) : sec.canvas ? (
-                  (() => {
-                    const cls = gridClass(sec.id)
-                    const canvas = sec.canvas
-                    const visible = sec.fields.filter(
-                      (f) => !f.showIf || evaluateLogicRule(f.showIf, evalCtx),
-                    )
-                    const { order, byId } = resolveCanvas(
-                      visible.map((f) => f.id),
-                      canvas.items,
-                      canvas.cols,
-                    )
-                    const byField = new Map(visible.map((f) => [f.id, f]))
-                    return (
-                      <div className={cls}>
-                        <style>{canvasCss(cls, canvas.cols, canvas.rowHeight, byId)}</style>
-                        {order.map((id) => {
-                          const f = byField.get(id)!
-                          return (
-                            <div key={id} data-ci={id}>
-                              <FieldRow
-                                field={f}
-                                value={values[f.id]}
-                                onChange={(v) => setValue(f.id, v)}
-                                setFieldValue={setValue}
-                                error={errors.get(f.id)}
-                                people={people}
-                                evalCtx={evalCtx}
-                                loading={pickerLoading.has(f.id)}
-                              />
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )
-                  })()
-                ) : sec.layout && sec.layout.columns > 1 ? (
-                  (() => {
-                    const cls = gridClass(sec.id)
-                    const cols = sec.layout.columns
-                    const visible = sec.fields.filter(
-                      (f) => !f.showIf || evaluateLogicRule(f.showIf, evalCtx),
-                    )
-                    const css = columnsCss(
-                      cls,
-                      cols,
-                      visible.map((f) => ({ id: f.id, span: f.colSpan ?? cols })),
-                    )
-                    return (
-                      <div className={cls}>
-                        <style>{css}</style>
-                        {visible.map((f) => (
-                          <div key={f.id} data-cs={f.id}>
-                            <FieldRow
-                              field={f}
-                              value={values[f.id]}
-                              onChange={(v) => setValue(f.id, v)}
-                              setFieldValue={setValue}
-                              error={errors.get(f.id)}
-                              people={people}
-                              evalCtx={evalCtx}
-                              loading={pickerLoading.has(f.id)}
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    )
-                  })()
+                  <Badge variant="outline">v{version}</Badge>
+                  {reviewLink}
+                </div>
+              </div>
+              {/* Progress strip — every workflow step as a clickable pill. Hidden
+              on single-step apps (e.g. the Lift Plan), where a one-pill strip
+              + progress bar is just noise and makes the header needlessly tall. */}
+              {totalSteps > 1 ? (
+                <>
+                  <ol className="flex flex-wrap items-center gap-1 text-xs">
+                    {steps.map((s, i) => {
+                      const isCurrent = i === stepIndex
+                      const isCompleted = completedSteps.has(s.key)
+                      const isClickable = i <= stepIndex || isCompleted
+                      return (
+                        <li key={s.key}>
+                          <button
+                            type="button"
+                            disabled={!isClickable}
+                            onClick={() => jumpTo(i)}
+                            className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 transition-colors ${
+                              isCurrent
+                                ? 'border-teal-600 bg-teal-600 text-white'
+                                : isCompleted
+                                  ? 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300'
+                                  : 'border-slate-200 bg-white text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300'
+                            } ${!isClickable ? 'cursor-not-allowed opacity-60' : ''}`}
+                          >
+                            <span
+                              className={`inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold ${
+                                isCurrent
+                                  ? 'bg-white text-teal-700'
+                                  : isCompleted
+                                    ? 'bg-emerald-500 text-white'
+                                    : 'bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                              }`}
+                            >
+                              {isCompleted && !isCurrent ? <Check size={10} /> : i + 1}
+                            </span>
+                            <span className="truncate">{s.title?.en ?? s.key}</span>
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </ol>
+                  <div className="h-1 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+                    <div
+                      className="h-full rounded-full bg-teal-600 transition-all"
+                      style={{ width: `${Math.max(8, completion)}%` }}
+                    />
+                  </div>
+                </>
+              ) : null}
+            </div>
+          )
+        }
+        footer={
+          readOnly ? undefined : (
+            <div className="space-y-2">
+              {serverError ? (
+                <Alert variant="destructive">
+                  <AlertTitle>Submit failed</AlertTitle>
+                  <AlertDescription>{serverError}</AlertDescription>
+                </Alert>
+              ) : null}
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="lg"
+                  onClick={back}
+                  disabled={stepIndex === 0}
+                  className="h-12 px-4"
+                >
+                  <ChevronLeft size={16} />
+                  Back
+                </Button>
+                {stepIndex < totalSteps - 1 ? (
+                  <Button onClick={next} size="lg" className="h-12 flex-1 text-base">
+                    Next <ChevronRight size={16} />
+                  </Button>
                 ) : (
-                  sec.fields.map((f) => {
-                    if (f.showIf && !evaluateLogicRule(f.showIf, evalCtx)) return null
-                    return (
-                      <FieldRow
-                        key={f.id}
-                        field={f}
-                        value={values[f.id]}
-                        onChange={(v) => setValue(f.id, v)}
-                        setFieldValue={setValue}
-                        error={errors.get(f.id)}
-                        people={people}
-                        evalCtx={evalCtx}
-                        loading={pickerLoading.has(f.id)}
-                      />
-                    )
-                  })
+                  <Button
+                    onClick={submit}
+                    disabled={pending}
+                    size="lg"
+                    className="h-12 flex-1 text-base"
+                  >
+                    <Check size={16} />
+                    {pending ? 'Submitting…' : 'Submit'}
+                  </Button>
                 )}
               </div>
-            </PremiumSection>
+            </div>
           )
-        })
-      )}
-    </WizardLayout>
+        }
+      >
+        {readOnly ? (
+          <Alert variant="warning">
+            <AlertTitle>View only</AlertTitle>
+            <AlertDescription>
+              {responseStatus
+                ? `This entry is ${responseStatus.replace(/_/g, ' ')}. You don't have permission to edit it.`
+                : "You don't have permission to edit this entry."}
+            </AlertDescription>
+          </Alert>
+        ) : null}
+        <fieldset disabled={readOnly} className="m-0 min-w-0 space-y-5 border-0 p-0">
+          {stepIndex === 0 ? (
+            <PremiumSection
+              title="Site"
+              subtitle="Where this is being recorded"
+              icon={<MapPin size={20} />}
+              tone="teal"
+            >
+              <div className="space-y-1">
+                <Label>Site</Label>
+                <Select value={siteId} onChange={(e) => setSiteId(e.target.value)}>
+                  <option value="">— select —</option>
+                  {sites.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            </PremiumSection>
+          ) : null}
+
+          {tabbed ? (
+            <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200 pb-2 dark:border-slate-800">
+              {appTabs.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setActiveTabId(t.id)}
+                  className={`rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors ${
+                    t.id === activeTabId
+                      ? 'border-teal-600 bg-teal-600 text-white'
+                      : 'border-slate-200 bg-white text-slate-600 hover:border-teal-300 hover:text-teal-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300'
+                  }`}
+                >
+                  {t.title?.en ?? t.id}
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          {renderedSections.length === 0 ? (
+            <PremiumSection
+              title={step.title?.en ?? step.key}
+              icon={<ClipboardList size={20} />}
+              tone="slate"
+            >
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                {tabbed
+                  ? 'This tab has no sections.'
+                  : 'No sections bound to this step. Submit to finalise.'}
+              </p>
+            </PremiumSection>
+          ) : (
+            renderedSections.map((sec, i) => {
+              // Section-level visibility — completely hide the section if showIf
+              // is false against the current values.
+              if (sec.showIf && !evaluateLogicRule(sec.showIf, evalCtx)) return null
+              return (
+                <PremiumSection
+                  key={sec.id}
+                  title={sec.title?.en ?? sec.id}
+                  subtitle={
+                    sec.description?.en ?? (sec.repeating ? 'Repeatable section' : undefined)
+                  }
+                  icon={<ClipboardList size={20} />}
+                  tone={SECTION_TONES[i % SECTION_TONES.length]}
+                  count={sec.repeating ? (rowsByStep[sec.id]?.length ?? 0) : undefined}
+                >
+                  <div className="space-y-4">
+                    {sec.repeating ? (
+                      <RepeatingSection
+                        section={sec}
+                        rows={rowsByStep[sec.id] ?? []}
+                        onAdd={() => addRow(sec)}
+                        onRemove={(i) => removeRow(sec, i)}
+                        onUpdate={(i, patch) => updateRow(sec, i, patch)}
+                        people={people}
+                        evalCtx={evalCtx}
+                        errors={errors}
+                        sectionError={errors.get(`__section_${sec.id}`) ?? null}
+                      />
+                    ) : sec.canvas ? (
+                      (() => {
+                        const cls = gridClass(sec.id)
+                        const canvas = sec.canvas
+                        const visible = sec.fields.filter(
+                          (f) => !f.showIf || evaluateLogicRule(f.showIf, evalCtx),
+                        )
+                        const { order, byId } = resolveCanvas(
+                          visible.map((f) => f.id),
+                          canvas.items,
+                          canvas.cols,
+                        )
+                        const byField = new Map(visible.map((f) => [f.id, f]))
+                        return (
+                          <div className={cls}>
+                            <style>{canvasCss(cls, canvas.cols, canvas.rowHeight, byId)}</style>
+                            {order.map((id) => {
+                              const f = byField.get(id)!
+                              return (
+                                <div key={id} data-ci={id}>
+                                  <FieldRow
+                                    field={f}
+                                    value={values[f.id]}
+                                    onChange={(v) => setValue(f.id, v)}
+                                    setFieldValue={setValue}
+                                    error={errors.get(f.id)}
+                                    people={people}
+                                    evalCtx={evalCtx}
+                                    loading={pickerLoading.has(f.id)}
+                                  />
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )
+                      })()
+                    ) : sec.layout && sec.layout.columns > 1 ? (
+                      (() => {
+                        const cls = gridClass(sec.id)
+                        const cols = sec.layout.columns
+                        const visible = sec.fields.filter(
+                          (f) => !f.showIf || evaluateLogicRule(f.showIf, evalCtx),
+                        )
+                        const css = columnsCss(
+                          cls,
+                          cols,
+                          visible.map((f) => ({ id: f.id, span: f.colSpan ?? cols })),
+                        )
+                        return (
+                          <div className={cls}>
+                            <style>{css}</style>
+                            {visible.map((f) => (
+                              <div key={f.id} data-cs={f.id}>
+                                <FieldRow
+                                  field={f}
+                                  value={values[f.id]}
+                                  onChange={(v) => setValue(f.id, v)}
+                                  setFieldValue={setValue}
+                                  error={errors.get(f.id)}
+                                  people={people}
+                                  evalCtx={evalCtx}
+                                  loading={pickerLoading.has(f.id)}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        )
+                      })()
+                    ) : (
+                      sec.fields.map((f) => {
+                        if (f.showIf && !evaluateLogicRule(f.showIf, evalCtx)) return null
+                        return (
+                          <FieldRow
+                            key={f.id}
+                            field={f}
+                            value={values[f.id]}
+                            onChange={(v) => setValue(f.id, v)}
+                            setFieldValue={setValue}
+                            error={errors.get(f.id)}
+                            people={people}
+                            evalCtx={evalCtx}
+                            loading={pickerLoading.has(f.id)}
+                          />
+                        )
+                      })
+                    )}
+                  </div>
+                </PremiumSection>
+              )
+            })
+          )}
+        </fieldset>
+      </WizardLayout>
+    </FillReadOnlyContext.Provider>
   )
 }
 
@@ -1693,16 +1813,18 @@ function FieldInput({
         </div>
       )
     }
+    case 'customer_picker':
+      return <OrgUnitPickerInput level="customer" value={value} onChange={onChange} />
+    case 'project_picker':
+      return <OrgUnitPickerInput level="project" value={value} onChange={onChange} />
     case 'site_picker':
-      return (
-        <Input
-          value={(value as string) ?? ''}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder="(site id — see top-of-form site picker)"
-        />
-      )
+      return <OrgUnitPickerInput level="site" value={value} onChange={onChange} />
+    case 'area_picker':
+      return <OrgUnitPickerInput level="area" value={value} onChange={onChange} />
     case 'signature':
       return <SignatureField value={(value as string | null) ?? null} onChange={onChange} />
+    case 'sketch':
+      return <SketchField value={value} onChange={onChange} />
     case 'photo':
     case 'photo_upload':
       return (
@@ -2202,8 +2324,76 @@ function labelForRow(row: DataRow, labelCol?: string): string {
   return String(row.__rowId ?? '—')
 }
 
+// --- Org-unit pickers -------------------------------------------------------
+//
+// One searchable dropdown per org_units level (customer / project / site /
+// area). Self-contained: each fetches its own options via listOrgUnitOptions
+// (mirrors LookupInput), so no prop threading. Options are module-cached per
+// level — many instances / re-renders hit the server at most once per level.
+
+type OrgUnitOption = { id: string; name: string; code: string | null }
+const orgUnitOptionsCache: Record<string, OrgUnitOption[] | undefined> = {}
+const ORG_PICKER_COPY: Record<string, { noun: string; article: string }> = {
+  customer: { noun: 'customer', article: 'a' },
+  project: { noun: 'project', article: 'a' },
+  site: { noun: 'site', article: 'a' },
+  area: { noun: 'area', article: 'an' },
+}
+
+function OrgUnitPickerInput({
+  level,
+  value,
+  onChange,
+}: {
+  level: 'customer' | 'project' | 'site' | 'area'
+  value: unknown
+  onChange: (v: unknown) => void
+}) {
+  const [options, setOptions] = useState<OrgUnitOption[]>(() => orgUnitOptionsCache[level] ?? [])
+  const [loading, setLoading] = useState(() => orgUnitOptionsCache[level] === undefined)
+
+  useEffect(() => {
+    // Cache hit → initial state already correct; no fetch / no setState needed.
+    if (orgUnitOptionsCache[level] !== undefined) return
+    let alive = true
+    listOrgUnitOptions(level)
+      .then((rows) => {
+        orgUnitOptionsCache[level] = rows
+        if (alive) {
+          setOptions(rows)
+          setLoading(false)
+        }
+      })
+      .catch(() => {
+        if (alive) setLoading(false)
+      })
+    return () => {
+      alive = false
+    }
+  }, [level])
+
+  const { noun, article } = ORG_PICKER_COPY[level] ?? { noun: level, article: 'a' }
+  return (
+    <SearchSelect
+      value={(value as string) ?? ''}
+      onChange={(v) => onChange(v)}
+      options={options.map((o) => ({
+        value: o.id,
+        label: o.name,
+        hint: o.code ?? undefined,
+      }))}
+      placeholder={loading ? 'Loading…' : `Select ${article} ${noun}…`}
+      searchPlaceholder={`Search ${noun}s…`}
+      sheetTitle={`Select ${article} ${noun}`}
+      clearable
+      emptyLabel="—"
+    />
+  )
+}
+
 // A data-bound dropdown. Fetches rows from its source (optionally cascaded by a
 // parent field's value), and on selection can auto-fill sibling fields.
+
 function LookupInput({
   field,
   value,
@@ -2887,6 +3077,7 @@ function RankingInput({
 // --- Rich text (lightweight contentEditable) -------------------------------
 
 function RichTextInput({ value, onChange }: { value: unknown; onChange: (v: unknown) => void }) {
+  const readOnly = useContext(FillReadOnlyContext)
   const ref = useRef<HTMLDivElement>(null)
   // Seed the editor once on mount; afterwards it's uncontrolled so the caret
   // isn't reset on every keystroke.
@@ -2932,9 +3123,9 @@ function RichTextInput({ value, onChange }: { value: unknown; onChange: (v: unkn
       </div>
       <div
         ref={ref}
-        contentEditable
+        contentEditable={!readOnly}
         suppressContentEditableWarning
-        onInput={(e) => onChange((e.target as HTMLDivElement).innerHTML)}
+        onInput={readOnly ? undefined : (e) => onChange((e.target as HTMLDivElement).innerHTML)}
         className="app-scroll prose prose-sm max-h-60 min-h-[80px] max-w-none overflow-auto p-2 text-sm focus:outline-none"
       />
     </div>
@@ -3121,6 +3312,12 @@ function validateOne(field: FormField, value: unknown): string | null {
         return v?.message ?? 'Add a photo'
       return null
     }
+    case 'sketch': {
+      // Compound { attachmentId, url, scene } — require a drawn diagram.
+      const obj = (value as { attachmentId?: string }) ?? {}
+      if (required && !obj.attachmentId) return v?.message ?? 'Add a diagram'
+      return null
+    }
     case 'text':
     case 'textarea':
     case 'long_text':
@@ -3155,6 +3352,7 @@ function SignatureField({
   value: string | null
   onChange: (v: { attachmentId: string; url: string } | null) => void
 }) {
+  const readOnly = useContext(FillReadOnlyContext)
   const stored = (value as unknown as { attachmentId: string; url: string } | null) ?? null
 
   async function persist(dataUrl: string | null) {
@@ -3192,9 +3390,64 @@ function SignatureField({
 
   return (
     <div>
-      <SignaturePad value={stored?.url ?? null} onChange={persist} />
+      <SignaturePad value={stored?.url ?? null} onChange={persist} disabled={readOnly} />
     </div>
   )
+}
+
+// --- Sketch / diagram -------------------------------------------------------
+//
+// Freehand drawing canvas (Excalidraw). Mirrors SignatureField: the rendered
+// PNG is uploaded as an attachment so the viewer + PDF can show the diagram,
+// while the editable Excalidraw scene is stashed on the value so the drawing
+// can be re-opened and amended. Value shape: { attachmentId, url, scene }.
+
+type SketchValue = { attachmentId: string; url: string; scene?: SketchScene }
+
+function SketchField({
+  value,
+  onChange,
+}: {
+  value: unknown
+  onChange: (v: SketchValue | null) => void
+}) {
+  const readOnly = useContext(FillReadOnlyContext)
+  const stored = (value as SketchValue | null) ?? null
+
+  async function persist(dataUrl: string | null, scene: SketchScene) {
+    if (!dataUrl) {
+      onChange(null)
+      return
+    }
+    const file = dataUrlToFile(dataUrl, `sketch-${Date.now()}.png`)
+    const req = await requestUpload({
+      kind: 'image',
+      filename: file.name,
+      contentType: file.type,
+      sizeBytes: file.size,
+    })
+    if (!req.ok) {
+      console.warn('[sketch] presign failed', req.error)
+      return
+    }
+    const put = await fetch(req.putUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': file.type },
+      body: file,
+    })
+    if (!put.ok) return
+    const fin = await finalizeUpload({
+      kind: 'image',
+      key: req.key,
+      filename: file.name,
+      contentType: file.type,
+      sizeBytes: file.size,
+    })
+    if (!fin.ok) return
+    onChange({ attachmentId: fin.attachmentId, url: req.publicUrl, scene })
+  }
+
+  return <SketchPad initialScene={stored?.scene ?? null} onChange={persist} readOnly={readOnly} />
 }
 
 // --- Save status indicator -------------------------------------------------

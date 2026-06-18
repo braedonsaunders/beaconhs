@@ -86,7 +86,10 @@ function ElementInput({ field, compact }: { field: FormField; compact?: boolean 
     case 'url':
       return <Input disabled placeholder="https://" className="bg-white" />
     case 'select':
+    case 'customer_picker':
     case 'site_picker':
+    case 'project_picker':
+    case 'area_picker':
     case 'person_picker':
     case 'multi_person_picker':
     case 'equipment_picker':
@@ -175,6 +178,12 @@ function ElementInput({ field, compact }: { field: FormField; compact?: boolean 
       return (
         <div className="flex h-16 items-center justify-center rounded border border-dashed border-slate-300 bg-slate-50 text-xs text-slate-400">
           + upload
+        </div>
+      )
+    case 'sketch':
+      return (
+        <div className="flex h-20 items-center justify-center rounded border border-dashed border-slate-300 bg-[repeating-linear-gradient(45deg,transparent,transparent_9px,rgba(148,163,184,0.12)_9px,rgba(148,163,184,0.12)_10px)] text-xs text-slate-400 italic">
+          draw / diagram here
         </div>
       )
     case 'photo_ai':

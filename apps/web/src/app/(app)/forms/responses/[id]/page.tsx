@@ -44,6 +44,7 @@ import {
   type FormWorkflowStep,
 } from '@beaconhs/db/schema'
 import {
+  entityDisplayName,
   evaluateFormulaTree,
   evaluateLogicRule,
   sanitizeDocumentHtml,
@@ -349,7 +350,10 @@ export default async function FormResponsePage({
     <DetailPageLayout
       header={
         <DetailHeader
-          back={{ href: '/forms', label: 'Back to forms' }}
+          back={{
+            href: `/forms/templates/${template.id}/records`,
+            label: `Back to ${template.name}`,
+          }}
           title={template.name}
           subtitle={`${id.slice(0, 8)} · v${version.version}`}
           badge={
@@ -883,17 +887,6 @@ function renderRepeating(sec: any, values: Record<string, unknown>, evalCtx: Eva
   )
 }
 
-// Pick a human label out of an entity-attr map (the key varies by entity kind:
-// person → displayName, site/equipment/course → name, document → title, …).
-function entityDisplayName(attrs: Record<string, unknown> | null | undefined): string | null {
-  if (!attrs) return null
-  for (const k of ['displayName', 'name', 'title', 'serialNumber', 'assetTag', 'code']) {
-    const v = attrs[k]
-    if (typeof v === 'string' && v.trim()) return v
-  }
-  return null
-}
-
 function renderValue(
   field: {
     id: string
@@ -1123,6 +1116,20 @@ function renderValue(
         <span className="text-slate-500">[signature captured]</span>
       )
     }
+    case 'sketch': {
+      const sk = raw as { url?: string } | string
+      const url = typeof sk === 'object' && sk ? sk.url : undefined
+      return url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={url}
+          alt="Diagram"
+          className="max-h-80 w-auto rounded border border-slate-200 bg-white"
+        />
+      ) : (
+        <span className="text-slate-500">[diagram captured]</span>
+      )
+    }
     case 'photo':
     case 'photo_upload': {
       const files = Array.isArray(raw) ? (raw as AttachedFile[]) : []
@@ -1168,7 +1175,10 @@ function renderValue(
       )
     }
     case 'person_picker':
+    case 'customer_picker':
     case 'site_picker':
+    case 'project_picker':
+    case 'area_picker':
     case 'equipment_picker':
     case 'ppe_picker':
     case 'document_picker':

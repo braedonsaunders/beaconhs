@@ -16,7 +16,9 @@
 // One EntityKind ↔ one picker FieldType:
 //   person   → person_picker / multi_person_picker
 //   equipment→ equipment_picker
-//   site     → site_picker
+//   site     → customer_picker / project_picker / site_picker / area_picker
+//              (all resolve to org_units rows; each constrains its OPTIONS
+//              query to the matching level)
 //   ppe      → ppe_picker
 //   document → document_picker
 //   course   → course_picker
@@ -130,7 +132,13 @@ export const ENTITY_ATTRS: Record<EntityKind, EntityAttrDef[]> = {
 export const PICKER_TO_ENTITY_KIND: Record<string, EntityKind> = {
   person_picker: 'person',
   equipment_picker: 'equipment',
+  // Every org-unit picker (customer/project/site/area) resolves to an org_units
+  // row; their attrs are identical (name/code/level/address), so they all reuse
+  // the 'site' attr loader — only the OPTIONS query differs by level.
+  customer_picker: 'site',
+  project_picker: 'site',
   site_picker: 'site',
+  area_picker: 'site',
   ppe_picker: 'ppe',
   document_picker: 'document',
   course_picker: 'course',
@@ -153,4 +161,22 @@ export function getEntityAttrDef(kind: EntityKind, attrKey: string): EntityAttrD
   const list = ENTITY_ATTRS[kind]
   if (!list) return null
   return list.find((a) => a.key === attrKey) ?? null
+}
+
+/**
+ * Pick the human label out of a loaded entity-attr map. The "name" column
+ * varies by kind (person → displayName, site/equipment/course → name,
+ * document → title, …) so we probe a fixed priority list. Shared by the
+ * response viewer and the PDF renderer so a picked entity reads the same in
+ * both places. Returns null when no usable label is present.
+ */
+export function entityDisplayName(
+  attrs: Record<string, unknown> | null | undefined,
+): string | null {
+  if (!attrs) return null
+  for (const k of ['displayName', 'name', 'title', 'serialNumber', 'assetTag', 'code']) {
+    const v = attrs[k]
+    if (typeof v === 'string' && v.trim()) return v
+  }
+  return null
 }

@@ -2,13 +2,14 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { and, desc, eq, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import {
   formAutomations,
   formResponses,
   formTemplateVersions,
   formTemplates,
+  orgUnits,
 } from '@beaconhs/db/schema'
 import { extractScores, validateResponse } from '@beaconhs/forms-core'
 import { formResponseScores } from '@beaconhs/db/schema'
@@ -286,6 +287,30 @@ export async function fetchEntityAttrs(args: {
     const message = err instanceof Error ? err.message : 'fetch failed'
     return { ok: false, error: message }
   }
+}
+
+// The org_units hierarchy levels, one per org-unit picker element.
+const ORG_UNIT_LEVELS = ['customer', 'project', 'site', 'area'] as const
+export type OrgUnitLevel = (typeof ORG_UNIT_LEVELS)[number]
+
+/**
+ * Active org units at a given hierarchy level (customer / project / site /
+ * area), for the org-unit picker elements. Soft-deleted units are excluded.
+ * RLS-scoped via ctx.db, so only the active tenant's units are returned.
+ */
+export async function listOrgUnitOptions(
+  level: OrgUnitLevel,
+): Promise<{ id: string; name: string; code: string | null }[]> {
+  // Defensive: never run an unbounded query for an unexpected level.
+  if (!ORG_UNIT_LEVELS.includes(level)) return []
+  const ctx = await requireRequestContext()
+  return ctx.db(async (tx) =>
+    tx
+      .select({ id: orgUnits.id, name: orgUnits.name, code: orgUnits.code })
+      .from(orgUnits)
+      .where(and(eq(orgUnits.level, level), isNull(orgUnits.deletedAt)))
+      .orderBy(asc(orgUnits.name)),
+  )
 }
 
 /**

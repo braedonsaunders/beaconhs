@@ -1,10 +1,21 @@
 // Per-tenant seeder for the built-in Lift Plan form template.
 //
-// Lift plans were previously a first-class native module (apps/web/lift-plans
-// + lift_plan* tables). The clean cutover replaces that with a form template
-// owned by each tenant. The template lives behind the bound-modules view at
-// /inspections?bound=lift_plan, so it picks up the same surface JSHAs,
-// toolbox talks, and WAH rescue plans use.
+// This is a faithful recreation of the legacy Laravel "Lift Plan" form
+// (rassaun/beaconhs: LiftPlanController + resources/views/pages/liftplan).
+// It is a single-page form (no multi-step wizard, no sign-off) with six
+// sections, mirroring the original field-for-field:
+//
+//   1. Lift details   — job number, date, personnel, loads & weights
+//   2. Description of Lift
+//   3. Rigging / Hardware (repeating table)
+//   4. Pre-Lift Checklist (+ wind conditions)
+//   5. Crane Data
+//   6. Diagram / Sketch (freehand drawing canvas)
+//
+// The legacy "Job Number" was a dropdown of active Projects; the new platform
+// models projects as org_units at level='project', surfaced via the new
+// `project_picker` element. The freehand "Diagram / Sketch" uses the new
+// `sketch` element (Excalidraw).
 //
 // The template carries:
 //   - category='lift_plan' + moduleBinding='lift_plan' so the bound view picks
@@ -16,6 +27,8 @@
 // Idempotency contract: insert with ON CONFLICT (tenant_id, key) DO NOTHING.
 // If the template already exists for this tenant we skip — admins may have
 // edited it after seed and we don't want to clobber their version history.
+// (To force the latest schema onto an existing tenant, use the dedicated
+// reseed script, which publishes a new version instead of inserting.)
 
 import { and, eq } from 'drizzle-orm'
 import { formTemplates, formTemplateVersions } from '../schema'
@@ -26,288 +39,170 @@ export const LIFT_PLAN_TEMPLATE_CATEGORY = 'lift_plan'
 export const LIFT_PLAN_TEMPLATE_MODULE_BINDING = 'lift_plan'
 export const LIFT_PLAN_TEMPLATE_NAME = 'Lift Plan'
 
-const RISK_OPTIONS = [
-  { value: 'low', label: { en: 'Low' } },
-  { value: 'medium', label: { en: 'Medium' } },
-  { value: 'high', label: { en: 'High' } },
-  { value: 'critical', label: { en: 'Critical' } },
-]
-
-const PPE_OPTIONS = [
-  { value: 'hard_hat', label: { en: 'Hard hat' } },
-  { value: 'safety_glasses', label: { en: 'Safety glasses' } },
-  { value: 'gloves', label: { en: 'Gloves' } },
-  { value: 'cut_gloves', label: { en: 'Cut-resistant gloves' } },
-  { value: 'respirator', label: { en: 'Respirator' } },
-  { value: 'harness', label: { en: 'Fall-arrest harness' } },
-  { value: 'high_vis', label: { en: 'Hi-vis vest' } },
-  { value: 'safety_boots', label: { en: 'Safety boots' } },
-  { value: 'hearing_protection', label: { en: 'Hearing protection' } },
-  { value: 'face_shield', label: { en: 'Face shield' } },
-]
-
+// Pre-lift checklist items — value keys match the legacy checklist_json keys.
 const PRE_LIFT_CHECKLIST_OPTIONS = [
-  { value: 'ground_bearing_assessed', label: { en: 'Ground bearing assessed' } },
-  { value: 'tail_swing_cleared', label: { en: 'Tail swing path cleared' } },
-  { value: 'crane_level', label: { en: 'Crane level confirmed' } },
-  { value: 'rigging_inspected', label: { en: 'All rigging inspected' } },
-  { value: 'comms_briefed', label: { en: 'Communication plan briefed' } },
-  { value: 'exclusion_zone', label: { en: 'Exclusion zone established' } },
-  { value: 'wind_within_limits', label: { en: 'Wind speed within limits' } },
-  { value: 'outriggers_deployed', label: { en: 'Outriggers fully deployed' } },
+  { value: 'rigging_inspected', label: { en: 'Rigging Inspected' } },
+  { value: 'jha_completed', label: { en: 'JSA Completed' } },
+  { value: 'swing_check', label: { en: 'Swing Check / Clearance' } },
+  { value: 'load_chart_on_crane', label: { en: 'Load Chart on Crane' } },
+  { value: 'tag_lines', label: { en: 'Tag Lines' } },
+  { value: 'outriggers_pads', label: { en: 'Outriggers / Pads' } },
+  { value: 'site_control', label: { en: 'Site Control / Barriers' } },
+  { value: 'certified_operator', label: { en: 'Certified Operator' } },
+  { value: 'crane_inspected', label: { en: 'Crane Inspected' } },
+]
+
+// Free-text unit for the load / rigging weights (legacy placeholder kg/lb/ton).
+const WEIGHT_UNIT_OPTIONS = [
+  { value: 'kg', label: { en: 'kg' } },
+  { value: 'lb', label: { en: 'lb' } },
+  { value: 'ton', label: { en: 'ton' } },
 ]
 
 /**
- * The lift-plan form template schema. Stored verbatim into
- * form_template_versions.schema as v1.
- *
- * Multi-step layout (3 pages):
- *   1. "Plan"   — general info, crane data, loads (repeating), totals (formula)
- *   2. "Risk"   — hazards & controls (repeating), PPE, pre-lift checklist, diagram
- *   3. "Sign"   — supervisor / operator / rigger / spotter signatures
- *
- * Demonstrates the foundation features end-to-end:
- *   - Repeating sections w/ row-label-template + min-rows
- *   - Formula field (total_weight_lbs) cross-referencing repeating rows
- *   - Conditional visibility (critical_control textarea shows only when
- *     residual_risk = 'critical')
- *   - Default value (today's date)
- *   - Multi-step workflow w/ section bindings
+ * The lift-plan form template schema, stored verbatim into
+ * form_template_versions.schema as v1. Single workflow step ('complete') →
+ * the filler renders it as one page (matches the legacy autosaving form).
  */
 export const LIFT_PLAN_TEMPLATE_SCHEMA: FormSchemaV1 = {
   schemaVersion: 1,
   title: { en: 'Lift Plan' },
   description: {
-    en: 'Engineering plan for any critical lift: crane data, loads, hazards & controls, PPE, pre-lift checklist, diagram, sign-off by supervisor + operator + rigger + spotter.',
+    en: 'Crane lift plan: job, personnel, loads & weights, description, rigging/hardware, pre-lift checklist, crane data, and a lift diagram.',
   },
   sections: [
+    // 1. Lift details (legacy meta grid) ------------------------------------
     {
-      id: 'general_info',
-      title: { en: 'General info' },
-      step: 'plan',
+      id: 'lift_details',
+      title: { en: 'Lift details' },
+      step: 'complete',
+      layout: { columns: 2 },
       fields: [
+        {
+          id: 'job_number',
+          type: 'project_picker',
+          label: { en: 'Job Number' },
+          required: true,
+        },
         {
           id: 'lift_date',
           type: 'date',
-          label: { en: 'Lift date' },
-          required: true,
+          label: { en: 'Date' },
           defaultValue: { kind: 'today' },
         },
-        { id: 'site', type: 'site_picker', label: { en: 'Site' }, required: true },
-        { id: 'project', type: 'text', label: { en: 'Project' } },
+        { id: 'created_by', type: 'text', label: { en: 'Created By' } },
+        { id: 'crane_operator', type: 'text', label: { en: 'Crane Operator' } },
+        { id: 'qualified_rigger', type: 'text', label: { en: 'Qualified Rigger' } },
+        { id: 'signal_person', type: 'text', label: { en: 'Signal Person' } },
+        { id: 'other_person_1', type: 'text', label: { en: 'Other Person 1' } },
+        { id: 'other_person_2', type: 'text', label: { en: 'Other Person 2' } },
+        { id: 'load_to_be_lifted', type: 'text', label: { en: 'Load to be lifted' } },
+        { id: 'load_dimensions', type: 'text', label: { en: 'Load Dimensions' } },
+        { id: 'load_weight_value', type: 'number', label: { en: 'Load Weight' } },
         {
-          id: 'supervisor',
-          type: 'person_picker',
-          label: { en: 'Lift supervisor' },
-          required: true,
-          defaultValue: { kind: 'current_user_person_id' },
+          id: 'load_weight_unit',
+          type: 'select',
+          label: { en: 'Load Weight — unit' },
+          validation: { options: WEIGHT_UNIT_OPTIONS },
         },
-        // Live entity-attr lookup: surface the supervisor's current job
-        // title from the people table. Recomputes whenever the picker
-        // changes. Demonstrates the entity_attr → entity-loader → filler
-        // pipeline end-to-end on a real seeded template.
+        { id: 'rigging_weight_value', type: 'number', label: { en: 'Rigging Weight' } },
         {
-          id: 'supervisor_job_title',
-          type: 'formula',
-          label: { en: 'Supervisor — current job title' },
-          helpText: { en: "Read-only. Pulled from the supervisor's people record." },
-          formula: {
-            kind: 'entity_attr',
-            pickerFieldKey: 'supervisor',
-            attrKey: 'jobTitle',
-          },
-        },
-        { id: 'description', type: 'textarea', label: { en: 'Description / scope' } },
-      ],
-    },
-    {
-      id: 'crane_data',
-      title: { en: 'Crane data' },
-      step: 'plan',
-      fields: [
-        { id: 'crane_type', type: 'text', label: { en: 'Crane type' }, required: true },
-        { id: 'crane_model', type: 'text', label: { en: 'Crane model' } },
-        {
-          id: 'crane_capacity_lbs',
-          type: 'number',
-          label: { en: 'Crane capacity (lbs)' },
-          required: true,
-        },
-        {
-          id: 'crane_radius_ft',
-          type: 'number',
-          label: { en: 'Working radius (ft)' },
-          required: true,
-        },
-        {
-          id: 'crane_boom_length_ft',
-          type: 'number',
-          label: { en: 'Boom length (ft)' },
-          required: true,
-        },
-        { id: 'crane_counterweight_lbs', type: 'number', label: { en: 'Counterweight (lbs)' } },
-        { id: 'ground_bearing_psi', type: 'number', label: { en: 'Ground bearing (psi)' } },
-        { id: 'tail_swing_ft', type: 'number', label: { en: 'Tail swing (ft)' } },
-        // Equipment-picker + entity-attr smoke pair: pick the actual crane
-        // asset, then surface its current status as a read-only formula.
-        // Optional so the template doesn't break for tenants that haven't
-        // registered their cranes in the equipment register yet.
-        {
-          id: 'crane_equipment',
-          type: 'equipment_picker',
-          label: { en: 'Crane (asset register)' },
-          helpText: { en: 'Optional. Link to the actual crane asset to surface live status.' },
-        },
-        {
-          id: 'crane_current_status',
-          type: 'formula',
-          label: { en: 'Crane — current status' },
-          helpText: { en: "Read-only. Pulled from the equipment item's status column." },
-          formula: {
-            kind: 'entity_attr',
-            pickerFieldKey: 'crane_equipment',
-            attrKey: 'status',
-          },
+          id: 'rigging_weight_unit',
+          type: 'select',
+          label: { en: 'Rigging Weight — unit' },
+          validation: { options: WEIGHT_UNIT_OPTIONS },
         },
       ],
     },
+    // 2. Description of Lift -------------------------------------------------
     {
-      id: 'loads',
-      title: { en: 'Loads' },
-      description: { en: 'One row per discrete item being lifted.' },
-      repeating: true,
-      minRows: 1,
-      rowLabelTemplate: 'Load #{index+1} · {description}',
-      step: 'plan',
+      id: 'description',
+      title: { en: 'Description of Lift' },
+      step: 'complete',
       fields: [
-        { id: 'description', type: 'text', label: { en: 'Description' }, required: true },
         {
-          id: 'load_weight_lbs',
-          type: 'number',
-          label: { en: 'Load weight (lbs)' },
-          required: true,
+          id: 'description_of_lift',
+          type: 'rich_text',
+          label: { en: 'Description of Lift' },
         },
-        { id: 'rigging_weight_lbs', type: 'number', label: { en: 'Rigging weight (lbs)' } },
       ],
     },
+    // 3. Rigging / Hardware (repeating) -------------------------------------
     {
-      id: 'totals',
-      title: { en: 'Totals' },
-      step: 'plan',
+      id: 'rigging_hardware',
+      title: { en: 'Rigging / Hardware' },
+      description: { en: 'One row per rigging item or piece of hardware.' },
+      step: 'complete',
       fields: [
         {
-          id: 'total_weight_lbs',
-          type: 'formula',
-          label: { en: 'Total weight (lbs)' },
-          helpText: { en: 'Sum of all load weights + rigging weights across every Loads row.' },
-          formula: {
-            kind: 'sum',
-            of: [
-              { kind: 'sum_section', sectionKey: 'loads', rowFieldKey: 'load_weight_lbs' },
-              { kind: 'sum_section', sectionKey: 'loads', rowFieldKey: 'rigging_weight_lbs' },
+          id: 'rigging_items',
+          type: 'table',
+          label: { en: 'Rigging / Hardware' },
+          config: {
+            rowMode: 'addable',
+            minRows: 0,
+            columns: [
+              { key: 'rigging_hardware', label: 'Rigging / Hardware', type: 'text' },
+              { key: 'quantity', label: 'Quantity', type: 'number' },
+              { key: 'hitch_type', label: 'Hitch Type', type: 'text' },
+              { key: 'wll', label: 'Working Load Limit (WLL)', type: 'text' },
             ],
           },
         },
       ],
     },
-    {
-      id: 'hazards_controls',
-      title: { en: 'Hazards & controls' },
-      description: { en: 'One row per hazard.' },
-      repeating: true,
-      rowLabelTemplate: 'Hazard #{index+1}',
-      step: 'risk',
-      fields: [
-        { id: 'hazard', type: 'text', label: { en: 'Hazard' }, required: true },
-        { id: 'control', type: 'text', label: { en: 'Control' }, required: true },
-        {
-          id: 'residual_risk',
-          type: 'select',
-          label: { en: 'Residual risk' },
-          required: true,
-          validation: { options: RISK_OPTIONS },
-        },
-        {
-          // Only appears when residual risk is rated critical — proves the
-          // conditional-visibility runtime works against repeating rows.
-          id: 'critical_control',
-          type: 'textarea',
-          label: { en: 'Additional control for critical risk' },
-          helpText: { en: 'Required when residual risk is critical.' },
-          required: true,
-          showIf: { op: 'eq', field: 'residual_risk', value: 'critical' },
-        },
-      ],
-    },
-    {
-      id: 'ppe_required',
-      title: { en: 'PPE required' },
-      step: 'risk',
-      fields: [
-        {
-          id: 'ppe',
-          type: 'checkbox_group',
-          label: { en: 'PPE required' },
-          required: true,
-          validation: { options: PPE_OPTIONS },
-        },
-      ],
-    },
+    // 4. Pre-Lift Checklist -------------------------------------------------
     {
       id: 'pre_lift_checklist',
-      title: { en: 'Pre-lift checklist' },
-      step: 'risk',
+      title: { en: 'Pre-Lift Checklist' },
+      step: 'complete',
       fields: [
         {
-          id: 'pre_lift_items',
+          id: 'pre_lift_checklist',
           type: 'checkbox_group',
           label: { en: 'Confirm each item before the lift begins' },
-          required: true,
           validation: { options: PRE_LIFT_CHECKLIST_OPTIONS },
+        },
+        {
+          id: 'wind_conditions',
+          type: 'text',
+          label: { en: 'Wind Conditions' },
+          helpText: { en: 'e.g., 12 km/h NW' },
         },
       ],
     },
+    // 5. Crane Data ---------------------------------------------------------
     {
-      id: 'lift_diagram',
-      title: { en: 'Lift diagram' },
-      step: 'risk',
+      id: 'crane_data',
+      title: { en: 'Crane Data' },
+      step: 'complete',
+      layout: { columns: 2 },
+      fields: [
+        { id: 'crane_model', type: 'text', label: { en: 'Crane Model' } },
+        { id: 'boom_length_ft', type: 'number', label: { en: 'Boom Length (ft)' } },
+        { id: 'radius_ft', type: 'number', label: { en: 'Radius (ft)' } },
+        {
+          id: 'configuration',
+          type: 'text',
+          label: { en: 'Configuration' },
+          helpText: { en: 'sling angle, etc.' },
+        },
+        { id: 'crane_capacity_tons', type: 'text', label: { en: 'Crane Capacity (tons)' } },
+        { id: 'crane_boom_angle', type: 'text', label: { en: 'Crane Boom Angle' } },
+        { id: 'crane_notes', type: 'text', label: { en: 'Notes' }, colSpan: 2 },
+      ],
+    },
+    // 6. Diagram / Sketch ---------------------------------------------------
+    {
+      id: 'diagram',
+      title: { en: 'Diagram / Sketch' },
+      step: 'complete',
       fields: [
         {
           id: 'diagram',
-          type: 'file',
-          label: { en: 'Lift diagram (image / PDF)' },
-          helpText: { en: 'Upload the engineered lift drawing or sketch.' },
-        },
-      ],
-    },
-    {
-      id: 'signatures',
-      title: { en: 'Signatures' },
-      step: 'sign',
-      fields: [
-        {
-          id: 'supervisor_signature',
-          type: 'signature',
-          label: { en: 'Supervisor signature' },
-          required: true,
-        },
-        {
-          id: 'operator_signature',
-          type: 'signature',
-          label: { en: 'Operator signature' },
-          required: true,
-        },
-        {
-          id: 'rigger_signature',
-          type: 'signature',
-          label: { en: 'Rigger signature' },
-          required: true,
-        },
-        {
-          id: 'spotter_signature',
-          type: 'signature',
-          label: { en: 'Spotter signature' },
-          required: true,
+          type: 'sketch',
+          label: { en: 'Diagram / Sketch' },
+          helpText: { en: 'Draw the lift: crane, load, rigging, clearances, and exclusion zone.' },
         },
       ],
     },
@@ -315,20 +210,9 @@ export const LIFT_PLAN_TEMPLATE_SCHEMA: FormSchemaV1 = {
   workflow: {
     steps: [
       {
-        key: 'plan',
-        title: { en: 'Plan' },
+        key: 'complete',
+        title: { en: 'Complete' },
         assignee: { type: 'expression', expr: '$submitter' },
-      },
-      {
-        key: 'risk',
-        title: { en: 'Risk' },
-        assignee: { type: 'expression', expr: '$submitter' },
-      },
-      {
-        key: 'sign',
-        title: { en: 'Sign-off' },
-        assignee: { type: 'expression', expr: '$submitter' },
-        signatureRequired: true,
       },
     ],
   },
@@ -374,7 +258,7 @@ export async function seedLiftPlanTemplate(
       category: LIFT_PLAN_TEMPLATE_CATEGORY,
       moduleBinding: LIFT_PLAN_TEMPLATE_MODULE_BINDING,
       description:
-        'Engineering plan for any critical lift. Crane data, loads, hazards & controls, PPE, pre-lift checklist, diagram, sign-off.',
+        'Crane lift plan: job, personnel, loads & weights, description, rigging/hardware, pre-lift checklist, crane data, and a lift diagram.',
       status: 'published' as const,
       createdBy: null,
     })

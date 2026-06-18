@@ -105,7 +105,7 @@
     background-position: right 0.5rem center;
     background-size: 0.7rem;
   }
-
+}
 
 /* Brand logo animation (components/brand-logo.tsx). Strokes carry a normalized
    pathLength of 1 so one dasharray rule draws any shape. Resting styles are

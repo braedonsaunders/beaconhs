@@ -151,23 +151,32 @@ export function WizardLayout({
   footer,
   children,
   className,
+  wide = false,
 }: {
   header: React.ReactNode
-  footer: React.ReactNode
+  // Optional: when omitted, no footer bar renders (the body runs to the bottom)
+  // — a read-only record view reads as a DetailPageLayout, not a wizard.
+  footer?: React.ReactNode
   children: React.ReactNode
   className?: string
+  // Full-width content column (matches DetailPageLayout). Used by read-only
+  // record views; editable forms stay in the narrower, focused column.
+  wide?: boolean
 }) {
+  const maxW = wide ? 'max-w-screen-2xl' : 'max-w-3xl'
   return (
     <div className={cn('flex h-full min-h-0 flex-col', className)}>
       <div className="border-b border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-        <FadeInHeader className="mx-auto max-w-3xl px-4 py-4 sm:px-6">{header}</FadeInHeader>
+        <FadeInHeader className={cn('mx-auto px-4 py-4 sm:px-6', maxW)}>{header}</FadeInHeader>
       </div>
       <div className="app-scroll min-h-0 flex-1 overflow-y-auto">
-        <FadeInBody className="mx-auto max-w-3xl space-y-5 p-4 sm:p-6">{children}</FadeInBody>
+        <FadeInBody className={cn('mx-auto space-y-5 p-4 sm:p-6', maxW)}>{children}</FadeInBody>
       </div>
-      <div className="border-t border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-        <div className="ff-footer mx-auto max-w-3xl px-4 py-3 sm:px-6">{footer}</div>
-      </div>
+      {footer != null ? (
+        <div className="border-t border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+          <div className={cn('ff-footer mx-auto px-4 py-3 sm:px-6', maxW)}>{footer}</div>
+        </div>
+      ) : null}
     </div>
   )
 }
