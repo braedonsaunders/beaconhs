@@ -6,13 +6,22 @@
 
 import { and, desc, eq, gte, isNull } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/pg-core'
-import { analyseJournals, type JournalAnalysis } from '@beaconhs/ai'
-import { journalEntries, orgUnits, people } from '@beaconhs/db/schema'
+import { analyseDataset, analyseJournals, type DatasetAnalysis, type JournalAnalysis } from '@beaconhs/ai'
+import { runBhql } from '@beaconhs/analytics/server'
+import {
+  insightCards,
+  journalEntries,
+  orgUnits,
+  people,
+  type AiCardConfig,
+  type BhqlQuery,
+} from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { getTenantAiConfig } from '@/lib/ai-config'
 import { recordAudit } from '@/lib/audit'
 import { getAuthorPersonId, journalScopeWhere } from '../journals/_lib'
+import { canViewInsights } from './_access'
 
 const analysisAuthor = alias(people, 'analysis_author')
 
@@ -81,4 +90,55 @@ export async function runJournalAnalysis(days = 30): Promise<JournalAnalysisResu
     metadata: { days: safeDays },
   })
   return { ok: true, analysis, entryCount: entries.length, days: safeDays }
+}
+
+export type InsightAiResult =
+  | { ok: true; analysis: DatasetAnalysis; rowCount: number }
+  | { ok: false; error: string }
+
+/** Run an Insights AI card on demand: execute its BHQL dataset under RLS, then
+ *  have the tenant's model analyse the rows under the card's stored instruction. */
+export async function runInsightAiCard(cardId: string): Promise<InsightAiResult> {
+  const ctx = await requireRequestContext()
+  if (!canViewInsights(ctx)) return { ok: false, error: 'You do not have access to insights.' }
+  const aiConfig = await getTenantAiConfig(ctx)
+  if (!aiConfig) return { ok: false, error: 'AI is not configured. Set it up under Admin → AI.' }
+
+  const [card] = await ctx.db((tx) =>
+    tx
+      .select({
+        kind: insightCards.kind,
+        name: insightCards.name,
+        query: insightCards.query,
+        config: insightCards.config,
+      })
+      .from(insightCards)
+      .where(and(eq(insightCards.id, cardId), isNull(insightCards.deletedAt)))
+      .limit(1),
+  )
+  if (!card) return { ok: false, error: 'Card not found.' }
+  if (card.kind !== 'ai') return { ok: false, error: 'This card is not an AI card.' }
+  const cfg = card.config as AiCardConfig | null
+  if (!cfg || cfg.kind !== 'ai' || !cfg.prompt.trim()) {
+    return { ok: false, error: 'This AI card has no instruction configured.' }
+  }
+
+  let result
+  try {
+    result = await ctx.db((tx) => runBhql(tx, card.query as BhqlQuery, { maxRows: 5_000 }))
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not run the card dataset.' }
+  }
+  if (result.shape !== 'flat') {
+    return { ok: false, error: 'AI cards analyse a table dataset — set the card display to a table.' }
+  }
+  if (result.rows.length === 0) return { ok: false, error: 'No data in this period to analyse.' }
+
+  const analysis = await analyseDataset(aiConfig, {
+    instruction: cfg.prompt,
+    columns: result.columns.map((c) => ({ key: c.key, label: c.label })),
+    rows: result.rows,
+  })
+  if (!analysis) return { ok: false, error: 'Could not analyse this dataset.' }
+  return { ok: true, analysis, rowCount: result.rows.length }
 }

@@ -21,14 +21,17 @@ import {
   type VizKey,
 } from '@beaconhs/analytics'
 import type {
+  AiCardOutputShape,
   BhqlAggFn,
   BhqlAnyMeasure,
   BhqlBin,
   BhqlBreakout,
   BhqlExpr,
   BhqlExprMeasure,
+  BhqlJoinedSource,
   BhqlMeasure,
   BhqlQuery,
+  InsightCardConfig,
   ReportRuleGroup,
 } from '@beaconhs/db/schema'
 import { ExpressionField, exprLabel, type ExprField } from './expression-field.client'
@@ -39,7 +42,7 @@ import { createCard, generateCard, previewCard, updateCard } from '../_actions'
 type Mode = 'rows' | 'summarize'
 type FilterOp = 'eq' | 'neq' | 'contains' | 'gte' | 'lte' | 'in' | 'is_null' | 'is_not_null'
 type FilterRow = { field: string; op: FilterOp; value: string }
-type BreakoutRow = { field: string; bin?: BhqlBin; expr?: BhqlExpr }
+type BreakoutRow = { field: string; bin?: BhqlBin; expr?: BhqlExpr; unnest?: 'array' | 'jsonb' }
 type MeasureWhere = { field: string; op: FilterOp; value: string }
 type MeasureRow = {
   fn: BhqlAggFn
@@ -55,6 +58,23 @@ type MeasureRow = {
   /** When set, this is a CUSTOM-EXPRESSION measure (a formula that may contain
    *  aggregates, e.g. days-since) — the structured fn/field/ratio are ignored. */
   expr?: BhqlExpr
+}
+
+/** A cross-TABLE rate: numerator aggregated on the primary source ÷ denominator
+ *  aggregated on ANOTHER source, joined on the shared grain (the breakouts). This
+ *  is how TRIR (recordable incidents ÷ hours worked × 200000) is built with no
+ *  view. `on[i]` is the field on `denSource` that aligns with primary breakout i;
+ *  with no breakouts the two single-row aggregates cross-join (a scalar rate). */
+type CrossMetricRow = {
+  numFn: BhqlAggFn
+  numField?: string
+  numWhere?: MeasureWhere
+  denSource: string
+  denFn: BhqlAggFn
+  denField?: string
+  denWhere?: MeasureWhere
+  on: string[]
+  multiplier: number
 }
 
 const FILTER_OPS: { value: FilterOp; label: string; needsValue: boolean }[] = [
@@ -114,6 +134,8 @@ export type CardStudioInitial = {
   query: BhqlQuery | null
   vizType: string
   vizSettings?: Record<string, unknown>
+  kind?: string
+  config?: InsightCardConfig | null
 }
 
 export function CardStudio({
@@ -150,12 +172,23 @@ export function CardStudio({
   // yet editable in the structured rail — held verbatim so the card round-trips.
   const [extraAggs, setExtraAggs] = useState<BhqlExprMeasure[]>(decoded.extraAggs)
   const [extraBreakouts, setExtraBreakouts] = useState<BhqlBreakout[]>(decoded.extraBreakouts)
+  const [crossMetrics, setCrossMetrics] = useState<CrossMetricRow[]>(decoded.crossMetrics)
   const [vizType, setVizType] = useState<string>(initial.vizType || 'table')
   const [vizTouched, setVizTouched] = useState(Boolean(initial.id))
   const [suggestedViz, setSuggestedViz] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [aiPrompt, setAiPrompt] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
+
+  // AI card mode: the rail builds a DATASET; the model analyses it on demand
+  // under the instruction below (kind='ai' + config). Distinct from "Ask AI",
+  // which only drafts a normal query.
+  const initialAiCfg = initial.config?.kind === 'ai' ? initial.config : null
+  const [isAiCard, setIsAiCard] = useState(initial.kind === 'ai')
+  const [analysisPrompt, setAnalysisPrompt] = useState(initialAiCfg?.prompt ?? '')
+  const [analysisOutput, setAnalysisOutput] = useState<AiCardOutputShape>(
+    initialAiCfg?.output ?? 'insights',
+  )
 
   const entity = entityMap[entityKey]
   const cols = entity?.columns ?? []
@@ -205,7 +238,13 @@ export function CardStudio({
     const bks: BhqlBreakout[] = []
     for (const b of breakouts) {
       if (b.expr) bks.push({ expr: b.expr, alias: uniq('col') })
-      else if (b.field) bks.push({ field: b.field, alias: uniq(b.field), bin: b.bin })
+      else if (b.field)
+        bks.push({
+          field: b.field,
+          alias: uniq(b.field),
+          bin: b.unnest ? undefined : b.bin,
+          unnest: b.unnest,
+        })
     }
     bks.push(...extraBreakouts)
     const whereToGroup = (w?: MeasureWhere): ReportRuleGroup | undefined => {
@@ -269,6 +308,42 @@ export function CardStudio({
       outputAliases.push(ea.alias)
     }
 
+    // Cross-table rates: a measure on ANOTHER source joined to the primary grain,
+    // divided into a calc. With breakouts each maps to a field on the other source;
+    // with none, the two single-row aggregates cross-join (a scalar rate).
+    const joinedSources: BhqlJoinedSource[] = []
+    crossMetrics.forEach((cm, i) => {
+      const numAlias = `cm${i}_num`
+      const denAlias = `cm${i}_den`
+      const rateAlias = `cm${i}_rate`
+      mss.push({
+        fn: cm.numFn,
+        field: cm.numFn === 'count' ? undefined : cm.numField,
+        alias: numAlias,
+        filter: whereToGroup(cm.numWhere),
+      })
+      joinedSources.push({
+        source: cm.denSource,
+        measures: [
+          {
+            fn: cm.denFn,
+            field: cm.denFn === 'count' ? undefined : cm.denField,
+            alias: denAlias,
+            filter: whereToGroup(cm.denWhere),
+          },
+        ],
+        on: bks.map((b, j) => ({ breakout: b.alias, field: cm.on[j] ?? '', bin: b.bin })),
+      })
+      mss.push({
+        kind: 'calc',
+        alias: rateAlias,
+        numerator: numAlias,
+        denominator: denAlias,
+        multiplier: cm.multiplier,
+      })
+      outputAliases.push(rateAlias)
+    })
+
     const canPivot = pivotOn && bks.length >= 2 && outputAliases.length >= 1
     const pivot = canPivot
       ? {
@@ -283,7 +358,14 @@ export function CardStudio({
       display: canPivot ? 'pivot' : 'table',
       pivot,
       stages: [
-        { source: entityKey as never, filter, breakouts: bks, aggregations: mss, limit: 2000 },
+        {
+          source: entityKey as never,
+          filter,
+          breakouts: bks,
+          aggregations: mss,
+          joinedSources: joinedSources.length ? joinedSources : undefined,
+          limit: 2000,
+        },
       ],
     }
   }, [
@@ -297,6 +379,7 @@ export function CardStudio({
     cols,
     extraAggs,
     extraBreakouts,
+    crossMetrics,
   ])
 
   // Viz settings for BOTH the live preview and the saved card. A scalar/progress
@@ -370,6 +453,7 @@ export function CardStudio({
       setPivotOn(d.pivotOn)
       setExtraAggs(d.extraAggs)
       setExtraBreakouts(d.extraBreakouts)
+      setCrossMetrics(d.crossMetrics)
       setVizType(r.suggestedViz)
       setVizTouched(false)
       if (!name.trim() || name === 'Untitled card') {
@@ -385,7 +469,16 @@ export function CardStudio({
 
   async function save() {
     setSaving(true)
-    const payload = { name, query: ast, vizType, vizSettings }
+    const payload = {
+      name,
+      query: ast,
+      vizType: isAiCard ? 'table' : vizType,
+      vizSettings,
+      kind: (isAiCard ? 'ai' : 'question') as 'ai' | 'question',
+      config: isAiCard
+        ? ({ kind: 'ai', prompt: analysisPrompt, output: analysisOutput } as const)
+        : null,
+    }
     const r = initial.id
       ? await updateCard({ id: initial.id, ...payload })
       : await createCard(payload)
@@ -508,6 +601,42 @@ export function CardStudio({
             </div>
           </div>
 
+          {/* AI analysis card */}
+          <div className={sectionCls}>
+            <label className="flex items-center gap-2 text-xs font-medium text-slate-700 dark:text-slate-300">
+              <input
+                type="checkbox"
+                checked={isAiCard}
+                onChange={(e) => setIsAiCard(e.target.checked)}
+              />
+              <Sparkles size={13} className="text-teal-500" />
+              AI analysis card
+            </label>
+            {isAiCard ? (
+              <div className="mt-2 space-y-2">
+                <textarea
+                  value={analysisPrompt}
+                  onChange={(e) => setAnalysisPrompt(e.target.value)}
+                  rows={3}
+                  placeholder="What should the AI do with this data? e.g. “Summarise the top risks and who should act.”"
+                  className="w-full rounded-md border border-slate-300 bg-white px-2 py-2 text-xs outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                />
+                <select
+                  value={analysisOutput}
+                  onChange={(e) => setAnalysisOutput(e.target.value as AiCardOutputShape)}
+                  className={cn(selectCls, 'h-8 text-xs')}
+                >
+                  <option value="insights">Findings &amp; insights</option>
+                  <option value="summary">Short summary</option>
+                  <option value="bullets">Key bullet points</option>
+                </select>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  The rail below builds the dataset the model reads. Open the saved card to run it.
+                </p>
+              </div>
+            ) : null}
+          </div>
+
           {mode === 'rows' ? (
             <div className={sectionCls}>
               <h3 className={headCls}>Columns</h3>
@@ -561,6 +690,35 @@ export function CardStudio({
                   />
                 )}
               />
+              <RailList
+                title="Cross-table rates"
+                items={crossMetrics}
+                onAdd={() =>
+                  setCrossMetrics((c) => [
+                    ...c,
+                    {
+                      numFn: 'count',
+                      denSource: entities[0]?.key ?? '',
+                      denFn: 'count',
+                      on: [],
+                      multiplier: 1,
+                    },
+                  ])
+                }
+                onRemove={(i) => setCrossMetrics((c) => c.filter((_, j) => j !== i))}
+                render={(cm, i) => (
+                  <CrossMetricEditor
+                    row={cm}
+                    primaryFields={fields}
+                    breakouts={breakouts}
+                    entities={entities}
+                    entityMap={entityMap}
+                    onChange={(next) =>
+                      setCrossMetrics((cs) => cs.map((x, j) => (j === i ? next : x)))
+                    }
+                  />
+                )}
+              />
               {breakouts.length >= 2 && measures.length >= 1 ? (
                 <div className={sectionCls}>
                   <label className="flex items-center gap-2 text-xs font-medium text-slate-700 dark:text-slate-300">
@@ -595,7 +753,8 @@ export function CardStudio({
             )}
           />
 
-          {/* Visualize */}
+          {/* Visualize — AI cards render the model's output, not a chart. */}
+          {!isAiCard ? (
           <div className={sectionCls}>
             <h3 className={headCls}>Visualize</h3>
             <div className="grid grid-cols-4 gap-1.5">
@@ -629,6 +788,7 @@ export function CardStudio({
               })}
             </div>
           </div>
+          ) : null}
         </div>
 
         {/* RIGHT preview */}
@@ -651,7 +811,7 @@ export function CardStudio({
                 </div>
               ) : result ? (
                 <VizRenderer
-                  vizType={vizType}
+                  vizType={isAiCard ? 'table' : vizType}
                   result={result}
                   settings={vizSettings}
                   label={name}
@@ -900,6 +1060,43 @@ function BreakoutEditor({
           ))}
         </select>
       ) : null}
+      {col?.canBinNumeric ? (
+        <select
+          value={row.bin?.kind === 'numeric' ? String(row.bin.numBins) : ''}
+          onChange={(e) =>
+            onChange({
+              ...row,
+              bin: e.target.value
+                ? { kind: 'numeric', numBins: Number(e.target.value) }
+                : undefined,
+            })
+          }
+          className={cn(selectCls, 'h-8 text-xs')}
+        >
+          <option value="">No buckets</option>
+          {[5, 10, 20, 50].map((n) => (
+            <option key={n} value={n}>
+              {n} buckets
+            </option>
+          ))}
+        </select>
+      ) : null}
+      {col?.arrayUnnest ? (
+        <label className="flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-slate-400">
+          <input
+            type="checkbox"
+            checked={!!row.unnest}
+            onChange={(e) =>
+              onChange({
+                ...row,
+                unnest: e.target.checked ? col?.arrayUnnest : undefined,
+                bin: undefined,
+              })
+            }
+          />
+          Unnest — one row per item
+        </label>
+      ) : null}
     </div>
   )
 }
@@ -1127,6 +1324,157 @@ function MeasureEditor({
   )
 }
 
+function CrossMetricEditor({
+  row,
+  onChange,
+  primaryFields,
+  breakouts,
+  entities,
+  entityMap,
+}: {
+  row: CrossMetricRow
+  onChange: (next: CrossMetricRow) => void
+  primaryFields: FieldChoice[]
+  breakouts: BreakoutRow[]
+  entities: AnalyticsEntity[]
+  entityMap: Record<string, AnalyticsEntity>
+}) {
+  const denEntity = entityMap[row.denSource]
+  const denFields = useMemo(() => buildFields(denEntity, entityMap), [denEntity, entityMap])
+  const entityGroups = useMemo(() => {
+    const m = new Map<string, AnalyticsEntity[]>()
+    for (const e of entities) {
+      const arr = m.get(e.category) ?? []
+      arr.push(e)
+      m.set(e.category, arr)
+    }
+    return [...m.entries()]
+  }, [entities])
+  const hasFieldBreakouts = breakouts.some((b) => b.field && !b.expr)
+
+  return (
+    <div className="space-y-1.5 rounded-md border border-slate-200 p-2 dark:border-slate-700">
+      <div className="text-[10px] font-semibold tracking-wide text-slate-400 uppercase">
+        Numerator · this table
+      </div>
+      <select
+        value={row.numFn}
+        onChange={(e) => onChange({ ...row, numFn: e.target.value as BhqlAggFn })}
+        className={cn(selectCls, 'h-8 text-xs')}
+      >
+        {AGG_FNS.map((a) => (
+          <option key={a.value} value={a.value}>
+            {a.label}
+          </option>
+        ))}
+      </select>
+      {row.numFn !== 'count' ? (
+        <select
+          value={row.numField ?? ''}
+          onChange={(e) => onChange({ ...row, numField: e.target.value })}
+          className={cn(selectCls, 'h-8 text-xs')}
+        >
+          <FieldOptions
+            fields={primaryFields}
+            placeholder="Pick a field…"
+            predicate={(c) => (row.numFn === 'sum' || row.numFn === 'avg' ? c.canMeasure : true)}
+          />
+        </select>
+      ) : null}
+      <ConditionRow
+        fields={primaryFields}
+        where={row.numWhere}
+        onChange={(w) => onChange({ ...row, numWhere: w })}
+      />
+
+      <div className="pt-1 text-[10px] font-semibold tracking-wide text-slate-400 uppercase">
+        ÷ Denominator · another table
+      </div>
+      <select
+        value={row.denSource}
+        onChange={(e) => onChange({ ...row, denSource: e.target.value, denField: undefined, on: [] })}
+        className={cn(selectCls, 'h-8 text-xs')}
+      >
+        {entityGroups.map(([cat, ents]) => (
+          <optgroup key={cat} label={cat}>
+            {ents.map((en) => (
+              <option key={en.key} value={en.key}>
+                {en.label}
+              </option>
+            ))}
+          </optgroup>
+        ))}
+      </select>
+      <select
+        value={row.denFn}
+        onChange={(e) => onChange({ ...row, denFn: e.target.value as BhqlAggFn })}
+        className={cn(selectCls, 'h-8 text-xs')}
+      >
+        {AGG_FNS.map((a) => (
+          <option key={a.value} value={a.value}>
+            {a.label}
+          </option>
+        ))}
+      </select>
+      {row.denFn !== 'count' ? (
+        <select
+          value={row.denField ?? ''}
+          onChange={(e) => onChange({ ...row, denField: e.target.value })}
+          className={cn(selectCls, 'h-8 text-xs')}
+        >
+          <FieldOptions
+            fields={denFields}
+            placeholder="Pick a field…"
+            predicate={(c) => (row.denFn === 'sum' || row.denFn === 'avg' ? c.canMeasure : true)}
+          />
+        </select>
+      ) : null}
+      <ConditionRow
+        fields={denFields}
+        where={row.denWhere}
+        onChange={(w) => onChange({ ...row, denWhere: w })}
+      />
+
+      {hasFieldBreakouts ? (
+        <div className="space-y-1 rounded bg-slate-50 p-1.5 dark:bg-slate-800/40">
+          <div className="text-[10px] tracking-wide text-slate-400 uppercase">Align the grain</div>
+          {breakouts.map((b, i) =>
+            b.field && !b.expr ? (
+              <div key={i} className="flex items-center gap-1">
+                <span className="w-1/3 truncate text-[11px] text-slate-500 dark:text-slate-400">
+                  {fieldCol(primaryFields, b.field)?.label ?? b.field}
+                </span>
+                <span className="text-slate-300">↔</span>
+                <select
+                  value={row.on[i] ?? ''}
+                  onChange={(e) => {
+                    const on = [...row.on]
+                    on[i] = e.target.value
+                    onChange({ ...row, on })
+                  }}
+                  className={cn(selectCls, 'h-7 flex-1 text-xs')}
+                >
+                  <FieldOptions fields={denFields} placeholder="match field…" />
+                </select>
+              </div>
+            ) : null,
+          )}
+        </div>
+      ) : null}
+
+      <select
+        value={String(row.multiplier)}
+        onChange={(e) => onChange({ ...row, multiplier: Number(e.target.value) })}
+        className={cn(selectCls, 'h-8 text-xs')}
+      >
+        <option value="1">ratio (×1)</option>
+        <option value="100">percentage (×100)</option>
+        <option value="200000">rate per 200,000 hrs</option>
+      </select>
+    </div>
+  )
+}
+
 function FilterEditor({
   fields,
   row,
@@ -1202,6 +1550,8 @@ function decodeQuery(query: BhqlQuery | null): {
    *  (no structured editor yet), so an expression card round-trips losslessly. */
   extraAggs: BhqlExprMeasure[]
   extraBreakouts: BhqlBreakout[]
+  /** Cross-table rates (numerator ÷ a measure on another source). */
+  crossMetrics: CrossMetricRow[]
 } {
   const stage = query?.stages?.[0]
   if (!stage) {
@@ -1214,6 +1564,7 @@ function decodeQuery(query: BhqlQuery | null): {
       pivotOn: false,
       extraAggs: [],
       extraBreakouts: [],
+      crossMetrics: [],
     }
   }
   const filters: FilterRow[] = []
@@ -1231,7 +1582,7 @@ function decodeQuery(query: BhqlQuery | null): {
   // Field breakouts → a structured row; computed-expression breakouts → an
   // editable formula row (field left blank, expr carried for the editor).
   const breakouts: BreakoutRow[] = (stage.breakouts ?? []).map((b) =>
-    b.expr ? { field: '', expr: b.expr } : { field: b.field ?? '', bin: b.bin },
+    b.expr ? { field: '', expr: b.expr } : { field: b.field ?? '', bin: b.bin, unnest: b.unnest },
   )
   const extraBreakouts: BhqlBreakout[] = []
 
@@ -1254,8 +1605,49 @@ function decodeQuery(query: BhqlQuery | null): {
       baseByAlias.set(m.alias, m)
     }
   }
+  // Cross-table rates: each joined source + the calc that divides by its measure
+  // reconstructs into one CrossMetricRow; its consumed aliases are skipped below
+  // so the numerator/rate don't also show as plain measures.
+  const joinedSources = stage.joinedSources ?? []
+  const crossMetrics: CrossMetricRow[] = []
+  const crossConsumed = new Set<string>()
+  const breakoutAliasToIndex = new Map(
+    (stage.breakouts ?? []).map((b, i) => [b.alias, i] as const),
+  )
+  for (const js of joinedSources) {
+    const den = js.measures[0]
+    if (!den) continue
+    const calc = aggs.find((m) => m.kind === 'calc' && m.denominator === den.alias) as
+      | { numerator: string; multiplier?: number; alias: string }
+      | undefined
+    if (!calc) continue
+    const num = aggs.find(
+      (m) => (m.kind === undefined || m.kind === 'agg') && m.alias === calc.numerator,
+    ) as BhqlMeasure | undefined
+    if (!num) continue
+    crossConsumed.add(num.alias)
+    crossConsumed.add(calc.alias)
+    const on: string[] = new Array(breakoutAliasToIndex.size).fill('')
+    for (const k of js.on) {
+      const idx = breakoutAliasToIndex.get(k.breakout)
+      if (idx != null) on[idx] = k.field
+    }
+    crossMetrics.push({
+      numFn: num.fn,
+      numField: num.field,
+      numWhere: groupToWhere(num.filter),
+      denSource: js.source,
+      denFn: den.fn,
+      denField: den.field,
+      denWhere: groupToWhere(den.filter),
+      on,
+      multiplier: calc.multiplier ?? 1,
+    })
+  }
+
   const measures: MeasureRow[] = []
   for (const m of aggs) {
+    if (crossConsumed.has(m.alias)) continue
     if (m.kind === 'calc') {
       const num = baseByAlias.get(m.numerator)
       const den = m.denominator ? baseByAlias.get(m.denominator) : undefined
@@ -1277,7 +1669,11 @@ function decodeQuery(query: BhqlQuery | null): {
     }
   }
   const isSummarize =
-    breakouts.length > 0 || measures.length > 0 || extraAggs.length > 0 || extraBreakouts.length > 0
+    breakouts.length > 0 ||
+    measures.length > 0 ||
+    extraAggs.length > 0 ||
+    extraBreakouts.length > 0 ||
+    crossMetrics.length > 0
   return {
     entityKey: stage.source,
     mode: isSummarize ? 'summarize' : 'rows',
@@ -1288,5 +1684,6 @@ function decodeQuery(query: BhqlQuery | null): {
     pivotOn: query?.display === 'pivot' && Boolean(query.pivot),
     extraAggs,
     extraBreakouts,
+    crossMetrics,
   }
 }

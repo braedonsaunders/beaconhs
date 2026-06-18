@@ -286,6 +286,8 @@ export const REPORT_OPERATORS: ReportOperatorMeta[] = [
   },
   { key: 'is_null', label: 'is empty', needsValue: 'none' },
   { key: 'is_not_null', label: 'is set', needsValue: 'none' },
+  { key: 'is_true', label: 'is yes', needsValue: 'none', applicableKinds: ['enum'] },
+  { key: 'is_false', label: 'is no', needsValue: 'none', applicableKinds: ['enum'] },
   { key: 'contains', label: 'contains', needsValue: 'one', applicableKinds: ['text'] },
   {
     key: 'between_days_ago',

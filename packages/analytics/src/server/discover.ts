@@ -197,7 +197,10 @@ function kindOf(col: {
   if (/Timestamp/i.test(ct)) return 'timestamp'
   if (/Date/i.test(ct)) return 'date'
   if (/Boolean/i.test(ct) || dt === 'boolean') return 'enum'
-  if (dt === 'json' || dt === 'array' || dt === 'buffer') return null
+  if (dt === 'buffer') return null
+  // Array / jsonb columns are exposed as text but only for UNNEST (see the loop
+  // in discoverEntities, which flags them + hides them from normal pickers).
+  if (dt === 'array' || dt === 'json') return 'text'
   if (
     dt === 'number' ||
     dt === 'bigint' ||
@@ -247,6 +250,9 @@ export function discoverEntities(): AnalyticsEntity[] {
       if (hide.has(col.name)) continue
       const kind = kindOf(col)
       if (!kind) continue
+      const dt = String(col.dataType ?? '')
+      const arrayUnnest: 'array' | 'jsonb' | undefined =
+        dt === 'array' ? 'array' : dt === 'json' ? 'jsonb' : undefined
       const base = { key: col.name, label: humanize(col.name), kind }
       const semanticType: SemanticType =
         col.name === 'id'
@@ -258,7 +264,18 @@ export function discoverEntities(): AnalyticsEntity[] {
         Array.isArray(col.enumValues) && col.enumValues.length
           ? (col.enumValues as string[]).map((v) => ({ value: v, label: humanize(v) }))
           : undefined
-      columns.push({ ...base, semanticType, enumOptions, ...flagsFor(kind, semanticType) })
+      // Array/jsonb columns are usable only via UNNEST — flag them and keep them
+      // out of the plain dimension/measure/bin pickers.
+      const overrides = arrayUnnest
+        ? {
+            arrayUnnest,
+            canDimension: false,
+            canMeasure: false,
+            canBinTemporal: false,
+            canBinNumeric: false,
+          }
+        : {}
+      columns.push({ ...base, semanticType, enumOptions, ...flagsFor(kind, semanticType), ...overrides })
     }
     if (columns.length === 0) continue
 

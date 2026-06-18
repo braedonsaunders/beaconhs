@@ -22,6 +22,8 @@ export default async function EditCardPage({ params }: { params: Promise<{ id: s
         query: card.query,
         vizType: card.vizType,
         vizSettings: card.vizSettings,
+        kind: card.kind,
+        config: card.config,
       }}
       entities={discoverEntities()}
     />

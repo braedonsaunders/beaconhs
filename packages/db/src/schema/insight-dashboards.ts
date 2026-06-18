@@ -13,7 +13,7 @@ import { id, softDelete, timestamps } from './_helpers'
 import { tenants, users } from './core'
 
 /** Shared by Cards + dashboards so the publish UI is identical. */
-export const insightCardKind = pgEnum('insight_card_kind', ['question', 'model', 'metric'])
+export const insightCardKind = pgEnum('insight_card_kind', ['question', 'model', 'metric', 'ai'])
 export const insightShareStatus = pgEnum('insight_share_status', ['draft', 'published'])
 
 export type InsightDashboardWidget = {

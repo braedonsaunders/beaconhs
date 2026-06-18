@@ -97,6 +97,26 @@ export async function ensureSystemCards(ctx: RequestContext): Promise<Map<string
         .returning(select)
       for (const c of inserted) keep.set(c.name, c)
     }
+
+    // Refresh existing system cards whose definition drifted from BUILTIN_QUERIES
+    // (e.g. a built-in query was rewritten to drop a view dependency). System
+    // cards are the canonical, managed copy, so the stored row is brought back in
+    // line with the code definition.
+    for (const d of defs) {
+      const c = keep.get(d.name)
+      if (!c) continue
+      const drifted =
+        JSON.stringify(c.query) !== JSON.stringify(d.query) ||
+        c.vizType !== d.vizType ||
+        JSON.stringify(c.vizSettings ?? {}) !== JSON.stringify(d.vizSettings ?? {})
+      if (drifted) {
+        await tx
+          .update(insightCards)
+          .set({ query: d.query, vizType: d.vizType, vizSettings: d.vizSettings })
+          .where(eq(insightCards.id, c.id))
+        keep.set(d.name, { ...c, query: d.query, vizType: d.vizType, vizSettings: d.vizSettings })
+      }
+    }
     return keep
   })
 

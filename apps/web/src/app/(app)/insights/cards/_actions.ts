@@ -10,7 +10,7 @@ import {
   type VizKey,
 } from '@beaconhs/analytics'
 import { runBhql, validateBhql } from '@beaconhs/analytics/server'
-import { insightCards, type BhqlQuery } from '@beaconhs/db/schema'
+import { insightCards, type BhqlQuery, type InsightCardConfig } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { getTenantAiConfig } from '@/lib/ai-config'
 import { canCreateInsights, canPublishInsights, canViewInsights } from '../_access'
@@ -96,6 +96,8 @@ export async function createCard(input: {
   query: unknown
   vizType: string
   vizSettings?: Record<string, unknown>
+  kind?: 'question' | 'ai'
+  config?: InsightCardConfig | null
 }): Promise<Ok<{ id: string }> | Err> {
   const ctx = await requireRequestContext()
   if (!canCreateInsights(ctx)) return { ok: false, error: 'You can’t create Cards.' }
@@ -113,9 +115,11 @@ export async function createCard(input: {
         createdBy: ctx.userId,
         name: input.name.trim().slice(0, 120) || 'Untitled card',
         description: input.description?.trim().slice(0, 500) || null,
+        kind: input.kind ?? 'question',
         query,
         vizType: input.vizType,
         vizSettings: input.vizSettings ?? {},
+        config: input.config ?? null,
       })
       .returning({ id: insightCards.id }),
   )
@@ -142,6 +146,8 @@ export async function updateCard(input: {
   query: unknown
   vizType: string
   vizSettings?: Record<string, unknown>
+  kind?: 'question' | 'ai'
+  config?: InsightCardConfig | null
 }): Promise<Ok | Err> {
   const ctx = await requireRequestContext()
   if (!canCreateInsights(ctx) || !(await ownsOrManages(ctx, input.id))) {
@@ -159,9 +165,11 @@ export async function updateCard(input: {
       .set({
         name: input.name.trim().slice(0, 120) || 'Untitled card',
         description: input.description?.trim().slice(0, 500) || null,
+        kind: input.kind ?? 'question',
         query,
         vizType: input.vizType,
         vizSettings: input.vizSettings ?? {},
+        config: input.config ?? null,
       })
       .where(eq(insightCards.id, input.id)),
   )

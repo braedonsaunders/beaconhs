@@ -79,6 +79,7 @@ const zExpr: z.ZodType = z.lazy(() =>
       left: zExpr,
       right: zExpr,
     }),
+    z.object({ ex: z.literal('isnull'), arg: zExpr, negated: z.boolean().optional() }),
     z.object({ ex: z.literal('logic'), op: z.enum(['and', 'or', 'not']), args: z.array(zExpr) }),
     z.object({
       ex: z.literal('case'),
@@ -120,6 +121,7 @@ const zBreakout = z.object({
   expr: zExpr.optional(),
   alias: z.string(),
   bin: zBin.optional(),
+  unnest: z.enum(['array', 'jsonb']).optional(),
 })
 
 const zPivot = z.object({
@@ -129,11 +131,45 @@ const zPivot = z.object({
   subtotals: z.enum(['none', 'rows', 'both']).optional(),
 })
 
+const zJoinKey = z.object({
+  breakout: z.string(),
+  field: z.string(),
+  bin: zBin.optional(),
+})
+
+const zJoinedSource = z.object({
+  source: z.string(),
+  filter: zRuleGroup.nullish(),
+  measures: z.array(zMeasure),
+  on: z.array(zJoinKey),
+})
+
+const zSpineSource = z.object({
+  alias: z.string(),
+  source: z.string(),
+  filter: zRuleGroup.nullish(),
+})
+
+const zSpineFact = z.object({
+  alias: z.string(),
+  source: z.string(),
+  filter: zRuleGroup.nullish(),
+  on: z.array(z.object({ field: z.string(), equals: z.string() })),
+  latestBy: z.array(z.object({ ref: z.string(), direction: z.enum(['asc', 'desc']) })).optional(),
+})
+
+const zSpine = z.object({
+  dimensions: z.array(zSpineSource).min(1),
+  facts: z.array(zSpineFact).optional(),
+})
+
 const zStage = z.object({
   source: z.string(),
   filter: zRuleGroup.nullish(),
   aggregations: z.array(zAnyMeasure).optional(),
   breakouts: z.array(zBreakout).optional(),
+  joinedSources: z.array(zJoinedSource).optional(),
+  spine: zSpine.optional(),
   columns: z.array(z.string()).optional(),
   orderBy: z.array(z.object({ ref: z.string(), direction: z.enum(['asc', 'desc']) })).optional(),
   limit: z.number().nullish(),
@@ -145,6 +181,9 @@ const zQuery = z.object({
   display: z.enum(['table', 'pivot']),
   pivot: zPivot.nullish(),
 })
+
+type ParsedQuery = z.infer<typeof zQuery>
+type ParsedStage = z.infer<typeof zStage>
 
 // ---- semantic validation (registry-aware) ----------------------------------
 
@@ -224,6 +263,7 @@ function validateMeasure(
 
 const EXPR_FNS = new Set([
   'now',
+  'current_date',
   'coalesce',
   'nullif',
   'abs',
@@ -261,7 +301,13 @@ function validateExpr(
   entity: ReportEntity,
   entityMap: Record<string, ReportEntity>,
   e: unknown,
-  opts: { depth?: number; insideAgg?: boolean; allowAgg?: boolean },
+  opts: {
+    depth?: number
+    insideAgg?: boolean
+    allowAgg?: boolean
+    /** Spine mode: resolve "<alias>.<col>" refs against the spine's sources. */
+    resolve?: (ref: string) => ReportEntityColumn | null
+  },
 ): void {
   const depth = opts.depth ?? 0
   const insideAgg = opts.insideAgg ?? false
@@ -273,11 +319,16 @@ function validateExpr(
       depth: depth + 1,
       insideAgg: o?.insideAgg ?? insideAgg,
       allowAgg: o?.allowAgg ?? allowAgg,
+      resolve: opts.resolve,
     })
+  const resolveOne = (ref: string) =>
+    opts.resolve ? opts.resolve(ref) : resolveField(entity, entityMap, ref)
   switch (x.ex) {
     case 'field':
-      if (!resolveField(entity, entityMap, x.field as string))
-        fail(`Unknown field "${x.field}" in expression`)
+      if (!resolveOne(x.field as string)) fail(`Unknown field "${x.field}" in expression`)
+      return
+    case 'isnull':
+      recurse(x.arg)
       return
     case 'lit':
       return
@@ -325,6 +376,151 @@ function validateExpr(
   }
 }
 
+/** Validate a spine stage (dimension cross-product + latest-fact joins). Fields
+ *  are addressed "<alias>.<column>" and resolved against the spine's OWN sources
+ *  — never a single base entity — so a coverage matrix (the training matrix) is
+ *  buildable with no database view. Returns the normalized query. */
+function parseSpine(
+  q: ParsedQuery,
+  stage: ParsedStage,
+  entityMap: Record<string, ReportEntity>,
+): BhqlQuery {
+  const spine = stage.spine!
+  if (spine.dimensions.length < 1) fail('A spine needs at least one dimension')
+
+  const sources = new Map<string, EntityWithRelations>()
+  for (const s of [...spine.dimensions, ...(spine.facts ?? [])]) {
+    checkAlias(s.alias, 'source')
+    if (sources.has(s.alias)) fail(`Duplicate spine alias "${s.alias}"`)
+    const e = entityMap[s.source]
+    if (!e) fail(`Unknown source entity "${s.source}"`)
+    sources.set(s.alias, e as EntityWithRelations)
+  }
+
+  // Resolve "<alias>.<col>" (or "<alias>.<fk>.<col>") against the spine sources.
+  const resolveSpine = (ref: string): ReportEntityColumn | null => {
+    const segs = ref.split('.')
+    const src = sources.get(segs[0]!)
+    if (!src) return null
+    if (segs.length === 2) return entityColumn(src, segs[1]!)
+    let cur: ReportEntity = src
+    for (let i = 1; i < segs.length - 1; i++) {
+      const rel = (cur as EntityWithRelations).relations?.find((r) => r.via === segs[i])
+      if (!rel) return null
+      const next = entityMap[rel.target]
+      if (!next) return null
+      cur = next
+    }
+    return entityColumn(cur, segs[segs.length - 1]!)
+  }
+  const placeholderEntity = sources.get(spine.dimensions[0]!.alias)!
+
+  // Filters carry depth/op caps (field validity resolves at compile time, like
+  // the single-source path). Fact correlations + ordering resolve now.
+  for (const d of spine.dimensions) if (d.filter) validateFilterDepth(d.filter)
+  for (const f of spine.facts ?? []) {
+    const fEntity = sources.get(f.alias)!
+    if (f.filter) validateFilterDepth(f.filter)
+    if (f.on.length === 0) fail(`Fact "${f.source}" needs at least one join condition`)
+    for (const o of f.on) {
+      if (!entityColumn(fEntity, o.field)) fail(`Unknown field "${o.field}" on fact "${f.source}"`)
+      if (!resolveSpine(o.equals)) fail(`A fact join references unknown spine field "${o.equals}"`)
+    }
+    for (const o of f.latestBy ?? []) {
+      if (!entityColumn(fEntity, o.ref)) fail(`Unknown order field "${o.ref}" on fact "${f.source}"`)
+    }
+  }
+
+  const breakouts = stage.breakouts ?? []
+  const measures = stage.aggregations ?? []
+  const kindOf = (m: unknown) => (m as { kind?: string }).kind
+
+  const aliases = new Set<string>()
+  for (const b of breakouts) {
+    checkAlias(b.alias, 'breakout')
+    if (aliases.has(b.alias)) fail(`Duplicate alias "${b.alias}"`)
+    aliases.add(b.alias)
+    if (b.unnest && b.expr) fail(`Breakout "${b.alias}" can't both unnest and use an expression`)
+    if (b.unnest && b.bin) fail(`Breakout "${b.alias}" can't both unnest and bin`)
+    if (b.unnest && !b.field) fail(`Unnest breakout "${b.alias}" needs a field`)
+    if (b.expr && b.field) fail(`Breakout "${b.alias}" can't have both a field and an expression`)
+    if (b.expr) {
+      validateExpr(placeholderEntity, entityMap, b.expr, { allowAgg: false, resolve: resolveSpine })
+      continue
+    }
+    if (!b.field) fail(`Breakout "${b.alias}" needs a field or an expression`)
+    const col = resolveSpine(b.field)
+    if (!col) fail(`Unknown field "${b.field}" in spine`)
+    if (b.bin?.kind === 'temporal' && !(col.kind === 'date' || col.kind === 'timestamp'))
+      fail(`Field "${b.field}" can't be bucketed by time`)
+    if (b.bin?.kind === 'numeric' && col.kind !== 'number')
+      fail(`Field "${b.field}" can't be binned numerically`)
+  }
+  for (const m of measures) {
+    checkAlias(m.alias, 'measure')
+    if (aliases.has(m.alias)) fail(`Duplicate alias "${m.alias}"`)
+    aliases.add(m.alias)
+  }
+
+  const baseMeasures = measures.filter((m) => kindOf(m) === undefined || kindOf(m) === 'agg')
+  const exprMeasures = measures.filter((m) => kindOf(m) === 'expr')
+  const calcMeasures = measures.filter((m) => kindOf(m) === 'calc')
+  for (const m of baseMeasures) {
+    const bm = m as BhqlMeasure
+    if (bm.fn === 'count') {
+      if (bm.field) fail('count takes no field')
+    } else {
+      if (!bm.field) fail(`${bm.fn} requires a field`)
+      const col = resolveSpine(bm.field)
+      if (!col) fail(`Unknown field "${bm.field}" in spine`)
+      if ((bm.fn === 'sum' || bm.fn === 'avg') && col.kind !== 'number')
+        fail(`${bm.fn} requires a numeric field (got "${bm.field}")`)
+    }
+    if (bm.filter) validateFilterDepth(bm.filter)
+  }
+  for (const m of exprMeasures) {
+    validateExpr(placeholderEntity, entityMap, (m as { expr: unknown }).expr, {
+      allowAgg: true,
+      resolve: resolveSpine,
+    })
+  }
+  const baseAliases = new Set(baseMeasures.map((m) => m.alias))
+  for (const m of calcMeasures) {
+    const cm = m as { numerator: string; denominator?: string }
+    if (!baseAliases.has(cm.numerator))
+      fail(`A calculated measure references unknown measure "${cm.numerator}"`)
+    if (cm.denominator && !baseAliases.has(cm.denominator))
+      fail(`A calculated measure references unknown measure "${cm.denominator}"`)
+  }
+
+  for (const o of stage.orderBy ?? []) {
+    if (!aliases.has(o.ref)) fail(`order-by references unknown output "${o.ref}"`)
+  }
+
+  if (q.display === 'pivot' && q.pivot) {
+    const bset = new Set(breakouts.map((b) => b.alias))
+    const mset = new Set(measures.map((m) => m.alias))
+    for (const r of q.pivot.rows)
+      if (!bset.has(r.breakout)) fail(`pivot row "${r.breakout}" is not a breakout`)
+    for (const c of q.pivot.columns)
+      if (!bset.has(c.breakout)) fail(`pivot column "${c.breakout}" is not a breakout`)
+    for (const v of q.pivot.values)
+      if (!mset.has(v.measure)) fail(`pivot value "${v.measure}" is not a measure`)
+  }
+
+  const limit =
+    typeof stage.limit === 'number' && Number.isFinite(stage.limit)
+      ? Math.min(Math.max(Math.trunc(stage.limit), 1), MAX_LIMIT)
+      : null
+
+  return {
+    version: 'bhql/1',
+    display: q.display,
+    pivot: q.pivot ?? null,
+    stages: [{ ...stage, limit }],
+  } as BhqlQuery
+}
+
 /** Parse + fully validate untrusted input into a typed BhqlQuery. Throws
  *  BhqlValidationError on any problem. */
 export function parseBhqlQuery(raw: unknown, entityMap: Record<string, ReportEntity>): BhqlQuery {
@@ -337,6 +533,10 @@ export function parseBhqlQuery(raw: unknown, entityMap: Record<string, ReportEnt
   if (q.stages.length !== 1) fail('Exactly one stage is supported')
   const stage = q.stages[0]!
 
+  // A spine stage (dimension cross-product + latest-fact joins) addresses fields
+  // by "<alias>.<column>" against its own sources, so it has a dedicated path.
+  if (stage.spine) return parseSpine(q, stage, entityMap)
+
   const entity = entityMap[stage.source]
   if (!entity) fail(`Unknown source entity "${stage.source}"`)
 
@@ -347,6 +547,7 @@ export function parseBhqlQuery(raw: unknown, entityMap: Record<string, ReportEnt
   const exprMeasures = measures.filter((m) => kindOf(m) === 'expr')
   const breakouts = stage.breakouts ?? []
   const columns = stage.columns ?? []
+  const joinedSources = stage.joinedSources ?? []
 
   // Aliases unique + slug-safe across breakouts ∪ measures.
   const aliases = new Set<string>()
@@ -361,12 +562,47 @@ export function parseBhqlQuery(raw: unknown, entityMap: Record<string, ReportEnt
     aliases.add(m.alias)
   }
 
+  // Cross-source metrics: each joined source is aggregated to the primary grain
+  // and FULL OUTER JOINed. Validate its entity, its measures (resolved against
+  // ITS own columns, aliases globally unique) and its grain mapping (every
+  // primary breakout mapped exactly once to a real field on the joined source).
+  const breakoutAliases = new Set(breakouts.map((b) => b.alias))
+  for (const js of joinedSources) {
+    const jsEntity = entityMap[js.source]
+    if (!jsEntity) fail(`Unknown joined source "${js.source}"`)
+    for (const m of js.measures) {
+      checkAlias(m.alias, 'measure')
+      if (aliases.has(m.alias)) fail(`Duplicate alias "${m.alias}"`)
+      aliases.add(m.alias)
+      validateMeasure(jsEntity, entityMap, m as BhqlMeasure)
+      if ((m as BhqlMeasure).filter) validateFilterDepth((m as BhqlMeasure).filter)
+    }
+    const mapped = new Set<string>()
+    for (const k of js.on) {
+      if (!breakoutAliases.has(k.breakout))
+        fail(`A joined source maps an unknown breakout "${k.breakout}"`)
+      if (mapped.has(k.breakout)) fail(`Breakout "${k.breakout}" is mapped more than once`)
+      mapped.add(k.breakout)
+      const col = resolveField(jsEntity, entityMap, k.field)
+      if (!col) fail(`Unknown field "${k.field}" on joined source "${js.source}"`)
+      if (k.bin?.kind === 'temporal' && !(col.kind === 'date' || col.kind === 'timestamp'))
+        fail(`Join field "${k.field}" can't be bucketed by time`)
+      if (k.bin?.kind === 'numeric' && col.kind !== 'number')
+        fail(`Join field "${k.field}" can't be binned numerically`)
+    }
+    if (mapped.size !== breakouts.length)
+      fail(`Joined source "${js.source}" must map every breakout (the shared grain)`)
+  }
+
   // Every referenced field resolves through the whitelist (local column or a
   // single-hop FK relation "<via>.<column>"); bins are eligible.
   for (const c of columns) {
     if (!resolveField(entity, entityMap, c)) fail(`Unknown column "${c}" on ${stage.source}`)
   }
   for (const b of breakouts) {
+    if (b.unnest && b.expr) fail(`Breakout "${b.alias}" can't both unnest and use an expression`)
+    if (b.unnest && b.bin) fail(`Breakout "${b.alias}" can't both unnest and bin`)
+    if (b.unnest && !b.field) fail(`Unnest breakout "${b.alias}" needs a field`)
     // A computed-expression breakout (e.g. a CASE age bucket) — must be a plain
     // row-level expression, never an aggregate (you can't GROUP BY an aggregate).
     if (b.expr && b.field) fail(`Breakout "${b.alias}" can't have both a field and an expression`)
@@ -383,6 +619,9 @@ export function parseBhqlQuery(raw: unknown, entityMap: Record<string, ReportEnt
     if (b.bin?.kind === 'numeric' && col.kind !== 'number') {
       fail(`Field "${b.field}" can't be binned numerically`)
     }
+    if (b.bin?.kind === 'numeric' && b.field.includes('.')) {
+      fail('Numeric binning is only supported on a direct column, not a joined field')
+    }
   }
   for (const m of baseMeasures) {
     const bm = m as BhqlMeasure
@@ -393,7 +632,12 @@ export function parseBhqlQuery(raw: unknown, entityMap: Record<string, ReportEnt
   for (const m of exprMeasures) {
     validateExpr(entity, entityMap, (m as { expr: unknown }).expr, { allowAgg: true })
   }
-  const baseAliases = new Set(baseMeasures.map((m) => m.alias))
+  // A calc measure may combine base measures from the primary stage AND any
+  // joined source (the cross-table ratio case, e.g. TRIR = recordables ÷ hours).
+  const baseAliases = new Set([
+    ...baseMeasures.map((m) => m.alias),
+    ...joinedSources.flatMap((js) => js.measures.map((m) => m.alias)),
+  ])
   for (const m of calcMeasures) {
     const cm = m as { numerator: string; denominator?: string }
     if (!baseAliases.has(cm.numerator)) {

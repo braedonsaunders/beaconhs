@@ -51,20 +51,28 @@ const BREAKPOINTS = { lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }
 const ROW_HEIGHT = 48
 const MARGIN: readonly [number, number] = [16, 16]
 const RESIZE_HANDLES = ['se'] as const
+const UUID_RE = /^[0-9a-f-]{36}$/i
 
 type LayoutWidget = DashboardLayoutData['widgets'][number]
+type LibraryCard = { id: string; name: string; description: string }
 
 export function DashboardGrid({
   initialLayout,
   nodes,
   role,
   mode,
+  libraryCards = [],
 }: {
   initialLayout: DashboardLayoutData
   nodes: Record<string, ReactNode>
   role: RoleTier
   mode: 'view' | 'edit'
+  libraryCards?: LibraryCard[]
 }) {
+  const cardNameById = useMemo(
+    () => new Map(libraryCards.map((c) => [c.id, c.name])),
+    [libraryCards],
+  )
   const router = useRouter()
   const [width, setWidth] = useState(1024)
   const [viewport, setViewport] = useState<'phone' | 'tablet' | 'desktop'>('desktop')
@@ -155,6 +163,15 @@ export function DashboardGrid({
         ...prev,
         { id: meta.id, x: 0, y: maxY, w: meta.defaultSize.w, h: meta.defaultSize.h },
       ])
+    },
+    [layout, presentIds],
+  )
+
+  const handleAddCard = useCallback(
+    (card: { id: string }) => {
+      if (presentIds.has(card.id)) return
+      const maxY = layout.reduce((m, w) => Math.max(m, w.y + w.h), 0)
+      setLayout((prev) => [...prev, { id: card.id, x: 0, y: maxY, w: 4, h: 4 }])
     },
     [layout, presentIds],
   )
@@ -300,11 +317,21 @@ export function DashboardGrid({
                         </button>
                       </>
                     ) : null}
-                    {node ?? (
-                      <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-400">
-                        Widget "{w.id}" not available
-                      </div>
-                    )}
+                    {node ??
+                      (UUID_RE.test(w.id) ? (
+                        <div className="flex h-full flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-teal-200 bg-teal-50/40 px-3 text-center dark:border-teal-800/50 dark:bg-teal-950/30">
+                          <span className="text-xs font-medium text-slate-700 dark:text-slate-200">
+                            {cardNameById.get(w.id) ?? 'Insights card'}
+                          </span>
+                          <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                            Appears on your dashboard after you save.
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-400">
+                          Widget "{w.id}" not available
+                        </div>
+                      ))}
                   </div>
                 </div>
               )
@@ -313,7 +340,13 @@ export function DashboardGrid({
         </div>
 
         {mode === 'edit' && paletteOpen ? (
-          <WidgetPalette role={role} presentIds={presentIds} onAdd={handleAdd} />
+          <WidgetPalette
+            role={role}
+            presentIds={presentIds}
+            onAdd={handleAdd}
+            libraryCards={libraryCards}
+            onAddCard={handleAddCard}
+          />
         ) : null}
       </div>
     </div>
@@ -393,10 +426,14 @@ function WidgetPalette({
   role,
   presentIds,
   onAdd,
+  libraryCards,
+  onAddCard,
 }: {
   role: RoleTier
   presentIds: Set<string>
   onAdd: (w: WidgetMeta) => void
+  libraryCards: LibraryCard[]
+  onAddCard: (c: LibraryCard) => void
 }) {
   const visible = widgetsForRole(role)
   const byCategory = new Map<WidgetCategory, WidgetMeta[]>()
@@ -462,6 +499,51 @@ function WidgetPalette({
             </ul>
           </div>
         ))}
+
+        {libraryCards.length > 0 ? (
+          <div>
+            <h4 className="mb-1 px-1 text-[10px] font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
+              From your library
+            </h4>
+            <ul className="space-y-1">
+              {libraryCards.map((c) => {
+                const present = presentIds.has(c.id)
+                return (
+                  <li key={c.id}>
+                    <button
+                      type="button"
+                      onClick={() => onAddCard(c)}
+                      disabled={present}
+                      className={`flex w-full items-start justify-between gap-2 rounded-lg border border-transparent px-2 py-1.5 text-left transition ${
+                        present
+                          ? 'cursor-not-allowed bg-slate-50 text-slate-400 dark:bg-slate-900 dark:text-slate-500'
+                          : 'hover:border-teal-200 hover:bg-teal-50/50 dark:hover:border-teal-800/60 dark:hover:bg-teal-950/40'
+                      }`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-xs font-medium text-slate-800 dark:text-slate-100">
+                          {c.name}
+                        </div>
+                        {c.description ? (
+                          <div className="line-clamp-2 text-[10px] text-slate-500 dark:text-slate-400">
+                            {c.description}
+                          </div>
+                        ) : null}
+                      </div>
+                      {present ? (
+                        <span className="shrink-0 text-[10px] text-slate-400 dark:text-slate-500">
+                          added
+                        </span>
+                      ) : (
+                        <Plus size={13} className="shrink-0 text-teal-600" />
+                      )}
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        ) : null}
       </div>
     </motion.aside>
   )

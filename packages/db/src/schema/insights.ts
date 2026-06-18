@@ -87,6 +87,7 @@ export type BhqlExpr =
   | { ex: 'lit'; value: string | number | boolean | null }
   | { ex: 'arith'; op: '+' | '-' | '*' | '/'; left: BhqlExpr; right: BhqlExpr }
   | { ex: 'compare'; op: '=' | '!=' | '<' | '<=' | '>' | '>='; left: BhqlExpr; right: BhqlExpr }
+  | { ex: 'isnull'; arg: BhqlExpr; negated?: boolean } // x IS [NOT] NULL
   | { ex: 'logic'; op: 'and' | 'or' | 'not'; args: BhqlExpr[] }
   | { ex: 'case'; branches: { when: BhqlExpr; then: BhqlExpr }[]; else?: BhqlExpr }
   | { ex: 'call'; fn: string; args: BhqlExpr[] }
@@ -106,6 +107,11 @@ export type BhqlBreakout = {
   /** Output column key; unique within a stage; whitelist-safe slug. */
   alias: string
   bin?: BhqlBin
+  /** Expand an array / jsonb-array column (e.g. a tags column) to one row per
+   *  element, then group by the element. `array` = a Postgres array column
+   *  (`unnest`); `jsonb` = a jsonb array (`jsonb_array_elements_text`). Mutually
+   *  exclusive with `expr` and `bin`. */
+  unnest?: 'array' | 'jsonb'
 }
 
 /** References into a stage's own breakouts/measures, by alias. */
@@ -129,14 +135,85 @@ export type BhqlOrderBy = {
   direction: 'asc' | 'desc'
 }
 
+/** Aligns a joined source to the primary grain: maps a primary-stage breakout
+ *  (by alias) to the field on the joined source that supplies the same value,
+ *  bucketed identically when the primary breakout is binned. The join equates
+ *  the two. */
+export type BhqlJoinKey = {
+  /** A primary-stage breakout alias. */
+  breakout: string
+  /** The field on the joined source that supplies the same grain value. */
+  field: string
+  /** Match the primary breakout's bin (e.g. both bucketed by month). */
+  bin?: BhqlBin
+}
+
+/** An additional source, aggregated independently and FULL OUTER JOINed to the
+ *  primary stage on the shared-grain breakout dimensions. This is how a card
+ *  crosses TABLES for a metric whose parts live apart — e.g. TRIR = recordable
+ *  incidents (from `incidents`) ÷ hours worked (from `incident_hours_periods`)
+ *  × 200000 — with NO database view. Each joined source is GROUP-BY'd to the
+ *  primary's grain; its measures become referenceable by the stage's top-level
+ *  calc measures. */
+export type BhqlJoinedSource = {
+  /** Entity/table key — validated against the discovered registry. */
+  source: string
+  filter?: ReportRuleGroup | null
+  /** Aggregates produced from THIS source. Aliases are unique across the whole
+   *  query (primary stage + every joined source). */
+  measures: BhqlMeasure[]
+  /** Maps every primary breakout to a field on this source (the shared grain). */
+  on: BhqlJoinKey[]
+}
+
+/** A dimension source in a spine — its cross-product with the other dimensions
+ *  forms the row space. Columns are addressed as "<alias>.<column>" (and
+ *  "<alias>.<fk>.<column>" to follow a relation) in breakouts/measures/exprs. */
+export type BhqlSpineSource = {
+  alias: string
+  source: string
+  filter?: ReportRuleGroup | null
+}
+
+/** A fact source LEFT-JOINed onto the spine, optionally reduced to the single
+ *  latest row per spine key (a correlated LATERAL `ORDER BY … LIMIT 1`). Its
+ *  columns are addressed as "<alias>.<column>". */
+export type BhqlSpineFact = {
+  alias: string
+  source: string
+  filter?: ReportRuleGroup | null
+  /** Correlate to the spine: each fact field equals a spine field ref. */
+  on: { field: string; equals: string }[]
+  /** Reduce to one row per spine key by this ordering (omit = plain LEFT JOIN). */
+  latestBy?: BhqlOrderBy[]
+}
+
+/** A fact-free dimension grid (cross-product of dimension sources) plus optional
+ *  latest-fact joins — the generic form behind a coverage matrix (people ×
+ *  courses ⟕ latest training record → coverage status), buildable with NO view.
+ *  A spine's breakouts/measures/expressions address columns by
+ *  "<sourceAlias>.<column>". */
+export type BhqlSpine = {
+  dimensions: BhqlSpineSource[]
+  facts?: BhqlSpineFact[]
+}
+
 /** One analysis stage. v1 emits exactly one. The array shape is forward-compat
  *  for post-aggregation stages without a jsonb migration. */
 export type BhqlStage = {
-  /** Entity/table key — validated at run time against the discovered registry. */
+  /** Entity/table key — validated at run time against the discovered registry.
+   *  Ignored when `spine` is set (the spine defines the FROM). */
   source: string
   filter?: ReportRuleGroup | null
   aggregations?: BhqlAnyMeasure[]
   breakouts?: BhqlBreakout[]
+  /** Additional aggregated sources joined to the primary on the shared grain —
+   *  unlocks cross-table metrics (ratios across tables) with no view. Their
+   *  measures are available to this stage's calc measures. */
+  joinedSources?: BhqlJoinedSource[]
+  /** A dimension cross-product + latest-fact joins (the coverage-matrix form).
+   *  When set, breakouts/measures address columns as "<sourceAlias>.<column>". */
+  spine?: BhqlSpine
   /** Raw-row mode (no aggregations/breakouts): entity columns to SELECT. */
   columns?: string[]
   orderBy?: BhqlOrderBy[]
@@ -151,6 +228,30 @@ export type BhqlQuery = {
   display: BhqlDisplay
   pivot?: BhqlPivot | null
 }
+
+// --- Card kind configs ------------------------------------------------------
+
+/** How an AI card shapes the model's output for rendering. */
+export type AiCardOutputShape = 'summary' | 'bullets' | 'insights'
+
+/** Config for an `ai` card: the model analyses the card's BHQL dataset (its
+ *  `query`) under `prompt` and the result is rendered as prose/bullets. The
+ *  dataset is a normal BHQL query, so AI cards are fully user-buildable. */
+export type AiCardConfig = {
+  kind: 'ai'
+  prompt: string
+  output: AiCardOutputShape
+}
+
+/** Config for a reusable `metric` card: maps a shared-dimension key (e.g.
+ *  'time', 'site') to the metric source's column that supplies it, so a question
+ *  card can JOIN this metric onto its own grain (the cross-source machinery). */
+export type MetricCardConfig = {
+  kind: 'metric'
+  dims: Record<string, string>
+}
+
+export type InsightCardConfig = AiCardConfig | MetricCardConfig
 
 // --- Tables -----------------------------------------------------------------
 
@@ -171,6 +272,9 @@ export const insightCards = pgTable(
     query: jsonb('query').$type<BhqlQuery>().notNull(),
     vizType: text('viz_type').default('table').notNull(),
     vizSettings: jsonb('viz_settings').$type<Record<string, unknown>>().default({}).notNull(),
+    /** Kind-specific config: AI prompt/output for `ai` cards, shared-dimension
+     *  bindings for `metric` cards. Null for plain `question` cards. */
+    config: jsonb('config').$type<InsightCardConfig | null>(),
     status: insightShareStatus('status').default('draft').notNull(),
     allowedRoles: jsonb('allowed_roles').$type<string[]>(),
     publishedBy: text('published_by').references(() => users.id),

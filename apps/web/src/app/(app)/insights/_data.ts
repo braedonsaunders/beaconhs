@@ -6,6 +6,7 @@ import { and, asc, eq, isNull } from 'drizzle-orm'
 import {
   insightDashboardPins,
   insightDashboards,
+  type BhqlQuery,
   type DashboardParam,
   type DashboardParamMap,
   type InsightDashboardLayout,
@@ -20,48 +21,72 @@ import { applyParams } from './_params'
 import { DEFAULT_INSIGHT_LAYOUT } from './_widgets'
 import type { CardRow } from './cards/_data'
 
+// Short-TTL in-memory cache for compiled card results. Keyed by tenant + the
+// FINAL (param-injected) query, so it's RLS-correct (a key is one tenant's view)
+// and parameter-aware. Dashboards re-render often (param tweaks, tab switches,
+// the homepage on every nav) and the same card recurs across boards — this keeps
+// a busy dashboard from recompiling identical queries. Per-process (fine for a
+// 60s window); the value is already the tenant-scoped result.
+const CARD_RESULT_CACHE = new Map<string, { at: number; result: BhqlResult }>()
+const CARD_RESULT_TTL_MS = 60_000
+
+async function runCardCached(
+  ctx: RequestContext,
+  query: BhqlQuery,
+  key: string,
+): Promise<BhqlResult> {
+  const now = Date.now()
+  const hit = CARD_RESULT_CACHE.get(key)
+  if (hit && now - hit.at < CARD_RESULT_TTL_MS) return hit.result
+  const result = await ctx.db((tx) => runBhql(tx, query, { maxRows: 20_000 }))
+  CARD_RESULT_CACHE.set(key, { at: now, result })
+  if (CARD_RESULT_CACHE.size > 2_000) {
+    for (const [k, v] of CARD_RESULT_CACHE) if (now - v.at > CARD_RESULT_TTL_MS) CARD_RESULT_CACHE.delete(k)
+  }
+  return result
+}
+
 /** A Card compiled for a dashboard cell (server-side, under RLS). */
 export type CardRender = {
   id: string
   name: string
+  kind: string
   vizType: string
   vizSettings: Record<string, unknown>
   result: BhqlResult | null
   error: string | null
+  /** For an `ai` card: the stored instruction, rendered with an on-demand button. */
+  aiPrompt?: string | null
 }
 
 /** Compile each referenced Card's query in parallel (each under its own RLS tx).
  *  When the dashboard defines parameters, `applyParams` folds the current values
  *  into each card's filter before it is compiled, so one control fans out across
- *  every mapped card. */
+ *  every mapped card. AI cards are NOT run here — they execute their model on
+ *  demand from the cell, so a dashboard load never pays LLM cost. */
 export async function loadDashboardCardRenders(
   ctx: RequestContext,
-  cards: Array<Pick<CardRow, 'id' | 'name' | 'query' | 'vizType' | 'vizSettings'>>,
+  cards: Array<Pick<CardRow, 'id' | 'name' | 'kind' | 'query' | 'vizType' | 'vizSettings' | 'config'>>,
   opts: { paramValues?: Record<string, unknown>; paramMap?: DashboardParamMap } = {},
 ): Promise<CardRender[]> {
   const { paramValues = {}, paramMap = {} } = opts
   return Promise.all(
     cards.map(async (c) => {
+      const base = { id: c.id, name: c.name, kind: c.kind, vizType: c.vizType, vizSettings: c.vizSettings }
+      if (c.kind === 'ai') {
+        return {
+          ...base,
+          result: null,
+          error: null,
+          aiPrompt: c.config?.kind === 'ai' ? c.config.prompt : null,
+        }
+      }
       try {
         const query = applyParams(c.query, paramValues, paramMap, c.id)
-        const result = await ctx.db((tx) => runBhql(tx, query, { maxRows: 20_000 }))
-        return {
-          id: c.id,
-          name: c.name,
-          vizType: c.vizType,
-          vizSettings: c.vizSettings,
-          result,
-          error: null,
-        }
+        const result = await runCardCached(ctx, query, `${ctx.tenantId}:${JSON.stringify(query)}`)
+        return { ...base, result, error: null }
       } catch (e) {
-        return {
-          id: c.id,
-          name: c.name,
-          vizType: c.vizType,
-          vizSettings: c.vizSettings,
-          result: null,
-          error: e instanceof Error ? e.message : 'Could not run this card.',
-        }
+        return { ...base, result: null, error: e instanceof Error ? e.message : 'Could not run this card.' }
       }
     }),
   )

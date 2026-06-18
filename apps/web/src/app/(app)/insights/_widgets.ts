@@ -333,6 +333,10 @@ export const BUILTIN_QUERIES: Record<
       ],
     },
   },
+  // TRIR = recordable incidents ÷ hours worked × 200000, over the trailing year.
+  // View-free: recordables come from `incidents`, hours from the separate
+  // `incident_hours_periods` table, joined by the cross-source engine (no grain →
+  // CROSS JOIN of two single-row aggregates). Replaces the report_incident_rates view.
   'chart-trir': {
     vizType: 'scalar',
     vizSettings: { valueField: 'trir', decimals: 2 },
@@ -342,26 +346,39 @@ export const BUILTIN_QUERIES: Record<
       pivot: null,
       stages: [
         {
-          source: 'incident_rates',
+          source: 'incidents',
           filter: {
             combinator: 'and',
-            rules: [{ field: 'month', op: 'between_days_ago', value: 365 }],
+            rules: [{ field: 'occurred_at', op: 'between_days_ago', value: 365 }],
           },
           aggregations: [
-            { fn: 'sum', field: 'recordable_count', alias: 'rec' },
-            { fn: 'sum', field: 'hours_worked', alias: 'hrs' },
             {
-              kind: 'calc',
-              alias: 'trir',
-              numerator: 'rec',
-              denominator: 'hrs',
-              multiplier: 200000,
+              fn: 'count',
+              alias: 'rec',
+              filter: {
+                combinator: 'and',
+                rules: [{ field: 'severity', op: 'in', value: ['medical_aid', 'lost_time', 'fatality'] }],
+              },
+            },
+            { kind: 'calc', alias: 'trir', numerator: 'rec', denominator: 'hrs', multiplier: 200000 },
+          ],
+          joinedSources: [
+            {
+              source: 'incident_hours_periods',
+              filter: {
+                combinator: 'and',
+                rules: [{ field: 'period_start', op: 'between_days_ago', value: 365 }],
+              },
+              measures: [{ fn: 'sum', field: 'total_hours', alias: 'hrs' }],
+              on: [],
             },
           ],
         },
       ],
     },
   },
+  // DART = lost-time/restricted incidents ÷ hours worked × 200000 (OSHA), trailing
+  // year. Same view-free cross-source shape as TRIR; numerator = lost_time incidents.
   'chart-dart': {
     vizType: 'scalar',
     vizSettings: { valueField: 'dart', decimals: 2 },
@@ -371,15 +388,32 @@ export const BUILTIN_QUERIES: Record<
       pivot: null,
       stages: [
         {
-          source: 'incident_rates',
+          source: 'incidents',
           filter: {
             combinator: 'and',
-            rules: [{ field: 'month', op: 'between_days_ago', value: 365 }],
+            rules: [{ field: 'occurred_at', op: 'between_days_ago', value: 365 }],
           },
           aggregations: [
-            { fn: 'sum', field: 'dart_count', alias: 'd' },
-            { fn: 'sum', field: 'hours_worked', alias: 'hrs' },
+            {
+              fn: 'count',
+              alias: 'd',
+              filter: {
+                combinator: 'and',
+                rules: [{ field: 'lost_time', op: 'is_true' }],
+              },
+            },
             { kind: 'calc', alias: 'dart', numerator: 'd', denominator: 'hrs', multiplier: 200000 },
+          ],
+          joinedSources: [
+            {
+              source: 'incident_hours_periods',
+              filter: {
+                combinator: 'and',
+                rules: [{ field: 'period_start', op: 'between_days_ago', value: 365 }],
+              },
+              measures: [{ fn: 'sum', field: 'total_hours', alias: 'hrs' }],
+              on: [],
+            },
           ],
         },
       ],
@@ -561,7 +595,9 @@ export const BUILTIN_QUERIES: Record<
       ],
     },
   },
-  // Training compliance % — conditional count of completed ÷ total, ×100.
+  // Training compliance % — off the unified compliance engine's scoreboard
+  // (compliance_status), filtered to training + cert obligations via the
+  // obligation FK. Replaces the decommissioned legacy assignment-records table.
   'kpi-training-compliance': {
     vizType: 'scalar',
     vizSettings: { valueField: 'pct', decimals: 0 },
@@ -571,7 +607,17 @@ export const BUILTIN_QUERIES: Record<
       pivot: null,
       stages: [
         {
-          source: 'training_audience_assignment_records',
+          source: 'compliance_status',
+          filter: {
+            combinator: 'and',
+            rules: [
+              {
+                field: 'obligation_id.source_module',
+                op: 'in',
+                value: ['training', 'cert_requirement'],
+              },
+            ],
+          },
           aggregations: [
             { fn: 'count', alias: 'total' },
             {
@@ -590,6 +636,140 @@ export const BUILTIN_QUERIES: Record<
               multiplier: 100,
             },
           ],
+        },
+      ],
+    },
+  },
+  // Document compliance % — straight off the unified compliance engine's
+  // materialized scoreboard (compliance_status), filtered to document obligations
+  // via the obligation FK. No many-to-many audience resolution, no view, no JS loop.
+  'kpi-doc-compliance': {
+    vizType: 'scalar',
+    vizSettings: { valueField: 'pct', decimals: 0 },
+    query: {
+      version: 'bhql/1',
+      display: 'table',
+      pivot: null,
+      stages: [
+        {
+          source: 'compliance_status',
+          filter: {
+            combinator: 'and',
+            rules: [{ field: 'obligation_id.source_module', op: 'eq', value: 'document' }],
+          },
+          aggregations: [
+            { fn: 'count', alias: 'total' },
+            {
+              fn: 'count',
+              alias: 'done',
+              filter: {
+                combinator: 'and',
+                rules: [{ field: 'status', op: 'eq', value: 'completed' }],
+              },
+            },
+            { kind: 'calc', alias: 'pct', numerator: 'done', denominator: 'total', multiplier: 100 },
+          ],
+        },
+      ],
+    },
+  },
+  // Days since the last recordable incident — a custom aggregation (datediff over
+  // the latest recordable's date), no view, no JS.
+  'kpi-days-recordable': {
+    vizType: 'scalar',
+    vizSettings: { valueField: 'days', decimals: 0 },
+    query: {
+      version: 'bhql/1',
+      display: 'table',
+      pivot: null,
+      stages: [
+        {
+          source: 'incidents',
+          aggregations: [
+            {
+              kind: 'expr',
+              alias: 'days',
+              expr: {
+                ex: 'call',
+                fn: 'datediff',
+                args: [
+                  { ex: 'lit', value: 'day' },
+                  {
+                    ex: 'agg',
+                    fn: 'max',
+                    arg: { ex: 'field', field: 'occurred_at' },
+                    filter: {
+                      combinator: 'and',
+                      rules: [{ field: 'severity', op: 'in', value: ['medical_aid', 'lost_time', 'fatality'] }],
+                    },
+                  },
+                  { ex: 'call', fn: 'now', args: [] },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    },
+  },
+  // Open corrective actions bucketed by age — a computed CASE breakout (datediff
+  // age vs created_at), no view.
+  'chart-ca-aging': {
+    vizType: 'bar',
+    query: {
+      version: 'bhql/1',
+      display: 'table',
+      pivot: null,
+      stages: [
+        {
+          source: 'corrective_actions',
+          filter: { combinator: 'and', rules: [{ field: 'closed_at', op: 'is_null' }] },
+          breakouts: [
+            {
+              alias: 'bucket',
+              expr: {
+                ex: 'case',
+                branches: [
+                  {
+                    when: { ex: 'compare', op: '<', left: { ex: 'call', fn: 'datediff', args: [{ ex: 'lit', value: 'day' }, { ex: 'field', field: 'created_at' }, { ex: 'call', fn: 'now', args: [] }] }, right: { ex: 'lit', value: 7 } },
+                    then: { ex: 'lit', value: '< 7 days' },
+                  },
+                  {
+                    when: { ex: 'compare', op: '<', left: { ex: 'call', fn: 'datediff', args: [{ ex: 'lit', value: 'day' }, { ex: 'field', field: 'created_at' }, { ex: 'call', fn: 'now', args: [] }] }, right: { ex: 'lit', value: 30 } },
+                    then: { ex: 'lit', value: '7–30 days' },
+                  },
+                  {
+                    when: { ex: 'compare', op: '<', left: { ex: 'call', fn: 'datediff', args: [{ ex: 'lit', value: 'day' }, { ex: 'field', field: 'created_at' }, { ex: 'call', fn: 'now', args: [] }] }, right: { ex: 'lit', value: 60 } },
+                    then: { ex: 'lit', value: '30–60 days' },
+                  },
+                ],
+                else: { ex: 'lit', value: '60+ days' },
+              },
+            },
+          ],
+          aggregations: [{ fn: 'count', alias: 'count' }],
+        },
+      ],
+    },
+  },
+  // Journals by weekday — a datepart('dow') computed breakout, no view.
+  'journal-by-dow': {
+    vizType: 'bar',
+    query: {
+      version: 'bhql/1',
+      display: 'table',
+      pivot: null,
+      stages: [
+        {
+          source: 'journal_entries',
+          breakouts: [
+            {
+              alias: 'dow',
+              expr: { ex: 'call', fn: 'datepart', args: [{ ex: 'lit', value: 'dow' }, { ex: 'field', field: 'entry_date' }] },
+            },
+          ],
+          aggregations: [{ fn: 'count', alias: 'count' }],
+          orderBy: [{ ref: 'dow', direction: 'asc' }],
         },
       ],
     },

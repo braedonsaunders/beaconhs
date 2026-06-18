@@ -74,6 +74,9 @@ export const REPORT_FILTER_OPERATORS = [
   'lte',
   'is_null',
   'is_not_null',
+  // Boolean column tests (no value) — booleans surface as enum-kind columns.
+  'is_true',
+  'is_false',
   'contains',
   'between_days_ago',
   // Forward window: col on/before now + N days (includes overdue) — drives

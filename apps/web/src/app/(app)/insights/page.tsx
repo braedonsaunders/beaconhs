@@ -44,7 +44,9 @@ export default async function InsightsPage({
     dashboards.map(async (d) => {
       // Each placed widget that's a saved Card OR a BHQL-backed built-in runs
       // through the engine; legacy built-ins (AI, computed rollups) fall through.
-      const items: Array<Pick<CardRow, 'id' | 'name' | 'query' | 'vizType' | 'vizSettings'>> = []
+      const items: Array<
+        Pick<CardRow, 'id' | 'name' | 'kind' | 'query' | 'vizType' | 'vizSettings' | 'config'>
+      > = []
       for (const w of d.layout.widgets) {
         const card = cardsById.get(w.id)
         if (card) {
@@ -56,9 +58,11 @@ export default async function InsightsPage({
           items.push({
             id: w.id,
             name: INSIGHT_WIDGET_MAP.get(w.id)?.label ?? w.id,
+            kind: 'question',
             query: builtin.query,
             vizType: builtin.vizType,
             vizSettings: builtin.vizSettings ?? {},
+            config: null,
           })
         }
       }

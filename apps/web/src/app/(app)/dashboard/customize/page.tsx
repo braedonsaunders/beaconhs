@@ -8,6 +8,11 @@ import { ROLE_TIER_LABELS } from '../_role-tier'
 import { DashboardGrid } from '../_dashboard-grid'
 import { WidgetCard } from '../_widget-views'
 import { WIDGETS } from '../_widget-registry'
+import { loadCardsForPalette } from '../../insights/cards/_data'
+import { loadDashboardCardRenders } from '../../insights/_data'
+import { CardCell } from '../../insights/_viz/card-cell.client'
+
+const UUID_RE = /^[0-9a-f-]{36}$/i
 
 export const metadata = { title: 'Customise Dashboard' }
 export const dynamic = 'force-dynamic'
@@ -17,9 +22,10 @@ export default async function CustomiseDashboardPage() {
   const today = new Date()
   const todayIso = today.toISOString().slice(0, 10)
 
-  const [{ layout, role }, data] = await Promise.all([
+  const [{ layout, role }, data, paletteCards] = await Promise.all([
     loadDashboardLayout(ctx),
     loadDashboardMetrics(ctx, today),
+    loadCardsForPalette(ctx),
   ])
 
   // Pre-render *every* registered widget so the user can drop any of them
@@ -30,6 +36,23 @@ export default async function CustomiseDashboardPage() {
   for (const id of Object.keys(WIDGETS)) {
     nodes[id] = <WidgetCard widgetId={id} data={data} todayIso={todayIso} />
   }
+
+  // Pre-render the Insights cards already placed on the layout (newly-added ones
+  // render after Save). The library list feeds the palette's "From your library".
+  const cardById = new Map(paletteCards.map((c) => [c.id, c]))
+  const placedCards = layout.widgets
+    .filter((w) => !(w.id in WIDGETS) && UUID_RE.test(w.id))
+    .map((w) => cardById.get(w.id))
+    .filter((c) => c != null)
+  if (placedCards.length) {
+    const renders = await loadDashboardCardRenders(ctx, placedCards)
+    for (const r of renders) nodes[r.id] = <CardCell key={r.id} render={r} />
+  }
+  const libraryCards = paletteCards.map((c) => ({
+    id: c.id,
+    name: c.name,
+    description: c.description ?? '',
+  }))
 
   return (
     <PageContainer>
@@ -48,12 +71,18 @@ export default async function CustomiseDashboardPage() {
             </h1>
             <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
               Tailored to your role: {ROLE_TIER_LABELS[role]}. Drag tiles, resize from any corner,
-              add new widgets from the palette, or reset to the default layout for your role.
+              add widgets or your saved Insights cards from the palette, or reset to the default.
             </p>
           </div>
         </div>
 
-        <DashboardGrid initialLayout={layout} nodes={nodes} role={role} mode="edit" />
+        <DashboardGrid
+          initialLayout={layout}
+          nodes={nodes}
+          role={role}
+          mode="edit"
+          libraryCards={libraryCards}
+        />
       </div>
     </PageContainer>
   )

@@ -8,6 +8,7 @@
 import Link from 'next/link'
 import { ExternalLink } from 'lucide-react'
 import { VizRenderer } from './viz-renderer.client'
+import { AiCardView } from './ai-card-view.client'
 import type { CardRender } from '../_data'
 
 const UUID_RE = /^[0-9a-f-]{36}$/i
@@ -15,7 +16,9 @@ const UUID_RE = /^[0-9a-f-]{36}$/i
 export function CardCell({ render }: { render: CardRender }) {
   const selfTitled = render.vizType === 'scalar' || render.vizType === 'progress'
 
-  const body = render.error ? (
+  const body = render.kind === 'ai' ? (
+    <AiCardView cardId={render.id} prompt={render.aiPrompt} />
+  ) : render.error ? (
     <div className="grid h-full place-items-center px-2 text-center text-xs text-rose-500">
       {render.error}
     </div>

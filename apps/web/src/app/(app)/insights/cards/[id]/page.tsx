@@ -8,6 +8,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { canPublishInsights, canViewInsights } from '../../_access'
 import { loadCard } from '../_data'
 import { VizRenderer } from '../../_viz/viz-renderer.client'
+import { AiCardView } from '../../_viz/ai-card-view.client'
 import { CardToolbar } from '../_studio/card-toolbar.client'
 
 export const dynamic = 'force-dynamic'
@@ -19,12 +20,16 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
   const card = await loadCard(ctx, id)
   if (!card) notFound()
 
+  const isAi = card.kind === 'ai'
+  const aiPrompt = card.config?.kind === 'ai' ? card.config.prompt : undefined
   let result: BhqlResult | null = null
   let error: string | null = null
-  try {
-    result = await ctx.db((tx) => runBhql(tx, card.query, { maxRows: 50_000 }))
-  } catch (e) {
-    error = e instanceof Error ? e.message : 'Could not run this card.'
+  if (!isAi) {
+    try {
+      result = await ctx.db((tx) => runBhql(tx, card.query, { maxRows: 50_000 }))
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Could not run this card.'
+    }
   }
 
   return (
@@ -60,7 +65,9 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
         }
       />
       <div className="h-[72vh] rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
-        {error ? (
+        {isAi ? (
+          <AiCardView cardId={card.id} prompt={aiPrompt} />
+        ) : error ? (
           <div className="grid h-full place-items-center rounded-lg border border-dashed border-rose-300 bg-rose-50/40 px-4 text-center text-sm text-rose-600 dark:border-rose-500/30 dark:bg-rose-500/5 dark:text-rose-400">
             {error}
           </div>

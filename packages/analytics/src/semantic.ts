@@ -43,6 +43,10 @@ export type AnalyticsColumn = ReportEntityColumn & {
   semanticType: SemanticType
   enumOptions?: { value: string; label: string }[]
   fkTarget?: string
+  /** An array / jsonb-array column the builder can offer to UNNEST (one row per
+   *  element) — e.g. a tags column. Set by discovery; such columns are hidden
+   *  from the normal dimension/measure pickers. */
+  arrayUnnest?: 'array' | 'jsonb'
   /** Derived eligibility (computed once in `buildAnalyticsEntities`). */
   canDimension: boolean
   canMeasure: boolean

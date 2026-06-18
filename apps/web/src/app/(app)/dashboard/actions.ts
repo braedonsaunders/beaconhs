@@ -15,6 +15,8 @@ import { requireRequestContext } from '@/lib/auth'
 import { WIDGETS } from './_widget-registry'
 import { getUserRoleTier } from './_role-tier'
 
+const UUID_RE = /^[0-9a-f-]{36}$/i
+
 const WidgetSchema = z.object({
   id: z.string().min(1),
   x: z.number().int().min(0).max(12),
@@ -49,9 +51,11 @@ export async function saveDashboardLayout(input: unknown) {
     return { ok: false as const, error: parsed.error.message }
   }
 
-  // Filter out unknown widget ids
+  // Keep registered widget keys AND saved insight-card ids (uuids), so a real
+  // Insights card can live on the homepage grid alongside the bespoke widgets.
+  // An inaccessible card id simply renders an empty cell under RLS — never a leak.
   const filtered: DashboardLayoutData = {
-    widgets: parsed.data.widgets.filter((w) => w.id in WIDGETS),
+    widgets: parsed.data.widgets.filter((w) => w.id in WIDGETS || UUID_RE.test(w.id)),
   }
   const role = await getUserRoleTier(ctx)
 

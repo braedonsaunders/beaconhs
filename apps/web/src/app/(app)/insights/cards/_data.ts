@@ -1,16 +1,20 @@
 // Card loaders (plain server functions — not actions).
 
 import { and, desc, eq, isNull, or } from 'drizzle-orm'
-import { insightCards, type BhqlQuery } from '@beaconhs/db/schema'
+import { insightCards, type BhqlQuery, type InsightCardConfig } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
+
+export type CardKind = 'question' | 'model' | 'metric' | 'ai'
 
 export type CardRow = {
   id: string
   name: string
   description: string | null
+  kind: CardKind
   query: BhqlQuery
   vizType: string
   vizSettings: Record<string, unknown>
+  config: InsightCardConfig | null
   status: 'draft' | 'published'
   createdBy: string | null
   allowedRoles: string[] | null
@@ -20,25 +24,17 @@ const SELECT = {
   id: insightCards.id,
   name: insightCards.name,
   description: insightCards.description,
+  kind: insightCards.kind,
   query: insightCards.query,
   vizType: insightCards.vizType,
   vizSettings: insightCards.vizSettings,
+  config: insightCards.config,
   status: insightCards.status,
   createdBy: insightCards.createdBy,
   allowedRoles: insightCards.allowedRoles,
 }
 
-function map(row: {
-  id: string
-  name: string
-  description: string | null
-  query: BhqlQuery
-  vizType: string
-  vizSettings: Record<string, unknown>
-  status: 'draft' | 'published'
-  createdBy: string | null
-  allowedRoles: string[] | null
-}): CardRow {
+function map(row: CardRow): CardRow {
   return { ...row }
 }
 

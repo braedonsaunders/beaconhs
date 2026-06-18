@@ -86,6 +86,10 @@ export function compileRule(
       return sql`${colSql} IS NULL`
     case 'is_not_null':
       return sql`${colSql} IS NOT NULL`
+    case 'is_true':
+      return sql.join([colSql, sql.raw(' IS TRUE')], sql.raw(''))
+    case 'is_false':
+      return sql.join([colSql, sql.raw(' IS FALSE')], sql.raw(''))
     case 'contains':
       return sql`${colSql} ILIKE ${'%' + String(v ?? '') + '%'}`
     case 'between_days_ago': {

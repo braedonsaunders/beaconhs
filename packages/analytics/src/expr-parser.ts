@@ -64,6 +64,8 @@ export const EXPR_FN_HELP: Record<string, { sig: string; doc: string }> = {
   max: { sig: 'max([Field])', doc: 'Maximum (aggregate).' },
   case: { sig: 'case(cond, value, …, else?)', doc: 'Conditional: first matching cond → value.' },
   if: { sig: 'if(cond, then, else)', doc: 'Two-way conditional.' },
+  isnull: { sig: 'isnull(x)', doc: 'True when x is empty (NULL).' },
+  isnotnull: { sig: 'isnotnull(x)', doc: 'True when x has a value.' },
 }
 
 // ---- tokenizer -------------------------------------------------------------
@@ -327,6 +329,10 @@ class Parser {
         throw new ParseError('case() needs at least one cond, value pair', name.i)
       return { ex: 'case', branches, else: els }
     }
+    if (fn === 'isnull' || fn === 'isnotnull') {
+      if (args.length !== 1) throw new ParseError(`${fn}(value) needs 1 argument`, name.i)
+      return { ex: 'isnull', arg: args[0]!, negated: fn === 'isnotnull' }
+    }
     if (AGG_FNS.has(fn as BhqlAggFn)) {
       if (fn === 'count') return { ex: 'agg', fn: 'count' }
       if (!args[0]) throw new ParseError(`${fn}() needs a field argument`, name.i)
@@ -379,6 +385,8 @@ export function serializeExpression(expr: BhqlExpr, opts: ExprSerializeOpts): st
         return `(${s(e.left)} ${e.op} ${s(e.right)})`
       case 'compare':
         return `(${s(e.left)} ${e.op} ${s(e.right)})`
+      case 'isnull':
+        return `${e.negated ? 'isnotnull' : 'isnull'}(${s(e.arg)})`
       case 'logic':
         if (e.op === 'not') return `not ${s(e.args[0]!)}`
         return `(${e.args.map(s).join(e.op === 'and' ? ' and ' : ' or ')})`

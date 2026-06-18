@@ -7,10 +7,16 @@
 import { and, eq, isNull } from 'drizzle-orm'
 import { runBhql, validateBhql } from '@beaconhs/analytics/server'
 import { db, withSuperAdmin, withTenant } from '@beaconhs/db'
-import { insightCards, tenants, type BhqlQuery } from '@beaconhs/db/schema'
+import { insightCards, tenants, type BhqlExpr, type BhqlQuery } from '@beaconhs/db/schema'
 
 const CARD_NAME = 'Training matrix'
 
+// View-free: a SPINE over the raw tables (people × training_courses ⟕ latest
+// training_record) reproducing report_training_matrix exactly — same person ×
+// course grid, same latest-record-per-cell, same missing/valid/expired/expiring
+// coverage CASE (CURRENT_DATE + 90). Renders identically (vizType pivot, the
+// string `status` measure auto-colours RAG via the renderer's default).
+const CD: BhqlExpr = { ex: 'call', fn: 'current_date', args: [] }
 const QUERY: BhqlQuery = {
   version: 'bhql/1',
   display: 'pivot',
@@ -21,12 +27,78 @@ const QUERY: BhqlQuery = {
   },
   stages: [
     {
-      source: 'training_matrix',
+      source: 'people',
+      spine: {
+        dimensions: [
+          {
+            alias: 'p',
+            source: 'people',
+            filter: {
+              combinator: 'and',
+              rules: [
+                { field: 'status', op: 'eq', value: 'active' },
+                { field: 'deleted_at', op: 'is_null' },
+              ],
+            },
+          },
+          {
+            alias: 'c',
+            source: 'training_courses',
+            filter: { combinator: 'and', rules: [{ field: 'deleted_at', op: 'is_null' }] },
+          },
+        ],
+        facts: [
+          {
+            alias: 'tr',
+            source: 'training_records',
+            on: [
+              { field: 'person_id', equals: 'p.id' },
+              { field: 'course_id', equals: 'c.id' },
+            ],
+            filter: { combinator: 'and', rules: [{ field: 'deleted_at', op: 'is_null' }] },
+            latestBy: [{ ref: 'completed_on', direction: 'desc' }],
+          },
+        ],
+      },
       breakouts: [
-        { field: 'person_name', alias: 'person' },
-        { field: 'course_code', alias: 'course' },
+        {
+          alias: 'person',
+          expr: {
+            ex: 'call',
+            fn: 'concat',
+            args: [
+              { ex: 'field', field: 'p.last_name' },
+              { ex: 'lit', value: ', ' },
+              { ex: 'field', field: 'p.first_name' },
+            ],
+          },
+        },
+        { alias: 'course', field: 'c.code' },
       ],
-      aggregations: [{ fn: 'min', field: 'coverage_status', alias: 'status' }],
+      aggregations: [
+        {
+          kind: 'expr',
+          alias: 'status',
+          expr: {
+            ex: 'agg',
+            fn: 'min',
+            arg: {
+              ex: 'case',
+              branches: [
+                { when: { ex: 'isnull', arg: { ex: 'field', field: 'tr.id' } }, then: { ex: 'lit', value: 'missing' } },
+                { when: { ex: 'isnull', arg: { ex: 'field', field: 'tr.expires_on' } }, then: { ex: 'lit', value: 'valid' } },
+                { when: { ex: 'compare', op: '<', left: { ex: 'field', field: 'tr.expires_on' }, right: CD }, then: { ex: 'lit', value: 'expired' } },
+                { when: { ex: 'compare', op: '<=', left: { ex: 'field', field: 'tr.expires_on' }, right: { ex: 'arith', op: '+', left: CD, right: { ex: 'lit', value: 90 } } }, then: { ex: 'lit', value: 'expiring' } },
+              ],
+              else: { ex: 'lit', value: 'valid' },
+            },
+          },
+        },
+      ],
+      orderBy: [
+        { ref: 'person', direction: 'asc' },
+        { ref: 'course', direction: 'asc' },
+      ],
       limit: 50_000,
     },
   ],

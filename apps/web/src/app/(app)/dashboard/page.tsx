@@ -6,6 +6,11 @@ import { DashboardGrid } from './_dashboard-grid'
 import { WidgetCard } from './_widget-views'
 import { WIDGETS } from './_widget-registry'
 import { DashboardHeader } from './_dashboard-header'
+import { loadCardsForPalette } from '../insights/cards/_data'
+import { loadDashboardCardRenders } from '../insights/_data'
+import { CardCell } from '../insights/_viz/card-cell.client'
+
+const UUID_RE = /^[0-9a-f-]{36}$/i
 
 export const metadata = { title: 'Dashboard' }
 export const dynamic = 'force-dynamic'
@@ -32,12 +37,33 @@ export default async function DashboardPage() {
     loadDashboardMetrics(ctx, today),
   ])
 
-  // Pre-render every widget into a serialisable map keyed by id. Doing this
-  // in the RSC keeps each card a pure JSX subtree we can ship to the client.
+  // A placed widget id is EITHER a bespoke widget key OR a saved Insights card
+  // uuid. Run the placed cards through the same engine + viz as /insights (each
+  // under its own RLS tx), so a card built once renders on both surfaces.
+  const cardIds = layout.widgets
+    .filter((w) => !(w.id in WIDGETS) && UUID_RE.test(w.id))
+    .map((w) => w.id)
+  const renderById = new Map(
+    cardIds.length
+      ? await (async () => {
+          const byId = new Map((await loadCardsForPalette(ctx)).map((c) => [c.id, c]))
+          const cards = cardIds.map((id) => byId.get(id)).filter((c) => c != null)
+          const renders = await loadDashboardCardRenders(ctx, cards)
+          return renders.map((r) => [r.id, r] as const)
+        })()
+      : [],
+  )
+
+  // Pre-render every placed widget into a serialisable map keyed by id. Doing
+  // this in the RSC keeps each card a pure JSX subtree we can ship to the client.
   const nodes: Record<string, React.ReactNode> = {}
   for (const w of layout.widgets) {
-    if (!(w.id in WIDGETS)) continue
-    nodes[w.id] = <WidgetCard key={w.id} widgetId={w.id} data={data} todayIso={todayIso} />
+    if (w.id in WIDGETS) {
+      nodes[w.id] = <WidgetCard key={w.id} widgetId={w.id} data={data} todayIso={todayIso} />
+    } else {
+      const render = renderById.get(w.id)
+      if (render) nodes[w.id] = <CardCell key={w.id} render={render} />
+    }
   }
 
   const greeting = buildGreeting(today, ctx.membership?.displayName ?? null)
