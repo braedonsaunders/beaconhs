@@ -4,10 +4,9 @@
 import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lte, sql } from 'drizzle-orm'
 import type { RequestContext } from '@beaconhs/tenant'
 import {
+  complianceObligations,
+  complianceStatus,
   correctiveActions,
-  documentAcknowledgments,
-  documentAssignments,
-  documentAssignmentAudience,
   formResponses,
   incidents,
   inspectionRecords,
@@ -16,7 +15,6 @@ import {
   people,
   ppeItems,
   ppeIssueReports,
-  trainingAudienceAssignmentRecords,
   trainingCourses,
   trainingRecords,
 } from '@beaconhs/db/schema'
@@ -305,13 +303,19 @@ export async function loadDashboardMetrics(
       .map((n) => (hoursMonth > 0 ? Number(((n * 200_000) / hoursMonth).toFixed(2)) : null))
 
     // --- Training compliance % -------------------------------------------
+    // From the unified compliance engine's materialised scoreboard
+    // (compliance_status) filtered to training + cert obligations — NOT the
+    // decommissioned legacy assignment table (empty post-cutover). Matches the
+    // Insights "Training compliance" card.
     const tcRows = await tx
-      .select({
-        status: trainingAudienceAssignmentRecords.status,
-        c: count(),
-      })
-      .from(trainingAudienceAssignmentRecords)
-      .groupBy(trainingAudienceAssignmentRecords.status)
+      .select({ status: complianceStatus.status, c: count() })
+      .from(complianceStatus)
+      .innerJoin(
+        complianceObligations,
+        eq(complianceObligations.id, complianceStatus.obligationId),
+      )
+      .where(inArray(complianceObligations.sourceModule, ['training', 'cert_requirement']))
+      .groupBy(complianceStatus.status)
     const trainingTotal = tcRows.reduce((acc, r) => acc + Number(r.c), 0)
     const trainingCompleted = tcRows
       .filter((r) => r.status === 'completed')
@@ -320,98 +324,22 @@ export async function loadDashboardMetrics(
       trainingTotal === 0 ? null : Math.round((trainingCompleted / trainingTotal) * 100)
 
     // --- Document compliance % -------------------------------------------
-    // Expected = sum over assignments of audience-resolved people for that doc.
-    // We approximate by counting distinct people per assignment via the
-    // audience table (person rows count 1 each; other audience types contribute
-    // 0 since we don't materialise their resolved sets in this tier).
-    //
-    // For acknowledgments we count distinct (assignment_id, person_id) pairs
-    // where the person has acknowledged the document tied to the assignment.
-    const docAssignments = await tx
-      .select({
-        id: documentAssignments.id,
-        documentId: documentAssignments.documentId,
-      })
-      .from(documentAssignments)
-    const personAudienceCounts =
-      docAssignments.length > 0
-        ? await tx
-            .select({
-              assignmentId: documentAssignmentAudience.assignmentId,
-              c: count(),
-            })
-            .from(documentAssignmentAudience)
-            .where(
-              and(
-                eq(documentAssignmentAudience.type, 'person'),
-                inArray(
-                  documentAssignmentAudience.assignmentId,
-                  docAssignments.map((d) => d.id),
-                ),
-              ),
-            )
-            .groupBy(documentAssignmentAudience.assignmentId)
-        : []
-    const expectedMap = new Map<string, number>()
-    for (const r of personAudienceCounts) expectedMap.set(r.assignmentId, Number(r.c))
-
-    let documentExpected = 0
-    let documentAcked = 0
-    if (docAssignments.length > 0) {
-      // Get ack counts per (assignment.documentId), counting unique people.
-      const ackRows = await tx
-        .select({
-          documentId: documentAcknowledgments.documentId,
-          personId: documentAcknowledgments.personId,
-        })
-        .from(documentAcknowledgments)
-        .where(
-          inArray(
-            documentAcknowledgments.documentId,
-            docAssignments.map((d) => d.documentId),
-          ),
-        )
-      // Map doc -> set of person ids who've acked.
-      const ackedByDoc = new Map<string, Set<string>>()
-      for (const r of ackRows) {
-        const set = ackedByDoc.get(r.documentId) ?? new Set<string>()
-        set.add(r.personId)
-        ackedByDoc.set(r.documentId, set)
-      }
-      // Get person-audience for each assignment to compute hits.
-      const audByAssignment = new Map<string, Set<string>>()
-      if (personAudienceCounts.length > 0) {
-        const audRows = await tx
-          .select({
-            assignmentId: documentAssignmentAudience.assignmentId,
-            entityKey: documentAssignmentAudience.entityKey,
-          })
-          .from(documentAssignmentAudience)
-          .where(
-            and(
-              eq(documentAssignmentAudience.type, 'person'),
-              inArray(
-                documentAssignmentAudience.assignmentId,
-                docAssignments.map((d) => d.id),
-              ),
-            ),
-          )
-        for (const r of audRows) {
-          const set = audByAssignment.get(r.assignmentId) ?? new Set<string>()
-          set.add(r.entityKey)
-          audByAssignment.set(r.assignmentId, set)
-        }
-      }
-      for (const a of docAssignments) {
-        const expected = expectedMap.get(a.id) ?? 0
-        documentExpected += expected
-        const audSet = audByAssignment.get(a.id)
-        const acks = ackedByDoc.get(a.documentId)
-        if (audSet && acks) {
-          for (const personId of audSet) if (acks.has(personId)) documentAcked++
-        }
-      }
-    }
+    // From compliance_status (document obligations) — the unified engine already
+    // resolved audiences + acknowledgments, so it's a simple completed ÷ total
+    // (no per-tier audience approximation). Matches the Insights card.
+    const dcRows = await tx
+      .select({ status: complianceStatus.status, c: count() })
+      .from(complianceStatus)
+      .innerJoin(
+        complianceObligations,
+        eq(complianceObligations.id, complianceStatus.obligationId),
+      )
+      .where(eq(complianceObligations.sourceModule, 'document'))
+      .groupBy(complianceStatus.status)
+    const documentExpected = dcRows.reduce((acc, r) => acc + Number(r.c), 0)
+    const documentAcked = dcRows
+      .filter((r) => r.status === 'completed')
+      .reduce((acc, r) => acc + Number(r.c), 0)
     const documentCompliancePct =
       documentExpected === 0 ? null : Math.round((documentAcked / documentExpected) * 100)
 
