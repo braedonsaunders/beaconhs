@@ -285,3 +285,28 @@ export const CATEGORY_LABELS: Record<WidgetCategory, string> = {
 export function widgetsForRole(role: RoleTier): WidgetMeta[] {
   return Object.values(WIDGETS).filter((w) => !w.rolesShown || w.rolesShown.includes(role))
 }
+
+/** Homepage analytics tiles now backed by the SAME Insights system cards (real
+ *  BHQL over real tables — no bespoke or estimated computation). Maps the
+ *  homepage widget key → the Insights built-in card key, so these tiles render
+ *  through the shared engine + viz and stay consistent with /insights. Widgets
+ *  not listed here (lists, personal/action tiles) have no card equivalent and
+ *  keep rendering as bespoke widgets. */
+export const WIDGET_CARD_KEY: Record<string, string> = {
+  'kpi-trir': 'chart-trir',
+  'kpi-dart': 'chart-dart',
+  'kpi-training-compliance': 'kpi-training-compliance',
+  'kpi-document-compliance': 'kpi-doc-compliance',
+  'kpi-days-since-recordable': 'kpi-days-recordable',
+  'kpi-incidents-30d': 'kpi-incidents',
+  'kpi-open-cas': 'kpi-open-cas',
+  'kpi-overdue-cas': 'kpi-overdue-cas',
+  'chart-severity-pyramid': 'chart-severity',
+  'chart-capa-aging': 'chart-ca-aging',
+  'chart-top-sites': 'chart-top-sites',
+  'op-submissions-today': 'kpi-submissions',
+  'op-inspections-mtd': 'kpi-inspections',
+  'op-lone-worker-active': 'kpi-lw-active',
+  'kpi-ppe-open-issues': 'kpi-ppe-issues',
+  'kpi-people-active': 'kpi-people',
+}

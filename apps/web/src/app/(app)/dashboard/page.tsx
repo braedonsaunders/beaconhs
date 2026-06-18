@@ -4,10 +4,11 @@ import { loadDashboardMetrics } from './_metrics'
 import { loadDashboardLayout } from './_load-layout'
 import { DashboardGrid } from './_dashboard-grid'
 import { WidgetCard } from './_widget-views'
-import { WIDGETS } from './_widget-registry'
+import { WIDGETS, WIDGET_CARD_KEY } from './_widget-registry'
 import { DashboardHeader } from './_dashboard-header'
 import { loadCardsForPalette } from '../insights/cards/_data'
 import { loadDashboardCardRenders } from '../insights/_data'
+import { ensureSystemCards } from '../insights/_system-cards'
 import { CardCell } from '../insights/_viz/card-cell.client'
 
 const UUID_RE = /^[0-9a-f-]{36}$/i
@@ -32,37 +33,52 @@ export default async function DashboardPage() {
   const today = new Date()
   const todayIso = today.toISOString().slice(0, 10)
 
-  const [{ layout, role }, data] = await Promise.all([
+  const [{ layout, role }, data, systemCards] = await Promise.all([
     loadDashboardLayout(ctx),
     loadDashboardMetrics(ctx, today),
+    ensureSystemCards(ctx),
   ])
 
-  // A placed widget id is EITHER a bespoke widget key OR a saved Insights card
-  // uuid. Run the placed cards through the same engine + viz as /insights (each
-  // under its own RLS tx), so a card built once renders on both surfaces.
-  const cardIds = layout.widgets
-    .filter((w) => !(w.id in WIDGETS) && UUID_RE.test(w.id))
+  // Every placed widget is EITHER a bespoke widget key, a headline analytics key
+  // backed by an Insights system card (WIDGET_CARD_KEY), or a saved library-card
+  // uuid. Resolve the latter two to real Cards and run them through the SAME
+  // engine + viz as /insights — so the homepage shows identical real data and a
+  // card built once renders on both surfaces. Build widgetId -> cardId plus the
+  // de-duped set of distinct cards to compile (one render even if placed twice).
+  type CardItem = Parameters<typeof loadDashboardCardRenders>[1][number]
+  const widgetToCardId = new Map<string, string>()
+  const cardsToRun = new Map<string, CardItem>()
+  for (const w of layout.widgets) {
+    const card = systemCards.get(WIDGET_CARD_KEY[w.id] ?? '')
+    if (!card) continue
+    widgetToCardId.set(w.id, card.id)
+    cardsToRun.set(card.id, { ...card, kind: 'question', config: null })
+  }
+  const uuidIds = layout.widgets
+    .filter((w) => !(w.id in WIDGETS) && !widgetToCardId.has(w.id) && UUID_RE.test(w.id))
     .map((w) => w.id)
-  const renderById = new Map(
-    cardIds.length
-      ? await (async () => {
-          const byId = new Map((await loadCardsForPalette(ctx)).map((c) => [c.id, c]))
-          const cards = cardIds.map((id) => byId.get(id)).filter((c) => c != null)
-          const renders = await loadDashboardCardRenders(ctx, cards)
-          return renders.map((r) => [r.id, r] as const)
-        })()
-      : [],
-  )
+  if (uuidIds.length > 0) {
+    const byId = new Map((await loadCardsForPalette(ctx)).map((c) => [c.id, c]))
+    for (const id of uuidIds) {
+      const c = byId.get(id)
+      if (!c) continue
+      widgetToCardId.set(id, c.id)
+      cardsToRun.set(c.id, c)
+    }
+  }
+  const renders = await loadDashboardCardRenders(ctx, [...cardsToRun.values()])
+  const renderByCardId = new Map(renders.map((r) => [r.id, r] as const))
 
   // Pre-render every placed widget into a serialisable map keyed by id. Doing
   // this in the RSC keeps each card a pure JSX subtree we can ship to the client.
   const nodes: Record<string, React.ReactNode> = {}
   for (const w of layout.widgets) {
-    if (w.id in WIDGETS) {
-      nodes[w.id] = <WidgetCard key={w.id} widgetId={w.id} data={data} todayIso={todayIso} />
-    } else {
-      const render = renderById.get(w.id)
+    const cardId = widgetToCardId.get(w.id)
+    if (cardId) {
+      const render = renderByCardId.get(cardId)
       if (render) nodes[w.id] = <CardCell key={w.id} render={render} />
+    } else if (w.id in WIDGETS) {
+      nodes[w.id] = <WidgetCard key={w.id} widgetId={w.id} data={data} todayIso={todayIso} />
     }
   }
 
