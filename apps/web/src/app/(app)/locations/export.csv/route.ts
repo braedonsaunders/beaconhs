@@ -1,10 +1,10 @@
 import type { NextRequest } from 'next/server'
-import { and, asc, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
+import { and, asc, desc, eq, ilike, isNotNull, isNull, or, type SQL } from 'drizzle-orm'
 import { orgUnits } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { csvFilename, csvResponse } from '@/lib/csv'
-import { parseListParams } from '@/lib/list-params'
+import { parseListParams, pickString } from '@/lib/list-params'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,6 +19,7 @@ export async function GET(req: NextRequest) {
     perPage: 25,
     allowedSorts: SORTS,
   })
+  const statusFilter = pickString(sp.status) ?? 'active'
   const ctx = await requireRequestContext()
 
   const rows = await ctx.db(async (tx) => {
@@ -28,6 +29,8 @@ export async function GET(req: NextRequest) {
       const cond = or(ilike(orgUnits.name, term), ilike(orgUnits.code, term))
       if (cond) filters.push(cond)
     }
+    if (statusFilter === 'active') filters.push(isNull(orgUnits.deletedAt))
+    else if (statusFilter === 'archived') filters.push(isNotNull(orgUnits.deletedAt))
     const whereClause = and(...filters)
 
     const orderBy =
@@ -47,7 +50,10 @@ export async function GET(req: NextRequest) {
     entityType: 'org_unit',
     action: 'export',
     summary: `Exported ${rows.length} customers to CSV`,
-    metadata: { format: 'csv', filters: { q: params.q ?? null, level: 'customer' } },
+    metadata: {
+      format: 'csv',
+      filters: { q: params.q ?? null, level: 'customer', status: statusFilter },
+    },
   })
 
   return csvResponse({

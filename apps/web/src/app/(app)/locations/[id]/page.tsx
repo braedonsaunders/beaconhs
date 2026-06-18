@@ -45,7 +45,13 @@ import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { ActivityFeed } from '@/components/activity-feed'
 import { DetailPageLayout } from '@/components/page-layout'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
-import { createContactFromDrawer, createProject, updateLocation } from '../_actions/locations'
+import {
+  archiveLocation,
+  createContactFromDrawer,
+  createProject,
+  restoreLocation,
+  updateLocation,
+} from '../_actions/locations'
 import { ContactCreateDrawer } from './_drawers'
 
 export const dynamic = 'force-dynamic'
@@ -273,7 +279,29 @@ async function renderCustomer({
           back={{ href: '/locations', label: 'Back to locations' }}
           title={unit.name}
           subtitle={unit.code ? `Customer · ${unit.code}` : 'Customer'}
-          badge={<Badge variant="secondary">customer</Badge>}
+          badge={
+            <>
+              <Badge variant="secondary">customer</Badge>
+              {unit.deletedAt ? <Badge variant="warning">Archived</Badge> : null}
+            </>
+          }
+          actions={
+            unit.deletedAt ? (
+              <form action={restoreLocation}>
+                <input type="hidden" name="id" value={unit.id} />
+                <Button type="submit" variant="outline" size="sm">
+                  Restore
+                </Button>
+              </form>
+            ) : (
+              <form action={archiveLocation}>
+                <input type="hidden" name="id" value={unit.id} />
+                <Button type="submit" variant="outline" size="sm">
+                  Archive
+                </Button>
+              </form>
+            )
+          }
         />
       }
       subtabs={
@@ -658,27 +686,34 @@ function ProjectsTab({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {projects.map((p) => (
-              <TableRow key={p.id}>
-                <TableCell>
-                  <Link
-                    href={`/locations/${p.id}`}
-                    className="font-medium text-slate-900 hover:underline"
-                  >
-                    {p.name}
-                  </Link>
-                </TableCell>
-                <TableCell className="font-mono text-xs text-slate-600">{p.code ?? '—'}</TableCell>
-                <TableCell className="text-right">
-                  <Link
-                    href={`/locations/${p.id}`}
-                    className="text-xs text-teal-700 hover:underline"
-                  >
-                    View →
-                  </Link>
-                </TableCell>
-              </TableRow>
-            ))}
+            {[...projects]
+              .sort((a, b) => (a.deletedAt ? 1 : 0) - (b.deletedAt ? 1 : 0))
+              .map((p) => (
+                <TableRow key={p.id}>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <Link
+                        href={`/locations/${p.id}`}
+                        className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                      >
+                        {p.name}
+                      </Link>
+                      {p.deletedAt ? <Badge variant="warning">Archived</Badge> : null}
+                    </div>
+                  </TableCell>
+                  <TableCell className="font-mono text-xs text-slate-600">
+                    {p.code ?? '—'}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Link
+                      href={`/locations/${p.id}`}
+                      className="text-xs text-teal-700 hover:underline"
+                    >
+                      View →
+                    </Link>
+                  </TableCell>
+                </TableRow>
+              ))}
           </TableBody>
         </Table>
       )}

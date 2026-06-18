@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, isNull, or } from 'drizzle-orm'
 import {
   Alert,
   AlertDescription,
@@ -283,7 +283,16 @@ export default async function HazidAssessmentDetailPage({
     const projectOptions = await tx
       .select({ id: orgUnits.id, name: orgUnits.name })
       .from(orgUnits)
-      .where(eq(orgUnits.level, 'project'))
+      // active jobs only, plus this assessment's current project even if it was archived
+      .where(
+        and(
+          eq(orgUnits.level, 'project'),
+          or(
+            isNull(orgUnits.deletedAt),
+            row.a.projectOrgUnitId ? eq(orgUnits.id, row.a.projectOrgUnitId) : undefined,
+          ),
+        ),
+      )
       .orderBy(asc(orgUnits.name))
     const typeOptions = await tx
       .select({ id: hazidAssessmentTypes.id, name: hazidAssessmentTypes.name })

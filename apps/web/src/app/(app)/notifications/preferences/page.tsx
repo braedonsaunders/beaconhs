@@ -4,6 +4,7 @@ import { notificationPreferences } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
 import { PreferencesForm } from './_form'
+import { PushToggle } from './_push-toggle'
 import {
   NOTIFICATION_CATEGORIES,
   NOTIFICATION_CHANNELS,
@@ -54,6 +55,7 @@ export default async function NotificationPreferencesPage() {
           description="Choose which notification categories reach you, and on which channels. In-app delivery always lands in your inbox."
           back={{ href: '/notifications', label: 'Back to inbox' }}
         />
+        <PushToggle vapidPublicKey={process.env.VAPID_PUBLIC_KEY ?? null} />
         <PreferencesForm initial={initial} />
       </div>
     </PageContainer>

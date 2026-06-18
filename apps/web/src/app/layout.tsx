@@ -6,7 +6,9 @@ import { SplashScreen } from '@/components/brand-splash'
 export const metadata: Metadata = {
   title: { default: 'BeaconHS', template: '%s · BeaconHS' },
   description: 'Health & Safety platform',
-  manifest: '/manifest.webmanifest',
+  // The manifest <link> is rendered manually in <head> below so it can carry
+  // crossorigin="use-credentials" — without it the browser fetches the manifest
+  // without the session cookie and the per-tenant branding can't be resolved.
   applicationName: 'BeaconHS',
   appleWebApp: { capable: true, statusBarStyle: 'default', title: 'BeaconHS' },
 }
@@ -30,6 +32,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className="h-full" suppressHydrationWarning>
       <head>
+        <link rel="manifest" href="/manifest.webmanifest" crossOrigin="use-credentials" />
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
       </head>
       <body className="h-full overflow-hidden bg-slate-50 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100">

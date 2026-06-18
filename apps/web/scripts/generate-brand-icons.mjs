@@ -77,6 +77,24 @@ function tile(size, scale) {
 
 const faviconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 56 60">${beaconTop(NAVY)}</svg>`
 
+// Monochrome silhouette for the Android push-notification badge. The platform
+// masks the badge to its alpha channel and tints it with the system colour, so
+// we render the beacon top filled solid-white on a transparent background.
+const badgeSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 56 60">
+  <g fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round">
+    <path d="M19.1 20.8L6.9 16.4" />
+    <path d="M22.6 16.2L15.1 5.6" />
+    <path d="M28 14.5L28 3" />
+    <path d="M33.4 16.2L40.9 5.6" />
+    <path d="M36.9 20.8L49.1 16.4" />
+  </g>
+  <g fill="#fff" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M15.5 38L28 24L40.5 38Z" />
+    <path d="M20 38L36 38L36 53L20 53Z" />
+    <path d="M14.5 55L41.5 55" />
+  </g>
+</svg>`
+
 const here = dirname(fileURLToPath(import.meta.url))
 const webRoot = join(here, '..')
 const iconsDir = join(webRoot, 'public/icons')
@@ -95,5 +113,6 @@ await Promise.all([
   render(tile(512, 0.55), 512, join(iconsDir, 'maskable-512.png')),
   render(tile(512, 0.66), 180, join(webRoot, 'src/app/apple-icon.png')),
   render(faviconSvg, 64, join(webRoot, 'src/app/icon1.png')),
+  render(badgeSvg, 72, join(iconsDir, 'badge-72.png')),
 ])
 console.log('Brand icons regenerated.')

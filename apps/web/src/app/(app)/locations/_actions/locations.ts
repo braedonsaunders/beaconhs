@@ -100,6 +100,63 @@ export async function updateLocation(formData: FormData): Promise<void> {
   revalidatePath('/locations')
 }
 
+/**
+ * Archive a customer location (soft-delete). Archived customers drop off the
+ * default /locations list — switch the Status filter to "Archived" to find and
+ * restore them. Non-cascading: descendant projects/sites are left untouched.
+ */
+export async function archiveLocation(formData: FormData): Promise<void> {
+  const ctx = await requireRequestContext()
+  const id = String(formData.get('id') ?? '')
+  if (!id) return
+
+  const before = await ctx.db(async (tx) => {
+    const [u] = await tx.select().from(orgUnits).where(eq(orgUnits.id, id)).limit(1)
+    return u
+  })
+  if (!before || before.deletedAt) return
+
+  await ctx.db((tx) =>
+    tx.update(orgUnits).set({ deletedAt: new Date() }).where(eq(orgUnits.id, id)),
+  )
+  await recordAudit(ctx, {
+    entityType: 'org_unit',
+    entityId: id,
+    action: 'archive',
+    summary: `Archived ${before.level} "${before.name}"`,
+    before: before as unknown as Record<string, unknown>,
+  })
+  revalidatePath('/locations')
+  revalidatePath(`/locations/${id}`)
+}
+
+/**
+ * Restore a previously archived customer location — it reappears in the default
+ * /locations list.
+ */
+export async function restoreLocation(formData: FormData): Promise<void> {
+  const ctx = await requireRequestContext()
+  const id = String(formData.get('id') ?? '')
+  if (!id) return
+
+  const before = await ctx.db(async (tx) => {
+    const [u] = await tx.select().from(orgUnits).where(eq(orgUnits.id, id)).limit(1)
+    return u
+  })
+  if (!before || !before.deletedAt) return
+
+  await ctx.db((tx) => tx.update(orgUnits).set({ deletedAt: null }).where(eq(orgUnits.id, id)))
+  await recordAudit(ctx, {
+    entityType: 'org_unit',
+    entityId: id,
+    action: 'update',
+    summary: `Restored ${before.level} "${before.name}"`,
+    after: { deletedAt: null },
+  })
+  revalidatePath('/locations')
+  revalidatePath(`/locations/${id}`)
+}
+
 function buildAddressFromForm(formData: FormData): {
   line1?: string
   line2?: string

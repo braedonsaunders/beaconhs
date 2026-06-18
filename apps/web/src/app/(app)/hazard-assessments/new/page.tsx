@@ -44,7 +44,8 @@ export default async function NewHazardAssessmentPage() {
     const projects = await tx
       .select({ id: orgUnits.id, name: orgUnits.name })
       .from(orgUnits)
-      .where(eq(orgUnits.level, 'project'))
+      // active jobs only (archived/closed jobs are not selectable for a new assessment)
+      .where(and(eq(orgUnits.level, 'project'), isNull(orgUnits.deletedAt)))
       .orderBy(asc(orgUnits.name))
 
     const allTypes = await tx

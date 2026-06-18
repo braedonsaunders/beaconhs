@@ -80,8 +80,15 @@ export async function processNotification(job: Job<NotifyJobData>): Promise<void
               JSON.stringify({ title: d.title, body: d.body, linkPath: d.linkPath }),
             )
           } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err)
-            console.warn(`[push] failed for ${t.user.email}: ${msg}`)
+            const statusCode = (err as { statusCode?: number }).statusCode
+            if (statusCode === 404 || statusCode === 410) {
+              // Endpoint gone (unsubscribed or expired) — prune it so we stop
+              // retrying a dead subscription on every future notification.
+              await tx.delete(webpushSubscriptions).where(eq(webpushSubscriptions.id, sub.id))
+            } else {
+              const msg = err instanceof Error ? err.message : String(err)
+              console.warn(`[push] failed for ${t.user.email}: ${msg}`)
+            }
           }
         }
       }

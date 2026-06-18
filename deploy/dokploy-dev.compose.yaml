@@ -23,6 +23,11 @@ services:
       R2_BUCKET: ${R2_BUCKET}
       R2_PUBLIC_URL: ${R2_PUBLIC_URL}
       RESEND_API_KEY: ${RESEND_API_KEY}
+      # Web serves the public key to the subscribe client and signs the
+      # "send test push" action, so it needs the full keypair too.
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY}
+      VAPID_SUBJECT: ${VAPID_SUBJECT}
     networks: [infra-net, dokploy-network]
     deploy:
       replicas: 1
@@ -46,6 +51,10 @@ services:
       R2_PUBLIC_URL: ${R2_PUBLIC_URL}
       RESEND_API_KEY: ${RESEND_API_KEY}
       APP_URL: ${APP_URL}
+      # Worker fans push notifications out to subscribed devices.
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY}
+      VAPID_SUBJECT: ${VAPID_SUBJECT}
     networks: [infra-net]
     deploy:
       replicas: 1

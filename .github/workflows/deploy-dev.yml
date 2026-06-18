@@ -119,6 +119,9 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
           R2_PUBLIC_URL: ${{ secrets.R2_PUBLIC_URL }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
         run: |
           set -euo pipefail
           IMAGE="${IMAGE_NAME}:${GITHUB_SHA}"
@@ -132,7 +135,10 @@ jobs:
           R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
           R2_BUCKET=${R2_BUCKET}
           R2_PUBLIC_URL=${R2_PUBLIC_URL}
-          RESEND_API_KEY=${RESEND_API_KEY}"
+          RESEND_API_KEY=${RESEND_API_KEY}
+          VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
+          VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
+          VAPID_SUBJECT=${VAPID_SUBJECT}"
           jq -n --arg id "$COMPOSE_ID" --arg cf "$COMPOSE_FILE" --arg env "$ENV_BLOCK" --arg reg "$REGISTRY_ID" \
             '{composeId:$id, sourceType:"raw", composeType:"stack", composeFile:$cf, env:$env, registryId:$reg}' \
             | curl -sf -X POST "$DOKPLOY_URL/api/compose.update" \

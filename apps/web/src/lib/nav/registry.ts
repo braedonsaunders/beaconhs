@@ -32,11 +32,11 @@ export type NavModule = {
 export const NAV_GROUP_ORDER = [
   'Overview',
   'Frontline',
-  'Programs',
+  'Knowledge',
   'Assets & people',
   // Program oversight — obligations/compliance + analytics/dashboards + reports.
   'Assurance',
-  'Settings',
+  'Platform',
 ] as const
 
 export type NavGroupLabel = (typeof NAV_GROUP_ORDER)[number]
@@ -99,9 +99,9 @@ export const NAV_MODULES: NavModule[] = [
   // Field tools (safe-distance calc, etc.) sit with the crew workflows by default.
   { key: 'tools', href: '/tools', label: 'Tools', iconKey: 'wrench', group: 'Frontline' },
 
-  // Programs
-  { key: 'training', href: '/training', label: 'Training', iconKey: 'grad', group: 'Programs' },
-  { key: 'documents', href: '/documents', label: 'Documents', iconKey: 'book', group: 'Programs' },
+  // Knowledge
+  { key: 'training', href: '/training', label: 'Training', iconKey: 'grad', group: 'Knowledge' },
+  { key: 'documents', href: '/documents', label: 'Documents', iconKey: 'book', group: 'Knowledge' },
 
   // Assets & people
   { key: 'people', href: '/people', label: 'People', iconKey: 'users', group: 'Assets & people' },
@@ -151,7 +151,7 @@ export const NAV_MODULES: NavModule[] = [
     group: 'Assurance',
   },
 
-  // Settings
+  // Platform
   // Library & catalogues and Navigation are intentionally NOT sidebar modules —
   // they're surfaced as tiles on the /admin landing page to keep the sidebar lean.
   {
@@ -160,10 +160,10 @@ export const NAV_MODULES: NavModule[] = [
     label: 'Admin',
     iconKey: 'settings',
     requiredPermission: 'admin.settings.manage',
-    group: 'Settings',
+    group: 'Platform',
   },
   // Forms = the template library + designer; a build/admin task, so it lives in
-  // Settings. Crews don't need the library — they fill forms via assignments,
+  // Platform. Crews don't need the library — they fill forms via assignments,
   // the module pages (inspections/JSHA/…), and pinned forms.
   {
     key: 'forms',
@@ -171,9 +171,9 @@ export const NAV_MODULES: NavModule[] = [
     label: 'Builder',
     iconKey: 'clipboard-check',
     requiredPermission: 'forms.template.read',
-    group: 'Settings',
+    group: 'Platform',
   },
-  { key: 'utilities', href: '/utilities', label: 'Utilities', iconKey: 'gauge', group: 'Settings' },
+  { key: 'utilities', href: '/utilities', label: 'Utilities', iconKey: 'gauge', group: 'Platform' },
 ]
 
 const MODULE_BY_KEY = new Map(NAV_MODULES.map((m) => [m.key, m]))

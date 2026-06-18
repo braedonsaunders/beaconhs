@@ -6,6 +6,7 @@
 // can fully customise output.
 
 import {
+  entityKindForPicker,
   evaluateFormulaTree,
   evaluateLogicRule,
   sanitizeDocumentHtml,
@@ -112,6 +113,11 @@ export type RenderInput = {
   // when omitted, those fields render as the configured `defaultDisplay`
   // (or em-dash) on the resulting PDF.
   entitiesByField?: EntityAttrsByField
+  // Resolved display name per picker field id (e.g. `{ jobNumber: "Acme
+  // Tower" }`) so picker fields print the entity's name instead of the raw
+  // stored id. Keyed by top-level field id; repeating-row pickers are not
+  // resolved and fall back to the raw id.
+  pickerLabelsByField?: Record<string, string>
   metadata: {
     title: string
     reference?: string
@@ -267,6 +273,7 @@ function buildHtml(input: RenderInput): string {
                 f.type,
                 raw,
                 (f as { config?: Record<string, unknown> }).config,
+                input.pickerLabelsByField?.[f.id],
               )
               if (display === null) return ''
               const spanStyle = cols
@@ -362,11 +369,24 @@ function buildHtml(input: RenderInput): string {
 </body></html>`
 }
 
-function renderValue(type: string, raw: unknown, config?: Record<string, unknown>): string | null {
+function renderValue(
+  type: string,
+  raw: unknown,
+  config?: Record<string, unknown>,
+  pickerLabel?: string,
+): string | null {
   if (raw === undefined || raw === null || raw === '') {
     // `metric` is a live aggregate with no stored value — omit from the PDF.
     if (['heading', 'paragraph', 'image', 'divider', 'metric'].includes(type)) return null
     return '<em style="color:#999">—</em>'
+  }
+  // Single-entity pickers store an entity id; the caller resolves it to a
+  // display name (worker-side, RLS-scoped) and passes it via
+  // pickerLabelsByField. Detect them via the shared registry so new picker
+  // kinds (customer/area/…) are covered without touching this switch. Fall
+  // back to the raw id when no name was resolved (e.g. repeating-row pickers).
+  if (entityKindForPicker(type)) {
+    return escapeHtml(pickerLabel ?? String(raw))
   }
   switch (type) {
     case 'photo':
@@ -380,6 +400,14 @@ function renderValue(type: string, raw: unknown, config?: Record<string, unknown
     }
     case 'signature':
       return '<em>see Signatures section</em>'
+    case 'sketch': {
+      // Freehand diagram — the value carries a PNG url (same shape as a
+      // signature). Embed it inline so the lift diagram prints.
+      const sk = raw as { url?: string }
+      return sk && sk.url
+        ? `<img src="${escapeHtml(sk.url)}" style="max-width:100%;max-height:360px;border:1px solid #ccc"/>`
+        : '<em style="color:#999">—</em>'
+    }
     case 'checkbox_group':
     case 'multi_select':
       return Array.isArray(raw)

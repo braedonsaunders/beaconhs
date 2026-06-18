@@ -8,6 +8,7 @@ import { AppSidebar } from './app-sidebar'
 import { MobileNavProvider } from './mobile-nav'
 import { MobileNavToggle } from './mobile-nav-toggle'
 import { MobileTabBar } from './mobile-tab-bar'
+import { ServiceWorkerRegistrar } from './service-worker-registrar'
 
 type Ctx = {
   isSuperAdmin: boolean
@@ -38,6 +39,7 @@ export function AppShell({
   const display = ctx.membership?.displayName ?? 'Account'
   return (
     <div className="flex h-screen overflow-hidden">
+      <ServiceWorkerRegistrar unreadCount={unreadCount} />
       <AppSidebar groups={groups} defaultCollapsed={defaultCollapsed} />
 
       <MobileNavProvider>

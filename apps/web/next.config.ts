@@ -26,6 +26,8 @@ const nextConfig: NextConfig = {
     'mssql',
     'bullmq',
     'ioredis',
+    // Web Push (Node crypto) — used by the test-push server action.
+    'web-push',
     'puppeteer-core',
     '@aws-sdk/client-s3',
     '@aws-sdk/s3-request-presigner',

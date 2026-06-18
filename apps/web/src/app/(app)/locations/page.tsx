@@ -1,7 +1,21 @@
 import Link from 'next/link'
 import { MapPin } from 'lucide-react'
-import { and, asc, count, desc, eq, ilike, inArray, or, sql, type SQL } from 'drizzle-orm'
 import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  isNotNull,
+  isNull,
+  or,
+  sql,
+  type SQL,
+} from 'drizzle-orm'
+import {
+  Badge,
   Button,
   EmptyState,
   PageHeader,
@@ -14,8 +28,9 @@ import {
 } from '@beaconhs/ui'
 import { customerContacts, orgUnits } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
-import { buildExportHref, parseListParams } from '@/lib/list-params'
+import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
+import { FilterChips } from '@/components/filter-bar'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { ListPageLayout } from '@/components/page-layout'
@@ -31,16 +46,30 @@ export default async function LocationsPage({
 }) {
   const sp = await searchParams
   const params = parseListParams(sp, { sort: 'name', dir: 'asc', perPage: 25, allowedSorts: SORTS })
+  const statusFilter = pickString(sp.status) ?? 'active'
   const ctx = await requireRequestContext()
 
-  const { rows, total } = await ctx.db(async (tx) => {
-    const filters: SQL<unknown>[] = [eq(orgUnits.level, 'customer')]
+  const { rows, total, activeCount, archivedCount } = await ctx.db(async (tx) => {
+    const baseFilters: SQL<unknown>[] = [eq(orgUnits.level, 'customer')]
     if (params.q) {
       const term = `%${params.q}%`
       const cond = or(ilike(orgUnits.name, term), ilike(orgUnits.code, term))
-      if (cond) filters.push(cond)
+      if (cond) baseFilters.push(cond)
     }
+    const filters = [...baseFilters]
+    if (statusFilter === 'active') filters.push(isNull(orgUnits.deletedAt))
+    else if (statusFilter === 'archived') filters.push(isNotNull(orgUnits.deletedAt))
     const whereClause = and(...filters)
+
+    // Active vs archived tallies for the status filter, over the search-filtered
+    // set but independent of the status selection itself.
+    const [tallies] = await tx
+      .select({
+        active: sql<string>`count(*) filter (where ${orgUnits.deletedAt} is null)`,
+        archived: sql<string>`count(*) filter (where ${orgUnits.deletedAt} is not null)`,
+      })
+      .from(orgUnits)
+      .where(and(...baseFilters))
 
     const orderBy =
       params.sort === 'code'
@@ -122,6 +151,8 @@ export default async function LocationsPage({
         contacts: contactCounts.get(c.id) ?? 0,
       })),
       total: Number(tot?.c ?? 0),
+      activeCount: Number(tallies?.active ?? 0),
+      archivedCount: Number(tallies?.archived ?? 0),
     }
   })
 
@@ -145,8 +176,19 @@ export default async function LocationsPage({
               </div>
             }
           />
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <SearchInput placeholder="Search by name or code" />
+            <FilterChips
+              basePath="/locations"
+              currentParams={sp}
+              paramKey="status"
+              label="Status"
+              defaultValue="active"
+              options={[
+                { value: 'active', label: 'Active', count: activeCount },
+                { value: 'archived', label: 'Archived', count: archivedCount },
+              ]}
+            />
           </div>
         </>
       }
@@ -154,12 +196,24 @@ export default async function LocationsPage({
       {rows.length === 0 ? (
         <EmptyState
           icon={<MapPin size={32} />}
-          title={params.q ? `No customers match "${params.q}"` : 'No customers'}
-          description="Add a customer to track projects, sites, and on-site contacts."
+          title={
+            params.q
+              ? `No customers match "${params.q}"`
+              : statusFilter === 'archived'
+                ? 'No archived customers'
+                : 'No customers'
+          }
+          description={
+            statusFilter === 'archived'
+              ? 'Archived customers appear here once you archive them from a customer page.'
+              : 'Add a customer to track projects, sites, and on-site contacts.'
+          }
           action={
-            <Link href="/locations/new">
-              <Button>Add customer</Button>
-            </Link>
+            statusFilter === 'archived' ? null : (
+              <Link href="/locations/new">
+                <Button>Add customer</Button>
+              </Link>
+            )
           }
         />
       ) : (
@@ -183,17 +237,20 @@ export default async function LocationsPage({
               {rows.map(({ unit, projects, sites, contacts }) => (
                 <TableRow key={unit.id}>
                   <TableCell>
-                    <Link
-                      href={`/locations/${unit.id}`}
-                      className="font-medium text-slate-900 hover:underline"
-                    >
-                      {unit.name}
-                    </Link>
+                    <div className="flex items-center gap-2">
+                      <Link
+                        href={`/locations/${unit.id}`}
+                        className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                      >
+                        {unit.name}
+                      </Link>
+                      {unit.deletedAt ? <Badge variant="warning">Archived</Badge> : null}
+                    </div>
                   </TableCell>
-                  <TableCell className="font-mono text-xs text-slate-600">
+                  <TableCell className="font-mono text-xs text-slate-600 dark:text-slate-400">
                     {unit.code ?? '—'}
                   </TableCell>
-                  <TableCell className="text-slate-600">
+                  <TableCell className="text-slate-600 dark:text-slate-400">
                     {formatAddressLine(unit.address) ?? '—'}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{projects}</TableCell>
