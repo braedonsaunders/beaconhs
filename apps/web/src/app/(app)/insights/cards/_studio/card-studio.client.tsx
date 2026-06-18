@@ -40,7 +40,24 @@ import { VizRenderer } from '../../_viz/viz-renderer.client'
 import { VizIcon } from '../../_viz/viz-icon'
 import { createCard, generateCard, previewCard, updateCard } from '../_actions'
 
-type Mode = 'rows' | 'summarize'
+type Mode = 'rows' | 'summarize' | 'matrix'
+
+/** A guided coverage matrix: two dimension axes (cross-product) ⟕ the latest fact
+ *  per cell, shown as a status (missing/expired/expiring/valid by an expiry date,
+ *  or the latest value of a field). Compiles to a spine query — no view. */
+type MatrixSpec = {
+  rowSource: string
+  rowLabel: string
+  colSource: string
+  colLabel: string
+  factSource: string
+  factRowKey: string
+  factColKey: string
+  latestBy: string
+  valueMode: 'coverage' | 'latest'
+  expiryField: string
+  latestField: string
+}
 type FilterOp = 'eq' | 'neq' | 'contains' | 'gte' | 'lte' | 'in' | 'is_null' | 'is_not_null'
 type FilterRow = { field: string; op: FilterOp; value: string }
 type BreakoutRow = { field: string; bin?: BhqlBin; expr?: BhqlExpr; unnest?: 'array' | 'jsonb' }
@@ -132,6 +149,54 @@ function coerceValue(value: string, op: FilterOp): string | number | string[] | 
   return value
 }
 
+const CURRENT_DATE_EXPR: BhqlExpr = { ex: 'call', fn: 'current_date', args: [] }
+
+/** The standard coverage CASE (missing/valid/expired/expiring) keyed on a fact
+ *  expiry field ref — the training-matrix RAG colours come from these strings. */
+function coverageCase(expiryRef: string): BhqlExpr {
+  return {
+    ex: 'case',
+    branches: [
+      { when: { ex: 'isnull', arg: { ex: 'field', field: 'f.id' } }, then: { ex: 'lit', value: 'missing' } },
+      { when: { ex: 'isnull', arg: { ex: 'field', field: expiryRef } }, then: { ex: 'lit', value: 'valid' } },
+      { when: { ex: 'compare', op: '<', left: { ex: 'field', field: expiryRef }, right: CURRENT_DATE_EXPR }, then: { ex: 'lit', value: 'expired' } },
+      { when: { ex: 'compare', op: '<=', left: { ex: 'field', field: expiryRef }, right: { ex: 'arith', op: '+', left: CURRENT_DATE_EXPR, right: { ex: 'lit', value: 90 } } }, then: { ex: 'lit', value: 'expiring' } },
+    ],
+    else: { ex: 'lit', value: 'valid' },
+  }
+}
+
+/** Pick a field by name preference (else the first non-pk) — for matrix defaults. */
+function pickField(entity: AnalyticsEntity | undefined, prefer: RegExp): string {
+  if (!entity) return ''
+  const cols = entity.columns.filter((c) => c.semanticType !== 'pk')
+  return (cols.find((c) => prefer.test(c.key)) ?? cols[0])?.key ?? ''
+}
+
+function defaultMatrixSpec(
+  entities: AnalyticsEntity[],
+  entityMap: Record<string, AnalyticsEntity>,
+): MatrixSpec {
+  const has = (k: string) => Boolean(entityMap[k])
+  const rowSource = has('people') ? 'people' : (entities[0]?.key ?? '')
+  const colSource = has('training_courses') ? 'training_courses' : (entities[1]?.key ?? rowSource)
+  const factSource = has('training_records') ? 'training_records' : (entities[2]?.key ?? rowSource)
+  const factEntity = entityMap[factSource]
+  return {
+    rowSource,
+    rowLabel: pickField(entityMap[rowSource], /name|last_name|title|label/),
+    colSource,
+    colLabel: pickField(entityMap[colSource], /code|name|title/),
+    factSource,
+    factRowKey: pickField(factEntity, /person_id|people_id/),
+    factColKey: pickField(factEntity, /course_id|item_id|type_id/),
+    latestBy: pickField(factEntity, /completed_on|completed|occurred_at|created_at|date/),
+    valueMode: 'coverage',
+    expiryField: pickField(factEntity, /expires_on|expiry|valid_until/),
+    latestField: pickField(factEntity, /completed_on|status|created_at/),
+  }
+}
+
 export type CardStudioInitial = {
   id?: string
   name: string
@@ -181,6 +246,9 @@ export function CardStudio({
   const [extraAggs, setExtraAggs] = useState<BhqlExprMeasure[]>(decoded.extraAggs)
   const [extraBreakouts, setExtraBreakouts] = useState<BhqlBreakout[]>(decoded.extraBreakouts)
   const [crossMetrics, setCrossMetrics] = useState<CrossMetricRow[]>(decoded.crossMetrics)
+  const [matrixSpec, setMatrixSpec] = useState<MatrixSpec>(
+    () => decoded.matrixSpec ?? defaultMatrixSpec(entities, entityMap),
+  )
   const [vizType, setVizType] = useState<string>(initial.vizType || 'table')
   const [vizTouched, setVizTouched] = useState(Boolean(initial.id))
   const [suggestedViz, setSuggestedViz] = useState<string | null>(null)
@@ -218,6 +286,59 @@ export function CardStudio({
             .map((f) => ({ field: f.field, op: f.op, value: coerceValue(f.value, f.op) })),
         }
       : null
+
+    if (mode === 'matrix') {
+      const ms = matrixSpec
+      const statusAgg: BhqlAnyMeasure =
+        ms.valueMode === 'coverage'
+          ? {
+              kind: 'expr',
+              alias: 'status',
+              expr: { ex: 'agg', fn: 'min', arg: coverageCase(`f.${ms.expiryField}`) },
+            }
+          : { fn: 'min', field: `f.${ms.latestField}`, alias: 'status' }
+      return {
+        version: 'bhql/1',
+        display: 'pivot',
+        pivot: {
+          rows: [{ breakout: 'row' }],
+          columns: [{ breakout: 'col' }],
+          values: [{ measure: 'status' }],
+        },
+        stages: [
+          {
+            source: ms.rowSource as never,
+            spine: {
+              dimensions: [
+                { alias: 'r', source: ms.rowSource },
+                { alias: 'c', source: ms.colSource },
+              ],
+              facts: [
+                {
+                  alias: 'f',
+                  source: ms.factSource,
+                  on: [
+                    { field: ms.factRowKey, equals: 'r.id' },
+                    { field: ms.factColKey, equals: 'c.id' },
+                  ],
+                  latestBy: ms.latestBy ? [{ ref: ms.latestBy, direction: 'desc' }] : undefined,
+                },
+              ],
+            },
+            breakouts: [
+              { alias: 'row', field: `r.${ms.rowLabel}` },
+              { alias: 'col', field: `c.${ms.colLabel}` },
+            ],
+            aggregations: [statusAgg],
+            orderBy: [
+              { ref: 'row', direction: 'asc' },
+              { ref: 'col', direction: 'asc' },
+            ],
+            limit: 50_000,
+          },
+        ],
+      }
+    }
 
     if (mode === 'rows') {
       return {
@@ -399,6 +520,7 @@ export function CardStudio({
     extraAggs,
     extraBreakouts,
     crossMetrics,
+    matrixSpec,
   ])
 
   // Viz settings for BOTH the live preview and the saved card. A scalar/progress
@@ -473,6 +595,7 @@ export function CardStudio({
       setExtraAggs(d.extraAggs)
       setExtraBreakouts(d.extraBreakouts)
       setCrossMetrics(d.crossMetrics)
+      if (d.matrixSpec) setMatrixSpec(d.matrixSpec)
       setVizType(r.suggestedViz)
       setVizTouched(false)
       if (!name.trim() || name === 'Untitled card') {
@@ -491,7 +614,7 @@ export function CardStudio({
     const payload = {
       name,
       query: ast,
-      vizType: isAiCard ? 'table' : vizType,
+      vizType: isAiCard ? 'table' : mode === 'matrix' ? 'pivot' : vizType,
       vizSettings,
       kind: (isMetric ? 'metric' : isAiCard ? 'ai' : 'question') as 'ai' | 'question' | 'metric',
       config: isAiCard
@@ -602,7 +725,7 @@ export function CardStudio({
               </p>
             ) : null}
             <div className="mt-3 inline-flex rounded-md border border-slate-200 p-0.5 dark:border-slate-700">
-              {(['rows', 'summarize'] as Mode[]).map((m) => (
+              {(['rows', 'summarize', 'matrix'] as Mode[]).map((m) => (
                 <button
                   key={m}
                   type="button"
@@ -614,13 +737,14 @@ export function CardStudio({
                       : 'text-slate-500 hover:text-slate-800 dark:text-slate-400',
                   )}
                 >
-                  {m === 'rows' ? 'Raw rows' : 'Summarize'}
+                  {m === 'rows' ? 'Raw rows' : m === 'summarize' ? 'Summarize' : 'Matrix'}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Card type — AI analysis / reusable metric */}
+          {/* Card type — AI analysis / reusable metric (not for a matrix). */}
+          {mode !== 'matrix' ? (
           <div className={sectionCls}>
             <label className="flex items-center gap-2 text-xs font-medium text-slate-700 dark:text-slate-300">
               <input
@@ -670,6 +794,7 @@ export function CardStudio({
               </div>
             ) : null}
           </div>
+          ) : null}
 
           {mode === 'rows' ? (
             <div className={sectionCls}>
@@ -694,6 +819,13 @@ export function CardStudio({
                 ))}
               </div>
             </div>
+          ) : mode === 'matrix' ? (
+            <MatrixEditor
+              spec={matrixSpec}
+              onChange={setMatrixSpec}
+              entities={entities}
+              entityMap={entityMap}
+            />
           ) : (
             <>
               <RailList
@@ -771,7 +903,8 @@ export function CardStudio({
             </>
           )}
 
-          {/* Filters */}
+          {/* Filters (the matrix has its own structure). */}
+          {mode !== 'matrix' ? (
           <RailList
             title="Filters"
             items={filters}
@@ -787,9 +920,10 @@ export function CardStudio({
               />
             )}
           />
+          ) : null}
 
-          {/* Visualize — AI cards render the model's output, not a chart. */}
-          {!isAiCard ? (
+          {/* Visualize — AI cards + matrices render their own output, not a chart. */}
+          {!isAiCard && mode !== 'matrix' ? (
           <div className={sectionCls}>
             <h3 className={headCls}>Visualize</h3>
             <div className="grid grid-cols-4 gap-1.5">
@@ -846,7 +980,7 @@ export function CardStudio({
                 </div>
               ) : result ? (
                 <VizRenderer
-                  vizType={isAiCard ? 'table' : vizType}
+                  vizType={isAiCard ? 'table' : mode === 'matrix' ? 'pivot' : vizType}
                   result={result}
                   settings={vizSettings}
                   label={name}
@@ -1539,6 +1673,185 @@ function CrossMetricEditor({
   )
 }
 
+function MatrixEditor({
+  spec,
+  onChange,
+  entities,
+  entityMap,
+}: {
+  spec: MatrixSpec
+  onChange: (next: MatrixSpec) => void
+  entities: AnalyticsEntity[]
+  entityMap: Record<string, AnalyticsEntity>
+}) {
+  const entityGroups = useMemo(() => {
+    const m = new Map<string, AnalyticsEntity[]>()
+    for (const e of entities) {
+      const arr = m.get(e.category) ?? []
+      arr.push(e)
+      m.set(e.category, arr)
+    }
+    return [...m.entries()]
+  }, [entities])
+  const entityOptions = () =>
+    entityGroups.map(([cat, ents]) => (
+      <optgroup key={cat} label={cat}>
+        {ents.map((en) => (
+          <option key={en.key} value={en.key}>
+            {en.label}
+          </option>
+        ))}
+      </optgroup>
+    ))
+  const fieldOptions = (source: string, predicate?: (c: AnalyticsColumn) => boolean) => {
+    const cols = (entityMap[source]?.columns ?? []).filter((c) =>
+      predicate ? predicate(c) : c.semanticType !== 'pk',
+    )
+    return [
+      <option key="__" value="">
+        Pick a field…
+      </option>,
+      ...cols.map((c) => (
+        <option key={c.key} value={c.key}>
+          {c.label}
+        </option>
+      )),
+    ]
+  }
+  const sel = cn(selectCls, 'h-8 text-xs')
+  const lbl = 'text-[10px] font-semibold tracking-wide text-slate-400 uppercase'
+  const inline = 'flex items-center gap-1'
+  const hint = 'w-1/3 shrink-0 text-[11px] text-slate-500 dark:text-slate-400'
+
+  return (
+    <div className={cn(sectionCls, 'space-y-3')}>
+      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+        Every <b>row</b> × every <b>column</b>, coloured by the latest matching record — no view.
+      </p>
+      <div className="space-y-1">
+        <div className={lbl}>Rows</div>
+        <select
+          value={spec.rowSource}
+          onChange={(e) => onChange({ ...spec, rowSource: e.target.value, rowLabel: '' })}
+          className={sel}
+        >
+          {entityOptions()}
+        </select>
+        <select
+          value={spec.rowLabel}
+          onChange={(e) => onChange({ ...spec, rowLabel: e.target.value })}
+          className={sel}
+        >
+          {fieldOptions(spec.rowSource)}
+        </select>
+      </div>
+      <div className="space-y-1">
+        <div className={lbl}>Columns</div>
+        <select
+          value={spec.colSource}
+          onChange={(e) => onChange({ ...spec, colSource: e.target.value, colLabel: '' })}
+          className={sel}
+        >
+          {entityOptions()}
+        </select>
+        <select
+          value={spec.colLabel}
+          onChange={(e) => onChange({ ...spec, colLabel: e.target.value })}
+          className={sel}
+        >
+          {fieldOptions(spec.colSource)}
+        </select>
+      </div>
+      <div className="space-y-1">
+        <div className={lbl}>Latest record from</div>
+        <select
+          value={spec.factSource}
+          onChange={(e) =>
+            onChange({
+              ...spec,
+              factSource: e.target.value,
+              factRowKey: '',
+              factColKey: '',
+              latestBy: '',
+              expiryField: '',
+              latestField: '',
+            })
+          }
+          className={sel}
+        >
+          {entityOptions()}
+        </select>
+        <div className={inline}>
+          <span className={hint}>→ row by</span>
+          <select
+            value={spec.factRowKey}
+            onChange={(e) => onChange({ ...spec, factRowKey: e.target.value })}
+            className={cn(sel, 'flex-1')}
+          >
+            {fieldOptions(spec.factSource)}
+          </select>
+        </div>
+        <div className={inline}>
+          <span className={hint}>→ col by</span>
+          <select
+            value={spec.factColKey}
+            onChange={(e) => onChange({ ...spec, factColKey: e.target.value })}
+            className={cn(sel, 'flex-1')}
+          >
+            {fieldOptions(spec.factSource)}
+          </select>
+        </div>
+        <div className={inline}>
+          <span className={hint}>latest by</span>
+          <select
+            value={spec.latestBy}
+            onChange={(e) => onChange({ ...spec, latestBy: e.target.value })}
+            className={cn(sel, 'flex-1')}
+          >
+            {fieldOptions(spec.factSource)}
+          </select>
+        </div>
+      </div>
+      <div className="space-y-1">
+        <div className={lbl}>Cell value</div>
+        <select
+          value={spec.valueMode}
+          onChange={(e) =>
+            onChange({ ...spec, valueMode: e.target.value as 'coverage' | 'latest' })
+          }
+          className={sel}
+        >
+          <option value="coverage">Coverage status (by expiry)</option>
+          <option value="latest">Latest value of a field</option>
+        </select>
+        {spec.valueMode === 'coverage' ? (
+          <div className={inline}>
+            <span className={hint}>expiry date</span>
+            <select
+              value={spec.expiryField}
+              onChange={(e) => onChange({ ...spec, expiryField: e.target.value })}
+              className={cn(sel, 'flex-1')}
+            >
+              {fieldOptions(spec.factSource, (c) => c.kind === 'date' || c.kind === 'timestamp')}
+            </select>
+          </div>
+        ) : (
+          <div className={inline}>
+            <span className={hint}>show field</span>
+            <select
+              value={spec.latestField}
+              onChange={(e) => onChange({ ...spec, latestField: e.target.value })}
+              className={cn(sel, 'flex-1')}
+            >
+              {fieldOptions(spec.factSource)}
+            </select>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function FilterEditor({
   fields,
   row,
@@ -1616,6 +1929,8 @@ function decodeQuery(query: BhqlQuery | null): {
   extraBreakouts: BhqlBreakout[]
   /** Cross-table rates (numerator ÷ a measure on another source). */
   crossMetrics: CrossMetricRow[]
+  /** A coverage matrix (spine query) → the guided matrix editor. */
+  matrixSpec?: MatrixSpec
 } {
   const stage = query?.stages?.[0]
   if (!stage) {
@@ -1629,6 +1944,52 @@ function decodeQuery(query: BhqlQuery | null): {
       extraAggs: [],
       extraBreakouts: [],
       crossMetrics: [],
+    }
+  }
+
+  // A spine query → the guided coverage-matrix editor.
+  if (stage.spine) {
+    const sp = stage.spine
+    const fact = sp.facts?.[0]
+    const stripAlias = (ref?: string) => (ref ? ref.split('.').slice(1).join('.') : '')
+    const agg = stage.aggregations?.[0]
+    let valueMode: 'coverage' | 'latest' = 'latest'
+    let expiryField = ''
+    let latestField = ''
+    if (agg && (agg as { kind?: string }).kind === 'expr') {
+      valueMode = 'coverage'
+      const expr = (agg as BhqlExprMeasure).expr as {
+        arg?: { branches?: { when?: { arg?: { field?: string } } }[] }
+      }
+      expiryField = stripAlias(expr.arg?.branches?.[1]?.when?.arg?.field)
+    } else if (agg && (agg as { kind?: string }).kind === undefined) {
+      latestField = stripAlias((agg as BhqlMeasure).field)
+    }
+    const matrixSpec: MatrixSpec = {
+      rowSource: sp.dimensions[0]?.source ?? '',
+      rowLabel: stage.breakouts?.[0]?.field ? stripAlias(stage.breakouts[0]!.field) : '',
+      colSource: sp.dimensions[1]?.source ?? '',
+      colLabel: stage.breakouts?.[1]?.field ? stripAlias(stage.breakouts[1]!.field) : '',
+      factSource: fact?.source ?? '',
+      factRowKey: fact?.on?.[0]?.field ?? '',
+      factColKey: fact?.on?.[1]?.field ?? '',
+      latestBy: fact?.latestBy?.[0]?.ref ?? '',
+      valueMode,
+      expiryField,
+      latestField,
+    }
+    return {
+      entityKey: stage.source,
+      mode: 'matrix',
+      columns: [],
+      breakouts: [],
+      measures: [],
+      filters: [],
+      pivotOn: true,
+      extraAggs: [],
+      extraBreakouts: [],
+      crossMetrics: [],
+      matrixSpec,
     }
   }
   const filters: FilterRow[] = []
