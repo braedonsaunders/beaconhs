@@ -30,6 +30,7 @@ import type {
   BhqlExprMeasure,
   BhqlJoinedSource,
   BhqlMeasure,
+  BhqlMetricRef,
   BhqlQuery,
   InsightCardConfig,
   ReportRuleGroup,
@@ -73,6 +74,9 @@ type CrossMetricRow = {
   denFn: BhqlAggFn
   denField?: string
   denWhere?: MeasureWhere
+  /** When set, the denominator is a reusable Metric card (its measure is loaded
+   *  + joined at run time) — `denSource/denFn/denField/denWhere` are then ignored. */
+  denMetricId?: string
   on: string[]
   multiplier: number
 }
@@ -138,12 +142,16 @@ export type CardStudioInitial = {
   config?: InsightCardConfig | null
 }
 
+export type StudioMetric = { id: string; name: string; source: string }
+
 export function CardStudio({
   initial,
   entities,
+  metrics = [],
 }: {
   initial: CardStudioInitial
   entities: AnalyticsEntity[]
+  metrics?: StudioMetric[]
 }) {
   const router = useRouter()
   const entityMap = useMemo(() => Object.fromEntries(entities.map((e) => [e.key, e])), [entities])
@@ -189,6 +197,9 @@ export function CardStudio({
   const [analysisOutput, setAnalysisOutput] = useState<AiCardOutputShape>(
     initialAiCfg?.output ?? 'insights',
   )
+  // Reusable metric: this card's aggregate can be referenced as a denominator in
+  // other cards' cross-table rates (kind='metric'). Mutually exclusive with AI.
+  const [isMetric, setIsMetric] = useState(initial.kind === 'metric')
 
   const entity = entityMap[entityKey]
   const cols = entity?.columns ?? []
@@ -312,6 +323,7 @@ export function CardStudio({
     // divided into a calc. With breakouts each maps to a field on the other source;
     // with none, the two single-row aggregates cross-join (a scalar rate).
     const joinedSources: BhqlJoinedSource[] = []
+    const metricRefs: BhqlMetricRef[] = []
     crossMetrics.forEach((cm, i) => {
       const numAlias = `cm${i}_num`
       const denAlias = `cm${i}_den`
@@ -322,18 +334,24 @@ export function CardStudio({
         alias: numAlias,
         filter: whereToGroup(cm.numWhere),
       })
-      joinedSources.push({
-        source: cm.denSource,
-        measures: [
-          {
-            fn: cm.denFn,
-            field: cm.denFn === 'count' ? undefined : cm.denField,
-            alias: denAlias,
-            filter: whereToGroup(cm.denWhere),
-          },
-        ],
-        on: bks.map((b, j) => ({ breakout: b.alias, field: cm.on[j] ?? '', bin: b.bin })),
-      })
+      const on = bks.map((b, j) => ({ breakout: b.alias, field: cm.on[j] ?? '', bin: b.bin }))
+      if (cm.denMetricId) {
+        // Reusable metric — resolved + joined at run time (live propagation).
+        metricRefs.push({ metricId: cm.denMetricId, alias: denAlias, on })
+      } else {
+        joinedSources.push({
+          source: cm.denSource,
+          measures: [
+            {
+              fn: cm.denFn,
+              field: cm.denFn === 'count' ? undefined : cm.denField,
+              alias: denAlias,
+              filter: whereToGroup(cm.denWhere),
+            },
+          ],
+          on,
+        })
+      }
       mss.push({
         kind: 'calc',
         alias: rateAlias,
@@ -364,6 +382,7 @@ export function CardStudio({
           breakouts: bks,
           aggregations: mss,
           joinedSources: joinedSources.length ? joinedSources : undefined,
+          metricRefs: metricRefs.length ? metricRefs : undefined,
           limit: 2000,
         },
       ],
@@ -474,7 +493,7 @@ export function CardStudio({
       query: ast,
       vizType: isAiCard ? 'table' : vizType,
       vizSettings,
-      kind: (isAiCard ? 'ai' : 'question') as 'ai' | 'question',
+      kind: (isMetric ? 'metric' : isAiCard ? 'ai' : 'question') as 'ai' | 'question' | 'metric',
       config: isAiCard
         ? ({ kind: 'ai', prompt: analysisPrompt, output: analysisOutput } as const)
         : null,
@@ -601,16 +620,31 @@ export function CardStudio({
             </div>
           </div>
 
-          {/* AI analysis card */}
+          {/* Card type — AI analysis / reusable metric */}
           <div className={sectionCls}>
             <label className="flex items-center gap-2 text-xs font-medium text-slate-700 dark:text-slate-300">
               <input
                 type="checkbox"
                 checked={isAiCard}
-                onChange={(e) => setIsAiCard(e.target.checked)}
+                onChange={(e) => {
+                  setIsAiCard(e.target.checked)
+                  if (e.target.checked) setIsMetric(false)
+                }}
               />
               <Sparkles size={13} className="text-teal-500" />
               AI analysis card
+            </label>
+            <label className="mt-2 flex items-center gap-2 text-xs font-medium text-slate-700 dark:text-slate-300">
+              <input
+                type="checkbox"
+                checked={isMetric}
+                onChange={(e) => {
+                  setIsMetric(e.target.checked)
+                  if (e.target.checked) setIsAiCard(false)
+                }}
+              />
+              <span className="font-semibold text-violet-500">ƒ</span>
+              Reusable metric — referenceable in other cards
             </label>
             {isAiCard ? (
               <div className="mt-2 space-y-2">
@@ -713,6 +747,7 @@ export function CardStudio({
                     breakouts={breakouts}
                     entities={entities}
                     entityMap={entityMap}
+                    metrics={metrics}
                     onChange={(next) =>
                       setCrossMetrics((cs) => cs.map((x, j) => (j === i ? next : x)))
                     }
@@ -1331,6 +1366,7 @@ function CrossMetricEditor({
   breakouts,
   entities,
   entityMap,
+  metrics,
 }: {
   row: CrossMetricRow
   onChange: (next: CrossMetricRow) => void
@@ -1338,8 +1374,13 @@ function CrossMetricEditor({
   breakouts: BreakoutRow[]
   entities: AnalyticsEntity[]
   entityMap: Record<string, AnalyticsEntity>
+  metrics: StudioMetric[]
 }) {
-  const denEntity = entityMap[row.denSource]
+  // When the denominator is a saved metric, grain-map against the metric's source.
+  const metricSource = row.denMetricId
+    ? metrics.find((m) => m.id === row.denMetricId)?.source
+    : undefined
+  const denEntity = entityMap[metricSource ?? row.denSource]
   const denFields = useMemo(() => buildFields(denEntity, entityMap), [denEntity, entityMap])
   const entityGroups = useMemo(() => {
     const m = new Map<string, AnalyticsEntity[]>()
@@ -1388,52 +1429,75 @@ function CrossMetricEditor({
       />
 
       <div className="pt-1 text-[10px] font-semibold tracking-wide text-slate-400 uppercase">
-        ÷ Denominator · another table
+        ÷ Denominator
       </div>
-      <select
-        value={row.denSource}
-        onChange={(e) => onChange({ ...row, denSource: e.target.value, denField: undefined, on: [] })}
-        className={cn(selectCls, 'h-8 text-xs')}
-      >
-        {entityGroups.map(([cat, ents]) => (
-          <optgroup key={cat} label={cat}>
-            {ents.map((en) => (
-              <option key={en.key} value={en.key}>
-                {en.label}
-              </option>
-            ))}
-          </optgroup>
-        ))}
-      </select>
-      <select
-        value={row.denFn}
-        onChange={(e) => onChange({ ...row, denFn: e.target.value as BhqlAggFn })}
-        className={cn(selectCls, 'h-8 text-xs')}
-      >
-        {AGG_FNS.map((a) => (
-          <option key={a.value} value={a.value}>
-            {a.label}
-          </option>
-        ))}
-      </select>
-      {row.denFn !== 'count' ? (
+      {metrics.length > 0 ? (
         <select
-          value={row.denField ?? ''}
-          onChange={(e) => onChange({ ...row, denField: e.target.value })}
+          value={row.denMetricId ?? '__inline'}
+          onChange={(e) => {
+            const v = e.target.value
+            onChange({ ...row, denMetricId: v === '__inline' ? undefined : v, on: [] })
+          }}
           className={cn(selectCls, 'h-8 text-xs')}
         >
-          <FieldOptions
-            fields={denFields}
-            placeholder="Pick a field…"
-            predicate={(c) => (row.denFn === 'sum' || row.denFn === 'avg' ? c.canMeasure : true)}
-          />
+          <option value="__inline">Build inline (another table)…</option>
+          {metrics.map((m) => (
+            <option key={m.id} value={m.id}>
+              ƒ {m.name} (saved metric)
+            </option>
+          ))}
         </select>
       ) : null}
-      <ConditionRow
-        fields={denFields}
-        where={row.denWhere}
-        onChange={(w) => onChange({ ...row, denWhere: w })}
-      />
+      {!row.denMetricId ? (
+        <>
+          <select
+            value={row.denSource}
+            onChange={(e) =>
+              onChange({ ...row, denSource: e.target.value, denField: undefined, on: [] })
+            }
+            className={cn(selectCls, 'h-8 text-xs')}
+          >
+            {entityGroups.map(([cat, ents]) => (
+              <optgroup key={cat} label={cat}>
+                {ents.map((en) => (
+                  <option key={en.key} value={en.key}>
+                    {en.label}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+          <select
+            value={row.denFn}
+            onChange={(e) => onChange({ ...row, denFn: e.target.value as BhqlAggFn })}
+            className={cn(selectCls, 'h-8 text-xs')}
+          >
+            {AGG_FNS.map((a) => (
+              <option key={a.value} value={a.value}>
+                {a.label}
+              </option>
+            ))}
+          </select>
+          {row.denFn !== 'count' ? (
+            <select
+              value={row.denField ?? ''}
+              onChange={(e) => onChange({ ...row, denField: e.target.value })}
+              className={cn(selectCls, 'h-8 text-xs')}
+            >
+              <FieldOptions
+                fields={denFields}
+                placeholder="Pick a field…"
+                predicate={(c) => (row.denFn === 'sum' || row.denFn === 'avg' ? c.canMeasure : true)}
+              />
+            </select>
+          ) : null}
+          <ConditionRow
+            fields={denFields}
+            where={row.denWhere}
+            onChange={(w) => onChange({ ...row, denWhere: w })}
+          />
+        </>
+      ) : null}
 
       {hasFieldBreakouts ? (
         <div className="space-y-1 rounded bg-slate-50 p-1.5 dark:bg-slate-800/40">
@@ -1640,6 +1704,34 @@ function decodeQuery(query: BhqlQuery | null): {
       denFn: den.fn,
       denField: den.field,
       denWhere: groupToWhere(den.filter),
+      on,
+      multiplier: calc.multiplier ?? 1,
+    })
+  }
+  // Reusable-metric-backed rates reconstruct the same way (denominator = a metric).
+  for (const mr of stage.metricRefs ?? []) {
+    const calc = aggs.find((m) => m.kind === 'calc' && m.denominator === mr.alias) as
+      | { numerator: string; multiplier?: number; alias: string }
+      | undefined
+    if (!calc) continue
+    const num = aggs.find(
+      (m) => (m.kind === undefined || m.kind === 'agg') && m.alias === calc.numerator,
+    ) as BhqlMeasure | undefined
+    if (!num) continue
+    crossConsumed.add(num.alias)
+    crossConsumed.add(calc.alias)
+    const on: string[] = new Array(breakoutAliasToIndex.size).fill('')
+    for (const k of mr.on) {
+      const idx = breakoutAliasToIndex.get(k.breakout)
+      if (idx != null) on[idx] = k.field
+    }
+    crossMetrics.push({
+      numFn: num.fn,
+      numField: num.field,
+      numWhere: groupToWhere(num.filter),
+      denSource: '',
+      denFn: 'count',
+      denMetricId: mr.metricId,
       on,
       multiplier: calc.multiplier ?? 1,
     })

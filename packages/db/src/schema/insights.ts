@@ -188,6 +188,18 @@ export type BhqlSpineFact = {
   latestBy?: BhqlOrderBy[]
 }
 
+/** A reference to a reusable Metric card (kind='metric') used as a measure in
+ *  THIS query. The executor loads the metric at run time and expands it into a
+ *  joined source (so editing the metric propagates to every card that uses it).
+ *  `on` maps each primary breakout to a field on the metric's source — the
+ *  shared grain — exactly like a joined source. */
+export type BhqlMetricRef = {
+  metricId: string
+  /** Output alias for the metric's measure in this query (referenceable by a calc). */
+  alias: string
+  on: BhqlJoinKey[]
+}
+
 /** A fact-free dimension grid (cross-product of dimension sources) plus optional
  *  latest-fact joins — the generic form behind a coverage matrix (people ×
  *  courses ⟕ latest training record → coverage status), buildable with NO view.
@@ -214,6 +226,9 @@ export type BhqlStage = {
   /** A dimension cross-product + latest-fact joins (the coverage-matrix form).
    *  When set, breakouts/measures address columns as "<sourceAlias>.<column>". */
   spine?: BhqlSpine
+  /** References to reusable Metric cards, resolved to joined sources at run time
+   *  (live propagation). Their measures are available to this stage's calcs. */
+  metricRefs?: BhqlMetricRef[]
   /** Raw-row mode (no aggregations/breakouts): entity columns to SELECT. */
   columns?: string[]
   orderBy?: BhqlOrderBy[]

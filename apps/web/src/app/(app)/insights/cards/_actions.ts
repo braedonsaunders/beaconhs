@@ -96,7 +96,7 @@ export async function createCard(input: {
   query: unknown
   vizType: string
   vizSettings?: Record<string, unknown>
-  kind?: 'question' | 'ai'
+  kind?: 'question' | 'ai' | 'metric'
   config?: InsightCardConfig | null
 }): Promise<Ok<{ id: string }> | Err> {
   const ctx = await requireRequestContext()
@@ -146,7 +146,7 @@ export async function updateCard(input: {
   query: unknown
   vizType: string
   vizSettings?: Record<string, unknown>
-  kind?: 'question' | 'ai'
+  kind?: 'question' | 'ai' | 'metric'
   config?: InsightCardConfig | null
 }): Promise<Ok | Err> {
   const ctx = await requireRequestContext()

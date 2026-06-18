@@ -49,6 +49,28 @@ export async function loadCard(ctx: RequestContext, id: string): Promise<CardRow
   return row ? map(row) : null
 }
 
+/** Reusable Metric cards (kind='metric') the user can reference in another card:
+ *  their own + any published. Returns the id, name and source entity so the
+ *  builder can offer them + grain-map against the metric's source. */
+export async function loadMetricCards(
+  ctx: RequestContext,
+): Promise<{ id: string; name: string; source: string }[]> {
+  const rows = await ctx.db((tx) =>
+    tx
+      .select({ id: insightCards.id, name: insightCards.name, query: insightCards.query })
+      .from(insightCards)
+      .where(
+        and(
+          eq(insightCards.kind, 'metric'),
+          isNull(insightCards.deletedAt),
+          or(eq(insightCards.createdBy, ctx.userId), eq(insightCards.status, 'published')),
+        ),
+      )
+      .orderBy(desc(insightCards.updatedAt)),
+  )
+  return rows.map((r) => ({ id: r.id, name: r.name, source: r.query?.stages?.[0]?.source ?? '' }))
+}
+
 /** Cards available to drop on a dashboard: the user's own + any published. */
 export async function loadCardsForPalette(ctx: RequestContext): Promise<CardRow[]> {
   const rows = await ctx.db((tx) =>

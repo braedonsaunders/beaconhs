@@ -144,6 +144,12 @@ const zJoinedSource = z.object({
   on: z.array(zJoinKey),
 })
 
+const zMetricRef = z.object({
+  metricId: z.string(),
+  alias: z.string(),
+  on: z.array(zJoinKey),
+})
+
 const zSpineSource = z.object({
   alias: z.string(),
   source: z.string(),
@@ -169,6 +175,7 @@ const zStage = z.object({
   aggregations: z.array(zAnyMeasure).optional(),
   breakouts: z.array(zBreakout).optional(),
   joinedSources: z.array(zJoinedSource).optional(),
+  metricRefs: z.array(zMetricRef).optional(),
   spine: zSpine.optional(),
   columns: z.array(z.string()).optional(),
   orderBy: z.array(z.object({ ref: z.string(), direction: z.enum(['asc', 'desc']) })).optional(),
@@ -594,6 +601,24 @@ export function parseBhqlQuery(raw: unknown, entityMap: Record<string, ReportEnt
       fail(`Joined source "${js.source}" must map every breakout (the shared grain)`)
   }
 
+  // Reusable Metric references — validate the alias + the grain mapping's breakout
+  // side here; the metric's source/fields are validated at run time when the ref
+  // is expanded into a joined source (the metric card isn't known until then).
+  const metricRefs = stage.metricRefs ?? []
+  for (const mr of metricRefs) {
+    checkAlias(mr.alias, 'measure')
+    if (aliases.has(mr.alias)) fail(`Duplicate alias "${mr.alias}"`)
+    aliases.add(mr.alias)
+    const mapped = new Set<string>()
+    for (const k of mr.on) {
+      if (!breakoutAliases.has(k.breakout))
+        fail(`A metric reference maps an unknown breakout "${k.breakout}"`)
+      mapped.add(k.breakout)
+    }
+    if (mapped.size !== breakouts.length)
+      fail('A metric reference must map every breakout (the shared grain)')
+  }
+
   // Every referenced field resolves through the whitelist (local column or a
   // single-hop FK relation "<via>.<column>"); bins are eligible.
   for (const c of columns) {
@@ -637,6 +662,7 @@ export function parseBhqlQuery(raw: unknown, entityMap: Record<string, ReportEnt
   const baseAliases = new Set([
     ...baseMeasures.map((m) => m.alias),
     ...joinedSources.flatMap((js) => js.measures.map((m) => m.alias)),
+    ...metricRefs.map((mr) => mr.alias),
   ])
   for (const m of calcMeasures) {
     const cm = m as { numerator: string; denominator?: string }
