@@ -125,9 +125,13 @@ const AGG_FNS: { value: BhqlAggFn; label: string }[] = [
   { value: 'count_distinct', label: 'Distinct count of' },
 ]
 
-const selectCls =
+const inputCls =
   'h-9 w-full rounded-md border border-slate-300 bg-white px-2 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100'
-const inputCls = selectCls
+// Selects add the `.app-select` treatment (globals.css: appearance-none + custom
+// chevron + line-height:normal) so the value text isn't clipped by native macOS
+// chrome at the compact h-7/h-8 sizes used throughout the studio. `pr-7` leaves
+// room for the chevron.
+const selectCls = cn(inputCls, 'app-select pr-7')
 const sectionCls =
   'rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900'
 const headCls =
@@ -1356,26 +1360,70 @@ function ConditionRow({
       >
         <FieldOptions fields={fields} />
       </select>
-      <div className="flex gap-1">
-        <select
-          value={where.op}
-          onChange={(e) => onChange({ ...where, op: e.target.value as FilterOp })}
-          className={cn(selectCls, 'h-7 flex-1 text-xs')}
-        >
-          {FILTER_OPS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-        {op?.needsValue ? (
-          <input
-            value={where.value}
-            onChange={(e) => onChange({ ...where, value: e.target.value })}
-            placeholder="value"
-            className={cn(inputCls, 'h-7 flex-1 text-xs')}
-          />
-        ) : null}
+      <select
+        value={where.op}
+        onChange={(e) => onChange({ ...where, op: e.target.value as FilterOp })}
+        className={cn(selectCls, 'h-7 text-xs')}
+      >
+        {FILTER_OPS.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      {op?.needsValue ? (
+        <input
+          value={where.value}
+          onChange={(e) => onChange({ ...where, value: e.target.value })}
+          placeholder="value to match…"
+          className={cn(inputCls, 'h-7 text-xs')}
+        />
+      ) : null}
+    </div>
+  )
+}
+
+// Rate/scale multiplier — a FREE numeric basis (percent, OSHA per-200k, per-100k,
+// per-million, anything) rather than a fixed shortlist, with one-tap presets for
+// the common bases. The numerator ÷ denominator is multiplied by this value.
+const MULTIPLIER_PRESETS: { label: string; v: number }[] = [
+  { label: 'Ratio', v: 1 },
+  { label: 'Percent', v: 100 },
+  { label: 'Per 100k', v: 100_000 },
+  { label: 'Per 200k', v: 200_000 },
+]
+function MultiplierField({ value, onChange }: { value: number; onChange: (n: number) => void }) {
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-1.5">
+        <span className="shrink-0 text-[10px] font-semibold tracking-wide text-slate-400 uppercase">
+          × scale
+        </span>
+        <input
+          type="number"
+          inputMode="decimal"
+          value={Number.isFinite(value) ? value : ''}
+          onChange={(e) => onChange(e.target.value === '' ? 1 : Number(e.target.value))}
+          placeholder="1"
+          className={cn(inputCls, 'h-8 text-xs')}
+        />
+      </div>
+      <div className="flex flex-wrap gap-1">
+        {MULTIPLIER_PRESETS.map((p) => (
+          <button
+            key={p.v}
+            type="button"
+            onClick={() => onChange(p.v)}
+            className={cn(
+              'rounded border px-1.5 py-0.5 text-[10px] transition',
+              value === p.v
+                ? 'border-teal-500 bg-teal-50 text-teal-700 dark:bg-teal-500/10 dark:text-teal-300'
+                : 'border-slate-200 text-slate-500 hover:border-slate-300 dark:border-slate-700 dark:text-slate-400',
+            )}
+          >
+            {p.label}
+          </button>
+        ))}
       </div>
     </div>
   )
@@ -1524,15 +1572,10 @@ function MeasureEditor({
             where={row.denWhere}
             onChange={(w) => onChange({ ...row, denWhere: w })}
           />
-          <select
-            value={String(row.multiplier ?? 1)}
-            onChange={(e) => onChange({ ...row, multiplier: Number(e.target.value) })}
-            className={cn(selectCls, 'h-8 text-xs')}
-          >
-            <option value="1">ratio (×1)</option>
-            <option value="100">percentage (×100)</option>
-            <option value="200000">rate per 200,000 hrs</option>
-          </select>
+          <MultiplierField
+            value={row.multiplier ?? 1}
+            onChange={(n) => onChange({ ...row, multiplier: n })}
+          />
         </div>
       ) : null}
     </div>
@@ -1706,15 +1749,10 @@ function CrossMetricEditor({
         </div>
       ) : null}
 
-      <select
-        value={String(row.multiplier)}
-        onChange={(e) => onChange({ ...row, multiplier: Number(e.target.value) })}
-        className={cn(selectCls, 'h-8 text-xs')}
-      >
-        <option value="1">ratio (×1)</option>
-        <option value="100">percentage (×100)</option>
-        <option value="200000">rate per 200,000 hrs</option>
-      </select>
+      <MultiplierField
+        value={row.multiplier}
+        onChange={(n) => onChange({ ...row, multiplier: n })}
+      />
     </div>
   )
 }
@@ -1990,27 +2028,25 @@ function FilterEditor({
       >
         <FieldOptions fields={fields} />
       </select>
-      <div className="flex gap-1">
-        <select
-          value={row.op}
-          onChange={(e) => onChange({ ...row, op: e.target.value as FilterOp })}
-          className={cn(selectCls, 'h-8 flex-1 text-xs')}
-        >
-          {FILTER_OPS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-        {op?.needsValue ? (
-          <input
-            value={row.value}
-            onChange={(e) => onChange({ ...row, value: e.target.value })}
-            placeholder="value"
-            className={cn(inputCls, 'h-8 flex-1 text-xs')}
-          />
-        ) : null}
-      </div>
+      <select
+        value={row.op}
+        onChange={(e) => onChange({ ...row, op: e.target.value as FilterOp })}
+        className={cn(selectCls, 'h-8 text-xs')}
+      >
+        {FILTER_OPS.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      {op?.needsValue ? (
+        <input
+          value={row.value}
+          onChange={(e) => onChange({ ...row, value: e.target.value })}
+          placeholder="value to match…"
+          className={cn(inputCls, 'h-8 text-xs')}
+        />
+      ) : null}
     </div>
   )
 }

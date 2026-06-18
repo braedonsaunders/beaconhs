@@ -21,7 +21,7 @@ export default async function LibraryPage() {
   const [cards, lib] = await Promise.all([loadCardsForPalette(ctx), loadLibrary(ctx)])
 
   return (
-    <div className="space-y-5 p-4 lg:p-6">
+    <div className="app-scroll min-h-0 flex-1 space-y-5 overflow-y-auto p-4 lg:p-6">
       <PageHeader
         title="Library"
         description="Your cards and the dashboards shared across your team. Pin a dashboard to add it as a tab."

@@ -91,7 +91,21 @@
     background: rgb(71 85 105);
     background-clip: padding-box;
   }
-}
+
+  /* Raw <select> controls (where the shared <Select> isn't used, e.g. the dense
+     Insights card studio) drop the native macOS chrome that clips the value text
+     at small heights. Mirrors ui/select.tsx: appearance:none + a custom chevron +
+     line-height:normal. Add `pr-7` on the element to leave room for the chevron. */
+  .app-select {
+    appearance: none;
+    -webkit-appearance: none;
+    line-height: normal;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='%2364748b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.5rem center;
+    background-size: 0.7rem;
+  }
+
 
 /* Brand logo animation (components/brand-logo.tsx). Strokes carry a normalized
    pathLength of 1 so one dasharray rule draws any shape. Resting styles are
