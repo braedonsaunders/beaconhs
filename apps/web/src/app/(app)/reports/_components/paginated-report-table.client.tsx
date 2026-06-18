@@ -151,7 +151,7 @@ export function PaginatedReportTable({
               setPageSize(Number(e.target.value))
               setPage(0)
             }}
-            className="h-7 rounded-md border border-slate-200 bg-white px-1.5 text-xs outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+            className="app-select h-7 rounded-md border border-slate-200 bg-white pr-6 pl-1.5 text-xs outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
           >
             {PAGE_SIZES.map((s) => (
               <option key={s} value={s}>

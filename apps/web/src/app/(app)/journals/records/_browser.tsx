@@ -214,7 +214,7 @@ export function RecordsBrowser({
               }))
             }
             aria-label="Status"
-            className="h-9 rounded-lg border border-slate-300 bg-white px-2 text-sm text-slate-700 outline-none focus:border-teal-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+            className="app-select h-9 rounded-lg border border-slate-300 bg-white pr-7 pl-2 text-sm text-slate-700 outline-none focus:border-teal-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
           >
             <option value="">Any status</option>
             <option value="submitted">Submitted</option>
@@ -230,7 +230,7 @@ export function RecordsBrowser({
               }))
             }
             aria-label="Type"
-            className="h-9 rounded-lg border border-slate-300 bg-white px-2 text-sm text-slate-700 outline-none focus:border-teal-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+            className="app-select h-9 rounded-lg border border-slate-300 bg-white pr-7 pl-2 text-sm text-slate-700 outline-none focus:border-teal-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
           >
             <option value="">Any type</option>
             <option value="worker">Worker</option>

@@ -33,8 +33,10 @@ const PARAM_TYPES: { value: DashboardParamType; label: string }[] = [
   { value: 'enum', label: 'Choice' },
 ]
 
+// `.app-select` (globals.css) drops the native macOS chrome that clips the value
+// text; `pr-7` leaves room for its custom chevron.
 const selectCls =
-  'h-9 w-full rounded-md border border-slate-300 bg-white px-2 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100'
+  'app-select h-9 w-full rounded-md border border-slate-300 bg-white pr-7 pl-2 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100'
 
 function slug(s: string): string {
   const base = s

@@ -31,7 +31,7 @@ export function LostTimeAddForm({
             id="ltf-status"
             name="status"
             defaultValue="off_work"
-            className="h-9 w-full rounded-md border border-slate-300 bg-white px-2 text-sm"
+            className="app-select h-9 w-full rounded-md border border-slate-300 bg-white pr-7 pl-2 text-sm"
             disabled={isPending}
           >
             {STATUSES.map((s) => (
@@ -47,7 +47,7 @@ export function LostTimeAddForm({
             id="ltf-injury"
             name="injuryId"
             defaultValue=""
-            className="h-9 w-full rounded-md border border-slate-300 bg-white px-2 text-sm"
+            className="app-select h-9 w-full rounded-md border border-slate-300 bg-white pr-7 pl-2 text-sm"
             disabled={isPending}
           >
             <option value="">— Any —</option>

@@ -190,7 +190,7 @@ export default async function AdminSettingsPage() {
                 <select
                   name="defaultLanguage"
                   defaultValue={tenant.defaultLanguage}
-                  className="h-10 w-32 rounded-md border border-slate-300 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900"
+                  className="app-select h-10 w-32 rounded-md border border-slate-300 bg-white pr-8 pl-3 text-sm dark:border-slate-700 dark:bg-slate-900"
                 >
                   {KNOWN_LANGUAGES.map((l) => (
                     <option key={l.value} value={l.value}>

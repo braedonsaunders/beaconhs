@@ -226,7 +226,7 @@ export function KioskClient({
                 <select
                   value={siteId}
                   onChange={(e) => setSiteId(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+                  className="app-select mt-1 w-full rounded-md border border-slate-300 bg-white py-2 pr-8 pl-3 text-sm text-slate-900"
                 >
                   <option value="">— No site —</option>
                   {sites.map((s) => (
@@ -245,7 +245,7 @@ export function KioskClient({
                 <select
                   value={crewId}
                   onChange={(e) => setCrewId(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+                  className="app-select mt-1 w-full rounded-md border border-slate-300 bg-white py-2 pr-8 pl-3 text-sm text-slate-900"
                 >
                   <option value="">— No crew —</option>
                   {crews.map((c) => (
