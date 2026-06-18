@@ -48,8 +48,11 @@ type Mode = 'rows' | 'summarize' | 'matrix'
 type MatrixSpec = {
   rowSource: string
   rowLabel: string
+  /** Optional 2nd row label field, concatenated for a unique display (e.g. last + first). */
+  rowLabel2?: string
   colSource: string
   colLabel: string
+  colLabel2?: string
   factSource: string
   factRowKey: string
   factColKey: string
@@ -57,6 +60,10 @@ type MatrixSpec = {
   valueMode: 'coverage' | 'latest'
   expiryField: string
   latestField: string
+  /** Per-axis filters (e.g. active people, non-deleted courses). */
+  rowFilters: FilterRow[]
+  colFilters: FilterRow[]
+  factFilters: FilterRow[]
 }
 type FilterOp = 'eq' | 'neq' | 'contains' | 'gte' | 'lte' | 'in' | 'is_null' | 'is_not_null'
 type FilterRow = { field: string; op: FilterOp; value: string }
@@ -149,6 +156,15 @@ function coerceValue(value: string, op: FilterOp): string | number | string[] | 
   return value
 }
 
+/** Compile a row of structured filters into a ReportRuleGroup (AND), dropping
+ *  incomplete rows. Used by the matrix axes (and mirrors the summarize filter). */
+function filtersToGroup(rows: FilterRow[]): ReportRuleGroup | null {
+  const rules = rows
+    .filter((f) => f.field && (f.op === 'is_null' || f.op === 'is_not_null' || f.value !== ''))
+    .map((f) => ({ field: f.field, op: f.op, value: coerceValue(f.value, f.op) }))
+  return rules.length ? { combinator: 'and', rules } : null
+}
+
 const CURRENT_DATE_EXPR: BhqlExpr = { ex: 'call', fn: 'current_date', args: [] }
 
 /** The standard coverage CASE (missing/valid/expired/expiring) keyed on a fact
@@ -182,9 +198,19 @@ function defaultMatrixSpec(
   const colSource = has('training_courses') ? 'training_courses' : (entities[1]?.key ?? rowSource)
   const factSource = has('training_records') ? 'training_records' : (entities[2]?.key ?? rowSource)
   const factEntity = entityMap[factSource]
+  const colKeys = (src: string) => new Set((entityMap[src]?.columns ?? []).map((c) => c.key))
+  const dimFilters = (src: string, active: boolean): FilterRow[] => {
+    const keys = colKeys(src)
+    const f: FilterRow[] = []
+    if (active && keys.has('status')) f.push({ field: 'status', op: 'eq', value: 'active' })
+    if (keys.has('deleted_at')) f.push({ field: 'deleted_at', op: 'is_null', value: '' })
+    return f
+  }
+  const second = (src: string, key: string) => (colKeys(src).has(key) ? key : undefined)
   return {
     rowSource,
-    rowLabel: pickField(entityMap[rowSource], /name|last_name|title|label/),
+    rowLabel: pickField(entityMap[rowSource], /last_name|name|title|label/),
+    rowLabel2: second(rowSource, 'first_name'),
     colSource,
     colLabel: pickField(entityMap[colSource], /code|name|title/),
     factSource,
@@ -194,6 +220,9 @@ function defaultMatrixSpec(
     valueMode: 'coverage',
     expiryField: pickField(factEntity, /expires_on|expiry|valid_until/),
     latestField: pickField(factEntity, /completed_on|status|created_at/),
+    rowFilters: dimFilters(rowSource, true),
+    colFilters: dimFilters(colSource, false),
+    factFilters: dimFilters(factSource, false),
   }
 }
 
@@ -297,6 +326,22 @@ export function CardStudio({
               expr: { ex: 'agg', fn: 'min', arg: coverageCase(`f.${ms.expiryField}`) },
             }
           : { fn: 'min', field: `f.${ms.latestField}`, alias: 'status' }
+      // A label is a single field, or a concat of two (unique display, e.g. last + first).
+      const label = (alias: string, dimAlias: string, f1: string, f2?: string): BhqlBreakout =>
+        f2
+          ? {
+              alias,
+              expr: {
+                ex: 'call',
+                fn: 'concat',
+                args: [
+                  { ex: 'field', field: `${dimAlias}.${f1}` },
+                  { ex: 'lit', value: ' · ' },
+                  { ex: 'field', field: `${dimAlias}.${f2}` },
+                ],
+              },
+            }
+          : { alias, field: `${dimAlias}.${f1}` }
       return {
         version: 'bhql/1',
         display: 'pivot',
@@ -310,13 +355,14 @@ export function CardStudio({
             source: ms.rowSource as never,
             spine: {
               dimensions: [
-                { alias: 'r', source: ms.rowSource },
-                { alias: 'c', source: ms.colSource },
+                { alias: 'r', source: ms.rowSource, filter: filtersToGroup(ms.rowFilters) },
+                { alias: 'c', source: ms.colSource, filter: filtersToGroup(ms.colFilters) },
               ],
               facts: [
                 {
                   alias: 'f',
                   source: ms.factSource,
+                  filter: filtersToGroup(ms.factFilters),
                   on: [
                     { field: ms.factRowKey, equals: 'r.id' },
                     { field: ms.factColKey, equals: 'c.id' },
@@ -326,8 +372,8 @@ export function CardStudio({
               ],
             },
             breakouts: [
-              { alias: 'row', field: `r.${ms.rowLabel}` },
-              { alias: 'col', field: `c.${ms.colLabel}` },
+              label('row', 'r', ms.rowLabel, ms.rowLabel2),
+              label('col', 'c', ms.colLabel, ms.colLabel2),
             ],
             aggregations: [statusAgg],
             orderBy: [
@@ -1723,6 +1769,60 @@ function MatrixEditor({
   const inline = 'flex items-center gap-1'
   const hint = 'w-1/3 shrink-0 text-[11px] text-slate-500 dark:text-slate-400'
 
+  const rowFields = useMemo(
+    () => buildFields(entityMap[spec.rowSource], entityMap),
+    [spec.rowSource, entityMap],
+  )
+  const colFields = useMemo(
+    () => buildFields(entityMap[spec.colSource], entityMap),
+    [spec.colSource, entityMap],
+  )
+  const factFields = useMemo(
+    () => buildFields(entityMap[spec.factSource], entityMap),
+    [spec.factSource, entityMap],
+  )
+  const secondLabelOptions = (source: string) =>
+    (entityMap[source]?.columns ?? [])
+      .filter((c) => c.semanticType !== 'pk')
+      .map((c) => (
+        <option key={c.key} value={c.key}>
+          {c.label}
+        </option>
+      ))
+  const filterList = (rows: FilterRow[], fields: FieldChoice[], onRows: (r: FilterRow[]) => void) => (
+    <div className="space-y-1 rounded bg-slate-50 p-1.5 dark:bg-slate-800/40">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] tracking-wide text-slate-400 uppercase">Filters</span>
+        <button
+          type="button"
+          onClick={() => onRows([...rows, { field: fields[0]?.value ?? '', op: 'eq', value: '' }])}
+          className="text-teal-600 hover:text-teal-700"
+        >
+          <Plus size={12} />
+        </button>
+      </div>
+      {rows.length === 0 ? <p className="text-[10px] text-slate-400">All rows.</p> : null}
+      {rows.map((f, i) => (
+        <div key={i} className="flex items-start gap-1">
+          <div className="flex-1">
+            <FilterEditor
+              fields={fields}
+              row={f}
+              onChange={(next) => onRows(rows.map((x, j) => (j === i ? next : x)))}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => onRows(rows.filter((_, j) => j !== i))}
+            className="mt-1 text-slate-300 hover:text-rose-500"
+          >
+            <Trash2 size={12} />
+          </button>
+        </div>
+      ))}
+    </div>
+  )
+
   return (
     <div className={cn(sectionCls, 'space-y-3')}>
       <p className="text-[11px] text-slate-500 dark:text-slate-400">
@@ -1744,6 +1844,15 @@ function MatrixEditor({
         >
           {fieldOptions(spec.rowSource)}
         </select>
+        <select
+          value={spec.rowLabel2 ?? ''}
+          onChange={(e) => onChange({ ...spec, rowLabel2: e.target.value || undefined })}
+          className={cn(sel, 'text-slate-500')}
+        >
+          <option value="">+ second label (optional)</option>
+          {secondLabelOptions(spec.rowSource)}
+        </select>
+        {filterList(spec.rowFilters, rowFields, (r) => onChange({ ...spec, rowFilters: r }))}
       </div>
       <div className="space-y-1">
         <div className={lbl}>Columns</div>
@@ -1761,6 +1870,15 @@ function MatrixEditor({
         >
           {fieldOptions(spec.colSource)}
         </select>
+        <select
+          value={spec.colLabel2 ?? ''}
+          onChange={(e) => onChange({ ...spec, colLabel2: e.target.value || undefined })}
+          className={cn(sel, 'text-slate-500')}
+        >
+          <option value="">+ second label (optional)</option>
+          {secondLabelOptions(spec.colSource)}
+        </select>
+        {filterList(spec.colFilters, colFields, (r) => onChange({ ...spec, colFilters: r }))}
       </div>
       <div className="space-y-1">
         <div className={lbl}>Latest record from</div>
@@ -1811,6 +1929,7 @@ function MatrixEditor({
             {fieldOptions(spec.factSource)}
           </select>
         </div>
+        {filterList(spec.factFilters, factFields, (r) => onChange({ ...spec, factFilters: r }))}
       </div>
       <div className="space-y-1">
         <div className={lbl}>Cell value</div>
@@ -1952,6 +2071,33 @@ function decodeQuery(query: BhqlQuery | null): {
     const sp = stage.spine
     const fact = sp.facts?.[0]
     const stripAlias = (ref?: string) => (ref ? ref.split('.').slice(1).join('.') : '')
+    const groupToRows = (g?: ReportRuleGroup | null): FilterRow[] =>
+      (g?.rules ?? []).flatMap((r) => {
+        if (!r || typeof r !== 'object' || !('field' in r)) return []
+        const rr = r as { field: string; op: string; value?: unknown }
+        return [
+          {
+            field: rr.field,
+            op: rr.op as FilterOp,
+            value: Array.isArray(rr.value)
+              ? rr.value.join(', ')
+              : rr.value == null
+                ? ''
+                : String(rr.value),
+          },
+        ]
+      })
+    // A label breakout is a single field, or a concat of two (composed display).
+    const labelFields = (b?: BhqlBreakout): { f1: string; f2?: string } => {
+      if (!b) return { f1: '' }
+      if (b.field) return { f1: stripAlias(b.field) }
+      const ex = b.expr as { ex?: string; fn?: string; args?: { ex?: string; field?: string }[] }
+      if (ex?.ex === 'call' && ex.fn === 'concat') {
+        const fields = (ex.args ?? []).filter((a) => a.ex === 'field').map((a) => stripAlias(a.field))
+        return { f1: fields[0] ?? '', f2: fields[1] }
+      }
+      return { f1: '' }
+    }
     const agg = stage.aggregations?.[0]
     let valueMode: 'coverage' | 'latest' = 'latest'
     let expiryField = ''
@@ -1965,11 +2111,15 @@ function decodeQuery(query: BhqlQuery | null): {
     } else if (agg && (agg as { kind?: string }).kind === undefined) {
       latestField = stripAlias((agg as BhqlMeasure).field)
     }
+    const rowL = labelFields(stage.breakouts?.[0])
+    const colL = labelFields(stage.breakouts?.[1])
     const matrixSpec: MatrixSpec = {
       rowSource: sp.dimensions[0]?.source ?? '',
-      rowLabel: stage.breakouts?.[0]?.field ? stripAlias(stage.breakouts[0]!.field) : '',
+      rowLabel: rowL.f1,
+      rowLabel2: rowL.f2,
       colSource: sp.dimensions[1]?.source ?? '',
-      colLabel: stage.breakouts?.[1]?.field ? stripAlias(stage.breakouts[1]!.field) : '',
+      colLabel: colL.f1,
+      colLabel2: colL.f2,
       factSource: fact?.source ?? '',
       factRowKey: fact?.on?.[0]?.field ?? '',
       factColKey: fact?.on?.[1]?.field ?? '',
@@ -1977,6 +2127,9 @@ function decodeQuery(query: BhqlQuery | null): {
       valueMode,
       expiryField,
       latestField,
+      rowFilters: groupToRows(sp.dimensions[0]?.filter),
+      colFilters: groupToRows(sp.dimensions[1]?.filter),
+      factFilters: groupToRows(fact?.filter),
     }
     return {
       entityKey: stage.source,

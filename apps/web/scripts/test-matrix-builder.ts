@@ -31,13 +31,28 @@ const q: BhqlQuery = {
       source: 'people',
       spine: {
         dimensions: [
-          { alias: 'r', source: 'people' },
-          { alias: 'c', source: 'training_courses' },
+          {
+            alias: 'r',
+            source: 'people',
+            filter: {
+              combinator: 'and',
+              rules: [
+                { field: 'status', op: 'eq', value: 'active' },
+                { field: 'deleted_at', op: 'is_null' },
+              ],
+            },
+          },
+          {
+            alias: 'c',
+            source: 'training_courses',
+            filter: { combinator: 'and', rules: [{ field: 'deleted_at', op: 'is_null' }] },
+          },
         ],
         facts: [
           {
             alias: 'f',
             source: 'training_records',
+            filter: { combinator: 'and', rules: [{ field: 'deleted_at', op: 'is_null' }] },
             on: [
               { field: 'person_id', equals: 'r.id' },
               { field: 'course_id', equals: 'c.id' },
@@ -47,7 +62,18 @@ const q: BhqlQuery = {
         ],
       },
       breakouts: [
-        { alias: 'row', field: 'r.employee_no' },
+        {
+          alias: 'row',
+          expr: {
+            ex: 'call',
+            fn: 'concat',
+            args: [
+              { ex: 'field', field: 'r.last_name' },
+              { ex: 'lit', value: ' · ' },
+              { ex: 'field', field: 'r.first_name' },
+            ],
+          },
+        },
         { alias: 'col', field: 'c.code' },
       ],
       aggregations: [{ kind: 'expr', alias: 'status', expr: coverage }],
