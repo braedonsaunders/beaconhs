@@ -15,6 +15,7 @@ import {
   type ReportEntity,
   type ReportEntityColumn,
 } from '@beaconhs/reports/entities'
+import type { ReportRuleGroup } from '@beaconhs/db/schema'
 
 /** How to interpret a column — drives auto-viz, binning and formatting. */
 export type SemanticType =
@@ -74,6 +75,11 @@ export type AnalyticsEntity = Omit<ReportEntity, 'columns'> & {
   primary?: boolean
   /** Foreign-key relationships to other entities (single-hop, RLS-safe targets). */
   relations?: AnalyticsRelation[]
+  /** Implicit predicate ALWAYS AND-ed into every query against this entity. Used
+   *  for scoped virtual entities — e.g. a per-app `form_responses:<templateId>`
+   *  source is the real form_responses table with a baked-in template_id filter,
+   *  so each Builder app is its own data source without a stray UUID filter. */
+  baseFilter?: ReportRuleGroup
 }
 
 /** Authored annotations keyed by entity → column key. Sparse on purpose: only

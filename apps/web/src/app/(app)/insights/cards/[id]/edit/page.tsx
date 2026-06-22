@@ -1,8 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
-import { discoverEntities } from '@beaconhs/analytics/server'
 import { requireRequestContext } from '@/lib/auth'
 import { canCreateInsights } from '../../../_access'
-import { loadCard, loadMetricCards } from '../../_data'
+import { loadCard, loadMetricCards, loadStudioEntities } from '../../_data'
 import { CardStudio } from '../../_studio/card-studio.client'
 
 export const dynamic = 'force-dynamic'
@@ -14,7 +13,7 @@ export default async function EditCardPage({ params }: { params: Promise<{ id: s
   if (!canCreateInsights(ctx)) redirect('/insights')
   const card = await loadCard(ctx, id)
   if (!card) notFound()
-  const metrics = await loadMetricCards(ctx)
+  const [metrics, entities] = await Promise.all([loadMetricCards(ctx), loadStudioEntities(ctx)])
   return (
     <CardStudio
       initial={{
@@ -26,7 +25,7 @@ export default async function EditCardPage({ params }: { params: Promise<{ id: s
         kind: card.kind,
         config: card.config,
       }}
-      entities={discoverEntities()}
+      entities={entities}
       metrics={metrics}
     />
   )

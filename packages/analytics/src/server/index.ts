@@ -9,7 +9,7 @@ import { discoverEntityMap } from './discover'
 
 export { runBhql } from './execute'
 export { compileBhql, type CompiledBhql } from './compile'
-export { discoverEntities, discoverEntityMap } from './discover'
+export { discoverEntities, discoverEntityMap, scopedFormAppEntity } from './discover'
 
 /** Validate untrusted BHQL against the live, schema-discovered registry. The
  *  server-side convenience over the pure `parseBhqlQuery(raw, entityMap)`. */

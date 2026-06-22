@@ -325,6 +325,51 @@ export function discoverEntities(): AnalyticsEntity[] {
   return entities
 }
 
+const FORM_ENTITY_KEY = 'form_responses'
+const SCOPED_FORM_RE = /^form_responses:([0-9a-fA-F-]{36})$/
+
+let MAP_CACHE: Record<string, AnalyticsEntity> | null = null
+function baseEntityMap(): Record<string, AnalyticsEntity> {
+  if (!MAP_CACHE) MAP_CACHE = Object.fromEntries(discoverEntities().map((e) => [e.key, e]))
+  return MAP_CACHE
+}
+
+/** Build a per-app entity: the real form_responses table scoped to ONE Builder
+ *  app via an implicit template_id filter. `label` (the app name) is shown in the
+ *  studio source picker; it's omitted for stateless compile/render resolution
+ *  (the scope lives entirely in the `form_responses:<templateId>` key). */
+export function scopedFormAppEntity(templateId: string, label?: string): AnalyticsEntity | null {
+  const base = baseEntityMap()[FORM_ENTITY_KEY]
+  if (!base) return null
+  return {
+    ...base,
+    key: `${FORM_ENTITY_KEY}:${templateId}`,
+    label: label ?? base.label,
+    description: label ? `Submitted responses for the “${label}” app.` : base.description,
+    primary: false,
+    baseFilter: {
+      combinator: 'and',
+      rules: [{ field: 'template_id', op: 'eq', value: templateId }],
+    },
+  }
+}
+
+/** Entity map for validate/compile. A Proxy resolves `form_responses:<templateId>`
+ *  source keys to a scoped per-app entity on demand — so a card saved against one
+ *  Builder app re-renders later with NO tenant lookup (the template id is in the
+ *  key, the columns come from the static form_responses entity). */
 export function discoverEntityMap(): Record<string, AnalyticsEntity> {
-  return Object.fromEntries(discoverEntities().map((e) => [e.key, e]))
+  const base = baseEntityMap()
+  return new Proxy(base, {
+    get(target, prop) {
+      if (typeof prop === 'string' && !(prop in target)) {
+        const m = SCOPED_FORM_RE.exec(prop)
+        if (m) return scopedFormAppEntity(m[1]!) ?? undefined
+      }
+      return target[prop as string]
+    },
+    has(target, prop) {
+      return prop in target || (typeof prop === 'string' && SCOPED_FORM_RE.test(prop))
+    },
+  })
 }

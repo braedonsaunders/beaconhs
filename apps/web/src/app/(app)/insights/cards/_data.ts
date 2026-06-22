@@ -1,8 +1,15 @@
 // Card loaders (plain server functions — not actions).
 
-import { and, desc, eq, isNull, or } from 'drizzle-orm'
-import { insightCards, type BhqlQuery, type InsightCardConfig } from '@beaconhs/db/schema'
+import { and, asc, desc, eq, isNull, or } from 'drizzle-orm'
+import {
+  formTemplates,
+  insightCards,
+  type BhqlQuery,
+  type InsightCardConfig,
+} from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
+import { discoverEntities, scopedFormAppEntity } from '@beaconhs/analytics/server'
+import type { AnalyticsEntity } from '@beaconhs/analytics'
 
 export type CardKind = 'question' | 'model' | 'metric' | 'ai'
 
@@ -86,4 +93,23 @@ export async function loadCardsForPalette(ctx: RequestContext): Promise<CardRow[
       .orderBy(desc(insightCards.updatedAt)),
   )
   return rows.map(map)
+}
+
+/** Entities for the card studio source picker: the schema-discovered entities PLUS
+ *  one scoped entity per Builder app (the form_responses table scoped to that
+ *  template), so each app is its own data source instead of a single "Builder
+ *  apps" bucket. The scope rides in the entity key (`form_responses:<templateId>`),
+ *  so a saved card re-renders with no tenant lookup. */
+export async function loadStudioEntities(ctx: RequestContext): Promise<AnalyticsEntity[]> {
+  const apps = await ctx.db((tx) =>
+    tx
+      .select({ id: formTemplates.id, name: formTemplates.name })
+      .from(formTemplates)
+      .where(and(eq(formTemplates.tenantId, ctx.tenantId), isNull(formTemplates.deletedAt)))
+      .orderBy(asc(formTemplates.name)),
+  )
+  const appEntities = apps
+    .map((a) => scopedFormAppEntity(a.id, a.name))
+    .filter((e): e is AnalyticsEntity => e != null)
+  return [...discoverEntities(), ...appEntities]
 }

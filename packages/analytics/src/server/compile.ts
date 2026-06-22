@@ -635,6 +635,22 @@ function calcMeasureColumn(
 /** Compile one source to an aggregated subquery (`SELECT <grain>, <measures> …
  *  GROUP BY <grain>`), returning the statement (unparenthesised) and its output
  *  columns. Reuses the same whitelist-safe helpers as the single-source path. */
+/** AND an entity's implicit base filter (a scoped virtual entity, e.g. a per-app
+ *  `form_responses:<templateId>` source) into the stage WHERE, so the scope binds
+ *  on every query against that entity. The stage predicate is parenthesised to
+ *  preserve its own OR grouping; the base filter's value binds as a param. */
+function withBaseFilter(
+  entity: AnalyticsEntity,
+  ctx: CompileCtx,
+  stageWhere: SQL | null,
+): SQL | null {
+  if (!entity.baseFilter) return stageWhere
+  const baseWhere = compileRuleGroup(entity, entity.baseFilter, (c) => colSqlOf(ctx, c))
+  if (!baseWhere) return stageWhere
+  if (!stageWhere) return baseWhere
+  return sql.join([baseWhere, sql.raw(' AND ('), stageWhere, sql.raw(')')], sql.raw(''))
+}
+
 function compileAggregatedSubquery(
   source: string,
   filter: ReportRuleGroup | null | undefined,
@@ -673,7 +689,11 @@ function compileAggregatedSubquery(
   }
   if (selects.length === 0) throw new Error(`Source "${source}" selects no columns`)
 
-  const where = filter ? compileRuleGroup(entity, filter, (c) => colSqlOf(ctx, c)) : null
+  const where = withBaseFilter(
+    aEntity,
+    ctx,
+    filter ? compileRuleGroup(entity, filter, (c) => colSqlOf(ctx, c)) : null,
+  )
   const whereSql = where ? sql.join([sql.raw('WHERE '), where], sql.raw('')) : null
   const groupBy = breakouts.length
     ? sql.raw(`GROUP BY ${breakouts.map((_, i) => i + 1).join(', ')}`)
@@ -1154,9 +1174,11 @@ export function compileBhql(
   let effectiveLimit = Math.min(Math.max(Math.trunc(requested), 1), HARD_MAX)
   if (opts.maxRows) effectiveLimit = Math.min(effectiveLimit, opts.maxRows)
 
-  const where = stage.filter
-    ? compileRuleGroup(entity, stage.filter, (c) => colSqlOf(ctx, c))
-    : null
+  const where = withBaseFilter(
+    aEntity,
+    ctx,
+    stage.filter ? compileRuleGroup(entity, stage.filter, (c) => colSqlOf(ctx, c)) : null,
+  )
   const whereSql = where ? sql.join([sql.raw('WHERE '), where], sql.raw('')) : null
 
   const selects: SQL[] = []
