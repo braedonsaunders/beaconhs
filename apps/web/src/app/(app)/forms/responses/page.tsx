@@ -30,6 +30,7 @@ import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
 import { TableToolbar } from '@/components/table-toolbar'
+import { formCategoryLabel } from '../_lib/category-label'
 
 export const metadata = { title: 'Form responses' }
 
@@ -183,7 +184,7 @@ export default async function FormResponsesPage({
           }
           description={
             categoryFilter
-              ? `No ${categoryFilter.replace(/_/g, ' ')} responses. Fill out a template to log one.`
+              ? `No ${formCategoryLabel(categoryFilter)} responses. Fill out a template to log one.`
               : 'Select a template to fill out a new form.'
           }
           action={
@@ -256,7 +257,7 @@ export default async function FormResponsesPage({
                         </Link>
                         {template.category ? (
                           <div className="text-xs text-slate-500">
-                            {template.category.replace(/_/g, ' ')}
+                            {formCategoryLabel(template.category)}
                           </div>
                         ) : null}
                       </TableCell>

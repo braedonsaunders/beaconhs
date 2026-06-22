@@ -23,6 +23,7 @@ import { recordAudit } from '@/lib/audit'
 import { PageContainer } from '@/components/page-layout'
 import { eq } from 'drizzle-orm'
 import { AppTypePicker } from './_app-type-picker'
+import { formCategoryLabel } from '../../_lib/category-label'
 
 export const metadata = { title: 'New app' }
 
@@ -239,7 +240,7 @@ function CanonicalCard({
             </div>
             <p className="mt-1 line-clamp-3 text-xs text-slate-600">{description}</p>
             <div className="mt-3 flex flex-wrap items-center gap-1.5">
-              <Badge variant="secondary">{category}</Badge>
+              <Badge variant="secondary">{formCategoryLabel(category)}</Badge>
               <Badge variant="outline">
                 {sectionCount} section{sectionCount === 1 ? '' : 's'}
               </Badge>

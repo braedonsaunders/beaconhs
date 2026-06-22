@@ -403,7 +403,11 @@ async function ensureTemplate(
       key: args.key,
       name: args.name,
       category: 'jsha',
-      moduleBinding: 'hazard_assessment_app',
+      // NO moduleBinding: these are first-class Builder apps that OPTIONALLY attach
+      // to a hazard-assessment type via the hazid_assessment_type_apps join — they
+      // are NOT owned by the hazard module (each can be filled standalone, or not
+      // exist at all). The join + autoCreate drive the in-assessment embedding, not
+      // this tag, so it only mislabelled them as hazard-module-bound.
       description: args.description,
       status: 'published' as const,
       kind: 'wizard' as const,
