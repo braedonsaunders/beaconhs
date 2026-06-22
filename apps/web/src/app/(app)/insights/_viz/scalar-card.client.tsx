@@ -59,7 +59,11 @@ export function ScalarCard({
         <span className="text-3xl font-bold text-slate-900 tabular-nums dark:text-slate-100">
           {format(value, decimals, prefix, suffix)}
         </span>
-        {delta != null && delta !== 0 ? (
+        {value == null ? (
+          <span className="mb-1 text-xs font-medium text-slate-400 dark:text-slate-500">
+            No data
+          </span>
+        ) : delta != null && delta !== 0 ? (
           <span
             className={cn(
               'mb-1 inline-flex items-center text-xs font-medium',

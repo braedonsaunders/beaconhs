@@ -227,7 +227,10 @@ function buildOption(spec: VizChartSpec): echarts.EChartsCoreOption {
         stack: spec.stacked && isBar ? 'total' : undefined,
         smooth: type === 'line' ? 0.25 : undefined,
         areaStyle: s.areaStyle ? { opacity: 0.18 } : undefined,
-        barMaxWidth: 36,
+        // Slimmer bars — horizontal row charts especially read as chunky "lines"
+        // at the default cap, so keep them compact like the old dashboard tiles.
+        barMaxWidth: horizontal ? 16 : 26,
+        barCategoryGap: '30%',
         itemStyle: isBar ? { borderRadius: spec.stacked ? 0 : 3 } : undefined,
         label:
           isBar && spec.showValues
