@@ -54,9 +54,9 @@ export const WIDGETS: Record<string, WidgetMeta> = {
     category: 'kpi',
     label: 'TRIR',
     description:
-      'Total recordable incident rate — rolling 12-mo, with prior-period delta and sparkline.',
+      'Total recordable incident rate — recordable incidents per 200,000 hours worked, rolling 12 months.',
     defaultSize: { w: 3, h: 3 },
-    minSize: { w: 2, h: 3 },
+    minSize: { w: 2, h: 2 },
     maxSize: { w: 6, h: 4 },
     rolesShown: ['super_admin', 'tenant_admin', 'safety_manager'],
   },
@@ -64,9 +64,10 @@ export const WIDGETS: Record<string, WidgetMeta> = {
     id: 'kpi-dart',
     category: 'kpi',
     label: 'DART',
-    description: 'Days-away/restricted/transferred rate — rolling 12-mo, with delta and sparkline.',
+    description:
+      'Days-away/restricted/transferred rate per 200,000 hours worked, rolling 12 months.',
     defaultSize: { w: 3, h: 3 },
-    minSize: { w: 2, h: 3 },
+    minSize: { w: 2, h: 2 },
     maxSize: { w: 6, h: 4 },
     rolesShown: ['super_admin', 'tenant_admin', 'safety_manager'],
   },
@@ -76,7 +77,7 @@ export const WIDGETS: Record<string, WidgetMeta> = {
     label: 'Training compliance',
     description: 'Share of assigned training records currently completed.',
     defaultSize: { w: 3, h: 3 },
-    minSize: { w: 2, h: 3 },
+    minSize: { w: 2, h: 2 },
     maxSize: { w: 6, h: 4 },
   },
   'kpi-document-compliance': {
@@ -85,7 +86,7 @@ export const WIDGETS: Record<string, WidgetMeta> = {
     label: 'Document compliance',
     description: 'Share of expected document acknowledgments completed.',
     defaultSize: { w: 3, h: 3 },
-    minSize: { w: 2, h: 3 },
+    minSize: { w: 2, h: 2 },
     maxSize: { w: 6, h: 4 },
   },
   'kpi-days-since-recordable': {
