@@ -14,10 +14,27 @@ const coverage: BhqlExpr = {
   arg: {
     ex: 'case',
     branches: [
-      { when: { ex: 'isnull', arg: { ex: 'field', field: 'f.id' } }, then: { ex: 'lit', value: 'missing' } },
-      { when: { ex: 'isnull', arg: { ex: 'field', field: 'f.expires_on' } }, then: { ex: 'lit', value: 'valid' } },
-      { when: { ex: 'compare', op: '<', left: { ex: 'field', field: 'f.expires_on' }, right: CD }, then: { ex: 'lit', value: 'expired' } },
-      { when: { ex: 'compare', op: '<=', left: { ex: 'field', field: 'f.expires_on' }, right: { ex: 'arith', op: '+', left: CD, right: { ex: 'lit', value: 90 } } }, then: { ex: 'lit', value: 'expiring' } },
+      {
+        when: { ex: 'isnull', arg: { ex: 'field', field: 'f.id' } },
+        then: { ex: 'lit', value: 'missing' },
+      },
+      {
+        when: { ex: 'isnull', arg: { ex: 'field', field: 'f.expires_on' } },
+        then: { ex: 'lit', value: 'valid' },
+      },
+      {
+        when: { ex: 'compare', op: '<', left: { ex: 'field', field: 'f.expires_on' }, right: CD },
+        then: { ex: 'lit', value: 'expired' },
+      },
+      {
+        when: {
+          ex: 'compare',
+          op: '<=',
+          left: { ex: 'field', field: 'f.expires_on' },
+          right: { ex: 'arith', op: '+', left: CD, right: { ex: 'lit', value: 90 } },
+        },
+        then: { ex: 'lit', value: 'expiring' },
+      },
     ],
     else: { ex: 'lit', value: 'valid' },
   },
@@ -25,7 +42,11 @@ const coverage: BhqlExpr = {
 const q: BhqlQuery = {
   version: 'bhql/1',
   display: 'pivot',
-  pivot: { rows: [{ breakout: 'row' }], columns: [{ breakout: 'col' }], values: [{ measure: 'status' }] },
+  pivot: {
+    rows: [{ breakout: 'row' }],
+    columns: [{ breakout: 'col' }],
+    values: [{ measure: 'status' }],
+  },
   stages: [
     {
       source: 'people',
@@ -95,8 +116,13 @@ async function main() {
     const r = await runBhql(tx, q, { maxRows: 50_000 })
     if (r.shape === 'pivot') {
       const counts: Record<string, number> = {}
-      for (const row of r.cells) for (const cell of row) if (cell) counts[String(cell.status)] = (counts[String(cell.status)] ?? 0) + 1
-      console.log(`matrix builder OK: ${r.rowKeys.length} rows × ${r.columnKeys.length} cols`, counts)
+      for (const row of r.cells)
+        for (const cell of row)
+          if (cell) counts[String(cell.status)] = (counts[String(cell.status)] ?? 0) + 1
+      console.log(
+        `matrix builder OK: ${r.rowKeys.length} rows × ${r.columnKeys.length} cols`,
+        counts,
+      )
     } else {
       console.log('shape:', r.shape)
     }

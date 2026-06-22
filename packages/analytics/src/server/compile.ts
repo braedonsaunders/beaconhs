@@ -478,10 +478,24 @@ function breakoutColumn(ctx: CompileCtx, b: BhqlBreakout): { select: SQL; column
     if (field.includes('.')) {
       throw new Error('Numeric binning is only supported on a direct column, not a joined field')
     }
-    const lo = sql.join([sql.raw('(SELECT MIN('), base, sql.raw(`) FROM "${ctx.entity.table}")`)], sql.raw(''))
-    const hi = sql.join([sql.raw('(SELECT MAX('), base, sql.raw(`) FROM "${ctx.entity.table}")`)], sql.raw(''))
+    const lo = sql.join(
+      [sql.raw('(SELECT MIN('), base, sql.raw(`) FROM "${ctx.entity.table}")`)],
+      sql.raw(''),
+    )
+    const hi = sql.join(
+      [sql.raw('(SELECT MAX('), base, sql.raw(`) FROM "${ctx.entity.table}")`)],
+      sql.raw(''),
+    )
     const bucket = sql.join(
-      [sql.raw('width_bucket('), base, sql.raw(', '), lo, sql.raw(', ('), hi, sql.raw(`) + 1, ${b.bin.numBins})`)],
+      [
+        sql.raw('width_bucket('),
+        base,
+        sql.raw(', '),
+        lo,
+        sql.raw(', ('),
+        hi,
+        sql.raw(`) + 1, ${b.bin.numBins})`),
+      ],
       sql.raw(''),
     )
     return {
@@ -722,7 +736,14 @@ function compileMultiSource(
     }))
     return {
       alias: `s${i}`,
-      sub: compileAggregatedSubquery(js.source, js.filter, grainBreakouts, js.measures, [], entityMap),
+      sub: compileAggregatedSubquery(
+        js.source,
+        js.filter,
+        grainBreakouts,
+        js.measures,
+        [],
+        entityMap,
+      ),
       measures: js.measures,
     }
   })
@@ -791,7 +812,10 @@ function compileMultiSource(
   let from: SQL = sql.join([sql.raw('FROM'), paren(primary.sql), sql.raw('p')], sql.raw(' '))
   joined.forEach((j) => {
     if (grainCols.length === 0) {
-      from = sql.join([from, sql.raw('CROSS JOIN'), paren(j.sub.sql), sql.raw(j.alias)], sql.raw(' '))
+      from = sql.join(
+        [from, sql.raw('CROSS JOIN'), paren(j.sub.sql), sql.raw(j.alias)],
+        sql.raw(' '),
+      )
       return
     }
     const onParts = grainCols.map((g) => {

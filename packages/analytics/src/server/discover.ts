@@ -275,7 +275,13 @@ export function discoverEntities(): AnalyticsEntity[] {
             canBinNumeric: false,
           }
         : {}
-      columns.push({ ...base, semanticType, enumOptions, ...flagsFor(kind, semanticType), ...overrides })
+      columns.push({
+        ...base,
+        semanticType,
+        enumOptions,
+        ...flagsFor(kind, semanticType),
+        ...overrides,
+      })
     }
     if (columns.length === 0) continue
 

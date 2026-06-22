@@ -6,7 +6,12 @@
 
 import { and, desc, eq, gte, isNull } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/pg-core'
-import { analyseDataset, analyseJournals, type DatasetAnalysis, type JournalAnalysis } from '@beaconhs/ai'
+import {
+  analyseDataset,
+  analyseJournals,
+  type DatasetAnalysis,
+  type JournalAnalysis,
+} from '@beaconhs/ai'
 import { runBhql } from '@beaconhs/analytics/server'
 import {
   insightCards,
@@ -130,7 +135,10 @@ export async function runInsightAiCard(cardId: string): Promise<InsightAiResult>
     return { ok: false, error: e instanceof Error ? e.message : 'Could not run the card dataset.' }
   }
   if (result.shape !== 'flat') {
-    return { ok: false, error: 'AI cards analyse a table dataset — set the card display to a table.' }
+    return {
+      ok: false,
+      error: 'AI cards analyse a table dataset — set the card display to a table.',
+    }
   }
   if (result.rows.length === 0) return { ok: false, error: 'No data in this period to analyse.' }
 

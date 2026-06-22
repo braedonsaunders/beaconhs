@@ -326,10 +326,7 @@ export async function loadDashboardMetrics(
     const tcRows = await tx
       .select({ status: complianceStatus.status, c: count() })
       .from(complianceStatus)
-      .innerJoin(
-        complianceObligations,
-        eq(complianceObligations.id, complianceStatus.obligationId),
-      )
+      .innerJoin(complianceObligations, eq(complianceObligations.id, complianceStatus.obligationId))
       .where(inArray(complianceObligations.sourceModule, ['training', 'cert_requirement']))
       .groupBy(complianceStatus.status)
     const trainingTotal = tcRows.reduce((acc, r) => acc + Number(r.c), 0)
@@ -346,10 +343,7 @@ export async function loadDashboardMetrics(
     const dcRows = await tx
       .select({ status: complianceStatus.status, c: count() })
       .from(complianceStatus)
-      .innerJoin(
-        complianceObligations,
-        eq(complianceObligations.id, complianceStatus.obligationId),
-      )
+      .innerJoin(complianceObligations, eq(complianceObligations.id, complianceStatus.obligationId))
       .where(eq(complianceObligations.sourceModule, 'document'))
       .groupBy(complianceStatus.status)
     const documentExpected = dcRows.reduce((acc, r) => acc + Number(r.c), 0)

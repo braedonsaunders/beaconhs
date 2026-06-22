@@ -179,10 +179,32 @@ function coverageCase(expiryRef: string): BhqlExpr {
   return {
     ex: 'case',
     branches: [
-      { when: { ex: 'isnull', arg: { ex: 'field', field: 'f.id' } }, then: { ex: 'lit', value: 'missing' } },
-      { when: { ex: 'isnull', arg: { ex: 'field', field: expiryRef } }, then: { ex: 'lit', value: 'valid' } },
-      { when: { ex: 'compare', op: '<', left: { ex: 'field', field: expiryRef }, right: CURRENT_DATE_EXPR }, then: { ex: 'lit', value: 'expired' } },
-      { when: { ex: 'compare', op: '<=', left: { ex: 'field', field: expiryRef }, right: { ex: 'arith', op: '+', left: CURRENT_DATE_EXPR, right: { ex: 'lit', value: 90 } } }, then: { ex: 'lit', value: 'expiring' } },
+      {
+        when: { ex: 'isnull', arg: { ex: 'field', field: 'f.id' } },
+        then: { ex: 'lit', value: 'missing' },
+      },
+      {
+        when: { ex: 'isnull', arg: { ex: 'field', field: expiryRef } },
+        then: { ex: 'lit', value: 'valid' },
+      },
+      {
+        when: {
+          ex: 'compare',
+          op: '<',
+          left: { ex: 'field', field: expiryRef },
+          right: CURRENT_DATE_EXPR,
+        },
+        then: { ex: 'lit', value: 'expired' },
+      },
+      {
+        when: {
+          ex: 'compare',
+          op: '<=',
+          left: { ex: 'field', field: expiryRef },
+          right: { ex: 'arith', op: '+', left: CURRENT_DATE_EXPR, right: { ex: 'lit', value: 90 } },
+        },
+        then: { ex: 'lit', value: 'expiring' },
+      },
     ],
     else: { ex: 'lit', value: 'valid' },
   }
@@ -803,55 +825,56 @@ export function CardStudio({
 
           {/* Card type — AI analysis / reusable metric (not for a matrix). */}
           {mode !== 'matrix' ? (
-          <div className={sectionCls}>
-            <label className="flex items-center gap-2 text-xs font-medium text-slate-700 dark:text-slate-300">
-              <input
-                type="checkbox"
-                checked={isAiCard}
-                onChange={(e) => {
-                  setIsAiCard(e.target.checked)
-                  if (e.target.checked) setIsMetric(false)
-                }}
-              />
-              <Sparkles size={13} className="text-teal-500" />
-              AI analysis card
-            </label>
-            <label className="mt-2 flex items-center gap-2 text-xs font-medium text-slate-700 dark:text-slate-300">
-              <input
-                type="checkbox"
-                checked={isMetric}
-                onChange={(e) => {
-                  setIsMetric(e.target.checked)
-                  if (e.target.checked) setIsAiCard(false)
-                }}
-              />
-              <span className="font-semibold text-violet-500">ƒ</span>
-              Reusable metric — referenceable in other cards
-            </label>
-            {isAiCard ? (
-              <div className="mt-2 space-y-2">
-                <textarea
-                  value={analysisPrompt}
-                  onChange={(e) => setAnalysisPrompt(e.target.value)}
-                  rows={3}
-                  placeholder="What should the AI do with this data? e.g. “Summarise the top risks and who should act.”"
-                  className="w-full rounded-md border border-slate-300 bg-white px-2 py-2 text-xs outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+            <div className={sectionCls}>
+              <label className="flex items-center gap-2 text-xs font-medium text-slate-700 dark:text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={isAiCard}
+                  onChange={(e) => {
+                    setIsAiCard(e.target.checked)
+                    if (e.target.checked) setIsMetric(false)
+                  }}
                 />
-                <select
-                  value={analysisOutput}
-                  onChange={(e) => setAnalysisOutput(e.target.value as AiCardOutputShape)}
-                  className={cn(selectCls, 'h-8 text-xs')}
-                >
-                  <option value="insights">Findings &amp; insights</option>
-                  <option value="summary">Short summary</option>
-                  <option value="bullets">Key bullet points</option>
-                </select>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                  The rail below builds the dataset the model reads. Open the saved card to run it.
-                </p>
-              </div>
-            ) : null}
-          </div>
+                <Sparkles size={13} className="text-teal-500" />
+                AI analysis card
+              </label>
+              <label className="mt-2 flex items-center gap-2 text-xs font-medium text-slate-700 dark:text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={isMetric}
+                  onChange={(e) => {
+                    setIsMetric(e.target.checked)
+                    if (e.target.checked) setIsAiCard(false)
+                  }}
+                />
+                <span className="font-semibold text-violet-500">ƒ</span>
+                Reusable metric — referenceable in other cards
+              </label>
+              {isAiCard ? (
+                <div className="mt-2 space-y-2">
+                  <textarea
+                    value={analysisPrompt}
+                    onChange={(e) => setAnalysisPrompt(e.target.value)}
+                    rows={3}
+                    placeholder="What should the AI do with this data? e.g. “Summarise the top risks and who should act.”"
+                    className="w-full rounded-md border border-slate-300 bg-white px-2 py-2 text-xs outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  />
+                  <select
+                    value={analysisOutput}
+                    onChange={(e) => setAnalysisOutput(e.target.value as AiCardOutputShape)}
+                    className={cn(selectCls, 'h-8 text-xs')}
+                  >
+                    <option value="insights">Findings &amp; insights</option>
+                    <option value="summary">Short summary</option>
+                    <option value="bullets">Key bullet points</option>
+                  </select>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    The rail below builds the dataset the model reads. Open the saved card to run
+                    it.
+                  </p>
+                </div>
+              ) : null}
+            </div>
           ) : null}
 
           {mode === 'rows' ? (
@@ -963,58 +986,58 @@ export function CardStudio({
 
           {/* Filters (the matrix has its own structure). */}
           {mode !== 'matrix' ? (
-          <RailList
-            title="Filters"
-            items={filters}
-            onAdd={() =>
-              setFilters((f) => [...f, { field: cols[0]?.key ?? '', op: 'eq', value: '' }])
-            }
-            onRemove={(i) => setFilters((f) => f.filter((_, j) => j !== i))}
-            render={(f, i) => (
-              <FilterEditor
-                fields={fields}
-                row={f}
-                onChange={(next) => setFilters((fs) => fs.map((x, j) => (j === i ? next : x)))}
-              />
-            )}
-          />
+            <RailList
+              title="Filters"
+              items={filters}
+              onAdd={() =>
+                setFilters((f) => [...f, { field: cols[0]?.key ?? '', op: 'eq', value: '' }])
+              }
+              onRemove={(i) => setFilters((f) => f.filter((_, j) => j !== i))}
+              render={(f, i) => (
+                <FilterEditor
+                  fields={fields}
+                  row={f}
+                  onChange={(next) => setFilters((fs) => fs.map((x, j) => (j === i ? next : x)))}
+                />
+              )}
+            />
           ) : null}
 
           {/* Visualize — AI cards + matrices render their own output, not a chart. */}
           {!isAiCard && mode !== 'matrix' ? (
-          <div className={sectionCls}>
-            <h3 className={headCls}>Visualize</h3>
-            <div className="grid grid-cols-4 gap-1.5">
-              {VIZ_LIST.map((v) => {
-                const isSuggested = v.key === suggestedViz
-                return (
-                  <button
-                    key={v.key}
-                    type="button"
-                    title={isSuggested ? `${v.label} — suggested` : v.label}
-                    onClick={() => {
-                      setVizType(v.key)
-                      setVizTouched(true)
-                    }}
-                    className={cn(
-                      'relative flex flex-col items-center gap-1 rounded-md border px-1 py-2 text-[10px] transition',
-                      vizType === v.key
-                        ? 'border-teal-500 bg-teal-50 text-teal-700 dark:bg-teal-500/10 dark:text-teal-300'
-                        : isSuggested
-                          ? 'border-teal-300/70 text-slate-500 hover:border-teal-400 dark:border-teal-500/30 dark:text-slate-400'
-                          : 'border-slate-200 text-slate-500 hover:border-slate-300 dark:border-slate-700 dark:text-slate-400',
-                    )}
-                  >
-                    {isSuggested && vizType !== v.key ? (
-                      <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-teal-400" />
-                    ) : null}
-                    <VizIcon iconKey={v.iconKey} size={15} />
-                    <span className="truncate">{v.label}</span>
-                  </button>
-                )
-              })}
+            <div className={sectionCls}>
+              <h3 className={headCls}>Visualize</h3>
+              <div className="grid grid-cols-4 gap-1.5">
+                {VIZ_LIST.map((v) => {
+                  const isSuggested = v.key === suggestedViz
+                  return (
+                    <button
+                      key={v.key}
+                      type="button"
+                      title={isSuggested ? `${v.label} — suggested` : v.label}
+                      onClick={() => {
+                        setVizType(v.key)
+                        setVizTouched(true)
+                      }}
+                      className={cn(
+                        'relative flex flex-col items-center gap-1 rounded-md border px-1 py-2 text-[10px] transition',
+                        vizType === v.key
+                          ? 'border-teal-500 bg-teal-50 text-teal-700 dark:bg-teal-500/10 dark:text-teal-300'
+                          : isSuggested
+                            ? 'border-teal-300/70 text-slate-500 hover:border-teal-400 dark:border-teal-500/30 dark:text-slate-400'
+                            : 'border-slate-200 text-slate-500 hover:border-slate-300 dark:border-slate-700 dark:text-slate-400',
+                      )}
+                    >
+                      {isSuggested && vizType !== v.key ? (
+                        <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-teal-400" />
+                      ) : null}
+                      <VizIcon iconKey={v.iconKey} size={15} />
+                      <span className="truncate">{v.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
             </div>
-          </div>
           ) : null}
 
           {!isAiCard && mode !== 'matrix' ? (
@@ -1873,7 +1896,9 @@ function CrossMetricEditor({
               <FieldOptions
                 fields={denFields}
                 placeholder="Pick a field…"
-                predicate={(c) => (row.denFn === 'sum' || row.denFn === 'avg' ? c.canMeasure : true)}
+                predicate={(c) =>
+                  row.denFn === 'sum' || row.denFn === 'avg' ? c.canMeasure : true
+                }
               />
             </select>
           ) : null}
@@ -1990,7 +2015,11 @@ function MatrixEditor({
           {c.label}
         </option>
       ))
-  const filterList = (rows: FilterRow[], fields: FieldChoice[], onRows: (r: FilterRow[]) => void) => (
+  const filterList = (
+    rows: FilterRow[],
+    fields: FieldChoice[],
+    onRows: (r: FilterRow[]) => void,
+  ) => (
     <div className="space-y-1 rounded bg-slate-50 p-1.5 dark:bg-slate-800/40">
       <div className="flex items-center justify-between">
         <span className="text-[10px] tracking-wide text-slate-400 uppercase">Filters</span>
@@ -2292,7 +2321,9 @@ function decodeQuery(query: BhqlQuery | null): {
       if (b.field) return { f1: stripAlias(b.field) }
       const ex = b.expr as { ex?: string; fn?: string; args?: { ex?: string; field?: string }[] }
       if (ex?.ex === 'call' && ex.fn === 'concat') {
-        const fields = (ex.args ?? []).filter((a) => a.ex === 'field').map((a) => stripAlias(a.field))
+        const fields = (ex.args ?? [])
+          .filter((a) => a.ex === 'field')
+          .map((a) => stripAlias(a.field))
         return { f1: fields[0] ?? '', f2: fields[1] }
       }
       return { f1: '' }
@@ -2388,9 +2419,7 @@ function decodeQuery(query: BhqlQuery | null): {
   const joinedSources = stage.joinedSources ?? []
   const crossMetrics: CrossMetricRow[] = []
   const crossConsumed = new Set<string>()
-  const breakoutAliasToIndex = new Map(
-    (stage.breakouts ?? []).map((b, i) => [b.alias, i] as const),
-  )
+  const breakoutAliasToIndex = new Map((stage.breakouts ?? []).map((b, i) => [b.alias, i] as const))
   for (const js of joinedSources) {
     const den = js.measures[0]
     if (!den) continue

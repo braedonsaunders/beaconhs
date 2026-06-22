@@ -434,7 +434,8 @@ function parseSpine(
       if (!resolveSpine(o.equals)) fail(`A fact join references unknown spine field "${o.equals}"`)
     }
     for (const o of f.latestBy ?? []) {
-      if (!entityColumn(fEntity, o.ref)) fail(`Unknown order field "${o.ref}" on fact "${f.source}"`)
+      if (!entityColumn(fEntity, o.ref))
+        fail(`Unknown order field "${o.ref}" on fact "${f.source}"`)
     }
   }
 

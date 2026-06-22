@@ -16,22 +16,23 @@ const UUID_RE = /^[0-9a-f-]{36}$/i
 export function CardCell({ render }: { render: CardRender }) {
   const selfTitled = render.vizType === 'scalar' || render.vizType === 'progress'
 
-  const body = render.kind === 'ai' ? (
-    <AiCardView cardId={render.id} prompt={render.aiPrompt} />
-  ) : render.error ? (
-    <div className="grid h-full place-items-center px-2 text-center text-xs text-rose-500">
-      {render.error}
-    </div>
-  ) : render.result ? (
-    <VizRenderer
-      vizType={render.vizType}
-      result={render.result}
-      settings={render.vizSettings}
-      label={render.name}
-    />
-  ) : (
-    <div className="grid h-full place-items-center text-xs text-slate-400">No data</div>
-  )
+  const body =
+    render.kind === 'ai' ? (
+      <AiCardView cardId={render.id} prompt={render.aiPrompt} />
+    ) : render.error ? (
+      <div className="grid h-full place-items-center px-2 text-center text-xs text-rose-500">
+        {render.error}
+      </div>
+    ) : render.result ? (
+      <VizRenderer
+        vizType={render.vizType}
+        result={render.result}
+        settings={render.vizSettings}
+        label={render.name}
+      />
+    ) : (
+      <div className="grid h-full place-items-center text-xs text-slate-400">No data</div>
+    )
 
   // Scalar/progress already render a complete, labelled KPI card.
   if (selfTitled && render.result && !render.error) {

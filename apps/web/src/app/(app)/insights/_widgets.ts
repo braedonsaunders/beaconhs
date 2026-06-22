@@ -368,10 +368,18 @@ export const BUILTIN_QUERIES: Record<
               alias: 'rec',
               filter: {
                 combinator: 'and',
-                rules: [{ field: 'severity', op: 'in', value: ['medical_aid', 'lost_time', 'fatality'] }],
+                rules: [
+                  { field: 'severity', op: 'in', value: ['medical_aid', 'lost_time', 'fatality'] },
+                ],
               },
             },
-            { kind: 'calc', alias: 'trir', numerator: 'rec', denominator: 'hrs', multiplier: 200000 },
+            {
+              kind: 'calc',
+              alias: 'trir',
+              numerator: 'rec',
+              denominator: 'hrs',
+              multiplier: 200000,
+            },
           ],
           joinedSources: [
             {
@@ -679,7 +687,13 @@ export const BUILTIN_QUERIES: Record<
                 rules: [{ field: 'status', op: 'eq', value: 'completed' }],
               },
             },
-            { kind: 'calc', alias: 'pct', numerator: 'done', denominator: 'total', multiplier: 100 },
+            {
+              kind: 'calc',
+              alias: 'pct',
+              numerator: 'done',
+              denominator: 'total',
+              multiplier: 100,
+            },
           ],
         },
       ],
@@ -712,7 +726,13 @@ export const BUILTIN_QUERIES: Record<
                     arg: { ex: 'field', field: 'occurred_at' },
                     filter: {
                       combinator: 'and',
-                      rules: [{ field: 'severity', op: 'in', value: ['medical_aid', 'lost_time', 'fatality'] }],
+                      rules: [
+                        {
+                          field: 'severity',
+                          op: 'in',
+                          value: ['medical_aid', 'lost_time', 'fatality'],
+                        },
+                      ],
                     },
                   },
                   { ex: 'call', fn: 'now', args: [] },
@@ -753,15 +773,54 @@ export const BUILTIN_QUERIES: Record<
                 ex: 'case',
                 branches: [
                   {
-                    when: { ex: 'compare', op: '<', left: { ex: 'call', fn: 'datediff', args: [{ ex: 'lit', value: 'day' }, { ex: 'field', field: 'created_at' }, { ex: 'call', fn: 'now', args: [] }] }, right: { ex: 'lit', value: 7 } },
+                    when: {
+                      ex: 'compare',
+                      op: '<',
+                      left: {
+                        ex: 'call',
+                        fn: 'datediff',
+                        args: [
+                          { ex: 'lit', value: 'day' },
+                          { ex: 'field', field: 'created_at' },
+                          { ex: 'call', fn: 'now', args: [] },
+                        ],
+                      },
+                      right: { ex: 'lit', value: 7 },
+                    },
                     then: { ex: 'lit', value: '< 7 days' },
                   },
                   {
-                    when: { ex: 'compare', op: '<', left: { ex: 'call', fn: 'datediff', args: [{ ex: 'lit', value: 'day' }, { ex: 'field', field: 'created_at' }, { ex: 'call', fn: 'now', args: [] }] }, right: { ex: 'lit', value: 30 } },
+                    when: {
+                      ex: 'compare',
+                      op: '<',
+                      left: {
+                        ex: 'call',
+                        fn: 'datediff',
+                        args: [
+                          { ex: 'lit', value: 'day' },
+                          { ex: 'field', field: 'created_at' },
+                          { ex: 'call', fn: 'now', args: [] },
+                        ],
+                      },
+                      right: { ex: 'lit', value: 30 },
+                    },
                     then: { ex: 'lit', value: '7–30 days' },
                   },
                   {
-                    when: { ex: 'compare', op: '<', left: { ex: 'call', fn: 'datediff', args: [{ ex: 'lit', value: 'day' }, { ex: 'field', field: 'created_at' }, { ex: 'call', fn: 'now', args: [] }] }, right: { ex: 'lit', value: 60 } },
+                    when: {
+                      ex: 'compare',
+                      op: '<',
+                      left: {
+                        ex: 'call',
+                        fn: 'datediff',
+                        args: [
+                          { ex: 'lit', value: 'day' },
+                          { ex: 'field', field: 'created_at' },
+                          { ex: 'call', fn: 'now', args: [] },
+                        ],
+                      },
+                      right: { ex: 'lit', value: 60 },
+                    },
                     then: { ex: 'lit', value: '30–60 days' },
                   },
                 ],
@@ -787,7 +846,14 @@ export const BUILTIN_QUERIES: Record<
           breakouts: [
             {
               alias: 'dow',
-              expr: { ex: 'call', fn: 'datepart', args: [{ ex: 'lit', value: 'dow' }, { ex: 'field', field: 'entry_date' }] },
+              expr: {
+                ex: 'call',
+                fn: 'datepart',
+                args: [
+                  { ex: 'lit', value: 'dow' },
+                  { ex: 'field', field: 'entry_date' },
+                ],
+              },
             },
           ],
           aggregations: [{ fn: 'count', alias: 'count' }],

@@ -85,10 +85,32 @@ const QUERY: BhqlQuery = {
             arg: {
               ex: 'case',
               branches: [
-                { when: { ex: 'isnull', arg: { ex: 'field', field: 'tr.id' } }, then: { ex: 'lit', value: 'missing' } },
-                { when: { ex: 'isnull', arg: { ex: 'field', field: 'tr.expires_on' } }, then: { ex: 'lit', value: 'valid' } },
-                { when: { ex: 'compare', op: '<', left: { ex: 'field', field: 'tr.expires_on' }, right: CD }, then: { ex: 'lit', value: 'expired' } },
-                { when: { ex: 'compare', op: '<=', left: { ex: 'field', field: 'tr.expires_on' }, right: { ex: 'arith', op: '+', left: CD, right: { ex: 'lit', value: 90 } } }, then: { ex: 'lit', value: 'expiring' } },
+                {
+                  when: { ex: 'isnull', arg: { ex: 'field', field: 'tr.id' } },
+                  then: { ex: 'lit', value: 'missing' },
+                },
+                {
+                  when: { ex: 'isnull', arg: { ex: 'field', field: 'tr.expires_on' } },
+                  then: { ex: 'lit', value: 'valid' },
+                },
+                {
+                  when: {
+                    ex: 'compare',
+                    op: '<',
+                    left: { ex: 'field', field: 'tr.expires_on' },
+                    right: CD,
+                  },
+                  then: { ex: 'lit', value: 'expired' },
+                },
+                {
+                  when: {
+                    ex: 'compare',
+                    op: '<=',
+                    left: { ex: 'field', field: 'tr.expires_on' },
+                    right: { ex: 'arith', op: '+', left: CD, right: { ex: 'lit', value: 90 } },
+                  },
+                  then: { ex: 'lit', value: 'expiring' },
+                },
               ],
               else: { ex: 'lit', value: 'valid' },
             },

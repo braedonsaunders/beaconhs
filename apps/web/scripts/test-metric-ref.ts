@@ -50,7 +50,10 @@ async function main() {
         ],
       }
       const r = await runBhql(tx, refQuery, { maxRows: 10 })
-      console.log('metricRef resolved + ran:', JSON.stringify(r.shape === 'flat' ? r.rows : r.shape))
+      console.log(
+        'metricRef resolved + ran:',
+        JSON.stringify(r.shape === 'flat' ? r.rows : r.shape),
+      )
     } finally {
       await tx
         .update(insightCards)

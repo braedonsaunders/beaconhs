@@ -41,7 +41,8 @@ async function runCardCached(
   const result = await ctx.db((tx) => runBhql(tx, query, { maxRows: 20_000 }))
   CARD_RESULT_CACHE.set(key, { at: now, result })
   if (CARD_RESULT_CACHE.size > 2_000) {
-    for (const [k, v] of CARD_RESULT_CACHE) if (now - v.at > CARD_RESULT_TTL_MS) CARD_RESULT_CACHE.delete(k)
+    for (const [k, v] of CARD_RESULT_CACHE)
+      if (now - v.at > CARD_RESULT_TTL_MS) CARD_RESULT_CACHE.delete(k)
   }
   return result
 }
@@ -66,13 +67,21 @@ export type CardRender = {
  *  demand from the cell, so a dashboard load never pays LLM cost. */
 export async function loadDashboardCardRenders(
   ctx: RequestContext,
-  cards: Array<Pick<CardRow, 'id' | 'name' | 'kind' | 'query' | 'vizType' | 'vizSettings' | 'config'>>,
+  cards: Array<
+    Pick<CardRow, 'id' | 'name' | 'kind' | 'query' | 'vizType' | 'vizSettings' | 'config'>
+  >,
   opts: { paramValues?: Record<string, unknown>; paramMap?: DashboardParamMap } = {},
 ): Promise<CardRender[]> {
   const { paramValues = {}, paramMap = {} } = opts
   return Promise.all(
     cards.map(async (c) => {
-      const base = { id: c.id, name: c.name, kind: c.kind, vizType: c.vizType, vizSettings: c.vizSettings }
+      const base = {
+        id: c.id,
+        name: c.name,
+        kind: c.kind,
+        vizType: c.vizType,
+        vizSettings: c.vizSettings,
+      }
       if (c.kind === 'ai') {
         return {
           ...base,
@@ -86,7 +95,11 @@ export async function loadDashboardCardRenders(
         const result = await runCardCached(ctx, query, `${ctx.tenantId}:${JSON.stringify(query)}`)
         return { ...base, result, error: null }
       } catch (e) {
-        return { ...base, result: null, error: e instanceof Error ? e.message : 'Could not run this card.' }
+        return {
+          ...base,
+          result: null,
+          error: e instanceof Error ? e.message : 'Could not run this card.',
+        }
       }
     }),
   )

@@ -31,15 +31,26 @@ show('TRIR by month (cross-source)', {
         {
           fn: 'count',
           alias: 'recordable',
-          filter: { combinator: 'and', rules: [{ field: 'severity', op: 'eq', value: 'lost_time' }] },
+          filter: {
+            combinator: 'and',
+            rules: [{ field: 'severity', op: 'eq', value: 'lost_time' }],
+          },
         },
-        { kind: 'calc', alias: 'trir', numerator: 'recordable', denominator: 'hours', multiplier: 200000 },
+        {
+          kind: 'calc',
+          alias: 'trir',
+          numerator: 'recordable',
+          denominator: 'hours',
+          multiplier: 200000,
+        },
       ],
       joinedSources: [
         {
           source: 'incident_hours_periods',
           measures: [{ fn: 'sum', field: 'total_hours', alias: 'hours' }],
-          on: [{ breakout: 'month', field: 'period_start', bin: { kind: 'temporal', unit: 'month' } }],
+          on: [
+            { breakout: 'month', field: 'period_start', bin: { kind: 'temporal', unit: 'month' } },
+          ],
         },
       ],
     },
@@ -88,7 +99,13 @@ show('TRIR scalar (no grain)', {
       source: 'incidents',
       aggregations: [
         { fn: 'count', alias: 'recordable' },
-        { kind: 'calc', alias: 'trir', numerator: 'recordable', denominator: 'hours', multiplier: 200000 },
+        {
+          kind: 'calc',
+          alias: 'trir',
+          numerator: 'recordable',
+          denominator: 'hours',
+          multiplier: 200000,
+        },
       ],
       joinedSources: [
         {
@@ -172,10 +189,32 @@ show('Training matrix (spine, view-free)', {
             arg: {
               ex: 'case',
               branches: [
-                { when: { ex: 'isnull', arg: { ex: 'field', field: 'tr.id' } }, then: { ex: 'lit', value: 'missing' } },
-                { when: { ex: 'isnull', arg: { ex: 'field', field: 'tr.expires_on' } }, then: { ex: 'lit', value: 'valid' } },
-                { when: { ex: 'compare', op: '<', left: { ex: 'field', field: 'tr.expires_on' }, right: cd }, then: { ex: 'lit', value: 'expired' } },
-                { when: { ex: 'compare', op: '<=', left: { ex: 'field', field: 'tr.expires_on' }, right: { ex: 'arith', op: '+', left: cd, right: { ex: 'lit', value: 90 } } }, then: { ex: 'lit', value: 'expiring' } },
+                {
+                  when: { ex: 'isnull', arg: { ex: 'field', field: 'tr.id' } },
+                  then: { ex: 'lit', value: 'missing' },
+                },
+                {
+                  when: { ex: 'isnull', arg: { ex: 'field', field: 'tr.expires_on' } },
+                  then: { ex: 'lit', value: 'valid' },
+                },
+                {
+                  when: {
+                    ex: 'compare',
+                    op: '<',
+                    left: { ex: 'field', field: 'tr.expires_on' },
+                    right: cd,
+                  },
+                  then: { ex: 'lit', value: 'expired' },
+                },
+                {
+                  when: {
+                    ex: 'compare',
+                    op: '<=',
+                    left: { ex: 'field', field: 'tr.expires_on' },
+                    right: { ex: 'arith', op: '+', left: cd, right: { ex: 'lit', value: 90 } },
+                  },
+                  then: { ex: 'lit', value: 'expiring' },
+                },
               ],
               else: { ex: 'lit', value: 'valid' },
             },
