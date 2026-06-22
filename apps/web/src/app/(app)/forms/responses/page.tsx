@@ -60,11 +60,16 @@ export default async function FormResponsesPage({
   // Optional deep-link filter only: `?category=…` narrows to one template
   // category (e.g. links from other modules). No hardcoded category pivot.
   const categoryFilter = pickString(sp.category)
+  // The single most useful scope: pick ONE app/template. Without it this list is
+  // one undifferentiated dump of every app's submissions (e.g. thousands of JHSA
+  // wizard responses drowning out the rest).
+  const templateFilter = pickString(sp.template)
   const ctx = await requireRequestContext()
 
-  const { rows, total, statusCounts } = await ctx.db(async (tx) => {
+  const { rows, total, statusCounts, templateOptions } = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = []
     if (statusFilter) filters.push(eq(formResponses.status, statusFilter as any))
+    if (templateFilter) filters.push(eq(formResponses.templateId, templateFilter))
     if (categoryFilter) filters.push(eq(formTemplates.category, categoryFilter))
     if (params.q) {
       const term = `%${params.q}%`
@@ -110,14 +115,25 @@ export default async function FormResponsesPage({
       .orderBy(...orderBy)
       .limit(params.perPage)
       .offset((params.page - 1) * params.perPage)
+    // Status chip counts reflect the chosen app (when one is selected).
     const ss = await tx
       .select({ s: formResponses.status, c: count() })
       .from(formResponses)
+      .where(templateFilter ? eq(formResponses.templateId, templateFilter) : undefined)
       .groupBy(formResponses.status)
+    // App filter options: every template that has at least one response, most-used
+    // first so the dominant apps are easy to find.
+    const apps = await tx
+      .select({ id: formTemplates.id, name: formTemplates.name, c: count(formResponses.id) })
+      .from(formResponses)
+      .innerJoin(formTemplates, eq(formTemplates.id, formResponses.templateId))
+      .groupBy(formTemplates.id, formTemplates.name)
+      .orderBy(desc(count(formResponses.id)))
     return {
       rows: data,
       total: Number(tot?.c ?? 0),
       statusCounts: Object.fromEntries(ss.map((x) => [x.s, Number(x.c)])),
+      templateOptions: apps.map((a) => ({ value: a.id, label: a.name, count: Number(a.c) })),
     }
   })
 
@@ -129,7 +145,7 @@ export default async function FormResponsesPage({
         <>
           <PageHeader
             title="Form responses"
-            description="Every submission across every template."
+            description="Every app submission. Use the App filter to focus on one."
             actions={
               <Link href={buildExportHref('/forms/responses/export.csv', sp)}>
                 <Button variant="outline">Export CSV</Button>
@@ -137,7 +153,15 @@ export default async function FormResponsesPage({
             }
           />
           <TableToolbar>
-            <SearchInput placeholder="Search template name…" />
+            <SearchInput placeholder="Search app name…" />
+            <FilterChips
+              basePath="/forms/responses"
+              currentParams={sp}
+              paramKey="template"
+              label="App"
+              allLabel="All apps"
+              options={templateOptions}
+            />
             <FilterChips
               basePath="/forms/responses"
               currentParams={sp}
@@ -153,7 +177,7 @@ export default async function FormResponsesPage({
         <EmptyState
           icon={<ClipboardCheck size={32} />}
           title={
-            statusFilter || params.q || categoryFilter
+            statusFilter || params.q || categoryFilter || templateFilter
               ? 'No responses match these filters'
               : 'No responses'
           }
