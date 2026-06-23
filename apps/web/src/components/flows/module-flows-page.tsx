@@ -7,7 +7,7 @@ import { and, asc, eq } from 'drizzle-orm'
 import { formAutomations } from '@beaconhs/db/schema'
 import { requireModuleManage } from '@/lib/module-admin/guard'
 import { moduleAdminByKey } from '@/lib/module-admin/registry'
-import { listActiveEmailTemplates } from '@/lib/email-templates'
+import { listActiveEmailTemplatesForSubject } from '@/lib/email-templates'
 import { moduleFlowProfile } from '@/lib/flows/module-profiles'
 import { loadRecipientOptions } from '@/lib/flows/recipient-options'
 import { FlowsCanvas, type FlowSummary } from '@/app/(app)/apps/templates/[id]/flows/_flows-canvas'
@@ -33,7 +33,7 @@ export async function ModuleFlowsPage({ moduleKey }: { moduleKey: string }) {
         )
         .orderBy(asc(formAutomations.createdAt)),
     ),
-    listActiveEmailTemplates(ctx),
+    listActiveEmailTemplatesForSubject(ctx, 'module', moduleKey),
     loadRecipientOptions(ctx),
   ])
 

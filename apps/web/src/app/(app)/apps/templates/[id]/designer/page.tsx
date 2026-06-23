@@ -10,7 +10,7 @@ import {
 import type { FormSchemaV1 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { loadNavConfig } from '@/lib/nav/resolve'
-import { listActiveEmailTemplates } from '@/lib/email-templates'
+import { listActiveEmailTemplatesForSubject } from '@/lib/email-templates'
 import { loadRecipientOptions } from '@/lib/flows/recipient-options'
 import { FormDesigner } from './form-designer'
 import type { FlowSummary } from '../flows/_flows-canvas'
@@ -93,7 +93,7 @@ export default async function FormDesignerPage({
   })
 
   if (!data) notFound()
-  const emailTemplateOptions = await listActiveEmailTemplates(ctx)
+  const emailTemplateOptions = await listActiveEmailTemplatesForSubject(ctx, 'form_template', id)
   const recipientOptions = await loadRecipientOptions(ctx)
   let latestSchema: FormSchemaV1
   let currentVersion: number

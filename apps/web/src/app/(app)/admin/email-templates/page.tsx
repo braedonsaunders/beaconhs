@@ -21,6 +21,7 @@ import {
 import { can } from '@beaconhs/tenant'
 import { emailTemplates } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { listSubjectOptions } from '@/lib/flows/subject-fields'
 import { PageContainer } from '@/components/page-layout'
 import { createEmailTemplate, deleteEmailTemplate } from './_actions'
 
@@ -31,20 +32,23 @@ export default async function EmailTemplatesPage() {
   const ctx = await requireRequestContext()
   if (!ctx.isSuperAdmin && !can(ctx, 'admin.settings.manage')) redirect('/admin')
 
-  const templates = await ctx.db((tx) =>
-    tx
-      .select({
-        id: emailTemplates.id,
-        key: emailTemplates.key,
-        name: emailTemplates.name,
-        category: emailTemplates.category,
-        isActive: emailTemplates.isActive,
-        updatedAt: emailTemplates.updatedAt,
-      })
-      .from(emailTemplates)
-      .where(isNull(emailTemplates.deletedAt))
-      .orderBy(asc(emailTemplates.name)),
-  )
+  const [templates, subjects] = await Promise.all([
+    ctx.db((tx) =>
+      tx
+        .select({
+          id: emailTemplates.id,
+          key: emailTemplates.key,
+          name: emailTemplates.name,
+          category: emailTemplates.category,
+          isActive: emailTemplates.isActive,
+          updatedAt: emailTemplates.updatedAt,
+        })
+        .from(emailTemplates)
+        .where(isNull(emailTemplates.deletedAt))
+        .orderBy(asc(emailTemplates.name)),
+    ),
+    listSubjectOptions(ctx),
+  ])
 
   return (
     <PageContainer>
@@ -132,6 +136,33 @@ export default async function EmailTemplatesPage() {
                       required
                       placeholder="e.g. Incident notification"
                     />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="recordSubject">Record type *</Label>
+                    <Select id="recordSubject" name="recordSubject" required defaultValue="">
+                      <option value="" disabled>
+                        Choose a record type…
+                      </option>
+                      <optgroup label="Native modules">
+                        {subjects.modules.map((s) => (
+                          <option key={`module:${s.key}`} value={`module:${s.key}`}>
+                            {s.label}
+                          </option>
+                        ))}
+                      </optgroup>
+                      {subjects.apps.length > 0 ? (
+                        <optgroup label="Builder apps">
+                          {subjects.apps.map((s) => (
+                            <option key={`form_template:${s.key}`} value={`form_template:${s.key}`}>
+                              {s.label}
+                            </option>
+                          ))}
+                        </optgroup>
+                      ) : null}
+                    </Select>
+                    <p className="text-[11px] text-slate-400">
+                      The template&rsquo;s merge fields come from this record&rsquo;s data.
+                    </p>
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="category">Category</Label>

@@ -43,6 +43,11 @@ export const emailTemplates = pgTable(
     name: text('name').notNull(),
     description: text('description'),
     category: emailTemplateCategory('category').notNull().default('general'),
+    // The record TYPE this template is written for: 'module' + a moduleKey
+    // (journals, incidents, …) OR 'form_template' + a templateId (a Builder app).
+    // Drives the merge-field palette (all that type's fields). Null ⇒ generic.
+    recordSubjectType: text('record_subject_type'),
+    recordSubjectKey: text('record_subject_key'),
     subjectTemplate: text('subject_template').notNull().default(''), // supports {{tokens}}
     // GrapesJS getProjectData() — the builder doc, the authoritative reload format.
     design: jsonb('design').$type<Record<string, unknown>>().notNull().default({}),

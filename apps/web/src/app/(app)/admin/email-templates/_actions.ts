@@ -18,6 +18,18 @@ import {
   loadTenantEmailTemplate,
   slugifyTemplateKey,
 } from '@/lib/email-templates'
+import { loadSubjectFields } from '@/lib/flows/subject-fields'
+
+const SUBJECT_TYPES = new Set(['module', 'form_template'])
+
+function parseRecordSubject(raw: string): { type: string; key: string } | null {
+  const idx = raw.indexOf(':')
+  if (idx < 0) return null
+  const type = raw.slice(0, idx)
+  const key = raw.slice(idx + 1)
+  if (!SUBJECT_TYPES.has(type) || !key) return null
+  return { type, key }
+}
 
 async function requireManage() {
   const ctx = await requireRequestContext()
@@ -41,6 +53,17 @@ export async function createEmailTemplate(formData: FormData): Promise<void> {
   const category = String(formData.get('category') ?? 'general')
   const description = String(formData.get('description') ?? '').trim() || null
 
+  // Tie the template to a record type so the builder exposes that type's fields.
+  const subject = parseRecordSubject(String(formData.get('recordSubject') ?? ''))
+  const subjectFields = subject ? await loadSubjectFields(ctx, subject.type, subject.key) : []
+  const mergeFields =
+    subjectFields.length > 0
+      ? subjectFields.map((f) => ({ key: f.key, label: f.label }))
+      : [
+          { key: 'reference', label: 'Reference' },
+          { key: 'title', label: 'Title' },
+        ]
+
   const base = slugifyTemplateKey(String(formData.get('key') ?? '').trim() || name)
   const compiled = compileEmailMjml(STARTER_MJML)
 
@@ -62,13 +85,12 @@ export async function createEmailTemplate(formData: FormData): Promise<void> {
         name,
         description,
         category: category as 'general',
+        recordSubjectType: subject?.type ?? null,
+        recordSubjectKey: subject?.key ?? null,
         subjectTemplate: name,
         mjmlSource: STARTER_MJML,
         compiledHtml: compiled.html,
-        mergeFields: [
-          { key: 'name', label: 'Recipient / subject name' },
-          { key: 'site', label: 'Site' },
-        ],
+        mergeFields,
         createdByTenantUserId: ctx.membership?.id ?? null,
       })
       .returning({ id: emailTemplates.id })
@@ -171,9 +193,15 @@ export async function sendTestEmailTemplate(input: {
   const tpl = await loadTenantEmailTemplate(ctx, input.id)
   if (!tpl) return { ok: false, error: 'Template not found.' }
 
-  // Fill tokens with each merge field's sample (or a [key] placeholder).
+  // Fill tokens with a [key] placeholder — preferring the subject's live fields,
+  // falling back to the stored merge-field snapshot (generic templates).
+  const liveFields = await loadSubjectFields(ctx, tpl.recordSubjectType, tpl.recordSubjectKey)
   const sample: Record<string, unknown> = {}
-  for (const f of tpl.mergeFields ?? []) sample[f.key] = f.sample ?? `[${f.key}]`
+  if (liveFields.length > 0) {
+    for (const f of liveFields) sample[f.key] = `[${f.key}]`
+  } else {
+    for (const f of tpl.mergeFields ?? []) sample[f.key] = f.sample ?? `[${f.key}]`
+  }
 
   const { subject, html, text } = renderEmail(
     { mode: 'template', subjectTemplate: tpl.subjectTemplate, compiledHtml: tpl.compiledHtml },

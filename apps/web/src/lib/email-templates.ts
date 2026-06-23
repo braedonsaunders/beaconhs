@@ -5,7 +5,7 @@ import 'server-only'
 // server-side MJML compile (the ONLY place MJML runs — at save time, never on
 // the hot send path).
 
-import { and, asc, eq, isNull } from 'drizzle-orm'
+import { and, asc, eq, isNull, or } from 'drizzle-orm'
 import mjml2html from 'mjml'
 import { emailTemplates, type EmailTemplate } from '@beaconhs/db/schema'
 import { sanitizeEmailHtml } from '@beaconhs/email-render'
@@ -30,21 +30,57 @@ export type EmailTemplateOption = {
   name: string
   key: string
   category: string
+  recordSubjectType: string | null
+  recordSubjectKey: string | null
 }
+
+const EMAIL_TEMPLATE_OPTION_COLS = {
+  id: emailTemplates.id,
+  name: emailTemplates.name,
+  key: emailTemplates.key,
+  category: emailTemplates.category,
+  recordSubjectType: emailTemplates.recordSubjectType,
+  recordSubjectKey: emailTemplates.recordSubjectKey,
+} as const
 
 export async function listActiveEmailTemplates(
   ctx: RequestContext,
 ): Promise<EmailTemplateOption[]> {
   return ctx.db((tx) =>
     tx
-      .select({
-        id: emailTemplates.id,
-        name: emailTemplates.name,
-        key: emailTemplates.key,
-        category: emailTemplates.category,
-      })
+      .select(EMAIL_TEMPLATE_OPTION_COLS)
       .from(emailTemplates)
       .where(and(isNull(emailTemplates.deletedAt), eq(emailTemplates.isActive, true)))
+      .orderBy(asc(emailTemplates.name)),
+  )
+}
+
+/**
+ * Active templates relevant to a flow's subject: those authored FOR this exact
+ * record type, plus generic (untyped) templates that work with any subject.
+ */
+export async function listActiveEmailTemplatesForSubject(
+  ctx: RequestContext,
+  subjectType: string,
+  subjectKey: string,
+): Promise<EmailTemplateOption[]> {
+  return ctx.db((tx) =>
+    tx
+      .select(EMAIL_TEMPLATE_OPTION_COLS)
+      .from(emailTemplates)
+      .where(
+        and(
+          isNull(emailTemplates.deletedAt),
+          eq(emailTemplates.isActive, true),
+          or(
+            isNull(emailTemplates.recordSubjectType),
+            and(
+              eq(emailTemplates.recordSubjectType, subjectType),
+              eq(emailTemplates.recordSubjectKey, subjectKey),
+            ),
+          ),
+        ),
+      )
       .orderBy(asc(emailTemplates.name)),
   )
 }
