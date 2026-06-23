@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { Search, X } from 'lucide-react'
 import { Input } from '@beaconhs/ui'
@@ -16,6 +16,7 @@ export function SearchInput({
   const router = useRouter()
   const search = useSearchParams()
   const [value, setValue] = useState(search.get(paramKey) ?? '')
+  const [, startTransition] = useTransition()
 
   useEffect(() => {
     setValue(search.get(paramKey) ?? '')
@@ -29,7 +30,14 @@ export function SearchInput({
       // Reset to page 1 when search changes
       next.delete('page')
       const qs = next.toString()
-      router.replace(qs ? `${pathname}?${qs}` : pathname)
+      // Wrap the navigation in a transition so the App Router keeps the current
+      // page (and this input's focus) mounted while the new RSC streams in,
+      // instead of swapping in loading.tsx — otherwise the field loses focus on
+      // every keystroke and you have to click back in. `scroll: false` keeps the
+      // list from jumping to the top while filtering.
+      startTransition(() => {
+        router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+      })
     }, 250)
     return () => clearTimeout(handle)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -46,7 +54,9 @@ export function SearchInput({
         placeholder={placeholder}
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        className="h-8 pr-9 pl-9"
+        // Hide the browser's native search clear (×) — we render our own below,
+        // so the native one would show a duplicate clear button.
+        className="h-8 pr-9 pl-9 [&::-webkit-search-cancel-button]:hidden"
       />
       {value ? (
         <button
