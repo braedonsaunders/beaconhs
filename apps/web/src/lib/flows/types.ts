@@ -6,6 +6,7 @@
 // somehow present, is reported as unsupported rather than crashing the run.
 
 import type { ActionData, EvalContext } from '@beaconhs/forms-core'
+import type { PdfEmailableJobData } from '@beaconhs/jobs'
 
 export type FlowActorRef = {
   tenantUserId: string | null
@@ -54,4 +55,6 @@ export type FlowSubjectAdapter = {
     action: ActionData,
     helpers: ExtraActionHelpers,
   ): Promise<{ ran: string[]; failed: string[] }>
+  /** Build the PDF-render job for this subject (send_email attachPdf). Null ⇒ no PDF. */
+  pdfJob?(values: Record<string, unknown>): PdfEmailableJobData | null
 }

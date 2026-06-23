@@ -71,46 +71,140 @@ import {
   renderHazidSignedReportPdf,
   renderIncidentPdf,
   renderPpeIssuePdf,
+  renderRecordSummaryPdf,
   type HazidRenderInput,
 } from '@beaconhs/forms-pdf'
-import { enqueueEmail, type PdfJobData, type RenderedPdfArtifact } from '@beaconhs/jobs'
-import { presignGet, publicUrl, putObject } from '@beaconhs/storage'
+import {
+  enqueueEmail,
+  type PdfEmailPayload,
+  type PdfJobData,
+  type RenderedPdfArtifact,
+} from '@beaconhs/jobs'
+import { deleteObject, getObject, presignGet, publicUrl, putObject } from '@beaconhs/storage'
 import { importSlidesFromPptx } from './slides-import'
 import { audit } from '@beaconhs/audit'
 
 export async function processPdf(job: Job<PdfJobData, unknown>): Promise<unknown> {
   const data = job.data
   try {
-    switch (data.kind) {
-      case 'form_response':
-        return await renderFormResponse(data.tenantId, data.responseId)
-      case 'incident':
-        return await renderIncident(data.tenantId, data.incidentId)
-      case 'certificate':
-        return await renderCertificate(data.tenantId, data.certificateId)
-      case 'skill_certificate':
-        return await renderSkillCertificate(data.tenantId, data.skillCertificateId)
-      case 'hazid':
-        return await renderHazid(data.tenantId, data.assessmentId)
-      case 'ca':
-        return await renderCa(data.tenantId, data.caId)
-      case 'document':
-        return await renderDocument(data.tenantId, data.documentId)
-      case 'document_book':
-        return await renderDocumentBook(data.tenantId, data.bookId)
-      case 'equipment_workorder':
-        return await renderEquipmentWorkOrder(data.tenantId, data.workOrderId)
-      case 'ppe_issue':
-        return await renderPpeIssue(data.tenantId, data.issueReportId)
-      case 'hazid_signed_report':
-        return await renderHazidSignedReport(data.tenantId, data.reportId)
-      case 'slides_import':
-        return await importSlidesFromPptx(data)
+    const result = await dispatchPdf(data)
+    // Flows attachPdf path: once rendered + stored, email the PDF as an attachment.
+    if ('email' in data && data.email && isRenderedArtifact(result)) {
+      await emailRenderedPdf(data.email, result)
     }
+    return result
   } catch (err) {
     console.error(`[pdf] job ${job.id} failed:`, err)
     throw err
   }
+}
+
+async function dispatchPdf(data: PdfJobData): Promise<unknown> {
+  switch (data.kind) {
+    case 'form_response':
+      return await renderFormResponse(data.tenantId, data.responseId)
+    case 'incident':
+      return await renderIncident(data.tenantId, data.incidentId)
+    case 'certificate':
+      return await renderCertificate(data.tenantId, data.certificateId)
+    case 'skill_certificate':
+      return await renderSkillCertificate(data.tenantId, data.skillCertificateId)
+    case 'hazid':
+      return await renderHazid(data.tenantId, data.assessmentId)
+    case 'ca':
+      return await renderCa(data.tenantId, data.caId)
+    case 'record_summary':
+      return await renderRecordSummary(data)
+    case 'document':
+      return await renderDocument(data.tenantId, data.documentId)
+    case 'document_book':
+      return await renderDocumentBook(data.tenantId, data.bookId)
+    case 'equipment_workorder':
+      return await renderEquipmentWorkOrder(data.tenantId, data.workOrderId)
+    case 'ppe_issue':
+      return await renderPpeIssue(data.tenantId, data.issueReportId)
+    case 'hazid_signed_report':
+      return await renderHazidSignedReport(data.tenantId, data.reportId)
+    case 'slides_import':
+      return await importSlidesFromPptx(data)
+  }
+}
+
+function isRenderedArtifact(v: unknown): v is RenderedPdfArtifact {
+  return (
+    !!v &&
+    typeof v === 'object' &&
+    typeof (v as RenderedPdfArtifact).r2Key === 'string' &&
+    typeof (v as RenderedPdfArtifact).filename === 'string'
+  )
+}
+
+async function emailRenderedPdf(
+  email: PdfEmailPayload,
+  artifact: RenderedPdfArtifact,
+): Promise<void> {
+  let bytes: Buffer
+  try {
+    bytes = await getObject({ key: artifact.r2Key })
+  } catch (err) {
+    console.error('[pdf] could not read rendered PDF for email:', err)
+    return
+  }
+  await enqueueEmail({
+    to: email.to,
+    subject: email.subject,
+    html: email.html,
+    text: email.text,
+    attachments: [
+      {
+        filename: email.filename || artifact.filename,
+        content: bytes.toString('base64'),
+        contentType: 'application/pdf',
+      },
+    ],
+    meta: { tenantId: email.tenantId, category: email.category },
+  })
+  // The transient render artifact has served its purpose once attached.
+  try {
+    await deleteObject({ key: artifact.r2Key })
+  } catch {
+    /* best-effort cleanup */
+  }
+}
+
+// --- record_summary -------------------------------------------------------
+
+async function renderRecordSummary(
+  data: Extract<PdfJobData, { kind: 'record_summary' }>,
+): Promise<StoredPdfResult> {
+  const tenantName = await withTenant(db, data.tenantId, async (tx) => {
+    const [t] = await tx
+      .select({ name: tenants.name })
+      .from(tenants)
+      .where(eq(tenants.id, data.tenantId))
+      .limit(1)
+    return t?.name ?? 'BeaconHS'
+  })
+  const pdf = await renderRecordSummaryPdf({
+    tenantName,
+    heading: data.heading,
+    reference: data.reference ?? null,
+    subtitle: data.subtitle ?? null,
+    fields: data.fields,
+  })
+  const stamp = Date.now()
+  const ref = data.reference || data.subjectId.slice(0, 8)
+  const filename = data.filename || `${data.entityType}-${ref}-${stamp}.pdf`
+  const r2Key = `tmp/pdfs/record-summary/${data.tenantId}/${data.subjectId}-${stamp}.pdf`
+  return storeTransientPdfArtifact({
+    tenantId: data.tenantId,
+    pdf,
+    filename,
+    r2Key,
+    entityType: data.entityType,
+    entityId: data.subjectId,
+    summary: `Rendered ${data.heading} PDF`,
+  })
 }
 
 // --- form_response --------------------------------------------------------

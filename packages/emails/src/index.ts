@@ -10,6 +10,7 @@ export type SendEmailInput = {
   text: string
   from?: string
   replyTo?: string
+  attachments?: Array<{ filename: string; content: string; contentType?: string }>
 }
 
 const apiKey = process.env.RESEND_API_KEY
@@ -25,7 +26,12 @@ function client(): Resend {
 export async function sendEmail(input: SendEmailInput): Promise<{ id: string }> {
   if (!apiKey) {
     // Dev fallback: log to stdout so engineers can see what would have been sent.
-    console.log('[emails] (no API key) →', input.to, input.subject)
+    console.log(
+      '[emails] (no API key) →',
+      input.to,
+      input.subject,
+      input.attachments?.length ? `(+${input.attachments.length} attachment)` : '',
+    )
     return { id: 'dev-skipped' }
   }
   const res = await client().emails.send({
@@ -35,6 +41,12 @@ export async function sendEmail(input: SendEmailInput): Promise<{ id: string }> 
     html: input.html,
     text: input.text,
     replyTo: input.replyTo,
+    // Resend accepts base64 string content for attachments.
+    attachments: input.attachments?.map((a) => ({
+      filename: a.filename,
+      content: a.content,
+      contentType: a.contentType,
+    })),
   })
   if ('error' in res && res.error) throw new Error(res.error.message)
   return { id: (res as { data: { id: string } }).data.id }

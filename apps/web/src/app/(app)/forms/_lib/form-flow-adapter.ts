@@ -47,6 +47,7 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
     notifyCategory: 'forms',
     auditEntityType: 'form_response',
     deepLink: () => `/forms/responses/${responseId}`,
+    pdfJob: () => ({ kind: 'form_response', tenantId: ctx.tenantId, responseId }),
 
     async loadValues() {
       const [resp] = await ctx.db((tx) =>

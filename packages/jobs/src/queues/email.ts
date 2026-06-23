@@ -1,6 +1,13 @@
 import { Queue } from 'bullmq'
 import { connection } from '../connection'
 
+export type EmailAttachment = {
+  filename: string
+  /** base64-encoded file contents (BullMQ payloads must be JSON-serializable). */
+  content: string
+  contentType?: string
+}
+
 export type EmailJobData = {
   to: string | string[]
   subject: string
@@ -8,6 +15,7 @@ export type EmailJobData = {
   text: string
   from?: string
   replyTo?: string
+  attachments?: EmailAttachment[]
   // For audit-log fan-out
   meta?: { tenantId?: string; userId?: string; category?: string }
 }

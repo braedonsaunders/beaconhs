@@ -6,6 +6,7 @@ import { eq } from 'drizzle-orm'
 import { journalEntries, tenantUsers, users } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 import { spawnCorrectiveActionForSubject } from '../spawn'
+import { buildRecordSummaryPdfJob } from '../pdf-summary'
 import type { FlowSubjectAdapter } from '../types'
 
 export function createJournalFlowAdapter(ctx: RequestContext, entryId: string): FlowSubjectAdapter {
@@ -16,6 +17,16 @@ export function createJournalFlowAdapter(ctx: RequestContext, entryId: string): 
     notifyCategory: 'journal',
     auditEntityType: 'journal_entry',
     deepLink: () => `/journals/${entryId}`,
+    pdfJob: (values) =>
+      buildRecordSummaryPdfJob({
+        tenantId: ctx.tenantId,
+        subjectId: entryId,
+        entityType: 'journal_entry',
+        heading: 'Daily journal',
+        reference: values.reference,
+        subtitle: values.title,
+        values,
+      }),
 
     async loadValues() {
       const [e] = await ctx.db((tx) =>

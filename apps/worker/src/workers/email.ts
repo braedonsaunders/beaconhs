@@ -73,6 +73,7 @@ export async function processEmail(job: Job<EmailJobData>): Promise<void> {
       text: job.data.text,
       from: job.data.from,
       replyTo: job.data.replyTo,
+      attachments: job.data.attachments,
     })
 
     if (logId) {

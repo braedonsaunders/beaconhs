@@ -998,3 +998,52 @@ export async function renderPpeIssuePdf(input: PpeIssueRenderInput): Promise<Buf
     footerRight: `PPE Issue`,
   })
 }
+
+// --- Generic record summary PDF -------------------------------------------
+// A branded key-value table built from a flow's field-map. Used to attach a PDF
+// for modules that have no bespoke renderer (journals, inspections).
+
+export type RecordSummaryRenderInput = {
+  tenantName: string
+  heading: string
+  reference?: string | null
+  subtitle?: string | null
+  fields: { label: string; value: string }[]
+}
+
+export async function renderRecordSummaryPdf(input: RecordSummaryRenderInput): Promise<Buffer> {
+  return printLetterheadPdf({
+    body: renderRecordSummaryHtml(input),
+    title: input.heading,
+    footerLeft: input.tenantName,
+    footerRight: input.reference ?? undefined,
+  })
+}
+
+function renderRecordSummaryHtml(input: RecordSummaryRenderInput): string {
+  const rows =
+    input.fields.length === 0
+      ? `<tr><td style="padding:8px 10px;border:1px solid #e2e8f0;color:#94a3b8;">No details captured.</td></tr>`
+      : input.fields
+          .map(
+            (f) => `<tr>
+              <th style="text-align:left;padding:7px 10px;background:#f1f5f9;border:1px solid #e2e8f0;width:34%;font-weight:600;vertical-align:top;color:#334155;">${escapeHtml(
+                f.label,
+              )}</th>
+              <td style="padding:7px 10px;border:1px solid #e2e8f0;vertical-align:top;white-space:pre-wrap;color:#0f172a;">${escapeHtml(
+                f.value,
+              )}</td>
+            </tr>`,
+          )
+          .join('')
+  return `
+    <h1 style="font-size:19px;margin:0 0 4px;color:#0f172a;">${escapeHtml(input.heading)}</h1>
+    ${input.subtitle ? `<p style="margin:0 0 2px;font-size:13px;color:#475569;">${escapeHtml(input.subtitle)}</p>` : ''}
+    ${
+      input.reference
+        ? `<p style="margin:0 0 16px;font-size:12px;color:#64748b;">Reference: ${escapeHtml(input.reference)}</p>`
+        : '<div style="height:10px"></div>'
+    }
+    <table style="width:100%;border-collapse:collapse;font-size:12px;">${rows}</table>
+  `
+}

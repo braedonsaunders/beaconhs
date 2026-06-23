@@ -20,6 +20,7 @@ export function createHazidFlowAdapter(
     notifyCategory: 'hazid',
     auditEntityType: 'hazid_assessment',
     deepLink: () => `/hazard-assessments/${assessmentId}`,
+    pdfJob: () => ({ kind: 'hazid', tenantId: ctx.tenantId, assessmentId }),
 
     async loadValues() {
       const [a] = await ctx.db((tx) =>

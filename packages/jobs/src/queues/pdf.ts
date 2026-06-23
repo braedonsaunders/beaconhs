@@ -1,16 +1,44 @@
 import { Queue, QueueEvents, type JobsOptions } from 'bullmq'
 import { connection } from '../connection'
 
+// When a PDF job carries an `email` payload, the worker emails the rendered PDF
+// as an attachment after rendering (used by the Flows send_email attachPdf path,
+// so the submit never blocks waiting on Chromium).
+export type PdfEmailPayload = {
+  to: string[]
+  subject: string
+  html: string
+  text: string
+  filename: string
+  category?: string
+  tenantId?: string
+}
+
 export type PdfJobData =
-  | { kind: 'form_response'; tenantId: string; responseId: string }
-  | { kind: 'incident'; tenantId: string; incidentId: string }
+  | { kind: 'form_response'; tenantId: string; responseId: string; email?: PdfEmailPayload }
+  | { kind: 'incident'; tenantId: string; incidentId: string; email?: PdfEmailPayload }
   | { kind: 'certificate'; tenantId: string; certificateId: string }
   // Skill credential (training_skill_certificates) — renders the same
   // certificate + wallet-card pair as 'certificate' but for an
   // externally-authorised skill assignment.
   | { kind: 'skill_certificate'; tenantId: string; skillCertificateId: string }
-  | { kind: 'hazid'; tenantId: string; assessmentId: string }
-  | { kind: 'ca'; tenantId: string; caId: string }
+  | { kind: 'hazid'; tenantId: string; assessmentId: string; email?: PdfEmailPayload }
+  | { kind: 'ca'; tenantId: string; caId: string; email?: PdfEmailPayload }
+  // Generic branded "submission summary" PDF — a key-value table built from a
+  // flow's field-map. Fills the gap for modules without a bespoke renderer
+  // (journals, inspections). All data is inline (no DB load in the worker).
+  | {
+      kind: 'record_summary'
+      tenantId: string
+      subjectId: string
+      entityType: string
+      heading: string
+      reference?: string | null
+      subtitle?: string | null
+      fields: { label: string; value: string }[]
+      filename?: string
+      email?: PdfEmailPayload
+    }
   | { kind: 'document'; tenantId: string; documentId: string }
   | { kind: 'document_book'; tenantId: string; bookId: string }
   | { kind: 'equipment_workorder'; tenantId: string; workOrderId: string }
@@ -35,6 +63,7 @@ export type OnDemandPdfJobData =
   | Extract<PdfJobData, { kind: 'incident' }>
   | Extract<PdfJobData, { kind: 'hazid' }>
   | Extract<PdfJobData, { kind: 'ca' }>
+  | Extract<PdfJobData, { kind: 'record_summary' }>
   | Extract<PdfJobData, { kind: 'document' }>
   | Extract<PdfJobData, { kind: 'document_book' }>
   | Extract<PdfJobData, { kind: 'equipment_workorder' }>
@@ -71,6 +100,8 @@ function pdfJobId(data: PdfJobData): string {
       return `pdf|${data.tenantId}|hazid|${data.assessmentId}`
     case 'ca':
       return `pdf|${data.tenantId}|ca|${data.caId}`
+    case 'record_summary':
+      return `pdf|${data.tenantId}|record_summary|${data.subjectId}`
     case 'document':
       return `pdf|${data.tenantId}|document|${data.documentId}`
     case 'document_book':
@@ -138,6 +169,22 @@ export async function renderPdfOnDemand(
   } finally {
     await events.close()
   }
+}
+
+/**
+ * Render a PDF then email it as an attachment (the Flows `send_email` attachPdf
+ * path). Uses a unique jobId so it never dedups away an on-demand "view PDF" job
+ * or vice-versa; the worker emails after rendering. Fire-and-forget — the caller
+ * (a submit action) does not wait on Chromium.
+ */
+export type PdfEmailableJobData = Extract<
+  PdfJobData,
+  { kind: 'form_response' | 'incident' | 'hazid' | 'ca' | 'record_summary' }
+>
+
+export async function enqueuePdfEmail(pdf: PdfEmailableJobData, email: PdfEmailPayload) {
+  const jobId = `${pdfJobId(pdf)}|email|${Date.now()}-${Math.round(Math.random() * 1e6)}`
+  await pdfQueue.add(pdf.kind, { ...pdf, email }, { jobId, attempts: 2 })
 }
 
 export async function enqueueSlidesImport(data: Extract<PdfJobData, { kind: 'slides_import' }>) {

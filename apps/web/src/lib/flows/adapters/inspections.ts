@@ -7,6 +7,7 @@ import { eq } from 'drizzle-orm'
 import { inspectionRecords, tenantUsers, users } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 import { spawnCorrectiveActionForSubject } from '../spawn'
+import { buildRecordSummaryPdfJob } from '../pdf-summary'
 import type { FlowSubjectAdapter } from '../types'
 
 export function createInspectionFlowAdapter(
@@ -20,6 +21,16 @@ export function createInspectionFlowAdapter(
     notifyCategory: 'inspection',
     auditEntityType: 'inspection_record',
     deepLink: () => `/inspections/records/${recordId}`,
+    pdfJob: (values) =>
+      buildRecordSummaryPdfJob({
+        tenantId: ctx.tenantId,
+        subjectId: recordId,
+        entityType: 'inspection_record',
+        heading: 'Inspection record',
+        reference: values.reference,
+        subtitle: values.type_id,
+        values,
+      }),
 
     async loadValues() {
       const [r] = await ctx.db((tx) =>

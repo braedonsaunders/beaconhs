@@ -19,6 +19,7 @@ export function createIncidentFlowAdapter(
     notifyCategory: 'incident',
     auditEntityType: 'incident',
     deepLink: () => `/incidents/${incidentId}`,
+    pdfJob: () => ({ kind: 'incident', tenantId: ctx.tenantId, incidentId }),
 
     async loadValues() {
       const [i] = await ctx.db((tx) =>

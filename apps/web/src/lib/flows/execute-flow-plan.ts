@@ -112,7 +112,7 @@ export async function executeFlowPlan(
   const fieldPatch: Record<string, unknown> = {}
   let flagReason: string | null | undefined
 
-  const { enqueueEmail, enqueueNotification } = await import('@beaconhs/jobs')
+  const { enqueueEmail, enqueueNotification, enqueuePdfEmail } = await import('@beaconhs/jobs')
 
   for (const action of plan.actions) {
     try {
@@ -181,6 +181,27 @@ export async function executeFlowPlan(
             }
           }
           const { subject, html, text } = renderEmail(spec, values)
+          // attachPdf: render the subject's PDF in the worker, then email it as
+          // an attachment (non-blocking — the submit never waits on Chromium).
+          if (action.attachPdf && adapter.pdfJob) {
+            const pdfJob = adapter.pdfJob(values)
+            if (pdfJob) {
+              const refRaw = values.reference
+              const base = typeof refRaw === 'string' && refRaw.trim() ? refRaw : 'record'
+              const filename = `${base.replace(/[^a-zA-Z0-9_-]+/g, '-').slice(0, 60)}.pdf`
+              await enqueuePdfEmail(pdfJob, {
+                to,
+                subject,
+                html,
+                text,
+                filename,
+                category: adapter.notifyCategory,
+                tenantId: ctx.tenantId,
+              })
+              ran.push(`send_email+pdf→${to.length}`)
+              break
+            }
+          }
           await enqueueEmail({
             to,
             subject,

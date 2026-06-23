@@ -20,6 +20,7 @@ export function createCorrectiveActionFlowAdapter(
     notifyCategory: 'ca',
     auditEntityType: 'corrective_action',
     deepLink: () => `/corrective-actions/${caId}`,
+    pdfJob: () => ({ kind: 'ca', tenantId: ctx.tenantId, caId }),
 
     async loadValues() {
       const [r] = await ctx.db((tx) =>
