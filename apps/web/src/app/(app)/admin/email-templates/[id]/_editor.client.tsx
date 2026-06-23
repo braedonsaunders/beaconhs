@@ -1,8 +1,10 @@
 'use client'
 
-// Client wrapper around the GrapesJS email builder: name + subject, merge-token
-// chips, Save (server compiles MJML), and Send test. The builder is dynamically
-// imported (ssr:false) because GrapesJS touches window.
+// Client shell around the GrapesJS email builder — matches the form-designer /
+// document-editor shell: a full-height column with a compact top bar (name +
+// test + save), a slim subject bar, and the 1/3–2/3 builder filling the rest.
+// The record's fields + tables live in the builder's LEFT palette (not chips).
+// The builder is dynamically imported (ssr:false) because GrapesJS touches window.
 
 import { useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
@@ -10,13 +12,13 @@ import Link from 'next/link'
 import { toast } from 'sonner'
 import type { Editor } from 'grapesjs'
 import { ArrowLeft, Mail, Save, Send } from 'lucide-react'
-import { Button, Input, Label } from '@beaconhs/ui'
+import { Button, Input } from '@beaconhs/ui'
 import { saveEmailTemplateDesign, sendTestEmailTemplate } from '../_actions'
 
 const EmailBuilder = dynamic(() => import('../_builder.client'), {
   ssr: false,
   loading: () => (
-    <div className="flex h-[70vh] items-center justify-center rounded-lg border border-slate-200 text-sm text-slate-400 dark:border-slate-700">
+    <div className="flex h-full items-center justify-center text-sm text-slate-400">
       Loading editor…
     </div>
   ),
@@ -33,6 +35,7 @@ export function EmailTemplateEditor({
     name: string
     subjectTemplate: string
     design: Record<string, unknown>
+    mjmlSource?: string | null
     mergeFields: MergeField[]
     collections?: Collection[]
     subjectLabel?: string | null
@@ -106,35 +109,35 @@ export function EmailTemplateEditor({
     }
   }
 
-  const copyToken = (k: string) => {
-    void navigator.clipboard?.writeText(`{{${k}}}`)
-    toast.success(`Copied {{${k}}}`)
-  }
-
   return (
-    <div className="space-y-4 p-4 sm:p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <Link
-            href="/admin/email-templates"
-            className="rounded p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-          >
-            <ArrowLeft size={18} />
-          </Link>
-          <Mail size={20} className="shrink-0 text-teal-600" />
-          <Input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="w-64 font-semibold"
-            aria-label="Template name"
-          />
-        </div>
-        <div className="flex items-center gap-2">
+    <div className="flex h-full min-h-0 flex-col bg-slate-100 dark:bg-slate-950">
+      {/* Top bar — name + test + save */}
+      <div className="flex shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-900">
+        <Link
+          href="/admin/email-templates"
+          className="rounded p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+          aria-label="Back to templates"
+        >
+          <ArrowLeft size={18} />
+        </Link>
+        <Mail size={18} className="shrink-0 text-teal-600" />
+        <Input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="h-9 w-64 font-semibold"
+          aria-label="Template name"
+        />
+        {template.subjectLabel ? (
+          <span className="hidden text-xs text-slate-500 sm:inline dark:text-slate-400">
+            for <strong>{template.subjectLabel}</strong>
+          </span>
+        ) : null}
+        <div className="ml-auto flex items-center gap-2">
           <Input
             value={testTo}
             onChange={(e) => setTestTo(e.target.value)}
             placeholder="you@email.com"
-            className="w-44"
+            className="h-9 w-44"
             aria-label="Send test to"
           />
           <Button variant="outline" onClick={onSendTest} disabled={busy !== null}>
@@ -146,66 +149,32 @@ export function EmailTemplateEditor({
         </div>
       </div>
 
-      <div className="space-y-1.5">
-        <Label htmlFor="subject">Subject line</Label>
+      {/* Subject bar */}
+      <div className="flex shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 py-1.5 dark:border-slate-800 dark:bg-slate-900">
+        <span className="shrink-0 text-xs font-medium text-slate-500 dark:text-slate-400">
+          Subject
+        </span>
         <Input
-          id="subject"
           value={subject}
           onChange={(e) => setSubject(e.target.value)}
           placeholder="e.g. New incident at {{site}}"
+          className="h-8 flex-1 border-transparent bg-transparent px-1 shadow-none focus-visible:border-slate-200"
+          aria-label="Subject line"
         />
       </div>
 
-      {template.mergeFields.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-xs text-slate-500 dark:text-slate-400">
-            {template.subjectLabel ? (
-              <>
-                Fields from <strong>{template.subjectLabel}</strong> (click to copy):
-              </>
-            ) : (
-              'Tokens (click to copy):'
-            )}
-          </span>
-          {template.mergeFields.map((f) => (
-            <button
-              key={f.key}
-              type="button"
-              onClick={() => copyToken(f.key)}
-              className="rounded border border-slate-200 bg-slate-50 px-2 py-0.5 font-mono text-[11px] text-slate-600 hover:border-teal-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
-              title={f.label ? `${f.label} — click to copy` : 'Click to copy'}
-            >
-              {`{{${f.key}}}`}
-            </button>
-          ))}
-        </div>
-      ) : null}
-
-      {collections.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-xs text-slate-500 dark:text-slate-400">
-            Tables (drag from left):
-          </span>
-          {collections.map((c) => (
-            <span
-              key={c.key}
-              className="rounded border border-teal-200 bg-teal-50 px-2 py-0.5 font-mono text-[11px] text-teal-700 dark:border-teal-800 dark:bg-teal-950 dark:text-teal-300"
-              title={`Columns: ${c.fields.map((f) => f.key).join(', ')}`}
-            >
-              {`{{#each ${c.key}}}`}
-            </span>
-          ))}
-        </div>
-      ) : null}
-
-      <EmailBuilder
-        initialDesign={template.design}
-        mergeFields={template.mergeFields}
-        collections={collections}
-        onReady={(ed) => {
-          editorRef.current = ed
-        }}
-      />
+      {/* Builder — fills the rest; record fields + tables are in its left palette */}
+      <div className="min-h-0 flex-1">
+        <EmailBuilder
+          initialDesign={template.design}
+          initialMjml={template.mjmlSource ?? null}
+          mergeFields={template.mergeFields}
+          collections={collections}
+          onReady={(ed) => {
+            editorRef.current = ed
+          }}
+        />
+      </div>
     </div>
   )
 }

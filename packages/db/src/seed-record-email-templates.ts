@@ -4,12 +4,17 @@
 // that record's full field set + collections, and the {{#each}} loop engine
 // renders the line-item tables (hazards, ppe, signatures, photos, …).
 //
-// Idempotent — skips a (tenant,key) template that already exists.
+// Two representations are stored from ONE authored HTML body:
+//   • compiled_html — the authored HTML (what the SEND path renders; tested).
+//   • mjml_source   — that HTML wrapped in <mj-raw> so the GrapesJS/MJML builder
+//     canvas loads + edits it (mj-raw passes mustache through verbatim, incl.
+//     {{#each}}/{{#if}} — so row numbers via {{@number}} are NOT used here).
+// design stays {} → the editor loads mjml_source into the canvas.
+//
+// UPSERTs (re-running refreshes the body/subject/merge fields).
 //
 //   pnpm --filter @beaconhs/db exec tsx --env-file=../../.env \
 //     src/seed-record-email-templates.ts
-//
-// (When the DB host differs, set DATABASE_URL inline instead of --env-file.)
 
 import { sql } from 'drizzle-orm'
 import { createClient, withSuperAdmin } from './index'
@@ -40,6 +45,7 @@ function detailRow(label: string, token: string): string {
   return `<tr><td style="${LBL}">${label}</td><td style="${VAL}">${token}</td></tr>`
 }
 
+// A {{#each}} table — header row + one templated body row per collection item.
 function table(headers: string[], rowCells: string[], eachKey: string): string {
   const head = headers.map((h) => `<th style="${TH}">${h}</th>`).join('')
   const body = rowCells.map((c) => `<td style="${TD}">${c}</td>`).join('')
@@ -47,6 +53,12 @@ function table(headers: string[], rowCells: string[], eachKey: string): string {
     `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:6px"><tr>${head}</tr>` +
     `{{#each ${eachKey}}}<tr>${body}</tr>{{/each}}</table>`
   )
+}
+
+// Wrap authored HTML so the MJML builder canvas can load + edit it. mj-raw emits
+// its content verbatim, so {{#each}}/{{#if}}/{{token}} all survive compile.
+function wrapMjml(bodyHtml: string): string {
+  return `<mjml><mj-body>\n<mj-raw>\n${bodyHtml}\n</mj-raw>\n</mj-body></mjml>`
 }
 
 // --- hazard assessment (legacy pdf/hazardassessment.blade.php) ---------------
@@ -66,7 +78,6 @@ ${detailRow('Reported by', '{{reported_by_name}}')}
 {{#if hazards}}<h2 style="${H2}">Hazards &amp; controls</h2>
 ${table(
   [
-    '#',
     'Hazard',
     'Standard controls',
     'Specific controls',
@@ -75,7 +86,6 @@ ${table(
     'Applies',
   ],
   [
-    '{{@number}}',
     '{{name}}',
     '{{standard_controls}}',
     '{{specific_controls}}',
@@ -86,23 +96,15 @@ ${table(
   'hazards',
 )}{{/if}}
 {{#if tasks}}<h2 style="${H2}">Tasks</h2>
-${table(['#', 'Task', 'Controls'], ['{{@number}}', '{{name}}', '{{controls}}'], 'tasks')}{{/if}}
+${table(['Task', 'Controls'], ['{{name}}', '{{controls}}'], 'tasks')}{{/if}}
 {{#if ppe}}<h2 style="${H2}">PPE</h2>
-${table(['#', 'PPE', 'Description', 'Required', 'Answer'], ['{{@number}}', '{{name}}', '{{description}}', '{{required}}', '{{answer}}'], 'ppe')}{{/if}}
+${table(['PPE', 'Description', 'Required', 'Answer'], ['{{name}}', '{{description}}', '{{required}}', '{{answer}}'], 'ppe')}{{/if}}
 {{#if questions}}<h2 style="${H2}">Questions</h2>
-${table(['#', 'Question', 'Answer', 'Requires yes'], ['{{@number}}', '{{question}}', '{{answer}}', '{{requires_yes}}'], 'questions')}{{/if}}
+${table(['Question', 'Answer', 'Requires yes'], ['{{question}}', '{{answer}}', '{{requires_yes}}'], 'questions')}{{/if}}
 {{#if signatures}}<h2 style="${H2}">Signatures</h2>
 ${table(
-  ['#', 'Name', 'Type', 'Entrant', 'Attendant', 'Rescue', 'Signed'],
-  [
-    '{{@number}}',
-    '{{name}}',
-    '{{type}}',
-    '{{cs_entrant}}',
-    '{{cs_attendant}}',
-    '{{cs_rescue}}',
-    '{{signed_at}}',
-  ],
+  ['Name', 'Type', 'Entrant', 'Attendant', 'Rescue', 'Signed'],
+  ['{{name}}', '{{type}}', '{{cs_entrant}}', '{{cs_attendant}}', '{{cs_rescue}}', '{{signed_at}}'],
   'signatures',
 )}{{/if}}
 {{#if photos}}<h2 style="${H2}">Photos</h2>
@@ -184,6 +186,7 @@ const TEMPLATES: TemplateSeed[] = [
 async function main() {
   const { db, sql: pg } = createClient({ max: 4 })
   let created = 0
+  let updated = 0
   try {
     await withSuperAdmin(db, async (tx) => {
       const tenants = (await tx.execute(sql`select id from tenants`)) as unknown as {
@@ -191,24 +194,38 @@ async function main() {
       }[]
       for (const t of tenants) {
         for (const tpl of TEMPLATES) {
+          const mjml = wrapMjml(tpl.html)
+          const merge = JSON.stringify(tpl.mergeFields)
           const found = (await tx.execute(
             sql`select id from email_templates where tenant_id=${t.id} and key=${tpl.key} and deleted_at is null limit 1`,
           )) as unknown as { id: string }[]
-          if (found[0]) continue
-          await tx.execute(sql`
-            insert into email_templates
-              (tenant_id, key, name, description, category, record_subject_type, record_subject_key,
-               subject_template, compiled_html, merge_fields, is_active)
-            values
-              (${t.id}, ${tpl.key}, ${tpl.name}, ${tpl.description}, 'notification', 'module',
-               ${tpl.subjectKey}, ${tpl.subjectTemplate}, ${tpl.html},
-               ${JSON.stringify(tpl.mergeFields)}::jsonb, true)
-          `)
-          created++
+          if (found[0]) {
+            await tx.execute(sql`
+              update email_templates set
+                name=${tpl.name}, description=${tpl.description},
+                record_subject_type='module', record_subject_key=${tpl.subjectKey},
+                subject_template=${tpl.subjectTemplate}, compiled_html=${tpl.html},
+                mjml_source=${mjml}, merge_fields=${merge}::jsonb, design='{}'::jsonb,
+                is_active=true, updated_at=now()
+              where id=${found[0].id}
+            `)
+            updated++
+          } else {
+            await tx.execute(sql`
+              insert into email_templates
+                (tenant_id, key, name, description, category, record_subject_type, record_subject_key,
+                 subject_template, compiled_html, mjml_source, merge_fields, is_active)
+              values
+                (${t.id}, ${tpl.key}, ${tpl.name}, ${tpl.description}, 'notification', 'module',
+                 ${tpl.subjectKey}, ${tpl.subjectTemplate}, ${tpl.html}, ${mjml},
+                 ${merge}::jsonb, true)
+            `)
+            created++
+          }
         }
       }
     })
-    console.log(`✔ seeded ${created} record-type email template(s).`)
+    console.log(`✔ record-type email templates: ${created} created, ${updated} updated.`)
   } finally {
     await pg.end()
   }

@@ -39,6 +39,7 @@ export default async function EmailTemplateEditorPage({
         name: tpl.name,
         subjectTemplate: tpl.subjectTemplate,
         design: tpl.design ?? {},
+        mjmlSource: tpl.mjmlSource,
         mergeFields,
         collections,
         subjectLabel,

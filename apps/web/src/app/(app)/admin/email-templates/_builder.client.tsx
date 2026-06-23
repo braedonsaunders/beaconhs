@@ -68,18 +68,21 @@ function collectionTableMjml(c: Collection): string {
 
 export default function EmailBuilder({
   initialDesign,
+  initialMjml,
   onReady,
   mergeFields = [],
   collections = [],
 }: {
   initialDesign: Record<string, unknown> | null
+  /** MJML source to seed the canvas when there is no saved GrapesJS design yet. */
+  initialMjml?: string | null
   onReady: (editor: Editor) => void
   mergeFields?: MergeField[]
   collections?: Collection[]
 }) {
   return (
     <div
-      className="gjs-light flex h-[78vh] min-h-[420px] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-700"
+      className="gjs-light flex h-full min-h-0 flex-col overflow-hidden bg-white dark:bg-slate-900"
       style={LIGHT_THEME}
     >
       <GjsEditor
@@ -110,9 +113,14 @@ export default function EmailBuilder({
               media: TABLE_SVG,
             })
           }
+          // Saved GrapesJS design wins; else seed the canvas from the template's
+          // MJML (record-report templates ship MJML, no saved design yet); else
+          // the generic starter.
           try {
             if (initialDesign && Object.keys(initialDesign).length > 0) {
               editor.loadProjectData(initialDesign)
+            } else if (initialMjml && initialMjml.trim()) {
+              editor.setComponents(initialMjml)
             } else {
               editor.setComponents(STARTER_MJML)
             }
