@@ -1865,7 +1865,7 @@ async function main() {
 
   // Canonical templates (JSHA / Toolbox Talk / Lift Plan / WAH Rescue) ----
   // These are seeded for the first tenant only — every other tenant clones
-  // them on demand from the /forms/templates/new gallery.
+  // them on demand from the /apps/templates/new gallery.
   await seedCanonicalTemplates(db)
 
   // Documentation lookups — types + hierarchical categories + reference
@@ -2053,7 +2053,7 @@ export async function seedDocumentTypesAndCategories(tx: any, tenantId: string):
  * and version 1 is inserted only when the template was actually new.
  *
  * Re-export of CANONICAL_TEMPLATES means the same shape is consumed by the
- * "Start from template" gallery at /forms/templates/new (the gallery clones
+ * "Start from template" gallery at /apps/templates/new (the gallery clones
  * each template into the user's own tenant on click).
  */
 async function seedCanonicalTemplates(db: ReturnType<typeof createClient>['db']): Promise<void> {

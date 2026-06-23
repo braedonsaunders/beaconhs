@@ -34,6 +34,13 @@ export type FlowSubjectProfile = {
   statusValues?: string[]
   /** Field tokens for conditions, {{interpolation}}, and recipient `field` targets. */
   fields: FlowFieldDef[]
+  /**
+   * True when this subject has a rich, full-record PDF renderer (incidents,
+   * hazard assessments, corrective actions, form responses). When true, the
+   * send_email PDF picker offers "Full record PDF" vs "Field summary"; when
+   * false, only the generic field-summary PDF is available.
+   */
+  richPdf?: boolean
 }
 
 // The full vocabulary a Builder form template supports today — used to build the

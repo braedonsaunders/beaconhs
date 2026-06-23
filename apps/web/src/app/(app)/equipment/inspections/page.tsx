@@ -127,11 +127,11 @@ export default async function EquipmentInspectionsPage() {
     const key = item.preUseInspectionTemplateKey ?? null
     const tmpl = (key && templatesByKey.get(key)) || fallbackTemplate
     if (!tmpl) return null
-    return `/forms/templates/${tmpl.id}/fill?sourceEntityType=equipment&sourceEntityId=${item.id}`
+    return `/apps/templates/${tmpl.id}/fill?sourceEntityType=equipment&sourceEntityId=${item.id}`
   }
 
   function browseLink(item: (typeof overdueAnnual)[number]['item']): string {
-    return `/forms?category=inspection&sourceEntityType=equipment&sourceEntityId=${item.id}`
+    return `/apps?category=inspection&sourceEntityType=equipment&sourceEntityId=${item.id}`
   }
 
   const hasAny = overdueAnnual.length + overduePreUse.length + recent.length > 0
@@ -145,7 +145,7 @@ export default async function EquipmentInspectionsPage() {
             title="Equipment inspections"
             description="Pre-use, monthly, and annual inspections — anything overdue, plus recent submissions."
             actions={
-              <Link href="/forms?category=inspection">
+              <Link href="/apps?category=inspection">
                 <Button variant="outline">Browse inspection templates</Button>
               </Link>
             }
@@ -372,7 +372,7 @@ export default async function EquipmentInspectionsPage() {
                         </TableCell>
                         <TableCell>
                           <Link
-                            href={`/forms/responses/${response.id}`}
+                            href={`/apps/responses/${response.id}`}
                             className="text-xs text-teal-700 hover:underline dark:text-teal-400"
                           >
                             View →

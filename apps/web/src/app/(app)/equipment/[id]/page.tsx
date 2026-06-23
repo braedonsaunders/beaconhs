@@ -999,7 +999,7 @@ export default async function EquipmentDetailPage({
                         inspection. The completed form will appear under the Inspections tab.
                       </p>
                       <Link
-                        href={`/forms?category=inspection&sourceEntityType=equipment&sourceEntityId=${id}`}
+                        href={`/apps?category=inspection&sourceEntityType=equipment&sourceEntityId=${id}`}
                       >
                         <Button>
                           <ClipboardCheck size={14} /> Browse inspection forms
@@ -1267,7 +1267,7 @@ export default async function EquipmentDetailPage({
                         description="Pre-use, scheduled, and ad-hoc inspections (any form pinned to this equipment) appear here."
                         action={
                           <Link
-                            href={`/forms?category=inspection&sourceEntityType=equipment&sourceEntityId=${id}`}
+                            href={`/apps?category=inspection&sourceEntityType=equipment&sourceEntityId=${id}`}
                           >
                             <Button variant="outline" size="sm">
                               Start an inspection →
@@ -1308,7 +1308,7 @@ export default async function EquipmentDetailPage({
                               </TableCell>
                               <TableCell>
                                 <Link
-                                  href={`/forms/responses/${r.response.id}`}
+                                  href={`/apps/responses/${r.response.id}`}
                                   className="text-xs text-teal-700 hover:underline"
                                 >
                                   View →

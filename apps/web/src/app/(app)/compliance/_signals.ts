@@ -167,7 +167,7 @@ export async function listDueSignals(
           personId: null,
           dueOn: due,
           status: overdue ? 'overdue' : 'due_soon',
-          href: '/forms/sessions',
+          href: '/apps/sessions',
         })
       }
     }

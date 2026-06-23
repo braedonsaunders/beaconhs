@@ -9,7 +9,8 @@ import { requireModuleManage } from '@/lib/module-admin/guard'
 import { moduleAdminByKey } from '@/lib/module-admin/registry'
 import { listActiveEmailTemplates } from '@/lib/email-templates'
 import { moduleFlowProfile } from '@/lib/flows/module-profiles'
-import { FlowsCanvas, type FlowSummary } from '@/app/(app)/forms/templates/[id]/flows/_flows-canvas'
+import { loadRecipientOptions } from '@/lib/flows/recipient-options'
+import { FlowsCanvas, type FlowSummary } from '@/app/(app)/apps/templates/[id]/flows/_flows-canvas'
 
 export async function ModuleFlowsPage({ moduleKey }: { moduleKey: string }) {
   const ctx = await requireModuleManage(moduleKey)
@@ -17,7 +18,7 @@ export async function ModuleFlowsPage({ moduleKey }: { moduleKey: string }) {
   const mod = moduleAdminByKey(moduleKey)
   if (!profile || !mod) redirect('/')
 
-  const [flowsRaw, emailTemplates] = await Promise.all([
+  const [flowsRaw, emailTemplates, recipientOptions] = await Promise.all([
     ctx.db((tx) =>
       tx
         .select({
@@ -33,6 +34,7 @@ export async function ModuleFlowsPage({ moduleKey }: { moduleKey: string }) {
         .orderBy(asc(formAutomations.createdAt)),
     ),
     listActiveEmailTemplates(ctx),
+    loadRecipientOptions(ctx),
   ])
 
   return (
@@ -40,6 +42,7 @@ export async function ModuleFlowsPage({ moduleKey }: { moduleKey: string }) {
       <FlowsCanvas
         profile={profile}
         emailTemplates={emailTemplates}
+        recipientOptions={recipientOptions}
         flows={flowsRaw as FlowSummary[]}
         canEdit
         canGenerate={false}

@@ -791,7 +791,7 @@ export async function emitMonitoredSessionOverdue(
     const audience = await resolveAudience(ctx, tenantId, 'lone_worker')
     if (audience.length === 0) return
 
-    const linkPath = `/forms/responses/${res.id}`
+    const linkPath = `/apps/responses/${res.id}`
     const url = appUrl(linkPath)
     const dueAt = res.nextCheckinDueAt ?? new Date()
     const title = `CRITICAL: ${appName} — check-in overdue`

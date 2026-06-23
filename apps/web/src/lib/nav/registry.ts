@@ -167,7 +167,7 @@ export const NAV_MODULES: NavModule[] = [
   // the module pages (inspections/JSHA/…), and pinned forms.
   {
     key: 'forms',
-    href: '/forms',
+    href: '/apps',
     label: 'Builder',
     iconKey: 'clipboard-check',
     requiredPermission: 'forms.template.read',

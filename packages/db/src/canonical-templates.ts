@@ -4,7 +4,7 @@
 // (JSHA / Toolbox Talk / Lift Plan / Working-at-Heights Rescue Plan) re-implemented
 // as form templates. They are seeded into the first tenant by the dev seed, and
 // cloned on-demand into any tenant from the "Start from template" gallery
-// at /forms/templates/new.
+// at /apps/templates/new.
 //
 // Each entry is the persistence shape: { key, name, category, moduleBinding,
 // description, schema }. Add new canonical templates by appending here — the

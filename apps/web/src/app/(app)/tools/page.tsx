@@ -76,7 +76,7 @@ export default async function ToolsLandingPage() {
   const tools: ToolCard[] = [
     ...NATIVE_TOOLS,
     ...customTools.map((t) => ({
-      href: `/forms/templates/${t.id}/fill`,
+      href: `/apps/templates/${t.id}/fill`,
       icon: Wrench,
       title: t.name,
       description: t.description ?? 'Tenant-built tool.',

@@ -170,7 +170,7 @@ export const DEFAULT_QUICK_ACTIONS: QuickAction[] = [
   {
     id: 'd-toolbox',
     label: 'Toolbox talk',
-    href: '/forms/by-key/toolbox-talk/fill',
+    href: '/apps/by-key/toolbox-talk/fill',
     iconKey: 'clipboard',
     tone: 'sky',
   },

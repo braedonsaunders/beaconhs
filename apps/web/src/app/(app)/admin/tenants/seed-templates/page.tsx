@@ -113,10 +113,10 @@ export default async function SeedTemplatesPage() {
             Per-tenant form template with category <code>lift_plan</code>. Surfaces in the form
             gallery at{' '}
             <Link
-              href="/forms?category=lift_plan"
+              href="/apps?category=lift_plan"
               className="font-medium text-teal-700 hover:underline"
             >
-              /forms?category=lift_plan
+              /apps?category=lift_plan
             </Link>
             .
           </AlertDescription>

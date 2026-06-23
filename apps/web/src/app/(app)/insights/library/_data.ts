@@ -7,7 +7,7 @@ import 'server-only'
 import { and, desc, eq, isNull } from 'drizzle-orm'
 import type { RequestContext } from '@beaconhs/tenant'
 import { insightCards, insightDashboardPins, insightDashboards } from '@beaconhs/db/schema'
-import { getUserRoleKeys } from '@/app/(app)/forms/_lib/access'
+import { getUserRoleKeys } from '@/app/(app)/apps/_lib/access'
 import { canPublishInsights } from '../_access'
 
 function visible(

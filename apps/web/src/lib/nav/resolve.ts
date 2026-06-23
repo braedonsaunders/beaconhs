@@ -144,7 +144,7 @@ function resolveItem(
       // A pinned app behaves like a native module: land on its list of entries
       // (records), not the designer. Rows open the entry; editors get a
       // "Configure" link from there into the builder.
-      href: `/forms/templates/${item.templateId}/records`,
+      href: `/apps/templates/${item.templateId}/records`,
       label: item.label ?? meta.name,
       iconKey: item.iconKey ?? meta.iconKey ?? PINNED_FORM_DEFAULT_ICON,
     }

@@ -163,7 +163,7 @@ export default async function UpcomingInspections({
                     </TableCell>
                     <TableCell>
                       <Link
-                        href={`/forms?category=inspection&sourceEntityType=equipment&sourceEntityId=${item.id}`}
+                        href={`/apps?category=inspection&sourceEntityType=equipment&sourceEntityId=${item.id}`}
                         className="text-xs text-teal-700 hover:underline dark:text-teal-400"
                       >
                         Start →

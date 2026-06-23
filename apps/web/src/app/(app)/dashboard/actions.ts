@@ -280,7 +280,7 @@ export async function listQuickActionOptions(): Promise<QuickActionOptions> {
 
   const forms: QuickActionOption[] = formRows.map((f) => ({
     label: f.name,
-    href: `/forms/by-key/${f.key}/fill`,
+    href: `/apps/by-key/${f.key}/fill`,
     iconKey: f.iconKey ?? (f.surfaceAsTool ? 'cog' : 'clipboard'),
     tone: f.surfaceAsTool ? 'violet' : 'sky',
     hint: f.surfaceAsTool ? 'App' : labelForKind(f.kind),

@@ -585,7 +585,7 @@ export default async function PersonDetailPage({
                 },
                 {
                   key: 'forms',
-                  label: 'Forms',
+                  label: 'Apps',
                   count: submittedForms.length,
                 },
                 { key: 'activity', label: 'Activity' },
@@ -1099,14 +1099,14 @@ export default async function PersonDetailPage({
             {active === 'forms' ? (
               <Card>
                 <CardHeader>
-                  <CardTitle>Forms about this person ({submittedForms.length})</CardTitle>
+                  <CardTitle>Apps about this person ({submittedForms.length})</CardTitle>
                 </CardHeader>
                 <CardContent>
                   {submittedForms.length === 0 ? (
                     <EmptyState
                       icon={<FileText size={24} />}
-                      title="No forms about this person"
-                      description="JSHAs, incident investigations, evaluations, and other forms where this person is the subject appear here."
+                      title="No apps about this person"
+                      description="JSHAs, incident investigations, evaluations, and other app submissions where this person is the subject appear here."
                     />
                   ) : (
                     <Table>
@@ -1141,7 +1141,7 @@ export default async function PersonDetailPage({
                             </TableCell>
                             <TableCell>
                               <Link
-                                href={`/forms/responses/${row.response.id}`}
+                                href={`/apps/responses/${row.response.id}`}
                                 className="text-xs text-teal-700 hover:underline"
                               >
                                 View →

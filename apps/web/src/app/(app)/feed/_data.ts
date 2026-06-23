@@ -293,7 +293,7 @@ export async function getFeed(
             title: r.template,
             snippet: null,
             badge: label(r.status),
-            href: `/forms/responses/${r.id}`,
+            href: `/apps/responses/${r.id}`,
           })
       }
     }

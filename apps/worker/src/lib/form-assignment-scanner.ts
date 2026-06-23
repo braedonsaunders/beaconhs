@@ -204,7 +204,7 @@ export async function scanFormAssignments(
           body: assignment.dueOffsetMinutes
             ? `Please complete within ${assignment.dueOffsetMinutes} minutes.`
             : undefined,
-          linkPath: `/forms/templates/${assignment.templateId}/fill?assignment=${assignment.id}`,
+          linkPath: `/apps/templates/${assignment.templateId}/fill?assignment=${assignment.id}`,
           data: { assignmentId: assignment.id, templateId: assignment.templateId },
         })
         result.dispatched += 1

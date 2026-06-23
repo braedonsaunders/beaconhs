@@ -219,7 +219,7 @@ export function WidgetCard({ widgetId, data, todayIso, quickActions }: Props) {
         <CountTile
           label="Monitored sessions"
           value={data.lwActive}
-          href="/forms/sessions"
+          href="/apps/sessions"
           icon={Radio}
           caption={data.lwActive > 0 ? 'session(s) running' : 'all quiet'}
           tone={data.lwActive > 0 ? 'warning' : 'normal'}
@@ -230,7 +230,7 @@ export function WidgetCard({ widgetId, data, todayIso, quickActions }: Props) {
         <CountTile
           label="Submissions today"
           value={data.submissionsToday}
-          href="/forms/responses"
+          href="/apps/responses"
           icon={ClipboardList}
           caption="forms submitted"
           tone="normal"

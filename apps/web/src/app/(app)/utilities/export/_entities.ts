@@ -45,7 +45,7 @@ export const EXPORTABLE_ENTITIES: ExportEntity[] = [
     key: 'toolbox',
     label: 'Toolbox talks',
     description: 'Submitted toolbox-talk form responses — topic, attendees, status.',
-    csvHref: '/forms/responses/export.csv',
+    csvHref: '/apps/responses/export.csv',
     groupLabel: 'Programs',
   },
   {

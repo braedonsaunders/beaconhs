@@ -5,7 +5,7 @@ import 'server-only'
 // Native-module adapters register here as they're wired (Phase 8).
 
 import { can, type RequestContext } from '@beaconhs/tenant'
-import { createFormFlowAdapter } from '@/app/(app)/forms/_lib/form-flow-adapter'
+import { createFormFlowAdapter } from '@/app/(app)/apps/_lib/form-flow-adapter'
 import { canManageModule } from '@/lib/module-admin/guard'
 import { createJournalFlowAdapter } from './adapters/journals'
 import { createHazidFlowAdapter } from './adapters/hazid'

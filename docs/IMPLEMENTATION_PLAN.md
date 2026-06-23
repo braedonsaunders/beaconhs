@@ -111,7 +111,7 @@ Every list has search + sort + pagination + filter chips. Every row clicks throu
 - ✅ **Inspection Banks** (`/inspections/banks`): reusable inspection-criteria templates with criteria CRUD, sequence reorder, response-type + photo/comment-required flags.
 - ✅ **Training Skill Authorities** (`/training/authorities`) and **Skill Types** (`/training/skills`): full competency hierarchy with skill assignments per person + expiry tracking.
 - ✅ **Atmospheric Sensors** (`/confined-space/sensors`): calibration history + next-due tracking + overdue alarms.
-- ✅ **PDF rendering pipeline**: Puppeteer worker handles `form_response`, `incident`, and `certificate` kinds (full cert + wallet card). Uploads via `putObject`, sets pdfAttachmentId, audit-logs. Public routes at `/incidents/[id]/pdf`, `/forms/responses/[id]/pdf`, `/training/records/[id]/certificate?format=cert|wallet` enqueue and 302 to the signed URL.
+- ✅ **PDF rendering pipeline**: Puppeteer worker handles `form_response`, `incident`, and `certificate` kinds (full cert + wallet card). Uploads via `putObject`, sets pdfAttachmentId, audit-logs. Public routes at `/incidents/[id]/pdf`, `/apps/responses/[id]/pdf`, `/training/records/[id]/certificate?format=cert|wallet` enqueue and 302 to the signed URL.
 
 ### Wave 3 — legacy-parity rebuild (13 first-class modules built out properly)
 
@@ -140,7 +140,7 @@ App-shell nav: Frontline now includes JSHA/HazID / Toolbox talks / Lift plans; I
 
 ### Wave 2 modules (canonical form templates, Equipment work-orders/truck-log, Documents books/reference, Kiosk, Training classes)
 
-- ✅ **Canonical form templates** seeded: JSHA, Toolbox Talk, Critical Lift Plan, Working-at-Heights Rescue Plan. `/forms/templates/new` gives a "Start from template" gallery that clones one of the canonicals into the tenant. Lifts the legacy HazID / JSHA / Toolbox / Lift-Plan modules onto the form-builder runtime rather than porting bespoke surfaces.
+- ✅ **Canonical form templates** seeded: JSHA, Toolbox Talk, Critical Lift Plan, Working-at-Heights Rescue Plan. `/apps/templates/new` gives a "Start from template" gallery that clones one of the canonicals into the tenant. Lifts the legacy HazID / JSHA / Toolbox / Lift-Plan modules onto the form-builder runtime rather than porting bespoke surfaces.
 - ✅ **Equipment Work Orders** (`/equipment/work-orders`): list/detail/new with auto `WO-YYYY-NNNN` ref, priority enum, action-taken notes, status workflow, mark-complete action.
 - ✅ **Equipment Truck Log** (`/equipment/truck-log`): month calendar grid + entry form (km in/out, driver, manpower, site) + summary matrix with grand totals + CSV export.
 - ✅ **Equipment Scheduled Inspections** (`/equipment/inspections`): overdue pre-use + annual rollup + start-inspection link wired to the appropriate equipment-inspection template.

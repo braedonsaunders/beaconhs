@@ -29,6 +29,7 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
     subjectType: 'module',
     subjectKey: 'hazid',
     label: 'Hazard Assessments',
+    richPdf: true,
     triggers: ['on_create', 'on_sign', 'on_lock', 'on_unlock', 'on_delete'],
     actions: ['send_email', 'notify_role', 'create_capa', 'webhook'],
     fields: [
@@ -48,6 +49,7 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
     subjectType: 'module',
     subjectKey: 'incidents',
     label: 'Incidents',
+    richPdf: true,
     triggers: ['on_create', 'status_change', 'on_lock', 'on_unlock'],
     actions: ['send_email', 'notify_role', 'create_capa', 'webhook'],
     statusValues: ['reported', 'under_investigation', 'pending_review', 'closed', 'reopened'],
@@ -67,6 +69,7 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
     subjectType: 'module',
     subjectKey: 'corrective-actions',
     label: 'Corrective Actions',
+    richPdf: true,
     triggers: ['on_create', 'status_change'],
     actions: ['send_email', 'notify_role', 'webhook'],
     statusValues: ['open', 'in_progress', 'pending_verification', 'closed', 'cancelled'],

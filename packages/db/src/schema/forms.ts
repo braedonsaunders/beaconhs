@@ -56,7 +56,7 @@ export const formTemplates = pgTable(
     iconKey: text('icon_key'),
     // App-level role gating. Empty / null ⇒ visible & usable by everyone (today's
     // behavior). Non-empty ⇒ only these role keys (plus admins / super-admins)
-    // may see the app in the gallery and fill it out. Enforced in /forms + /fill.
+    // may see the app in the gallery and fill it out. Enforced in /apps + /fill.
     allowedRoles: jsonb('allowed_roles').$type<string[]>(),
     // Which built-in module this template powers, if any. Lets us hide certain
     // templates from the generic forms list when they're owned by a specialty UI.
@@ -398,7 +398,7 @@ export const formResponseSteps = pgTable(
     signatureAttachmentId: uuid('signature_attachment_id'),
     comment: text('comment'),
     // Lifecycle status. Defaults to 'pending'; populated by the workflow
-    // server actions in apps/web/src/app/(app)/forms/responses/[id]/_actions.ts.
+    // server actions in apps/web/src/app/(app)/apps/responses/[id]/_actions.ts.
     status: text('status').default('pending').notNull(),
     // Inline signature data URL (PNG). Stored alongside the attachment-id
     // pointer so PDFs can render the signature without a separate fetch.

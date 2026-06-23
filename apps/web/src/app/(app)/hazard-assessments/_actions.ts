@@ -515,7 +515,7 @@ export async function openAssessmentApp(formData: FormData) {
       `/hazard-assessments/${assessmentId}?app=${typeAppId}&responseId=${target.responseId}#section-apps` as any,
     )
   }
-  redirect(`/forms/responses/${target.responseId}` as any)
+  redirect(`/apps/responses/${target.responseId}` as any)
 }
 
 export async function updateGeneral(formData: FormData) {

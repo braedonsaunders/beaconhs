@@ -7,7 +7,7 @@ import 'server-only'
 // adapter call. Fully guarded: a Flow must NEVER break a submit/save, so every
 // action is individually try/caught and the whole run is best-effort.
 
-import { and, eq } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import {
   resolveDefaultValue,
   type AssigneeTarget,
@@ -15,10 +15,11 @@ import {
   type EmailTarget,
   type EvalContext,
 } from '@beaconhs/forms-core'
-import { roleAssignments, roles, tenantUsers, users } from '@beaconhs/db/schema'
+import { people, roleAssignments, roles, tenantUsers, users } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 import { interpolate, renderEmail, type RenderableEmail } from '@beaconhs/email-render'
 import { loadTenantEmailTemplate } from '@/lib/email-templates'
+import { buildRecordSummaryPdfJob } from './pdf-summary'
 import { recordFlowGate } from './gate-store'
 import type { FlowActorRef, FlowSubjectAdapter } from './types'
 
@@ -78,19 +79,65 @@ export async function executeFlowPlan(
     return r?.id ?? null
   }
 
+  // person id → best email (people.email, else the linked user's email).
+  const personEmail = async (personId: string): Promise<string | null> => {
+    const [p] = await ctx.db((tx) =>
+      tx
+        .select({ email: people.email, userId: people.userId })
+        .from(people)
+        .where(eq(people.id, personId))
+        .limit(1),
+    )
+    if (!p) return null
+    if (p.email && p.email.includes('@')) return p.email.trim()
+    if (p.userId) {
+      const [u] = await ctx.db((tx) =>
+        tx.select({ email: users.email }).from(users).where(eq(users.id, p.userId!)).limit(1),
+      )
+      return u?.email ?? null
+    }
+    return null
+  }
+
   const resolveEmails = async (targets: EmailTarget[]): Promise<string[]> => {
     const out = new Set<string>()
+    const add = (e: string | null | undefined) => {
+      const v = e?.trim()
+      if (v && v.includes('@')) out.add(v)
+    }
     for (const t of targets) {
       if (t.type === 'literal') {
-        if (t.email.includes('@')) out.add(t.email.trim())
+        // One address OR a comma/semicolon/space-separated list.
+        for (const part of t.email.split(/[,;\s]+/)) add(part)
       } else if (t.type === 'submitter') {
-        const s = await getSubmitter()
-        if (s.email) out.add(s.email)
+        add((await getSubmitter()).email)
       } else if (t.type === 'role') {
-        for (const u of await getRoleUsers(t.role)) if (u.email) out.add(u.email)
+        for (const u of await getRoleUsers(t.role)) add(u.email)
       } else if (t.type === 'field') {
         const v = values[t.field]
-        if (typeof v === 'string' && v.includes('@')) out.add(v.trim())
+        if (typeof v === 'string') add(v.includes('@') ? v : await personEmail(v))
+      } else if (t.type === 'person') {
+        add(await personEmail(t.personId))
+      } else if (t.type === 'submitter_manager') {
+        const s = await getSubmitter()
+        if (s.userId) {
+          const [self] = await ctx.db((tx) =>
+            tx
+              .select({ mgr: people.managerPersonId })
+              .from(people)
+              .where(eq(people.userId, s.userId!))
+              .limit(1),
+          )
+          if (self?.mgr) add(await personEmail(self.mgr))
+        }
+      } else if (t.type === 'department_manager') {
+        const mgrs = await ctx.db((tx) =>
+          tx
+            .selectDistinct({ mgr: people.managerPersonId })
+            .from(people)
+            .where(and(eq(people.departmentId, t.departmentId), isNull(people.deletedAt))),
+        )
+        for (const m of mgrs) if (m.mgr) add(await personEmail(m.mgr))
       }
     }
     return Array.from(out)
@@ -184,7 +231,22 @@ export async function executeFlowPlan(
           // attachPdf: render the subject's PDF in the worker, then email it as
           // an attachment (non-blocking — the submit never waits on Chromium).
           if (action.attachPdf && adapter.pdfJob) {
-            const pdfJob = adapter.pdfJob(values)
+            // 'summary' → the generic field-summary PDF; otherwise the subject's
+            // rich/default PDF.
+            const pdfJob =
+              action.pdfFormat === 'summary'
+                ? buildRecordSummaryPdfJob({
+                    tenantId: ctx.tenantId,
+                    subjectId: adapter.subjectId,
+                    entityType: adapter.auditEntityType,
+                    heading: adapter.auditEntityType
+                      .replace(/_/g, ' ')
+                      .replace(/\b\w/g, (c) => c.toUpperCase()),
+                    reference: values.reference,
+                    subtitle: values.title,
+                    values,
+                  })
+                : adapter.pdfJob(values)
             if (pdfJob) {
               const refRaw = values.reference
               const base = typeof refRaw === 'string' && refRaw.trim() ? refRaw : 'record'

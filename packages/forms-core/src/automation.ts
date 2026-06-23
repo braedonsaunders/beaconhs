@@ -26,10 +26,15 @@ import type { FlowSubjectProfile } from './flow-subjects'
 // --- Targets (who / where) --------------------------------------------------
 
 export const emailTargetSchema = z.discriminatedUnion('type', [
+  // `email` may hold ONE address or a comma/semicolon/space-separated list.
   z.object({ type: z.literal('literal'), email: z.string() }),
-  z.object({ type: z.literal('role'), role: z.string() }),
+  z.object({ type: z.literal('role'), role: z.string() }), // everyone in a role
   z.object({ type: z.literal('field'), field: z.string() }), // field holding an email / person id
-  z.object({ type: z.literal('submitter') }),
+  z.object({ type: z.literal('submitter') }), // the user who submitted/owns the record
+  z.object({ type: z.literal('person'), personId: z.string() }), // a specific person
+  z.object({ type: z.literal('submitter_manager') }), // the submitter's reporting manager
+  // every reporting manager of the chosen department's people
+  z.object({ type: z.literal('department_manager'), departmentId: z.string() }),
 ])
 export type EmailTarget = z.infer<typeof emailTargetSchema>
 
@@ -83,7 +88,11 @@ export const actionDataSchema = z.discriminatedUnion('action', [
     design: z.record(z.string(), z.unknown()).optional(),
     compiledHtml: z.string().optional(),
     subjectTemplate: z.string().optional(),
+    // Attach a PDF of the record. `pdfFormat` picks WHICH PDF: 'full' = the
+    // subject's rich record PDF (incidents/hazid/CA/form responses); 'summary' =
+    // a generic field-summary table. Absent format ⇒ the subject's best default.
     attachPdf: z.boolean().optional(),
+    pdfFormat: z.enum(['full', 'summary']).optional(),
   }),
   z.object({
     action: z.literal('create_capa'),

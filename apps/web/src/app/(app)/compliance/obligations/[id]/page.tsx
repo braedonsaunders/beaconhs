@@ -12,10 +12,15 @@ import {
 import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
+import { pickString } from '@/lib/list-params'
+import { EVERYONE_KEY, type AudienceItem } from '@/components/audience-picker'
+import { recurrenceValueFromStored } from '@/components/recurrence'
 import { SummaryStrip } from '../../_shared'
-import { kindLabel } from '../_meta'
+import { KIND_META, kindLabel, type ObligationKind } from '../_meta'
 import { obligationCompliance } from '../_data'
+import { loadObligationFormOptions } from '../_form-options'
 import { ObligationDetailActions } from './_detail-actions'
+import { ObligationEditDrawer, type ObligationEditData } from './_edit-drawer'
 
 export const metadata = { title: 'Obligation' }
 export const dynamic = 'force-dynamic'
@@ -44,10 +49,13 @@ function cadence(rec: {
 
 export default async function ObligationDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { id } = await params
+  const sp = await searchParams
   const ctx = await requireRequestContext()
   assertCan(ctx, 'compliance.read')
   const data = await obligationCompliance(ctx, id)
@@ -60,6 +68,37 @@ export default async function ObligationDetailPage({
       : ob.subjectKind === 'per_task'
         ? 'Sign-off'
         : 'Person'
+
+  const canManage = can(ctx, 'compliance.manage')
+  // Only kinds the unified form can author are editable (rules out future
+  // ETL-only source modules); such obligations stay manageable (pause/delete).
+  const editable = canManage && ob.sourceModule in KIND_META
+  const basePath = `/compliance/obligations/${ob.id}`
+
+  // Edit flyout — opened via ?drawer=edit. Reuses the audience already loaded
+  // for the compliance evaluation; the picker uses the EVERYONE_KEY sentinel
+  // where stored rows use the everyone kind.
+  let edit: ObligationEditData | null = null
+  if (editable && pickString(sp.drawer) === 'edit') {
+    const { targets, audienceOptions } = await loadObligationFormOptions(ctx)
+    const initialAudience: AudienceItem[] = audience.map((a) => ({
+      type: a.kind,
+      entityKey: a.kind === 'everyone' ? EVERYONE_KEY : a.entityKey,
+    }))
+    edit = {
+      kind: ob.sourceModule as ObligationKind,
+      targets,
+      audienceOptions,
+      initial: {
+        id: ob.id,
+        title: ob.title,
+        notes: ob.notes,
+        audience: initialAudience,
+        recurrence: recurrenceValueFromStored(ob.recurrence),
+        targetRef: ob.targetRef ?? {},
+      },
+    }
+  }
 
   return (
     <PageContainer>
@@ -76,7 +115,8 @@ export default async function ObligationDetailPage({
             <ObligationDetailActions
               id={ob.id}
               enabled={ob.status === 'active'}
-              canManage={can(ctx, 'compliance.manage')}
+              canManage={canManage}
+              canEdit={editable}
             />
           }
         />
@@ -134,6 +174,8 @@ export default async function ObligationDetailPage({
             </TableBody>
           </Table>
         )}
+
+        <ObligationEditDrawer edit={edit} closeHref={basePath} />
       </div>
     </PageContainer>
   )

@@ -69,15 +69,20 @@ export function ObligationForm({
   targets,
   audienceOptions,
   initial,
+  onClose,
 }: {
   initialKind: ObligationKind
   targets: ObligationTargets
   audienceOptions: AudienceOptions
   initial?: ObligationFormInitial
+  // Supplied when the form is hosted in a drawer (edit flyout): on success or
+  // cancel the form calls this instead of navigating to the detail page itself.
+  onClose?: () => void
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
   const editing = Boolean(initial)
+  const embedded = Boolean(onClose)
   const ref = initial?.targetRef ?? {}
 
   const [kind, setKind] = useState<ObligationKind>(initialKind)
@@ -160,8 +165,12 @@ export function ObligationForm({
         ? await updateObligation(initial!.id, input)
         : await createObligation(input)
       if (res.ok) {
-        router.push(`/compliance/obligations/${res.id}`)
-        router.refresh()
+        if (onClose) {
+          onClose()
+        } else {
+          router.push(`/compliance/obligations/${res.id}`)
+          router.refresh()
+        }
       } else {
         setError(
           res.error || (editing ? 'Failed to save obligation' : 'Failed to create obligation'),
@@ -171,7 +180,7 @@ export function ObligationForm({
   }
 
   return (
-    <form onSubmit={submit} className="mt-6 space-y-5">
+    <form onSubmit={submit} className={embedded ? 'space-y-5' : 'mt-6 space-y-5'}>
       <Card>
         <CardHeader>
           <CardTitle>Obligation</CardTitle>
@@ -357,12 +366,18 @@ export function ObligationForm({
         </div>
       ) : null}
 
-      <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-4">
-        <Link href={cancelHref}>
-          <Button type="button" variant="outline" disabled={pending}>
+      <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">
+        {embedded ? (
+          <Button type="button" variant="outline" disabled={pending} onClick={onClose}>
             Cancel
           </Button>
-        </Link>
+        ) : (
+          <Link href={cancelHref}>
+            <Button type="button" variant="outline" disabled={pending}>
+              Cancel
+            </Button>
+          </Link>
+        )}
         <Button type="submit" disabled={pending}>
           {pending
             ? editing

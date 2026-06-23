@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { escapeHtml, htmlToPlainText, interpolate, renderEmail, sanitizeEmailHtml } from './index'
 
 // Reproduce the EXACT legacy inline behaviour from
-// apps/web/.../forms/_lib/run-automations.ts so we can assert byte parity.
+// apps/web/.../apps/_lib/run-automations.ts so we can assert byte parity.
 function legacyInline(subjectTpl: string, bodyTpl: string, values: Record<string, unknown>) {
   const esc = (s: string) =>
     s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')

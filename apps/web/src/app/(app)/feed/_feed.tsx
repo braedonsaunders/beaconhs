@@ -70,8 +70,8 @@ const KIND: Record<FeedKind, KindMeta> = {
     bar: 'bg-amber-500',
   },
   form: {
-    label: 'Form',
-    plural: 'Forms',
+    label: 'App',
+    plural: 'Apps',
     Icon: ClipboardCheck,
     tile: 'bg-gradient-to-br from-violet-500 to-purple-600',
     chip: 'bg-violet-50 text-violet-700 ring-violet-600/20 dark:bg-violet-500/15 dark:text-violet-200 dark:ring-violet-500/25',

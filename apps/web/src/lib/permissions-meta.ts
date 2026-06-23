@@ -8,7 +8,7 @@ import { PERMISSION_CATALOGUE, type CataloguePermission } from '@beaconhs/db/sch
 
 // Group label per leading segment, in the order groups should render.
 const GROUP_LABELS: Record<string, string> = {
-  forms: 'Forms',
+  forms: 'Builder',
   incidents: 'Incidents',
   training: 'Training',
   equipment: 'Equipment',

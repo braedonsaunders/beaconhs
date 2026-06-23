@@ -103,7 +103,7 @@ export async function runSessionOverdueFlows(args: {
               category: 'lone_worker',
               type: 'monitored_session.overdue',
               title: interpolate(action.message, data) || 'Monitored session check-in overdue',
-              linkPath: `/forms/responses/${responseId}`,
+              linkPath: `/apps/responses/${responseId}`,
               isCritical: true,
               channels: action.channel === 'email' ? ['in_app', 'email'] : ['in_app'],
             })

@@ -173,6 +173,7 @@ export function EmailTemplateEditor({
 
       <EmailBuilder
         initialDesign={template.design}
+        mergeFields={template.mergeFields}
         onReady={(ed) => {
           editorRef.current = ed
         }}

@@ -8,7 +8,7 @@
 // what columns are safe to surface.
 //
 // **Allowlist contract.** Only columns named here are reachable. The server
-// loader (`apps/web/src/app/(app)/forms/_lib/entity-loader.ts`) and the
+// loader (`apps/web/src/app/(app)/apps/_lib/entity-loader.ts`) and the
 // runtime fetch action both copy ONLY these columns from the DB row into the
 // EvalContext — protecting us from "SELECT *" data leakage when a designer
 // or attacker invents an attribute key.

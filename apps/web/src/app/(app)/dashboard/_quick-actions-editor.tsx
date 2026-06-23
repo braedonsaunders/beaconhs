@@ -336,7 +336,7 @@ function PickerView({
 }) {
   const tabs: { key: PickerTab; label: string }[] = [
     { key: 'common', label: 'Common' },
-    { key: 'forms', label: 'Forms & apps' },
+    { key: 'forms', label: 'Apps' },
     { key: 'custom', label: 'Custom URL' },
   ]
   const list =
@@ -431,7 +431,7 @@ function PickerView({
             </div>
           ) : filtered.length === 0 ? (
             <p className="py-10 text-center text-sm text-slate-400 dark:text-slate-500">
-              {tab === 'forms' ? 'No published forms or apps yet.' : 'No matches.'}
+              {tab === 'forms' ? 'No published apps yet.' : 'No matches.'}
             </p>
           ) : (
             <ul className="space-y-1">
