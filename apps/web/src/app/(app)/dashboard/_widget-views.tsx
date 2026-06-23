@@ -42,6 +42,7 @@ import { AnimatedNumber } from './_counter'
 import { Sparkline } from './_sparkline'
 import { AnimatedBar } from './_bar'
 import { QuickActions } from './_quick-actions'
+import type { QuickAction } from './_quick-actions-shared'
 
 // =====================================================================
 // Public entry — switch on widget id and render the right card
@@ -51,9 +52,11 @@ type Props = {
   widgetId: string
   data: DashboardMetrics
   todayIso: string
+  /** User's saved Quick-actions tiles (only the personal-actions widget uses it). */
+  quickActions?: QuickAction[]
 }
 
-export function WidgetCard({ widgetId, data, todayIso }: Props) {
+export function WidgetCard({ widgetId, data, todayIso, quickActions }: Props) {
   switch (widgetId) {
     // KPIs — headline rates
     case 'kpi-trir':
@@ -267,13 +270,7 @@ export function WidgetCard({ widgetId, data, todayIso }: Props) {
     case 'personal-inbox':
       return <InboxList items={data.myInbox} />
     case 'personal-actions':
-      return (
-        <CardShell title="Quick actions" icon={TrendingDown} accent="teal">
-          <div className="px-1 pt-2 pb-1">
-            <QuickActions />
-          </div>
-        </CardShell>
-      )
+      return <QuickActions actions={quickActions} />
 
     default:
       return (

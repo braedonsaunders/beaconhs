@@ -78,7 +78,15 @@ export default async function DashboardPage() {
       const render = renderByCardId.get(cardId)
       if (render) nodes[w.id] = <CardCell key={w.id} render={render} />
     } else if (w.id in WIDGETS) {
-      nodes[w.id] = <WidgetCard key={w.id} widgetId={w.id} data={data} todayIso={todayIso} />
+      nodes[w.id] = (
+        <WidgetCard
+          key={w.id}
+          widgetId={w.id}
+          data={data}
+          todayIso={todayIso}
+          quickActions={layout.quickActions}
+        />
+      )
     }
   }
 

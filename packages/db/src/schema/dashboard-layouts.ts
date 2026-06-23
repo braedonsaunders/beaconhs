@@ -21,6 +21,21 @@ import {
 import { id, timestamps } from './_helpers'
 import { tenants, users } from './core'
 
+/**
+ * A single user-defined "Quick action" tile. Stored alongside the layout so a
+ * user's personal shortcuts travel with their dashboard. `tone`/`iconKey` are
+ * loose strings (resolved + fallback-mapped client-side) so adding new colours
+ * or icons never invalidates a persisted row. `href` is an internal path
+ * ("/incidents/new") or an absolute http(s) URL.
+ */
+export type DashboardQuickAction = {
+  id: string
+  label: string
+  href: string
+  iconKey: string
+  tone: string
+}
+
 export type DashboardLayoutData = {
   widgets: Array<{
     /** Widget registry id (e.g. 'trir', 'capa-aging') */
@@ -30,6 +45,8 @@ export type DashboardLayoutData = {
     w: number
     h: number
   }>
+  /** Per-user Quick-actions widget config. Undefined ⇒ fall back to defaults. */
+  quickActions?: DashboardQuickAction[]
 }
 
 export const userDashboardLayouts = pgTable(

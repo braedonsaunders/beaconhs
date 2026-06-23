@@ -36,7 +36,14 @@ export default async function CustomiseDashboardPage() {
   // can attach them instantly when the user clicks "Add" in the palette.
   const nodes: Record<string, React.ReactNode> = {}
   for (const id of Object.keys(WIDGETS)) {
-    nodes[id] = <WidgetCard widgetId={id} data={data} todayIso={todayIso} />
+    nodes[id] = (
+      <WidgetCard
+        widgetId={id}
+        data={data}
+        todayIso={todayIso}
+        quickActions={layout.quickActions}
+      />
+    )
   }
 
   // Headline analytics tiles are backed by Insights system cards — override their

@@ -245,9 +245,10 @@ export const WIDGETS: Record<string, WidgetMeta> = {
     category: 'personal',
     label: 'Quick actions',
     description: 'Common "start something" CTAs — report incident, new permit, etc.',
+    // Resizable in both axes like every other card. The grid of tiles reflows
+    // to the card's width and stretches to its height, so any size works.
     defaultSize: { w: 12, h: 2 },
-    minSize: { w: 6, h: 2 },
-    maxSize: { h: 2 },
+    minSize: { w: 3, h: 2 },
   },
 
   // ---- Admin --------------------------------------------------------------

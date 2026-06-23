@@ -1,136 +1,143 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
-import {
-  AlertTriangle,
-  ClipboardCheck,
-  ClipboardList,
-  FileText,
-  HardHat,
-  ListChecks,
-  Plus,
-  type LucideIcon,
-} from 'lucide-react'
 import { motion } from 'framer-motion'
+import { ArrowUpRight, Settings2, Zap } from 'lucide-react'
+import {
+  DEFAULT_QUICK_ACTIONS,
+  isExternalHref,
+  toneOf,
+  type QuickAction,
+} from './_quick-actions-shared'
+import { FALLBACK_ICON, QUICK_ACTION_ICONS } from './_quick-actions-icons'
+import { QuickActionsEditor } from './_quick-actions-editor'
 
 /**
- * A horizontal pill rail of common "start something" actions. We expose them
- * here so the dashboard isn't just a read-only display — power users can hit
- * "Report incident" or "Log toolbox talk" in one click from the landing page.
+ * The dashboard "Quick actions" card. A user-customisable grid of shortcut
+ * tiles — each resolves to an internal route, a Builder app/form, or a custom
+ * URL, with its own icon and colour (edited via the drawer in this file).
  *
- * Each pill has its own accent color so they don't blur together visually:
- * red for the safety-critical "Report incident", amber for hazid, etc.
+ * Layout is fully container-driven so the card resizes in BOTH axes and never
+ * needs an inner scrollbar:
+ *   • columns — `auto-fit` reflows to the card's width (many-across when wide,
+ *     down to 1 when narrow), so it works at any column span and on mobile.
+ *   • rows    — `auto-rows-fr` stretches the tiles to fill the card's height,
+ *     so making the card taller pushes the cards below it down and the tiles
+ *     simply grow. In the natural-height mobile stack the rows size to content.
+ *
+ * Self-contained card (not wrapped in CardShell) so it owns its header — and
+ * the "Customize" affordance that opens the editor.
  */
-type Tone = 'rose' | 'amber' | 'teal' | 'sky' | 'violet' | 'slate'
+export function QuickActions({ actions }: { actions?: QuickAction[] | null }) {
+  const [items, setItems] = useState<QuickAction[]>(
+    actions && actions.length ? actions : DEFAULT_QUICK_ACTIONS,
+  )
+  const [editorOpen, setEditorOpen] = useState(false)
 
-type Action = {
-  href: string
-  label: string
-  icon: LucideIcon
-  tone: Tone
-}
-
-const ACTIONS: Action[] = [
-  { href: '/incidents/new', label: 'Report incident', icon: AlertTriangle, tone: 'rose' },
-  {
-    href: '/hazard-assessments/new',
-    label: 'Start hazard assessment',
-    icon: HardHat,
-    tone: 'amber',
-  },
-  {
-    href: '/forms/by-key/toolbox-talk/fill',
-    label: 'Log toolbox talk',
-    icon: ClipboardList,
-    tone: 'sky',
-  },
-  { href: '/corrective-actions/new', label: 'New CA', icon: ListChecks, tone: 'teal' },
-  {
-    href: '/equipment/check-out',
-    label: 'Check out equipment',
-    icon: ClipboardCheck,
-    tone: 'violet',
-  },
-  { href: '/reports', label: 'Run report', icon: FileText, tone: 'slate' },
-]
-
-const toneClasses: Record<Tone, { ring: string; bg: string; chip: string; icon: string }> = {
-  rose: {
-    ring: 'hover:border-rose-300 hover:shadow-rose-100/60',
-    bg: 'group-hover:bg-rose-50/80',
-    chip: 'bg-rose-100 text-rose-700 group-hover:bg-rose-600 group-hover:text-white',
-    icon: 'text-rose-600',
-  },
-  amber: {
-    ring: 'hover:border-amber-300 hover:shadow-amber-100/60',
-    bg: 'group-hover:bg-amber-50/80',
-    chip: 'bg-amber-100 text-amber-700 group-hover:bg-amber-500 group-hover:text-white',
-    icon: 'text-amber-600',
-  },
-  teal: {
-    ring: 'hover:border-teal-300 hover:shadow-teal-100/60',
-    bg: 'group-hover:bg-teal-50/80',
-    chip: 'bg-teal-100 text-teal-700 group-hover:bg-teal-700 group-hover:text-white',
-    icon: 'text-teal-700',
-  },
-  sky: {
-    ring: 'hover:border-sky-300 hover:shadow-sky-100/60',
-    bg: 'group-hover:bg-sky-50/80',
-    chip: 'bg-sky-100 text-sky-700 group-hover:bg-sky-600 group-hover:text-white',
-    icon: 'text-sky-700',
-  },
-  violet: {
-    ring: 'hover:border-violet-300 hover:shadow-violet-100/60',
-    bg: 'group-hover:bg-violet-50/80',
-    chip: 'bg-violet-100 text-violet-700 group-hover:bg-violet-600 group-hover:text-white',
-    icon: 'text-violet-700',
-  },
-  slate: {
-    ring: 'hover:border-slate-300 dark:hover:border-slate-600 hover:shadow-slate-200/60',
-    bg: 'group-hover:bg-slate-50/80',
-    chip: 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 group-hover:bg-slate-700 group-hover:text-white',
-    icon: 'text-slate-600 dark:text-slate-300',
-  },
-}
-
-export function QuickActions() {
   return (
-    <div className="flex flex-wrap gap-2.5">
-      {ACTIONS.map((a, i) => {
-        const t = toneClasses[a.tone]
-        const Icon = a.icon
-        return (
-          <motion.div
-            key={a.href}
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{
-              delay: 0.05 + i * 0.04,
-              duration: 0.35,
-              ease: [0.22, 1, 0.36, 1],
-            }}
-            whileHover={{ y: -2 }}
-          >
-            <Link
-              href={a.href as any}
-              className={`group inline-flex items-center gap-2.5 rounded-full border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-800 shadow-sm transition-all dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100 ${t.ring} ${t.bg}`}
+    <div className="flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-4 py-3 dark:border-slate-800">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-teal-50 text-teal-700 ring-1 ring-teal-100 ring-inset dark:bg-teal-950/50 dark:text-teal-300">
+            <Zap size={14} />
+          </span>
+          <h3 className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+            Quick actions
+          </h3>
+        </div>
+        <button
+          type="button"
+          onClick={() => setEditorOpen(true)}
+          className="no-drag inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-50 hover:text-teal-700 dark:text-slate-400 dark:hover:bg-slate-800/60 dark:hover:text-teal-300"
+        >
+          <Settings2 size={13} />
+          Customize
+        </button>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-hidden">
+        {items.length === 0 ? (
+          <div className="flex h-full flex-col items-center justify-center gap-2 px-4 py-6 text-center">
+            <p className="text-xs text-slate-500 dark:text-slate-400">No quick actions yet.</p>
+            <button
+              type="button"
+              onClick={() => setEditorOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-teal-200 bg-teal-50 px-3 py-1.5 text-xs font-medium text-teal-700 transition hover:bg-teal-100 dark:border-teal-800/60 dark:bg-teal-950/40 dark:text-teal-300 dark:hover:bg-teal-900/40"
             >
-              <span
-                className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-xs transition-colors ${t.chip}`}
-              >
-                <Icon size={14} />
-              </span>
-              <span className="flex items-center gap-1.5">
-                {a.label}
-                <Plus
-                  size={12}
-                  className={`opacity-0 transition-opacity group-hover:opacity-100 ${t.icon}`}
-                />
-              </span>
-            </Link>
-          </motion.div>
-        )
-      })}
+              <Settings2 size={13} />
+              Add actions
+            </button>
+          </div>
+        ) : (
+          <div
+            className="grid h-full min-h-0 auto-rows-fr gap-2 p-2.5"
+            // `min(100%, …)` keeps a single column from overflowing on very narrow
+            // cards; otherwise auto-fit packs as many ~10rem tiles as the width allows.
+            style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 10rem), 1fr))' }}
+          >
+            {items.map((a, i) => (
+              <ActionTile key={a.id} action={a} index={i} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <QuickActionsEditor
+        open={editorOpen}
+        value={items}
+        onClose={() => setEditorOpen(false)}
+        onSaved={(next) => setItems(next)}
+      />
     </div>
+  )
+}
+
+function ActionTile({ action, index }: { action: QuickAction; index: number }) {
+  const t = toneOf(action.tone)
+  const Icon = QUICK_ACTION_ICONS[action.iconKey] ?? FALLBACK_ICON
+  const external = isExternalHref(action.href)
+
+  const inner = (
+    <>
+      <span
+        className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors ${t.chip}`}
+      >
+        <Icon size={14} />
+      </span>
+      <span
+        className={`min-w-0 flex-1 text-left text-[13px] leading-snug font-medium transition-colors ${t.label}`}
+      >
+        {action.label}
+      </span>
+      <ArrowUpRight
+        size={14}
+        className={`shrink-0 translate-x-1 opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100 ${t.arrow}`}
+      />
+    </>
+  )
+
+  const className = `group flex h-full min-h-0 w-full items-center gap-2.5 overflow-hidden rounded-xl border px-3 py-1.5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md focus-visible:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:outline-none dark:focus-visible:ring-offset-slate-900 ${t.tile}`
+
+  return (
+    <motion.div
+      className="min-h-0"
+      // Transform-only entrance (no opacity) so a tile is never stranded
+      // invisible if the animation can't run (e.g. a backgrounded tab) —
+      // this is a primary CTA card, it must always render its content.
+      initial={{ y: 8 }}
+      animate={{ y: 0 }}
+      transition={{ delay: 0.04 + index * 0.035, duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+    >
+      {external ? (
+        <a href={action.href} target="_blank" rel="noopener noreferrer" className={className}>
+          {inner}
+        </a>
+      ) : (
+        <Link href={action.href as any} className={className}>
+          {inner}
+        </Link>
+      )}
+    </motion.div>
   )
 }
