@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { signIn } from '@beaconhs/auth/client'
 import { Alert, AlertDescription, Button, Input, Label } from '@beaconhs/ui'
@@ -76,7 +77,12 @@ export function LoginForm() {
 
       {mode === 'password' ? (
         <div className="space-y-1.5">
-          <Label htmlFor="password">Password</Label>
+          <div className="flex items-center justify-between">
+            <Label htmlFor="password">Password</Label>
+            <Link href="/forgot-password" className="text-xs text-teal-700 hover:underline">
+              Forgot password?
+            </Link>
+          </div>
           <Input
             id="password"
             type="password"

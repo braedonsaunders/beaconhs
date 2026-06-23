@@ -16,9 +16,11 @@ import { revalidatePath } from 'next/cache'
 import { and, eq } from 'drizzle-orm'
 import { auth } from '@beaconhs/auth'
 import {
+  account,
   PERMISSION_CATALOGUE,
   roleAssignments,
   roles,
+  sessions,
   tenantUsers,
   userPermissionOverrides,
   users,
@@ -73,6 +75,24 @@ function detailPath(membershipId: string): string {
 
 function backToDetail(membershipId: string, error: string): never {
   redirect(`${detailPath(membershipId)}?error=${encodeURIComponent(error)}`)
+}
+
+/** Redirect back to a specific tab, optionally carrying an error or success notice. */
+function backToTab(
+  membershipId: string,
+  tab: string,
+  msg: { error?: string; notice?: string } = {},
+): never {
+  const q = new URLSearchParams({ tab })
+  if (msg.error) q.set('error', msg.error)
+  if (msg.notice) q.set('notice', msg.notice)
+  redirect(`${detailPath(membershipId)}?${q.toString()}`)
+}
+
+/** True when the actor may act on this account — blocks editing a super-admin
+ *  unless the actor is one too. (Caller has already passed `admin.users.manage`.) */
+function canActOn(ctx: Ctx, acct: { isSuperAdmin: boolean }): boolean {
+  return ctx.isSuperAdmin || !acct.isSuperAdmin
 }
 
 /** Load a membership + its account, or redirect back with an error. */
@@ -453,4 +473,238 @@ export async function setSuperAdmin(formData: FormData): Promise<void> {
   })
   revalidatePath(detailPath(membershipId))
   revalidatePath('/admin/users')
+}
+
+// --- account: name + email ----------------------------------------------
+
+export async function updateAccountName(formData: FormData): Promise<void> {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'admin.users.manage')
+  const membershipId = String(formData.get('membershipId') ?? '')
+  const name = String(formData.get('name') ?? '').trim()
+  if (!membershipId || !name) return
+  const member = await loadMember(ctx, membershipId)
+  if (!member) return
+  if (!canActOn(ctx, member.account)) {
+    backToDetail(membershipId, 'Only a super-admin can change a super-admin account.')
+  }
+  await ctx.db((tx) =>
+    tx.update(users).set({ name, updatedAt: new Date() }).where(eq(users.id, member.account.id)),
+  )
+  await recordAudit(ctx, {
+    entityType: 'tenant_user',
+    entityId: membershipId,
+    action: 'update',
+    summary: 'Updated account name',
+    after: { name },
+  })
+  revalidatePath(detailPath(membershipId))
+  revalidatePath('/admin/users')
+}
+
+export async function updateMemberEmail(formData: FormData): Promise<void> {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'admin.users.manage')
+  const membershipId = String(formData.get('membershipId') ?? '')
+  const email = String(formData.get('email') ?? '')
+    .trim()
+    .toLowerCase()
+  if (!membershipId) return
+  const member = await loadMember(ctx, membershipId)
+  if (!member) return
+  if (!canActOn(ctx, member.account)) {
+    backToTab(membershipId, 'security', {
+      error: 'Only a super-admin can change a super-admin account.',
+    })
+  }
+  if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    backToTab(membershipId, 'security', { error: 'Enter a valid email address.' })
+  }
+  if (email === member.account.email) {
+    backToTab(membershipId, 'security', { notice: 'Email unchanged.' })
+  }
+  // Email is globally unique across accounts — block collisions.
+  const taken = await ctx.db(async (tx) => {
+    const [u] = await tx.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1)
+    return Boolean(u && u.id !== member.account.id)
+  })
+  if (taken) {
+    backToTab(membershipId, 'security', {
+      error: 'That email is already in use by another account.',
+    })
+  }
+  // The new address hasn't been confirmed, so it reverts to unverified.
+  await ctx.db((tx) =>
+    tx
+      .update(users)
+      .set({ email, emailVerified: false, updatedAt: new Date() })
+      .where(eq(users.id, member.account.id)),
+  )
+  await recordAudit(ctx, {
+    entityType: 'tenant_user',
+    entityId: membershipId,
+    action: 'update',
+    summary: `Changed email to ${email}`,
+    before: { email: member.account.email },
+    after: { email },
+  })
+  revalidatePath(detailPath(membershipId))
+  revalidatePath('/admin/users')
+  backToTab(membershipId, 'security', { notice: 'Email updated.' })
+}
+
+export async function setEmailVerified(formData: FormData): Promise<void> {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'admin.users.manage')
+  const membershipId = String(formData.get('membershipId') ?? '')
+  const value = String(formData.get('value') ?? '') === 'on'
+  if (!membershipId) return
+  const member = await loadMember(ctx, membershipId)
+  if (!member) return
+  if (!canActOn(ctx, member.account)) {
+    backToTab(membershipId, 'security', {
+      error: 'Only a super-admin can change a super-admin account.',
+    })
+  }
+  await ctx.db((tx) =>
+    tx.update(users).set({ emailVerified: value }).where(eq(users.id, member.account.id)),
+  )
+  await recordAudit(ctx, {
+    entityType: 'tenant_user',
+    entityId: membershipId,
+    action: 'update',
+    summary: value ? 'Marked email verified' : 'Marked email unverified',
+  })
+  revalidatePath(detailPath(membershipId))
+  backToTab(membershipId, 'security', {
+    notice: value ? 'Email marked as verified.' : 'Email marked as unverified.',
+  })
+}
+
+// --- account: password + sessions ---------------------------------------
+
+export async function setMemberPassword(formData: FormData): Promise<void> {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'admin.users.manage')
+  const membershipId = String(formData.get('membershipId') ?? '')
+  const password = String(formData.get('password') ?? '')
+  const confirm = String(formData.get('confirmPassword') ?? '')
+  const signOut = String(formData.get('revokeSessions') ?? '') === 'on'
+  if (!membershipId) return
+
+  const member = await loadMember(ctx, membershipId)
+  if (!member) return
+  if (!canActOn(ctx, member.account)) {
+    backToTab(membershipId, 'security', {
+      error: 'Only a super-admin can change a super-admin account.',
+    })
+  }
+  if (password.length < 8) {
+    backToTab(membershipId, 'security', { error: 'Password must be at least 8 characters.' })
+  }
+  if (password !== confirm) {
+    backToTab(membershipId, 'security', { error: 'Passwords do not match.' })
+  }
+
+  // Hash with Better-Auth's own hasher so the credential verifies on sign-in.
+  const authCtx = await auth.$context
+  const hashed = await authCtx.password.hash(password)
+
+  await ctx.db(async (tx) => {
+    const [cred] = await tx
+      .select({ id: account.id })
+      .from(account)
+      .where(and(eq(account.userId, member.account.id), eq(account.providerId, 'credential')))
+      .limit(1)
+    if (cred) {
+      await tx
+        .update(account)
+        .set({ password: hashed, updatedAt: new Date() })
+        .where(eq(account.id, cred.id))
+    } else {
+      // Invited / magic-link users have no credential account yet — create one.
+      await tx.insert(account).values({
+        id: crypto.randomUUID(),
+        userId: member.account.id,
+        accountId: member.account.id,
+        providerId: 'credential',
+        password: hashed,
+      })
+    }
+    if (signOut) await tx.delete(sessions).where(eq(sessions.userId, member.account.id))
+  })
+
+  await recordAudit(ctx, {
+    entityType: 'tenant_user',
+    entityId: membershipId,
+    action: 'update',
+    summary: signOut ? 'Set password and signed out all sessions' : 'Set password',
+  })
+  revalidatePath(detailPath(membershipId))
+  backToTab(membershipId, 'security', {
+    notice: signOut
+      ? 'Password updated. All active sessions were signed out.'
+      : 'Password updated. Share it with the member over a secure channel.',
+  })
+}
+
+export async function sendPasswordReset(formData: FormData): Promise<void> {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'admin.users.manage')
+  const membershipId = String(formData.get('membershipId') ?? '')
+  if (!membershipId) return
+  const member = await loadMember(ctx, membershipId)
+  if (!member) return
+  try {
+    await auth.api.requestPasswordReset({
+      body: { email: member.account.email, redirectTo: '/reset-password' },
+      headers: (await headers()) as unknown as Headers,
+    })
+  } catch {
+    backToTab(membershipId, 'security', {
+      error: "Couldn't send the reset email — check the mail configuration.",
+    })
+  }
+  await recordAudit(ctx, {
+    entityType: 'tenant_user',
+    entityId: membershipId,
+    action: 'update',
+    summary: `Sent password reset link to ${member.account.email}`,
+  })
+  revalidatePath(detailPath(membershipId))
+  backToTab(membershipId, 'security', { notice: `Reset link sent to ${member.account.email}.` })
+}
+
+export async function revokeMemberSessions(formData: FormData): Promise<void> {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'admin.users.manage')
+  const membershipId = String(formData.get('membershipId') ?? '')
+  if (!membershipId) return
+  const member = await loadMember(ctx, membershipId)
+  if (!member) return
+  if (!canActOn(ctx, member.account)) {
+    backToTab(membershipId, 'security', {
+      error: 'Only a super-admin can change a super-admin account.',
+    })
+  }
+  const deleted = await ctx.db(async (tx) => {
+    const rows = await tx
+      .delete(sessions)
+      .where(eq(sessions.userId, member.account.id))
+      .returning({ id: sessions.id })
+    return rows.length
+  })
+  await recordAudit(ctx, {
+    entityType: 'tenant_user',
+    entityId: membershipId,
+    action: 'update',
+    summary: `Signed out all sessions (${deleted})`,
+  })
+  revalidatePath(detailPath(membershipId))
+  backToTab(membershipId, 'security', {
+    notice:
+      deleted > 0
+        ? `Signed out ${deleted} session${deleted === 1 ? '' : 's'}.`
+        : 'No active sessions to sign out.',
+  })
 }

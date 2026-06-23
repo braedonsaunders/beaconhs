@@ -1,5 +1,5 @@
 import { notFound, redirect } from 'next/navigation'
-import { asc, eq } from 'drizzle-orm'
+import { and, asc, eq } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -14,8 +14,10 @@ import {
   cn,
 } from '@beaconhs/ui'
 import {
+  account,
   roleAssignments,
   roles,
+  sessions,
   tenantUsers,
   user,
   userPermissionOverrides,
@@ -30,6 +32,7 @@ import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { PERMISSION_GROUPS, permissionLabel } from '@/lib/permissions-meta'
 import { ScopePicker } from '../_components/scope-picker'
 import { ConfirmButton } from '../_components/confirm-button'
+import { SetPasswordForm } from '../_components/set-password-form'
 import { loadScopeOptions, describeScope } from '../_scope-data'
 import {
   assignRole,
@@ -37,16 +40,21 @@ import {
   removeAssignment,
   removeMember,
   resendInvite,
+  revokeMemberSessions,
+  sendPasswordReset,
+  setEmailVerified,
   setMemberStatus,
   setPermissionOverride,
   setSuperAdmin,
+  updateAccountName,
   updateMemberDisplayName,
+  updateMemberEmail,
 } from '../_actions'
 
 export const metadata = { title: 'Member' }
 export const dynamic = 'force-dynamic'
 
-const TABS = ['overview', 'roles', 'permissions', 'activity'] as const
+const TABS = ['overview', 'security', 'roles', 'permissions', 'activity'] as const
 
 export default async function AdminUserDetailPage({
   params,
@@ -61,6 +69,7 @@ export default async function AdminUserDetailPage({
   const sp = await searchParams
   const active = pickActiveTab(sp, TABS, 'overview')
   const error = typeof sp.error === 'string' ? sp.error : undefined
+  const notice = typeof sp.notice === 'string' ? sp.notice : undefined
 
   const data = await ctx.db(async (tx) => {
     const [member] = await tx
@@ -86,11 +95,21 @@ export default async function AdminUserDetailPage({
       })
       .from(userPermissionOverrides)
       .where(eq(userPermissionOverrides.tenantUserId, id))
-    return { member, assignments, allRoles, overrides }
+    const [cred] = await tx
+      .select({ id: account.id })
+      .from(account)
+      .where(and(eq(account.userId, member.account.id), eq(account.providerId, 'credential')))
+      .limit(1)
+    const activeSessions = await tx
+      .select({ id: sessions.id, createdAt: sessions.createdAt, expiresAt: sessions.expiresAt })
+      .from(sessions)
+      .where(eq(sessions.userId, member.account.id))
+    return { member, assignments, allRoles, overrides, hasPassword: Boolean(cred), activeSessions }
   })
 
   if (!data) notFound()
-  const { member, assignments, allRoles, overrides } = data
+  const { member, assignments, allRoles, overrides, hasPassword, activeSessions } = data
+  const sessionCount = activeSessions.length
   const scopeOptions = await loadScopeOptions(ctx)
   const activity = await recentActivityForEntity(ctx, 'tenant_user', id)
 
@@ -134,6 +153,11 @@ export default async function AdminUserDetailPage({
             {error}
           </div>
         ) : null}
+        {notice ? (
+          <div className="rounded-md border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-800 dark:border-teal-900 dark:bg-teal-950/40 dark:text-teal-300">
+            {notice}
+          </div>
+        ) : null}
 
         <TabNav
           basePath={basePath}
@@ -141,6 +165,7 @@ export default async function AdminUserDetailPage({
           active={active}
           tabs={[
             { key: 'overview', label: 'Overview' },
+            { key: 'security', label: 'Security' },
             { key: 'roles', label: 'Roles & scope', count: assignments.length },
             { key: 'permissions', label: 'Permissions' },
             { key: 'activity', label: 'Activity' },
@@ -155,10 +180,6 @@ export default async function AdminUserDetailPage({
               </CardHeader>
               <CardContent className="space-y-4">
                 <dl className="grid grid-cols-3 gap-x-3 gap-y-2 text-sm">
-                  <dt className="text-slate-500 dark:text-slate-400">Account name</dt>
-                  <dd className="col-span-2 text-slate-900 dark:text-slate-100">
-                    {member.account.name}
-                  </dd>
                   <dt className="text-slate-500 dark:text-slate-400">Email</dt>
                   <dd className="col-span-2 text-slate-900 dark:text-slate-100">
                     {member.account.email}
@@ -170,6 +191,20 @@ export default async function AdminUserDetailPage({
                       : '—'}
                   </dd>
                 </dl>
+                <form action={updateAccountName} className="space-y-1.5">
+                  <input type="hidden" name="membershipId" value={id} />
+                  <Label htmlFor="name">Account name</Label>
+                  <div className="flex gap-2">
+                    <Input id="name" name="name" defaultValue={member.account.name} required />
+                    <Button type="submit" variant="outline">
+                      Save
+                    </Button>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    The member&apos;s name across the platform. Change their email in the Security
+                    tab.
+                  </p>
+                </form>
                 <form action={updateMemberDisplayName} className="space-y-1.5">
                   <input type="hidden" name="membershipId" value={id} />
                   <Label htmlFor="displayName">Display name in this tenant</Label>
@@ -269,6 +304,134 @@ export default async function AdminUserDetailPage({
                     )}
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+          </div>
+        ) : null}
+
+        {active === 'security' ? (
+          <div className="space-y-5">
+            <Card>
+              <CardHeader>
+                <CardTitle>Password</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <div className="flex flex-wrap items-center gap-2 text-sm">
+                  <Badge variant={hasPassword ? 'success' : 'secondary'}>
+                    {hasPassword ? 'Password set' : 'No password'}
+                  </Badge>
+                  <span className="text-slate-500 dark:text-slate-400">
+                    {hasPassword
+                      ? 'The member can sign in with email and password.'
+                      : 'The member signs in with a magic link until a password is set.'}
+                  </span>
+                </div>
+
+                <SetPasswordForm membershipId={id} />
+
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4 dark:border-slate-800">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                      Email a reset link
+                    </p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Sends {member.account.email} a secure link to set their own password.
+                    </p>
+                  </div>
+                  <form action={sendPasswordReset}>
+                    <input type="hidden" name="membershipId" value={id} />
+                    <Button type="submit" variant="outline">
+                      Send reset link
+                    </Button>
+                  </form>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Sessions</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm text-slate-900 dark:text-slate-100">
+                      {sessionCount === 0
+                        ? 'No active sessions.'
+                        : `${sessionCount} active session${sessionCount === 1 ? '' : 's'}.`}
+                    </p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Signing out everywhere forces the member to sign in again. Cached sessions can
+                      persist for up to five minutes.
+                    </p>
+                  </div>
+                  {sessionCount > 0 ? (
+                    <form action={revokeMemberSessions}>
+                      <input type="hidden" name="membershipId" value={id} />
+                      <ConfirmButton
+                        type="submit"
+                        variant="outline"
+                        confirmMessage={`Sign ${displayName} out of all ${sessionCount} session${sessionCount === 1 ? '' : 's'}?`}
+                      >
+                        Sign out everywhere
+                      </ConfirmButton>
+                    </form>
+                  ) : null}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Email &amp; verification</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <div className="flex items-center justify-between gap-3 rounded-md border border-slate-200 p-3 dark:border-slate-800">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                      Email verified
+                    </p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      {member.account.emailVerified ? 'Confirmed.' : 'Not confirmed yet.'}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant={member.account.emailVerified ? 'success' : 'secondary'}>
+                      {member.account.emailVerified ? 'Verified' : 'Unverified'}
+                    </Badge>
+                    <form action={setEmailVerified}>
+                      <input type="hidden" name="membershipId" value={id} />
+                      <input
+                        type="hidden"
+                        name="value"
+                        value={member.account.emailVerified ? 'off' : 'on'}
+                      />
+                      <Button type="submit" variant="ghost" size="sm">
+                        {member.account.emailVerified ? 'Mark unverified' : 'Mark verified'}
+                      </Button>
+                    </form>
+                  </div>
+                </div>
+
+                <form action={updateMemberEmail} className="space-y-1.5">
+                  <input type="hidden" name="membershipId" value={id} />
+                  <Label htmlFor="email">Email address</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="email"
+                      name="email"
+                      type="email"
+                      defaultValue={member.account.email}
+                      required
+                    />
+                    <Button type="submit" variant="outline">
+                      Update
+                    </Button>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    The member signs in with this address. Changing it marks the email unverified.
+                  </p>
+                </form>
               </CardContent>
             </Card>
           </div>

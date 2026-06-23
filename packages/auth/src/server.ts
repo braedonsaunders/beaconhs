@@ -23,6 +23,15 @@ export const auth = betterAuth({
     requireEmailVerification: false,
     minPasswordLength: 8,
     autoSignIn: true,
+    // Self-service password reset. `url` already points at the API callback
+    // (`/api/auth/reset-password/<token>?callbackURL=/reset-password`), which
+    // validates the token and forwards the user to our /reset-password page.
+    sendResetPassword: async ({ user, url }) => {
+      const subject = 'Reset your BeaconHS password'
+      const text = `A password reset was requested for your BeaconHS account.\n\nSet a new password:\n\n${url}\n\nThis link expires in 1 hour. If you didn't request it, ignore this email — your password won't change.`
+      const html = `<p>A password reset was requested for your BeaconHS account.</p><p><a href="${url}">Set a new password</a></p><p>This link expires in 1 hour. If you didn't request it, ignore this email — your password won't change.</p>`
+      await sendAuthEmail({ to: user.email, subject, html, text, label: 'password-reset', url })
+    },
   },
   session: {
     expiresIn: 60 * 60 * 24 * 30,
@@ -35,22 +44,7 @@ export const auth = betterAuth({
         const subject = 'Sign in to BeaconHS'
         const text = `Click this link to sign in to BeaconHS:\n\n${url}\n\nThis link expires in 15 minutes. If you didn't request it, ignore this email.`
         const html = `<p>Click <a href="${url}">here</a> to sign in to BeaconHS.</p><p>This link expires in 15 minutes.</p>`
-
-        const apiKey = process.env.RESEND_API_KEY
-        if (apiKey) {
-          const { enqueueEmail } = await import('@beaconhs/jobs')
-          await enqueueEmail({ to: email, subject, html, text })
-          return
-        }
-
-        // Dev fallback: send via SMTP to Mailpit on localhost:1025.
-        try {
-          await sendViaSmtp({ to: email, subject, html, text })
-          console.log(`[auth] magic-link sent to ${email} via Mailpit`)
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err)
-          console.warn(`[auth] could not send magic-link via Mailpit (${msg}); URL:`, url)
-        }
+        await sendAuthEmail({ to: email, subject, html, text, label: 'magic-link', url })
       },
     }),
     nextCookies(),
@@ -60,6 +54,38 @@ export const auth = betterAuth({
 
 export type AuthInstance = typeof auth
 export type Session = Awaited<ReturnType<typeof auth.api.getSession>>
+
+// Shared sender for transactional auth emails (magic link, password reset).
+// Prefers the Resend-backed job queue in production; falls back to SMTP/Mailpit
+// in dev. Delivery failures never throw — the caller (a Better-Auth flow) must
+// not 500 just because mail is misconfigured; we log and the URL stays usable
+// from the server logs in dev.
+async function sendAuthEmail(args: {
+  to: string
+  subject: string
+  html: string
+  text: string
+  label: string
+  /** The actionable link — logged to the console if delivery fails so dev still works. */
+  url?: string
+}) {
+  const { to, subject, html, text, label, url } = args
+  const apiKey = process.env.RESEND_API_KEY
+  if (apiKey) {
+    const { enqueueEmail } = await import('@beaconhs/jobs')
+    await enqueueEmail({ to, subject, html, text, meta: { category: 'auth' } })
+    return
+  }
+  try {
+    await sendViaSmtp({ to, subject, html, text })
+    console.log(`[auth] ${label} sent to ${to} via Mailpit`)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.warn(
+      `[auth] could not send ${label} to ${to} via Mailpit (${msg})${url ? `; URL: ${url}` : ''}`,
+    )
+  }
+}
 
 // Minimal SMTP client for Mailpit (no auth, plain text). Avoids pulling a
 // full mail library when we just need dev delivery.
