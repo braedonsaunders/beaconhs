@@ -8,6 +8,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
 import { SortTh } from '@/components/sortable-th'
 import { ListCard, MobileCardList } from '@/components/list-card'
+import { SearchInput } from '@/components/search-input'
 import { mergeHref, parseListParams, pickString } from '@/lib/list-params'
 
 export const metadata = { title: 'Users & roles' }
@@ -45,9 +46,10 @@ export default async function AdminUsersPage({
   if (!can(ctx, 'admin.users.manage')) redirect('/admin')
 
   const sp = await searchParams
-  const { sort, dir } = parseListParams(sp, { sort: 'name', dir: 'asc', allowedSorts: SORTS })
+  const { sort, dir, q } = parseListParams(sp, { sort: 'name', dir: 'asc', allowedSorts: SORTS })
   // Default to active members; `?status=all` is the explicit show-everything sentinel.
   const statusFilter = pickString(sp.status) ?? 'active'
+  const query = (q ?? '').trim().toLowerCase()
 
   const rows = await ctx.db(async (tx) => {
     const memberRows = await tx
@@ -73,7 +75,13 @@ export default async function AdminUsersPage({
     }))
   })
 
-  const filtered = rows.filter((r) => statusFilter === 'all' || r.status === statusFilter)
+  const filtered = rows.filter((r) => {
+    if (statusFilter !== 'all' && r.status !== statusFilter) return false
+    if (!query) return true
+    // Match name, tenant display name, email, or any assigned role.
+    const haystack = [r.name, r.displayName ?? '', r.email, ...r.roleNames].join(' ').toLowerCase()
+    return haystack.includes(query)
+  })
   const sorted = [...filtered].sort((a, b) => {
     const mult = dir === 'asc' ? 1 : -1
     switch (sort) {
@@ -88,6 +96,8 @@ export default async function AdminUsersPage({
     }
   })
 
+  const activeCount = rows.filter((r) => r.status === 'active').length
+
   const basePath = '/admin/users'
   const sortProps = { basePath, currentParams: sp, sort, dir }
 
@@ -97,7 +107,7 @@ export default async function AdminUsersPage({
         <DetailHeader
           back={{ href: '/admin', label: 'Back to admin' }}
           title="Users & roles"
-          subtitle={`${rows.length} member${rows.length === 1 ? '' : 's'} in this tenant`}
+          subtitle={`${activeCount} active member${activeCount === 1 ? '' : 's'}`}
           actions={
             <div className="flex items-center gap-2">
               <Link href="/admin/roles">
@@ -110,32 +120,39 @@ export default async function AdminUsersPage({
           }
         />
 
-        <div className="flex flex-wrap gap-1.5">
-          {STATUS_FILTERS.map((f) => {
-            const active = statusFilter === f.value
-            return (
-              <Link
-                key={f.value}
-                href={mergeHref(basePath, sp, {
-                  status: f.value === 'active' ? undefined : f.value,
-                })}
-                className={cn(
-                  'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
-                  active
-                    ? 'border-teal-600 bg-teal-50 text-teal-800 dark:border-teal-500 dark:bg-teal-950/50 dark:text-teal-300'
-                    : 'border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800/60',
-                )}
-              >
-                {f.label}
-              </Link>
-            )
-          })}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <SearchInput placeholder="Search name, email, or role…" />
+          <div className="flex flex-wrap gap-1.5">
+            {STATUS_FILTERS.map((f) => {
+              const active = statusFilter === f.value
+              return (
+                <Link
+                  key={f.value}
+                  href={mergeHref(basePath, sp, {
+                    status: f.value === 'active' ? undefined : f.value,
+                  })}
+                  className={cn(
+                    'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+                    active
+                      ? 'border-teal-600 bg-teal-50 text-teal-800 dark:border-teal-500 dark:bg-teal-950/50 dark:text-teal-300'
+                      : 'border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800/60',
+                  )}
+                >
+                  {f.label}
+                </Link>
+              )
+            })}
+          </div>
         </div>
 
         {sorted.length === 0 ? (
           <EmptyState
             title="No members match"
-            description="Try a different status filter, or invite someone."
+            description={
+              query
+                ? 'No members match your search. Try a different term or status filter.'
+                : 'Try a different status filter, or invite someone.'
+            }
           />
         ) : (
           <>
