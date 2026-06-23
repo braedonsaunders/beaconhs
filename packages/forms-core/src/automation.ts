@@ -21,6 +21,7 @@ import {
   type LogicRule,
 } from './schema'
 import { evaluateLogicRule, type EvalContext } from './evaluator'
+import type { FlowSubjectProfile } from './flow-subjects'
 
 // --- Targets (who / where) --------------------------------------------------
 
@@ -50,6 +51,15 @@ export const triggerDataSchema = z.discriminatedUnion('trigger', [
   // Fires when a monitored session misses a check-in past its grace period.
   // Dispatched by the overdue scan (apps/worker) via planAutomation(..., 'session_overdue').
   z.object({ trigger: z.literal('session_overdue') }),
+  // Generic native-module lifecycle triggers. Modules without a status enum
+  // (journals, hazard assessments) map their lifecycle moments onto these; the
+  // engine dispatches them by literal exactly like on_submit. A subject's
+  // FlowSubjectProfile decides which of these are offered in the canvas.
+  z.object({ trigger: z.literal('on_create') }),
+  z.object({ trigger: z.literal('on_sign') }),
+  z.object({ trigger: z.literal('on_lock') }),
+  z.object({ trigger: z.literal('on_unlock') }),
+  z.object({ trigger: z.literal('on_delete') }),
 ])
 export type TriggerData = z.infer<typeof triggerDataSchema>
 
@@ -59,8 +69,20 @@ export const actionDataSchema = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('send_email'),
     to: z.array(emailTargetSchema),
-    subject: z.string(),
-    bodyTemplate: z.string(), // supports {{fieldKey}} interpolation
+    // How the body is composed. Absent ⇒ legacy 'inline' (back-compat: every
+    // stored graph still validates because subject/bodyTemplate stay optional).
+    mode: z.enum(['inline', 'template', 'design']).optional(),
+    // mode 'inline' — write the email here.
+    subject: z.string().optional(),
+    bodyTemplate: z.string().optional(), // supports {{fieldKey}} interpolation
+    // mode 'template' — reference a library template (resolved at SEND time so
+    // edits to the template propagate to every flow that uses it).
+    templateId: z.string().optional(),
+    subjectOverride: z.string().optional(),
+    // mode 'design' — a one-off drag-and-drop design authored on this node.
+    design: z.record(z.string(), z.unknown()).optional(),
+    compiledHtml: z.string().optional(),
+    subjectTemplate: z.string().optional(),
     attachPdf: z.boolean().optional(),
   }),
   z.object({
@@ -180,7 +202,11 @@ export function emptyAutomationGraph(): AutomationGraph {
 
 // --- Static lint (best-effort; surfaced in the builder) ---------------------
 
-export function lintAutomationGraph(graph: AutomationGraph, fieldIds: Set<string>): string[] {
+export function lintAutomationGraph(
+  graph: AutomationGraph,
+  fieldIds: Set<string>,
+  profile?: FlowSubjectProfile,
+): string[] {
   const errors: string[] = []
   const ids = new Set(graph.nodes.map((n) => n.id))
 
@@ -190,6 +216,21 @@ export function lintAutomationGraph(graph: AutomationGraph, fieldIds: Set<string
   }
   if (!graph.nodes.some((n) => n.data.kind === 'trigger')) {
     errors.push('Flow has no trigger — add a trigger node to start it.')
+  }
+
+  // When a subject profile is supplied, reject triggers/actions the subject does
+  // not support (e.g. a journal flow using `start_monitored_session`).
+  if (profile) {
+    const okTriggers = new Set<string>(profile.triggers)
+    const okActions = new Set<string>(profile.actions)
+    for (const n of graph.nodes) {
+      if (n.data.kind === 'trigger' && !okTriggers.has(n.data.trigger.trigger)) {
+        errors.push(`Trigger ${n.id}: "${n.data.trigger.trigger}" is not available for ${profile.label}.`)
+      }
+      if (n.data.kind === 'action' && !okActions.has(n.data.action.action)) {
+        errors.push(`Action ${n.id}: "${n.data.action.action}" is not available for ${profile.label}.`)
+      }
+    }
   }
 
   const walkRuleFields = (rule: LogicRule, where: string) => {

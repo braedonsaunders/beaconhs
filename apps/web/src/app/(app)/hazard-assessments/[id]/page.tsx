@@ -52,6 +52,9 @@ import {
 import { publicUrl } from '@beaconhs/storage'
 import { revalidatePath } from 'next/cache'
 import { requireRequestContext } from '@/lib/auth'
+import { FlowApprovals } from '@/components/flows/flow-approvals'
+import { getPendingFlowGatesForSubject } from '@/lib/flows/gate-store'
+import { canManageSubjectGates } from '@/lib/flows/registry'
 import { canManageModule } from '@/lib/module-admin/guard'
 import { recentActivityForEntity } from '@/lib/audit'
 import { pickString } from '@/lib/list-params'
@@ -163,6 +166,12 @@ export default async function HazidAssessmentDetailPage({
   const { id } = await params
   const sp = await searchParams
   const ctx = await requireRequestContext()
+  const pendingGates = await getPendingFlowGatesForSubject(
+    ctx,
+    'module',
+    id,
+    canManageSubjectGates(ctx, 'module', 'hazid'),
+  )
   const drawerKey = pickString(sp.drawer) ?? ''
   const appParam = pickString(sp.app) ?? ''
   const editTaskId = pickString(sp.taskId) ?? ''
@@ -709,6 +718,7 @@ export default async function HazidAssessmentDetailPage({
       subtabs={<SectionNav sections={sectionItems} />}
     >
       <div className="ff-surface space-y-5">
+        {pendingGates.length > 0 ? <FlowApprovals gates={pendingGates} /> : null}
         <section id="section-overview" className="scroll-mt-2 space-y-5">
           <>
             {/* Readiness strip — at-a-glance completeness + worst residual risk */}

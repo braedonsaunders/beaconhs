@@ -77,6 +77,10 @@ import { publicUrl } from '@beaconhs/storage'
 import { requireRequestContext } from '@/lib/auth'
 import { canManageModule } from '@/lib/module-admin/guard'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
+import { runModuleFlows } from '@/lib/flows/run-module-flows'
+import { FlowApprovals } from '@/components/flows/flow-approvals'
+import { getPendingFlowGatesForSubject } from '@/lib/flows/gate-store'
+import { canManageSubjectGates } from '@/lib/flows/registry'
 import { ActivityFeed } from '@/components/activity-feed'
 import { PhotoGallery } from '@/components/photo-gallery'
 import { PhotoUploaderSection } from '@/components/photo-uploader-section'
@@ -154,6 +158,12 @@ async function updateStatus(formData: FormData) {
   })
   if (fromStatus && fromStatus !== status) {
     await emitIncidentStatusChanged(ctx, { incidentId: id, fromStatus, toStatus: status })
+    await runModuleFlows(ctx, {
+      moduleKey: 'incidents',
+      event: 'status_change',
+      subjectId: id,
+      toStatus: status,
+    })
   }
   revalidatePath(`/incidents/${id}`)
   revalidatePath('/incidents')
@@ -171,6 +181,11 @@ async function toggleLock(formData: FormData) {
     action: 'update',
     summary: lock ? 'Locked' : 'Unlocked',
     after: { locked: lock },
+  })
+  await runModuleFlows(ctx, {
+    moduleKey: 'incidents',
+    event: lock ? 'on_lock' : 'on_unlock',
+    subjectId: id,
   })
   revalidatePath(`/incidents/${id}`)
 }
@@ -1046,6 +1061,12 @@ export default async function IncidentDetailPage({
   const drawer = pickString(sp.drawer)
   const editId = pickString(sp.editId)
   const ctx = await requireRequestContext()
+  const pendingGates = await getPendingFlowGatesForSubject(
+    ctx,
+    'module',
+    id,
+    canManageSubjectGates(ctx, 'module', 'incidents'),
+  )
 
   const data = await ctx.db(async (tx) => {
     const [row] = await tx
@@ -1334,6 +1355,7 @@ export default async function IncidentDetailPage({
       subtabs={<SectionNav sections={sectionItems} />}
     >
       <div className="space-y-5">
+        {pendingGates.length > 0 ? <FlowApprovals gates={pendingGates} /> : null}
         {/* ===================== OVERVIEW ===================== */}
         <section id="section-overview" className="scroll-mt-2 space-y-5">
           {/* Hero — investigation progress ring */}

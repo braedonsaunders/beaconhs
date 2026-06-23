@@ -8,6 +8,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
+import type { Editor } from 'grapesjs'
 import {
   addEdge,
   Background,
@@ -39,12 +41,42 @@ import {
   Zap,
 } from 'lucide-react'
 import { Button, Drawer, Input, Label, Select, Textarea } from '@beaconhs/ui'
-import type { ActionData, AutomationGraph, AutomationNode, TriggerData } from '@beaconhs/forms-core'
+import type {
+  ActionData,
+  AutomationGraph,
+  AutomationNode,
+  FlowSubjectProfile,
+  TriggerData,
+} from '@beaconhs/forms-core'
 import { emptyAutomationGraph } from '@beaconhs/forms-core'
 import { LogicBuilder } from '../designer/logic-builder'
 import { toast } from '@/lib/toast'
-import { createFlow, deleteFlow, renameFlow, saveFlow, setFlowEnabled } from './_actions'
+import {
+  createFlow,
+  deleteFlow,
+  renameFlow,
+  saveFlow,
+  setFlowEnabled,
+  type FlowSubjectRef,
+} from '@/lib/flows/flow-crud'
 import { generateFlowDraft } from '../../../_ai-actions'
+import { compileEmailDesign } from '@/lib/flows/email-design-actions'
+
+export type EmailTemplateOption = { id: string; name: string }
+
+// The drag-and-drop email builder, reused for the send_email "design" (one-off)
+// mode. Client-only (GrapesJS touches window) → dynamic, ssr:false.
+const EmailDesignBuilder = dynamic(
+  () => import('@/app/(app)/admin/email-templates/_builder.client'),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-full items-center justify-center text-sm text-slate-400">
+        Loading editor…
+      </div>
+    ),
+  },
+)
 
 export type FlowSummary = { id: string; name: string; enabled: boolean; graph: AutomationGraph }
 type FlowMeta = { id: string; name: string; enabled: boolean }
@@ -104,6 +136,16 @@ function triggerSummary(t: TriggerData): string {
       return `Scheduled (${t.cron})`
     case 'session_overdue':
       return 'Session check-in overdue'
+    case 'on_create':
+      return 'On create'
+    case 'on_sign':
+      return 'On sign'
+    case 'on_lock':
+      return 'On lock / close'
+    case 'on_unlock':
+      return 'On unlock / reopen'
+    case 'on_delete':
+      return 'On delete'
   }
 }
 
@@ -118,6 +160,27 @@ const ACTION_LABEL: Record<ActionData['action'], string> = {
   create_response: 'Start another form',
   analyze_photos: 'Analyze photos (AI)',
   start_monitored_session: 'Start monitored session',
+}
+
+const TRIGGER_LABEL: Record<TriggerData['trigger'], string> = {
+  on_submit: 'A record is submitted',
+  on_field_value: 'A field matches a condition',
+  status_change: 'Status changes',
+  scheduled: 'On a schedule',
+  session_overdue: 'A monitored session goes overdue',
+  on_create: 'A record is created',
+  on_sign: 'A record is signed',
+  on_lock: 'A record is locked / closed',
+  on_unlock: 'A record is unlocked / reopened',
+  on_delete: 'A record is deleted',
+}
+
+// Build a fresh TriggerData from a trigger kind (used by the picker + defaults).
+function buildTrigger(v: TriggerData['trigger'], firstField: string, firstStatus: string): TriggerData {
+  if (v === 'on_field_value') return { trigger: 'on_field_value', rule: { op: 'isSet', field: firstField } }
+  if (v === 'status_change') return { trigger: 'status_change', to: firstStatus }
+  if (v === 'scheduled') return { trigger: 'scheduled', cron: '0 8 * * 1' }
+  return { trigger: v } as TriggerData
 }
 
 const CARD = 'rounded-lg border bg-white px-3 py-2 text-xs shadow-sm w-48 dark:bg-slate-900'
@@ -206,10 +269,17 @@ function ActionNode({ data, selected }: NodeProps) {
 
 // --- Default node data ------------------------------------------------------
 
-function defaultData(kind: NData['kind'], firstField: string): NData {
+function defaultData(kind: NData['kind'], firstField: string, profile: FlowSubjectProfile): NData {
   switch (kind) {
     case 'trigger':
-      return { kind: 'trigger', trigger: { trigger: 'on_submit' } }
+      return {
+        kind: 'trigger',
+        trigger: buildTrigger(
+          profile.triggers[0] ?? 'on_submit',
+          firstField,
+          profile.statusValues?.[0] ?? 'submitted',
+        ),
+      }
     case 'condition':
       return { kind: 'condition', rule: { op: 'isSet', field: firstField }, label: 'If…' }
     case 'gate':
@@ -220,12 +290,7 @@ function defaultData(kind: NData['kind'], firstField: string): NData {
     case 'action':
       return {
         kind: 'action',
-        action: {
-          action: 'send_email',
-          to: [{ type: 'submitter' }],
-          subject: '',
-          bodyTemplate: '',
-        },
+        action: defaultAction(profile.actions[0] ?? 'send_email', firstField ? [firstField] : []),
       }
   }
 }
@@ -468,24 +533,29 @@ const FLOW_TEMPLATES: FlowTemplate[] = [
 ]
 
 export function FlowsCanvas({
-  templateId,
-  templateName,
-  fieldIds,
+  profile,
+  emailTemplates,
   flows,
   canEdit,
   canGenerate,
   embedded = false,
+  backHref,
 }: {
-  templateId: string
-  templateName: string
-  fieldIds: string[]
+  profile: FlowSubjectProfile
+  emailTemplates: EmailTemplateOption[]
   flows: FlowSummary[]
   canEdit: boolean
   canGenerate: boolean
   // When rendered inside the unified App editor, hide the standalone back link
-  // + the redundant "templateName ·" prefix (the editor header already has it).
+  // + the redundant subject-name prefix (the editor header already has it).
   embedded?: boolean
+  backHref?: string
 }) {
+  // Subject-driven: triggers/actions/status/fields all come from the profile, so
+  // the same canvas renders for a form template OR a native module.
+  const subject: FlowSubjectRef = { type: profile.subjectType, key: profile.subjectKey }
+  const subjectLabel = profile.label
+  const fieldIds = useMemo(() => profile.fields.map((f) => f.key), [profile])
   // Working graphs live in a ref keyed by flow id; switching flows captures the
   // current canvas into the ref and loads the target's graph. Save persists the
   // selected flow only (n8n-style). The sidebar list holds name/enabled.
@@ -522,7 +592,10 @@ export function FlowsCanvas({
     [],
   )
 
-  const availableFields = useMemo(() => fieldIds.map((id) => ({ id, label: id })), [fieldIds])
+  const availableFields = useMemo(
+    () => profile.fields.map((f) => ({ id: f.key, label: f.label })),
+    [profile],
+  )
   const selectedNode = nodes.find((n) => n.id === selectedNodeId) ?? null
   const selectedFlow = flowList.find((f) => f.id === selectedFlowId) ?? null
 
@@ -550,7 +623,7 @@ export function FlowsCanvas({
 
   const addFlow = () => {
     start(async () => {
-      const res = await createFlow(templateId, 'New flow')
+      const res = await createFlow(subject, 'New flow')
       if (!res.ok || !res.id) {
         toast.error(res.error ?? 'Could not create the flow')
         return
@@ -602,7 +675,7 @@ export function FlowsCanvas({
       id,
       type: kind,
       position: { x: 80 + Math.random() * 240, y: 80 + Math.random() * 240 },
-      data: defaultData(kind, fieldIds[0] ?? ''),
+      data: defaultData(kind, fieldIds[0] ?? '', profile),
     }
     setNodes((ns) => [...ns, node])
     setSelectedNodeId(id)
@@ -780,11 +853,11 @@ export function FlowsCanvas({
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <header className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-white px-4 py-2 dark:border-slate-800 dark:bg-slate-900">
           <div className="flex min-w-0 items-center gap-2 text-sm">
-            {embedded ? null : (
+            {!embedded && backHref ? (
               <>
                 <Link
-                  href={`/forms/templates/${templateId}`}
-                  title="Back to app"
+                  href={backHref}
+                  title="Back"
                   className="flex items-center gap-1 rounded-md px-2 py-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
                 >
                   <ArrowLeft size={15} />
@@ -792,9 +865,9 @@ export function FlowsCanvas({
                 </Link>
                 <span className="h-4 w-px bg-slate-200" />
               </>
-            )}
+            ) : null}
             <span className="min-w-0 truncate">
-              {embedded ? null : <span className="font-semibold">{templateName}</span>}{' '}
+              {embedded ? null : <span className="font-semibold">{subjectLabel}</span>}{' '}
               <span className={embedded ? 'font-semibold text-slate-700' : 'text-slate-400'}>
                 {embedded ? '' : '· '}
                 {selectedFlow ? selectedFlow.name : 'Flows'}
@@ -931,6 +1004,8 @@ export function FlowsCanvas({
             data={selectedNode.data}
             fieldIds={fieldIds}
             availableFields={availableFields}
+            profile={profile}
+            emailTemplates={emailTemplates}
             readOnly={!canEdit}
             onChange={(d) => patchData(selectedNode.id, d)}
           />
@@ -1005,12 +1080,16 @@ function NodeInspector({
   data,
   fieldIds,
   availableFields,
+  profile,
+  emailTemplates,
   readOnly,
   onChange,
 }: {
   data: NData
   fieldIds: string[]
   availableFields: { id: string; label: string }[]
+  profile: FlowSubjectProfile
+  emailTemplates: EmailTemplateOption[]
   readOnly: boolean
   onChange: (d: NData) => void
 }) {
@@ -1024,24 +1103,21 @@ function NodeInspector({
             disabled={readOnly}
             onChange={(e) => {
               const v = e.target.value as TriggerData['trigger']
-              const next: TriggerData =
-                v === 'on_field_value'
-                  ? { trigger: 'on_field_value', rule: { op: 'isSet', field: fieldIds[0] ?? '' } }
-                  : v === 'status_change'
-                    ? { trigger: 'status_change', to: 'submitted' }
-                    : v === 'scheduled'
-                      ? { trigger: 'scheduled', cron: '0 8 * * 1' }
-                      : v === 'session_overdue'
-                        ? { trigger: 'session_overdue' }
-                        : { trigger: 'on_submit' }
-              onChange({ kind: 'trigger', trigger: next })
+              onChange({
+                kind: 'trigger',
+                trigger: buildTrigger(
+                  v,
+                  fieldIds[0] ?? '',
+                  profile.statusValues?.[0] ?? 'submitted',
+                ),
+              })
             }}
           >
-            <option value="on_submit">A response is submitted</option>
-            <option value="on_field_value">A field matches a condition</option>
-            <option value="status_change">Status changes</option>
-            <option value="scheduled">On a schedule</option>
-            <option value="session_overdue">A monitored session goes overdue</option>
+            {profile.triggers.map((tk) => (
+              <option key={tk} value={tk}>
+                {TRIGGER_LABEL[tk]}
+              </option>
+            ))}
           </Select>
         </Field>
         {t.trigger === 'on_field_value' ? (
@@ -1073,9 +1149,9 @@ function NodeInspector({
                 })
               }
             >
-              {['submitted', 'in_review', 'closed', 'rejected', 'non_compliant'].map((s) => (
+              {(profile.statusValues ?? ['submitted']).map((s) => (
                 <option key={s} value={s}>
-                  {s.replace('_', ' ')}
+                  {s.replace(/_/g, ' ')}
                 </option>
               ))}
             </Select>
@@ -1182,31 +1258,94 @@ function NodeInspector({
   }
 
   // action
-  return <ActionInspector data={data} fieldIds={fieldIds} readOnly={readOnly} onChange={onChange} />
+  return (
+    <ActionInspector
+      data={data}
+      fieldIds={fieldIds}
+      actions={profile.actions}
+      emailTemplates={emailTemplates}
+      readOnly={readOnly}
+      onChange={onChange}
+    />
+  )
 }
 
 function ActionInspector({
   data,
   fieldIds,
+  actions,
+  emailTemplates,
   readOnly,
   onChange,
 }: {
   data: Extract<NData, { kind: 'action' }>
   fieldIds: string[]
+  actions: ActionData['action'][]
+  emailTemplates: EmailTemplateOption[]
   readOnly: boolean
   onChange: (d: NData) => void
 }) {
   const a = data.action
   const set = (action: ActionData) => onChange({ kind: 'action', action })
+  const actionChoices = actions.length ? actions : (Object.keys(ACTION_LABEL) as ActionData['action'][])
+
+  // send_email "design" (one-off) mode — a full-screen drag-and-drop builder.
+  const [designOpen, setDesignOpen] = useState(false)
+  const [designBusy, setDesignBusy] = useState(false)
+  const designRef = useRef<Editor | null>(null)
+  const saveDesign = async () => {
+    const ed = designRef.current
+    if (!ed || a.action !== 'send_email') return
+    setDesignBusy(true)
+    try {
+      const design = ed.getProjectData() as Record<string, unknown>
+      const mjmlSource = ed.getHtml()
+      const res = await compileEmailDesign(mjmlSource)
+      if (!res.ok) {
+        toast.error(res.error ?? 'Could not compile the design')
+        return
+      }
+      set({ ...a, mode: 'design', design, compiledHtml: res.html ?? '' })
+      setDesignOpen(false)
+    } finally {
+      setDesignBusy(false)
+    }
+  }
+
   return (
     <div className="space-y-3">
+      {designOpen ? (
+        <div className="fixed inset-0 z-[60] flex flex-col bg-white dark:bg-slate-950">
+          <div className="flex items-center justify-between border-b border-slate-200 px-4 py-2 dark:border-slate-800">
+            <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+              Email design
+            </span>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => setDesignOpen(false)}>
+                Cancel
+              </Button>
+              <Button size="sm" disabled={designBusy} onClick={saveDesign}>
+                {designBusy ? 'Saving…' : 'Save design'}
+              </Button>
+            </div>
+          </div>
+          <div className="min-h-0 flex-1">
+            <EmailDesignBuilder
+              initialDesign={a.action === 'send_email' ? (a.design ?? null) : null}
+              onReady={(ed) => {
+                designRef.current = ed
+              }}
+            />
+          </div>
+        </div>
+      ) : null}
       <Field label="Action">
         <Select
           value={a.action}
           disabled={readOnly}
           onChange={(e) => set(defaultAction(e.target.value as ActionData['action'], fieldIds))}
         >
-          {(Object.keys(ACTION_LABEL) as ActionData['action'][]).map((k) => (
+          {actionChoices.map((k) => (
             <option key={k} value={k}>
               {ACTION_LABEL[k]}
             </option>
@@ -1256,21 +1395,92 @@ function ActionInspector({
               />
             </Field>
           ) : null}
-          <Field label="Subject">
-            <Input
-              value={a.subject}
+          <Field label="Email content">
+            <Select
+              value={a.mode ?? 'inline'}
               disabled={readOnly}
-              onChange={(e) => set({ ...a, subject: e.target.value })}
-            />
+              onChange={(e) =>
+                set({ ...a, mode: e.target.value as 'inline' | 'template' | 'design' })
+              }
+            >
+              <option value="inline">Write it here</option>
+              <option value="template">Use a saved template</option>
+              <option value="design">Design one (drag &amp; drop)</option>
+            </Select>
           </Field>
-          <Field label="Body (supports {{field_id}})">
-            <Textarea
-              rows={4}
-              value={a.bodyTemplate}
-              disabled={readOnly}
-              onChange={(e) => set({ ...a, bodyTemplate: e.target.value })}
-            />
-          </Field>
+          {(a.mode ?? 'inline') === 'design' ? (
+            <>
+              <Field label="Subject">
+                <Input
+                  value={a.subjectTemplate ?? ''}
+                  disabled={readOnly}
+                  onChange={(e) => set({ ...a, subjectTemplate: e.target.value })}
+                />
+              </Field>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={readOnly}
+                onClick={() => setDesignOpen(true)}
+              >
+                {a.compiledHtml ? 'Edit design' : 'Open visual builder'}
+              </Button>
+              {a.compiledHtml ? (
+                <p className="text-xs text-emerald-600">Design saved — Save the flow to keep it.</p>
+              ) : (
+                <p className="text-xs text-slate-400">
+                  Build a one-off email with the drag-and-drop editor.
+                </p>
+              )}
+            </>
+          ) : (a.mode ?? 'inline') === 'template' ? (
+            <>
+              <Field label="Template">
+                <Select
+                  value={a.templateId ?? ''}
+                  disabled={readOnly}
+                  onChange={(e) => set({ ...a, templateId: e.target.value })}
+                >
+                  <option value="">— choose a template —</option>
+                  {emailTemplates.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              {emailTemplates.length === 0 ? (
+                <p className="text-xs text-slate-400">
+                  No templates yet — create one in Admin → Email templates.
+                </p>
+              ) : null}
+              <Field label="Subject override (optional)">
+                <Input
+                  value={a.subjectOverride ?? ''}
+                  disabled={readOnly}
+                  onChange={(e) => set({ ...a, subjectOverride: e.target.value })}
+                />
+              </Field>
+            </>
+          ) : (
+            <>
+              <Field label="Subject">
+                <Input
+                  value={a.subject ?? ''}
+                  disabled={readOnly}
+                  onChange={(e) => set({ ...a, subject: e.target.value })}
+                />
+              </Field>
+              <Field label="Body (supports {{token}})">
+                <Textarea
+                  rows={4}
+                  value={a.bodyTemplate ?? ''}
+                  disabled={readOnly}
+                  onChange={(e) => set({ ...a, bodyTemplate: e.target.value })}
+                />
+              </Field>
+            </>
+          )}
         </>
       ) : null}
 

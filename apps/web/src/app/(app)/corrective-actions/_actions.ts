@@ -23,6 +23,7 @@ import {
 import { emitCorrectiveActionAssigned, emitCorrectiveActionCompleted } from '@beaconhs/events'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { runModuleFlows } from '@/lib/flows/run-module-flows'
 
 export type ActionResult = { ok: true } | { ok: false; error: string }
 
@@ -291,6 +292,12 @@ export async function closeCorrectiveAction(args: {
     after: { status: 'closed', closedAt: new Date().toISOString(), costImpact: parsedCost },
   })
   await emitCorrectiveActionCompleted(ctx, { caId: args.caId, completerUserId: ctx.userId })
+  await runModuleFlows(ctx, {
+    moduleKey: 'corrective-actions',
+    event: 'status_change',
+    subjectId: args.caId,
+    toStatus: 'closed',
+  })
   revalidatePath(`/corrective-actions/${args.caId}`)
   revalidatePath('/corrective-actions')
   revalidatePath('/corrective-actions/reports/overdue')

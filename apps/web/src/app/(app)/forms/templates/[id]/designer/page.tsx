@@ -10,6 +10,7 @@ import {
 import type { FormSchemaV1 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { loadNavConfig } from '@/lib/nav/resolve'
+import { listActiveEmailTemplates } from '@/lib/email-templates'
 import { FormDesigner } from './form-designer'
 import type { FlowSummary } from '../flows/_flows-canvas'
 
@@ -91,6 +92,7 @@ export default async function FormDesignerPage({
   })
 
   if (!data) notFound()
+  const emailTemplateOptions = await listActiveEmailTemplates(ctx)
   let latestSchema: FormSchemaV1
   let currentVersion: number
   if (!data.latestVersion) {
@@ -128,6 +130,7 @@ export default async function FormDesignerPage({
       allowedRoles={data.tmpl.allowedRoles ?? []}
       roles={data.tenantRoles}
       flows={data.flows as FlowSummary[]}
+      emailTemplates={emailTemplateOptions}
       canGenerate={can(ctx, 'forms.ai.generate')}
       canPin={canPin}
       pinned={data.pinned}

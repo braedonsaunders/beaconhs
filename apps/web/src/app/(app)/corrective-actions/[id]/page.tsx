@@ -27,6 +27,10 @@ import {
 import { publicUrl } from '@beaconhs/storage'
 import { requireRequestContext } from '@/lib/auth'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
+import { runModuleFlows } from '@/lib/flows/run-module-flows'
+import { FlowApprovals } from '@/components/flows/flow-approvals'
+import { getPendingFlowGatesForSubject } from '@/lib/flows/gate-store'
+import { canManageSubjectGates } from '@/lib/flows/registry'
 import { ActivityFeed } from '@/components/activity-feed'
 import { DetailPageLayout } from '@/components/page-layout'
 import { PremiumSection as Section } from '@/components/premium-section'
@@ -83,6 +87,12 @@ async function updateStatus(formData: FormData) {
     action: 'update',
     summary: `Status moved to "${status.replace(/_/g, ' ')}"`,
     after: { status },
+  })
+  await runModuleFlows(ctx, {
+    moduleKey: 'corrective-actions',
+    event: 'status_change',
+    subjectId: id,
+    toStatus: status,
   })
   if (status === 'pending_verification') {
     await emitCorrectiveActionCompleted(ctx, { caId: id, completerUserId: ctx.userId })
@@ -200,6 +210,12 @@ export default async function CorrectiveActionPage({
   const sp = await searchParams
   const drawer = pickString(sp.drawer)
   const ctx = await requireRequestContext()
+  const pendingGates = await getPendingFlowGatesForSubject(
+    ctx,
+    'module',
+    id,
+    canManageSubjectGates(ctx, 'module', 'corrective-actions'),
+  )
   const data = await ctx.db(async (tx) => {
     const [ca] = await tx
       .select()
@@ -392,6 +408,7 @@ export default async function CorrectiveActionPage({
       subtabs={<SectionNav sections={sectionItems} />}
     >
       <div className="space-y-5">
+        {pendingGates.length > 0 ? <FlowApprovals gates={pendingGates} /> : null}
         {/* ===================== OVERVIEW ===================== */}
         <section id="section-overview" className="scroll-mt-2 space-y-5">
           <div className="flex flex-col gap-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:bg-slate-900">

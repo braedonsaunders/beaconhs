@@ -35,6 +35,7 @@ import {
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
+import { runModuleFlows } from '@/lib/flows/run-module-flows'
 
 // All HazID server actions assume a tenant is active. requireRequestContext
 // types tenantId as string | null because some admin pages run pre-tenant —
@@ -415,6 +416,7 @@ export async function createAssessment(formData: FormData): Promise<{ id: string
     summary: `Created ${created.reference}`,
     after: { reference: created.reference, assessmentTypeId, siteOrgUnitId },
   })
+  await runModuleFlows(ctx, { moduleKey: 'hazid', event: 'on_create', subjectId: created.id })
   revalidatePath('/hazard-assessments')
   return { id: created.id }
 }
@@ -626,6 +628,7 @@ export async function lockAssessment(formData: FormData) {
     action: 'update',
     summary: 'Locked',
   })
+  await runModuleFlows(ctx, { moduleKey: 'hazid', event: 'on_lock', subjectId: id })
   revalidateAssessment(id)
 }
 
@@ -654,6 +657,7 @@ export async function unlockAssessment(formData: FormData) {
     action: 'update',
     summary: 'Unlocked (signatures cleared)',
   })
+  await runModuleFlows(ctx, { moduleKey: 'hazid', event: 'on_unlock', subjectId: id })
   revalidateAssessment(id)
 }
 
@@ -669,6 +673,7 @@ export async function deleteAssessment(formData: FormData) {
     action: 'delete',
     summary: 'Soft-deleted assessment',
   })
+  await runModuleFlows(ctx, { moduleKey: 'hazid', event: 'on_delete', subjectId: id })
   revalidatePath('/hazard-assessments')
   // Deleting from the detail page would otherwise reload into a 404.
   redirect('/hazard-assessments')
@@ -1337,6 +1342,10 @@ export async function addSignature(formData: FormData) {
     action: 'sign',
     summary: `Added ${signatureType} signature`,
   })
+  // Fire "on sign" Flows only when an actual signature was applied.
+  if (signatureDataUrl) {
+    await runModuleFlows(ctx, { moduleKey: 'hazid', event: 'on_sign', subjectId: assessmentId })
+  }
   revalidateAssessment(assessmentId)
 }
 

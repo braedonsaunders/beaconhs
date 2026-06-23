@@ -20,6 +20,7 @@ import type { RequestContext } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { getTenantAiConfig, getTenantAutoJournalAi } from '@/lib/ai-config'
 import { recordAudit } from '@/lib/audit'
+import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { getAuthorPersonId, htmlToText, journalCanReadAll, journalScopeWhere } from './_lib'
 import {
   buildTree,
@@ -123,6 +124,8 @@ export async function submitEntry(id: string): Promise<ActionOk | ActionErr> {
     action: 'publish',
     summary: `Submitted ${row.reference}`,
   })
+  // Fire any "on submit" journal Flows (email/notify/CAPA/approval). Guarded.
+  await runModuleFlows(ctx, { moduleKey: 'journals', event: 'on_submit', subjectId: id })
   // Background categorisation: when enabled (Admin → AI → Automation), summarise
   // and tag the submitted entry so logs stay organised without the worker doing
   // it. Best-effort — never block a submit on AI.
@@ -152,6 +155,7 @@ export async function deleteEntry(id: string): Promise<ActionOk | ActionErr> {
     action: 'delete',
     summary: `Deleted ${row.reference}`,
   })
+  await runModuleFlows(ctx, { moduleKey: 'journals', event: 'on_delete', subjectId: id })
   revalidatePath('/journals')
   return { ok: true }
 }

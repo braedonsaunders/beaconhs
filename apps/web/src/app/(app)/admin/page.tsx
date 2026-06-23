@@ -122,6 +122,12 @@ const GROUPS: Group[] = [
         title: 'Data sources',
         desc: 'Reference lists + live data your apps bind to — lookups, cascades, KPIs.',
       },
+      {
+        href: '/admin/email-templates',
+        icon: Mail,
+        title: 'Email templates',
+        desc: 'Drag-and-drop branded emails that flows send (Send email → template).',
+      },
     ],
   },
   {

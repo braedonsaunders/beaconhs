@@ -1,0 +1,103 @@
+// FlowSubjectProfile per native module — the pure-data description that drives
+// the SAME FlowsCanvas (which triggers/actions/status/fields it offers) and the
+// lint. Field keys here MUST match the keys each module's adapter loadValues()
+// returns, so conditions / {{interpolation}} / recipient `field` targets resolve.
+
+import type { FlowSubjectProfile } from '@beaconhs/forms-core'
+
+export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
+  journals: {
+    subjectType: 'module',
+    subjectKey: 'journals',
+    label: 'Journals',
+    triggers: ['on_submit', 'on_delete'],
+    actions: ['send_email', 'notify_role', 'create_capa', 'webhook'],
+    statusValues: ['draft', 'submitted', 'archived'],
+    fields: [
+      { key: 'status', label: 'Status', kind: 'enum' },
+      { key: 'reference', label: 'Reference', kind: 'text' },
+      { key: 'title', label: 'Title', kind: 'text' },
+      { key: 'body_text', label: 'Body text', kind: 'text' },
+      { key: 'entry_date', label: 'Entry date', kind: 'date' },
+      { key: 'person_id', label: 'Author (person id)', kind: 'person' },
+      { key: 'supervisor_person_id', label: 'Supervisor (person id)', kind: 'person' },
+      { key: 'site_org_unit_id', label: 'Site', kind: 'org_unit' },
+      { key: 'tags', label: 'Tags', kind: 'text' },
+    ],
+  },
+  hazid: {
+    subjectType: 'module',
+    subjectKey: 'hazid',
+    label: 'Hazard Assessments',
+    triggers: ['on_create', 'on_sign', 'on_lock', 'on_unlock', 'on_delete'],
+    actions: ['send_email', 'notify_role', 'create_capa', 'webhook'],
+    fields: [
+      { key: 'reference', label: 'Reference', kind: 'text' },
+      { key: 'job_scope', label: 'Job scope', kind: 'text' },
+      { key: 'location_on_site', label: 'Location on site', kind: 'text' },
+      { key: 'locked', label: 'Locked', kind: 'bool' },
+      { key: 'in_progress', label: 'In progress', kind: 'bool' },
+      { key: 'occurred_at', label: 'Occurred at', kind: 'date' },
+      { key: 'site_org_unit_id', label: 'Site', kind: 'org_unit' },
+      { key: 'project_org_unit_id', label: 'Project', kind: 'org_unit' },
+      { key: 'supervisor_person_id', label: 'Supervisor (person id)', kind: 'person' },
+      { key: 'assessment_type_id', label: 'Assessment type', kind: 'text' },
+    ],
+  },
+  incidents: {
+    subjectType: 'module',
+    subjectKey: 'incidents',
+    label: 'Incidents',
+    triggers: ['on_create', 'status_change', 'on_lock', 'on_unlock'],
+    actions: ['send_email', 'notify_role', 'create_capa', 'webhook'],
+    statusValues: ['reported', 'under_investigation', 'pending_review', 'closed', 'reopened'],
+    fields: [
+      { key: 'status', label: 'Status', kind: 'enum' },
+      { key: 'reference', label: 'Reference', kind: 'text' },
+      { key: 'title', label: 'Title', kind: 'text' },
+      { key: 'type', label: 'Type', kind: 'enum' },
+      { key: 'severity', label: 'Severity', kind: 'enum' },
+      { key: 'occurred_at', label: 'Occurred at', kind: 'date' },
+      { key: 'site_org_unit_id', label: 'Site', kind: 'org_unit' },
+      { key: 'department_id', label: 'Department', kind: 'text' },
+      { key: 'supervisor_person_id', label: 'Supervisor (person id)', kind: 'person' },
+    ],
+  },
+  'corrective-actions': {
+    subjectType: 'module',
+    subjectKey: 'corrective-actions',
+    label: 'Corrective Actions',
+    triggers: ['on_create', 'status_change'],
+    actions: ['send_email', 'notify_role', 'webhook'],
+    statusValues: ['open', 'in_progress', 'pending_verification', 'closed', 'cancelled'],
+    fields: [
+      { key: 'status', label: 'Status', kind: 'enum' },
+      { key: 'reference', label: 'Reference', kind: 'text' },
+      { key: 'title', label: 'Title', kind: 'text' },
+      { key: 'severity', label: 'Severity', kind: 'enum' },
+      { key: 'due_on', label: 'Due on', kind: 'date' },
+      { key: 'site_org_unit_id', label: 'Site', kind: 'org_unit' },
+      { key: 'owner_tenant_user_id', label: 'Owner (user id)', kind: 'person' },
+    ],
+  },
+  inspections: {
+    subjectType: 'module',
+    subjectKey: 'inspections',
+    label: 'Inspections',
+    triggers: ['on_create', 'on_submit', 'status_change'],
+    actions: ['send_email', 'notify_role', 'create_capa', 'webhook'],
+    statusValues: ['draft', 'in_progress', 'submitted', 'closed'],
+    fields: [
+      { key: 'status', label: 'Status', kind: 'enum' },
+      { key: 'reference', label: 'Reference', kind: 'text' },
+      { key: 'type_id', label: 'Inspection type', kind: 'text' },
+      { key: 'occurred_at', label: 'Occurred at', kind: 'date' },
+      { key: 'site_org_unit_id', label: 'Site', kind: 'org_unit' },
+      { key: 'inspector_tenant_user_id', label: 'Inspector (user id)', kind: 'person' },
+    ],
+  },
+}
+
+export function moduleFlowProfile(moduleKey: string): FlowSubjectProfile | null {
+  return MODULE_FLOW_PROFILES[moduleKey] ?? null
+}

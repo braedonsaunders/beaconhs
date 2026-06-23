@@ -33,6 +33,7 @@ import {
   Tag,
   Timer,
   Users,
+  Workflow,
   Wrench,
   type LucideIcon,
 } from 'lucide-react'
@@ -71,6 +72,7 @@ const ICONS: Record<string, LucideIcon> = {
   tag: Tag,
   timer: Timer,
   users: Users,
+  workflow: Workflow,
   wrench: Wrench,
 }
 

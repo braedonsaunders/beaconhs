@@ -18,6 +18,7 @@ import {
 import { inspectionRecords, inspectionTypes, orgUnits } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { pickString } from '@/lib/list-params'
 import { PageContainer } from '@/components/page-layout'
 import { materialiseCriteriaForRecord, nextInspectionReference } from '../../_lib'
@@ -94,6 +95,8 @@ async function createRecord(formData: FormData) {
       criteriaMaterialised: materialised,
     },
   })
+
+  await runModuleFlows(ctx, { moduleKey: 'inspections', event: 'on_create', subjectId: row.id })
 
   revalidatePath('/inspections/records')
   redirect(`/inspections/records/${row.id}?tab=criteria`)

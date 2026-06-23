@@ -175,6 +175,7 @@ export async function generateFlowDraft(
       .where(eq(formAutomations.id, flowId))
       .limit(1)
     if (!flow) return null
+    if (!flow.templateId) return [] // module flow — no template schema to read
     const [v] = await tx
       .select({ schema: formTemplateVersions.schema })
       .from(formTemplateVersions)

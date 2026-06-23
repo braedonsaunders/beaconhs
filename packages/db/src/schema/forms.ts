@@ -467,9 +467,18 @@ export const formResponseScores = pgTable(
 
 // --- Flows (automation graphs) ---------------------------------------------
 
-// One unified automation graph per template (system actions + human gates).
+// A flow's SUBJECT: a Builder form template (today) OR a native module
+// (journals, hazard assessments, incidents, …). The SAME engine + canvas drive
+// both — see packages/forms-core/flow-subjects.ts.
+export const flowSubjectType = pgEnum('flow_subject_type', ['form_template', 'module'])
+
+// One unified automation graph per subject (system actions + human gates).
 // Edited in place — intentionally NOT pinned to an immutable version snapshot,
 // so a broken recipient/rule can be fixed without republishing the schema.
+//
+// Polymorphic: a form flow sets templateId (and, after backfill, subjectKey =
+// templateId); a module flow sets subjectType='module' + subjectKey=moduleKey
+// (e.g. 'journals') and leaves templateId null.
 export const formAutomations = pgTable(
   'form_automations',
   {
@@ -477,18 +486,65 @@ export const formAutomations = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    templateId: uuid('template_id')
-      .notNull()
-      .references(() => formTemplates.id, { onDelete: 'cascade' }),
+    subjectType: flowSubjectType('subject_type').notNull().default('form_template'),
+    subjectKey: text('subject_key'),
+    templateId: uuid('template_id').references(() => formTemplates.id, { onDelete: 'cascade' }),
     name: text('name').default('Flow').notNull(),
     enabled: boolean('enabled').default(true).notNull(),
     graph: jsonb('graph').$type<AutomationGraph>().notNull(),
     ...timestamps,
   },
   (t) => ({
-    // Many flows per template (each independently enable/disable-able).
+    // Many flows per subject (each independently enable/disable-able).
     templateIdx: index('form_automations_template_idx').on(t.templateId),
+    subjectIdx: index('form_automations_subject_idx').on(t.tenantId, t.subjectType, t.subjectKey),
     tenantIdx: index('form_automations_tenant_idx').on(t.tenantId),
+  }),
+)
+
+// Human approval GATES for ANY flow subject (forms + native modules). One row
+// per paused gate node; resolving it resumes the chosen branch. This is the
+// single gate store — it replaces the forms-only `form_response_steps` gate
+// rows (stepKey `gate:*`), so we never build two gate systems.
+export const flowGateStatus = pgEnum('flow_gate_status', ['pending', 'approved', 'rejected'])
+
+export const flowGates = pgTable(
+  'flow_gates',
+  {
+    id: id(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    subjectType: flowSubjectType('subject_type').notNull(),
+    subjectKey: text('subject_key'), // moduleKey | templateId
+    subjectId: uuid('subject_id').notNull(), // record id (responseId, journalId, …)
+    flowId: uuid('flow_id')
+      .notNull()
+      .references(() => formAutomations.id, { onDelete: 'cascade' }),
+    nodeId: text('node_id').notNull(),
+    title: text('title').notNull(),
+    assigneeTenantUserId: uuid('assignee_tenant_user_id').references(() => tenantUsers.id),
+    status: flowGateStatus('status').notNull().default('pending'),
+    signatureRequired: boolean('signature_required').default(false).notNull(),
+    signatureDataUrl: text('signature_data_url'),
+    comment: text('comment'),
+    decidedByTenantUserId: uuid('decided_by_tenant_user_id').references(() => tenantUsers.id),
+    decidedAt: timestamp('decided_at', { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => ({
+    subjectIdx: index('flow_gates_subject_idx').on(
+      t.tenantId,
+      t.subjectType,
+      t.subjectId,
+      t.status,
+    ),
+    assigneeIdx: index('flow_gates_assignee_idx').on(
+      t.tenantId,
+      t.assigneeTenantUserId,
+      t.status,
+    ),
+    flowIdx: index('flow_gates_flow_idx').on(t.flowId),
   }),
 )
 

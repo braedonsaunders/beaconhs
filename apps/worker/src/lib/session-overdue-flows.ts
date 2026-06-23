@@ -112,10 +112,12 @@ export async function runSessionOverdueFlows(args: {
         } else if (action.action === 'send_email') {
           const to = await resolveEmails(tx, tenantId, action.to, submitterEmail, data)
           if (to.length > 0) {
-            const body = interpolate(action.bodyTemplate, data)
+            // Worker handles inline email only; template/design modes (DB-backed)
+            // are a web-side concern. Guard the now-optional inline fields.
+            const body = interpolate(action.bodyTemplate ?? '', data)
             await enqueueEmail({
               to,
-              subject: interpolate(action.subject, data) || 'Monitored session check-in overdue',
+              subject: interpolate(action.subject ?? '', data) || 'Monitored session check-in overdue',
               text: body,
               html: `<div style="font-family:system-ui,Arial,sans-serif;white-space:pre-wrap">${body}</div>`,
               meta: { tenantId, category: 'lone_worker' },

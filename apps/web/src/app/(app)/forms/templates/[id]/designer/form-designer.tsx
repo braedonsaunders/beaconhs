@@ -74,8 +74,12 @@ import {
 import {
   FIELD_TYPES,
   entityKindForPicker,
+  FORM_TEMPLATE_ACTIONS,
+  FORM_TEMPLATE_TRIGGERS,
+  FORM_STATUS_VALUES,
   type CanvasLayout,
   type DataBinding,
+  type FlowSubjectProfile,
   type DefaultValueExpression,
   type FieldType,
   type FormField,
@@ -295,6 +299,7 @@ export function FormDesigner({
   allowedRoles = [],
   roles = [],
   flows = [],
+  emailTemplates = [],
   canGenerate = false,
   canPin = false,
   pinned = false,
@@ -309,6 +314,7 @@ export function FormDesigner({
   allowedRoles?: string[]
   roles?: { key: string; name: string }[]
   flows?: FlowSummary[]
+  emailTemplates?: { id: string; name: string }[]
   canGenerate?: boolean
   canPin?: boolean
   pinned?: boolean
@@ -346,6 +352,20 @@ export function FormDesigner({
     for (const sec of schema.sections) for (const f of sec.fields) ids.push(f.id)
     return ids
   }, [schema])
+
+  // The form-template flow subject: the full Builder vocabulary, fields = live ids.
+  const flowProfile = useMemo<FlowSubjectProfile>(
+    () => ({
+      subjectType: 'form_template',
+      subjectKey: templateId,
+      label: appName,
+      triggers: FORM_TEMPLATE_TRIGGERS,
+      actions: FORM_TEMPLATE_ACTIONS,
+      statusValues: FORM_STATUS_VALUES,
+      fields: liveFieldIds.map((id) => ({ key: id, label: id })),
+    }),
+    [templateId, appName, liveFieldIds],
+  )
 
   const selectedField = useMemo(() => {
     if (selection.kind !== 'field') return null
@@ -825,9 +845,8 @@ export function FormDesigner({
           {surface === 'flows' ? (
             <div className="min-h-0 flex-1">
               <FlowsCanvas
-                templateId={templateId}
-                templateName={appName}
-                fieldIds={liveFieldIds}
+                profile={flowProfile}
+                emailTemplates={emailTemplates}
                 flows={flows}
                 canEdit
                 canGenerate={canGenerate}

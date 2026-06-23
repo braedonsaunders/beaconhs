@@ -66,8 +66,9 @@ import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { computeFormScore } from '@/app/(app)/forms/_lib/score-router'
 import { pickString } from '@/lib/list-params'
 import { WorkflowPanel, type WorkflowStepProp } from './_workflow-panel'
-import { FlowApprovalsPanel } from './_flow-approvals'
-import { getPendingFlowGates } from './_flow-gate-actions'
+import { FlowApprovals } from '@/components/flows/flow-approvals'
+import { getPendingFlowGatesForSubject } from '@/lib/flows/gate-store'
+import { canManageSubjectGates } from '@/lib/flows/registry'
 import { createCorrectiveActionFromResponse, createIncidentFromResponse } from './_spawn-actions'
 import { buildSpawnPrefill, labelForField } from './_spawn-prefill'
 import { SpawnDrawers, type SpawnDrawerKind } from './_spawn-drawers'
@@ -239,7 +240,12 @@ export default async function FormResponsePage({
   })
 
   if (!data) notFound()
-  const pendingFlowGates = await getPendingFlowGates(id)
+  const pendingFlowGates = await getPendingFlowGatesForSubject(
+    ctx,
+    'form_template',
+    id,
+    canManageSubjectGates(ctx, 'form_template', null),
+  )
   const {
     response,
     template,
@@ -645,7 +651,7 @@ export default async function FormResponsePage({
               })
             })()}
 
-            {pendingFlowGates.length > 0 ? <FlowApprovalsPanel gates={pendingFlowGates} /> : null}
+            {pendingFlowGates.length > 0 ? <FlowApprovals gates={pendingFlowGates} /> : null}
 
             <Section
               title={`Workflow steps (${workflowStepProps.length})`}

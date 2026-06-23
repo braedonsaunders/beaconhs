@@ -1,27 +1,29 @@
 'use client'
 
-// Flow approvals — pending human gates from the automation canvas. The assignee
-// (or a forms manager) approves/rejects; resolving resumes the flow branch
-// server-side. Distinct from the template's linear workflow sign-off panel.
+// Flow approvals — pending human gates from the automation canvas, for ANY
+// subject (a form response, a journal, a hazard assessment, …). The assignee (or
+// a manager for that subject) approves/rejects; resolving resumes the flow branch
+// server-side. Mount on any record's detail page with its subjectType+subjectId.
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Check, ShieldCheck, X } from 'lucide-react'
 import { Button } from '@beaconhs/ui'
 import { toast } from '@/lib/toast'
-import { resolveFlowGate, type PendingFlowGate } from './_flow-gate-actions'
+import { resolveFlowGate } from '@/lib/flows/gate-actions'
+import type { PendingFlowGate } from '@/lib/flows/gate-store'
 
-export function FlowApprovalsPanel({ gates }: { gates: PendingFlowGate[] }) {
+export function FlowApprovals({ gates }: { gates: PendingFlowGate[] }) {
   const router = useRouter()
   const [pending, start] = useTransition()
   const [busyId, setBusyId] = useState<string | null>(null)
 
   if (gates.length === 0) return null
 
-  const act = (stepId: string, decision: 'approve' | 'reject') => {
-    setBusyId(stepId)
+  const act = (gateId: string, decision: 'approve' | 'reject') => {
+    setBusyId(gateId)
     start(async () => {
-      const res = await resolveFlowGate({ stepId, decision })
+      const res = await resolveFlowGate({ gateId, decision })
       setBusyId(null)
       if (!res.ok) {
         toast.error(res.error)
@@ -33,11 +35,11 @@ export function FlowApprovalsPanel({ gates }: { gates: PendingFlowGate[] }) {
   }
 
   return (
-    <section className="rounded-xl border border-violet-200 bg-violet-50/40 p-4">
+    <section className="rounded-xl border border-violet-200 bg-violet-50/40 p-4 dark:border-violet-900 dark:bg-violet-950/20">
       <div className="mb-3 flex items-center gap-2">
         <ShieldCheck size={16} className="text-violet-600" />
-        <h3 className="text-sm font-semibold text-slate-800">Flow approvals</h3>
-        <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-medium text-violet-700">
+        <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Flow approvals</h3>
+        <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-medium text-violet-700 dark:bg-violet-900 dark:text-violet-200">
           {gates.length} pending
         </span>
       </div>
@@ -45,11 +47,13 @@ export function FlowApprovalsPanel({ gates }: { gates: PendingFlowGate[] }) {
         {gates.map((g) => (
           <li
             key={g.id}
-            className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2"
+            className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900"
           >
             <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-slate-800">{g.title}</p>
-              <p className="text-xs text-slate-500">
+              <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-200">
+                {g.title}
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 {g.assigneeName ? `Assigned to ${g.assigneeName}` : 'Unassigned'}
                 {g.assignedToMe ? ' · you' : ''}
               </p>

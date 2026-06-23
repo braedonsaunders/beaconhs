@@ -18,9 +18,13 @@ const nextConfig: NextConfig = {
     '@beaconhs/plugin-sdk',
     '@beaconhs/storage',
     '@beaconhs/sync',
+    '@beaconhs/email-render',
   ],
   serverExternalPackages: [
     'postgres',
+    // MJML email compiler (Node-only, heavy) — used in the email-template save
+    // server action; keep it out of the Next bundle.
+    'mjml',
     // SQL drivers used by the data-sync database connector (server-only).
     'mysql2',
     'mssql',

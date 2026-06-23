@@ -258,4 +258,10 @@ export const TENANT_SCOPED_TABLES = [
   'sync_connections',
   'sync_crosswalk',
   'sync_runs',
+  // Unified Flows — human approval gates for ANY subject (forms + native
+  // modules); replaces the forms-only form_response_steps gate rows.
+  'flow_gates',
+  // Tenant-managed email template library (drag-and-drop builder) referenced by
+  // the send_email flow action.
+  'email_templates',
 ] as const

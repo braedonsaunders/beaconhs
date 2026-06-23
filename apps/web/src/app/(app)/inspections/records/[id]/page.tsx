@@ -42,6 +42,10 @@ import {
 } from '@beaconhs/db/schema'
 import { publicUrl } from '@beaconhs/storage'
 import { requireRequestContext } from '@/lib/auth'
+import { runModuleFlows } from '@/lib/flows/run-module-flows'
+import { FlowApprovals } from '@/components/flows/flow-approvals'
+import { getPendingFlowGatesForSubject } from '@/lib/flows/gate-store'
+import { canManageSubjectGates } from '@/lib/flows/registry'
 import { pickString } from '@/lib/list-params'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { ActivityFeed } from '@/components/activity-feed'
@@ -124,6 +128,15 @@ async function updateStatus(formData: FormData) {
   await logRecordAudit(ctx, id, `Status changed to "${status.replace(/_/g, ' ')}"`, 'update', {
     status,
   })
+  await runModuleFlows(ctx, {
+    moduleKey: 'inspections',
+    event: 'status_change',
+    subjectId: id,
+    toStatus: status,
+  })
+  if (status === 'submitted') {
+    await runModuleFlows(ctx, { moduleKey: 'inspections', event: 'on_submit', subjectId: id })
+  }
   revalidatePath(`/inspections/records/${id}`)
   revalidatePath('/inspections/records')
 }
@@ -576,6 +589,12 @@ export default async function InspectionRecordDetailPage({
   const sp = await searchParams
   const active: Tab = pickActiveTab(sp, TABS, 'overview')
   const ctx = await requireRequestContext()
+  const pendingGates = await getPendingFlowGatesForSubject(
+    ctx,
+    'module',
+    id,
+    canManageSubjectGates(ctx, 'module', 'inspections'),
+  )
 
   const data = await ctx.db(async (tx) => {
     const [row] = await tx
@@ -782,6 +801,7 @@ export default async function InspectionRecordDetailPage({
       }
     >
       <div className="space-y-5">
+        {pendingGates.length > 0 ? <FlowApprovals gates={pendingGates} /> : null}
         {active === 'overview' ? (
           <>
             <Section title="General information">
