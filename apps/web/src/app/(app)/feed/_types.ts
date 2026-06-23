@@ -27,3 +27,17 @@ export type FeedEvent = {
 }
 
 export type FeedPage = { events: FeedEvent[]; nextCursor: string | null }
+
+/**
+ * Lightweight activity rollup for the feed's summary rail. Counts are scoped the
+ * same way as the timeline itself (per-module visibility), so they never reveal
+ * more than the timeline would.
+ */
+export type FeedSummary = {
+  /** Events per kind over the last 7 days. */
+  byKind: Record<FeedKind, number>
+  /** Total across all kinds over the last 7 days. */
+  total: number
+  /** Total across all kinds in the last 24 hours. */
+  today: number
+}

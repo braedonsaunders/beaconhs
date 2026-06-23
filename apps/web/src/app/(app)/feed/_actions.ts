@@ -6,9 +6,9 @@
 
 import { requireRequestContext } from '@/lib/auth'
 import { getFeed } from './_data'
-import type { FeedPage } from './_types'
+import type { FeedKind, FeedPage } from './_types'
 
-export async function fetchFeedPage(cursor: string | null): Promise<FeedPage> {
+export async function fetchFeedPage(cursor: string | null, kinds?: FeedKind[]): Promise<FeedPage> {
   const ctx = await requireRequestContext()
-  return getFeed(ctx, { cursor })
+  return getFeed(ctx, { cursor, kinds })
 }

@@ -9,7 +9,7 @@
 // sites, self → only yours, none → the source is excluded entirely. This never
 // shows more than the caller's permission tier implies.
 
-import { and, asc, desc, eq, inArray, isNotNull, isNull, lt, sql, type SQL } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, sql, type SQL } from 'drizzle-orm'
 import { alias, type AnyPgColumn } from 'drizzle-orm/pg-core'
 import {
   attachments,
@@ -28,7 +28,7 @@ import { publicUrl } from '@beaconhs/storage'
 import type { Database } from '@beaconhs/db'
 import { can, type RequestContext } from '@beaconhs/tenant'
 import { getAuthorPersonId, htmlToText, journalScopeWhere, snippetOf } from '../journals/_lib'
-import type { FeedEvent, FeedPage, FeedTag } from './_types'
+import type { FeedEvent, FeedKind, FeedPage, FeedSummary, FeedTag } from './_types'
 
 const PAGE = 20
 
@@ -76,17 +76,21 @@ const label = (s: string) => STATUS_LABEL[s] ?? s
 
 export async function getFeed(
   ctx: RequestContext,
-  opts: { cursor?: string | null; limit?: number } = {},
+  opts: { cursor?: string | null; limit?: number; kinds?: FeedKind[] } = {},
 ): Promise<FeedPage> {
   const limit = Math.min(opts.limit ?? PAGE, 50)
   const cursor = opts.cursor ? new Date(opts.cursor) : null
   const authorPersonId = await getAuthorPersonId(ctx)
+  // Optional kind filter (drives the timeline's filter pills). Empty/undefined
+  // means "all kinds" — otherwise only the requested sources are queried.
+  const kindSet = opts.kinds && opts.kinds.length ? new Set<FeedKind>(opts.kinds) : null
+  const want = (k: FeedKind) => !kindSet || kindSet.has(k)
 
   const events = await ctx.db(async (tx) => {
     const all: FeedEvent[] = []
 
     // ---- Journals (submitted) ----
-    {
+    if (want('journal')) {
       // Submitted entries set submittedAt, but fall back to createdAt so seeded /
       // legacy rows (and any without a submit timestamp) still appear and sort.
       // NB: this is a raw sql() expression, so Drizzle can't infer the param type
@@ -152,7 +156,7 @@ export async function getFeed(
     }
 
     // ---- Incidents (reported) ----
-    {
+    if (want('incident')) {
       const scope = moduleScope(
         ctx,
         'incidents.read',
@@ -199,7 +203,7 @@ export async function getFeed(
     }
 
     // ---- Corrective actions (raised) ----
-    {
+    if (want('corrective_action')) {
       const scope = moduleScope(
         ctx,
         'ca.read',
@@ -246,7 +250,7 @@ export async function getFeed(
     }
 
     // ---- Form responses (submitted) ----
-    {
+    if (want('form')) {
       const scope = moduleScope(
         ctx,
         'forms.response.read',
@@ -303,6 +307,128 @@ export async function getFeed(
   const page = events.slice(0, limit)
   const nextCursor = page.length === limit ? page[page.length - 1]!.at : null
   return { events: page, nextCursor }
+}
+
+/**
+ * Counts for the feed's summary rail: events per kind over the last 7 days, plus
+ * a 24-hour total. Scoped per-module exactly like getFeed, so the numbers never
+ * exceed what the timeline would show. Each source contributes one cheap COUNT.
+ */
+export async function getFeedSummary(ctx: RequestContext): Promise<FeedSummary> {
+  const now = Date.now()
+  const week = new Date(now - 7 * 24 * 60 * 60 * 1000)
+  const dayIso = new Date(now - 24 * 60 * 60 * 1000).toISOString()
+  const authorPersonId = await getAuthorPersonId(ctx)
+
+  return ctx.db(async (tx) => {
+    const byKind: Record<FeedKind, number> = {
+      journal: 0,
+      incident: 0,
+      corrective_action: 0,
+      form: 0,
+    }
+    let today = 0
+
+    // ---- Journals (submitted) — raw coalesce, so cursor/cutoff are ISO casts. ----
+    {
+      const journalAt = sql`coalesce(${journalEntries.submittedAt}, ${journalEntries.createdAt})`
+      const rows = await tx
+        .select({
+          wk: sql<number>`count(*)`,
+          day: sql<number>`count(*) filter (where ${journalAt} >= ${dayIso}::timestamptz)`,
+        })
+        .from(journalEntries)
+        .where(
+          whereAll(
+            eq(journalEntries.status, 'submitted'),
+            isNull(journalEntries.deletedAt),
+            journalScopeWhere(ctx, authorPersonId),
+            sql`${journalAt} >= ${week.toISOString()}::timestamptz`,
+          ),
+        )
+      byKind.journal = Number(rows[0]?.wk ?? 0)
+      today += Number(rows[0]?.day ?? 0)
+    }
+
+    // ---- Incidents (reported) ----
+    {
+      const scope = moduleScope(
+        ctx,
+        'incidents.read',
+        incidents.siteOrgUnitId,
+        incidents.reportedByTenantUserId,
+      )
+      if (scope !== 'none') {
+        const rows = await tx
+          .select({
+            wk: sql<number>`count(*)`,
+            day: sql<number>`count(*) filter (where ${incidents.createdAt} >= ${dayIso}::timestamptz)`,
+          })
+          .from(incidents)
+          .where(whereAll(isNull(incidents.deletedAt), scope, gte(incidents.createdAt, week)))
+        byKind.incident = Number(rows[0]?.wk ?? 0)
+        today += Number(rows[0]?.day ?? 0)
+      }
+    }
+
+    // ---- Corrective actions (raised) ----
+    {
+      const scope = moduleScope(
+        ctx,
+        'ca.read',
+        correctiveActions.siteOrgUnitId,
+        correctiveActions.ownerTenantUserId,
+      )
+      if (scope !== 'none') {
+        const rows = await tx
+          .select({
+            wk: sql<number>`count(*)`,
+            day: sql<number>`count(*) filter (where ${correctiveActions.createdAt} >= ${dayIso}::timestamptz)`,
+          })
+          .from(correctiveActions)
+          .where(
+            whereAll(
+              isNull(correctiveActions.deletedAt),
+              scope,
+              gte(correctiveActions.createdAt, week),
+            ),
+          )
+        byKind.corrective_action = Number(rows[0]?.wk ?? 0)
+        today += Number(rows[0]?.day ?? 0)
+      }
+    }
+
+    // ---- Form responses (submitted) ----
+    {
+      const scope = moduleScope(
+        ctx,
+        'forms.response.read',
+        formResponses.siteOrgUnitId,
+        formResponses.submittedBy,
+      )
+      if (scope !== 'none') {
+        const rows = await tx
+          .select({
+            wk: sql<number>`count(*)`,
+            day: sql<number>`count(*) filter (where ${formResponses.submittedAt} >= ${dayIso}::timestamptz)`,
+          })
+          .from(formResponses)
+          .where(
+            whereAll(
+              isNotNull(formResponses.submittedAt),
+              isNull(formResponses.deletedAt),
+              scope,
+              gte(formResponses.submittedAt, week),
+            ),
+          )
+        byKind.form = Number(rows[0]?.wk ?? 0)
+        today += Number(rows[0]?.day ?? 0)
+      }
+    }
+
+    const total = byKind.journal + byKind.incident + byKind.corrective_action + byKind.form
+    return { byKind, total, today }
+  })
 }
 
 async function journalPhotos(
