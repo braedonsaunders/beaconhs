@@ -15,6 +15,7 @@ import {
 import { equipmentItems, equipmentWorkOrders, people, tenantUsers, user } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { pickString } from '@/lib/list-params'
 import { PageContainer } from '@/components/page-layout'
 import { PersonSelectField } from '@/components/person-select-field'
@@ -70,6 +71,7 @@ async function createWorkOrder(formData: FormData) {
     summary: `Opened work order ${row.reference}: ${summary}`,
     after: { reference: row.reference, itemId, priority, summary, status: 'open' },
   })
+  await runModuleFlows(ctx, { moduleKey: 'equipment', event: 'on_create', subjectId: row.id })
   revalidatePath('/equipment/work-orders')
   revalidatePath(`/equipment/${itemId}`)
   redirect(`/equipment/work-orders/${row.id}`)

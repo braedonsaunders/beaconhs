@@ -96,6 +96,51 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
       { key: 'inspector_tenant_user_id', label: 'Inspector (user id)', kind: 'person' },
     ],
   },
+  training: {
+    subjectType: 'module',
+    subjectKey: 'training',
+    label: 'Training',
+    triggers: ['on_submit'],
+    actions: ['send_email', 'notify_role', 'webhook'],
+    statusValues: ['in_progress', 'submitted', 'cancelled'],
+    fields: [
+      { key: 'status', label: 'Status', kind: 'enum' },
+      { key: 'score', label: 'Score', kind: 'number' },
+      { key: 'passed', label: 'Passed', kind: 'bool' },
+      { key: 'type_id', label: 'Assessment type', kind: 'text' },
+      { key: 'person_id', label: 'Person', kind: 'person' },
+      { key: 'completed_at', label: 'Completed at', kind: 'date' },
+    ],
+  },
+  equipment: {
+    subjectType: 'module',
+    subjectKey: 'equipment',
+    label: 'Equipment',
+    triggers: ['on_create', 'status_change'],
+    actions: ['send_email', 'notify_role', 'webhook'],
+    statusValues: ['open', 'assigned', 'in_progress', 'awaiting_parts', 'closed', 'cancelled'],
+    fields: [
+      { key: 'reference', label: 'Reference', kind: 'text' },
+      { key: 'summary', label: 'Summary', kind: 'text' },
+      { key: 'status', label: 'Status', kind: 'enum' },
+      { key: 'opened_at', label: 'Opened at', kind: 'date' },
+      { key: 'closed_at', label: 'Closed at', kind: 'date' },
+      { key: 'assigned_to_tenant_user_id', label: 'Assigned to (user id)', kind: 'person' },
+    ],
+  },
+  documents: {
+    subjectType: 'module',
+    subjectKey: 'documents',
+    label: 'Documents',
+    triggers: ['on_create'],
+    actions: ['send_email', 'notify_role', 'webhook'],
+    fields: [
+      { key: 'title', label: 'Title', kind: 'text' },
+      { key: 'period_start', label: 'Period start', kind: 'date' },
+      { key: 'period_end', label: 'Period end', kind: 'date' },
+      { key: 'next_review_on', label: 'Next review on', kind: 'date' },
+    ],
+  },
 }
 
 export function moduleFlowProfile(moduleKey: string): FlowSubjectProfile | null {

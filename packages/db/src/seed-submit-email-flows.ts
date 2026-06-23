@@ -74,9 +74,27 @@ const FLOWS: {
   },
   {
     moduleKey: 'incidents',
-    name: 'Email + PDF when closed',
-    trigger: { trigger: 'status_change', to: 'closed' },
-    subjectOverride: 'Incident closed: {{reference}}',
+    name: 'Email + PDF on report',
+    trigger: { trigger: 'on_create' },
+    subjectOverride: 'New incident reported: {{reference}}',
+  },
+  {
+    moduleKey: 'training',
+    name: 'Email + PDF on assessment submit',
+    trigger: { trigger: 'on_submit' },
+    subjectOverride: 'Training assessment submitted',
+  },
+  {
+    moduleKey: 'equipment',
+    name: 'Email + PDF on work-order open',
+    trigger: { trigger: 'on_create' },
+    subjectOverride: 'Work order opened: {{reference}}',
+  },
+  {
+    moduleKey: 'documents',
+    name: 'Email + PDF on management review',
+    trigger: { trigger: 'on_create' },
+    subjectOverride: 'Management review recorded: {{title}}',
   },
 ]
 
@@ -111,6 +129,12 @@ async function main() {
   let flowsCreated = 0
   try {
     await withSuperAdmin(db, async (tx) => {
+      // Incidents are now native with an on_create seam — retire the earlier
+      // status_change→closed workaround flow.
+      await tx.execute(
+        sql`delete from form_automations where subject_type='module' and subject_key='incidents' and name='Email + PDF when closed'`,
+      )
+
       const tenants = (await tx.execute(sql`select id, name from tenants`)) as unknown as {
         id: string
         name: string

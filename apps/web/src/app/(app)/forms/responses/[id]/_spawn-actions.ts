@@ -15,6 +15,7 @@ import { correctiveActions, formResponses, incidents } from '@beaconhs/db/schema
 import { emitCorrectiveActionAssigned, emitIncidentReported } from '@beaconhs/events'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { runModuleFlows } from '@/lib/flows/run-module-flows'
 
 // -- Shared loader ---------------------------------------------------------
 
@@ -216,6 +217,7 @@ export async function createIncidentFromResponse(
     metadata: { incidentId: row.id },
   })
   await emitIncidentReported(ctx, { incidentId: row.id })
+  await runModuleFlows(ctx, { moduleKey: 'incidents', event: 'on_create', subjectId: row.id })
 
   revalidatePath(`/forms/responses/${input.responseId}`)
   revalidatePath('/incidents')

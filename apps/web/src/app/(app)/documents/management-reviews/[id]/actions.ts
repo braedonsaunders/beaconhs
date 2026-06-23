@@ -6,6 +6,7 @@ import { eq } from 'drizzle-orm'
 import { documentManagementReviews } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { runModuleFlows } from '@/lib/flows/run-module-flows'
 
 /**
  * Instant-create a management review and land in its detail editor (the single
@@ -39,6 +40,7 @@ export async function createManagementReview(formData: FormData): Promise<void> 
     summary: `Recorded management review "${title}"`,
     after: { title, periodEnd },
   })
+  await runModuleFlows(ctx, { moduleKey: 'documents', event: 'on_create', subjectId: id })
   revalidatePath('/documents/management-reviews')
   redirect(`/documents/management-reviews/${id}`)
 }

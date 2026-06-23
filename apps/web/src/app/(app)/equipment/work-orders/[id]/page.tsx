@@ -7,6 +7,7 @@ import { Badge, Button, DetailHeader, Input, Label, Select, Textarea } from '@be
 import { equipmentItems, equipmentWorkOrders, people, tenantUsers, user } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
+import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { pickString } from '@/lib/list-params'
 import { DetailGrid } from '@/components/detail-grid'
 import { Section } from '@/components/section'
@@ -143,6 +144,12 @@ async function updateStatus(formData: FormData) {
     action: 'update',
     summary: `Status moved to "${statusLabel(status)}"`,
     after: { status },
+  })
+  await runModuleFlows(ctx, {
+    moduleKey: 'equipment',
+    event: 'status_change',
+    subjectId: id,
+    toStatus: status,
   })
   if (itemId) revalidatePath(`/equipment/${itemId}`)
   revalidatePath(`/equipment/work-orders/${id}`)

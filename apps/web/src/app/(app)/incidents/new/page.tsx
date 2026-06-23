@@ -18,6 +18,7 @@ import { incidents, orgUnits } from '@beaconhs/db/schema'
 import { emitIncidentReported } from '@beaconhs/events'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { PageContainer } from '@/components/page-layout'
 
 export const metadata = { title: 'Report incident' }
@@ -91,6 +92,7 @@ async function reportIncident(formData: FormData) {
     })
     // Fire-and-forget notification; the emit function never throws.
     await emitIncidentReported(ctx, { incidentId: row.id })
+    await runModuleFlows(ctx, { moduleKey: 'incidents', event: 'on_create', subjectId: row.id })
     redirect(`/incidents/${row.id}`)
   }
   redirect('/incidents')

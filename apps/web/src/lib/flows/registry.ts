@@ -12,6 +12,9 @@ import { createHazidFlowAdapter } from './adapters/hazid'
 import { createIncidentFlowAdapter } from './adapters/incidents'
 import { createCorrectiveActionFlowAdapter } from './adapters/corrective-actions'
 import { createInspectionFlowAdapter } from './adapters/inspections'
+import { createTrainingFlowAdapter } from './adapters/training'
+import { createEquipmentFlowAdapter } from './adapters/equipment'
+import { createDocumentFlowAdapter } from './adapters/documents'
 import type { FlowSubjectAdapter } from './types'
 
 export type ModuleFlowAdapterFactory = (
@@ -26,6 +29,9 @@ export const MODULE_FLOW_ADAPTERS: Record<string, ModuleFlowAdapterFactory> = {
   incidents: createIncidentFlowAdapter,
   'corrective-actions': createCorrectiveActionFlowAdapter,
   inspections: createInspectionFlowAdapter,
+  training: createTrainingFlowAdapter,
+  equipment: createEquipmentFlowAdapter,
+  documents: createDocumentFlowAdapter,
 }
 
 export function buildFlowAdapter(

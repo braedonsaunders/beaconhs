@@ -13,6 +13,7 @@ import {
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { gradeAnswer, type QuestionKind } from '../_lib/grading'
 
 /**
@@ -186,6 +187,7 @@ export async function submitAssessmentAttempt(attemptId: string, formData: FormD
     summary: `Submitted assessment ${attemptId} (${summary.score}%, ${summary.passed ? 'pass' : 'fail'})`,
     after: { ...summary },
   })
+  await runModuleFlows(ctx, { moduleKey: 'training', event: 'on_submit', subjectId: attemptId })
   revalidatePath(`/training/assessments/${attemptId}`)
   revalidatePath('/training/assessments')
 }
