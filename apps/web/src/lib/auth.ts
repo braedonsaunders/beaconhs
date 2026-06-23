@@ -10,7 +10,7 @@ import {
   userPermissionOverrides,
   users,
 } from '@beaconhs/db/schema'
-import { and, eq, sql } from 'drizzle-orm'
+import { and, asc, eq, sql } from 'drizzle-orm'
 import { makeTenantContext, UnauthorizedError, type RequestContext } from '@beaconhs/tenant'
 
 export const ACTIVE_TENANT_COOKIE = 'bhs-active-tenant'
@@ -125,13 +125,20 @@ export const getRequestContext = cache(async (): Promise<RequestContext | null> 
       .from(tenantUsers)
       .innerJoin(tenants, eq(tenants.id, tenantUsers.tenantId))
       .where(and(eq(tenantUsers.userId, userId), eq(tenantUsers.status, 'active')))
+      // Deterministic order so a multi-tenant user defaults to a STABLE tenant (their oldest /
+      // "home" membership) across requests — not a random one that flips per query.
+      .orderBy(asc(tenantUsers.joinedAt))
 
     if (memberships.length === 0) return null
 
     let active = cookieTenantId
       ? memberships.find((m) => m.tenant.id === cookieTenantId)
       : undefined
-    if (!active && memberships.length === 1) active = memberships[0]
+    // No cookie (or it points at a tenant they're no longer in) → fall back to their first membership.
+    // A user can belong to several tenants (one global identity, joined by email), so we must NOT bail
+    // out here — returning null when there are multiple memberships caused a /login ↔ /dashboard redirect
+    // loop (the layout has a session but no context). The active tenant is switchable in the UI.
+    if (!active) active = memberships[0]
     if (!active) return null
 
     const assignments = await tx
