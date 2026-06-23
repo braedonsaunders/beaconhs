@@ -46,7 +46,8 @@ export default async function AdminUsersPage({
 
   const sp = await searchParams
   const { sort, dir } = parseListParams(sp, { sort: 'name', dir: 'asc', allowedSorts: SORTS })
-  const statusFilter = pickString(sp.status) ?? 'all'
+  // Default to active members; `?status=all` is the explicit show-everything sentinel.
+  const statusFilter = pickString(sp.status) ?? 'active'
 
   const rows = await ctx.db(async (tx) => {
     const memberRows = await tx
@@ -115,7 +116,9 @@ export default async function AdminUsersPage({
             return (
               <Link
                 key={f.value}
-                href={mergeHref(basePath, sp, { status: f.value === 'all' ? undefined : f.value })}
+                href={mergeHref(basePath, sp, {
+                  status: f.value === 'active' ? undefined : f.value,
+                })}
                 className={cn(
                   'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
                   active
