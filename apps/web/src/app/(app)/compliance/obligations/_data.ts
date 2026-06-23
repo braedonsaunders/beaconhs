@@ -2,7 +2,7 @@
 // over `compliance_obligations` (+ audience counts), and live compliance via the
 // evaluation adapters. The old per-module UNION is gone.
 
-import { and, desc, eq, inArray, isNull, ne, sql } from 'drizzle-orm'
+import { and, count, desc, eq, ilike, inArray, isNull, ne, sql } from 'drizzle-orm'
 import { complianceAudience, complianceObligations } from '@beaconhs/db/schema'
 import type { requireRequestContext } from '@/lib/auth'
 import { type AudienceItem, evaluateObligation } from '@beaconhs/compliance'
@@ -29,24 +29,33 @@ function cadenceLabel(rec: ComplianceRecurrence | null | undefined): string {
   return rec.kind
 }
 
+export type ObligationListResult = { rows: ObligationRow[]; total: number }
+
 export async function listObligations(
   ctx: Ctx,
-  filterKind?: ObligationKind,
-): Promise<ObligationRow[]> {
+  opts: { kind?: ObligationKind; q?: string; page?: number; perPage?: number } = {},
+): Promise<ObligationListResult> {
+  const perPage = opts.perPage ?? 25
+  const page = Math.max(1, opts.page ?? 1)
   return ctx.db(async (tx) => {
+    const where = and(
+      eq(complianceObligations.tenantId, ctx.tenantId),
+      isNull(complianceObligations.deletedAt),
+      ne(complianceObligations.status, 'archived'),
+      opts.kind ? eq(complianceObligations.sourceModule, opts.kind) : undefined,
+      opts.q ? ilike(complianceObligations.title, `%${opts.q}%`) : undefined,
+    )
+
+    const [tot] = await tx.select({ c: count() }).from(complianceObligations).where(where)
+    const total = Number(tot?.c ?? 0)
+
     const obs = await tx
       .select()
       .from(complianceObligations)
-      .where(
-        and(
-          eq(complianceObligations.tenantId, ctx.tenantId),
-          isNull(complianceObligations.deletedAt),
-          ne(complianceObligations.status, 'archived'),
-          filterKind ? eq(complianceObligations.sourceModule, filterKind) : undefined,
-        ),
-      )
+      .where(where)
       .orderBy(desc(complianceObligations.createdAt))
-      .limit(1000)
+      .limit(perPage)
+      .offset((page - 1) * perPage)
 
     const ids = obs.map((o) => o.id)
     const counts = new Map<string, number>()
@@ -62,7 +71,7 @@ export async function listObligations(
       for (const r of ac) counts.set(r.id, r.n)
     }
 
-    return obs.map((o) => ({
+    const rows = obs.map((o) => ({
       kind: o.sourceModule as ObligationKind,
       id: o.id,
       title: o.title,
@@ -77,6 +86,7 @@ export async function listObligations(
       cadence: cadenceLabel(o.recurrence),
       enabled: o.status === 'active',
     }))
+    return { rows, total }
   })
 }
 

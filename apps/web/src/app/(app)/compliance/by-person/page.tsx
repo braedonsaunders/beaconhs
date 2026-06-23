@@ -1,9 +1,7 @@
 import { asc, eq } from 'drizzle-orm'
 import {
   Badge,
-  Button,
   PageHeader,
-  Select,
   Table,
   TableBody,
   TableCell,
@@ -19,6 +17,7 @@ import { ListPageLayout } from '@/components/page-layout'
 import { kindLabel, personCompliance } from '../_hub'
 import { StatusBadge, SummaryStrip } from '../_shared'
 import { ComplianceSubNav } from '../_sub-nav'
+import { PersonPicker } from './_person-picker'
 
 export const metadata = { title: 'Compliance · By person' }
 export const dynamic = 'force-dynamic'
@@ -46,6 +45,11 @@ export default async function ByPersonPage({
       .orderBy(asc(people.lastName), asc(people.firstName))
       .limit(2000),
   )
+  const personOptions = peopleOptions.map((p) => ({
+    value: p.id,
+    label: `${p.lastName ?? ''}${p.lastName ? ', ' : ''}${p.firstName ?? ''}`.trim() || '(unnamed)',
+    hint: p.jobTitle ?? undefined,
+  }))
 
   const rows = personId ? await personCompliance(ctx, personId) : []
   const isOverdue = (s: string) => s === 'overdue' || s === 'expiring'
@@ -70,24 +74,7 @@ export default async function ByPersonPage({
       }
     >
       <div className="space-y-6">
-        <form method="get" className="flex flex-wrap items-end gap-3">
-          <div className="min-w-[320px] flex-1">
-            <label className="mb-1 block text-xs font-medium tracking-wide text-slate-500 uppercase">
-              Person
-            </label>
-            <Select name="person" defaultValue={personId ?? ''}>
-              <option value="">— Select —</option>
-              {peopleOptions.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {`${p.lastName ?? ''}${p.lastName ? ', ' : ''}${p.firstName ?? ''}`.trim() ||
-                    '(unnamed)'}
-                  {p.jobTitle ? ` — ${p.jobTitle}` : ''}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <Button type="submit">Run</Button>
-        </form>
+        <PersonPicker people={personOptions} selected={personId ?? ''} />
 
         {!personId ? (
           <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 p-8 text-center text-sm text-slate-500">

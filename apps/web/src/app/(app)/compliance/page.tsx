@@ -58,6 +58,7 @@ export default async function ComplianceOverviewPage() {
             label="Overdue / expiring"
             value={totalOverdue.toLocaleString()}
             tone={totalOverdue > 0 ? 'danger' : undefined}
+            href="/compliance/expiring"
           />
           <Kpi label="Overall compliance" value={`${overall}%`} />
         </div>
@@ -134,15 +135,40 @@ export default async function ComplianceOverviewPage() {
   )
 }
 
-function Kpi({ label, value, tone }: { label: string; value: string | number; tone?: 'danger' }) {
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4">
-      <div className="text-xs tracking-wide text-slate-500 uppercase">{label}</div>
+function Kpi({
+  label,
+  value,
+  tone,
+  href,
+}: {
+  label: string
+  value: string | number
+  tone?: 'danger'
+  href?: string
+}) {
+  const inner = (
+    <>
+      <div className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
+        {label}
+      </div>
       <div
-        className={`mt-1 text-2xl font-semibold ${tone === 'danger' ? 'text-red-700' : 'text-slate-900'}`}
+        className={`mt-1 text-2xl font-semibold ${tone === 'danger' ? 'text-red-700 dark:text-red-400' : 'text-slate-900 dark:text-slate-100'}`}
       >
         {value}
       </div>
-    </div>
+    </>
   )
+  const cls =
+    'block rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900'
+  if (href) {
+    return (
+      <Link
+        href={href as any}
+        className={`${cls} transition-colors hover:border-slate-300 hover:bg-slate-50 dark:hover:border-slate-700 dark:hover:bg-slate-800/60`}
+      >
+        {inner}
+      </Link>
+    )
+  }
+  return <div className={cls}>{inner}</div>
 }
