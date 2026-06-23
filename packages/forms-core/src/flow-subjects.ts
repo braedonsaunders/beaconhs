@@ -22,6 +22,19 @@ export type FlowFieldDef = {
   kind?: FlowFieldKind
 }
 
+/**
+ * A repeating child collection a subject exposes (e.g. a hazard assessment's
+ * `hazards`, `signatures`, `photos`). Templates iterate it with
+ * `{{#each <key>}} … {{/each}}`; inside the loop each `fields` entry is an item
+ * column referenced as `{{<field.key>}}`. Drives the builder's drag-in "table"
+ * blocks and the email-render loop engine.
+ */
+export type FlowCollectionDef = {
+  key: string
+  label: string
+  fields: FlowFieldDef[]
+}
+
 export type FlowSubjectProfile = {
   subjectType: FlowSubjectType
   /** templateId (forms) | moduleKey e.g. 'journals' (modules). */
@@ -34,6 +47,12 @@ export type FlowSubjectProfile = {
   statusValues?: string[]
   /** Field tokens for conditions, {{interpolation}}, and recipient `field` targets. */
   fields: FlowFieldDef[]
+  /**
+   * Repeating child collections (line-items) the subject exposes for
+   * `{{#each}}` tables — hazards, signatures, ppe, photos, etc. Absent ⇒ the
+   * subject has no tabular data.
+   */
+  collections?: FlowCollectionDef[]
   /**
    * True when this subject has a rich, full-record PDF renderer (incidents,
    * hazard assessments, corrective actions, form responses). When true, the

@@ -20,6 +20,6 @@ export async function compileEmailDesign(
     can(ctx, 'forms.template.create') ||
     Object.keys(MODULE_FLOW_PROFILES).some((m) => canManageModule(ctx, m))
   if (!mayAuthor) return { ok: false, error: 'Not authorized' }
-  const { html, errors } = compileEmailMjml(mjmlSource)
+  const { html, errors } = await compileEmailMjml(mjmlSource)
   return { ok: true, html, warnings: errors }
 }

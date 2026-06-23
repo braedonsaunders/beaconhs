@@ -3,11 +3,33 @@ import 'server-only'
 // Hazard Assessments (HazID) FlowSubjectAdapter. Field-map keys mirror
 // MODULE_FLOW_PROFILES.hazid.
 
-import { eq } from 'drizzle-orm'
-import { hazidAssessments, tenantUsers, users } from '@beaconhs/db/schema'
+import { asc, eq } from 'drizzle-orm'
+import {
+  attachments,
+  hazidAssessmentHazards,
+  hazidAssessmentPhotos,
+  hazidAssessmentPPE,
+  hazidAssessmentQuestions,
+  hazidAssessmentSignatures,
+  hazidAssessmentTasks,
+  hazidAssessmentTypes,
+  hazidAssessments,
+  hazidHazards,
+  hazidTasks,
+  orgUnits,
+  people,
+  tenantUsers,
+  users,
+} from '@beaconhs/db/schema'
+import { publicUrl } from '@beaconhs/storage'
 import type { RequestContext } from '@beaconhs/tenant'
 import { spawnCorrectiveActionForSubject } from '../spawn'
+import { fmtDateTime, personName, yesBlank, yesNo } from '../format'
 import type { FlowSubjectAdapter } from '../types'
+
+function riskScore(l: number | null, s: number | null): number | string {
+  return l != null && s != null ? l * s : ''
+}
 
 export function createHazidFlowAdapter(
   ctx: RequestContext,
@@ -23,35 +45,174 @@ export function createHazidFlowAdapter(
     pdfJob: () => ({ kind: 'hazid', tenantId: ctx.tenantId, assessmentId }),
 
     async loadValues() {
-      const [a] = await ctx.db((tx) =>
+      // Header + resolved joins (site / project / type / supervisor / reporter),
+      // mirroring the PDF loader so email templates reach the same data parity.
+      const [head] = await ctx.db((tx) =>
         tx
           .select({
-            reference: hazidAssessments.reference,
-            jobScope: hazidAssessments.jobScope,
-            locationOnSite: hazidAssessments.locationOnSite,
-            locked: hazidAssessments.locked,
-            inProgress: hazidAssessments.inProgress,
-            occurredAt: hazidAssessments.occurredAt,
-            siteOrgUnitId: hazidAssessments.siteOrgUnitId,
-            projectOrgUnitId: hazidAssessments.projectOrgUnitId,
-            supervisorPersonId: hazidAssessments.supervisorPersonId,
-            assessmentTypeId: hazidAssessments.assessmentTypeId,
+            a: hazidAssessments,
+            typeName: hazidAssessmentTypes.name,
+            siteName: orgUnits.name,
+            supFirst: people.firstName,
+            supLast: people.lastName,
+            supFormal: people.formalName,
           })
           .from(hazidAssessments)
+          .leftJoin(
+            hazidAssessmentTypes,
+            eq(hazidAssessmentTypes.id, hazidAssessments.assessmentTypeId),
+          )
+          .leftJoin(orgUnits, eq(orgUnits.id, hazidAssessments.siteOrgUnitId))
+          .leftJoin(people, eq(people.id, hazidAssessments.supervisorPersonId))
           .where(eq(hazidAssessments.id, assessmentId))
           .limit(1),
       )
+      if (!head) return {}
+      const a = head.a
+
+      const [proj] = a.projectOrgUnitId
+        ? await ctx.db((tx) =>
+            tx
+              .select({ name: orgUnits.name })
+              .from(orgUnits)
+              .where(eq(orgUnits.id, a.projectOrgUnitId!))
+              .limit(1),
+          )
+        : [null]
+
+      const [reporter] = a.reportedByTenantUserId
+        ? await ctx.db((tx) =>
+            tx
+              .select({ name: users.name })
+              .from(tenantUsers)
+              .innerJoin(users, eq(users.id, tenantUsers.userId))
+              .where(eq(tenantUsers.id, a.reportedByTenantUserId!))
+              .limit(1),
+          )
+        : [null]
+
+      const [tasks, hazards, ppe, questions, signatures, photos] = await Promise.all([
+        ctx.db((tx) =>
+          tx
+            .select({
+              description: hazidAssessmentTasks.description,
+              controls: hazidAssessmentTasks.controls,
+              libName: hazidTasks.name,
+            })
+            .from(hazidAssessmentTasks)
+            .leftJoin(hazidTasks, eq(hazidTasks.id, hazidAssessmentTasks.taskId))
+            .where(eq(hazidAssessmentTasks.assessmentId, assessmentId))
+            .orderBy(asc(hazidAssessmentTasks.entityOrder)),
+        ),
+        ctx.db((tx) =>
+          tx
+            .select({ row: hazidAssessmentHazards, libName: hazidHazards.name })
+            .from(hazidAssessmentHazards)
+            .leftJoin(hazidHazards, eq(hazidHazards.id, hazidAssessmentHazards.hazardId))
+            .where(eq(hazidAssessmentHazards.assessmentId, assessmentId))
+            .orderBy(asc(hazidAssessmentHazards.entityOrder)),
+        ),
+        ctx.db((tx) =>
+          tx
+            .select()
+            .from(hazidAssessmentPPE)
+            .where(eq(hazidAssessmentPPE.assessmentId, assessmentId))
+            .orderBy(asc(hazidAssessmentPPE.entityOrder)),
+        ),
+        ctx.db((tx) =>
+          tx
+            .select()
+            .from(hazidAssessmentQuestions)
+            .where(eq(hazidAssessmentQuestions.assessmentId, assessmentId))
+            .orderBy(asc(hazidAssessmentQuestions.entityOrder)),
+        ),
+        ctx.db((tx) =>
+          tx
+            .select({
+              row: hazidAssessmentSignatures,
+              pFirst: people.firstName,
+              pLast: people.lastName,
+              pFormal: people.formalName,
+            })
+            .from(hazidAssessmentSignatures)
+            .leftJoin(people, eq(people.id, hazidAssessmentSignatures.personId))
+            .where(eq(hazidAssessmentSignatures.assessmentId, assessmentId)),
+        ),
+        ctx.db((tx) =>
+          tx
+            .select({ caption: hazidAssessmentPhotos.caption, r2Key: attachments.r2Key })
+            .from(hazidAssessmentPhotos)
+            .innerJoin(attachments, eq(attachments.id, hazidAssessmentPhotos.attachmentId))
+            .where(eq(hazidAssessmentPhotos.assessmentId, assessmentId)),
+        ),
+      ])
+
       return {
-        reference: a?.reference ?? null,
-        job_scope: a?.jobScope ?? null,
-        location_on_site: a?.locationOnSite ?? null,
-        locked: a?.locked ?? null,
-        in_progress: a?.inProgress ?? null,
-        occurred_at: a?.occurredAt ? a.occurredAt.toISOString() : null,
-        site_org_unit_id: a?.siteOrgUnitId ?? null,
-        project_org_unit_id: a?.projectOrgUnitId ?? null,
-        supervisor_person_id: a?.supervisorPersonId ?? null,
-        assessment_type_id: a?.assessmentTypeId ?? null,
+        reference: a.reference ?? null,
+        job_scope: a.jobScope ?? null,
+        location_on_site: a.locationOnSite ?? null,
+        locked: a.locked ?? null,
+        in_progress: a.inProgress ?? null,
+        occurred_at: fmtDateTime(a.occurredAt),
+        locked_at: fmtDateTime(a.lockedAt),
+        site_name: head.siteName ?? '',
+        project_name: proj?.name ?? '',
+        type_name: head.typeName ?? '',
+        supervisor_name: personName({
+          firstName: head.supFirst,
+          lastName: head.supLast,
+          formalName: head.supFormal,
+        }),
+        reported_by_name: reporter?.name ?? '',
+        // FK ids for conditions / recipient `field` targets.
+        site_org_unit_id: a.siteOrgUnitId ?? null,
+        project_org_unit_id: a.projectOrgUnitId ?? null,
+        supervisor_person_id: a.supervisorPersonId ?? null,
+        assessment_type_id: a.assessmentTypeId ?? null,
+        // Collections — rendered via {{#each …}} tables.
+        tasks: tasks.map((t) => ({
+          name: t.libName ?? t.description ?? 'Task',
+          controls: t.controls ?? '',
+        })),
+        hazards: hazards.map((h) => ({
+          name: h.libName ?? h.row.name ?? 'Hazard',
+          standard_controls: h.row.standardControls ?? '',
+          specific_controls: h.row.specificControls ?? '',
+          controls: h.row.controls ?? '',
+          applicable: yesNo(h.row.applicable),
+          pre_likelihood: h.row.preLikelihood ?? '',
+          pre_severity: h.row.preSeverity ?? '',
+          pre_risk: riskScore(h.row.preLikelihood, h.row.preSeverity),
+          post_likelihood: h.row.postLikelihood ?? '',
+          post_severity: h.row.postSeverity ?? '',
+          post_risk: riskScore(h.row.postLikelihood, h.row.postSeverity),
+        })),
+        ppe: ppe.map((p) => ({
+          name: p.name ?? '',
+          description: p.description ?? '',
+          required: yesNo(p.required),
+          answer: p.answer ? p.answer.toUpperCase() : '',
+        })),
+        questions: questions.map((q) => ({
+          question: q.question ?? '',
+          answer: q.answer ?? '',
+          requires_yes: yesNo(q.requiresYes),
+        })),
+        signatures: signatures.map((s) => ({
+          name:
+            personName({ firstName: s.pFirst, lastName: s.pLast, formalName: s.pFormal }) ||
+            s.row.externalName ||
+            'Unknown',
+          type: s.row.signatureType,
+          cs_entrant: yesBlank(s.row.csEntrant),
+          cs_attendant: yesBlank(s.row.csAttendant),
+          cs_rescue: yesBlank(s.row.csRescue),
+          signed_at: fmtDateTime(s.row.signedAt),
+        })),
+        photos: photos.map((p) => ({
+          url: publicUrl(p.r2Key),
+          caption: p.caption ?? '',
+        })),
       }
     },
 

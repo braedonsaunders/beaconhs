@@ -2,11 +2,22 @@ import 'server-only'
 
 // Journals FlowSubjectAdapter. Field-map keys mirror MODULE_FLOW_PROFILES.journals.
 
-import { eq } from 'drizzle-orm'
-import { journalEntries, tenantUsers, users } from '@beaconhs/db/schema'
+import { asc, eq } from 'drizzle-orm'
+import { alias } from 'drizzle-orm/pg-core'
+import {
+  attachments,
+  journalEntries,
+  journalEntryPhotos,
+  orgUnits,
+  people,
+  tenantUsers,
+  users,
+} from '@beaconhs/db/schema'
+import { publicUrl } from '@beaconhs/storage'
 import type { RequestContext } from '@beaconhs/tenant'
 import { spawnCorrectiveActionForSubject } from '../spawn'
 import { buildRecordSummaryPdfJob } from '../pdf-summary'
+import { fmtDate, personName } from '../format'
 import type { FlowSubjectAdapter } from '../types'
 
 export function createJournalFlowAdapter(ctx: RequestContext, entryId: string): FlowSubjectAdapter {
@@ -29,33 +40,61 @@ export function createJournalFlowAdapter(ctx: RequestContext, entryId: string): 
       }),
 
     async loadValues() {
+      const author = alias(people, 'jrnl_author')
+      const supervisor = alias(people, 'jrnl_supervisor')
       const [e] = await ctx.db((tx) =>
         tx
           .select({
-            status: journalEntries.status,
-            reference: journalEntries.reference,
-            title: journalEntries.title,
-            bodyText: journalEntries.bodyText,
-            entryDate: journalEntries.entryDate,
-            personId: journalEntries.personId,
-            supervisorPersonId: journalEntries.supervisorPersonId,
-            siteOrgUnitId: journalEntries.siteOrgUnitId,
-            tagsCache: journalEntries.tagsCache,
+            row: journalEntries,
+            siteName: orgUnits.name,
+            authFirst: author.firstName,
+            authLast: author.lastName,
+            authFormal: author.formalName,
+            supFirst: supervisor.firstName,
+            supLast: supervisor.lastName,
+            supFormal: supervisor.formalName,
           })
           .from(journalEntries)
+          .leftJoin(orgUnits, eq(orgUnits.id, journalEntries.siteOrgUnitId))
+          .leftJoin(author, eq(author.id, journalEntries.personId))
+          .leftJoin(supervisor, eq(supervisor.id, journalEntries.supervisorPersonId))
           .where(eq(journalEntries.id, entryId))
           .limit(1),
       )
+      if (!e) return {}
+      const r = e.row
+
+      const photos = await ctx.db((tx) =>
+        tx
+          .select({ caption: journalEntryPhotos.caption, r2Key: attachments.r2Key })
+          .from(journalEntryPhotos)
+          .innerJoin(attachments, eq(attachments.id, journalEntryPhotos.attachmentId))
+          .where(eq(journalEntryPhotos.entryId, entryId))
+          .orderBy(asc(journalEntryPhotos.sortOrder)),
+      )
+
       return {
-        status: e?.status ?? null,
-        reference: e?.reference ?? null,
-        title: e?.title ?? null,
-        body_text: e?.bodyText ?? null,
-        entry_date: e?.entryDate ?? null,
-        person_id: e?.personId ?? null,
-        supervisor_person_id: e?.supervisorPersonId ?? null,
-        site_org_unit_id: e?.siteOrgUnitId ?? null,
-        tags: (e?.tagsCache ?? []).join(', '),
+        status: r.status ?? null,
+        reference: r.reference ?? null,
+        title: r.title ?? null,
+        body_text: r.bodyText ?? null,
+        entry_date: fmtDate(r.entryDate),
+        author_name: personName({
+          firstName: e.authFirst,
+          lastName: e.authLast,
+          formalName: e.authFormal,
+        }),
+        supervisor_name: personName({
+          firstName: e.supFirst,
+          lastName: e.supLast,
+          formalName: e.supFormal,
+        }),
+        site_name: e.siteName ?? '',
+        tags: (r.tagsCache ?? []).join(', '),
+        person_id: r.personId ?? null,
+        supervisor_person_id: r.supervisorPersonId ?? null,
+        site_org_unit_id: r.siteOrgUnitId ?? null,
+        photos: photos.map((p) => ({ url: publicUrl(p.r2Key), caption: p.caption ?? '' })),
       }
     },
 

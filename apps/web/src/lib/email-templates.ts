@@ -87,12 +87,16 @@ export async function listActiveEmailTemplatesForSubject(
 
 /**
  * Compile MJML source → responsive, sanitized HTML. The authoritative compile —
- * the client builder's in-canvas compile is preview only. `mjml2html` is sync.
+ * the client builder's in-canvas compile is preview only. NOTE: `mjml2html` in
+ * mjml v5 is ASYNC (returns a Promise) — it MUST be awaited, or `out.html` is
+ * undefined and the stored compiledHtml ends up empty.
  */
-export function compileEmailMjml(mjmlSource: string): { html: string; errors: string[] } {
+export async function compileEmailMjml(
+  mjmlSource: string,
+): Promise<{ html: string; errors: string[] }> {
   if (!mjmlSource.trim()) return { html: '', errors: [] }
   try {
-    const out = mjml2html(mjmlSource, { validationLevel: 'soft' })
+    const out = await mjml2html(mjmlSource, { validationLevel: 'soft' })
     const errors = (out.errors ?? []).map((e) => e.formattedMessage || e.message || 'MJML error')
     return { html: sanitizeEmailHtml(out.html || ''), errors }
   } catch (e) {

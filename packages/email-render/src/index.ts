@@ -22,12 +22,13 @@ export function escapeHtml(s: string): string {
     .replace(/"/g, '&quot;')
 }
 
-// --- {{token}} interpolation ------------------------------------------------
+// --- {{token}} interpolation (scalar only; inline path uses this) -----------
 
 /**
  * Replace `{{ token }}` occurrences with values[token]. When `escapeHtml` is set,
  * only the SUBSTITUTED VALUE is HTML-escaped (the surrounding template is left
- * intact) — use that when interpolating into trusted HTML.
+ * intact) — use that when interpolating into trusted HTML. Scalar-only — for
+ * collections / conditionals use {@link renderTemplate}.
  */
 export function interpolate(
   tpl: string,
@@ -39,6 +40,188 @@ export function interpolate(
     const s = v == null ? '' : String(v)
     return opts?.escapeHtml ? escapeHtml(s) : s
   })
+}
+
+// --- Block template engine ({{#each}} / {{#if}} / {{this.field}} / {{{raw}}}) -
+//
+// A small, dependency-free templating layer for the template/design render path
+// so authored templates can render the record's COLLECTIONS as tables/lists,
+// not just scalar header tokens. Grammar:
+//   {{ path }}            escaped value (path = key, this, this.key, a.b.c, @index…)
+//   {{{ path }}}          raw (unescaped) value — for fields that hold trusted HTML
+//   {{#each coll}}…{{/each}}   iterate an array; inside, {{field}} is the item's field
+//   {{#if path}}…{{else}}…{{/if}}   conditional (empty array / 0 / '' / null = false)
+// Loop metadata inside #each: {{@index}} (0-based), {{@number}} (1-based),
+// {{@first}}, {{@last}}, {{@length}}. Scalar-only templates render byte-identically
+// to `interpolate`, preserving inline + existing template back-compat.
+
+type Frame = { data: Record<string, unknown>; item?: unknown; meta?: Record<string, unknown> }
+
+type TplNode =
+  | { t: 'text'; v: string }
+  | { t: 'var'; expr: string; raw: boolean }
+  | { t: 'each'; expr: string; body: TplNode[] }
+  | { t: 'if'; expr: string; body: TplNode[]; alt: TplNode[] }
+
+type Tok =
+  | { k: 'text'; v: string }
+  | { k: 'var'; expr: string; raw: boolean }
+  | { k: 'open'; block: 'each' | 'if'; expr: string }
+  | { k: 'else' }
+  | { k: 'close'; block: 'each' | 'if' }
+
+const TAG_RE = /\{\{\{\s*([\s\S]*?)\s*\}\}\}|\{\{\s*([\s\S]*?)\s*\}\}/g
+
+function tokenize(tpl: string): Tok[] {
+  const toks: Tok[] = []
+  let last = 0
+  let m: RegExpExecArray | null
+  TAG_RE.lastIndex = 0
+  while ((m = TAG_RE.exec(tpl))) {
+    if (m.index > last) toks.push({ k: 'text', v: tpl.slice(last, m.index) })
+    last = TAG_RE.lastIndex
+    if (m[1] !== undefined) {
+      toks.push({ k: 'var', expr: m[1].trim(), raw: true })
+      continue
+    }
+    const inner = (m[2] ?? '').trim()
+    if (inner.startsWith('#each'))
+      toks.push({ k: 'open', block: 'each', expr: inner.slice(5).trim() })
+    else if (inner.startsWith('#if'))
+      toks.push({ k: 'open', block: 'if', expr: inner.slice(3).trim() })
+    else if (inner === 'else') toks.push({ k: 'else' })
+    else if (inner === '/each') toks.push({ k: 'close', block: 'each' })
+    else if (inner === '/if') toks.push({ k: 'close', block: 'if' })
+    else if (inner.startsWith('/')) {
+      /* unknown close — drop */
+    } else toks.push({ k: 'var', expr: inner, raw: false })
+  }
+  if (last < tpl.length) toks.push({ k: 'text', v: tpl.slice(last) })
+  return toks
+}
+
+function parseBlock(toks: Tok[], i: { v: number }, until: (t: Tok) => boolean): TplNode[] {
+  const nodes: TplNode[] = []
+  while (i.v < toks.length) {
+    const t = toks[i.v]
+    if (!t) break
+    if (until(t)) return nodes
+    i.v++
+    if (t.k === 'text') nodes.push({ t: 'text', v: t.v })
+    else if (t.k === 'var') nodes.push({ t: 'var', expr: t.expr, raw: t.raw })
+    else if (t.k === 'open' && t.block === 'each') {
+      const body = parseBlock(toks, i, (x) => x.k === 'close' && x.block === 'each')
+      if (toks[i.v]?.k === 'close') i.v++
+      nodes.push({ t: 'each', expr: t.expr, body })
+    } else if (t.k === 'open' && t.block === 'if') {
+      const body = parseBlock(
+        toks,
+        i,
+        (x) => x.k === 'else' || (x.k === 'close' && x.block === 'if'),
+      )
+      let alt: TplNode[] = []
+      if (toks[i.v]?.k === 'else') {
+        i.v++
+        alt = parseBlock(toks, i, (x) => x.k === 'close' && x.block === 'if')
+      }
+      if (toks[i.v]?.k === 'close') i.v++
+      nodes.push({ t: 'if', expr: t.expr, body, alt })
+    }
+    // stray else/close at this depth → dropped
+  }
+  return nodes
+}
+
+function resolvePath(expr: string, stack: Frame[]): unknown {
+  const path = expr.trim()
+  if (path === 'this' || path === '.') return stack[stack.length - 1]?.item
+  if (path.startsWith('@')) {
+    const key = path.slice(1)
+    for (let i = stack.length - 1; i >= 0; i--) {
+      const meta = stack[i]?.meta
+      if (meta && key in meta) return meta[key]
+    }
+    return undefined
+  }
+  const parts = path.split('.')
+  const head = parts[0] ?? ''
+  let base: unknown
+  if (head === 'this') {
+    base = stack[stack.length - 1]?.item
+  } else {
+    for (let i = stack.length - 1; i >= 0; i--) {
+      const d = stack[i]?.data
+      if (d && typeof d === 'object' && Object.prototype.hasOwnProperty.call(d, head)) {
+        base = d[head]
+        break
+      }
+    }
+  }
+  for (const part of parts.slice(1)) {
+    if (base == null || typeof base !== 'object') return undefined
+    base = (base as Record<string, unknown>)[part]
+  }
+  return base
+}
+
+function isTruthy(v: unknown): boolean {
+  if (Array.isArray(v)) return v.length > 0
+  if (v == null || v === false) return false
+  if (typeof v === 'number') return v !== 0 && !Number.isNaN(v)
+  if (typeof v === 'string') return v.length > 0
+  return true
+}
+
+function renderNodes(nodes: TplNode[], stack: Frame[], escape: boolean): string {
+  let out = ''
+  for (const n of nodes) {
+    if (n.t === 'text') {
+      out += n.v
+    } else if (n.t === 'var') {
+      const v = resolvePath(n.expr, stack)
+      const s = v == null ? '' : String(v)
+      out += escape && !n.raw ? escapeHtml(s) : s
+    } else if (n.t === 'each') {
+      const coll = resolvePath(n.expr, stack)
+      if (Array.isArray(coll)) {
+        for (let idx = 0; idx < coll.length; idx++) {
+          const item = coll[idx]
+          stack.push({
+            data: item && typeof item === 'object' ? (item as Record<string, unknown>) : {},
+            item,
+            meta: {
+              index: idx,
+              number: idx + 1,
+              first: idx === 0,
+              last: idx === coll.length - 1,
+              length: coll.length,
+            },
+          })
+          out += renderNodes(n.body, stack, escape)
+          stack.pop()
+        }
+      }
+    } else if (n.t === 'if') {
+      out += renderNodes(isTruthy(resolvePath(n.expr, stack)) ? n.body : n.alt, stack, escape)
+    }
+  }
+  return out
+}
+
+/**
+ * Render an authored template that may contain {{#each}} / {{#if}} blocks and
+ * dotted paths, against `values`. Scalar `{{token}}` output is byte-identical to
+ * {@link interpolate}. When `escapeHtml` is set, substituted values are escaped
+ * (use {@link `{{{raw}}}`} to opt a field out, e.g. a sanitized rich-text field).
+ */
+export function renderTemplate(
+  tpl: string,
+  values: Record<string, unknown>,
+  opts?: { escapeHtml?: boolean },
+): string {
+  if (tpl.indexOf('{{') === -1) return tpl
+  const nodes = parseBlock(tokenize(tpl), { v: 0 }, () => false)
+  return renderNodes(nodes, [{ data: values, item: values }], opts?.escapeHtml ?? false)
 }
 
 // --- Plain-text fallback ----------------------------------------------------
@@ -106,7 +289,7 @@ export type RenderableEmail =
   // Legacy inline body — byte-for-byte the old run-automations.ts shell.
   | { mode: 'inline'; subject: string; bodyTemplate: string }
   // A saved library template OR a one-off design: pre-sanitized, compiled HTML
-  // with {{tokens}} still embedded.
+  // with {{tokens}} / {{#each}} blocks still embedded.
   | { mode: 'template' | 'design'; subjectTemplate: string; compiledHtml: string }
 
 export type RenderedEmail = { subject: string; html: string; text: string }
@@ -122,9 +305,10 @@ export function renderEmail(spec: RenderableEmail, values: Record<string, unknow
     const html = `${INLINE_SHELL_OPEN}${escapeHtml(text)}${INLINE_SHELL_CLOSE}`
     return { subject, html, text }
   }
-  // template | design — interpolate escaped values into trusted, pre-sanitized HTML.
-  const subject = interpolate(spec.subjectTemplate, values) || 'Notification'
-  const html = interpolate(spec.compiledHtml, values, { escapeHtml: true })
+  // template | design — render {{tokens}} + {{#each}} blocks (escaped values)
+  // into trusted, pre-sanitized HTML.
+  const subject = renderTemplate(spec.subjectTemplate, values) || 'Notification'
+  const html = renderTemplate(spec.compiledHtml, values, { escapeHtml: true })
   const text = htmlToPlainText(html)
   return { subject, html, text }
 }

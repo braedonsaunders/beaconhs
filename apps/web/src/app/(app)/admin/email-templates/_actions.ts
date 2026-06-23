@@ -65,7 +65,7 @@ export async function createEmailTemplate(formData: FormData): Promise<void> {
         ]
 
   const base = slugifyTemplateKey(String(formData.get('key') ?? '').trim() || name)
-  const compiled = compileEmailMjml(STARTER_MJML)
+  const compiled = await compileEmailMjml(STARTER_MJML)
 
   const newId = await ctx.db(async (tx) => {
     const existing = await tx
@@ -117,7 +117,7 @@ export async function saveEmailTemplateDesign(input: {
 }): Promise<{ ok: boolean; error?: string; warnings?: string[] }> {
   const ctx = await requireManage()
   if (!input.id) return { ok: false, error: 'Missing template id.' }
-  const compiled = compileEmailMjml(input.mjmlSource)
+  const compiled = await compileEmailMjml(input.mjmlSource)
   await ctx.db((tx) =>
     tx
       .update(emailTemplates)

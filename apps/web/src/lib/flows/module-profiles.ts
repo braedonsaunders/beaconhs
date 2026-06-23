@@ -19,10 +19,24 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
       { key: 'title', label: 'Title', kind: 'text' },
       { key: 'body_text', label: 'Body text', kind: 'text' },
       { key: 'entry_date', label: 'Entry date', kind: 'date' },
+      { key: 'author_name', label: 'Author name', kind: 'text' },
+      { key: 'supervisor_name', label: 'Supervisor name', kind: 'text' },
+      { key: 'site_name', label: 'Site name', kind: 'text' },
+      { key: 'tags', label: 'Tags', kind: 'text' },
+      // FK ids for conditions / recipient `field` targets.
       { key: 'person_id', label: 'Author (person id)', kind: 'person' },
       { key: 'supervisor_person_id', label: 'Supervisor (person id)', kind: 'person' },
-      { key: 'site_org_unit_id', label: 'Site', kind: 'org_unit' },
-      { key: 'tags', label: 'Tags', kind: 'text' },
+      { key: 'site_org_unit_id', label: 'Site (id)', kind: 'org_unit' },
+    ],
+    collections: [
+      {
+        key: 'photos',
+        label: 'Photos',
+        fields: [
+          { key: 'url', label: 'Image URL', kind: 'text' },
+          { key: 'caption', label: 'Caption', kind: 'text' },
+        ],
+      },
     ],
   },
   hazid: {
@@ -39,10 +53,83 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
       { key: 'locked', label: 'Locked', kind: 'bool' },
       { key: 'in_progress', label: 'In progress', kind: 'bool' },
       { key: 'occurred_at', label: 'Occurred at', kind: 'date' },
-      { key: 'site_org_unit_id', label: 'Site', kind: 'org_unit' },
-      { key: 'project_org_unit_id', label: 'Project', kind: 'org_unit' },
+      { key: 'site_name', label: 'Site name', kind: 'text' },
+      { key: 'project_name', label: 'Project name', kind: 'text' },
+      { key: 'type_name', label: 'Assessment type name', kind: 'text' },
+      { key: 'supervisor_name', label: 'Supervisor name', kind: 'text' },
+      { key: 'reported_by_name', label: 'Reported by', kind: 'text' },
+      { key: 'locked_at', label: 'Locked at', kind: 'date' },
+      // FK ids kept for conditions / recipient `field` targets.
+      { key: 'site_org_unit_id', label: 'Site (id)', kind: 'org_unit' },
+      { key: 'project_org_unit_id', label: 'Project (id)', kind: 'org_unit' },
       { key: 'supervisor_person_id', label: 'Supervisor (person id)', kind: 'person' },
-      { key: 'assessment_type_id', label: 'Assessment type', kind: 'text' },
+      { key: 'assessment_type_id', label: 'Assessment type (id)', kind: 'text' },
+    ],
+    collections: [
+      {
+        key: 'tasks',
+        label: 'Tasks',
+        fields: [
+          { key: 'name', label: 'Task', kind: 'text' },
+          { key: 'controls', label: 'Controls', kind: 'text' },
+        ],
+      },
+      {
+        key: 'hazards',
+        label: 'Hazards & controls',
+        fields: [
+          { key: 'name', label: 'Hazard', kind: 'text' },
+          { key: 'standard_controls', label: 'Standard controls', kind: 'text' },
+          { key: 'specific_controls', label: 'Specific controls', kind: 'text' },
+          { key: 'controls', label: 'Controls', kind: 'text' },
+          { key: 'applicable', label: 'Applicable', kind: 'text' },
+          { key: 'pre_likelihood', label: 'Pre likelihood', kind: 'number' },
+          { key: 'pre_severity', label: 'Pre severity', kind: 'number' },
+          { key: 'pre_risk', label: 'Pre risk (L×S)', kind: 'number' },
+          { key: 'post_likelihood', label: 'Post likelihood', kind: 'number' },
+          { key: 'post_severity', label: 'Post severity', kind: 'number' },
+          { key: 'post_risk', label: 'Post risk (L×S)', kind: 'number' },
+        ],
+      },
+      {
+        key: 'ppe',
+        label: 'PPE',
+        fields: [
+          { key: 'name', label: 'PPE', kind: 'text' },
+          { key: 'description', label: 'Description', kind: 'text' },
+          { key: 'required', label: 'Required', kind: 'text' },
+          { key: 'answer', label: 'Answer', kind: 'text' },
+        ],
+      },
+      {
+        key: 'questions',
+        label: 'Questions',
+        fields: [
+          { key: 'question', label: 'Question', kind: 'text' },
+          { key: 'answer', label: 'Answer', kind: 'text' },
+          { key: 'requires_yes', label: 'Requires yes', kind: 'text' },
+        ],
+      },
+      {
+        key: 'signatures',
+        label: 'Signatures',
+        fields: [
+          { key: 'name', label: 'Name', kind: 'text' },
+          { key: 'type', label: 'Type', kind: 'text' },
+          { key: 'cs_entrant', label: 'CS entrant', kind: 'text' },
+          { key: 'cs_attendant', label: 'CS attendant', kind: 'text' },
+          { key: 'cs_rescue', label: 'CS rescue', kind: 'text' },
+          { key: 'signed_at', label: 'Signed at', kind: 'text' },
+        ],
+      },
+      {
+        key: 'photos',
+        label: 'Photos',
+        fields: [
+          { key: 'url', label: 'Image URL', kind: 'text' },
+          { key: 'caption', label: 'Caption', kind: 'text' },
+        ],
+      },
     ],
   },
   incidents: {

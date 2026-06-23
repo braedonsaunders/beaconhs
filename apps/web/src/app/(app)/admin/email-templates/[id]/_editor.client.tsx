@@ -23,6 +23,7 @@ const EmailBuilder = dynamic(() => import('../_builder.client'), {
 })
 
 type MergeField = { key: string; label?: string; sample?: string }
+type Collection = { key: string; label: string; fields: { key: string; label: string }[] }
 
 export function EmailTemplateEditor({
   template,
@@ -33,9 +34,11 @@ export function EmailTemplateEditor({
     subjectTemplate: string
     design: Record<string, unknown>
     mergeFields: MergeField[]
+    collections?: Collection[]
     subjectLabel?: string | null
   }
 }) {
+  const collections = template.collections ?? []
   const editorRef = useRef<Editor | null>(null)
   const [name, setName] = useState(template.name)
   const [subject, setSubject] = useState(template.subjectTemplate)
@@ -178,9 +181,27 @@ export function EmailTemplateEditor({
         </div>
       ) : null}
 
+      {collections.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-xs text-slate-500 dark:text-slate-400">
+            Tables (drag from left):
+          </span>
+          {collections.map((c) => (
+            <span
+              key={c.key}
+              className="rounded border border-teal-200 bg-teal-50 px-2 py-0.5 font-mono text-[11px] text-teal-700 dark:border-teal-800 dark:bg-teal-950 dark:text-teal-300"
+              title={`Columns: ${c.fields.map((f) => f.key).join(', ')}`}
+            >
+              {`{{#each ${c.key}}}`}
+            </span>
+          ))}
+        </div>
+      ) : null}
+
       <EmailBuilder
         initialDesign={template.design}
         mergeFields={template.mergeFields}
+        collections={collections}
         onReady={(ed) => {
           editorRef.current = ed
         }}

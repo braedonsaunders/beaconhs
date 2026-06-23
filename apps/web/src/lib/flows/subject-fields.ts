@@ -11,6 +11,8 @@ import { MODULE_FLOW_PROFILES } from './module-profiles'
 
 export type SubjectFieldOption = { key: string; label: string }
 export type SubjectOption = { type: 'module' | 'form_template'; key: string; label: string }
+/** A repeating child collection exposed for {{#each}} tables. */
+export type SubjectCollection = { key: string; label: string; fields: SubjectFieldOption[] }
 
 // Content-only field types carry no mergeable value.
 const SKIP_FIELD_TYPES = new Set(['heading', 'paragraph', 'divider', 'image', 'metric'])
@@ -53,6 +55,24 @@ export async function loadSubjectFields(
     }
     return out
   }
+  return []
+}
+
+/** Repeating child collections a subject exposes for {{#each}} tables. */
+export async function loadSubjectCollections(
+  ctx: RequestContext,
+  subjectType: string | null,
+  subjectKey: string | null,
+): Promise<SubjectCollection[]> {
+  if (!subjectType || !subjectKey) return []
+  if (subjectType === 'module') {
+    return (MODULE_FLOW_PROFILES[subjectKey]?.collections ?? []).map((c) => ({
+      key: c.key,
+      label: c.label,
+      fields: c.fields.map((f) => ({ key: f.key, label: f.label })),
+    }))
+  }
+  // form_template: repeating sections / grid fields are a future pass.
   return []
 }
 
