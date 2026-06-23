@@ -62,12 +62,15 @@
     touch-action: manipulation;
   }
 
-  /* The App Router moves focus to its route boundary (<section tabindex="-1">)
-     after a soft navigation — e.g. when a list search clears its ?q= param via
-     router.replace. Browsers can then paint a page-wide focus ring around that
-     boundary. It's a focus-restoration target, not an interactive control, so
-     suppress the ring; real keyboard-tabbable controls (tabindex >= 0 / native
-     elements) are unaffected and keep their focus-visible styles. */
+  /* Suppress the page-wide focus ring that appears on a soft navigation — e.g.
+     when a list search clears its ?q= param via router.replace and focus leaves
+     the field. Chrome (notably on Windows) makes the scrollable content pane
+     (overflow:auto) keyboard-focusable and paints a 1–2px ring around the whole
+     pane; the App Router also focuses its <section tabindex="-1"> route
+     boundary. Neither is an interactive control, so drop the outline. Real
+     keyboard-focusable controls (links, buttons, inputs) keep their rings. */
+  .app-scroll:focus,
+  .app-scroll:focus-visible,
   [tabindex='-1']:focus,
   [tabindex='-1']:focus-visible {
     outline: none;
