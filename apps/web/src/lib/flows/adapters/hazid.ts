@@ -153,6 +153,7 @@ export function createHazidFlowAdapter(
         location_on_site: a.locationOnSite ?? null,
         locked: a.locked ?? null,
         in_progress: a.inProgress ?? null,
+        status_label: a.locked ? 'Locked' : a.inProgress ? 'In progress' : 'Open',
         occurred_at: fmtDateTime(a.occurredAt),
         locked_at: fmtDateTime(a.lockedAt),
         site_name: head.siteName ?? '',

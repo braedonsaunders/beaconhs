@@ -9,7 +9,7 @@ import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { canManageModule } from '@/lib/module-admin/guard'
 import { MODULE_FLOW_PROFILES } from '@/lib/flows/module-profiles'
-import { compileEmailMjml } from '@/lib/email-templates'
+import { compileBuilderHtml } from '@/lib/email-templates'
 
 export async function compileEmailDesign(
   mjmlSource: string,
@@ -20,6 +20,6 @@ export async function compileEmailDesign(
     can(ctx, 'forms.template.create') ||
     Object.keys(MODULE_FLOW_PROFILES).some((m) => canManageModule(ctx, m))
   if (!mayAuthor) return { ok: false, error: 'Not authorized' }
-  const { html, errors } = await compileEmailMjml(mjmlSource)
+  const { html, errors } = compileBuilderHtml(mjmlSource)
   return { ok: true, html, warnings: errors }
 }

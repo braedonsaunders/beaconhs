@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   escapeHtml,
+  expandRepeatMarkers,
   htmlToPlainText,
   interpolate,
   renderEmail,
@@ -167,6 +168,36 @@ describe('renderTemplate — blocks', () => {
     expect(r.html).toBe('<h1>HAZ-1</h1><table><tr><td>Fall</td></tr><tr><td>Fire</td></tr></table>')
     expect(r.text).toContain('Fall')
     expect(r.text).toContain('Fire')
+  })
+})
+
+describe('expandRepeatMarkers', () => {
+  it('wraps a data-each row in {{#each}} and strips the marker', () => {
+    const out = expandRepeatMarkers(
+      '<table><tr><th>H</th></tr><tr data-each="hazards"><td>{{name}}</td></tr></table>',
+    )
+    expect(out).toBe(
+      '<table><tr><th>H</th></tr>{{#each hazards}}<tr><td>{{name}}</td></tr>{{/each}}</table>',
+    )
+  })
+
+  it('keeps other attributes on the row and supports data-if', () => {
+    const out = expandRepeatMarkers('<tr class="r" data-if="photos" style="x"><td>a</td></tr>')
+    expect(out).toBe('{{#if photos}}<tr class="r" style="x"><td>a</td></tr>{{/if}}')
+  })
+
+  it('end-to-end: expand then render produces real rows', () => {
+    const tpl = expandRepeatMarkers(
+      '<table><tr><th>Name</th></tr><tr data-each="sigs"><td>{{name}}</td></tr></table>',
+    )
+    const html = renderTemplate(
+      tpl,
+      { sigs: [{ name: 'Jane' }, { name: 'Bob' }] },
+      { escapeHtml: true },
+    )
+    expect(html).toBe(
+      '<table><tr><th>Name</th></tr><tr><td>Jane</td></tr><tr><td>Bob</td></tr></table>',
+    )
   })
 })
 

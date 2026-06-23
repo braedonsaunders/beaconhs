@@ -224,6 +224,35 @@ export function renderTemplate(
   return renderNodes(nodes, [{ data: values, item: values }], opts?.escapeHtml ?? false)
 }
 
+// --- Editable-builder markers → mustache (run at SAVE/compile) --------------
+//
+// The plain-HTML email builder can't author `{{#each}}` directly (the markers
+// would show as literal text in the canvas and a table row can't carry text
+// nodes between it). Instead the builder marks a repeating table row with
+// `data-each="collection"` and a conditional element with `data-if="path"` —
+// real, invisible HTML attributes that round-trip through GrapesJS. At compile
+// we expand them into the `{{#each}}` / `{{#if}}` blocks the renderer handles.
+
+/**
+ * Expand `data-each` / `data-if` builder markers into mustache blocks:
+ *   <tr data-each="hazards">…</tr>      → {{#each hazards}}<tr>…</tr>{{/each}}
+ *   <tr data-if="signatures">…</tr>     → {{#if signatures}}<tr>…</tr>{{/if}}
+ * Only `<tr>` is supported (the table-row case) — rows don't nest, so a
+ * non-greedy match to the first `</tr>` is correct. The marker attribute is
+ * stripped from the emitted row.
+ */
+export function expandRepeatMarkers(html: string): string {
+  return html.replace(
+    /<tr\b([^>]*)\bdata-(each|if)="([^"]+)"([^>]*)>([\s\S]*?)<\/tr>/gi,
+    (_m, pre: string, kind: string, key: string, post: string, inner: string) => {
+      const attrs = `${pre}${post}`.replace(/\s+/g, ' ').trim()
+      const open = attrs ? `<tr ${attrs}>` : '<tr>'
+      const block = kind === 'each' ? 'each' : 'if'
+      return `{{#${block} ${key}}}${open}${inner}</tr>{{/${block}}}`
+    },
+  )
+}
+
 // --- Plain-text fallback ----------------------------------------------------
 
 /** Derive a readable plain-text body from rendered HTML (for the text/* part). */

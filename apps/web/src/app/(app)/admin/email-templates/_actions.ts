@@ -14,7 +14,7 @@ import { enqueueEmail } from '@beaconhs/jobs'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import {
-  compileEmailMjml,
+  compileBuilderHtml,
   loadTenantEmailTemplate,
   slugifyTemplateKey,
 } from '@/lib/email-templates'
@@ -39,12 +39,11 @@ async function requireManage() {
   return ctx
 }
 
-const STARTER_MJML =
-  '<mjml><mj-body><mj-section><mj-column>' +
-  '<mj-text font-size="20px" font-weight="bold">Hello {{name}}</mj-text>' +
-  '<mj-text>Write your message here. Insert tokens like {{site}} that fill in when the flow runs.</mj-text>' +
-  '<mj-button href="https://example.com">Open</mj-button>' +
-  '</mj-column></mj-section></mj-body></mjml>'
+const STARTER_HTML =
+  '<div style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#0f172a;padding:24px;max-width:680px;margin:0 auto;">' +
+  '<h1 style="font-size:20px;margin:0 0 8px;">Hello {{name}}</h1>' +
+  '<p style="font-size:14px;line-height:1.6;color:#334155;margin:0;">Write your message here. Drag a field from the left to insert a token like {{site}} that fills in when the flow runs.</p>' +
+  '</div>'
 
 export async function createEmailTemplate(formData: FormData): Promise<void> {
   const ctx = await requireManage()
@@ -65,7 +64,7 @@ export async function createEmailTemplate(formData: FormData): Promise<void> {
         ]
 
   const base = slugifyTemplateKey(String(formData.get('key') ?? '').trim() || name)
-  const compiled = await compileEmailMjml(STARTER_MJML)
+  const compiled = compileBuilderHtml(STARTER_HTML)
 
   const newId = await ctx.db(async (tx) => {
     const existing = await tx
@@ -88,7 +87,7 @@ export async function createEmailTemplate(formData: FormData): Promise<void> {
         recordSubjectType: subject?.type ?? null,
         recordSubjectKey: subject?.key ?? null,
         subjectTemplate: name,
-        mjmlSource: STARTER_MJML,
+        mjmlSource: STARTER_HTML,
         compiledHtml: compiled.html,
         mergeFields,
         createdByTenantUserId: ctx.membership?.id ?? null,
@@ -117,7 +116,7 @@ export async function saveEmailTemplateDesign(input: {
 }): Promise<{ ok: boolean; error?: string; warnings?: string[] }> {
   const ctx = await requireManage()
   if (!input.id) return { ok: false, error: 'Missing template id.' }
-  const compiled = await compileEmailMjml(input.mjmlSource)
+  const compiled = compileBuilderHtml(input.mjmlSource)
   await ctx.db((tx) =>
     tx
       .update(emailTemplates)

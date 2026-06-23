@@ -2,13 +2,13 @@ import 'server-only'
 
 // Shared helpers for the email-template library: RLS-bound reads used by BOTH
 // the Flows runner (send_email mode='template') and the admin builder, plus the
-// server-side MJML compile (the ONLY place MJML runs — at save time, never on
-// the hot send path).
+// server-side compile (the ONLY place compile runs — at save time, never on the
+// hot send path). The builder emits plain inline-styled HTML (no MJML); compile
+// = expand data-each/data-if markers → {{#each}}/{{#if}}, then sanitize.
 
 import { and, asc, eq, isNull, or } from 'drizzle-orm'
-import mjml2html from 'mjml'
 import { emailTemplates, type EmailTemplate } from '@beaconhs/db/schema'
-import { sanitizeEmailHtml } from '@beaconhs/email-render'
+import { expandRepeatMarkers, sanitizeEmailHtml } from '@beaconhs/email-render'
 import type { RequestContext } from '@beaconhs/tenant'
 
 export async function loadTenantEmailTemplate(
@@ -86,19 +86,15 @@ export async function listActiveEmailTemplatesForSubject(
 }
 
 /**
- * Compile MJML source → responsive, sanitized HTML. The authoritative compile —
- * the client builder's in-canvas compile is preview only. NOTE: `mjml2html` in
- * mjml v5 is ASYNC (returns a Promise) — it MUST be awaited, or `out.html` is
- * undefined and the stored compiledHtml ends up empty.
+ * Compile the plain-HTML email builder's output → send-ready HTML. The builder
+ * runs in HTML mode (not MJML) so its tables stay editable; here we expand the
+ * `data-each` / `data-if` row markers into `{{#each}}` / `{{#if}}` blocks, then
+ * sanitize. No MJML — the builder emits inline-styled, email-ready HTML.
  */
-export async function compileEmailMjml(
-  mjmlSource: string,
-): Promise<{ html: string; errors: string[] }> {
-  if (!mjmlSource.trim()) return { html: '', errors: [] }
+export function compileBuilderHtml(sourceHtml: string): { html: string; errors: string[] } {
+  if (!sourceHtml.trim()) return { html: '', errors: [] }
   try {
-    const out = await mjml2html(mjmlSource, { validationLevel: 'soft' })
-    const errors = (out.errors ?? []).map((e) => e.formattedMessage || e.message || 'MJML error')
-    return { html: sanitizeEmailHtml(out.html || ''), errors }
+    return { html: sanitizeEmailHtml(expandRepeatMarkers(sourceHtml)), errors: [] }
   } catch (e) {
     return { html: '', errors: [e instanceof Error ? e.message : String(e)] }
   }

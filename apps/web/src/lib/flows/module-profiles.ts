@@ -52,6 +52,7 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
       { key: 'location_on_site', label: 'Location on site', kind: 'text' },
       { key: 'locked', label: 'Locked', kind: 'bool' },
       { key: 'in_progress', label: 'In progress', kind: 'bool' },
+      { key: 'status_label', label: 'Status', kind: 'text' },
       { key: 'occurred_at', label: 'Occurred at', kind: 'date' },
       { key: 'site_name', label: 'Site name', kind: 'text' },
       { key: 'project_name', label: 'Project name', kind: 'text' },
