@@ -176,8 +176,13 @@ const TRIGGER_LABEL: Record<TriggerData['trigger'], string> = {
 }
 
 // Build a fresh TriggerData from a trigger kind (used by the picker + defaults).
-function buildTrigger(v: TriggerData['trigger'], firstField: string, firstStatus: string): TriggerData {
-  if (v === 'on_field_value') return { trigger: 'on_field_value', rule: { op: 'isSet', field: firstField } }
+function buildTrigger(
+  v: TriggerData['trigger'],
+  firstField: string,
+  firstStatus: string,
+): TriggerData {
+  if (v === 'on_field_value')
+    return { trigger: 'on_field_value', rule: { op: 'isSet', field: firstField } }
   if (v === 'status_change') return { trigger: 'status_change', to: firstStatus }
   if (v === 'scheduled') return { trigger: 'scheduled', cron: '0 8 * * 1' }
   return { trigger: v } as TriggerData
@@ -1287,7 +1292,9 @@ function ActionInspector({
 }) {
   const a = data.action
   const set = (action: ActionData) => onChange({ kind: 'action', action })
-  const actionChoices = actions.length ? actions : (Object.keys(ACTION_LABEL) as ActionData['action'][])
+  const actionChoices = actions.length
+    ? actions
+    : (Object.keys(ACTION_LABEL) as ActionData['action'][])
 
   // send_email "design" (one-off) mode — a full-screen drag-and-drop builder.
   const [designOpen, setDesignOpen] = useState(false)

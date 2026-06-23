@@ -27,7 +27,9 @@ const SEVERITY_ORDER: Record<string, number> = { low: 1, medium: 2, high: 3 }
 function attachmentIdsFromValue(raw: unknown): string[] {
   const pick = (arr: unknown[]) =>
     arr
-      .map((x) => (x && typeof x === 'object' ? (x as { attachmentId?: string }).attachmentId : null))
+      .map((x) =>
+        x && typeof x === 'object' ? (x as { attachmentId?: string }).attachmentId : null,
+      )
       .filter((x): x is string => !!x)
   if (Array.isArray(raw)) return pick(raw)
   if (raw && typeof raw === 'object') {
@@ -120,7 +122,10 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
       })
     },
 
-    async handleExtraAction(action: ActionData, { values, fieldPatch, evalCtx }: ExtraActionHelpers) {
+    async handleExtraAction(
+      action: ActionData,
+      { values, fieldPatch, evalCtx }: ExtraActionHelpers,
+    ) {
       const ran: string[] = []
       const failed: string[] = []
 
@@ -171,7 +176,9 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
         if (action.storeInField) {
           const lines: string[] = [analysis.summary]
           if (analysis.hazards.length)
-            lines.push(`Hazards: ${analysis.hazards.map((h) => `${h.type} (${h.severity})`).join('; ')}`)
+            lines.push(
+              `Hazards: ${analysis.hazards.map((h) => `${h.type} (${h.severity})`).join('; ')}`,
+            )
           if (badPpe.length) lines.push(`PPE: ${badPpe.map((p) => p.item).join(', ')}`)
           const summary = lines.filter(Boolean).join('\n')
           fieldPatch[action.storeInField] = summary

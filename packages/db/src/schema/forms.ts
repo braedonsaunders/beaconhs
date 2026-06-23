@@ -539,11 +539,7 @@ export const flowGates = pgTable(
       t.subjectId,
       t.status,
     ),
-    assigneeIdx: index('flow_gates_assignee_idx').on(
-      t.tenantId,
-      t.assigneeTenantUserId,
-      t.status,
-    ),
+    assigneeIdx: index('flow_gates_assignee_idx').on(t.tenantId, t.assigneeTenantUserId, t.status),
     flowIdx: index('flow_gates_flow_idx').on(t.flowId),
   }),
 )

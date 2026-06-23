@@ -4,7 +4,16 @@
 // responsive HTML server-side. The compiled HTML carries {{merge}} tokens that
 // are resolved per-send by @beaconhs/email-render.
 
-import { boolean, index, jsonb, pgEnum, pgTable, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
+import {
+  boolean,
+  index,
+  jsonb,
+  pgEnum,
+  pgTable,
+  text,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 import { id, timestamps, softDelete } from './_helpers'
 import { tenants, tenantUsers } from './core'

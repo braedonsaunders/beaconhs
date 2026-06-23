@@ -154,7 +154,9 @@ export function EmailTemplateEditor({
 
       {template.mergeFields.length > 0 ? (
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-xs text-slate-500 dark:text-slate-400">Tokens (click to copy):</span>
+          <span className="text-xs text-slate-500 dark:text-slate-400">
+            Tokens (click to copy):
+          </span>
           {template.mergeFields.map((f) => (
             <button
               key={f.key}

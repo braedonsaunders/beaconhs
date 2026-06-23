@@ -20,10 +20,7 @@ function authorizeSubject(ctx: RequestContext, subject: FlowSubjectRef): boolean
   return false
 }
 
-async function loadSubject(
-  ctx: RequestContext,
-  flowId: string,
-): Promise<FlowSubjectRef | null> {
+async function loadSubject(ctx: RequestContext, flowId: string): Promise<FlowSubjectRef | null> {
   const [f] = await ctx.db((tx) =>
     tx
       .select({

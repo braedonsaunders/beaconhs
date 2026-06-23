@@ -24,14 +24,25 @@ function legacyInline(subjectTpl: string, bodyTpl: string, values: Record<string
 
 describe('renderEmail — inline parity', () => {
   const cases: Array<{ subject: string; body: string; values: Record<string, unknown> }> = [
-    { subject: 'Hello {{name}}', body: 'Hi {{name}},\nYour score is {{score}}.', values: { name: 'Sam', score: 88 } },
+    {
+      subject: 'Hello {{name}}',
+      body: 'Hi {{name}},\nYour score is {{score}}.',
+      values: { name: 'Sam', score: 88 },
+    },
     { subject: '', body: 'No subject case', values: {} },
-    { subject: 'Site {{site}}', body: 'Danger: <b>{{hazard}}</b> & "stuff"', values: { site: 'Tower', hazard: '<script>' } },
+    {
+      subject: 'Site {{site}}',
+      body: 'Danger: <b>{{hazard}}</b> & "stuff"',
+      values: { site: 'Tower', hazard: '<script>' },
+    },
     { subject: '{{missing}}', body: 'token {{missing}} gone', values: {} },
   ]
   for (const c of cases) {
     it(`matches legacy for subject="${c.subject}"`, () => {
-      const got = renderEmail({ mode: 'inline', subject: c.subject, bodyTemplate: c.body }, c.values)
+      const got = renderEmail(
+        { mode: 'inline', subject: c.subject, bodyTemplate: c.body },
+        c.values,
+      )
       expect(got).toEqual(legacyInline(c.subject, c.body, c.values))
     })
   }
@@ -39,7 +50,11 @@ describe('renderEmail — inline parity', () => {
 
 describe('interpolate', () => {
   it('escapes substituted values when escapeHtml is set, not the template', () => {
-    const out = interpolate('<p>{{x}}</p>', { x: '<script>alert(1)</script>' }, { escapeHtml: true })
+    const out = interpolate(
+      '<p>{{x}}</p>',
+      { x: '<script>alert(1)</script>' },
+      { escapeHtml: true },
+    )
     expect(out).toBe('<p>&lt;script&gt;alert(1)&lt;/script&gt;</p>')
   })
   it('leaves template + value raw without escapeHtml', () => {
@@ -50,7 +65,11 @@ describe('interpolate', () => {
 describe('renderEmail — template/design', () => {
   it('interpolates escaped values into trusted HTML and derives text', () => {
     const r = renderEmail(
-      { mode: 'template', subjectTemplate: 'Re: {{ref}}', compiledHtml: '<h1>Hi {{name}}</h1><p>{{note}}</p>' },
+      {
+        mode: 'template',
+        subjectTemplate: 'Re: {{ref}}',
+        compiledHtml: '<h1>Hi {{name}}</h1><p>{{note}}</p>',
+      },
       { ref: 'INC-1', name: 'Sam', note: 'A & B <ok>' },
     )
     expect(r.subject).toBe('Re: INC-1')
@@ -78,7 +97,9 @@ describe('sanitizeEmailHtml', () => {
 
 describe('htmlToPlainText', () => {
   it('strips tags + decodes entities', () => {
-    expect(htmlToPlainText('<p>Hello&nbsp;<b>world</b></p><p>A &amp; B</p>')).toBe('Hello world\nA & B')
+    expect(htmlToPlainText('<p>Hello&nbsp;<b>world</b></p><p>A &amp; B</p>')).toBe(
+      'Hello world\nA & B',
+    )
   })
 })
 

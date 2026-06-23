@@ -8,10 +8,7 @@ import type { RequestContext } from '@beaconhs/tenant'
 import { spawnCorrectiveActionForSubject } from '../spawn'
 import type { FlowSubjectAdapter } from '../types'
 
-export function createJournalFlowAdapter(
-  ctx: RequestContext,
-  entryId: string,
-): FlowSubjectAdapter {
+export function createJournalFlowAdapter(ctx: RequestContext, entryId: string): FlowSubjectAdapter {
   return {
     subjectType: 'module',
     subjectKey: 'journals',

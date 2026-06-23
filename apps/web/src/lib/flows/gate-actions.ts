@@ -63,7 +63,11 @@ export async function resolveFlowGate(args: {
   if (adapter && flow?.graph) {
     try {
       const values = await adapter.loadValues()
-      const plan = planFromGate(flow.graph, gate.nodeId, decision, { values, rows: {}, entities: {} })
+      const plan = planFromGate(flow.graph, gate.nodeId, decision, {
+        values,
+        rows: {},
+        entities: {},
+      })
       if (plan.actions.length > 0 || plan.gates.length > 0) {
         const res = await executeFlowPlan(ctx, adapter, { flowId: gate.flowId, plan, values })
         if (res.ran.length) summary += ` · ran ${res.ran.join(', ')}`

@@ -7,7 +7,11 @@
 
 import type { ActionData, EvalContext } from '@beaconhs/forms-core'
 
-export type FlowActorRef = { tenantUserId: string | null; userId: string | null; email: string | null }
+export type FlowActorRef = {
+  tenantUserId: string | null
+  userId: string | null
+  email: string | null
+}
 
 export type ExtraActionHelpers = {
   values: Record<string, unknown>
@@ -41,7 +45,10 @@ export type FlowSubjectAdapter = {
   }): Promise<{ ok: boolean }>
   spawnIncident?(i: { title: string }): Promise<{ ok: boolean }>
   /** Persist set_field patches + the non-compliant flag (forms write back to the response). */
-  persistAfterRun?(p: { fieldPatch: Record<string, unknown>; flagNonCompliant: boolean }): Promise<void>
+  persistAfterRun?(p: {
+    fieldPatch: Record<string, unknown>
+    flagNonCompliant: boolean
+  }): Promise<void>
   /** Subject-specific actions the generic executor doesn't know (forms-only today). */
   handleExtraAction?(
     action: ActionData,

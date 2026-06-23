@@ -28,10 +28,7 @@ export async function ModuleFlowsPage({ moduleKey }: { moduleKey: string }) {
         })
         .from(formAutomations)
         .where(
-          and(
-            eq(formAutomations.subjectType, 'module'),
-            eq(formAutomations.subjectKey, moduleKey),
-          ),
+          and(eq(formAutomations.subjectType, 'module'), eq(formAutomations.subjectKey, moduleKey)),
         )
         .orderBy(asc(formAutomations.createdAt)),
     ),

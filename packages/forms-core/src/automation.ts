@@ -225,10 +225,14 @@ export function lintAutomationGraph(
     const okActions = new Set<string>(profile.actions)
     for (const n of graph.nodes) {
       if (n.data.kind === 'trigger' && !okTriggers.has(n.data.trigger.trigger)) {
-        errors.push(`Trigger ${n.id}: "${n.data.trigger.trigger}" is not available for ${profile.label}.`)
+        errors.push(
+          `Trigger ${n.id}: "${n.data.trigger.trigger}" is not available for ${profile.label}.`,
+        )
       }
       if (n.data.kind === 'action' && !okActions.has(n.data.action.action)) {
-        errors.push(`Action ${n.id}: "${n.data.action.action}" is not available for ${profile.label}.`)
+        errors.push(
+          `Action ${n.id}: "${n.data.action.action}" is not available for ${profile.label}.`,
+        )
       }
     }
   }
