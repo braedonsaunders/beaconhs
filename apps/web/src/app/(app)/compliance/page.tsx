@@ -12,7 +12,11 @@ import {
 } from '@beaconhs/ui'
 import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { parseListParams } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
+import { SearchInput } from '@/components/search-input'
+import { TableToolbar } from '@/components/table-toolbar'
+import { Pagination } from '@/components/pagination'
 import { obligationRollup, kindLabel } from './_hub'
 import { PercentBar } from './_shared'
 import { ComplianceSubNav } from './_sub-nav'
@@ -20,16 +24,33 @@ import { ComplianceSubNav } from './_sub-nav'
 export const metadata = { title: 'Compliance' }
 export const dynamic = 'force-dynamic'
 
-export default async function ComplianceOverviewPage() {
+const BASE = '/compliance'
+
+export default async function ComplianceOverviewPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  const sp = await searchParams
   const ctx = await requireRequestContext()
   assertCan(ctx, 'compliance.read')
   const canAssign = can(ctx, 'compliance.assign')
+  const params = parseListParams(sp, { sort: 'overdue', allowedSorts: ['overdue'] as const })
   const rollup = await obligationRollup(ctx)
 
+  // KPIs are the org-wide scoreboard — always over every obligation, never the
+  // searched/paged subset.
   const totalSubjects = rollup.reduce((s, r) => s + r.total, 0)
   const totalCompleted = rollup.reduce((s, r) => s + r.completed, 0)
   const totalOverdue = rollup.reduce((s, r) => s + r.overdue, 0)
   const overall = totalSubjects === 0 ? 0 : Math.round((totalCompleted / totalSubjects) * 100)
+
+  const q = params.q?.toLowerCase()
+  const filtered = q ? rollup.filter((r) => r.title.toLowerCase().includes(q)) : rollup
+  const total = filtered.length
+  const pageCount = Math.max(1, Math.ceil(total / params.perPage))
+  const page = Math.min(params.page, pageCount)
+  const rows = filtered.slice((page - 1) * params.perPage, page * params.perPage)
 
   return (
     <ListPageLayout
@@ -63,8 +84,12 @@ export default async function ComplianceOverviewPage() {
           <Kpi label="Overall compliance" value={`${overall}%`} />
         </div>
 
+        <TableToolbar>
+          <SearchInput placeholder="Search obligations by title…" />
+        </TableToolbar>
+
         {rollup.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 p-8 text-center text-sm text-slate-500">
+          <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 p-8 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-400">
             No obligations.
             {canAssign ? (
               <>
@@ -76,59 +101,72 @@ export default async function ComplianceOverviewPage() {
               </>
             ) : null}
           </div>
+        ) : total === 0 ? (
+          <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 p-8 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-400">
+            No obligations match your search.
+          </div>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Kind</TableHead>
-                <TableHead>Obligation</TableHead>
-                <TableHead className="w-28">Completed</TableHead>
-                <TableHead className="w-28">Subjects</TableHead>
-                <TableHead className="w-28">Overdue</TableHead>
-                <TableHead>Compliance</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rollup.map((r) => (
-                <TableRow key={r.id}>
-                  <TableCell>
-                    <Badge variant="secondary">{kindLabel(r.kind)}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Link
-                      href={`/compliance/obligations/${r.id}`}
-                      className="font-medium text-slate-900 hover:underline"
-                    >
-                      {r.title}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="text-slate-700 tabular-nums">
-                    {r.completed.toLocaleString()}
-                  </TableCell>
-                  <TableCell className="text-slate-700 tabular-nums">
-                    {r.total.toLocaleString()}
-                  </TableCell>
-                  <TableCell className="tabular-nums">
-                    {r.overdue > 0 ? (
-                      <Badge variant="destructive">{r.overdue}</Badge>
-                    ) : (
-                      <span className="text-slate-400">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <div className="max-w-xs flex-1">
-                        <PercentBar percent={r.percent} />
-                      </div>
-                      <span className="min-w-[3rem] text-right text-xs text-slate-600 tabular-nums">
-                        {r.percent}%
-                      </span>
-                    </div>
-                  </TableCell>
+          <>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Kind</TableHead>
+                  <TableHead>Obligation</TableHead>
+                  <TableHead className="w-28">Completed</TableHead>
+                  <TableHead className="w-28">Subjects</TableHead>
+                  <TableHead className="w-28">Overdue</TableHead>
+                  <TableHead>Compliance</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {rows.map((r) => (
+                  <TableRow key={r.id}>
+                    <TableCell>
+                      <Badge variant="secondary">{kindLabel(r.kind)}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Link
+                        href={`/compliance/obligations/${r.id}`}
+                        className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                      >
+                        {r.title}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="text-slate-700 tabular-nums dark:text-slate-300">
+                      {r.completed.toLocaleString()}
+                    </TableCell>
+                    <TableCell className="text-slate-700 tabular-nums dark:text-slate-300">
+                      {r.total.toLocaleString()}
+                    </TableCell>
+                    <TableCell className="tabular-nums">
+                      {r.overdue > 0 ? (
+                        <Badge variant="destructive">{r.overdue}</Badge>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <div className="max-w-xs flex-1">
+                          <PercentBar percent={r.percent} />
+                        </div>
+                        <span className="min-w-[3rem] text-right text-xs text-slate-600 tabular-nums dark:text-slate-400">
+                          {r.percent}%
+                        </span>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            <Pagination
+              basePath={BASE}
+              currentParams={sp}
+              total={total}
+              page={page}
+              perPage={params.perPage}
+            />
+          </>
         )}
       </div>
     </ListPageLayout>
