@@ -4,7 +4,7 @@
 
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { Mail, Plus, Trash2, ArrowUpRight } from 'lucide-react'
+import { Mail, Plus, ArrowUpRight } from 'lucide-react'
 import { asc, isNull } from 'drizzle-orm'
 import {
   Badge,
@@ -24,6 +24,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { listSubjectOptions } from '@/lib/flows/subject-fields'
 import { PageContainer } from '@/components/page-layout'
 import { createEmailTemplate, deleteEmailTemplate } from './_actions'
+import { DeleteTemplateButton } from './_delete-button'
 
 export const metadata = { title: 'Email templates' }
 export const dynamic = 'force-dynamic'
@@ -106,13 +107,7 @@ export default async function EmailTemplatesPage() {
                       </Link>
                       <form action={deleteEmailTemplate}>
                         <input type="hidden" name="id" value={t.id} />
-                        <button
-                          type="submit"
-                          className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950"
-                          title="Delete template"
-                        >
-                          <Trash2 size={15} />
-                        </button>
+                        <DeleteTemplateButton name={t.name} />
                       </form>
                     </div>
                   </li>
