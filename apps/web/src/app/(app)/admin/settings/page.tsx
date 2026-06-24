@@ -13,6 +13,7 @@ import {
   DetailHeader,
   Input,
   Label,
+  Select,
 } from '@beaconhs/ui'
 import { db } from '@beaconhs/db'
 import { tenants } from '@beaconhs/db/schema'
@@ -187,17 +188,17 @@ export default async function AdminSettingsPage() {
                 ))}
               </div>
               <Field label="Default language">
-                <select
+                <Select
                   name="defaultLanguage"
                   defaultValue={tenant.defaultLanguage}
-                  className="app-select h-10 w-32 rounded-md border border-slate-300 bg-white pr-8 pl-3 text-sm dark:border-slate-700 dark:bg-slate-900"
+                  className="h-10 w-32 pl-3 text-sm"
                 >
                   {KNOWN_LANGUAGES.map((l) => (
                     <option key={l.value} value={l.value}>
                       {l.label}
                     </option>
                   ))}
-                </select>
+                </Select>
               </Field>
             </CardContent>
           </Card>

@@ -36,7 +36,7 @@ import {
   ChevronDown,
   Search,
 } from 'lucide-react'
-import { cn, FileUploader } from '@beaconhs/ui'
+import { cn, FileUploader, Select } from '@beaconhs/ui'
 import { requestUpload, finalizeUpload } from '@/lib/uploads'
 import { FONT_FAMILIES, FONT_SIZES, LINE_SPACINGS, TEXT_COLORS, HIGHLIGHT_COLORS } from './_lib'
 
@@ -320,21 +320,18 @@ function ToolbarSelect({
   widthClass: string
 }) {
   return (
-    <select
+    <Select
       title={title}
       value={value}
       onChange={(e) => onChange(e.currentTarget.value)}
-      className={cn(
-        'doc-select h-8 rounded border border-slate-200 bg-white px-1.5 text-xs text-slate-700 outline-none hover:border-slate-300 focus:border-teal-400 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-slate-700',
-        widthClass,
-      )}
+      className={cn('h-8 px-1.5 text-xs text-slate-700 dark:text-slate-200', widthClass)}
     >
       {options.map((o) => (
         <option key={o.value || 'none'} value={o.value}>
           {o.label}
         </option>
       ))}
-    </select>
+    </Select>
   )
 }
 

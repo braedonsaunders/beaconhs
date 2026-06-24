@@ -31,7 +31,7 @@ import {
   Underline as UnderlineIcon,
   Undo2,
 } from 'lucide-react'
-import { cn } from '@beaconhs/ui'
+import { cn, Select } from '@beaconhs/ui'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
 import { toast } from '@/lib/toast'
 
@@ -256,7 +256,7 @@ function StyleSelect({ editor }: { editor: Editor | null }) {
           ? 'h3'
           : 'p'
   return (
-    <select
+    <Select
       title="Text style"
       disabled={!editor}
       value={value}
@@ -272,13 +272,13 @@ function StyleSelect({ editor }: { editor: Editor | null }) {
             .setHeading({ level: Number(v[1]) as 1 | 2 | 3 })
             .run()
       }}
-      className="h-7 rounded border border-transparent bg-transparent px-1.5 text-xs font-medium text-slate-700 hover:border-slate-200 focus:outline-none disabled:opacity-40"
+      className="h-7 px-1.5 text-xs font-medium text-slate-700 disabled:opacity-40"
     >
       <option value="p">Normal</option>
       <option value="h1">Heading 1</option>
       <option value="h2">Heading 2</option>
       <option value="h3">Heading 3</option>
-    </select>
+    </Select>
   )
 }
 

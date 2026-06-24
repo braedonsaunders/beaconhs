@@ -20,6 +20,17 @@ const eslintConfig = [
       'react-hooks/purity': 'warn',
       'react-hooks/refs': 'warn',
       'react-hooks/preserve-manual-memoization': 'warn',
+      // One select everywhere: the app-wide <Select> from @beaconhs/ui (a
+      // mobile-first searchable dropdown / bottom sheet). Native <select> is
+      // banned so we never regress to inconsistent, un-searchable controls.
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "JSXOpeningElement[name.name='select']",
+          message:
+            'Use <Select> from @beaconhs/ui (or SearchSelect / PersonSelectField) instead of a native <select>.',
+        },
+      ],
     },
   },
 ]

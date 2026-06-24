@@ -9,7 +9,7 @@
 import { useRef, useState } from 'react'
 import { Reorder } from 'framer-motion'
 import { Copy, FileUp, Loader2, Play, Trash2, X } from 'lucide-react'
-import { Button, FileUploader, Textarea, cn } from '@beaconhs/ui'
+import { Button, FileUploader, Select, Textarea, cn } from '@beaconhs/ui'
 import type { Slide, SlideElement } from '@beaconhs/db/schema'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
 import { toast } from '@/lib/toast'
@@ -204,7 +204,7 @@ export function SlideDeckEditor({
         }}
         onImageFit={setImageFit}
       >
-        <select
+        <Select
           value=""
           title="Add slide"
           onChange={(e) => {
@@ -212,7 +212,7 @@ export function SlideDeckEditor({
             if (v) addSlide(v)
             e.currentTarget.value = ''
           }}
-          className="h-7 w-32 rounded border border-slate-200 bg-white px-1.5 text-xs font-medium text-slate-700 focus:outline-none"
+          className="h-7 w-32 px-1.5 text-xs font-medium text-slate-700"
         >
           <option value="">+ Add slide…</option>
           {SLIDE_TEMPLATES.map((t) => (
@@ -220,7 +220,7 @@ export function SlideDeckEditor({
               {t.label}
             </option>
           ))}
-        </select>
+        </Select>
         {selected ? (
           <ColorPicker
             label="Slide background"

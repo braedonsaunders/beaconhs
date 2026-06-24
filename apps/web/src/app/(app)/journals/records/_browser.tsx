@@ -17,7 +17,7 @@ import {
   Search,
   X,
 } from 'lucide-react'
-import { cn, SearchSelect } from '@beaconhs/ui'
+import { cn, SearchSelect, Select } from '@beaconhs/ui'
 import { tagSwatch } from '../_tag-colors'
 import { formatLongDate, statusMeta } from '../_format'
 import { fetchEntry } from '../_actions'
@@ -205,7 +205,7 @@ export function RecordsBrowser({
             className="h-9 rounded-lg border border-slate-300 bg-white px-2 text-sm text-slate-700 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/25 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
           />
 
-          <select
+          <Select
             value={filters.status ?? ''}
             onChange={(e) =>
               setFilters((f) => ({
@@ -214,14 +214,14 @@ export function RecordsBrowser({
               }))
             }
             aria-label="Status"
-            className="app-select h-9 rounded-lg border border-slate-300 bg-white pr-7 pl-2 text-sm text-slate-700 outline-none focus:border-teal-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+            className="h-9 text-sm"
           >
             <option value="">Any status</option>
             <option value="submitted">Submitted</option>
             <option value="draft">Draft</option>
             <option value="archived">Archived</option>
-          </select>
-          <select
+          </Select>
+          <Select
             value={filters.definition ?? ''}
             onChange={(e) =>
               setFilters((f) => ({
@@ -230,12 +230,12 @@ export function RecordsBrowser({
               }))
             }
             aria-label="Type"
-            className="app-select h-9 rounded-lg border border-slate-300 bg-white pr-7 pl-2 text-sm text-slate-700 outline-none focus:border-teal-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+            className="h-9 text-sm"
           >
             <option value="">Any type</option>
             <option value="worker">Worker</option>
             <option value="supervisor">Supervisor</option>
-          </select>
+          </Select>
           <div className="w-40">
             <SearchSelect
               value={filters.tag ?? ''}

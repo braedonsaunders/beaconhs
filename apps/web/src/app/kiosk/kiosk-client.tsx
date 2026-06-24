@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import { ArrowLeft, CheckCircle2, LogIn, LogOut, Search, X } from 'lucide-react'
+import { Select } from '@beaconhs/ui'
 import { recordKioskScan } from './actions'
 
 type Person = { id: string; firstName: string; lastName: string; jobTitle: string | null }
@@ -223,10 +224,10 @@ export function KioskClient({
                 <label className="text-xs font-medium tracking-wide text-slate-500 uppercase">
                   Site (optional)
                 </label>
-                <select
+                <Select
                   value={siteId}
                   onChange={(e) => setSiteId(e.target.value)}
-                  className="app-select mt-1 w-full rounded-md border border-slate-300 bg-white py-2 pr-8 pl-3 text-sm text-slate-900"
+                  className="mt-1 w-full py-2 pl-3 text-sm text-slate-900"
                 >
                   <option value="">— No site —</option>
                   {sites.map((s) => (
@@ -234,7 +235,7 @@ export function KioskClient({
                       {s.name}
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
             ) : null}
             {crews.length > 0 ? (
@@ -242,10 +243,10 @@ export function KioskClient({
                 <label className="text-xs font-medium tracking-wide text-slate-500 uppercase">
                   Crew (optional)
                 </label>
-                <select
+                <Select
                   value={crewId}
                   onChange={(e) => setCrewId(e.target.value)}
-                  className="app-select mt-1 w-full rounded-md border border-slate-300 bg-white py-2 pr-8 pl-3 text-sm text-slate-900"
+                  className="mt-1 w-full py-2 pl-3 text-sm text-slate-900"
                 >
                   <option value="">— No crew —</option>
                   {crews.map((c) => (
@@ -253,7 +254,7 @@ export function KioskClient({
                       {c.name}
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
             ) : null}
           </div>

@@ -5,6 +5,9 @@
 //   • Mobile (<lg): an iOS/Android-style bottom sheet that slides up, with a
 //     big search field and large tap targets + safe-area padding.
 // Animated (framer-motion), portal'd sheet, Esc + click-out + scroll-lock.
+// Supports disabled options and optgroup-style headers (via SelectOption.group).
+// This is the single dropdown implementation behind both the people picker and
+// the generic <Select> — there are no native <select> dropdowns in the app.
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -12,7 +15,15 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { Check, ChevronDown, Search, X } from 'lucide-react'
 import { cn } from './utils'
 
-export type SelectOption = { value: string; label: string; hint?: string }
+export type SelectOption = {
+  value: string
+  label: string
+  hint?: string
+  /** Rendered greyed-out and non-selectable. */
+  disabled?: boolean
+  /** Group header label (from <optgroup>); options sharing a group are batched. */
+  group?: string
+}
 
 export function SearchSelect({
   value,
@@ -26,6 +37,10 @@ export function SearchSelect({
   sheetTitle,
   ariaLabel,
   className,
+  triggerClassName,
+  searchable,
+  invalid = false,
+  id,
 }: {
   value: string
   onChange: (value: string) => void
@@ -39,7 +54,15 @@ export function SearchSelect({
   /** Title shown at the top of the mobile bottom sheet. */
   sheetTitle?: string
   ariaLabel?: string
+  /** Classes for the outer wrapper (layout / width). */
   className?: string
+  /** Classes for the trigger button (height / text size overrides). */
+  triggerClassName?: string
+  /** Force the search box on/off. Defaults to auto: shown when >7 options or any groups. */
+  searchable?: boolean
+  /** Renders the trigger in an error state. */
+  invalid?: boolean
+  id?: string
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -67,20 +90,36 @@ export function SearchSelect({
   const display = selected?.label ?? (showEmpty ? emptyLabel : placeholder)
   const isPlaceholder = !selected && !showEmpty
 
+  const showSearch = searchable ?? (allOptions.length > 7 || allOptions.some((o) => o.group))
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return allOptions
-    return allOptions.filter((o) => o.label.toLowerCase().includes(q))
+    return allOptions.filter(
+      (o) => o.label.toLowerCase().includes(q) || o.group?.toLowerCase().includes(q),
+    )
   }, [query, allOptions])
+
+  // Next non-disabled index from `from` in direction `dir`; stays put if none.
+  function nextEnabled(from: number, dir: 1 | -1) {
+    let i = from
+    while (true) {
+      i += dir
+      if (i < 0 || i >= filtered.length) return from
+      if (!filtered[i]?.disabled) return i
+    }
+  }
+  function firstEnabled(start: number) {
+    if (start >= 0 && start < filtered.length && !filtered[start]?.disabled) return start
+    const fwd = filtered.findIndex((o) => !o.disabled)
+    return fwd === -1 ? 0 : fwd
+  }
 
   function openMenu() {
     if (disabled) return
     setQuery('')
     setHighlight(
-      Math.max(
-        0,
-        filtered.findIndex((o) => o.value === value),
-      ),
+      firstEnabled(filtered.findIndex((o) => o.value === value)),
     )
     setOpen(true)
     setTimeout(() => searchRef.current?.focus(), 60)
@@ -107,14 +146,14 @@ export function SearchSelect({
       if (e.key === 'Escape') setOpen(false)
       else if (e.key === 'ArrowDown') {
         e.preventDefault()
-        setHighlight((h) => Math.min(h + 1, filtered.length - 1))
+        setHighlight((h) => nextEnabled(h, 1))
       } else if (e.key === 'ArrowUp') {
         e.preventDefault()
-        setHighlight((h) => Math.max(h - 1, 0))
+        setHighlight((h) => nextEnabled(h, -1))
       } else if (e.key === 'Enter') {
         e.preventDefault()
         const o = filtered[highlight]
-        if (o) choose(o.value)
+        if (o && !o.disabled) choose(o.value)
       }
     }
     document.addEventListener('keydown', onKey)
@@ -142,35 +181,48 @@ export function SearchSelect({
       ) : null}
       {filtered.map((o, i) => {
         const active = o.value === value
+        const prevGroup = i > 0 ? filtered[i - 1]?.group : undefined
+        const header = o.group && o.group !== prevGroup ? o.group : null
         return (
-          <li key={o.value || '__empty'}>
-            <button
-              type="button"
-              role="option"
-              aria-selected={active}
-              onMouseEnter={() => setHighlight(i)}
-              onClick={() => choose(o.value)}
-              className={cn(
-                'flex h-12 w-full items-center gap-2.5 px-4 text-left text-[15px] transition-colors lg:h-9 lg:px-3 lg:text-sm',
-                i === highlight
-                  ? 'bg-teal-50 dark:bg-teal-950/50'
-                  : 'active:bg-slate-100 dark:active:bg-slate-700',
-                active
-                  ? 'font-medium text-teal-900 dark:text-teal-300'
-                  : 'text-slate-700 dark:text-slate-200',
-              )}
-            >
-              <span className="min-w-0 flex-1 truncate">
-                {o.label}
-                {o.hint ? (
-                  <span className="ml-1.5 text-xs text-slate-400 dark:text-slate-500">
-                    {o.hint}
-                  </span>
-                ) : null}
-              </span>
-              {active ? <Check size={17} className="shrink-0 text-teal-600" /> : null}
-            </button>
-          </li>
+          <div key={o.value || `__opt-${i}`}>
+            {header ? (
+              <div className="px-4 pt-2.5 pb-1 text-[11px] font-semibold tracking-wide text-slate-400 uppercase lg:px-3 dark:text-slate-500">
+                {header}
+              </div>
+            ) : null}
+            <li>
+              <button
+                type="button"
+                role="option"
+                aria-selected={active}
+                disabled={o.disabled}
+                onMouseEnter={() => !o.disabled && setHighlight(i)}
+                onClick={() => !o.disabled && choose(o.value)}
+                className={cn(
+                  'flex h-12 w-full items-center gap-2.5 px-4 text-left text-[15px] transition-colors lg:h-9 lg:px-3 lg:text-sm',
+                  o.disabled
+                    ? 'cursor-not-allowed text-slate-300 dark:text-slate-600'
+                    : i === highlight
+                      ? 'bg-teal-50 dark:bg-teal-950/50'
+                      : 'active:bg-slate-100 dark:active:bg-slate-700',
+                  !o.disabled &&
+                    (active
+                      ? 'font-medium text-teal-900 dark:text-teal-300'
+                      : 'text-slate-700 dark:text-slate-200'),
+                )}
+              >
+                <span className="min-w-0 flex-1 truncate">
+                  {o.label}
+                  {o.hint ? (
+                    <span className="ml-1.5 text-xs text-slate-400 dark:text-slate-500">
+                      {o.hint}
+                    </span>
+                  ) : null}
+                </span>
+                {active ? <Check size={17} className="shrink-0 text-teal-600" /> : null}
+              </button>
+            </li>
+          </div>
         )
       })}
     </ul>
@@ -203,16 +255,20 @@ export function SearchSelect({
     <div ref={wrapRef} className={cn('relative', className)}>
       <button
         type="button"
+        id={id}
         onClick={() => (open ? setOpen(false) : openMenu())}
         disabled={disabled}
         aria-label={ariaLabel}
         aria-haspopup="listbox"
         aria-expanded={open}
+        aria-invalid={invalid || undefined}
         className={cn(
           'flex h-10 w-full items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-left text-sm shadow-sm transition dark:border-slate-700 dark:bg-slate-900',
           'focus:border-teal-500 focus:ring-2 focus:ring-teal-500/25 focus:outline-none',
           disabled && 'cursor-not-allowed bg-slate-50 opacity-70 dark:bg-slate-800',
           open && 'border-teal-500 ring-2 ring-teal-500/25',
+          invalid && 'border-red-400 focus:border-red-500 focus:ring-red-500/30',
+          triggerClassName,
         )}
       >
         <span
@@ -237,8 +293,8 @@ export function SearchSelect({
       {/* Desktop dropdown */}
       {open && isDesktop ? (
         <div className="absolute top-full left-0 z-50 mt-1.5 w-full min-w-[12rem] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-slate-900">
-          {searchBox(false)}
-          <div className="mt-1 max-h-64 overflow-y-auto">{optionList}</div>
+          {showSearch ? searchBox(false) : null}
+          <div className={cn('max-h-64 overflow-y-auto', showSearch && 'mt-1')}>{optionList}</div>
         </div>
       ) : null}
 
@@ -279,7 +335,7 @@ export function SearchSelect({
                         <X size={18} />
                       </button>
                     </div>
-                    {searchBox(true)}
+                    {showSearch ? searchBox(true) : null}
                     <div className="mt-1 min-h-0 flex-1 overflow-y-auto pb-[max(0.75rem,env(safe-area-inset-bottom))]">
                       {optionList}
                     </div>

@@ -13,7 +13,7 @@ import { useMemo, useState, useTransition } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { Loader2, Plus, RotateCcw, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { Button, Drawer, Input, SearchSelect, Select, cn, type SelectOption } from '@beaconhs/ui'
+import { Button, Drawer, Input, SearchSelect, Select, type SelectOption } from '@beaconhs/ui'
 import type { DashboardParam, DashboardParamMap, DashboardParamType } from '@beaconhs/db/schema'
 import { paramSearchKey } from './_params'
 
@@ -32,11 +32,6 @@ const PARAM_TYPES: { value: DashboardParamType; label: string }[] = [
   { value: 'date', label: 'Date' },
   { value: 'enum', label: 'Choice' },
 ]
-
-// `.app-select` (globals.css) drops the native macOS chrome that clips the value
-// text; `pr-7` leaves room for its custom chevron.
-const selectCls =
-  'app-select h-9 w-full rounded-md border border-slate-300 bg-white pr-7 pl-2 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100'
 
 function slug(s: string): string {
   const base = s
@@ -488,12 +483,12 @@ function ParamsSettingsBody({
                 <div className="space-y-1.5">
                   {p.targets.map((t, ti) => (
                     <div key={ti} className="flex items-center gap-1.5">
-                      <select
+                      <Select
                         value={t.cardId}
                         onChange={(e) =>
                           updateTarget(pi, ti, { cardId: e.target.value, field: '' })
                         }
-                        className={cn(selectCls, 'flex-1')}
+                        className="flex-1"
                       >
                         <option value="">Pick a card…</option>
                         {cardOptions.map((c) => (
@@ -501,11 +496,11 @@ function ParamsSettingsBody({
                             {c.label}
                           </option>
                         ))}
-                      </select>
-                      <select
+                      </Select>
+                      <Select
                         value={t.field}
                         onChange={(e) => updateTarget(pi, ti, { field: e.target.value })}
-                        className={cn(selectCls, 'flex-1')}
+                        className="flex-1"
                         disabled={!t.cardId}
                       >
                         <option value="">Pick a field…</option>
@@ -514,7 +509,7 @@ function ParamsSettingsBody({
                             {f.label}
                           </option>
                         ))}
-                      </select>
+                      </Select>
                       <button
                         type="button"
                         onClick={() => removeTarget(pi, ti)}

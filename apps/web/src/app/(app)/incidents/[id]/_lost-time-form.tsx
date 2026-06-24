@@ -4,7 +4,7 @@
 // parent drawer's footer Submit button targets us via `form={formId}`.
 
 import { useTransition } from 'react'
-import { Input, Label, Textarea } from '@beaconhs/ui'
+import { Input, Label, Select, Textarea } from '@beaconhs/ui'
 
 const STATUSES = [
   { value: 'off_work', label: 'Off work' },
@@ -27,11 +27,11 @@ export function LostTimeAddForm({
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="ltf-status">Status</Label>
-          <select
+          <Select
             id="ltf-status"
             name="status"
             defaultValue="off_work"
-            className="app-select h-9 w-full rounded-md border border-slate-300 bg-white pr-7 pl-2 text-sm"
+            className="h-9 w-full pl-2 text-sm"
             disabled={isPending}
           >
             {STATUSES.map((s) => (
@@ -39,15 +39,15 @@ export function LostTimeAddForm({
                 {s.label}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="ltf-injury">Injury</Label>
-          <select
+          <Select
             id="ltf-injury"
             name="injuryId"
             defaultValue=""
-            className="app-select h-9 w-full rounded-md border border-slate-300 bg-white pr-7 pl-2 text-sm"
+            className="h-9 w-full pl-2 text-sm"
             disabled={isPending}
           >
             <option value="">— Any —</option>
@@ -56,7 +56,7 @@ export function LostTimeAddForm({
                 {opt.label}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

@@ -19,7 +19,7 @@ import {
   ChevronDown,
   Loader2,
 } from 'lucide-react'
-import { cn, FileUploader } from '@beaconhs/ui'
+import { cn, FileUploader, Select } from '@beaconhs/ui'
 import { requestUpload, finalizeUpload } from '@/lib/uploads'
 import { toast } from '@/lib/toast'
 import { ZOOM_PRESETS, PAGE_SIZES, type PageSizeKey } from './_lib'
@@ -211,18 +211,18 @@ function SaveBadge({ state }: { state: SaveState }) {
 
 function ZoomSelect({ zoom, onZoomChange }: { zoom: number; onZoomChange: (z: number) => void }) {
   return (
-    <select
+    <Select
       title="Zoom"
       value={zoom}
       onChange={(e) => onZoomChange(Number(e.currentTarget.value))}
-      className="doc-select h-8 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-600 outline-none hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-slate-700"
+      className="h-8 px-2 text-xs text-slate-600 dark:text-slate-300"
     >
       {ZOOM_PRESETS.map((z) => (
         <option key={z} value={z}>
           {Math.round(z * 100)}%
         </option>
       ))}
-    </select>
+    </Select>
   )
 }
 
@@ -311,17 +311,17 @@ function PageSetupMenu({
             <span className="mb-1 block font-medium text-slate-500 dark:text-slate-400">
               Page size
             </span>
-            <select
+            <Select
               value={layout.pageSize}
               onChange={(e) => onLayoutChange({ pageSize: e.currentTarget.value as PageSizeKey })}
-              className="doc-select h-8 w-full rounded border border-slate-200 px-2 dark:border-slate-800"
+              className="h-8 w-full px-2"
             >
               {Object.entries(PAGE_SIZES).map(([k, v]) => (
                 <option key={k} value={k}>
                   {v.label}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <label className="flex items-center justify-between">
             <span className="font-medium text-slate-500 dark:text-slate-400">Print header</span>

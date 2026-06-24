@@ -28,7 +28,7 @@ import {
   Type,
   Underline as UnderlineIcon,
 } from 'lucide-react'
-import { cn } from '@beaconhs/ui'
+import { cn, Select } from '@beaconhs/ui'
 import type { SlideElement, SlideImageElement, SlideTextElement } from '@beaconhs/db/schema'
 import type { SlideCanvasHandle } from './slide-canvas'
 import { newShapeElement, newTextElement } from './slide-model'
@@ -112,7 +112,7 @@ export function SlideRibbon({
       </Btn>
       <Sep />
 
-      <select
+      <Select
         title="Font"
         disabled={!text}
         value={text?.fontFamily ?? 'sans'}
@@ -121,12 +121,12 @@ export function SlideRibbon({
             fontFamily: e.currentTarget.value as 'sans' | 'serif' | 'mono',
           })
         }
-        className="h-7 rounded border border-transparent bg-transparent px-1 text-xs font-medium text-slate-700 hover:border-slate-200 focus:outline-none disabled:opacity-40"
+        className="h-7 px-1 text-xs font-medium text-slate-700 disabled:opacity-40"
       >
         <option value="sans">Sans</option>
         <option value="serif">Serif</option>
         <option value="mono">Mono</option>
-      </select>
+      </Select>
       <FontSizeInput
         value={text?.fontSize ?? null}
         onChange={(fontSize) => api.current?.setTextProp({ fontSize })}
@@ -232,16 +232,16 @@ export function SlideRibbon({
           <Btn label="Replace image" onClick={onReplaceImage}>
             <ImageIcon size={15} />
           </Btn>
-          <select
+          <Select
             title="Image fit (player)"
             value={image.fit ?? 'stretch'}
             onChange={(e) => onImageFit(e.currentTarget.value as 'stretch' | 'cover' | 'contain')}
-            className="h-7 rounded border border-transparent bg-transparent px-1 text-xs font-medium text-slate-700 hover:border-slate-200 focus:outline-none"
+            className="h-7 px-1 text-xs font-medium text-slate-700"
           >
             <option value="stretch">Stretch</option>
             <option value="cover">Fill (crop)</option>
             <option value="contain">Fit</option>
-          </select>
+          </Select>
           <Sep />
         </>
       ) : null}

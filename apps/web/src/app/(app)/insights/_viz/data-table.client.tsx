@@ -6,7 +6,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ChevronsUpDown } from 'lucide-react'
-import { cn } from '@beaconhs/ui'
+import { Select, cn } from '@beaconhs/ui'
 import {
   resolveCellStyle,
   type CfRule,
@@ -168,20 +168,20 @@ export function DataTable({
           {result.truncated ? ' (capped)' : ''}
         </span>
         <div className="flex items-center gap-2">
-          <select
+          <Select
             value={pageSize}
             onChange={(e) => {
               setPageSize(Number(e.target.value))
               setPage(0)
             }}
-            className="app-select h-7 rounded-md border border-slate-200 bg-white pr-6 pl-1.5 text-xs outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+            className="h-7 text-xs"
           >
             {PAGE_SIZES.map((s) => (
               <option key={s} value={s}>
                 {s} / page
               </option>
             ))}
-          </select>
+          </Select>
           <div className="flex items-center gap-1">
             <button
               type="button"

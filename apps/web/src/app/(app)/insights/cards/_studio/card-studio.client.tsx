@@ -10,7 +10,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, BarChart3, Loader2, Plus, Save, Sparkles, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { Button, cn } from '@beaconhs/ui'
+import { Button, Select, cn } from '@beaconhs/ui'
 import {
   VIZ_LIST,
   parseExpression,
@@ -129,11 +129,9 @@ const AGG_FNS: { value: BhqlAggFn; label: string }[] = [
 
 const inputCls =
   'h-9 w-full rounded-md border border-slate-300 bg-white px-2 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100'
-// Selects add the `.app-select` treatment (globals.css: appearance-none + custom
-// chevron + line-height:normal) so the value text isn't clipped by native macOS
-// chrome at the compact h-7/h-8 sizes used throughout the studio. `pr-7` leaves
-// room for the chevron.
-const selectCls = cn(inputCls, 'app-select pr-7')
+// Layout only — <Select> supplies its own chrome (border, bg, chevron, focus ring);
+// per-usage overrides (h-7/h-8, text-xs, flex-1) win via tailwind-merge.
+const selectCls = 'h-9 w-full text-sm'
 const sectionCls =
   'rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900'
 const headCls =
@@ -784,7 +782,7 @@ export function CardStudio({
           {/* Source */}
           <div className={sectionCls}>
             <h3 className={headCls}>Data</h3>
-            <select
+            <Select
               value={entityKey}
               onChange={(e) => setEntityKey(e.target.value)}
               className={selectCls}
@@ -798,7 +796,7 @@ export function CardStudio({
                   ))}
                 </optgroup>
               ))}
-            </select>
+            </Select>
             {entity?.description ? (
               <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">
                 {entity.description}
@@ -859,7 +857,7 @@ export function CardStudio({
                     placeholder="What should the AI do with this data? e.g. “Summarise the top risks and who should act.”"
                     className="w-full rounded-md border border-slate-300 bg-white px-2 py-2 text-xs outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                   />
-                  <select
+                  <Select
                     value={analysisOutput}
                     onChange={(e) => setAnalysisOutput(e.target.value as AiCardOutputShape)}
                     className={cn(selectCls, 'h-8 text-xs')}
@@ -867,7 +865,7 @@ export function CardStudio({
                     <option value="insights">Findings &amp; insights</option>
                     <option value="summary">Short summary</option>
                     <option value="bullets">Key bullet points</option>
-                  </select>
+                  </Select>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400">
                     The rail below builds the dataset the model reads. Open the saved card to run
                     it.
@@ -1191,7 +1189,7 @@ function buildFields(
 const fieldCol = (fields: FieldChoice[], value: string): AnalyticsColumn | undefined =>
   fields.find((f) => f.value === value)?.col
 
-/** <option>/<optgroup> list for a field <select>: local columns first, then one
+/** option/optgroup list for a field Select: local columns first, then one
  *  optgroup per relation. `predicate` filters by column (e.g. numeric-only). */
 function FieldOptions({
   fields,
@@ -1299,15 +1297,15 @@ function BreakoutEditor({
       >
         ƒx Custom column
       </button>
-      <select
+      <Select
         value={row.field}
         onChange={(e) => onChange({ ...row, field: e.target.value, bin: undefined })}
         className={selectCls}
       >
         <FieldOptions fields={fields} />
-      </select>
+      </Select>
       {col?.canBinTemporal ? (
-        <select
+        <Select
           value={row.bin?.kind === 'temporal' ? row.bin.unit : ''}
           onChange={(e) =>
             onChange({
@@ -1323,10 +1321,10 @@ function BreakoutEditor({
               by {u}
             </option>
           ))}
-        </select>
+        </Select>
       ) : null}
       {col?.canBinNumeric ? (
-        <select
+        <Select
           value={row.bin?.kind === 'numeric' ? String(row.bin.numBins) : ''}
           onChange={(e) =>
             onChange({
@@ -1344,7 +1342,7 @@ function BreakoutEditor({
               {n} buckets
             </option>
           ))}
-        </select>
+        </Select>
       ) : null}
       {col?.arrayUnnest ? (
         <label className="flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-slate-400">
@@ -1399,14 +1397,14 @@ function ConditionRow({
           <Trash2 size={11} />
         </button>
       </div>
-      <select
+      <Select
         value={where.field}
         onChange={(e) => onChange({ ...where, field: e.target.value })}
         className={cn(selectCls, 'h-7 text-xs')}
       >
         <FieldOptions fields={fields} />
-      </select>
-      <select
+      </Select>
+      <Select
         value={where.op}
         onChange={(e) => onChange({ ...where, op: e.target.value as FilterOp })}
         className={cn(selectCls, 'h-7 text-xs')}
@@ -1416,7 +1414,7 @@ function ConditionRow({
             {o.label}
           </option>
         ))}
-      </select>
+      </Select>
       {op?.needsValue ? (
         <input
           value={where.value}
@@ -1570,7 +1568,7 @@ function SettingRow({
     return (
       <label className={cn('block space-y-1', labelCls)}>
         <span>{def.label}</span>
-        <select
+        <Select
           value={typeof value === 'string' ? value : ''}
           onChange={(e) => onChange(e.target.value || undefined)}
           className={cn(selectCls, 'h-8 text-xs')}
@@ -1581,7 +1579,7 @@ function SettingRow({
               {o.label}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
     )
   }
@@ -1677,7 +1675,7 @@ function MeasureEditor({
       >
         ƒx Custom expression
       </button>
-      <select
+      <Select
         value={row.fn}
         onChange={(e) => onChange({ ...row, fn: e.target.value as BhqlAggFn })}
         className={selectCls}
@@ -1687,9 +1685,9 @@ function MeasureEditor({
             {a.label}
           </option>
         ))}
-      </select>
+      </Select>
       {row.fn !== 'count' ? (
-        <select
+        <Select
           value={row.field ?? ''}
           onChange={(e) => onChange({ ...row, field: e.target.value })}
           className={cn(selectCls, 'h-8 text-xs')}
@@ -1699,7 +1697,7 @@ function MeasureEditor({
             placeholder="Pick a field…"
             predicate={(c) => (row.fn === 'sum' || row.fn === 'avg' ? c.canMeasure : true)}
           />
-        </select>
+        </Select>
       ) : null}
       <ConditionRow
         fields={fields}
@@ -1727,7 +1725,7 @@ function MeasureEditor({
           <div className="text-[10px] font-semibold tracking-wide text-slate-400 uppercase">
             ÷ denominator
           </div>
-          <select
+          <Select
             value={row.denFn ?? 'count'}
             onChange={(e) => onChange({ ...row, denFn: e.target.value as BhqlAggFn })}
             className={cn(selectCls, 'h-8 text-xs')}
@@ -1737,9 +1735,9 @@ function MeasureEditor({
                 {a.label}
               </option>
             ))}
-          </select>
+          </Select>
           {row.denFn && row.denFn !== 'count' ? (
-            <select
+            <Select
               value={row.denField ?? ''}
               onChange={(e) => onChange({ ...row, denField: e.target.value })}
               className={cn(selectCls, 'h-8 text-xs')}
@@ -1751,7 +1749,7 @@ function MeasureEditor({
                   row.denFn === 'sum' || row.denFn === 'avg' ? c.canMeasure : true
                 }
               />
-            </select>
+            </Select>
           ) : null}
           <ConditionRow
             fields={fields}
@@ -1807,7 +1805,7 @@ function CrossMetricEditor({
       <div className="text-[10px] font-semibold tracking-wide text-slate-400 uppercase">
         Numerator · this table
       </div>
-      <select
+      <Select
         value={row.numFn}
         onChange={(e) => onChange({ ...row, numFn: e.target.value as BhqlAggFn })}
         className={cn(selectCls, 'h-8 text-xs')}
@@ -1817,9 +1815,9 @@ function CrossMetricEditor({
             {a.label}
           </option>
         ))}
-      </select>
+      </Select>
       {row.numFn !== 'count' ? (
-        <select
+        <Select
           value={row.numField ?? ''}
           onChange={(e) => onChange({ ...row, numField: e.target.value })}
           className={cn(selectCls, 'h-8 text-xs')}
@@ -1829,7 +1827,7 @@ function CrossMetricEditor({
             placeholder="Pick a field…"
             predicate={(c) => (row.numFn === 'sum' || row.numFn === 'avg' ? c.canMeasure : true)}
           />
-        </select>
+        </Select>
       ) : null}
       <ConditionRow
         fields={primaryFields}
@@ -1841,7 +1839,7 @@ function CrossMetricEditor({
         ÷ Denominator
       </div>
       {metrics.length > 0 ? (
-        <select
+        <Select
           value={row.denMetricId ?? '__inline'}
           onChange={(e) => {
             const v = e.target.value
@@ -1855,11 +1853,11 @@ function CrossMetricEditor({
               ƒ {m.name} (saved metric)
             </option>
           ))}
-        </select>
+        </Select>
       ) : null}
       {!row.denMetricId ? (
         <>
-          <select
+          <Select
             value={row.denSource}
             onChange={(e) =>
               onChange({ ...row, denSource: e.target.value, denField: undefined, on: [] })
@@ -1875,8 +1873,8 @@ function CrossMetricEditor({
                 ))}
               </optgroup>
             ))}
-          </select>
-          <select
+          </Select>
+          <Select
             value={row.denFn}
             onChange={(e) => onChange({ ...row, denFn: e.target.value as BhqlAggFn })}
             className={cn(selectCls, 'h-8 text-xs')}
@@ -1886,9 +1884,9 @@ function CrossMetricEditor({
                 {a.label}
               </option>
             ))}
-          </select>
+          </Select>
           {row.denFn !== 'count' ? (
-            <select
+            <Select
               value={row.denField ?? ''}
               onChange={(e) => onChange({ ...row, denField: e.target.value })}
               className={cn(selectCls, 'h-8 text-xs')}
@@ -1900,7 +1898,7 @@ function CrossMetricEditor({
                   row.denFn === 'sum' || row.denFn === 'avg' ? c.canMeasure : true
                 }
               />
-            </select>
+            </Select>
           ) : null}
           <ConditionRow
             fields={denFields}
@@ -1920,7 +1918,7 @@ function CrossMetricEditor({
                   {fieldCol(primaryFields, b.field)?.label ?? b.field}
                 </span>
                 <span className="text-slate-300">↔</span>
-                <select
+                <Select
                   value={row.on[i] ?? ''}
                   onChange={(e) => {
                     const on = [...row.on]
@@ -1930,7 +1928,7 @@ function CrossMetricEditor({
                   className={cn(selectCls, 'h-7 flex-1 text-xs')}
                 >
                   <FieldOptions fields={denFields} placeholder="match field…" />
-                </select>
+                </Select>
               </div>
             ) : null,
           )}
@@ -2060,59 +2058,59 @@ function MatrixEditor({
       </p>
       <div className="space-y-1">
         <div className={lbl}>Rows</div>
-        <select
+        <Select
           value={spec.rowSource}
           onChange={(e) => onChange({ ...spec, rowSource: e.target.value, rowLabel: '' })}
           className={sel}
         >
           {entityOptions()}
-        </select>
-        <select
+        </Select>
+        <Select
           value={spec.rowLabel}
           onChange={(e) => onChange({ ...spec, rowLabel: e.target.value })}
           className={sel}
         >
           {fieldOptions(spec.rowSource)}
-        </select>
-        <select
+        </Select>
+        <Select
           value={spec.rowLabel2 ?? ''}
           onChange={(e) => onChange({ ...spec, rowLabel2: e.target.value || undefined })}
           className={cn(sel, 'text-slate-500')}
         >
           <option value="">+ second label (optional)</option>
           {secondLabelOptions(spec.rowSource)}
-        </select>
+        </Select>
         {filterList(spec.rowFilters, rowFields, (r) => onChange({ ...spec, rowFilters: r }))}
       </div>
       <div className="space-y-1">
         <div className={lbl}>Columns</div>
-        <select
+        <Select
           value={spec.colSource}
           onChange={(e) => onChange({ ...spec, colSource: e.target.value, colLabel: '' })}
           className={sel}
         >
           {entityOptions()}
-        </select>
-        <select
+        </Select>
+        <Select
           value={spec.colLabel}
           onChange={(e) => onChange({ ...spec, colLabel: e.target.value })}
           className={sel}
         >
           {fieldOptions(spec.colSource)}
-        </select>
-        <select
+        </Select>
+        <Select
           value={spec.colLabel2 ?? ''}
           onChange={(e) => onChange({ ...spec, colLabel2: e.target.value || undefined })}
           className={cn(sel, 'text-slate-500')}
         >
           <option value="">+ second label (optional)</option>
           {secondLabelOptions(spec.colSource)}
-        </select>
+        </Select>
         {filterList(spec.colFilters, colFields, (r) => onChange({ ...spec, colFilters: r }))}
       </div>
       <div className="space-y-1">
         <div className={lbl}>Latest record from</div>
-        <select
+        <Select
           value={spec.factSource}
           onChange={(e) =>
             onChange({
@@ -2128,42 +2126,42 @@ function MatrixEditor({
           className={sel}
         >
           {entityOptions()}
-        </select>
+        </Select>
         <div className={inline}>
           <span className={hint}>→ row by</span>
-          <select
+          <Select
             value={spec.factRowKey}
             onChange={(e) => onChange({ ...spec, factRowKey: e.target.value })}
             className={cn(sel, 'flex-1')}
           >
             {fieldOptions(spec.factSource)}
-          </select>
+          </Select>
         </div>
         <div className={inline}>
           <span className={hint}>→ col by</span>
-          <select
+          <Select
             value={spec.factColKey}
             onChange={(e) => onChange({ ...spec, factColKey: e.target.value })}
             className={cn(sel, 'flex-1')}
           >
             {fieldOptions(spec.factSource)}
-          </select>
+          </Select>
         </div>
         <div className={inline}>
           <span className={hint}>latest by</span>
-          <select
+          <Select
             value={spec.latestBy}
             onChange={(e) => onChange({ ...spec, latestBy: e.target.value })}
             className={cn(sel, 'flex-1')}
           >
             {fieldOptions(spec.factSource)}
-          </select>
+          </Select>
         </div>
         {filterList(spec.factFilters, factFields, (r) => onChange({ ...spec, factFilters: r }))}
       </div>
       <div className="space-y-1">
         <div className={lbl}>Cell value</div>
-        <select
+        <Select
           value={spec.valueMode}
           onChange={(e) =>
             onChange({ ...spec, valueMode: e.target.value as 'coverage' | 'latest' })
@@ -2172,28 +2170,28 @@ function MatrixEditor({
         >
           <option value="coverage">Coverage status (by expiry)</option>
           <option value="latest">Latest value of a field</option>
-        </select>
+        </Select>
         {spec.valueMode === 'coverage' ? (
           <div className={inline}>
             <span className={hint}>expiry date</span>
-            <select
+            <Select
               value={spec.expiryField}
               onChange={(e) => onChange({ ...spec, expiryField: e.target.value })}
               className={cn(sel, 'flex-1')}
             >
               {fieldOptions(spec.factSource, (c) => c.kind === 'date' || c.kind === 'timestamp')}
-            </select>
+            </Select>
           </div>
         ) : (
           <div className={inline}>
             <span className={hint}>show field</span>
-            <select
+            <Select
               value={spec.latestField}
               onChange={(e) => onChange({ ...spec, latestField: e.target.value })}
               className={cn(sel, 'flex-1')}
             >
               {fieldOptions(spec.factSource)}
-            </select>
+            </Select>
           </div>
         )}
       </div>
@@ -2213,14 +2211,14 @@ function FilterEditor({
   const op = FILTER_OPS.find((o) => o.value === row.op)
   return (
     <div className="space-y-1">
-      <select
+      <Select
         value={row.field}
         onChange={(e) => onChange({ ...row, field: e.target.value })}
         className={cn(selectCls, 'h-8 text-xs')}
       >
         <FieldOptions fields={fields} />
-      </select>
-      <select
+      </Select>
+      <Select
         value={row.op}
         onChange={(e) => onChange({ ...row, op: e.target.value as FilterOp })}
         className={cn(selectCls, 'h-8 text-xs')}
@@ -2230,7 +2228,7 @@ function FilterEditor({
             {o.label}
           </option>
         ))}
-      </select>
+      </Select>
       {op?.needsValue ? (
         <input
           value={row.value}

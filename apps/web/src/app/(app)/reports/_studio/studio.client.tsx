@@ -71,10 +71,8 @@ const sectionCls =
   'rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900'
 const headCls =
   'mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400'
-// `.app-select` (globals.css) drops the native macOS chrome that clips the value
-// text; `pr-7` leaves room for its custom chevron.
-const selectCls =
-  'app-select h-9 w-full rounded-md border border-slate-300 bg-white pr-7 pl-2 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100'
+// Layout only — <Select> supplies its own chrome (border, bg, chevron, focus ring).
+const selectCls = 'h-9 w-full text-sm'
 
 export function ReportStudio({
   entities,
@@ -348,7 +346,7 @@ export function ReportStudio({
                 {/* Data source */}
                 <div className={sectionCls}>
                   <h3 className={headCls}>Data source</h3>
-                  <select
+                  <Select
                     value={entityKey}
                     onChange={(e) => changeEntity(e.target.value)}
                     className={selectCls}
@@ -362,7 +360,7 @@ export function ReportStudio({
                         ))}
                       </optgroup>
                     ))}
-                  </select>
+                  </Select>
                   {entity.description ? (
                     <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">
                       {entity.description}
@@ -766,7 +764,7 @@ function BreakoutEditor({
   const col = cols.find((c) => c.key === row.column)
   return (
     <div className="space-y-1">
-      <select
+      <Select
         value={row.column}
         onChange={(e) => onChange({ column: e.target.value, bin: undefined })}
         className={cn(selectCls, 'h-8 text-xs')}
@@ -776,9 +774,9 @@ function BreakoutEditor({
             {c.label}
           </option>
         ))}
-      </select>
+      </Select>
       {col && isTemporalCol(col) ? (
-        <select
+        <Select
           value={row.bin ?? ''}
           onChange={(e) =>
             onChange({
@@ -794,7 +792,7 @@ function BreakoutEditor({
               by {u}
             </option>
           ))}
-        </select>
+        </Select>
       ) : null}
     </div>
   )
@@ -813,7 +811,7 @@ function MeasureEditor({
   const fieldCols = row.fn === 'sum' || row.fn === 'avg' ? cols.filter(isNumberCol) : cols
   return (
     <div className="space-y-1">
-      <select
+      <Select
         value={row.fn}
         onChange={(e) => onChange({ ...row, fn: e.target.value as ReportAggFn })}
         className={cn(selectCls, 'h-8 text-xs')}
@@ -823,9 +821,9 @@ function MeasureEditor({
             {a.label}
           </option>
         ))}
-      </select>
+      </Select>
       {def?.needsColumn ? (
-        <select
+        <Select
           value={row.column ?? ''}
           onChange={(e) => onChange({ ...row, column: e.target.value })}
           className={cn(selectCls, 'h-8 text-xs')}
@@ -836,7 +834,7 @@ function MeasureEditor({
               {c.label}
             </option>
           ))}
-        </select>
+        </Select>
       ) : null}
     </div>
   )
