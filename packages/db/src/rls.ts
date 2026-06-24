@@ -113,6 +113,9 @@ export const TENANT_SCOPED_TABLES = [
   'ppe_inspections',
   'ppe_issue_reports',
   'ppe_type_inspection_criteria',
+  'ppe_type_criteria_groups',
+  'ppe_criteria_banks',
+  'ppe_criteria_bank_criteria',
   'ppe_annual_records',
   'documents',
   'document_versions',
@@ -264,4 +267,7 @@ export const TENANT_SCOPED_TABLES = [
   // Tenant-managed email template library (drag-and-drop builder) referenced by
   // the send_email flow action.
   'email_templates',
+  // Tenant-managed PDF document template library (paper-size builder) attached by
+  // the send_email flow action.
+  'pdf_templates',
 ] as const

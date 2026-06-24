@@ -30,3 +30,15 @@ declare module 'grapesjs-mjml' {
   const plugin: (editor: unknown, opts?: Record<string, unknown>) => void
   export default plugin
 }
+
+declare module 'pagedjs' {
+  // Paged.js polyfill — paginates HTML/CSS into page boxes in the browser.
+  export class Previewer {
+    constructor()
+    preview(
+      content?: string | HTMLElement,
+      stylesheets?: unknown[],
+      renderTo?: HTMLElement,
+    ): Promise<{ total: number; pages: unknown[] }>
+  }
+}
