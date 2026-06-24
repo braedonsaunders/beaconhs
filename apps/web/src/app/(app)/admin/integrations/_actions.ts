@@ -7,11 +7,12 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { and, eq, isNull } from 'drizzle-orm'
-import { syncConnections } from '@beaconhs/db/schema'
+import { syncConnections, tenantIntegrations } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { type ConnectorRunContext, getConnector, sealSecret, unsealSecret } from '@beaconhs/sync'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { getOutboundIntegration } from '@/lib/integrations'
 import type { RequestContext } from '@beaconhs/tenant'
 
 const PERM = 'admin.integrations.manage'
@@ -63,12 +64,60 @@ function buildCtx(
 export async function createConnection(formData: FormData): Promise<void> {
   const ctx = await guard()
   if (!ctx) return
-  const connectorKey = String(formData.get('connectorKey') ?? '').trim()
-  const name = String(formData.get('name') ?? '').trim()
-  if (!getConnector(connectorKey) || !name) {
+  const source = String(formData.get('connectorKey') ?? '').trim()
+
+  // Push-out integration — add a tenant_integrations instance (one per key) and
+  // jump to its config page. Encoded as "outbound:<key>" in the picker.
+  if (source.startsWith('outbound:')) {
+    const key = source.slice('outbound:'.length)
+    const def = getOutboundIntegration(key)
+    if (!def) {
+      revalidatePath('/admin/integrations')
+      return
+    }
+    const id = await ctx.db(async (tx) => {
+      const [existing] = await tx
+        .select({ id: tenantIntegrations.id })
+        .from(tenantIntegrations)
+        .where(
+          and(eq(tenantIntegrations.integrationKey, key), isNull(tenantIntegrations.deletedAt)),
+        )
+        .limit(1)
+      if (existing) return existing.id
+      const [row] = await tx
+        .insert(tenantIntegrations)
+        .values({
+          tenantId: ctx.tenantId,
+          integrationKey: key,
+          enabled: false,
+          config: {},
+          secrets: {},
+          status: 'draft',
+        })
+        .returning({ id: tenantIntegrations.id })
+      return row?.id ?? null
+    })
+    if (id) {
+      await recordAudit(ctx, {
+        entityType: 'tenant_integration',
+        entityId: id,
+        action: 'create',
+        summary: `Added integration "${def.name}"`,
+      })
+      redirect(`/admin/integrations/outbound/${id}`)
+    }
     revalidatePath('/admin/integrations')
     return
   }
+
+  // Sync-in connection.
+  const connectorKey = source
+  const connector = getConnector(connectorKey)
+  if (!connector) {
+    revalidatePath('/admin/integrations')
+    return
+  }
+  const name = String(formData.get('name') ?? '').trim() || connector.name
   const newId = await ctx.db(async (tx) => {
     const [row] = await tx
       .insert(syncConnections)

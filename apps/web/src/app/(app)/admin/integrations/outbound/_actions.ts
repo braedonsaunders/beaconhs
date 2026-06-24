@@ -1,10 +1,11 @@
 'use server'
 
-// Server actions for /admin/integrations/outbound. Enable + configure an
-// outbound integration; secrets are sealed (sealSecret) exactly like sync
-// connections. Gated by admin.integrations.manage.
+// Server actions for an outbound-integration instance (a tenant_integrations
+// row). Configure, enable, test, and remove. Secrets are sealed (sealSecret)
+// exactly like sync connections. Gated by admin.integrations.manage.
 
 import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 import { and, eq, isNull } from 'drizzle-orm'
 import { tenantIntegrations } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
@@ -33,12 +34,12 @@ function unsealAll(secrets: Sealed | null | undefined): Record<string, string> {
   return out
 }
 
-async function loadRow(ctx: RequestContext, key: string) {
+async function loadById(ctx: RequestContext, id: string) {
   return ctx.db(async (tx) => {
     const [row] = await tx
       .select()
       .from(tenantIntegrations)
-      .where(and(eq(tenantIntegrations.integrationKey, key), isNull(tenantIntegrations.deletedAt)))
+      .where(and(eq(tenantIntegrations.id, id), isNull(tenantIntegrations.deletedAt)))
       .limit(1)
     return row ?? null
   })
@@ -47,15 +48,14 @@ async function loadRow(ctx: RequestContext, key: string) {
 export async function saveOutbound(formData: FormData): Promise<void> {
   const ctx = await guard()
   if (!ctx) return
-  const key = String(formData.get('integrationKey') ?? '').trim()
-  const def = getOutboundIntegration(key)
+  const id = String(formData.get('id') ?? '').trim()
+  const row = await loadById(ctx, id)
+  if (!row) return
+  const def = getOutboundIntegration(row.integrationKey)
   if (!def) return
-  const existing = await loadRow(ctx, key)
   const enabled = formData.get('enabled') === 'on' || formData.get('enabled') === 'true'
 
-  const config: Record<string, unknown> = {
-    ...((existing?.config as Record<string, unknown>) ?? {}),
-  }
+  const config: Record<string, unknown> = { ...((row.config as Record<string, unknown>) ?? {}) }
   for (const f of def.configFields) {
     const raw = formData.get(f.key)
     if (f.type === 'boolean') {
@@ -72,51 +72,36 @@ export async function saveOutbound(formData: FormData): Promise<void> {
   }
 
   // Merge sealed secrets so a blank field keeps the stored value.
-  const secrets: Sealed = { ...((existing?.secrets as Sealed) ?? {}) }
+  const secrets: Sealed = { ...((row.secrets as Sealed) ?? {}) }
   for (const s of def.secretFields) {
     const v = String(formData.get(s.key) ?? '')
     if (v.trim() !== '') secrets[s.key] = sealSecret(v.trim())
   }
 
-  const savedId = await ctx.db(async (tx) => {
-    if (existing) {
-      await tx
-        .update(tenantIntegrations)
-        .set({ enabled, config, secrets, status: enabled ? 'ready' : 'disabled' })
-        .where(eq(tenantIntegrations.id, existing.id))
-      return existing.id
-    }
-    const [r] = await tx
-      .insert(tenantIntegrations)
-      .values({
-        tenantId: ctx.tenantId,
-        integrationKey: key,
-        enabled,
-        config,
-        secrets,
-        status: enabled ? 'ready' : 'draft',
-      })
-      .returning({ id: tenantIntegrations.id })
-    return r?.id ?? null
-  })
-
+  await ctx.db((tx) =>
+    tx
+      .update(tenantIntegrations)
+      .set({ enabled, config, secrets, status: enabled ? 'ready' : 'disabled' })
+      .where(eq(tenantIntegrations.id, id)),
+  )
   await recordAudit(ctx, {
     entityType: 'tenant_integration',
-    entityId: savedId ?? key,
-    action: existing ? 'update' : 'create',
+    entityId: id,
+    action: 'update',
     summary: `${enabled ? 'Enabled' : 'Saved'} integration "${def.name}"`,
   })
-  revalidatePath('/admin/integrations/outbound')
+  revalidatePath(`/admin/integrations/outbound/${id}`)
+  revalidatePath('/admin/integrations')
 }
 
 export async function testOutbound(formData: FormData): Promise<void> {
   const ctx = await guard()
   if (!ctx) return
-  const key = String(formData.get('integrationKey') ?? '').trim()
-  const def = getOutboundIntegration(key)
-  if (!def?.test) return
-  const row = await loadRow(ctx, key)
+  const id = String(formData.get('id') ?? '').trim()
+  const row = await loadById(ctx, id)
   if (!row) return
+  const def = getOutboundIntegration(row.integrationKey)
+  if (!def?.test) return
   const runCtx: OutboundIntegrationContext = {
     tenantId: ctx.tenantId,
     db: ctx.db,
@@ -135,7 +120,28 @@ export async function testOutbound(formData: FormData): Promise<void> {
         lastError: result.ok ? null : (result.error ?? 'Test failed'),
         lastRunAt: new Date(),
       })
-      .where(eq(tenantIntegrations.id, row.id)),
+      .where(eq(tenantIntegrations.id, id)),
   )
-  revalidatePath('/admin/integrations/outbound')
+  revalidatePath(`/admin/integrations/outbound/${id}`)
+}
+
+export async function deleteOutbound(formData: FormData): Promise<void> {
+  const ctx = await guard()
+  if (!ctx) return
+  const id = String(formData.get('id') ?? '').trim()
+  if (!id) return
+  await ctx.db((tx) =>
+    tx
+      .update(tenantIntegrations)
+      .set({ deletedAt: new Date(), enabled: false })
+      .where(eq(tenantIntegrations.id, id)),
+  )
+  await recordAudit(ctx, {
+    entityType: 'tenant_integration',
+    entityId: id,
+    action: 'delete',
+    summary: 'Removed outbound integration',
+  })
+  revalidatePath('/admin/integrations')
+  redirect('/admin/integrations')
 }
