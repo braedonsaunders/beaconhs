@@ -15,10 +15,11 @@
 // fills the fixed-height container — without it the row sizes to content and the
 // overflow is clipped by the wrapper (the "can't scroll to the bottom" bug).
 
-import type { CSSProperties } from 'react'
+import { useState, type CSSProperties } from 'react'
 import GjsEditor, { BlocksProvider, Canvas } from '@grapesjs/react'
 import grapesjs, { type Editor } from 'grapesjs'
 import 'grapesjs/dist/css/grapes.min.css'
+import { TableToolbar } from '../_table-tools'
 
 const STARTER_HTML =
   '<div style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#0f172a;padding:24px;max-width:680px;margin:0 auto;">' +
@@ -134,6 +135,7 @@ export default function EmailBuilder({
   mergeFields?: MergeField[]
   collections?: Collection[]
 }) {
+  const [editor, setEditor] = useState<Editor | null>(null)
   return (
     <div
       className="gjs-light flex h-full min-h-0 flex-col overflow-hidden bg-white dark:bg-slate-900"
@@ -186,6 +188,7 @@ export default function EmailBuilder({
               /* noop */
             }
           }
+          setEditor(editor)
           onReady(editor)
         }}
       >
@@ -228,7 +231,8 @@ export default function EmailBuilder({
           </aside>
 
           {/* RIGHT 2/3 — the canvas */}
-          <div className="col-span-2 min-h-0 overflow-hidden">
+          <div className="relative col-span-2 min-h-0 overflow-hidden">
+            <TableToolbar editor={editor} />
             <Canvas className="h-full" />
           </div>
         </div>
