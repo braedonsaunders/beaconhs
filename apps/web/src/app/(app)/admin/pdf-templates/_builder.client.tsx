@@ -2,11 +2,14 @@
 
 // Plain-HTML GrapesJS builder for PDF documents — same editable-HTML model as
 // the email builder (Content blocks + Record-field tokens + drag-in data tables
-// via data-each), but the canvas is styled as a PAPER PAGE (white column at the
-// page content width on a gray surround). Pagination preview is the Preview tab
-// (Paged.js); here it's a continuous page-width design surface.
+// via data-each), but the canvas is styled as a real PAPER SHEET: the body is
+// sized to the exact page (width × height at 96dpi), the page margin is rendered
+// as the sheet's internal whitespace with a dashed boundary guide, and it floats
+// on a dark "desk" surround — Word/Docs-style document authoring. The styling
+// re-applies live when paper size / orientation / margin change in the top bar.
+// Multi-page pagination is the Preview tab (Paged.js); here it's one tall sheet.
 
-import type { CSSProperties } from 'react'
+import { useEffect, useRef, type CSSProperties } from 'react'
 import GjsEditor, { BlocksProvider, Canvas } from '@grapesjs/react'
 import grapesjs, { type Editor } from 'grapesjs'
 import 'grapesjs/dist/css/grapes.min.css'
@@ -104,10 +107,31 @@ const BASE_BLOCKS: { id: string; label: string; content: string }[] = [
   },
 ]
 
+// Build the canvas stylesheet that turns the GrapesJS iframe body into a paper
+// sheet at the exact page size, with the margin shown as inner whitespace + a
+// dashed boundary guide, floating on a dark desk.
+function pageCss(pageWidthPx: number, pageHeightPx: number, marginPx: number): string {
+  return (
+    `html{background:#3f4856;padding:0;margin:0;}` +
+    `body{box-sizing:border-box;width:${pageWidthPx}px;min-height:${pageHeightPx}px;` +
+    `margin:32px auto;background:#fff;padding:${marginPx}px;position:relative;` +
+    `box-shadow:0 10px 34px rgba(0,0,0,.4);border-radius:1px;` +
+    `font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#0f172a;}` +
+    // dashed margin/content boundary guide (non-interactive, print-hidden idea)
+    `body::before{content:'';position:absolute;inset:${marginPx}px;` +
+    `border:1px dashed #cbd5e1;pointer-events:none;z-index:0;}` +
+    // keep authored content above the guide
+    `body>*{position:relative;z-index:1;}`
+  )
+}
+
 export default function PdfBuilder({
   initialDesign,
   initialHtml,
   pageWidthPx,
+  pageHeightPx,
+  marginPx,
+  paperLabel,
   onReady,
   mergeFields = [],
   collections = [],
@@ -115,10 +139,26 @@ export default function PdfBuilder({
   initialDesign: Record<string, unknown> | null
   initialHtml?: string | null
   pageWidthPx: number
+  pageHeightPx: number
+  marginPx: number
+  paperLabel?: string
   onReady: (editor: Editor) => void
   mergeFields?: MergeField[]
   collections?: Collection[]
 }) {
+  const editorRef = useRef<Editor | null>(null)
+
+  // Re-apply the paper-sheet CSS whenever the page dimensions change (the user
+  // picks A4 / landscape / a new margin in the top bar). The load handler injects
+  // a <style id="bhs-page-css"> we update in place here.
+  useEffect(() => {
+    const ed = editorRef.current
+    if (!ed) return
+    const doc = ed.Canvas.getBody()?.ownerDocument
+    const el = doc?.getElementById('bhs-page-css')
+    if (el) el.innerHTML = pageCss(pageWidthPx, pageHeightPx, marginPx)
+  }, [pageWidthPx, pageHeightPx, marginPx])
+
   return (
     <div
       className="gjs-light flex h-full min-h-0 flex-col overflow-hidden bg-white dark:bg-slate-900"
@@ -148,16 +188,14 @@ export default function PdfBuilder({
               media: TABLE_SVG,
             })
           }
-          // Style the canvas as a paper page once the iframe is ready.
+          // Style the canvas as a real paper sheet once the iframe is ready. The
+          // <style id> lets the resize effect update it live on paper changes.
           editor.on('load', () => {
             const doc = editor.Canvas.getBody()?.ownerDocument
             if (!doc) return
             const style = doc.createElement('style')
-            style.innerHTML =
-              `html{background:#e5e7eb;}` +
-              `body{box-sizing:border-box;max-width:${pageWidthPx}px;margin:24px auto;` +
-              `background:#fff;padding:36px;min-height:calc(100vh - 48px);` +
-              `box-shadow:0 1px 6px rgba(0,0,0,.18);}`
+            style.id = 'bhs-page-css'
+            style.innerHTML = pageCss(pageWidthPx, pageHeightPx, marginPx)
             doc.head.appendChild(style)
           })
           try {
@@ -175,6 +213,7 @@ export default function PdfBuilder({
               /* noop */
             }
           }
+          editorRef.current = editor
           onReady(editor)
         }}
       >
@@ -214,7 +253,12 @@ export default function PdfBuilder({
               )}
             </BlocksProvider>
           </aside>
-          <div className="col-span-2 min-h-0 overflow-hidden">
+          <div className="relative col-span-2 min-h-0 overflow-hidden bg-[#3f4856]">
+            {paperLabel ? (
+              <span className="pointer-events-none absolute top-2 right-3 z-10 rounded-full bg-black/35 px-2.5 py-1 text-[11px] font-medium tracking-wide text-white/90 uppercase backdrop-blur-sm">
+                {paperLabel}
+              </span>
+            ) : null}
             <Canvas className="h-full" />
           </div>
         </div>

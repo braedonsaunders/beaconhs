@@ -228,7 +228,10 @@ export function PdfTemplateEditor({
           <PdfBuilder
             initialDesign={template.design}
             initialHtml={template.sourceHtml ?? null}
-            pageWidthPx={metrics.contentW}
+            pageWidthPx={metrics.pageW}
+            pageHeightPx={metrics.pageH}
+            marginPx={metrics.margin}
+            paperLabel={`${paperSize.toUpperCase()} · ${orientation}`}
             mergeFields={template.mergeFields}
             collections={collections}
             onReady={(ed) => {

@@ -23,6 +23,7 @@ import { pdfTemplates } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { listSubjectOptions } from '@/lib/flows/subject-fields'
 import { PageContainer } from '@/components/page-layout'
+import { AdminBackLink } from '../_back-link'
 import { createPdfTemplate, deletePdfTemplate } from './_actions'
 import { DeletePdfTemplateButton } from './_delete-button'
 
@@ -54,6 +55,7 @@ export default async function PdfTemplatesPage() {
 
   return (
     <PageContainer>
+      <AdminBackLink />
       <div className="space-y-8">
         <header className="space-y-1">
           <div className="flex items-center gap-2">
