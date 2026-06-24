@@ -1,55 +1,32 @@
-// Email delivery via Resend (or a local mailpit smtp in dev via nodemailer fallback).
-// Tightly minimal — keep templates here too.
+// Email delivery. The provider abstraction (Resend, SendGrid, Mailgun, Postmark,
+// SMTP) lives in ./providers + ./transport. This file keeps `sendEmail` as the
+// ENVIRONMENT fallback — used for platform sends that have no tenant/platform
+// provider configured (e.g. auth magic-links) — plus all the built-in
+// transactional templates.
 
-import { Resend } from 'resend'
+import { sendVia, type SendEmailInput } from './transport'
 
-export type SendEmailInput = {
-  to: string | string[]
-  subject: string
-  html: string
-  text: string
-  from?: string
-  replyTo?: string
-  attachments?: Array<{ filename: string; content: string; contentType?: string }>
-}
+export * from './providers'
+export * from './transport'
 
-const apiKey = process.env.RESEND_API_KEY
 const defaultFrom = process.env.RESEND_FROM ?? 'BeaconHS <noreply@beaconhs.app>'
 
-let resend: Resend | null = null
-function client(): Resend {
-  if (!apiKey) throw new Error('RESEND_API_KEY is not set')
-  if (!resend) resend = new Resend(apiKey)
-  return resend
-}
-
+// The worker resolves a tenant/platform transport first (see
+// @beaconhs/worker resolve-email-transport) and only falls back to this when
+// none is configured: a Resend key in the environment, or a dev stdout log.
 export async function sendEmail(input: SendEmailInput): Promise<{ id: string }> {
+  const apiKey = process.env.RESEND_API_KEY
   if (!apiKey) {
     // Dev fallback: log to stdout so engineers can see what would have been sent.
     console.log(
-      '[emails] (no API key) →',
+      '[emails] (no provider configured) →',
       input.to,
       input.subject,
       input.attachments?.length ? `(+${input.attachments.length} attachment)` : '',
     )
     return { id: 'dev-skipped' }
   }
-  const res = await client().emails.send({
-    from: input.from ?? defaultFrom,
-    to: input.to,
-    subject: input.subject,
-    html: input.html,
-    text: input.text,
-    replyTo: input.replyTo,
-    // Resend accepts base64 string content for attachments.
-    attachments: input.attachments?.map((a) => ({
-      filename: a.filename,
-      content: a.content,
-      contentType: a.contentType,
-    })),
-  })
-  if ('error' in res && res.error) throw new Error(res.error.message)
-  return { id: (res as { data: { id: string } }).data.id }
+  return sendVia({ provider: 'resend', apiKey, from: input.from ?? defaultFrom }, input)
 }
 
 // --- Templates -----------------------------------------------------------

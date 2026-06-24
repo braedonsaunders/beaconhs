@@ -22,6 +22,9 @@ const nextConfig: NextConfig = {
   ],
   serverExternalPackages: [
     'postgres',
+    // SMTP transport for the email-provider abstraction (Node-only) — used by the
+    // "send test" server action; keep nodemailer out of the Next bundle.
+    'nodemailer',
     // MJML email compiler (Node-only, heavy) — used in the email-template save
     // server action; keep it out of the Next bundle.
     'mjml',

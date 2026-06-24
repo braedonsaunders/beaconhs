@@ -143,6 +143,7 @@ export default async function EmailLogPage({
           createdAt: emailLog.createdAt,
           errorMessage: emailLog.errorMessage,
           providerMessageId: emailLog.providerMessageId,
+          meta: emailLog.meta,
         },
         tenant: { id: tenants.id, name: tenants.name },
       })
@@ -268,12 +269,33 @@ export default async function EmailLogPage({
                       )}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={statusVariant(log.status)}>{log.status}</Badge>
-                      {log.status === 'failed' && log.errorMessage ? (
-                        <div className="mt-0.5 max-w-xs truncate text-[11px] text-red-700">
-                          {log.errorMessage}
-                        </div>
-                      ) : null}
+                      {(() => {
+                        const meta = (log.meta ?? {}) as Record<string, unknown>
+                        const provider = typeof meta.provider === 'string' ? meta.provider : null
+                        const suppressed = meta.suppressed === true
+                        return (
+                          <>
+                            <div className="flex flex-wrap items-center gap-1">
+                              <Badge variant={statusVariant(log.status)}>{log.status}</Badge>
+                              {suppressed ? (
+                                <Badge variant="outline" className="text-[11px]">
+                                  suppressed
+                                </Badge>
+                              ) : null}
+                              {provider && provider !== 'suppressed' ? (
+                                <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                                  via {provider}
+                                </span>
+                              ) : null}
+                            </div>
+                            {log.status === 'failed' && log.errorMessage && !suppressed ? (
+                              <div className="mt-0.5 max-w-xs truncate text-[11px] text-red-700">
+                                {log.errorMessage}
+                              </div>
+                            ) : null}
+                          </>
+                        )
+                      })()}
                     </TableCell>
                     {ctx.isSuperAdmin ? (
                       <TableCell className="text-xs text-slate-600">

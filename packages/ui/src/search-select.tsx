@@ -118,9 +118,7 @@ export function SearchSelect({
   function openMenu() {
     if (disabled) return
     setQuery('')
-    setHighlight(
-      firstEnabled(filtered.findIndex((o) => o.value === value)),
-    )
+    setHighlight(firstEnabled(filtered.findIndex((o) => o.value === value)))
     setOpen(true)
     setTimeout(() => searchRef.current?.focus(), 60)
   }

@@ -141,6 +141,12 @@ const STATIC_GROUPS: Group[] = [
         desc: 'Provider, models & encrypted API key',
       },
       {
+        href: '/admin/email',
+        icon: <Mail size={18} />,
+        title: 'Email',
+        desc: 'Provider, sender & encrypted credentials',
+      },
+      {
         href: '/admin/integrations',
         icon: <RefreshCw size={18} />,
         title: 'Integrations',
