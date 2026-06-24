@@ -39,6 +39,24 @@ export type PdfJobData =
       filename?: string
       email?: PdfEmailPayload
     }
+  // Tenant PDF DOCUMENT template (paper-size builder). The HTML is already
+  // merged (compiled template + record values) by the flow executor; the worker
+  // only prints it with the page setup. {{page}}/{{pages}} in header/footer are
+  // kept for the printer's page-number substitution.
+  | {
+      kind: 'template_pdf'
+      tenantId: string
+      html: string
+      paperSize: 'letter' | 'a4' | 'legal'
+      orientation: 'portrait' | 'landscape'
+      marginMm: number
+      headerHtml?: string | null
+      footerHtml?: string | null
+      entityType?: string
+      entityId?: string
+      filename?: string
+      email?: PdfEmailPayload
+    }
   | { kind: 'document'; tenantId: string; documentId: string }
   | { kind: 'document_book'; tenantId: string; bookId: string }
   | { kind: 'equipment_workorder'; tenantId: string; workOrderId: string }
@@ -102,6 +120,8 @@ function pdfJobId(data: PdfJobData): string {
       return `pdf|${data.tenantId}|ca|${data.caId}`
     case 'record_summary':
       return `pdf|${data.tenantId}|record_summary|${data.subjectId}`
+    case 'template_pdf':
+      return `pdf|${data.tenantId}|template_pdf|${data.entityId ?? 'doc'}`
     case 'document':
       return `pdf|${data.tenantId}|document|${data.documentId}`
     case 'document_book':
@@ -179,7 +199,7 @@ export async function renderPdfOnDemand(
  */
 export type PdfEmailableJobData = Extract<
   PdfJobData,
-  { kind: 'form_response' | 'incident' | 'hazid' | 'ca' | 'record_summary' }
+  { kind: 'form_response' | 'incident' | 'hazid' | 'ca' | 'record_summary' | 'template_pdf' }
 >
 
 export async function enqueuePdfEmail(pdf: PdfEmailableJobData, email: PdfEmailPayload) {

@@ -300,6 +300,7 @@ export function FormDesigner({
   roles = [],
   flows = [],
   emailTemplates = [],
+  pdfTemplates = [],
   recipientOptions,
   canGenerate = false,
   canPin = false,
@@ -316,6 +317,7 @@ export function FormDesigner({
   roles?: { key: string; name: string }[]
   flows?: FlowSummary[]
   emailTemplates?: { id: string; name: string }[]
+  pdfTemplates?: { id: string; name: string }[]
   recipientOptions?: RecipientOptions
   canGenerate?: boolean
   canPin?: boolean
@@ -850,6 +852,7 @@ export function FormDesigner({
               <FlowsCanvas
                 profile={flowProfile}
                 emailTemplates={emailTemplates}
+                pdfTemplates={pdfTemplates}
                 recipientOptions={recipientOptions}
                 flows={flows}
                 canEdit

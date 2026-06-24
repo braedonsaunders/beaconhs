@@ -65,6 +65,7 @@ import { generateFlowDraft } from '../../../_ai-actions'
 import { compileEmailDesign } from '@/lib/flows/email-design-actions'
 
 export type EmailTemplateOption = { id: string; name: string }
+export type PdfTemplateOption = { id: string; name: string }
 
 // Pickable people / roles / departments for the send_email recipient editor.
 export type RecipientOptions = {
@@ -709,6 +710,7 @@ const FLOW_TEMPLATES: FlowTemplate[] = [
 export function FlowsCanvas({
   profile,
   emailTemplates,
+  pdfTemplates = [],
   recipientOptions = EMPTY_RECIPIENT_OPTIONS,
   flows,
   canEdit,
@@ -718,6 +720,7 @@ export function FlowsCanvas({
 }: {
   profile: FlowSubjectProfile
   emailTemplates: EmailTemplateOption[]
+  pdfTemplates?: PdfTemplateOption[]
   recipientOptions?: RecipientOptions
   flows: FlowSummary[]
   canEdit: boolean
@@ -1182,6 +1185,7 @@ export function FlowsCanvas({
             availableFields={availableFields}
             profile={profile}
             emailTemplates={emailTemplates}
+            pdfTemplates={pdfTemplates}
             recipientOptions={recipientOptions}
             readOnly={!canEdit}
             onChange={(d) => patchData(selectedNode.id, d)}
@@ -1259,6 +1263,7 @@ function NodeInspector({
   availableFields,
   profile,
   emailTemplates,
+  pdfTemplates,
   recipientOptions,
   readOnly,
   onChange,
@@ -1268,6 +1273,7 @@ function NodeInspector({
   availableFields: { id: string; label: string }[]
   profile: FlowSubjectProfile
   emailTemplates: EmailTemplateOption[]
+  pdfTemplates: PdfTemplateOption[]
   recipientOptions: RecipientOptions
   readOnly: boolean
   onChange: (d: NData) => void
@@ -1443,6 +1449,7 @@ function NodeInspector({
       fieldIds={fieldIds}
       actions={profile.actions}
       emailTemplates={emailTemplates}
+      pdfTemplates={pdfTemplates}
       recipientOptions={recipientOptions}
       richPdf={profile.richPdf ?? false}
       readOnly={readOnly}
@@ -1456,6 +1463,7 @@ function ActionInspector({
   fieldIds,
   actions,
   emailTemplates,
+  pdfTemplates,
   recipientOptions,
   richPdf,
   readOnly,
@@ -1465,6 +1473,7 @@ function ActionInspector({
   fieldIds: string[]
   actions: ActionData['action'][]
   emailTemplates: EmailTemplateOption[]
+  pdfTemplates: PdfTemplateOption[]
   recipientOptions: RecipientOptions
   richPdf: boolean
   readOnly: boolean
@@ -1649,22 +1658,42 @@ function ActionInspector({
             </label>
           </Field>
           {a.attachPdf ? (
-            richPdf ? (
-              <Field label="Which PDF">
-                <Select
-                  value={a.pdfFormat ?? 'full'}
-                  disabled={readOnly}
-                  onChange={(e) => set({ ...a, pdfFormat: e.target.value as 'full' | 'summary' })}
-                >
-                  <option value="full">Full record PDF</option>
-                  <option value="summary">Field summary (key / value table)</option>
-                </Select>
-              </Field>
-            ) : (
-              <p className="text-xs text-slate-400">
-                Attaches a field-summary PDF — a branded table of the record&apos;s fields.
-              </p>
-            )
+            <Field label="PDF document">
+              <Select
+                value={
+                  a.pdfTemplateId
+                    ? `tpl:${a.pdfTemplateId}`
+                    : `builtin:${a.pdfFormat ?? (richPdf ? 'full' : 'summary')}`
+                }
+                disabled={readOnly}
+                onChange={(e) => {
+                  const v = e.target.value
+                  if (v.startsWith('tpl:')) {
+                    set({ ...a, pdfTemplateId: v.slice(4), pdfFormat: undefined })
+                  } else {
+                    set({
+                      ...a,
+                      pdfTemplateId: undefined,
+                      pdfFormat: v.slice(8) as 'full' | 'summary',
+                    })
+                  }
+                }}
+              >
+                {pdfTemplates.length > 0 ? (
+                  <optgroup label="PDF templates (paper-size documents)">
+                    {pdfTemplates.map((t) => (
+                      <option key={t.id} value={`tpl:${t.id}`}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                ) : null}
+                <optgroup label="Built-in">
+                  {richPdf ? <option value="builtin:full">Full record PDF</option> : null}
+                  <option value="builtin:summary">Field summary (key / value table)</option>
+                </optgroup>
+              </Select>
+            </Field>
           ) : null}
         </>
       ) : null}

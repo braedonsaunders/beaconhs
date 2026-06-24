@@ -69,6 +69,7 @@ import {
   renderFormPdf,
   renderHazidPdf,
   renderHazidSignedReportPdf,
+  renderHtmlDocumentPdf,
   renderIncidentPdf,
   renderPpeIssuePdf,
   renderRecordSummaryPdf,
@@ -115,6 +116,8 @@ async function dispatchPdf(data: PdfJobData): Promise<unknown> {
       return await renderCa(data.tenantId, data.caId)
     case 'record_summary':
       return await renderRecordSummary(data)
+    case 'template_pdf':
+      return await renderTemplatePdf(data)
     case 'document':
       return await renderDocument(data.tenantId, data.documentId)
     case 'document_book':
@@ -204,6 +207,34 @@ async function renderRecordSummary(
     entityType: data.entityType,
     entityId: data.subjectId,
     summary: `Rendered ${data.heading} PDF`,
+  })
+}
+
+// --- template_pdf (tenant PDF document template) --------------------------
+// The HTML is already merged by the flow executor; print it on the chosen page.
+async function renderTemplatePdf(
+  data: Extract<PdfJobData, { kind: 'template_pdf' }>,
+): Promise<StoredPdfResult> {
+  const pdf = await renderHtmlDocumentPdf({
+    bodyHtml: data.html,
+    paperSize: data.paperSize,
+    orientation: data.orientation,
+    marginMm: data.marginMm,
+    headerHtml: data.headerHtml ?? null,
+    footerHtml: data.footerHtml ?? null,
+  })
+  const stamp = Date.now()
+  const entityType = data.entityType ?? 'document'
+  const entityId = data.entityId ?? 'doc'
+  const filename = data.filename || `${entityType}-${stamp}.pdf`
+  return storeTransientPdfArtifact({
+    tenantId: data.tenantId,
+    pdf,
+    filename,
+    r2Key: `tmp/pdfs/template/${data.tenantId}/${entityId}-${stamp}.pdf`,
+    entityType,
+    entityId,
+    summary: 'Rendered PDF document template',
   })
 }
 

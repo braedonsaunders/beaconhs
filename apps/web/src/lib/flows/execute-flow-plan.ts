@@ -17,7 +17,13 @@ import {
 } from '@beaconhs/forms-core'
 import { people, roleAssignments, roles, tenantUsers, users } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
-import { interpolate, renderEmail, type RenderableEmail } from '@beaconhs/email-render'
+import {
+  interpolate,
+  renderEmail,
+  renderTemplate,
+  type RenderableEmail,
+} from '@beaconhs/email-render'
+import { loadTenantPdfTemplate } from '@/lib/pdf-templates'
 import { loadTenantEmailTemplate } from '@/lib/email-templates'
 import { buildRecordSummaryPdfJob } from './pdf-summary'
 import { recordFlowGate } from './gate-store'
@@ -228,6 +234,49 @@ export async function executeFlowPlan(
             }
           }
           const { subject, html, text } = renderEmail(spec, values)
+          const refForFile = values.reference
+          const fileBase =
+            typeof refForFile === 'string' && refForFile.trim() ? refForFile : 'document'
+          const pdfFilename = `${fileBase.replace(/[^a-zA-Z0-9_-]+/g, '-').slice(0, 60)}.pdf`
+          // attachPdf with a chosen PDF DOCUMENT template: merge it here (cheap)
+          // and hand the worker pre-rendered HTML + page setup to print. Page
+          // tokens {{page}}/{{pages}} are preserved for the printer.
+          if (action.attachPdf && action.pdfTemplateId) {
+            const tpl = await loadTenantPdfTemplate(ctx, action.pdfTemplateId)
+            if (tpl) {
+              const headerVals = { ...values, page: '{{page}}', pages: '{{pages}}' }
+              await enqueuePdfEmail(
+                {
+                  kind: 'template_pdf',
+                  tenantId: ctx.tenantId,
+                  html: renderTemplate(tpl.compiledHtml, values, { escapeHtml: true }),
+                  paperSize: tpl.paperSize,
+                  orientation: tpl.orientation,
+                  marginMm: tpl.marginMm,
+                  headerHtml: tpl.headerHtml
+                    ? renderTemplate(tpl.headerHtml, headerVals, { escapeHtml: false })
+                    : null,
+                  footerHtml: tpl.footerHtml
+                    ? renderTemplate(tpl.footerHtml, headerVals, { escapeHtml: false })
+                    : null,
+                  entityType: adapter.auditEntityType,
+                  entityId: adapter.subjectId,
+                  filename: pdfFilename,
+                },
+                {
+                  to,
+                  subject,
+                  html,
+                  text,
+                  filename: pdfFilename,
+                  category: adapter.notifyCategory,
+                  tenantId: ctx.tenantId,
+                },
+              )
+              ran.push(`send_email+pdfdoc→${to.length}`)
+              break
+            }
+          }
           // attachPdf: render the subject's PDF in the worker, then email it as
           // an attachment (non-blocking — the submit never waits on Chromium).
           if (action.attachPdf && adapter.pdfJob) {

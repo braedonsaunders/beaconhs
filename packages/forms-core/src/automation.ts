@@ -88,10 +88,13 @@ export const actionDataSchema = z.discriminatedUnion('action', [
     design: z.record(z.string(), z.unknown()).optional(),
     compiledHtml: z.string().optional(),
     subjectTemplate: z.string().optional(),
-    // Attach a PDF of the record. `pdfFormat` picks WHICH PDF: 'full' = the
-    // subject's rich record PDF (incidents/hazid/CA/form responses); 'summary' =
-    // a generic field-summary table. Absent format ⇒ the subject's best default.
+    // Attach a PDF of the record. `pdfTemplateId` (preferred) attaches a tenant
+    // PDF DOCUMENT template (paper-size builder, /admin/pdf-templates). Else
+    // `pdfFormat` picks a built-in: 'full' = the subject's rich record PDF
+    // (incidents/hazid/CA/form responses); 'summary' = a generic field-summary
+    // table. Absent ⇒ the subject's best default.
     attachPdf: z.boolean().optional(),
+    pdfTemplateId: z.string().optional(),
     pdfFormat: z.enum(['full', 'summary']).optional(),
   }),
   z.object({
