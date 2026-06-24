@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { asc, eq, sql } from 'drizzle-orm'
 import { equipmentItems, equipmentTypes, orgUnits, people } from '@beaconhs/db/schema'
-import { requireRequestContext } from '@/lib/auth'
+import { requireExportContext } from '@/lib/auth'
 import { csvFilename, csvResponse } from '@/lib/csv'
 import { pickString } from '@/lib/list-params'
 
@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
   const horizonIso = horizon.toISOString().slice(0, 10)
   const today = new Date().toISOString().slice(0, 10)
 
-  const ctx = await requireRequestContext()
+  const ctx = await requireExportContext()
   const rows = await ctx.db((tx) =>
     tx
       .select({ item: equipmentItems, type: equipmentTypes, site: orgUnits, holder: people })

@@ -15,6 +15,8 @@ export type AuditAction =
   | 'export'
   | 'copy'
   | 'view_sensitive'
+  | 'impersonate'
+  | 'impersonate_stop'
 
 export async function recordAudit(
   ctx: RequestContext,
@@ -28,6 +30,21 @@ export async function recordAudit(
     metadata?: Record<string, unknown>
   },
 ): Promise<void> {
+  // Dual-attribution: while an admin is impersonating, every write is performed
+  // "as" the target (actorUserId stays the target so it reads as their own
+  // activity), but we stamp the real actor into metadata + flag the summary so
+  // the trail stays honest. Start/stop entries themselves are recorded by the
+  // admin's own (non-impersonated) context, so this branch is skipped for them.
+  const imp = ctx.impersonation
+  const metadata = imp
+    ? {
+        ...(evt.metadata ?? {}),
+        impersonatorUserId: imp.actor.userId,
+        impersonatorName: imp.actor.name,
+      }
+    : (evt.metadata ?? {})
+  const summary = imp && evt.summary ? `[impersonated] ${evt.summary}` : evt.summary
+
   await ctx.db((tx) =>
     tx.insert(auditLog).values({
       tenantId: ctx.tenantId,
@@ -35,10 +52,10 @@ export async function recordAudit(
       entityType: evt.entityType,
       entityId: evt.entityId,
       action: evt.action,
-      summary: evt.summary,
+      summary,
       before: evt.before ?? null,
       after: evt.after ?? null,
-      metadata: evt.metadata ?? {},
+      metadata,
     }),
   )
 }

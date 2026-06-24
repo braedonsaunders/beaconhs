@@ -1,5 +1,5 @@
 import type { NextRequest } from 'next/server'
-import { requireRequestContext } from '@/lib/auth'
+import { requireExportContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { csvFilename, csvResponse } from '@/lib/csv'
 import { listEntries } from '../_data'
@@ -8,7 +8,7 @@ import type { JournalDefinition, JournalFilters, JournalStatus } from '../_types
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
-  const ctx = await requireRequestContext()
+  const ctx = await requireExportContext()
   const sp = new URL(req.url).searchParams
   const get = (k: string) => sp.get(k) || undefined
 

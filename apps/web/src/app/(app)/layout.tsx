@@ -46,6 +46,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   ])
   if (!tenant) redirect('/login')
 
+  // While impersonating, ctx is already the TARGET (membership = their display
+  // name); ctx.impersonation carries the real admin for the banner.
+  const impersonation = ctx.impersonation
+    ? {
+        actorName: ctx.impersonation.actor.name,
+        targetName: ctx.membership?.displayName ?? 'this user',
+        expiresAtMs: ctx.impersonation.expiresAt.getTime(),
+      }
+    : null
+
   return (
     <ThemeProvider>
       <NavigationProvider>
@@ -60,6 +70,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           availableTenants={available}
           unreadCount={unread}
           defaultCollapsed={defaultCollapsed}
+          impersonation={impersonation}
         >
           {children}
           <Toaster richColors position="top-right" />

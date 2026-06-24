@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { and, asc, desc, eq, gte, ilike, lte, or, type SQL } from 'drizzle-orm'
 import { equipmentExpenses, equipmentItems, equipmentTypes, orgUnits } from '@beaconhs/db/schema'
-import { requireRequestContext } from '@/lib/auth'
+import { requireExportContext } from '@/lib/auth'
 import { csvFilename, csvResponse } from '@/lib/csv'
 import { parseListParams, pickString } from '@/lib/list-params'
 
@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
   const itemFilter = pickString(sp.item)
   const fromDate = pickString(sp.from)
   const toDate = pickString(sp.to)
-  const ctx = await requireRequestContext()
+  const ctx = await requireExportContext()
 
   const rows = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = []

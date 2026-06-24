@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { and, asc, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
 import { incidents, orgUnits } from '@beaconhs/db/schema'
-import { requireRequestContext } from '@/lib/auth'
+import { requireExportContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { csvFilename, csvResponse } from '@/lib/csv'
 import { parseListParams, pickString } from '@/lib/list-params'
@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
   })
   const typeFilter = pickString(sp.type)
   const statusFilter = pickString(sp.status)
-  const ctx = await requireRequestContext()
+  const ctx = await requireExportContext()
 
   const rows = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = []

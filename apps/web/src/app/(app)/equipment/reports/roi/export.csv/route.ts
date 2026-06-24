@@ -6,11 +6,11 @@ import {
   equipmentTypes,
   truckLogEntries,
 } from '@beaconhs/db/schema'
-import { requireRequestContext } from '@/lib/auth'
+import { requireExportContext } from '@/lib/auth'
 import { csvFilename, csvResponse } from '@/lib/csv'
 
 export async function GET() {
-  const ctx = await requireRequestContext()
+  const ctx = await requireExportContext()
   const rows = await ctx.db((tx) =>
     tx
       .select({

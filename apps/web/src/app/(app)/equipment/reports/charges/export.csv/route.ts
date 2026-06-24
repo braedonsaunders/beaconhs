@@ -7,7 +7,7 @@ import {
   orgUnits,
   truckLogEntries,
 } from '@beaconhs/db/schema'
-import { requireRequestContext } from '@/lib/auth'
+import { requireExportContext } from '@/lib/auth'
 import { csvFilename, csvResponse } from '@/lib/csv'
 import { pickString } from '@/lib/list-params'
 
@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
   const start = new Date(year, month - 1, 1).toISOString().slice(0, 10)
   const end = new Date(year, month, 0).toISOString().slice(0, 10)
 
-  const ctx = await requireRequestContext()
+  const ctx = await requireExportContext()
   const { rolled } = await ctx.db(async (tx) => {
     const expenseRows = await tx
       .select({

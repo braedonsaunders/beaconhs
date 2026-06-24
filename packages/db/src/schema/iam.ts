@@ -212,6 +212,10 @@ export const PERMISSION_CATALOGUE = [
   'insights.manage',
   // Admin
   'admin.users.manage',
+  // Sign in AS another user to see the app exactly as they do (scoped to the
+  // tenant; super-admins anywhere, tenant admins within their tenant). Held by
+  // tenant_admin via the full catalogue; grant explicitly to anyone else.
+  'admin.users.impersonate',
   'admin.roles.manage',
   'admin.org.manage',
   'admin.plugins.manage',

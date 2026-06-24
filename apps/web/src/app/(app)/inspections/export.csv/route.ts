@@ -21,7 +21,7 @@ import {
   tenantUsers,
   user,
 } from '@beaconhs/db/schema'
-import { requireRequestContext } from '@/lib/auth'
+import { requireExportContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { csvFilename, csvResponse } from '@/lib/csv'
 import { parseListParams, pickString } from '@/lib/list-params'
@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
   const signedFilter = pickString(sp.signed) // 'yes' | 'no'
   const dateFromRaw = pickString(sp.dateFrom)
   const dateToRaw = pickString(sp.dateTo)
-  const ctx = await requireRequestContext()
+  const ctx = await requireExportContext()
 
   const rows = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = []

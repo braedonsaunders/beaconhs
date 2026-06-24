@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { and, asc, desc, eq, ilike, isNotNull, isNull, or, type SQL } from 'drizzle-orm'
 import { orgUnits } from '@beaconhs/db/schema'
-import { requireRequestContext } from '@/lib/auth'
+import { requireExportContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { csvFilename, csvResponse } from '@/lib/csv'
 import { parseListParams, pickString } from '@/lib/list-params'
@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
     allowedSorts: SORTS,
   })
   const statusFilter = pickString(sp.status) ?? 'active'
-  const ctx = await requireRequestContext()
+  const ctx = await requireExportContext()
 
   const rows = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = [eq(orgUnits.level, 'customer')]

@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { and, asc, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
 import { departments, people, trades } from '@beaconhs/db/schema'
-import { requireRequestContext } from '@/lib/auth'
+import { requireExportContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { csvFilename, csvResponse } from '@/lib/csv'
 import { parseListParams } from '@/lib/list-params'
@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url)
   const sp = Object.fromEntries(url.searchParams.entries())
   const params = parseListParams(sp, { sort: 'name', dir: 'asc', perPage: 25, allowedSorts: SORTS })
-  const ctx = await requireRequestContext()
+  const ctx = await requireExportContext()
 
   const rows = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = []

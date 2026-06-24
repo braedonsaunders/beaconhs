@@ -5,13 +5,13 @@
 import { NextRequest } from 'next/server'
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
 import { people, trainingCourses, trainingRecords } from '@beaconhs/db/schema'
-import { requireRequestContext } from '@/lib/auth'
+import { requireExportContext } from '@/lib/auth'
 import { csvFilename, csvResponse } from '@/lib/csv'
 
 const EXPIRING_WINDOW_DAYS = 90
 
 export async function GET(req: NextRequest) {
-  const ctx = await requireRequestContext()
+  const ctx = await requireExportContext()
   const sp = req.nextUrl.searchParams
   const departmentFilter = sp.get('department') || undefined
   const tradeFilter = sp.get('trade') || undefined

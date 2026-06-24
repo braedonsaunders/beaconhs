@@ -86,6 +86,20 @@ export const session = pgTable(
     ipAddress: text('ipAddress'),
     userAgent: text('userAgent'),
     activeTenantId: uuid('activeTenantId'),
+    // --- Admin impersonation overlay ---------------------------------------
+    // When a privileged admin "views as" another user, the pointer lives on the
+    // ADMIN's own session row: server-authoritative (the client can never set
+    // it), un-forgeable, and it auto-dies when the admin signs out (the row is
+    // deleted). getRequestContext() reads these to resolve the request as the
+    // target user — pinned to impersonationTenantId, re-authorized every request
+    // — while remembering the real actor. See apps/web/src/lib/impersonation.ts.
+    impersonatingUserId: text('impersonating_user_id').references(() => user.id, {
+      onDelete: 'set null',
+    }),
+    impersonationTenantId: uuid('impersonation_tenant_id'),
+    impersonationStartedAt: timestamp('impersonation_started_at', { withTimezone: true }),
+    impersonationExpiresAt: timestamp('impersonation_expires_at', { withTimezone: true }),
+    impersonationReason: text('impersonation_reason'),
     createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updatedAt', { withTimezone: true }).defaultNow().notNull(),
   },

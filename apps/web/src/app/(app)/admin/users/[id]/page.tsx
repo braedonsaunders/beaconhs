@@ -46,6 +46,7 @@ import {
   setMemberStatus,
   setPermissionOverride,
   setSuperAdmin,
+  startImpersonation,
   updateAccountName,
   updateMemberDisplayName,
   updateMemberEmail,
@@ -115,6 +116,14 @@ export default async function AdminUserDetailPage({
 
   const displayName = member.membership.displayName ?? member.account.name
   const canToggleSuperAdmin = ctx.isSuperAdmin
+  // "View as": needs the impersonate permission, an active non-super-admin
+  // target that isn't yourself, and that you're not already impersonating.
+  const canImpersonate =
+    can(ctx, 'admin.users.impersonate') &&
+    !ctx.impersonation &&
+    member.membership.userId !== ctx.userId &&
+    !member.account.isSuperAdmin &&
+    member.membership.status === 'active'
 
   // Effective permissions: union of assigned roles' permissions, then overrides.
   const rolePerms = new Set<string>()
@@ -304,6 +313,32 @@ export default async function AdminUserDetailPage({
                     )}
                   </div>
                 </div>
+
+                {canImpersonate ? (
+                  <div className="rounded-md border border-rose-200 p-3 dark:border-rose-900/60">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                          Impersonate
+                        </p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          See the app exactly as {displayName}. Anything you do is recorded against
+                          you and ends after 30 minutes or when you exit.
+                        </p>
+                      </div>
+                      <form action={startImpersonation}>
+                        <input type="hidden" name="membershipId" value={id} />
+                        <ConfirmButton
+                          type="submit"
+                          variant="outline"
+                          confirmMessage={`View the app as ${displayName}? You'll act on their behalf until you exit, and everything you do is audited.`}
+                        >
+                          View as user
+                        </ConfirmButton>
+                      </form>
+                    </div>
+                  </div>
+                ) : null}
               </CardContent>
             </Card>
           </div>

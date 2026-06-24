@@ -102,6 +102,7 @@ const PERMISSION_LABELS: Record<string, string> = {
   'insights.manage': "Manage others' insights",
 
   'admin.users.manage': 'Manage users',
+  'admin.users.impersonate': 'Impersonate users',
   'admin.roles.manage': 'Manage roles',
   'admin.org.manage': 'Manage org hierarchy',
   'admin.plugins.manage': 'Manage plugins',

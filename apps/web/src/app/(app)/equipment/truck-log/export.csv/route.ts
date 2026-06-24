@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { asc, eq, sql } from 'drizzle-orm'
 import { equipmentItems, equipmentTypes, truckLogEntries } from '@beaconhs/db/schema'
-import { requireRequestContext } from '@/lib/auth'
+import { requireExportContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { csvFilename, csvResponse } from '@/lib/csv'
 
@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url)
   const yearRaw = url.searchParams.get('year')
   const year = yearRaw && /^\d{4}$/.test(yearRaw) ? Number(yearRaw) : new Date().getFullYear()
-  const ctx = await requireRequestContext()
+  const ctx = await requireExportContext()
 
   const firstDay = ymd(year, 1, 1)
   const nextFirst = ymd(year + 1, 1, 1)

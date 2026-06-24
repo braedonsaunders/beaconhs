@@ -1,17 +1,16 @@
 import { cache } from 'react'
 import { cookies, headers } from 'next/headers'
 import { auth } from '@beaconhs/auth'
-import { db } from '@beaconhs/db'
-import {
-  roleAssignments,
-  roles,
-  tenants,
-  tenantUsers,
-  userPermissionOverrides,
-  users,
-} from '@beaconhs/db/schema'
+import { db, type Database } from '@beaconhs/db'
+import { sessions, tenants, tenantUsers, users } from '@beaconhs/db/schema'
 import { and, asc, eq, sql } from 'drizzle-orm'
-import { makeTenantContext, UnauthorizedError, type RequestContext } from '@beaconhs/tenant'
+import {
+  assertNotImpersonating,
+  makeTenantContext,
+  UnauthorizedError,
+  type RequestContext,
+} from '@beaconhs/tenant'
+import { actorMayImpersonate, resolveMembershipPerms } from './impersonation'
 
 export const ACTIVE_TENANT_COOKIE = 'bhs-active-tenant'
 
@@ -55,6 +54,10 @@ export const getRequestContext = cache(async (): Promise<RequestContext | null> 
   if (!session?.user?.id) return null
 
   const userId = session.user.id
+  // The real session's token keys the impersonation pointer (stored on the
+  // admin's own session row). The Better-Auth session cookie is never swapped,
+  // so this stays the admin's token throughout — "stop" just clears the pointer.
+  const sessionToken = session.session?.token ?? null
   const cookieStore = await cookies()
   const cookieTenantId = cookieStore.get(ACTIVE_TENANT_COOKIE)?.value ?? null
 
@@ -62,6 +65,15 @@ export const getRequestContext = cache(async (): Promise<RequestContext | null> 
     await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
     const [u] = await tx.select().from(users).where(eq(users.id, userId)).limit(1)
     if (!u) return null
+
+    // Impersonation overlay: when this admin session is "viewing as" another
+    // user, resolve the WHOLE request as the target (their tenant, their real
+    // permissions + scopes), remembering the real actor. Re-authorized here on
+    // every request; any failure falls through to the admin's own context.
+    if (sessionToken) {
+      const overlay = await resolveImpersonation(tx as unknown as Database, sessionToken, u)
+      if (overlay) return overlay
+    }
 
     if (u.isSuperAdmin) {
       // Find which tenant to view
@@ -141,29 +153,12 @@ export const getRequestContext = cache(async (): Promise<RequestContext | null> 
     if (!active) active = memberships[0]
     if (!active) return null
 
-    const assignments = await tx
-      .select({ assignment: roleAssignments, role: roles })
-      .from(roleAssignments)
-      .innerJoin(roles, eq(roles.id, roleAssignments.roleId))
-      .where(eq(roleAssignments.tenantUserId, active.membership.id))
-
-    const permissions = new Set<string>()
-    const scopes = assignments.map((a) => a.assignment.scope)
-    for (const a of assignments) for (const p of a.role.permissions) permissions.add(p)
-
-    // Per-user overrides layer on top of role-granted permissions: a `grant`
-    // adds a permission the user's roles don't carry; a `deny` removes one they
-    // would otherwise have. Applied grant-then-deny so an explicit deny always
-    // wins. (Admins manage these on the user's Permissions tab.)
-    const overrides = await tx
-      .select({
-        permission: userPermissionOverrides.permission,
-        effect: userPermissionOverrides.effect,
-      })
-      .from(userPermissionOverrides)
-      .where(eq(userPermissionOverrides.tenantUserId, active.membership.id))
-    for (const o of overrides) if (o.effect === 'grant') permissions.add(o.permission)
-    for (const o of overrides) if (o.effect === 'deny') permissions.delete(o.permission)
+    // Role-union permissions + scopes, then per-user grant/deny overrides
+    // (deny wins). Shared with the impersonation path so both resolve identically.
+    const { permissions, scopes } = await resolveMembershipPerms(
+      tx as unknown as Database,
+      active.membership.id,
+    )
 
     return makeTenantContext(db, {
       userId,
@@ -179,9 +174,87 @@ export const getRequestContext = cache(async (): Promise<RequestContext | null> 
   })
 })
 
+/**
+ * Resolve the impersonation overlay for an admin session that is "viewing as"
+ * another user. Returns the target user's RequestContext (pinned to the tenant
+ * impersonation was started in, carrying the target's real permissions/scopes
+ * and the real actor in `impersonation`), or null when there is no active,
+ * still-authorized pointer — in which case the caller resolves the admin's own
+ * context. Runs inside the bypass-RLS read transaction from getRequestContext.
+ */
+async function resolveImpersonation(
+  tx: Database,
+  sessionToken: string,
+  actor: { id: string; name: string; email: string; isSuperAdmin: boolean },
+): Promise<RequestContext | null> {
+  const [s] = await tx
+    .select({
+      targetUserId: sessions.impersonatingUserId,
+      tenantId: sessions.impersonationTenantId,
+      expiresAt: sessions.impersonationExpiresAt,
+    })
+    .from(sessions)
+    .where(eq(sessions.token, sessionToken))
+    .limit(1)
+  if (!s?.targetUserId || !s.tenantId || !s.expiresAt) return null
+  if (s.expiresAt.getTime() <= Date.now()) return null
+
+  // Re-authorize the real actor for the pinned tenant on EVERY request, so a
+  // mid-session role change / suspension immediately ends the impersonation.
+  if (!(await actorMayImpersonate(tx, actor, s.tenantId))) return null
+
+  // Super-admins are never impersonatable — their real experience is the
+  // cross-tenant bypass we deliberately refuse to grant through this path.
+  const [target] = await tx.select().from(users).where(eq(users.id, s.targetUserId)).limit(1)
+  if (!target || target.isSuperAdmin) return null
+
+  // The target must still be an active member of the pinned tenant.
+  const [m] = await tx
+    .select({ id: tenantUsers.id, displayName: tenantUsers.displayName })
+    .from(tenantUsers)
+    .where(
+      and(
+        eq(tenantUsers.userId, target.id),
+        eq(tenantUsers.tenantId, s.tenantId),
+        eq(tenantUsers.status, 'active'),
+      ),
+    )
+    .limit(1)
+  if (!m) return null
+
+  const { permissions, scopes } = await resolveMembershipPerms(tx, m.id)
+  return makeTenantContext(db, {
+    userId: target.id,
+    tenantId: s.tenantId,
+    isSuperAdmin: false,
+    membership: { id: m.id, displayName: m.displayName ?? target.name },
+    permissions,
+    scopes,
+    impersonation: {
+      // Fall back to email so the banner never reads "signed in as ⟨blank⟩"
+      // for an actor whose account has no display name set.
+      actor: { userId: actor.id, name: actor.name || actor.email, email: actor.email },
+      tenantId: s.tenantId,
+      expiresAt: s.expiresAt,
+    },
+  })
+}
+
 export async function requireRequestContext(): Promise<RequestContext> {
   const ctx = await getRequestContext()
   if (!ctx) throw new UnauthorizedError()
+  return ctx
+}
+
+/**
+ * Like requireRequestContext, but refuses while impersonating: bulk data
+ * exports must never run "as" another user (they'd exfiltrate that user's data
+ * under the admin's hand without a per-record audit). Used by the export.csv
+ * routes — the rest of the app stays read+write under impersonation.
+ */
+export async function requireExportContext(): Promise<RequestContext> {
+  const ctx = await requireRequestContext()
+  assertNotImpersonating(ctx, 'export')
   return ctx
 }
 

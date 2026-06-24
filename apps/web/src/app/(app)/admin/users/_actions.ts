@@ -29,6 +29,7 @@ import {
 import { assertCan, ForbiddenError } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { IMPERSONATION_TTL_MS } from '@/lib/impersonation'
 
 const PERMISSIONS = new Set<string>(PERMISSION_CATALOGUE as unknown as string[])
 
@@ -707,4 +708,75 @@ export async function revokeMemberSessions(formData: FormData): Promise<void> {
         ? `Signed out ${deleted} session${deleted === 1 ? '' : 's'}.`
         : 'No active sessions to sign out.',
   })
+}
+
+// --- impersonation ("view as") ------------------------------------------
+
+/**
+ * Begin impersonating a member: stamp a short-lived pointer onto the actor's
+ * OWN session row, then redirect. getRequestContext() reads that pointer and
+ * resolves every subsequent request as the target user (their tenant, their
+ * real permissions) until it expires or `stopImpersonation` clears it. The real
+ * Better-Auth session is never swapped, so exiting is always safe.
+ *
+ * Scope: requires `admin.users.impersonate` IN the tenant the member belongs to
+ * (super-admins pass anywhere; tenant admins only within their tenant — the
+ * member is always in `ctx.tenantId` because this runs from their detail page).
+ * Super-admin accounts cannot be impersonated.
+ */
+export async function startImpersonation(formData: FormData): Promise<void> {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'admin.users.impersonate')
+  const membershipId = String(formData.get('membershipId') ?? '')
+  if (!membershipId) return
+  if (ctx.impersonation) {
+    backToDetail(membershipId, 'Stop the current impersonation before starting another.')
+  }
+  const reason = String(formData.get('reason') ?? '').trim() || null
+
+  const member = await loadMember(ctx, membershipId)
+  if (!member) return
+  if (member.membership.userId === ctx.userId) {
+    backToDetail(membershipId, "You can't impersonate yourself.")
+  }
+  if (member.account.isSuperAdmin) {
+    backToDetail(membershipId, "Super-admin accounts can't be impersonated.")
+  }
+  if (member.membership.status !== 'active') {
+    backToDetail(membershipId, 'Only active members can be impersonated.')
+  }
+
+  // The pointer is keyed by the actor's current session token (the cookie is
+  // never swapped, so this stays the admin's session for the whole overlay).
+  const authSession = await auth.api.getSession({
+    headers: (await headers()) as unknown as Headers,
+  })
+  const token = authSession?.session?.token
+  if (!token) {
+    backToDetail(membershipId, 'Could not resolve your session. Sign in again and retry.')
+  }
+
+  const expiresAt = new Date(Date.now() + IMPERSONATION_TTL_MS)
+  await ctx.db((tx) =>
+    tx
+      .update(sessions)
+      .set({
+        impersonatingUserId: member.account.id,
+        impersonationTenantId: ctx.tenantId,
+        impersonationStartedAt: new Date(),
+        impersonationExpiresAt: expiresAt,
+        impersonationReason: reason,
+      })
+      .where(eq(sessions.token, token!)),
+  )
+
+  await recordAudit(ctx, {
+    entityType: 'tenant_user',
+    entityId: membershipId,
+    action: 'impersonate',
+    summary: `Started impersonating ${member.account.email}`,
+    metadata: { targetUserId: member.account.id, expiresAt: expiresAt.toISOString(), reason },
+  })
+
+  redirect('/dashboard')
 }

@@ -7,11 +7,11 @@ import {
   people,
   truckLogEntries,
 } from '@beaconhs/db/schema'
-import { requireRequestContext } from '@/lib/auth'
+import { requireExportContext } from '@/lib/auth'
 import { csvFilename, csvResponse } from '@/lib/csv'
 
 export async function GET() {
-  const ctx = await requireRequestContext()
+  const ctx = await requireExportContext()
   const yearStart = new Date()
   yearStart.setMonth(0, 1)
   yearStart.setHours(0, 0, 0, 0)

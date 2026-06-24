@@ -10,6 +10,18 @@ import type { RoleScope } from '@beaconhs/db/schema'
  * already operates inside a chosen tenant. Routes that legitimately need
  * cross-tenant access use `SuperAdminContext` instead.
  */
+/**
+ * Set only while an admin is "viewing as" another user. The surrounding
+ * RequestContext's `userId` / `membership` / `permissions` are the IMPERSONATED
+ * user's (so the whole app behaves as them); `actor` is the real admin who
+ * initiated it, surfaced for the banner + dual-attribution in the audit log.
+ */
+export type ImpersonationInfo = {
+  actor: { userId: string; name: string; email: string }
+  tenantId: string
+  expiresAt: Date
+}
+
 export type RequestContext = {
   userId: string
   tenantId: string
@@ -18,6 +30,8 @@ export type RequestContext = {
   membership: { id: string; displayName: string } | null
   permissions: Set<string>
   scopes: RoleScope[]
+  // Present only during impersonation — null/undefined for a normal session.
+  impersonation?: ImpersonationInfo | null
   // Convenience: bound DB executor with tenant context applied
   db: <T>(fn: (tx: Database) => Promise<T>) => Promise<T>
 }
@@ -67,6 +81,27 @@ export class ForbiddenError extends Error {
   constructor(public readonly permission: string) {
     super(`Missing permission: ${permission}`)
   }
+}
+
+export class ImpersonationBlockedError extends Error {
+  override readonly name = 'ImpersonationBlockedError'
+  constructor(public readonly action?: string) {
+    super(
+      action
+        ? `This action is blocked while impersonating: ${action}`
+        : 'This action is blocked while impersonating another user',
+    )
+  }
+}
+
+/**
+ * Guard for actions that must never run "as" someone else — credential/identity
+ * changes, privilege grants, API-key management, bulk exports. Most admin
+ * actions are already blocked because the impersonated user lacks the
+ * permission; this is the explicit belt-and-suspenders for the rest.
+ */
+export function assertNotImpersonating(ctx: RequestContext, action?: string): void {
+  if (ctx.impersonation) throw new ImpersonationBlockedError(action)
 }
 
 export class UnauthorizedError extends Error {
