@@ -23,6 +23,7 @@ import { emailTemplates } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { listSubjectOptions } from '@/lib/flows/subject-fields'
 import { PageContainer } from '@/components/page-layout'
+import { AdminBackLink } from '../_back-link'
 import { createEmailTemplate, deleteEmailTemplate } from './_actions'
 import { DeleteTemplateButton } from './_delete-button'
 
@@ -53,6 +54,7 @@ export default async function EmailTemplatesPage() {
 
   return (
     <PageContainer>
+      <AdminBackLink />
       <div className="space-y-8">
         <header className="space-y-1">
           <div className="flex items-center gap-2">
