@@ -261,6 +261,10 @@ export const TENANT_SCOPED_TABLES = [
   'sync_connections',
   'sync_crosswalk',
   'sync_runs',
+  // Outbound integrations — per-tenant enablement/config + the export ledger
+  // that makes event-driven pushes idempotent and reversible.
+  'tenant_integrations',
+  'integration_export_log',
   // Unified Flows — human approval gates for ANY subject (forms + native
   // modules); replaces the forms-only form_response_steps gate rows.
   'flow_gates',

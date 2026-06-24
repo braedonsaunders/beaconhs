@@ -16,6 +16,7 @@ import {
   Label,
 } from '@beaconhs/ui'
 import {
+  departments,
   orgUnits,
   people,
   tenantUsers,
@@ -27,6 +28,7 @@ import {
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { runIntegrations, type TrainingClassCompletedEvent } from '@/lib/integrations'
 import { DetailGrid } from '@/components/detail-grid'
 import { PersonSelectField } from '@/components/person-select-field'
 import { Section } from '@/components/section'
@@ -127,19 +129,19 @@ async function markClassComplete(formData: FormData) {
     }
   }
 
-  await ctx.db(async (tx) => {
+  const completed = await ctx.db(async (tx) => {
     const [cls] = await tx
       .select()
       .from(trainingClasses)
       .where(eq(trainingClasses.id, classId))
       .limit(1)
-    if (!cls) return
+    if (!cls) return null
     const [course] = await tx
       .select()
       .from(trainingCourses)
       .where(eq(trainingCourses.id, cls.courseId))
       .limit(1)
-    if (!course) return
+    if (!course) return null
     const completedOn = (cls.endsAt ?? new Date()).toISOString().slice(0, 10)
     const expiresOn = course.validForMonths
       ? (() => {
@@ -180,6 +182,7 @@ async function markClassComplete(formData: FormData) {
       .update(trainingClasses)
       .set({ completedAt: new Date() })
       .where(eq(trainingClasses.id, classId))
+    return { cls, course }
   })
 
   await recordAudit(ctx, {
@@ -192,6 +195,72 @@ async function markClassComplete(formData: FormData) {
       passed: attendeeGrades.filter((a) => a.passed).length,
     },
   })
+
+  // Emit a generic completion event for any enabled outbound integration
+  // (e.g. the adminapp2 training-time export). Best-effort: an integration must
+  // never break class completion.
+  if (completed) {
+    try {
+      const { cls, course } = completed
+      const passedByPerson = new Map(attendeeGrades.map((a) => [a.personId, a.passed]))
+      const startsAt = new Date(cls.startsAt)
+      const endsAt = new Date(cls.endsAt)
+      const startDay = Date.UTC(
+        startsAt.getUTCFullYear(),
+        startsAt.getUTCMonth(),
+        startsAt.getUTCDate(),
+      )
+      const endDay = Date.UTC(endsAt.getUTCFullYear(), endsAt.getUTCMonth(), endsAt.getUTCDate())
+      const spanDays = Math.max(1, Math.round((endDay - startDay) / 86_400_000) + 1)
+      const lengthDays = cls.lengthDays ?? spanDays
+      const hoursPerDay =
+        cls.hoursPerDay != null
+          ? Number(cls.hoursPerDay)
+          : spanDays === 1
+            ? Math.max(0, (endsAt.getTime() - startsAt.getTime()) / 3_600_000)
+            : 8
+      const roster = await ctx.db((tx) =>
+        tx
+          .select({
+            personId: people.id,
+            externalEmployeeId: people.externalEmployeeId,
+            firstName: people.firstName,
+            lastName: people.lastName,
+            departmentName: departments.name,
+          })
+          .from(trainingClassAttendees)
+          .innerJoin(people, eq(people.id, trainingClassAttendees.personId))
+          .leftJoin(departments, eq(departments.id, people.departmentId))
+          .where(eq(trainingClassAttendees.classId, classId)),
+      )
+      const event: TrainingClassCompletedEvent = {
+        type: 'training.class.completed',
+        tenantId: ctx.tenantId,
+        classId,
+        course: { code: course.code, name: course.name },
+        startsAt: startsAt.toISOString(),
+        endsAt: endsAt.toISOString(),
+        hoursPerDay,
+        lengthDays,
+        attendees: roster.map((r) => {
+          const attended = passedByPerson.get(r.personId) ?? false
+          return {
+            personId: r.personId,
+            externalEmployeeId: r.externalEmployeeId,
+            firstName: r.firstName,
+            lastName: r.lastName,
+            departmentName: r.departmentName,
+            attended,
+            hours: attended ? hoursPerDay * lengthDays : 0,
+          }
+        }),
+      }
+      await runIntegrations(ctx, event)
+    } catch {
+      // Swallow — completion already succeeded.
+    }
+  }
+
   revalidatePath(`/training/classes/${classId}`)
   revalidatePath('/training/classes')
   revalidatePath('/training')

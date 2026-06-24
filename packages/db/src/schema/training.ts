@@ -9,6 +9,7 @@ import {
   index,
   integer,
   jsonb,
+  numeric,
   pgEnum,
   pgTable,
   text,
@@ -85,6 +86,12 @@ export const trainingClasses = pgTable(
     endsAt: timestamp('ends_at', { withTimezone: true }).notNull(),
     instructorTenantUserId: uuid('instructor_tenant_user_id').references(() => tenantUsers.id),
     capacity: integer('capacity'),
+    // Hours credited per attendee per day, and how many days the class spans.
+    // Both optional: when null, outbound time integrations derive hours from
+    // starts_at/ends_at (single-day) and fall back to a sensible default for
+    // multi-day classes. Set them to override the derivation.
+    hoursPerDay: numeric('hours_per_day', { precision: 5, scale: 2 }),
+    lengthDays: integer('length_days'),
     cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
     completedAt: timestamp('completed_at', { withTimezone: true }),
     notes: text('notes'),

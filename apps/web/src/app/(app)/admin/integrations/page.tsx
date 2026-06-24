@@ -13,6 +13,7 @@ import {
   PlugZap,
   RefreshCw,
   Trash2,
+  Upload,
   type LucideIcon,
 } from 'lucide-react'
 import { desc, isNull } from 'drizzle-orm'
@@ -110,6 +111,13 @@ export default async function IntegrationsPage() {
             <strong>Equipment</strong> from your other systems. Connect a SQL database, import a
             CSV, or link a SaaS app through Nango — then schedule it to keep records up to date.
           </p>
+          <Link
+            href="/admin/integrations/outbound"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-teal-700 hover:text-teal-800"
+          >
+            <Upload size={15} /> Outbound integrations — push data out when events happen
+            <ArrowUpRight size={14} />
+          </Link>
         </header>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_380px]">

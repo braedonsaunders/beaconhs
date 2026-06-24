@@ -116,6 +116,10 @@ export const people = pgTable(
     // Optional link to a system user (workers without app access have no userId)
     userId: text('user_id').references(() => users.id),
     employeeNo: text('employee_no'),
+    // External-system employee key (e.g. a NetSuite internal id / payroll id).
+    // App-owned, optional; consumed by outbound integrations such as the
+    // training-time export so they can post against the external HR/payroll id.
+    externalEmployeeId: text('external_employee_id'),
     firstName: text('first_name').notNull(),
     lastName: text('last_name').notNull(),
     formalName: text('formal_name'),

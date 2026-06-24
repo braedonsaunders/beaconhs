@@ -42,6 +42,7 @@ async function savePerson(formData: FormData) {
   // App-owned fields — always editable, sync or not.
   const appFields = {
     formalName: String(formData.get('formalName') ?? '').trim() || null,
+    externalEmployeeId: String(formData.get('externalEmployeeId') ?? '').trim() || null,
     crewId: String(formData.get('crewId') ?? '').trim() || null,
     managerPersonId,
     emergencyContactName: String(formData.get('emergencyContactName') ?? '').trim() || null,
@@ -149,6 +150,13 @@ export async function PersonEditTab({ personId }: { personId: string }) {
             </Field>
             <Field label="Employee #">
               <Input name="employeeNo" defaultValue={person.employeeNo ?? ''} disabled={locked} />
+            </Field>
+            <Field label="External employee ID">
+              <Input
+                name="externalEmployeeId"
+                defaultValue={person.externalEmployeeId ?? ''}
+                placeholder="e.g. payroll / NetSuite id"
+              />
             </Field>
             <Field label="Hire date">
               <Input
