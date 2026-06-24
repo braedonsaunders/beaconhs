@@ -43,6 +43,7 @@
     },
     "patchedDependencies": {
       "pagedjs@0.4.3": "patches/pagedjs@0.4.3.patch"
-    }
+    },
+    "allowUnusedPatches": true
   }
 }
