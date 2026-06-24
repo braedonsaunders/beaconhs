@@ -40,6 +40,9 @@
         "react",
         "react-dom"
       ]
+    },
+    "patchedDependencies": {
+      "pagedjs@0.4.3": "patches/pagedjs@0.4.3.patch"
     }
   }
 }

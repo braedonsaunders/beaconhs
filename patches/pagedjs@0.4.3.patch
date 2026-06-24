@@ -1,0 +1,18 @@
+diff --git a/package.json b/package.json
+index 4ca70bc7b187ab97a93677ab4141471f7d3af4a9..5391309a4dbf5437dce692f20f3ba3a57a2fd756 100644
+--- a/package.json
++++ b/package.json
+@@ -9,11 +9,11 @@
+   "browser": "dist/paged.js",
+   "type": "module",
+   "exports": {
+-    "import": "./src/index.js",
++    "import": "./dist/paged.esm.js",
+     "require": "./lib/index.cjs",
+     "browser": "./dist/paged.js",
+     "polyfill": "./dist/paged.polyfill.js",
+-    "default": "./src/index.js"
++    "default": "./dist/paged.esm.js"
+   },
+   "dependencies": {
+     "@babel/polyfill": "^7.10.1",

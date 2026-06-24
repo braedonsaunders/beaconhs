@@ -8,6 +8,11 @@ overrides:
   kysely: 0.28.17
   ioredis: 5.11.1
 
+patchedDependencies:
+  pagedjs@0.4.3:
+    hash: 633a3606b8c686ff0f7b1b867f15431ef50de628eed447cea923474b87f00f96
+    path: patches/pagedjs@0.4.3.patch
+
 importers:
 
   .:
@@ -209,7 +214,7 @@ importers:
         version: 16.2.7(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       pagedjs:
         specifier: ^0.4.3
-        version: 0.4.3
+        version: 0.4.3(patch_hash=633a3606b8c686ff0f7b1b867f15431ef50de628eed447cea923474b87f00f96)
       qrcode:
         specifier: ^1.5.4
         version: 1.5.4
@@ -13772,7 +13777,7 @@ snapshots:
 
   package-manager-detector@1.6.0: {}
 
-  pagedjs@0.4.3:
+  pagedjs@0.4.3(patch_hash=633a3606b8c686ff0f7b1b867f15431ef50de628eed447cea923474b87f00f96):
     dependencies:
       '@babel/polyfill': 7.12.1
       '@babel/runtime': 7.29.7
