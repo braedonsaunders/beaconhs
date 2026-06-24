@@ -18,6 +18,7 @@ import {
   loadTenantEmailTemplate,
   slugifyTemplateKey,
 } from '@/lib/email-templates'
+import { inlineEmailCss } from '@/lib/email-inline'
 import { loadSubjectFields } from '@/lib/flows/subject-fields'
 
 const SUBJECT_TYPES = new Set(['module', 'form_template'])
@@ -116,7 +117,9 @@ export async function saveEmailTemplateDesign(input: {
 }): Promise<{ ok: boolean; error?: string; warnings?: string[] }> {
   const ctx = await requireManage()
   if (!input.id) return { ok: false, error: 'Missing template id.' }
-  const compiled = compileBuilderHtml(input.mjmlSource)
+  // Inline the builder's <style> rules onto elements (email clients strip
+  // <style>) BEFORE compile expands the data-each rows into {{#each}}.
+  const compiled = compileBuilderHtml(inlineEmailCss(input.mjmlSource))
   await ctx.db((tx) =>
     tx
       .update(emailTemplates)

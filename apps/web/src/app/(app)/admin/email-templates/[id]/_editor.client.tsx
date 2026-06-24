@@ -27,6 +27,16 @@ const EmailBuilder = dynamic(() => import('../_builder.client'), {
 type MergeField = { key: string; label?: string; sample?: string }
 type Collection = { key: string; label: string; fields: { key: string; label: string }[] }
 
+// GrapesJS keeps authored styles in getCss() (keyed by generated ids), NOT
+// inline on the elements getHtml() returns — so saving getHtml() alone loses
+// every style. Serialize the CSS block + the structure; the save action then
+// inlines the CSS (juice) so it survives email clients that strip <style>.
+function fullHtml(ed: Editor): string {
+  const css = ed.getCss?.() ?? ''
+  const html = ed.getHtml()
+  return css ? `<style>${css}</style>${html}` : html
+}
+
 export function EmailTemplateEditor({
   template,
 }: {
@@ -53,7 +63,7 @@ export function EmailTemplateEditor({
     if (!ed) return null
     return {
       design: ed.getProjectData() as Record<string, unknown>,
-      mjmlSource: ed.getHtml(),
+      mjmlSource: fullHtml(ed),
     }
   }
 
