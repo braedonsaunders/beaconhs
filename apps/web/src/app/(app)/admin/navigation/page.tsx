@@ -5,6 +5,7 @@ import { formTemplates } from '@beaconhs/db/schema'
 import { PageContainer } from '@/components/page-layout'
 import { requireRequestContext } from '@/lib/auth'
 import { loadNavConfig } from '@/lib/nav/resolve'
+import { AdminBackLink } from '../_back-link'
 import { NavEditor } from './_editor'
 
 export const metadata = { title: 'Navigation' }
@@ -35,6 +36,7 @@ export default async function NavigationAdminPage() {
 
   return (
     <PageContainer>
+      <AdminBackLink />
       <NavEditor initialConfig={config} templates={templates} />
     </PageContainer>
   )

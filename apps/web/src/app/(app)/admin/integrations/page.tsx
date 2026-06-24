@@ -34,6 +34,7 @@ import { syncConnections } from '@beaconhs/db/schema'
 import { listConnectors, toConnectorSummary } from '@beaconhs/sync'
 import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
+import { AdminBackLink } from '../_back-link'
 import { createConnection, deleteConnection } from './_actions'
 
 export const metadata = { title: 'Integrations' }
@@ -97,6 +98,7 @@ export default async function IntegrationsPage() {
 
   return (
     <PageContainer>
+      <AdminBackLink />
       <div className="space-y-8">
         <header className="space-y-1">
           <div className="flex items-center gap-2">

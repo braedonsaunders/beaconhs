@@ -60,7 +60,7 @@ export default async function AdminRolesPage({
     <PageContainer>
       <div className="space-y-5">
         <DetailHeader
-          back={{ href: '/admin/users', label: 'Back to users' }}
+          back={{ href: '/admin', label: 'Back to admin' }}
           title="Roles"
           subtitle="Bundles of permissions you assign to members."
           actions={
