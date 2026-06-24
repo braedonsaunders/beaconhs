@@ -18,6 +18,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
 import { TrainingSubNav } from '../../_components/training-sub-nav'
+import { createClassDraft } from '../_actions'
 
 export const metadata = { title: 'Class calendar' }
 export const dynamic = 'force-dynamic'
@@ -180,11 +181,11 @@ export default async function TrainingClassesCalendarPage({
                     <List size={14} /> List view
                   </Button>
                 </Link>
-                <Link href="/training/classes/new">
-                  <Button>
+                <form action={createClassDraft}>
+                  <Button type="submit">
                     <Plus size={14} /> Schedule new class
                   </Button>
-                </Link>
+                </form>
               </div>
             }
           />

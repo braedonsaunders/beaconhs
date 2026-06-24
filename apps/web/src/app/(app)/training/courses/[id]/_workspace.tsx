@@ -57,6 +57,7 @@ import {
   updateCourseSettings,
   updateModule,
 } from './studio/_actions'
+import { createClassDraft } from '../../classes/_actions'
 
 export type LessonKind =
   | 'rich'
@@ -660,12 +661,12 @@ function ClassesPanel({ classes, courseId }: { classes: ClassLite[]; courseId: s
         <p className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
           Scheduled classes
         </p>
-        <Link
-          href={`/training/classes/new?courseId=${courseId}`}
-          className="text-[11px] text-teal-700 hover:underline"
-        >
-          Schedule →
-        </Link>
+        <form action={createClassDraft}>
+          <input type="hidden" name="courseId" value={courseId} />
+          <button type="submit" className="text-[11px] text-teal-700 hover:underline">
+            Schedule →
+          </button>
+        </form>
       </div>
       {classes.length === 0 ? (
         <p className="px-1 text-xs text-slate-400">No classes scheduled for this course.</p>

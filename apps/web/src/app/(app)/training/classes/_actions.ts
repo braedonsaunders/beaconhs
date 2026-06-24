@@ -10,11 +10,52 @@
 //   reopenClass       it off the schedule; reopen clears it. Header actions,
 //                     mirroring locations archive/restore.
 
+import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { eq } from 'drizzle-orm'
-import { trainingClasses } from '@beaconhs/db/schema'
+import { asc, eq } from 'drizzle-orm'
+import { trainingClasses, trainingCourses } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+
+// Draft-first create (documents "New document" pattern): instantly insert a
+// draft class and land on its unified record — no intermediary form page. The
+// course defaults to the first in the catalogue (or is passed from a course
+// page); everything is then adjusted in place via the auto-saving fields.
+export async function createClassDraft(formData: FormData): Promise<void> {
+  const ctx = await requireRequestContext()
+  let courseId = String(formData.get('courseId') ?? '').trim()
+  const startsAt = new Date()
+  const endsAt = new Date(startsAt.getTime() + 60 * 60_000)
+
+  const newId = await ctx.db(async (tx) => {
+    if (!courseId) {
+      const [first] = await tx
+        .select({ id: trainingCourses.id })
+        .from(trainingCourses)
+        .orderBy(asc(trainingCourses.name))
+        .limit(1)
+      if (!first) return null // no courses in the catalogue yet
+      courseId = first.id
+    }
+    const [row] = await tx
+      .insert(trainingClasses)
+      .values({ tenantId: ctx.tenantId, courseId, title: 'Untitled class', startsAt, endsAt })
+      .returning({ id: trainingClasses.id })
+    return row?.id ?? null
+  })
+
+  // A class needs a course; send them to create one first if the catalogue is empty.
+  if (!newId) redirect('/training/courses/new')
+
+  await recordAudit(ctx, {
+    entityType: 'training_class',
+    entityId: newId,
+    action: 'create',
+    summary: 'Created class draft',
+  })
+  revalidatePath('/training/classes')
+  redirect(`/training/classes/${newId}`)
+}
 
 const CLASS_REQUIRED_IDS = new Set(['courseId'])
 const CLASS_NULLABLE_IDS = new Set(['siteOrgUnitId', 'instructorTenantUserId'])
