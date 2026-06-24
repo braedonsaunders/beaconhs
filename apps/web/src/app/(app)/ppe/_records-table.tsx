@@ -14,6 +14,7 @@ export type PpeTableRow = {
   size: string | null
   status: 'in_stock' | 'issued' | 'returned' | 'damaged' | 'discarded' | 'expired'
   holderName: string | null
+  assignedOn: string | null
   lastInspectionOn: string | null
   nextInspectionDue: string | null
 }
@@ -90,6 +91,7 @@ export function PpeRecordsTable({
             meta={
               [
                 r.size,
+                r.assignedOn ? `Assigned ${r.assignedOn}` : null,
                 r.lastInspectionOn ? `Inspected ${r.lastInspectionOn}` : null,
                 r.nextInspectionDue ? `Due ${r.nextInspectionDue}` : null,
               ]
@@ -122,6 +124,9 @@ export function PpeRecordsTable({
               </SortTh>
               <SortTh column="holder" {...sortProps}>
                 Holder
+              </SortTh>
+              <SortTh column="assigned" {...sortProps}>
+                Date assigned
               </SortTh>
               <SortTh column="last_inspection" {...sortProps}>
                 Last inspected
@@ -171,6 +176,9 @@ export function PpeRecordsTable({
                   </td>
                   <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
                     {r.holderName ?? '—'}
+                  </td>
+                  <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
+                    {r.assignedOn ?? '—'}
                   </td>
                   <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
                     {r.lastInspectionOn ?? '—'}

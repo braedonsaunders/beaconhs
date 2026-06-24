@@ -19,6 +19,7 @@ import {
   MapPin,
   NotebookPen,
   Rss,
+  ShieldAlert,
   X,
   type LucideIcon,
 } from 'lucide-react'
@@ -69,6 +70,15 @@ const KIND: Record<FeedKind, KindMeta> = {
     accent: 'hover:text-amber-700 dark:hover:text-amber-300',
     bar: 'bg-amber-500',
   },
+  hazard_assessment: {
+    label: 'Hazard assessment',
+    plural: 'Hazard assessments',
+    Icon: ShieldAlert,
+    tile: 'bg-gradient-to-br from-sky-500 to-blue-600',
+    chip: 'bg-sky-50 text-sky-700 ring-sky-600/20 dark:bg-sky-500/15 dark:text-sky-200 dark:ring-sky-500/25',
+    accent: 'hover:text-sky-700 dark:hover:text-sky-300',
+    bar: 'bg-sky-500',
+  },
   form: {
     label: 'App',
     plural: 'Apps',
@@ -80,12 +90,19 @@ const KIND: Record<FeedKind, KindMeta> = {
   },
 }
 
-const KIND_ORDER: FeedKind[] = ['journal', 'incident', 'corrective_action', 'form']
+const KIND_ORDER: FeedKind[] = [
+  'journal',
+  'incident',
+  'corrective_action',
+  'hazard_assessment',
+  'form',
+]
 
 const ICON_TINT: Record<FeedKind, string> = {
   journal: 'text-teal-500',
   incident: 'text-rose-500',
   corrective_action: 'text-amber-500',
+  hazard_assessment: 'text-sky-500',
   form: 'text-violet-500',
 }
 
@@ -829,8 +846,8 @@ function EmptyFeed({ filter, onClear }: { filter: Filter; onClear: () => void })
           No activity yet
         </h2>
         <p className="mt-1.5 max-w-sm text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-          Submitted journals, incidents, corrective actions, and forms appear here as your team
-          works.
+          Journals, incidents, corrective actions, hazard assessments, and forms appear here as your
+          team works.
         </p>
       </div>
     )

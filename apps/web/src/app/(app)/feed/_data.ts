@@ -16,6 +16,8 @@ import {
   correctiveActions,
   formResponses,
   formTemplates,
+  hazidAssessmentTypes,
+  hazidAssessments,
   incidents,
   journalEntries,
   journalEntryPhotos,
@@ -249,6 +251,59 @@ export async function getFeed(
       }
     }
 
+    // ---- Hazard assessments (logged) ----
+    // Unlike incidents / CAs / forms, hazard assessments have no
+    // .read.all/.site/.self permission tier — the module (nav + list) is gated
+    // by tenant RLS alone, so the whole tenant sees every assessment. The feed
+    // mirrors that: tenant-wide rows, no extra row-scope. (Routing through
+    // moduleScope with a non-existent base would wrongly exclude the source.)
+    if (want('hazard_assessment')) {
+      const reporter = alias(tenantUsers, 'feed_hazid_reporter')
+      const rows = await tx
+        .select({
+          id: hazidAssessments.id,
+          at: hazidAssessments.createdAt,
+          reference: hazidAssessments.reference,
+          jobScope: hazidAssessments.jobScope,
+          typeName: hazidAssessmentTypes.name,
+          locked: hazidAssessments.locked,
+          actor: reporter.displayName,
+          siteName: orgUnits.name,
+        })
+        .from(hazidAssessments)
+        .leftJoin(reporter, eq(reporter.id, hazidAssessments.reportedByTenantUserId))
+        .leftJoin(
+          hazidAssessmentTypes,
+          eq(hazidAssessmentTypes.id, hazidAssessments.assessmentTypeId),
+        )
+        .leftJoin(orgUnits, eq(orgUnits.id, hazidAssessments.siteOrgUnitId))
+        .where(
+          whereAll(
+            isNull(hazidAssessments.deletedAt),
+            cursor ? lt(hazidAssessments.createdAt, cursor) : undefined,
+          ),
+        )
+        .orderBy(desc(hazidAssessments.createdAt))
+        .limit(limit)
+      for (const r of rows)
+        all.push({
+          id: `hazard_assessment:${r.id}`,
+          kind: 'hazard_assessment',
+          at: r.at.toISOString(),
+          action: 'logged a hazard assessment',
+          actorName: r.actor ?? null,
+          siteName: r.siteName ?? null,
+          title:
+            (r.jobScope?.trim() ? snippetOf(r.jobScope, 120) : null) ||
+            r.typeName ||
+            r.reference ||
+            'Hazard assessment',
+          snippet: null,
+          badge: r.locked ? 'Locked' : 'In progress',
+          href: `/hazard-assessments/${r.id}`,
+        })
+    }
+
     // ---- Form responses (submitted) ----
     if (want('form')) {
       const scope = moduleScope(
@@ -325,6 +380,7 @@ export async function getFeedSummary(ctx: RequestContext): Promise<FeedSummary> 
       journal: 0,
       incident: 0,
       corrective_action: 0,
+      hazard_assessment: 0,
       form: 0,
     }
     let today = 0
@@ -398,6 +454,19 @@ export async function getFeedSummary(ctx: RequestContext): Promise<FeedSummary> 
       }
     }
 
+    // ---- Hazard assessments (logged) — tenant-wide (RLS-only), see getFeed. ----
+    {
+      const rows = await tx
+        .select({
+          wk: sql<number>`count(*)`,
+          day: sql<number>`count(*) filter (where ${hazidAssessments.createdAt} >= ${dayIso}::timestamptz)`,
+        })
+        .from(hazidAssessments)
+        .where(whereAll(isNull(hazidAssessments.deletedAt), gte(hazidAssessments.createdAt, week)))
+      byKind.hazard_assessment = Number(rows[0]?.wk ?? 0)
+      today += Number(rows[0]?.day ?? 0)
+    }
+
     // ---- Form responses (submitted) ----
     {
       const scope = moduleScope(
@@ -426,7 +495,12 @@ export async function getFeedSummary(ctx: RequestContext): Promise<FeedSummary> 
       }
     }
 
-    const total = byKind.journal + byKind.incident + byKind.corrective_action + byKind.form
+    const total =
+      byKind.journal +
+      byKind.incident +
+      byKind.corrective_action +
+      byKind.hazard_assessment +
+      byKind.form
     return { byKind, total, today }
   })
 }

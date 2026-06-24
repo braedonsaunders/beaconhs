@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { HardHat } from 'lucide-react'
 import { and, asc, count, desc, eq, ilike, isNull, or, sql, type SQL } from 'drizzle-orm'
 import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
-import { people, ppeItems, ppeTypes } from '@beaconhs/db/schema'
+import { people, ppeIssues, ppeItems, ppeTypes } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
@@ -23,6 +23,7 @@ const SORTS = [
   'size',
   'status',
   'holder',
+  'assigned',
   'last_inspection',
   'next_inspection',
 ] as const
@@ -43,7 +44,7 @@ export default async function PpePage({
 }) {
   const sp = await searchParams
   const params = parseListParams(sp, {
-    sort: 'last_inspection',
+    sort: 'assigned',
     dir: 'desc',
     perPage: 25,
     allowedSorts: SORTS,
@@ -64,6 +65,16 @@ export default async function PpePage({
     if (statusFilter) filters.push(eq(ppeItems.status, statusFilter as any))
     const whereClause = and(...filters)
 
+    // "Date assigned" = the most recent issue/replace event for the item (when
+    // its current holder received it). Correlated subquery so we can both sort
+    // and display it; there is no assigned-date column on ppe_items.
+    const assignedAtSql = sql<string | null>`(
+      select max(${ppeIssues.occurredAt})
+      from ${ppeIssues}
+      where ${ppeIssues.itemId} = ${ppeItems.id}
+        and ${ppeIssues.action} in ('issue', 'replace')
+    )`
+
     const dirFn = params.dir === 'asc' ? asc : desc
     const orderBy =
       params.sort === 'serial'
@@ -74,16 +85,23 @@ export default async function PpePage({
             ? [dirFn(ppeItems.status)]
             : params.sort === 'holder'
               ? [dirFn(people.lastName)]
-              : params.sort === 'last_inspection'
-                ? // Never-inspected items sink to the bottom in both directions.
+              : params.sort === 'assigned'
+                ? // Never-assigned items sink to the bottom in both directions.
                   [
                     params.dir === 'asc'
-                      ? sql`${ppeItems.lastInspectionOn} asc nulls last`
-                      : sql`${ppeItems.lastInspectionOn} desc nulls last`,
+                      ? sql`${assignedAtSql} asc nulls last`
+                      : sql`${assignedAtSql} desc nulls last`,
                   ]
-                : params.sort === 'next_inspection'
-                  ? [dirFn(ppeItems.nextInspectionDue)]
-                  : [dirFn(ppeTypes.name)]
+                : params.sort === 'last_inspection'
+                  ? // Never-inspected items sink to the bottom in both directions.
+                    [
+                      params.dir === 'asc'
+                        ? sql`${ppeItems.lastInspectionOn} asc nulls last`
+                        : sql`${ppeItems.lastInspectionOn} desc nulls last`,
+                    ]
+                  : params.sort === 'next_inspection'
+                    ? [dirFn(ppeItems.nextInspectionDue)]
+                    : [dirFn(ppeTypes.name)]
 
     const [tot] = await tx
       .select({ c: count() })
@@ -91,7 +109,7 @@ export default async function PpePage({
       .innerJoin(ppeTypes, eq(ppeTypes.id, ppeItems.typeId))
       .where(whereClause)
     const data = await tx
-      .select({ item: ppeItems, type: ppeTypes, holder: people })
+      .select({ item: ppeItems, type: ppeTypes, holder: people, assignedAt: assignedAtSql })
       .from(ppeItems)
       .innerJoin(ppeTypes, eq(ppeTypes.id, ppeItems.typeId))
       .leftJoin(people, eq(people.id, ppeItems.currentHolderPersonId))
@@ -123,13 +141,14 @@ export default async function PpePage({
   }))
   const issueDrawer = pickString(sp.drawer) === 'issue' ? 'issue' : null
 
-  const tableRows: PpeTableRow[] = rows.map(({ item, type, holder }) => ({
+  const tableRows: PpeTableRow[] = rows.map(({ item, type, holder, assignedAt }) => ({
     id: item.id,
     typeName: type.name,
     serialNumber: item.serialNumber,
     size: item.size,
     status: item.status,
     holderName: holder ? `${holder.firstName} ${holder.lastName}` : null,
+    assignedOn: assignedAt ? new Date(assignedAt).toISOString().slice(0, 10) : null,
     lastInspectionOn: item.lastInspectionOn,
     nextInspectionDue: item.nextInspectionDue,
   }))

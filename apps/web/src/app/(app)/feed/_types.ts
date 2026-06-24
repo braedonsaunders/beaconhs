@@ -1,7 +1,7 @@
 // Pure, serializable types for the activity feed — shared by the server
 // aggregator (_data.ts) and the client timeline (_feed.tsx). No runtime imports.
 
-export type FeedKind = 'journal' | 'incident' | 'corrective_action' | 'form'
+export type FeedKind = 'journal' | 'incident' | 'corrective_action' | 'hazard_assessment' | 'form'
 
 export type FeedTag = { name: string; color: string | null }
 
