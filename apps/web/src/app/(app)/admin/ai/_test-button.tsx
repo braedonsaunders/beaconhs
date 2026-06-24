@@ -29,8 +29,8 @@ export function AiTestButton() {
           className={cn(
             'flex items-start gap-2 rounded-md border p-2.5 text-sm',
             result.ok
-              ? 'border-teal-200 bg-teal-50 text-teal-800'
-              : 'border-red-200 bg-red-50 text-red-700',
+              ? 'border-teal-200 bg-teal-50 text-teal-800 dark:border-teal-800/60 dark:bg-teal-950/50 dark:text-teal-200'
+              : 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/50 dark:text-red-300',
           )}
         >
           {result.ok ? (

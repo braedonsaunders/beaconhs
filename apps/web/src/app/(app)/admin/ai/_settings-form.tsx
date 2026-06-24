@@ -115,7 +115,8 @@ export function AiSettingsForm({
     return (
       <div className="space-y-1.5">
         <Label>
-          {opts.label} <span className="font-normal text-slate-400">({opts.hint})</span>
+          {opts.label}{' '}
+          <span className="font-normal text-slate-400 dark:text-slate-500">({opts.hint})</span>
         </Label>
         {manual ? (
           <Input
@@ -153,9 +154,9 @@ export function AiSettingsForm({
           type="checkbox"
           name="enabled"
           defaultChecked={initial.enabled}
-          className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+          className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-600"
         />
-        <span className="text-sm font-medium text-slate-800">
+        <span className="text-sm font-medium text-slate-800 dark:text-slate-100">
           Enable AI features for this tenant
         </span>
       </label>
@@ -176,7 +177,7 @@ export function AiSettingsForm({
         <div className="space-y-1.5">
           <Label>
             Base URL{' '}
-            <span className="font-normal text-slate-400">
+            <span className="font-normal text-slate-400 dark:text-slate-500">
               {spec.requiresBaseUrl ? '(required)' : '(optional override)'}
             </span>
           </Label>
@@ -189,7 +190,9 @@ export function AiSettingsForm({
             placeholder={spec.baseUrl ?? 'https://your-endpoint/v1'}
           />
           {spec.baseUrl ? (
-            <p className="text-xs text-slate-400">Leave blank to use {spec.baseUrl}</p>
+            <p className="text-xs text-slate-400 dark:text-slate-500">
+              Leave blank to use {spec.baseUrl}
+            </p>
           ) : null}
         </div>
       ) : (
@@ -206,7 +209,7 @@ export function AiSettingsForm({
           autoComplete="off"
           placeholder={keyPlaceholder}
         />
-        <p className="text-xs text-slate-400">
+        <p className="text-xs text-slate-400 dark:text-slate-500">
           {initial.hasKey && savedProvider
             ? 'A key is stored, encrypted (AES-256-GCM). Leave blank to keep the existing one.'
             : 'Stored encrypted with a key derived from the app secret — never written to env or shown again.'}
@@ -220,7 +223,7 @@ export function AiSettingsForm({
             <button
               type="button"
               onClick={() => setManual((m) => !m)}
-              className="text-slate-500 hover:text-slate-700"
+              className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300"
             >
               {manual ? 'Choose from list' : 'Enter manually'}
             </button>
@@ -256,31 +259,31 @@ export function AiSettingsForm({
         {modelsError ? (
           <p className="text-xs text-amber-600">{modelsError}</p>
         ) : models.length ? (
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-400 dark:text-slate-500">
             {models.length} models available. Leave a field on “Provider default” to use the
             built-in default. The smart model handles photo captions — pick a vision-capable one.
           </p>
         ) : (
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-400 dark:text-slate-500">
             {spec.modelHint ?? 'Load this provider’s models from its API, or enter ids manually.'}
           </p>
         )}
       </div>
 
-      <div className="space-y-2 border-t border-slate-100 pt-4">
+      <div className="space-y-2 border-t border-slate-100 pt-4 dark:border-slate-800">
         <Label>Automation</Label>
         <label className="flex items-start gap-2.5">
           <input
             type="checkbox"
             name="autoJournalAi"
             defaultChecked={initial.autoJournalAi}
-            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-600"
           />
           <span className="text-sm">
             <span className="font-medium text-slate-800 dark:text-slate-100">
               Auto-summarise &amp; tag journals
             </span>
-            <span className="mt-0.5 block text-xs text-slate-400">
+            <span className="mt-0.5 block text-xs text-slate-400 dark:text-slate-500">
               When a journal is submitted, generate a short summary and suggested tags in the
               background. Keeps logs categorised without workers doing it themselves. Requires a
               key.
@@ -289,7 +292,7 @@ export function AiSettingsForm({
         </label>
       </div>
 
-      <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-4">
+      <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">
         <Button type="submit">Save AI settings</Button>
       </div>
     </form>

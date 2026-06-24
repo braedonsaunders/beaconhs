@@ -51,7 +51,7 @@ export default async function AiSettingsPage() {
               }}
             />
 
-            <div className="flex items-end justify-between border-t border-slate-100 pt-4">
+            <div className="flex items-end justify-between border-t border-slate-100 pt-4 dark:border-slate-800">
               <AiTestButton />
               {s.hasKey ? (
                 <form action={clearAiKey}>
