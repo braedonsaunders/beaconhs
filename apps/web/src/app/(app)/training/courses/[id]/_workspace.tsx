@@ -366,7 +366,7 @@ export function CourseWorkspace({
             {railTab === 'records' ? (
               <RecordsPanel course={course} records={records} total={recordsTotal} />
             ) : null}
-            {railTab === 'classes' ? <ClassesPanel classes={classes} /> : null}
+            {railTab === 'classes' ? <ClassesPanel classes={classes} courseId={course.id} /> : null}
             {railTab === 'files' ? <FilesPanel courseId={course.id} files={files} /> : null}
           </div>
         </aside>
@@ -653,14 +653,17 @@ function RecordsPanel({
   )
 }
 
-function ClassesPanel({ classes }: { classes: ClassLite[] }) {
+function ClassesPanel({ classes, courseId }: { classes: ClassLite[]; courseId: string }) {
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between px-1">
         <p className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
           Scheduled classes
         </p>
-        <Link href="/training/classes/new" className="text-[11px] text-teal-700 hover:underline">
+        <Link
+          href={`/training/classes/new?courseId=${courseId}`}
+          className="text-[11px] text-teal-700 hover:underline"
+        >
           Schedule →
         </Link>
       </div>

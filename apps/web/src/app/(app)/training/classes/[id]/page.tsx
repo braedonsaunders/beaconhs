@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { and, asc, eq, notInArray } from 'drizzle-orm'
-import { Check, GraduationCap, Plus, Trash2, UserCheck } from 'lucide-react'
+import { Ban, Check, GraduationCap, Plus, RotateCcw, Trash2, UserCheck } from 'lucide-react'
 import {
   Badge,
   Button,
@@ -29,11 +29,12 @@ import {
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { runIntegrations, type TrainingClassCompletedEvent } from '@/lib/integrations'
-import { DetailGrid } from '@/components/detail-grid'
+import { LiveDateTime, LiveField, LivePersonSelect, LiveSelect } from '@/components/live-field'
 import { PersonSelectField } from '@/components/person-select-field'
 import { Section } from '@/components/section'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { DetailPageLayout } from '@/components/page-layout'
+import { cancelClass, reopenClass, updateClassField } from '../_actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -288,17 +289,6 @@ export default async function TrainingClassPage({
       .from(trainingCourses)
       .where(eq(trainingCourses.id, cls.courseId))
       .limit(1)
-    const [site] = cls.siteOrgUnitId
-      ? await tx.select().from(orgUnits).where(eq(orgUnits.id, cls.siteOrgUnitId)).limit(1)
-      : []
-    const [instructor] = cls.instructorTenantUserId
-      ? await tx
-          .select({ id: tenantUsers.id, name: users.name, displayName: tenantUsers.displayName })
-          .from(tenantUsers)
-          .leftJoin(users, eq(users.id, tenantUsers.userId))
-          .where(eq(tenantUsers.id, cls.instructorTenantUserId))
-          .limit(1)
-      : []
     const attendees = await tx
       .select({ att: trainingClassAttendees, person: people })
       .from(trainingClassAttendees)
@@ -332,17 +322,46 @@ export default async function TrainingClassPage({
             .where(eq(people.status, 'active'))
             .orderBy(asc(people.lastName), asc(people.firstName))
             .limit(500)
-    return { cls, course, site, instructor, attendees, availablePeople }
+    // Lookups for the auto-saving course / site / instructor fields.
+    const [courses, sites, instructors] = await Promise.all([
+      tx
+        .select({ id: trainingCourses.id, name: trainingCourses.name, code: trainingCourses.code })
+        .from(trainingCourses)
+        .orderBy(asc(trainingCourses.name)),
+      tx
+        .select({ id: orgUnits.id, name: orgUnits.name })
+        .from(orgUnits)
+        .where(eq(orgUnits.level, 'site'))
+        .orderBy(asc(orgUnits.name)),
+      tx
+        .select({
+          id: tenantUsers.id,
+          name: users.name,
+          displayName: tenantUsers.displayName,
+          email: users.email,
+        })
+        .from(tenantUsers)
+        .leftJoin(users, eq(users.id, tenantUsers.userId))
+        .where(eq(tenantUsers.status, 'active')),
+    ])
+    return { cls, course, attendees, availablePeople, courses, sites, instructors }
   })
 
   if (!data) notFound()
-  const { cls, course, site, instructor, attendees, availablePeople } = data
+  const { cls, course, attendees, availablePeople, courses, sites, instructors } = data
   const basePath = `/training/classes/${id}`
   const startsAt = new Date(cls.startsAt)
   const endsAt = new Date(cls.endsAt)
   const isCompleted = !!cls.completedAt
   const isCancelled = !!cls.cancelledAt
   const inPast = endsAt < new Date()
+  const cancelAction = cancelClass.bind(null, id)
+  const reopenAction = reopenClass.bind(null, id)
+  const instructorOptions = instructors.map((i) => ({
+    value: i.id,
+    label: i.displayName ?? i.name ?? '(no name)',
+    hint: i.email ?? undefined,
+  }))
 
   return (
     <DetailPageLayout
@@ -362,6 +381,21 @@ export default async function TrainingClassPage({
               <Badge variant="secondary">Scheduled</Badge>
             )
           }
+          actions={
+            isCompleted ? null : isCancelled ? (
+              <form action={reopenAction}>
+                <Button type="submit" variant="outline" size="sm">
+                  <RotateCcw size={14} /> Reopen class
+                </Button>
+              </form>
+            ) : (
+              <form action={cancelAction}>
+                <Button type="submit" variant="outline" size="sm">
+                  <Ban size={14} /> Cancel class
+                </Button>
+              </form>
+            )
+          }
         />
       }
       subtabs={
@@ -377,31 +411,108 @@ export default async function TrainingClassPage({
       }
     >
       <div className="space-y-5">
-        <DetailGrid
-          rows={[
-            {
-              label: 'Course',
-              value: course ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Class details</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {isCompleted ? (
+              <p className="text-sm text-slate-600 dark:text-slate-400">
+                This class is complete — details are locked. Training records have been issued from
+                the roster.
+              </p>
+            ) : null}
+            <div className="space-y-1">
+              <LiveSelect
+                id={id}
+                field="courseId"
+                label="Course"
+                initialValue={cls.courseId}
+                allowEmpty={false}
+                options={courses.map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))}
+                disabled={isCompleted}
+                updateAction={updateClassField}
+              />
+              {course ? (
                 <Link
                   href={`/training/courses/${course.id}`}
-                  className="text-teal-700 hover:underline dark:text-teal-400"
+                  className="text-xs text-teal-700 hover:underline dark:text-teal-400"
                 >
-                  {course.code} · {course.name}
+                  Open course page →
                 </Link>
-              ) : (
-                '—'
-              ),
-            },
-            { label: 'Starts at', value: startsAt.toLocaleString() },
-            { label: 'Ends at', value: endsAt.toLocaleString() },
-            { label: 'Site', value: site?.name ?? '—' },
-            {
-              label: 'Instructor',
-              value: instructor?.displayName ?? instructor?.name ?? '—',
-            },
-            { label: 'Capacity', value: cls.capacity ?? '—' },
-          ]}
-        />
+              ) : null}
+            </div>
+            <LiveField
+              id={id}
+              field="title"
+              label="Title"
+              initialValue={cls.title}
+              disabled={isCompleted}
+              updateAction={updateClassField}
+            />
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <LiveDateTime
+                id={id}
+                field="startsAt"
+                label="Starts at"
+                initialValue={toLocalInput(startsAt)}
+                disabled={isCompleted}
+                updateAction={updateClassField}
+              />
+              <LiveDateTime
+                id={id}
+                field="endsAt"
+                label="Ends at"
+                initialValue={toLocalInput(endsAt)}
+                disabled={isCompleted}
+                updateAction={updateClassField}
+              />
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <LiveSelect
+                id={id}
+                field="siteOrgUnitId"
+                label="Site (location)"
+                initialValue={cls.siteOrgUnitId}
+                options={sites.map((s) => ({ value: s.id, label: s.name }))}
+                emptyLabel="— No site —"
+                disabled={isCompleted}
+                updateAction={updateClassField}
+              />
+              <LivePersonSelect
+                id={id}
+                field="instructorTenantUserId"
+                label="Instructor"
+                initialValue={cls.instructorTenantUserId}
+                options={instructorOptions}
+                sheetTitle="Select an instructor"
+                placeholder="Pick an instructor…"
+                searchPlaceholder="Search instructors…"
+                disabled={isCompleted}
+                updateAction={updateClassField}
+              />
+            </div>
+            <LiveField
+              id={id}
+              field="capacity"
+              label="Max attendees"
+              initialValue={cls.capacity != null ? String(cls.capacity) : null}
+              type="number"
+              disabled={isCompleted}
+              updateAction={updateClassField}
+            />
+            <LiveField
+              id={id}
+              field="notes"
+              label="Notes"
+              initialValue={cls.notes}
+              multiline
+              rows={3}
+              disabled={isCompleted}
+              updateAction={updateClassField}
+            />
+          </CardContent>
+        </Card>
 
         {active === 'roster' ? (
           <>
@@ -563,4 +674,11 @@ export default async function TrainingClassPage({
       </div>
     </DetailPageLayout>
   )
+}
+
+// datetime-local needs a tz-naive "YYYY-MM-DDTHH:mm" string. Format in the
+// server's local tz to round-trip with how the update action parses it back.
+function toLocalInput(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
 }

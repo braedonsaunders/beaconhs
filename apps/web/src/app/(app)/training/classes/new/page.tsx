@@ -6,12 +6,16 @@ import { Button, Input, Label, PageHeader, Select, Textarea } from '@beaconhs/ui
 import { orgUnits, tenantUsers, trainingClasses, trainingCourses, users } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { pickString } from '@/lib/list-params'
 import { PageContainer } from '@/components/page-layout'
 import { PersonSelectField } from '@/components/person-select-field'
 
 export const metadata = { title: 'Schedule training class' }
 export const dynamic = 'force-dynamic'
 
+// Complex record → full-page create that captures the essentials, then drops the
+// coordinator on the unified class record where every field auto-saves and the
+// roster/completion live (mirrors the incident "report → detail page" flow).
 async function createClass(formData: FormData): Promise<void> {
   'use server'
   const ctx = await requireRequestContext()
@@ -61,7 +65,13 @@ async function createClass(formData: FormData): Promise<void> {
   redirect(`/training/classes/${classId}`)
 }
 
-export default async function NewClassPage() {
+export default async function NewClassPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  const sp = await searchParams
+  const presetCourseId = pickString(sp.courseId) ?? ''
   const ctx = await requireRequestContext()
   const { courses, sites, instructors } = await ctx.db(async (tx) => {
     const [c, s, i] = await Promise.all([
@@ -93,15 +103,15 @@ export default async function NewClassPage() {
       <div className="mx-auto max-w-2xl">
         <PageHeader
           title="Schedule a training class"
-          description="Set the course, date/time, instructor, and capacity. Attendees can be rostered and completion marked after the class runs."
+          description="Set the course, date/time, instructor, and capacity. Attendees can be rostered and completion marked on the class record."
           back={{ href: '/training/classes', label: 'Back to classes' }}
         />
         <form
           action={createClass}
-          className="mt-6 space-y-5 rounded-lg border border-slate-200 bg-white p-6"
+          className="mt-6 space-y-5 rounded-lg border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900"
         >
           <Field label="Course" required>
-            <Select name="courseId" defaultValue="" required>
+            <Select name="courseId" defaultValue={presetCourseId} required>
               <option value="" disabled>
                 Pick a course…
               </option>
@@ -155,7 +165,7 @@ export default async function NewClassPage() {
           <Field label="Notes">
             <Textarea name="notes" rows={3} placeholder="Location details, prereqs, etc." />
           </Field>
-          <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-4">
+          <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">
             <Link href="/training/classes">
               <Button type="button" variant="outline">
                 Cancel
