@@ -111,6 +111,7 @@ jobs:
           COMPOSE_ID: ${{ secrets.DOKPLOY_COMPOSE_ID }}
           REGISTRY_ID: ${{ secrets.DOKPLOY_REGISTRY_ID }}
           DEV_DATABASE_URL: ${{ secrets.DEV_DATABASE_URL }}
+          REDIS_URL: ${{ secrets.DEV_REDIS_URL }}
           APP_URL: ${{ secrets.DEV_APP_URL }}
           BETTER_AUTH_SECRET: ${{ secrets.DEV_BETTER_AUTH_SECRET }}
           R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
@@ -128,6 +129,7 @@ jobs:
           COMPOSE_FILE="$(cat deploy/dokploy-dev.compose.yaml)"
           ENV_BLOCK="IMAGE=${IMAGE}
           DATABASE_URL=${DEV_DATABASE_URL}
+          REDIS_URL=${REDIS_URL}
           APP_URL=${APP_URL}
           BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
           R2_ENDPOINT=${R2_ENDPOINT}
