@@ -13,7 +13,7 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { asc, eq } from 'drizzle-orm'
-import { trainingClasses, trainingCourses } from '@beaconhs/db/schema'
+import { trainingClasses, trainingCourses, trainingRecords } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 
@@ -163,4 +163,31 @@ export async function reopenClass(id: string, _formData: FormData): Promise<void
   })
   revalidatePath(`/training/classes/${id}`)
   revalidatePath('/training/classes')
+}
+
+// Hard delete (attendees cascade). Blocked once the class has issued training
+// records — those are protected (FK restrict); cancel such a class instead.
+export async function deleteClass(id: string, _formData: FormData): Promise<void> {
+  const ctx = await requireRequestContext()
+  if (!id) return
+  const hasRecords = await ctx.db(async (tx) => {
+    const [rec] = await tx
+      .select({ id: trainingRecords.id })
+      .from(trainingRecords)
+      .where(eq(trainingRecords.classId, id))
+      .limit(1)
+    return !!rec
+  })
+  if (hasRecords) {
+    throw new Error('This class has issued training records — cancel it instead of deleting.')
+  }
+  await ctx.db((tx) => tx.delete(trainingClasses).where(eq(trainingClasses.id, id)))
+  await recordAudit(ctx, {
+    entityType: 'training_class',
+    entityId: id,
+    action: 'delete',
+    summary: 'Deleted training class',
+  })
+  revalidatePath('/training/classes')
+  redirect('/training/classes')
 }

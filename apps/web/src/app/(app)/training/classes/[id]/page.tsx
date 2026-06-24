@@ -13,7 +13,6 @@ import {
   DetailHeader,
   EmptyState,
   Input,
-  Label,
 } from '@beaconhs/ui'
 import {
   departments,
@@ -31,14 +30,14 @@ import { recordAudit } from '@/lib/audit'
 import { runIntegrations, type TrainingClassCompletedEvent } from '@/lib/integrations'
 import { LiveDateTime, LiveField, LivePersonSelect, LiveSelect } from '@/components/live-field'
 import { PersonSelectField } from '@/components/person-select-field'
-import { Section } from '@/components/section'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { DetailPageLayout } from '@/components/page-layout'
-import { cancelClass, reopenClass, updateClassField } from '../_actions'
+import { cancelClass, deleteClass, reopenClass, updateClassField } from '../_actions'
+import { DeleteClassButton } from './_delete-class-button'
 
 export const dynamic = 'force-dynamic'
 
-const TABS = ['roster', 'completion'] as const
+const TABS = ['details', 'roster', 'completion'] as const
 type Tab = (typeof TABS)[number]
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
@@ -278,7 +277,7 @@ export default async function TrainingClassPage({
 }) {
   const { id } = await params
   const sp = await searchParams
-  const active: Tab = pickActiveTab(sp, TABS, 'roster')
+  const active: Tab = pickActiveTab(sp, TABS, 'details')
   const ctx = await requireRequestContext()
 
   const data = await ctx.db(async (tx) => {
@@ -357,6 +356,7 @@ export default async function TrainingClassPage({
   const inPast = endsAt < new Date()
   const cancelAction = cancelClass.bind(null, id)
   const reopenAction = reopenClass.bind(null, id)
+  const deleteAction = deleteClass.bind(null, id)
   const instructorOptions = instructors.map((i) => ({
     value: i.id,
     label: i.displayName ?? i.name ?? '(no name)',
@@ -382,18 +382,25 @@ export default async function TrainingClassPage({
             )
           }
           actions={
-            isCompleted ? null : isCancelled ? (
-              <form action={reopenAction}>
-                <Button type="submit" variant="outline" size="sm">
-                  <RotateCcw size={14} /> Reopen class
-                </Button>
-              </form>
-            ) : (
-              <form action={cancelAction}>
-                <Button type="submit" variant="outline" size="sm">
-                  <Ban size={14} /> Cancel class
-                </Button>
-              </form>
+            isCompleted ? null : (
+              <div className="flex items-center gap-2">
+                {isCancelled ? (
+                  <form action={reopenAction}>
+                    <Button type="submit" variant="outline" size="sm">
+                      <RotateCcw size={14} /> Reopen class
+                    </Button>
+                  </form>
+                ) : (
+                  <form action={cancelAction}>
+                    <Button type="submit" variant="outline" size="sm">
+                      <Ban size={14} /> Cancel class
+                    </Button>
+                  </form>
+                )}
+                <form action={deleteAction}>
+                  <DeleteClassButton />
+                </form>
+              </div>
             )
           }
         />
@@ -404,6 +411,7 @@ export default async function TrainingClassPage({
           currentParams={sp}
           active={active}
           tabs={[
+            { key: 'details', label: 'Details' },
             { key: 'roster', label: 'Roster', count: attendees.length },
             { key: 'completion', label: 'Completion' },
           ]}
@@ -411,179 +419,134 @@ export default async function TrainingClassPage({
       }
     >
       <div className="space-y-5">
-        <Card>
-          <CardHeader>
-            <CardTitle>Class details</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {isCompleted ? (
-              <p className="text-sm text-slate-600 dark:text-slate-400">
-                This class is complete — details are locked. Training records have been issued from
-                the roster.
-              </p>
-            ) : null}
-            <div className="space-y-1">
-              <LiveSelect
-                id={id}
-                field="courseId"
-                label="Course"
-                initialValue={cls.courseId}
-                allowEmpty={false}
-                options={courses.map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))}
-                disabled={isCompleted}
-                updateAction={updateClassField}
-              />
-              {course ? (
-                <Link
-                  href={`/training/courses/${course.id}`}
-                  className="text-xs text-teal-700 hover:underline dark:text-teal-400"
-                >
-                  Open course page →
-                </Link>
+        {active === 'details' ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Class details</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {isCompleted ? (
+                <p className="text-sm text-slate-600 dark:text-slate-400">
+                  This class is complete — details are locked. Training records have been issued
+                  from the roster.
+                </p>
               ) : null}
-            </div>
-            <LiveField
-              id={id}
-              field="title"
-              label="Title"
-              initialValue={cls.title}
-              disabled={isCompleted}
-              updateAction={updateClassField}
-            />
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <LiveDateTime
+              <div className="space-y-1">
+                <LiveSelect
+                  id={id}
+                  field="courseId"
+                  label="Course"
+                  initialValue={cls.courseId}
+                  allowEmpty={false}
+                  options={courses.map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))}
+                  disabled={isCompleted}
+                  updateAction={updateClassField}
+                />
+                {course ? (
+                  <Link
+                    href={`/training/courses/${course.id}`}
+                    className="text-xs text-teal-700 hover:underline dark:text-teal-400"
+                  >
+                    Open course page →
+                  </Link>
+                ) : null}
+              </div>
+              <LiveField
                 id={id}
-                field="startsAt"
-                label="Starts at"
-                initialValue={toLocalInput(startsAt)}
+                field="title"
+                label="Title"
+                initialValue={cls.title}
                 disabled={isCompleted}
                 updateAction={updateClassField}
               />
-              <LiveDateTime
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <LiveDateTime
+                  id={id}
+                  field="startsAt"
+                  label="Starts at"
+                  initialValue={toLocalInput(startsAt)}
+                  disabled={isCompleted}
+                  updateAction={updateClassField}
+                />
+                <LiveDateTime
+                  id={id}
+                  field="endsAt"
+                  label="Ends at"
+                  initialValue={toLocalInput(endsAt)}
+                  disabled={isCompleted}
+                  updateAction={updateClassField}
+                />
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <LiveSelect
+                  id={id}
+                  field="siteOrgUnitId"
+                  label="Site (location)"
+                  initialValue={cls.siteOrgUnitId}
+                  options={sites.map((s) => ({ value: s.id, label: s.name }))}
+                  emptyLabel="— No site —"
+                  disabled={isCompleted}
+                  updateAction={updateClassField}
+                />
+                <LivePersonSelect
+                  id={id}
+                  field="instructorTenantUserId"
+                  label="Instructor"
+                  initialValue={cls.instructorTenantUserId}
+                  options={instructorOptions}
+                  sheetTitle="Select an instructor"
+                  placeholder="Pick an instructor…"
+                  searchPlaceholder="Search instructors…"
+                  disabled={isCompleted}
+                  updateAction={updateClassField}
+                />
+              </div>
+              <LiveField
                 id={id}
-                field="endsAt"
-                label="Ends at"
-                initialValue={toLocalInput(endsAt)}
+                field="capacity"
+                label="Max attendees"
+                initialValue={cls.capacity != null ? String(cls.capacity) : null}
+                type="number"
                 disabled={isCompleted}
                 updateAction={updateClassField}
               />
-            </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <LiveSelect
+              <LiveField
                 id={id}
-                field="siteOrgUnitId"
-                label="Site (location)"
-                initialValue={cls.siteOrgUnitId}
-                options={sites.map((s) => ({ value: s.id, label: s.name }))}
-                emptyLabel="— No site —"
+                field="notes"
+                label="Notes"
+                initialValue={cls.notes}
+                multiline
+                rows={3}
                 disabled={isCompleted}
                 updateAction={updateClassField}
               />
-              <LivePersonSelect
-                id={id}
-                field="instructorTenantUserId"
-                label="Instructor"
-                initialValue={cls.instructorTenantUserId}
-                options={instructorOptions}
-                sheetTitle="Select an instructor"
-                placeholder="Pick an instructor…"
-                searchPlaceholder="Search instructors…"
-                disabled={isCompleted}
-                updateAction={updateClassField}
-              />
-            </div>
-            <LiveField
-              id={id}
-              field="capacity"
-              label="Max attendees"
-              initialValue={cls.capacity != null ? String(cls.capacity) : null}
-              type="number"
-              disabled={isCompleted}
-              updateAction={updateClassField}
-            />
-            <LiveField
-              id={id}
-              field="notes"
-              label="Notes"
-              initialValue={cls.notes}
-              multiline
-              rows={3}
-              disabled={isCompleted}
-              updateAction={updateClassField}
-            />
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        ) : null}
 
         {active === 'roster' ? (
-          <>
-            <Card>
-              <CardHeader>
-                <CardTitle>Roster ({attendees.length})</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {attendees.length === 0 ? (
-                  <EmptyState
-                    icon={<UserCheck size={24} />}
-                    title="No attendees registered"
-                    description="Use the form below to add people to this class roster."
-                  />
-                ) : (
-                  <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
-                    {attendees.map((row) => (
-                      <li key={row.att.id} className="flex items-center justify-between gap-3 py-2">
-                        <div className="min-w-0">
-                          <Link
-                            href={`/people/${row.person.id}`}
-                            className="font-medium hover:underline"
-                          >
-                            {row.person.lastName}, {row.person.firstName}
-                          </Link>
-                          {row.person.jobTitle ? (
-                            <span className="ml-2 text-xs text-slate-500 dark:text-slate-400">
-                              {row.person.jobTitle}
-                            </span>
-                          ) : null}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Badge variant="secondary">{row.att.status}</Badge>
-                          {!isCompleted ? (
-                            <form action={removeClassAttendee} className="inline">
-                              <input type="hidden" name="classId" value={id} />
-                              <input type="hidden" name="personId" value={row.person.id} />
-                              <Button
-                                type="submit"
-                                variant="ghost"
-                                size="sm"
-                                aria-label="Remove from roster"
-                              >
-                                <Trash2 size={14} className="text-red-500" />
-                              </Button>
-                            </form>
-                          ) : null}
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </CardContent>
-            </Card>
-
-            {!isCompleted ? (
-              <Section title="Add an attendee">
-                {availablePeople.length === 0 ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Roster ({attendees.length})</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {!isCompleted ? (
+                availablePeople.length === 0 ? (
                   <p className="text-sm text-slate-500 dark:text-slate-400">
                     Every active person is already on this roster.
                   </p>
                 ) : (
-                  <form action={addClassAttendee} className="flex items-end gap-2">
+                  <form
+                    action={addClassAttendee}
+                    className="flex items-end gap-2 border-b border-slate-100 pb-4 dark:border-slate-800"
+                  >
                     <input type="hidden" name="classId" value={id} />
-                    <div className="min-w-0 flex-1 space-y-1.5">
-                      <Label htmlFor="personId">Person</Label>
+                    <div className="min-w-0 flex-1">
                       <PersonSelectField
                         name="personId"
                         defaultValue=""
                         clearable={false}
-                        placeholder="Pick a person…"
+                        placeholder="Add a person to the roster…"
                         options={availablePeople.map((p) => ({
                           value: p.id,
                           label: `${p.lastName}, ${p.firstName}`,
@@ -595,10 +558,58 @@ export default async function TrainingClassPage({
                       <Plus size={14} /> Add
                     </Button>
                   </form>
-                )}
-              </Section>
-            ) : null}
-          </>
+                )
+              ) : null}
+              {attendees.length === 0 ? (
+                <EmptyState
+                  icon={<UserCheck size={24} />}
+                  title="No attendees registered"
+                  description={
+                    isCompleted
+                      ? 'No one was rostered for this class.'
+                      : 'Add people above to build the roster.'
+                  }
+                />
+              ) : (
+                <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
+                  {attendees.map((row) => (
+                    <li key={row.att.id} className="flex items-center justify-between gap-3 py-2">
+                      <div className="min-w-0">
+                        <Link
+                          href={`/people/${row.person.id}`}
+                          className="font-medium hover:underline"
+                        >
+                          {row.person.lastName}, {row.person.firstName}
+                        </Link>
+                        {row.person.jobTitle ? (
+                          <span className="ml-2 text-xs text-slate-500 dark:text-slate-400">
+                            {row.person.jobTitle}
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary">{row.att.status}</Badge>
+                        {!isCompleted ? (
+                          <form action={removeClassAttendee} className="inline">
+                            <input type="hidden" name="classId" value={id} />
+                            <input type="hidden" name="personId" value={row.person.id} />
+                            <Button
+                              type="submit"
+                              variant="ghost"
+                              size="sm"
+                              aria-label="Remove from roster"
+                            >
+                              <Trash2 size={14} className="text-red-500" />
+                            </Button>
+                          </form>
+                        ) : null}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
         ) : null}
 
         {active === 'completion' ? (
