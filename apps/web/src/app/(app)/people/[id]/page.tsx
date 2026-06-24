@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { asc, desc, eq, inArray } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray } from 'drizzle-orm'
 import {
   Award,
   BadgeCheck,
@@ -189,7 +189,8 @@ export default async function PersonDetailPage({
         .select({ item: ppeItems, type: ppeTypes })
         .from(ppeItems)
         .innerJoin(ppeTypes, eq(ppeTypes.id, ppeItems.typeId))
-        .where(eq(ppeItems.currentHolderPersonId, id)),
+        // Currently-issued PPE only — items the person returned (or had before leaving) are not "current".
+        .where(and(eq(ppeItems.currentHolderPersonId, id), eq(ppeItems.status, 'issued'))),
       tx
         .select({ issue: ppeIssues, item: ppeItems, type: ppeTypes })
         .from(ppeIssues)

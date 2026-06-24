@@ -17,6 +17,7 @@ import {
   ArrowRight,
   ArrowUpRight,
   Bell,
+  Boxes,
   Calendar,
   CalendarClock,
   ClipboardCheck,
@@ -195,7 +196,7 @@ export function WidgetCard({ widgetId, data, todayIso, quickActions }: Props) {
         <CountTile
           label="PPE inspections overdue"
           value={data.ppeInspectionsOverdue}
-          href="/ppe/reports/inspection-due"
+          href="/ppe"
           icon={HardHat}
           caption={data.ppeInspectionsOverdue > 0 ? 'past annual due' : 'all current'}
           tone={data.ppeInspectionsOverdue > 0 ? 'danger' : 'normal'}
@@ -267,6 +268,12 @@ export function WidgetCard({ widgetId, data, todayIso, quickActions }: Props) {
       return <TopSitesChart items={data.topSitesByIncidents} />
 
     // Personal
+    case 'personal-my-ppe':
+      return <MyPpeCard items={data.myPpe} todayIso={todayIso} />
+    case 'personal-my-equipment':
+      return <MyEquipmentCard items={data.myEquipment} todayIso={todayIso} />
+    case 'personal-my-compliance':
+      return <MyComplianceCard data={data.myCompliance} />
     case 'personal-inbox':
       return <InboxList items={data.myInbox} />
     case 'personal-actions':
@@ -934,6 +941,370 @@ function InboxList({ items }: { items: DashboardMetrics['myInbox'] }) {
           })}
         </ul>
       )}
+    </CardShell>
+  )
+}
+
+// =====================================================================
+// Personal — My PPE / My equipment (gear issued/checked out to me, with a
+// one-tap "Inspect" CTA) + My compliance (a drillable completion ring)
+// =====================================================================
+
+/** Small "Inspect" pill used by the My-PPE and My-equipment rows. */
+function InspectButton({ href, tone = 'teal' }: { href: string; tone?: 'teal' | 'sky' }) {
+  const cls =
+    tone === 'sky'
+      ? 'border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100 dark:border-sky-800/60 dark:bg-sky-950/40 dark:text-sky-300 dark:hover:bg-sky-900/50'
+      : 'border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100 dark:border-teal-800/60 dark:bg-teal-950/40 dark:text-teal-300 dark:hover:bg-teal-900/50'
+  return (
+    <Link
+      href={href as any}
+      className={`inline-flex shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-semibold transition-colors ${cls}`}
+    >
+      <ClipboardCheck size={12} /> Inspect
+    </Link>
+  )
+}
+
+/** Badge for an inspection-due date: overdue (red) or due-within-7d (amber). */
+function inspectDueBadge(dueIso: string | null, todayIso: string) {
+  if (!dueIso) return null
+  const days = daysBetween(todayIso, dueIso)
+  if (days < 0)
+    return (
+      <Badge variant="destructive" className="shrink-0 tabular-nums">
+        {Math.abs(days)}d overdue
+      </Badge>
+    )
+  if (days <= 7)
+    return (
+      <Badge variant="warning" className="shrink-0 tabular-nums">
+        {days === 0 ? 'due today' : `due ${days}d`}
+      </Badge>
+    )
+  return null
+}
+
+function MyPpeCard({ items, todayIso }: { items: DashboardMetrics['myPpe']; todayIso: string }) {
+  return (
+    <CardShell
+      title="My PPE"
+      caption={items.length === 1 ? '1 item issued to you' : `${items.length} items issued to you`}
+      icon={HardHat}
+      href="/ppe"
+      accent="teal"
+    >
+      {items.length === 0 ? (
+        <EmptyRow>No PPE is currently issued to you.</EmptyRow>
+      ) : (
+        <ul className="space-y-0.5 px-2 pb-2">
+          {items.map((p, idx) => {
+            const due = p.nextInspectionDue
+            const sub =
+              [p.serialNumber, p.size, due ? `Inspection due ${due}` : 'No inspection scheduled']
+                .filter(Boolean)
+                .join(' · ') || '—'
+            return (
+              <motion.li
+                key={p.id}
+                initial={{ opacity: 0, x: -6 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.06 + idx * 0.04, duration: 0.3 }}
+                className="group flex items-center gap-2.5 rounded-lg px-3 py-2 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60"
+              >
+                <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-teal-50 text-teal-700 ring-1 ring-teal-100 ring-inset dark:bg-teal-950/50 dark:text-teal-300 dark:ring-teal-900/40">
+                  <HardHat size={15} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <Link
+                      href={`/ppe/${p.id}` as any}
+                      className="truncate text-sm font-medium text-slate-900 group-hover:text-teal-700 dark:text-slate-100 dark:group-hover:text-teal-300"
+                    >
+                      {p.typeName}
+                    </Link>
+                    {inspectDueBadge(due, todayIso)}
+                  </div>
+                  <div className="mt-0.5 truncate text-[11px] text-slate-500 dark:text-slate-400">
+                    {sub}
+                  </div>
+                </div>
+                <InspectButton
+                  href={`/ppe/${p.id}?tab=inspections&drawer=record-inspection&kind=pre_use`}
+                  tone="teal"
+                />
+              </motion.li>
+            )
+          })}
+        </ul>
+      )}
+    </CardShell>
+  )
+}
+
+function MyEquipmentCard({
+  items,
+  todayIso,
+}: {
+  items: DashboardMetrics['myEquipment']
+  todayIso: string
+}) {
+  return (
+    <CardShell
+      title="My equipment"
+      caption={
+        items.length === 1
+          ? '1 item checked out to you'
+          : `${items.length} items checked out to you`
+      }
+      icon={Boxes}
+      href="/equipment"
+      accent="sky"
+    >
+      {items.length === 0 ? (
+        <EmptyRow>You have no equipment checked out.</EmptyRow>
+      ) : (
+        <ul className="space-y-0.5 px-2 pb-2">
+          {items.map((e, idx) => {
+            const due = e.requiresAnnualInspection ? e.nextAnnualInspectionDue : null
+            const sub =
+              [
+                e.assetTag,
+                e.typeName,
+                e.expectedReturnOn
+                  ? `Due back ${e.expectedReturnOn}`
+                  : due
+                    ? `Inspection due ${due}`
+                    : null,
+              ]
+                .filter(Boolean)
+                .join(' · ') || '—'
+            return (
+              <motion.li
+                key={e.id}
+                initial={{ opacity: 0, x: -6 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.06 + idx * 0.04, duration: 0.3 }}
+                className="group flex items-center gap-2.5 rounded-lg px-3 py-2 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60"
+              >
+                <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-50 text-sky-700 ring-1 ring-sky-100 ring-inset dark:bg-sky-950/50 dark:text-sky-300 dark:ring-sky-900/40">
+                  <Boxes size={15} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <Link
+                      href={`/equipment/${e.id}` as any}
+                      className="truncate text-sm font-medium text-slate-900 group-hover:text-sky-700 dark:text-slate-100 dark:group-hover:text-sky-300"
+                    >
+                      {e.name}
+                    </Link>
+                    {inspectDueBadge(due, todayIso)}
+                  </div>
+                  <div className="mt-0.5 truncate text-[11px] text-slate-500 dark:text-slate-400">
+                    {sub}
+                  </div>
+                </div>
+                <InspectButton
+                  href={`/apps?category=inspection&sourceEntityType=equipment&sourceEntityId=${e.id}`}
+                  tone="sky"
+                />
+              </motion.li>
+            )
+          })}
+        </ul>
+      )}
+    </CardShell>
+  )
+}
+
+/** A completion ring: track + animated arc, colored by percent, % in the centre. */
+function ComplianceRing({ percent }: { percent: number }) {
+  const r = 30
+  const circumference = 2 * Math.PI * r
+  const clamped = Math.max(0, Math.min(100, percent))
+  const offset = circumference * (1 - clamped / 100)
+  const stroke = clamped >= 80 ? '#10b981' : clamped >= 50 ? '#f59e0b' : '#f43f5e'
+  return (
+    <div className="relative h-[76px] w-[76px] shrink-0">
+      <svg viewBox="0 0 76 76" className="h-full w-full -rotate-90">
+        <circle
+          cx="38"
+          cy="38"
+          r={r}
+          fill="none"
+          strokeWidth="7"
+          className="stroke-slate-100 dark:stroke-slate-800"
+        />
+        <motion.circle
+          cx="38"
+          cy="38"
+          r={r}
+          fill="none"
+          strokeWidth="7"
+          strokeLinecap="round"
+          stroke={stroke}
+          strokeDasharray={circumference}
+          initial={{ strokeDashoffset: circumference }}
+          animate={{ strokeDashoffset: offset }}
+          transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <AnimatedNumber
+          value={clamped}
+          format={(v) => `${Math.round(v)}%`}
+          className="text-lg font-semibold text-slate-900 tabular-nums dark:text-slate-100"
+        />
+      </div>
+    </div>
+  )
+}
+
+/** A clickable mini-stat tile inside the My-compliance card. */
+function MiniStat({
+  label,
+  value,
+  tone,
+}: {
+  label: string
+  value: number
+  tone: 'danger' | 'warning' | 'good' | 'normal'
+}) {
+  const valueClass =
+    tone === 'danger'
+      ? value > 0
+        ? 'text-rose-700 dark:text-rose-400'
+        : 'text-slate-400 dark:text-slate-500'
+      : tone === 'warning'
+        ? value > 0
+          ? 'text-amber-700 dark:text-amber-400'
+          : 'text-slate-400 dark:text-slate-500'
+        : tone === 'good'
+          ? 'text-emerald-700 dark:text-emerald-400'
+          : 'text-slate-700 dark:text-slate-200'
+  return (
+    <Link
+      href="/compliance/mine"
+      className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 transition-colors hover:border-teal-200 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-teal-800/60 dark:hover:bg-slate-800/60"
+    >
+      <span className="text-[10px] font-semibold tracking-[0.1em] text-slate-500 uppercase dark:text-slate-400">
+        {label}
+      </span>
+      <span className={`text-lg font-semibold tabular-nums ${valueClass}`}>{value}</span>
+    </Link>
+  )
+}
+
+function complianceStatusBadge(status: string) {
+  if (status === 'overdue')
+    return (
+      <Badge variant="destructive" className="shrink-0">
+        Overdue
+      </Badge>
+    )
+  if (status === 'expiring')
+    return (
+      <Badge variant="warning" className="shrink-0">
+        Due soon
+      </Badge>
+    )
+  if (status === 'in_progress')
+    return (
+      <Badge variant="warning" className="shrink-0">
+        In progress
+      </Badge>
+    )
+  return (
+    <Badge variant="secondary" className="shrink-0">
+      Pending
+    </Badge>
+  )
+}
+
+function MyComplianceCard({ data }: { data: DashboardMetrics['myCompliance'] }) {
+  if (!data.linked) {
+    return (
+      <CardShell
+        title="My compliance"
+        caption="Your obligations"
+        icon={ShieldCheck}
+        href="/compliance/mine"
+        accent="teal"
+      >
+        <EmptyRow>Your account isn’t linked to a person record yet.</EmptyRow>
+      </CardShell>
+    )
+  }
+  if (data.total === 0) {
+    return (
+      <CardShell
+        title="My compliance"
+        caption="Your obligations"
+        icon={ShieldCheck}
+        href="/compliance/mine"
+        accent="teal"
+      >
+        <EmptyRow>
+          <span className="inline-flex items-center gap-2">
+            <ShieldCheck size={12} className="text-emerald-500" />
+            Nothing assigned — you’re all caught up.
+          </span>
+        </EmptyRow>
+      </CardShell>
+    )
+  }
+  return (
+    <CardShell
+      title="My compliance"
+      caption={`${data.completed} of ${data.total} obligations complete`}
+      icon={ShieldCheck}
+      href="/compliance/mine"
+      accent="teal"
+    >
+      <div className="flex h-full flex-col">
+        <div className="flex items-center gap-4 px-4 pt-3 pb-3">
+          <ComplianceRing percent={data.percent ?? 0} />
+          <div className="grid flex-1 grid-cols-2 gap-2">
+            <MiniStat label="Overdue" value={data.overdue} tone="danger" />
+            <MiniStat label="Due soon" value={data.dueSoon} tone="warning" />
+            <MiniStat label="Pending" value={data.pending} tone="normal" />
+            <MiniStat label="Completed" value={data.completed} tone="good" />
+          </div>
+        </div>
+        {data.outstanding.length > 0 ? (
+          <div className="border-t border-slate-100 px-2 pt-2 pb-2 dark:border-slate-800">
+            <div className="px-2 pb-1 text-[10px] font-semibold tracking-[0.14em] text-slate-400 uppercase dark:text-slate-500">
+              Outstanding
+            </div>
+            <ul className="space-y-0.5">
+              {data.outstanding.map((o, idx) => (
+                <motion.li
+                  key={`${o.obligationId}-${idx}`}
+                  initial={{ opacity: 0, x: -6 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.06 + idx * 0.04, duration: 0.3 }}
+                >
+                  <Link
+                    href="/compliance/mine"
+                    className="group flex items-center justify-between gap-3 rounded-lg px-3 py-1.5 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-medium text-slate-900 group-hover:text-teal-700 dark:text-slate-100 dark:group-hover:text-teal-300">
+                        {o.title}
+                      </div>
+                      <div className="mt-0.5 truncate text-[11px] text-slate-500 capitalize dark:text-slate-400">
+                        {o.kind.replace(/_/g, ' ')}
+                        {o.dueOn ? ` · due ${o.dueOn}` : ''}
+                      </div>
+                    </div>
+                    {complianceStatusBadge(o.status)}
+                  </Link>
+                </motion.li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </div>
     </CardShell>
   )
 }

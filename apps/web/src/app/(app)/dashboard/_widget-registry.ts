@@ -232,6 +232,30 @@ export const WIDGETS: Record<string, WidgetMeta> = {
   },
 
   // ---- Personal -----------------------------------------------------------
+  'personal-my-ppe': {
+    id: 'personal-my-ppe',
+    category: 'personal',
+    label: 'My PPE',
+    description: 'PPE issued to you, each with a one-tap pre-use inspection.',
+    defaultSize: { w: 6, h: 5 },
+    minSize: { w: 3, h: 4 },
+  },
+  'personal-my-equipment': {
+    id: 'personal-my-equipment',
+    category: 'personal',
+    label: 'My equipment',
+    description: 'Equipment checked out to you, each with a one-tap inspection.',
+    defaultSize: { w: 6, h: 5 },
+    minSize: { w: 3, h: 4 },
+  },
+  'personal-my-compliance': {
+    id: 'personal-my-compliance',
+    category: 'personal',
+    label: 'My compliance',
+    description: 'Your completion rate and outstanding obligations at a glance.',
+    defaultSize: { w: 6, h: 5 },
+    minSize: { w: 3, h: 4 },
+  },
   'personal-inbox': {
     id: 'personal-inbox',
     category: 'personal',

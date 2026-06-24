@@ -7,6 +7,9 @@ import {
   complianceObligations,
   complianceStatus,
   correctiveActions,
+  equipmentCheckouts,
+  equipmentItems,
+  equipmentTypes,
   formResponses,
   incidentHoursPeriods,
   incidents,
@@ -16,6 +19,7 @@ import {
   people,
   ppeItems,
   ppeIssueReports,
+  ppeTypes,
   trainingCourses,
   trainingRecords,
 } from '@beaconhs/db/schema'
@@ -120,6 +124,47 @@ export type DashboardMetrics = {
     courseName: string
     expiresOn: string
   }>
+
+  // Personal — "my" widgets, scoped to the logged-in user's person record.
+  // Empty / zeroed when the account isn't linked to a person (`linked: false`).
+  myPpe: Array<{
+    id: string
+    typeName: string
+    serialNumber: string | null
+    size: string | null
+    status: string
+    nextInspectionDue: string | null
+    nextAnnualInspectionDue: string | null
+    expiresOn: string | null
+  }>
+  myEquipment: Array<{
+    id: string
+    name: string
+    assetTag: string
+    typeName: string | null
+    status: string
+    requiresAnnualInspection: boolean
+    nextAnnualInspectionDue: string | null
+    expectedReturnOn: string | null
+  }>
+  myCompliance: {
+    /** False when the user has no linked person record. */
+    linked: boolean
+    total: number
+    completed: number
+    overdue: number
+    dueSoon: number
+    pending: number
+    /** completed ÷ total, or null when nothing is assigned. */
+    percent: number | null
+    outstanding: Array<{
+      obligationId: string
+      kind: string
+      title: string
+      status: string
+      dueOn: string | null
+    }>
+  }
 }
 
 /** Returns the per-tenant dashboard payload. Single transaction. */
@@ -572,6 +617,158 @@ export async function loadDashboardMetrics(
       expiresOn: String(r.expiresOn),
     }))
 
+    // --- Personal "my" widgets -------------------------------------------
+    // Resolve the logged-in user's person record once; all three personal
+    // widgets key off it. Unlinked users (no person row) get empty states.
+    const [myPerson] = ctx.userId
+      ? await tx
+          .select({ id: people.id })
+          .from(people)
+          .where(and(eq(people.userId, ctx.userId), isNull(people.deletedAt)))
+          .limit(1)
+      : []
+    const myPersonId = myPerson?.id ?? null
+
+    // PPE currently issued to me — soonest pre-use inspection first.
+    const myPpe = myPersonId
+      ? (
+          await tx
+            .select({
+              id: ppeItems.id,
+              serialNumber: ppeItems.serialNumber,
+              size: ppeItems.size,
+              status: ppeItems.status,
+              nextInspectionDue: ppeItems.nextInspectionDue,
+              nextAnnualInspectionDue: ppeItems.nextAnnualInspectionDue,
+              expiresOn: ppeItems.expiresOn,
+              typeName: ppeTypes.name,
+            })
+            .from(ppeItems)
+            .innerJoin(ppeTypes, eq(ppeTypes.id, ppeItems.typeId))
+            .where(
+              and(
+                eq(ppeItems.currentHolderPersonId, myPersonId),
+                eq(ppeItems.status, 'issued'),
+                isNull(ppeItems.deletedAt),
+              ),
+            )
+            .orderBy(asc(ppeItems.nextInspectionDue))
+            .limit(12)
+        ).map((r) => ({
+          id: r.id,
+          typeName: r.typeName,
+          serialNumber: r.serialNumber,
+          size: r.size,
+          status: r.status,
+          nextInspectionDue: r.nextInspectionDue ? String(r.nextInspectionDue) : null,
+          nextAnnualInspectionDue: r.nextAnnualInspectionDue
+            ? String(r.nextAnnualInspectionDue)
+            : null,
+          expiresOn: r.expiresOn ? String(r.expiresOn) : null,
+        }))
+      : []
+
+    // Equipment checked out to me — open checkouts (returnedAt IS NULL) are the
+    // source of truth; oldest checkout first.
+    const myEquipment = myPersonId
+      ? (
+          await tx
+            .select({
+              id: equipmentItems.id,
+              name: equipmentItems.name,
+              assetTag: equipmentItems.assetTag,
+              status: equipmentItems.status,
+              requiresAnnualInspection: equipmentItems.requiresAnnualInspection,
+              nextAnnualInspectionDue: equipmentItems.nextAnnualInspectionDue,
+              typeName: equipmentTypes.name,
+              expectedReturnOn: equipmentCheckouts.expectedReturnOn,
+            })
+            .from(equipmentCheckouts)
+            .innerJoin(equipmentItems, eq(equipmentItems.id, equipmentCheckouts.equipmentItemId))
+            .leftJoin(equipmentTypes, eq(equipmentTypes.id, equipmentItems.typeId))
+            .where(
+              and(
+                eq(equipmentCheckouts.holderPersonId, myPersonId),
+                isNull(equipmentCheckouts.returnedAt),
+                isNull(equipmentItems.deletedAt),
+              ),
+            )
+            .orderBy(asc(equipmentCheckouts.checkedOutAt))
+            .limit(12)
+        ).map((r) => ({
+          id: r.id,
+          name: r.name,
+          assetTag: r.assetTag,
+          typeName: r.typeName,
+          status: r.status,
+          requiresAnnualInspection: r.requiresAnnualInspection,
+          nextAnnualInspectionDue: r.nextAnnualInspectionDue
+            ? String(r.nextAnnualInspectionDue)
+            : null,
+          expectedReturnOn: r.expectedReturnOn ? String(r.expectedReturnOn) : null,
+        }))
+      : []
+
+    // My compliance — read the materialised scoreboard for active obligations.
+    const complianceRows = myPersonId
+      ? await tx
+          .select({
+            obligationId: complianceObligations.id,
+            kind: complianceObligations.sourceModule,
+            title: complianceObligations.title,
+            status: complianceStatus.status,
+            dueOn: complianceStatus.dueOn,
+          })
+          .from(complianceStatus)
+          .innerJoin(
+            complianceObligations,
+            eq(complianceObligations.id, complianceStatus.obligationId),
+          )
+          .where(
+            and(
+              eq(complianceStatus.tenantId, ctx.tenantId),
+              eq(complianceStatus.personId, myPersonId),
+              isNull(complianceObligations.deletedAt),
+              eq(complianceObligations.status, 'active'),
+            ),
+          )
+          .limit(1000)
+      : []
+    const cTotal = complianceRows.length
+    const cCompleted = complianceRows.filter((r) => r.status === 'completed').length
+    const cOverdue = complianceRows.filter((r) => r.status === 'overdue').length
+    const cDueSoon = complianceRows.filter((r) => r.status === 'expiring').length
+    const cPending = complianceRows.filter(
+      (r) => r.status === 'pending' || r.status === 'in_progress',
+    ).length
+    const outstandingRank = (s: string) =>
+      s === 'overdue' ? 0 : s === 'expiring' ? 1 : s === 'in_progress' ? 2 : 3
+    const cOutstanding = complianceRows
+      .filter((r) => ['overdue', 'expiring', 'pending', 'in_progress'].includes(r.status))
+      .sort(
+        (a, b) =>
+          outstandingRank(a.status) - outstandingRank(b.status) ||
+          (a.dueOn ?? '9999-12-31').localeCompare(b.dueOn ?? '9999-12-31'),
+      )
+      .slice(0, 5)
+      .map((r) => ({
+        obligationId: r.obligationId,
+        kind: r.kind as string,
+        title: r.title,
+        status: r.status,
+        dueOn: r.dueOn ? String(r.dueOn) : null,
+      }))
+    const myCompliance = {
+      linked: myPersonId !== null,
+      total: cTotal,
+      completed: cCompleted,
+      overdue: cOverdue,
+      dueSoon: cDueSoon,
+      pending: cPending,
+      percent: cTotal === 0 ? null : Math.round((cCompleted / cTotal) * 100),
+      outstanding: cOutstanding,
+    }
+
     return {
       incidents30: Number(incRow?.c ?? 0),
       incidentsPrev30: Number(incPrev?.c ?? 0),
@@ -621,6 +818,10 @@ export async function loadDashboardMetrics(
       topSitesByIncidents,
       topOverdueCAs,
       expiringTraining30d,
+
+      myPpe,
+      myEquipment,
+      myCompliance,
     }
   })
 }

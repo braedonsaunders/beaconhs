@@ -1,0 +1,73 @@
+// /api/v1/{entity} — GET lists rows; POST creates a record (writable entities
+// only). Both authenticate first (so unknown paths can't probe which entities
+// exist without a valid key), then check the relevant scope.
+
+import { NextResponse } from 'next/server'
+import { REPORT_ENTITY_MAP } from '@beaconhs/reports'
+import { authenticateApiKey } from '@/lib/api/auth'
+import { ApiError, errorResponse, noStore } from '@/lib/api/errors'
+import { readEntityRows } from '@/lib/api/query'
+import { keyCanRead, keyCanWrite } from '@/lib/api/scopes'
+import { createEntity, isWritable } from '@/lib/api/write'
+
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
+export async function GET(
+  req: Request,
+  { params }: { params: Promise<{ entity: string }> },
+): Promise<NextResponse> {
+  try {
+    const { ctx, key } = await authenticateApiKey(req)
+    const { entity: entityKey } = await params
+    const entity = REPORT_ENTITY_MAP[entityKey]
+    if (!entity) throw ApiError.notFound(`Unknown entity "${entityKey}"`)
+    if (!keyCanRead(key.scopes, entityKey)) {
+      throw ApiError.forbidden(
+        `This key cannot read "${entityKey}" — grant scope read:${entityKey} or read:*.`,
+      )
+    }
+
+    const page = await readEntityRows(ctx, entity, new URL(req.url).searchParams)
+    return NextResponse.json({ entity: entityKey, ...page }, { headers: noStore() })
+  } catch (err) {
+    if (!(err instanceof ApiError)) console.error('[api/v1] unhandled error', err)
+    return errorResponse(err)
+  }
+}
+
+export async function POST(
+  req: Request,
+  { params }: { params: Promise<{ entity: string }> },
+): Promise<NextResponse> {
+  try {
+    const { ctx, key } = await authenticateApiKey(req)
+    const { entity: entityKey } = await params
+    const entity = REPORT_ENTITY_MAP[entityKey]
+    if (!entity) throw ApiError.notFound(`Unknown entity "${entityKey}"`)
+    if (!isWritable(entityKey)) {
+      throw ApiError.methodNotAllowed(`"${entityKey}" is read-only — POST is not supported.`)
+    }
+    if (!keyCanWrite(key.scopes, entityKey)) {
+      throw ApiError.forbidden(
+        `This key cannot write "${entityKey}" — grant scope write:${entityKey} or write:*.`,
+      )
+    }
+
+    let body: unknown
+    try {
+      body = await req.json()
+    } catch {
+      throw ApiError.invalid('Request body must be valid JSON')
+    }
+
+    const created = await createEntity(ctx, entityKey, body)
+    return NextResponse.json(
+      { entity: entityKey, data: created },
+      { status: 201, headers: noStore() },
+    )
+  } catch (err) {
+    if (!(err instanceof ApiError)) console.error('[api/v1] unhandled error', err)
+    return errorResponse(err)
+  }
+}
