@@ -164,6 +164,23 @@ export async function deleteConnection(formData: FormData): Promise<void> {
   revalidatePath('/admin/integrations')
 }
 
+export async function renameConnection(formData: FormData): Promise<void> {
+  const ctx = await guard()
+  if (!ctx) return
+  const id = String(formData.get('id') ?? '')
+  const name = String(formData.get('name') ?? '').trim()
+  if (!id || !name) return
+  await ctx.db((tx) => tx.update(syncConnections).set({ name }).where(eq(syncConnections.id, id)))
+  await recordAudit(ctx, {
+    entityType: 'sync_connection',
+    entityId: id,
+    action: 'update',
+    summary: `Renamed connection to "${name}"`,
+  })
+  revalidatePath(`/admin/integrations/${id}`)
+  revalidatePath('/admin/integrations')
+}
+
 export async function saveConfig(formData: FormData): Promise<void> {
   const ctx = await guard()
   if (!ctx) return

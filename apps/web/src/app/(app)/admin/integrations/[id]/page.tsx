@@ -24,7 +24,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
 import { DbMapper } from './_db-mapper'
 import { NangoConnect } from './_nango-connect'
-import { runNow, saveConfig, saveCsv, saveSchedule } from '../_actions'
+import { renameConnection, runNow, saveConfig, saveCsv, saveSchedule } from '../_actions'
 
 export const metadata = { title: 'Connection' }
 export const dynamic = 'force-dynamic'
@@ -110,8 +110,14 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
             <a href="/admin/integrations" className="text-xs text-slate-400 hover:text-slate-600">
               ← Integrations
             </a>
-            <div className="mt-1 flex items-center gap-2">
-              <h1 className="text-2xl font-semibold text-slate-900">{conn.name}</h1>
+            <form action={renameConnection} className="mt-1 flex items-center gap-2">
+              <input type="hidden" name="id" value={conn.id} />
+              <input
+                name="name"
+                defaultValue={conn.name}
+                aria-label="Connection name"
+                className="max-w-[16rem] min-w-0 rounded border border-transparent bg-transparent px-1 py-0.5 text-2xl font-semibold text-slate-900 hover:border-slate-200 focus:border-teal-400 focus:bg-white focus:outline-none dark:text-slate-100 dark:hover:border-slate-700 dark:focus:bg-slate-900"
+              />
               <span
                 className={cn(
                   'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1',
@@ -120,7 +126,15 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
               >
                 {conn.status}
               </span>
-            </div>
+              <Button
+                type="submit"
+                variant="ghost"
+                size="sm"
+                className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+              >
+                Save
+              </Button>
+            </form>
             <p className="text-sm text-slate-500">{summary?.name ?? conn.connectorKey}</p>
           </div>
           <form action={runNow}>
