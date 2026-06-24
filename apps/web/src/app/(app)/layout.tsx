@@ -1,3 +1,4 @@
+import { Fragment } from 'react'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { and, count, eq, isNull, sql } from 'drizzle-orm'
@@ -72,7 +73,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           defaultCollapsed={defaultCollapsed}
           impersonation={impersonation}
         >
-          {children}
+          {/* Remount the page subtree when the active tenant — or effective
+              user, while impersonating — changes. router.refresh() (fired by the
+              tenant switcher) re-renders server components but PRESERVES client
+              state across the refresh, so any 'use client' page that seeds
+              useState from server props (nav editor, edit forms, filter UIs)
+              would keep showing the previous tenant's values. Keying here resets
+              that whole class of state in one place; the shell/sidebar stay
+              mounted and update via fresh props as before. */}
+          <Fragment key={`${ctx.tenantId}:${ctx.userId}`}>{children}</Fragment>
           <Toaster richColors position="top-right" />
         </AppShell>
       </NavigationProvider>
