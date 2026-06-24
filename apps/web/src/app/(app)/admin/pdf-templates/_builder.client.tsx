@@ -113,11 +113,17 @@ const BASE_BLOCKS: { id: string; label: string; content: string }[] = [
 function pageCss(pageWidthPx: number, pageHeightPx: number, marginPx: number): string {
   return (
     `html{background:#3f4856;padding:0;margin:0;}` +
-    `body{box-sizing:border-box;width:${pageWidthPx}px;min-height:${pageHeightPx}px;` +
-    `margin:32px auto;background:#fff;padding:${marginPx}px;position:relative;` +
+    // The sheet shows at true page width when the pane is wide enough, else
+    // shrinks to fit (min) — so it NEVER overflows the canvas and always centers
+    // (a fixed pixel width wider than the pane pins left, the "dark strip" bug).
+    // !important on margin: GrapesJS injects its own `body{margin:0}` later in
+    // the cascade, which otherwise pins the sheet left (defeats the centering).
+    `body{box-sizing:border-box;width:min(${pageWidthPx}px, 100% - 48px);` +
+    `min-height:${pageHeightPx}px;` +
+    `margin:24px auto !important;background:#fff;padding:${marginPx}px;position:relative;` +
     `box-shadow:0 10px 34px rgba(0,0,0,.4);border-radius:1px;` +
     `font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#0f172a;}` +
-    // dashed margin/content boundary guide (non-interactive, print-hidden idea)
+    // dashed margin/content boundary guide (non-interactive)
     `body::before{content:'';position:absolute;inset:${marginPx}px;` +
     `border:1px dashed #cbd5e1;pointer-events:none;z-index:0;}` +
     // keep authored content above the guide

@@ -51,6 +51,16 @@ export function pageMetrics(size: PaperSize, orientation: Orientation, marginMm:
   return { pageW: w, pageH: h, margin: m, contentW: w - 2 * m }
 }
 
+// GrapesJS keeps authored styles in getCss() (keyed by generated ids like
+// #iltl), NOT inline on the elements getHtml() returns. Serializing html alone
+// loses every style — so the document is the CSS block + the structure. This is
+// what gets saved (sourceHtml → compiledHtml) and what the worker/Preview print.
+function fullHtml(ed: Editor): string {
+  const css = ed.getCss?.() ?? ''
+  const html = ed.getHtml()
+  return css ? `<style>${css}</style>${html}` : html
+}
+
 export function PdfTemplateEditor({
   template,
 }: {
@@ -88,7 +98,7 @@ export function PdfTemplateEditor({
     if (!ed) return null
     return {
       design: ed.getProjectData() as Record<string, unknown>,
-      sourceHtml: ed.getHtml(),
+      sourceHtml: fullHtml(ed),
     }
   }
 
@@ -119,7 +129,8 @@ export function PdfTemplateEditor({
   }
 
   const showPreview = () => {
-    const html = editorRef.current?.getHtml() ?? template.sourceHtml ?? ''
+    const ed = editorRef.current
+    const html = ed ? fullHtml(ed) : (template.sourceHtml ?? '')
     setPreviewHtml(html)
     setTab('preview')
   }
@@ -240,6 +251,7 @@ export function PdfTemplateEditor({
           />
         ) : (
           <PagedPreview
+            templateId={template.id}
             html={previewHtml}
             mergeFields={template.mergeFields}
             collections={collections}

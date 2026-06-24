@@ -12,6 +12,9 @@ import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { compileBuilderHtml, slugifyTemplateKey } from '@/lib/email-templates'
 import { loadSubjectFields } from '@/lib/flows/subject-fields'
+import { loadTenantPdfTemplate } from '@/lib/pdf-templates'
+import { buildFlowAdapter } from '@/lib/flows/registry'
+import { findSampleSubjectId } from '@/lib/flows/sample-record'
 
 async function requireManage() {
   const ctx = await requireRequestContext()
@@ -134,6 +137,37 @@ export async function savePdfTemplateDesign(input: {
   revalidatePath(`/admin/pdf-templates/${input.id}`)
   revalidatePath('/admin/pdf-templates')
   return { ok: true }
+}
+
+// Resolve a real sample record's field-map so the Preview tab fills {{tokens}}
+// and {{#each}} tables with live data instead of [placeholders]. Returns null
+// values when the template has no record subject or the tenant has no records
+// of that type (the client falls back to placeholder sample data).
+export async function loadPdfPreviewData(
+  templateId: string,
+): Promise<{ values: Record<string, unknown> | null; sampleRef: string | null }> {
+  const ctx = await requireManage()
+  const tpl = await loadTenantPdfTemplate(ctx, templateId)
+  if (!tpl?.recordSubjectType) return { values: null, sampleRef: null }
+
+  const sampleId = await findSampleSubjectId(ctx, tpl.recordSubjectType, tpl.recordSubjectKey)
+  if (!sampleId) return { values: null, sampleRef: null }
+
+  const adapter = buildFlowAdapter(
+    ctx,
+    tpl.recordSubjectType as 'module' | 'form_template',
+    tpl.recordSubjectKey,
+    sampleId,
+  )
+  if (!adapter) return { values: null, sampleRef: null }
+
+  try {
+    const values = await adapter.loadValues()
+    const ref = typeof values.reference === 'string' ? values.reference : null
+    return { values, sampleRef: ref ?? sampleId.slice(0, 8) }
+  } catch {
+    return { values: null, sampleRef: null }
+  }
 }
 
 export async function deletePdfTemplate(formData: FormData): Promise<void> {
