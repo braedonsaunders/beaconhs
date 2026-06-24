@@ -4,9 +4,17 @@ import 'server-only'
 // Field-map keys mirror MODULE_FLOW_PROFILES.equipment.
 
 import { eq } from 'drizzle-orm'
-import { equipmentWorkOrders, tenantUsers, users } from '@beaconhs/db/schema'
+import {
+  equipmentItems,
+  equipmentWorkOrders,
+  orgUnits,
+  people,
+  tenantUsers,
+  users,
+} from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 import { buildRecordSummaryPdfJob } from '../pdf-summary'
+import { fmtDateTime, personName, titleize } from '../format'
 import type { FlowSubjectAdapter } from '../types'
 
 export function createEquipmentFlowAdapter(
@@ -32,29 +40,50 @@ export function createEquipmentFlowAdapter(
       }),
 
     async loadValues() {
-      const [w] = await ctx.db((tx) =>
+      const [head] = await ctx.db((tx) =>
         tx
           .select({
-            reference: equipmentWorkOrders.reference,
-            summary: equipmentWorkOrders.summary,
-            status: equipmentWorkOrders.status,
-            openedAt: equipmentWorkOrders.openedAt,
-            closedAt: equipmentWorkOrders.closedAt,
-            itemId: equipmentWorkOrders.itemId,
-            assignedToTenantUserId: equipmentWorkOrders.assignedToTenantUserId,
+            w: equipmentWorkOrders,
+            itemName: equipmentItems.name,
+            siteName: orgUnits.name,
+            assignedName: users.name,
+            repFirst: people.firstName,
+            repLast: people.lastName,
+            repFormal: people.formalName,
           })
           .from(equipmentWorkOrders)
+          .leftJoin(equipmentItems, eq(equipmentItems.id, equipmentWorkOrders.itemId))
+          .leftJoin(orgUnits, eq(orgUnits.id, equipmentItems.currentSiteOrgUnitId))
+          .leftJoin(tenantUsers, eq(tenantUsers.id, equipmentWorkOrders.assignedToTenantUserId))
+          .leftJoin(users, eq(users.id, tenantUsers.userId))
+          .leftJoin(people, eq(people.id, equipmentWorkOrders.reportedByPersonId))
           .where(eq(equipmentWorkOrders.id, workOrderId))
           .limit(1),
       )
+      if (!head) return {}
+      const w = head.w
       return {
-        reference: w?.reference ?? null,
-        summary: w?.summary ?? null,
-        status: w?.status ?? null,
-        opened_at: w?.openedAt ? w.openedAt.toISOString() : null,
-        closed_at: w?.closedAt ? w.closedAt.toISOString() : null,
-        item_id: w?.itemId ?? null,
-        assigned_to_tenant_user_id: w?.assignedToTenantUserId ?? null,
+        reference: w.reference ?? null,
+        summary: w.summary ?? null,
+        description: w.description ?? '',
+        action_taken: w.actionTaken ?? '',
+        status: w.status ?? null,
+        status_label: titleize(w.status),
+        priority_label: titleize(w.priority),
+        cost: w.cost ?? '',
+        opened_at: fmtDateTime(w.openedAt),
+        closed_at: fmtDateTime(w.closedAt),
+        equipment_name: head.itemName ?? '',
+        site_name: head.siteName ?? '',
+        assigned_to_name: head.assignedName ?? '',
+        reported_by_name: personName({
+          firstName: head.repFirst,
+          lastName: head.repLast,
+          formalName: head.repFormal,
+        }),
+        // FK ids for conditions / recipient `field` targets.
+        item_id: w.itemId ?? null,
+        assigned_to_tenant_user_id: w.assignedToTenantUserId ?? null,
       }
     },
 

@@ -70,6 +70,28 @@ function table(headers: string[], cells: string[], eachKey: string): string {
   )
 }
 
+function para(heading: string, token: string): string {
+  return `<h2 style="${H2}">${heading}</h2><p style="margin:0 0 6px;font-size:13px;color:#0f172a;line-height:1.5;white-space:pre-wrap;">${token}</p>`
+}
+
+function section(heading: string, body: string): string {
+  return `<h2 style="${H2}">${heading}</h2>${body}`
+}
+
+const PHOTO_CELL =
+  '<img src="{{url}}" width="120" style="border-radius:4px;border:1px solid #e2e8f0;display:block;" alt="" />'
+function photosTable(): string {
+  return table(['Photo', 'Caption'], [PHOTO_CELL, '{{caption}}'], 'photos')
+}
+
+function header(title: string, subtitle: string, rows: string): string {
+  return (
+    `${WRAP_OPEN}\n<h1 style="margin:0 0 2px;font-size:20px;color:#0f172a;">${title}</h1>\n` +
+    `<p style="margin:0 0 14px;font-size:13px;color:#64748b;">${subtitle}</p>\n` +
+    `<table role="presentation" cellpadding="0" cellspacing="0" style="margin-bottom:6px">${rows}</table>`
+  )
+}
+
 // --- hazard assessment (legacy pdf/hazardassessment.blade.php) ---------------
 
 const HAZID_HTML = `${WRAP_OPEN}
@@ -162,6 +184,257 @@ const JOURNAL_MERGE = [
   { key: 'tags', label: 'Tags' },
 ]
 
+// --- incidents (legacy pdf/incident.blade.php) -------------------------------
+
+const INCIDENT_HTML =
+  header(
+    'Incident Report',
+    '{{reference}} &middot; {{status_label}} &middot; {{severity_label}}',
+    detailRow('Title', '{{title}}') +
+      detailRow('Type', '{{type_label}}') +
+      detailRow('Occurred', '{{occurred_at}}') +
+      detailRow('Site', '{{site_name}}') +
+      detailRow('Department', '{{department_name}}') +
+      detailRow('Location', '{{location}}') +
+      detailRow('Supervisor', '{{supervisor_name}}') +
+      detailRow('Reported by', '{{reported_by_name}}'),
+  ) +
+  para('Description', '{{description}}') +
+  para('Events leading up', '{{events_leading_up}}') +
+  para('Immediate action taken', '{{immediate_action_taken}}') +
+  para('PPE worn', '{{ppe_worn}}') +
+  para('Root cause', '{{root_cause}}') +
+  section('People involved', table(['Name', 'Role'], ['{{name}}', '{{role}}'], 'people_involved')) +
+  section(
+    'Injuries',
+    table(
+      ['Person', 'Body parts', 'Injury types', 'Treatment', 'Facility'],
+      [
+        '{{person_name}}',
+        '{{body_parts}}',
+        '{{injury_types}}',
+        '{{treatment}}',
+        '{{treated_at_facility}}',
+      ],
+      'injuries',
+    ),
+  ) +
+  section(
+    'Events',
+    table(
+      ['When', 'Description', 'Recorded by'],
+      ['{{occurred_at}}', '{{description}}', '{{recorded_by_name}}'],
+      'events',
+    ),
+  ) +
+  section(
+    'Contributing factors',
+    table(['Category', 'Description'], ['{{category}}', '{{description}}'], 'contributing_factors'),
+  ) +
+  section(
+    'Preventative steps',
+    table(
+      ['Description', 'Owner', 'Target', 'Status'],
+      ['{{description}}', '{{owner_name}}', '{{target_date}}', '{{status}}'],
+      'preventative_steps',
+    ),
+  ) +
+  section('Photos', photosTable()) +
+  WRAP_CLOSE
+
+const INCIDENT_MERGE = [
+  { key: 'reference', label: 'Reference' },
+  { key: 'title', label: 'Title' },
+  { key: 'status_label', label: 'Status' },
+  { key: 'type_label', label: 'Type' },
+  { key: 'severity_label', label: 'Severity' },
+  { key: 'occurred_at', label: 'Occurred at' },
+  { key: 'site_name', label: 'Site name' },
+  { key: 'department_name', label: 'Department' },
+  { key: 'supervisor_name', label: 'Supervisor' },
+  { key: 'reported_by_name', label: 'Reported by' },
+]
+
+// --- corrective actions (legacy pdf/correctiveaction.blade.php) --------------
+
+const CA_HTML =
+  header(
+    'Corrective Action',
+    '{{reference}} &middot; {{status_label}} &middot; {{severity_label}}',
+    detailRow('Title', '{{title}}') +
+      detailRow('Source', '{{source_label}}') +
+      detailRow('Owner', '{{owner_name}}') +
+      detailRow('Assigned by', '{{assigned_by_name}}') +
+      detailRow('Site', '{{site_name}}') +
+      detailRow('Assigned on', '{{assigned_on}}') +
+      detailRow('Due on', '{{due_on}}'),
+  ) +
+  para('Description', '{{description}}') +
+  para('Root cause', '{{root_cause}}') +
+  para('Action taken', '{{action_taken}}') +
+  section(
+    'Completion steps',
+    table(
+      ['Kind', 'Description', 'Completed by', 'Completed at'],
+      ['{{kind}}', '{{description}}', '{{completed_by_name}}', '{{completed_at}}'],
+      'complete_steps',
+    ),
+  ) +
+  section('Photos', photosTable()) +
+  WRAP_CLOSE
+
+const CA_MERGE = [
+  { key: 'reference', label: 'Reference' },
+  { key: 'title', label: 'Title' },
+  { key: 'status_label', label: 'Status' },
+  { key: 'severity_label', label: 'Severity' },
+  { key: 'source_label', label: 'Source' },
+  { key: 'owner_name', label: 'Owner' },
+  { key: 'assigned_by_name', label: 'Assigned by' },
+  { key: 'site_name', label: 'Site name' },
+  { key: 'due_on', label: 'Due on' },
+]
+
+// --- inspections (legacy pdf/inspection.blade.php) ---------------------------
+
+const INSPECTION_HTML =
+  header(
+    'Inspection Report',
+    '{{reference}} &middot; {{type_name}} &middot; {{status_label}}',
+    detailRow('Occurred', '{{occurred_at}}') +
+      detailRow('Site', '{{site_name}}') +
+      detailRow('Inspector', '{{inspector_name}}') +
+      detailRow('Supervisor', '{{supervisor_name}}'),
+  ) +
+  section(
+    'Inspection items',
+    table(
+      ['Group', 'Item', 'Answer', 'Severity', 'Non-compliance', 'Action taken'],
+      [
+        '{{group}}',
+        '{{question}}',
+        '{{answer}}',
+        '{{severity}}',
+        '{{non_compliance}}',
+        '{{action_taken}}',
+      ],
+      'criteria',
+    ),
+  ) +
+  para('Notes', '{{notes}}') +
+  section('Photos', photosTable()) +
+  WRAP_CLOSE
+
+const INSPECTION_MERGE = [
+  { key: 'reference', label: 'Reference' },
+  { key: 'type_name', label: 'Inspection type' },
+  { key: 'status_label', label: 'Status' },
+  { key: 'occurred_at', label: 'Occurred at' },
+  { key: 'site_name', label: 'Site name' },
+  { key: 'inspector_name', label: 'Inspector' },
+  { key: 'supervisor_name', label: 'Supervisor' },
+]
+
+// --- training (legacy pdf/trainingassessmentresult.blade.php) -----------------
+
+const TRAINING_HTML =
+  header(
+    'Training Assessment',
+    '{{assessment_name}} &middot; {{status_label}}',
+    detailRow('Person', '{{person_name}}') +
+      detailRow('Result', '{{pass_fail}}') +
+      detailRow('Score', '{{score_percent}}') +
+      detailRow('Passing score', '{{passing_score}}') +
+      detailRow('Completed', '{{completed_at}}'),
+  ) +
+  para('Description', '{{assessment_description}}') +
+  section(
+    'Questions & responses',
+    table(
+      ['Question', 'Answer', 'Correct answer', 'Result', 'Points'],
+      ['{{prompt}}', '{{answer}}', '{{correct_answer}}', '{{result}}', '{{points}}'],
+      'questions',
+    ),
+  ) +
+  WRAP_CLOSE
+
+const TRAINING_MERGE = [
+  { key: 'assessment_name', label: 'Assessment' },
+  { key: 'person_name', label: 'Person' },
+  { key: 'status_label', label: 'Status' },
+  { key: 'pass_fail', label: 'Pass / fail' },
+  { key: 'score_percent', label: 'Score' },
+  { key: 'passing_score', label: 'Passing score' },
+  { key: 'completed_at', label: 'Completed at' },
+]
+
+// --- equipment work order (legacy pdf/equipmentworkorder.blade.php) -----------
+
+const EQUIPMENT_HTML =
+  header(
+    'Work Order',
+    '{{reference}} &middot; {{status_label}} &middot; {{priority_label}}',
+    detailRow('Summary', '{{summary}}') +
+      detailRow('Equipment', '{{equipment_name}}') +
+      detailRow('Site', '{{site_name}}') +
+      detailRow('Assigned to', '{{assigned_to_name}}') +
+      detailRow('Reported by', '{{reported_by_name}}') +
+      detailRow('Opened', '{{opened_at}}') +
+      detailRow('Closed', '{{closed_at}}') +
+      detailRow('Cost', '{{cost}}'),
+  ) +
+  para('Description', '{{description}}') +
+  para('Action taken', '{{action_taken}}') +
+  WRAP_CLOSE
+
+const EQUIPMENT_MERGE = [
+  { key: 'reference', label: 'Reference' },
+  { key: 'summary', label: 'Summary' },
+  { key: 'status_label', label: 'Status' },
+  { key: 'priority_label', label: 'Priority' },
+  { key: 'equipment_name', label: 'Equipment' },
+  { key: 'site_name', label: 'Site name' },
+  { key: 'assigned_to_name', label: 'Assigned to' },
+  { key: 'reported_by_name', label: 'Reported by' },
+]
+
+// --- documents management review (legacy pdf/documentreview.blade.php) --------
+
+const REVIEW_HTML =
+  header(
+    'Management Review',
+    '{{title}}',
+    detailRow('Period', '{{period_start}} – {{period_end}}') +
+      detailRow('Next review', '{{next_review_on}}') +
+      detailRow('Chaired by', '{{chair_name}}') +
+      detailRow('Created by', '{{owner_name}}'),
+  ) +
+  para('Discussion notes', '{{discussion_notes}}') +
+  para('Decisions', '{{decisions}}') +
+  section('Attendees', table(['Name', 'Email'], ['{{name}}', '{{email}}'], 'attendees')) +
+  section(
+    'Documents reviewed',
+    table(['Document', 'Status'], ['{{title}}', '{{status}}'], 'documents_reviewed'),
+  ) +
+  section(
+    'Action items',
+    table(
+      ['Reference', 'Title', 'Status', 'Due'],
+      ['{{reference}}', '{{title}}', '{{status}}', '{{due_on}}'],
+      'action_items',
+    ),
+  ) +
+  WRAP_CLOSE
+
+const REVIEW_MERGE = [
+  { key: 'title', label: 'Title' },
+  { key: 'period_start', label: 'Period start' },
+  { key: 'period_end', label: 'Period end' },
+  { key: 'next_review_on', label: 'Next review on' },
+  { key: 'chair_name', label: 'Chaired by' },
+  { key: 'owner_name', label: 'Created by' },
+]
+
 type TemplateSeed = {
   key: string
   name: string
@@ -191,12 +464,75 @@ const TEMPLATES: TemplateSeed[] = [
     html: JOURNAL_HTML,
     mergeFields: JOURNAL_MERGE,
   },
+  {
+    key: 'incident-report',
+    name: 'Incident report',
+    description:
+      'Full incident — details, narrative, people, injuries, events, factors, steps, photos.',
+    subjectKey: 'incidents',
+    subjectTemplate: 'Incident {{reference}}',
+    html: INCIDENT_HTML,
+    mergeFields: INCIDENT_MERGE,
+  },
+  {
+    key: 'corrective-action-report',
+    name: 'Corrective Action report',
+    description: 'Corrective action — details, root cause, action taken, completion steps, photos.',
+    subjectKey: 'corrective-actions',
+    subjectTemplate: 'Corrective Action {{reference}}',
+    html: CA_HTML,
+    mergeFields: CA_MERGE,
+  },
+  {
+    key: 'inspection-report',
+    name: 'Inspection report',
+    description: 'Inspection — details, criteria/items with pass-fail, notes, photos.',
+    subjectKey: 'inspections',
+    subjectTemplate: 'Inspection {{reference}}',
+    html: INSPECTION_HTML,
+    mergeFields: INSPECTION_MERGE,
+  },
+  {
+    key: 'training-assessment-report',
+    name: 'Training Assessment report',
+    description: 'Training assessment — result, score, and per-question responses.',
+    subjectKey: 'training',
+    subjectTemplate: 'Training assessment — {{assessment_name}}',
+    html: TRAINING_HTML,
+    mergeFields: TRAINING_MERGE,
+  },
+  {
+    key: 'work-order-report',
+    name: 'Equipment Work Order report',
+    description:
+      'Equipment work order — details, equipment, assignment, description, action taken.',
+    subjectKey: 'equipment',
+    subjectTemplate: 'Work order {{reference}}',
+    html: EQUIPMENT_HTML,
+    mergeFields: EQUIPMENT_MERGE,
+  },
+  {
+    key: 'management-review-report',
+    name: 'Management Review report',
+    description:
+      'Management review — period, notes, decisions, attendees, documents, action items.',
+    subjectKey: 'documents',
+    subjectTemplate: 'Management review — {{title}}',
+    html: REVIEW_HTML,
+    mergeFields: REVIEW_MERGE,
+  },
 ]
+
+type GraphJson = {
+  nodes?: { data?: { action?: { action?: string; templateId?: string } } }[]
+}
 
 async function main() {
   const { db, sql: pg } = createClient({ max: 4 })
   let created = 0
   let updated = 0
+  let repointed = 0
+  let retired = 0
   try {
     await withSuperAdmin(db, async (tx) => {
       const tenants = (await tx.execute(sql`select id from tenants`)) as unknown as {
@@ -233,9 +569,55 @@ async function main() {
             created++
           }
         }
+
+        // Repoint the seeded submit→email+PDF module flows from the generic
+        // 'record-notification' template to this module's new report template,
+        // then retire the generic. Only touches actions STILL pointing at the
+        // generic — user customizations are preserved.
+        const [generic] = (await tx.execute(
+          sql`select id from email_templates where tenant_id=${t.id} and key='record-notification' and deleted_at is null limit 1`,
+        )) as unknown as { id: string }[]
+        if (generic) {
+          const reportRows = (await tx.execute(
+            sql`select key, id from email_templates where tenant_id=${t.id} and deleted_at is null and record_subject_type='module'`,
+          )) as unknown as { key: string; id: string }[]
+          const keyToId = new Map(reportRows.map((r) => [r.key, r.id]))
+          const subjectToTemplate = new Map<string, string>()
+          for (const tpl of TEMPLATES) {
+            const id = keyToId.get(tpl.key)
+            if (id) subjectToTemplate.set(tpl.subjectKey, id)
+          }
+          const flows = (await tx.execute(
+            sql`select id, subject_key, graph from form_automations where tenant_id=${t.id} and subject_type='module'`,
+          )) as unknown as { id: string; subject_key: string; graph: GraphJson }[]
+          for (const f of flows) {
+            const tplId = subjectToTemplate.get(f.subject_key)
+            if (!tplId) continue
+            let changed = false
+            for (const node of f.graph?.nodes ?? []) {
+              const action = node?.data?.action
+              if (action?.action === 'send_email' && action.templateId === generic.id) {
+                action.templateId = tplId
+                changed = true
+              }
+            }
+            if (changed) {
+              await tx.execute(
+                sql`update form_automations set graph=${JSON.stringify(f.graph)}::jsonb, updated_at=now() where id=${f.id}`,
+              )
+              repointed++
+            }
+          }
+          await tx.execute(
+            sql`update email_templates set deleted_at=now(), updated_at=now() where id=${generic.id}`,
+          )
+          retired++
+        }
       }
     })
-    console.log(`✔ record-type email templates: ${created} created, ${updated} updated.`)
+    console.log(
+      `✔ record-type email templates: ${created} created, ${updated} updated; ${repointed} flow(s) repointed, ${retired} generic template(s) retired.`,
+    )
   } finally {
     await pg.end()
   }

@@ -3,10 +3,18 @@ import 'server-only'
 // Training FlowSubjectAdapter — subject = a training ASSESSMENT (attempt).
 // Field-map keys mirror MODULE_FLOW_PROFILES.training.
 
-import { eq } from 'drizzle-orm'
-import { trainingAssessments, tenantUsers, users } from '@beaconhs/db/schema'
+import { asc, eq } from 'drizzle-orm'
+import {
+  people,
+  trainingAssessmentResults,
+  trainingAssessmentTypes,
+  trainingAssessments,
+  tenantUsers,
+  users,
+} from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 import { buildRecordSummaryPdfJob } from '../pdf-summary'
+import { fmtDateTime, personName, titleize } from '../format'
 import type { FlowSubjectAdapter } from '../types'
 
 export function createTrainingFlowAdapter(
@@ -32,27 +40,70 @@ export function createTrainingFlowAdapter(
       }),
 
     async loadValues() {
-      const [a] = await ctx.db((tx) =>
+      const [head] = await ctx.db((tx) =>
         tx
           .select({
-            status: trainingAssessments.status,
-            score: trainingAssessments.score,
-            passed: trainingAssessments.passed,
-            typeId: trainingAssessments.typeId,
-            personId: trainingAssessments.personId,
-            completedAt: trainingAssessments.completedAt,
+            a: trainingAssessments,
+            assessmentName: trainingAssessmentTypes.name,
+            assessmentDescription: trainingAssessmentTypes.description,
+            pFirst: people.firstName,
+            pLast: people.lastName,
+            pFormal: people.formalName,
           })
           .from(trainingAssessments)
+          .leftJoin(
+            trainingAssessmentTypes,
+            eq(trainingAssessmentTypes.id, trainingAssessments.typeId),
+          )
+          .leftJoin(people, eq(people.id, trainingAssessments.personId))
           .where(eq(trainingAssessments.id, assessmentId))
           .limit(1),
       )
+      if (!head) return {}
+      const a = head.a
+
+      const questions = await ctx.db((tx) =>
+        tx
+          .select({
+            prompt: trainingAssessmentResults.promptSnapshot,
+            answer: trainingAssessmentResults.answer,
+            correctAnswer: trainingAssessmentResults.correctAnswerSnapshot,
+            correct: trainingAssessmentResults.correct,
+            pointsAwarded: trainingAssessmentResults.pointsAwarded,
+            pointsPossible: trainingAssessmentResults.pointsPossible,
+          })
+          .from(trainingAssessmentResults)
+          .where(eq(trainingAssessmentResults.assessmentId, assessmentId))
+          .orderBy(asc(trainingAssessmentResults.createdAt)),
+      )
+
       return {
-        status: a?.status ?? null,
-        score: a?.score ?? null,
-        passed: a?.passed ?? null,
-        type_id: a?.typeId ?? null,
-        person_id: a?.personId ?? null,
-        completed_at: a?.completedAt ? a.completedAt.toISOString() : null,
+        status: a.status ?? null,
+        status_label: titleize(a.status),
+        score: a.score ?? null,
+        score_percent: a.score != null ? `${a.score}%` : '',
+        passing_score: a.passingScore != null ? `${a.passingScore}%` : '',
+        passed: a.passed ?? null,
+        pass_fail: a.passed === true ? 'Pass' : a.passed === false ? 'Fail' : 'Not graded',
+        assessment_name: head.assessmentName ?? '',
+        assessment_description: head.assessmentDescription ?? '',
+        person_name: personName({
+          firstName: head.pFirst,
+          lastName: head.pLast,
+          formalName: head.pFormal,
+        }),
+        completed_at: fmtDateTime(a.completedAt),
+        // FK ids for conditions / recipient `field` targets.
+        type_id: a.typeId ?? null,
+        person_id: a.personId ?? null,
+        // Collections.
+        questions: questions.map((q) => ({
+          prompt: q.prompt ?? '',
+          answer: q.answer ?? '',
+          correct_answer: q.correctAnswer ?? '',
+          result: q.correct === true ? 'Correct' : q.correct === false ? 'Incorrect' : 'N/A',
+          points: `${q.pointsAwarded}/${q.pointsPossible}`,
+        })),
       }
     },
 

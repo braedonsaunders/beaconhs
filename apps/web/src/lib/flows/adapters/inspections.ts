@@ -3,11 +3,23 @@ import 'server-only'
 // Inspections FlowSubjectAdapter. Field-map keys mirror
 // MODULE_FLOW_PROFILES.inspections.
 
-import { eq } from 'drizzle-orm'
-import { inspectionRecords, tenantUsers, users } from '@beaconhs/db/schema'
+import { asc, eq } from 'drizzle-orm'
+import { alias } from 'drizzle-orm/pg-core'
+import {
+  attachments,
+  inspectionRecordAttachments,
+  inspectionRecordCriteria,
+  inspectionRecords,
+  inspectionTypes,
+  orgUnits,
+  tenantUsers,
+  users,
+} from '@beaconhs/db/schema'
+import { publicUrl } from '@beaconhs/storage'
 import type { RequestContext } from '@beaconhs/tenant'
 import { spawnCorrectiveActionForSubject } from '../spawn'
 import { buildRecordSummaryPdfJob } from '../pdf-summary'
+import { fmtDateTime, titleize } from '../format'
 import type { FlowSubjectAdapter } from '../types'
 
 export function createInspectionFlowAdapter(
@@ -33,27 +45,80 @@ export function createInspectionFlowAdapter(
       }),
 
     async loadValues() {
-      const [r] = await ctx.db((tx) =>
+      const inspTU = alias(tenantUsers, 'insp_inspector_tu')
+      const inspU = alias(users, 'insp_inspector_u')
+      const supTU = alias(tenantUsers, 'insp_supervisor_tu')
+      const supU = alias(users, 'insp_supervisor_u')
+      const [head] = await ctx.db((tx) =>
         tx
           .select({
-            status: inspectionRecords.status,
-            reference: inspectionRecords.reference,
-            typeId: inspectionRecords.typeId,
-            occurredAt: inspectionRecords.occurredAt,
-            siteOrgUnitId: inspectionRecords.siteOrgUnitId,
-            inspectorTenantUserId: inspectionRecords.inspectorTenantUserId,
+            r: inspectionRecords,
+            typeName: inspectionTypes.name,
+            siteName: orgUnits.name,
+            inspectorName: inspU.name,
+            supervisorName: supU.name,
           })
           .from(inspectionRecords)
+          .leftJoin(inspectionTypes, eq(inspectionTypes.id, inspectionRecords.typeId))
+          .leftJoin(orgUnits, eq(orgUnits.id, inspectionRecords.siteOrgUnitId))
+          .leftJoin(inspTU, eq(inspTU.id, inspectionRecords.inspectorTenantUserId))
+          .leftJoin(inspU, eq(inspU.id, inspTU.userId))
+          .leftJoin(supTU, eq(supTU.id, inspectionRecords.supervisorTenantUserId))
+          .leftJoin(supU, eq(supU.id, supTU.userId))
           .where(eq(inspectionRecords.id, recordId))
           .limit(1),
       )
+      if (!head) return {}
+      const r = head.r
+
+      const [criteria, photos] = await Promise.all([
+        ctx.db((tx) =>
+          tx
+            .select({
+              groupLabel: inspectionRecordCriteria.groupLabelSnapshot,
+              question: inspectionRecordCriteria.questionTextSnapshot,
+              answer: inspectionRecordCriteria.answer,
+              severity: inspectionRecordCriteria.severity,
+              nonCompliance: inspectionRecordCriteria.nonComplianceDescription,
+              actionTaken: inspectionRecordCriteria.actionTaken,
+            })
+            .from(inspectionRecordCriteria)
+            .where(eq(inspectionRecordCriteria.recordId, recordId))
+            .orderBy(asc(inspectionRecordCriteria.sequence)),
+        ),
+        ctx.db((tx) =>
+          tx
+            .select({ caption: inspectionRecordAttachments.caption, r2Key: attachments.r2Key })
+            .from(inspectionRecordAttachments)
+            .innerJoin(attachments, eq(attachments.id, inspectionRecordAttachments.attachmentId))
+            .where(eq(inspectionRecordAttachments.recordId, recordId)),
+        ),
+      ])
+
       return {
-        status: r?.status ?? null,
-        reference: r?.reference ?? null,
-        type_id: r?.typeId ?? null,
-        occurred_at: r?.occurredAt ? r.occurredAt.toISOString() : null,
-        site_org_unit_id: r?.siteOrgUnitId ?? null,
-        inspector_tenant_user_id: r?.inspectorTenantUserId ?? null,
+        status: r.status ?? null,
+        status_label: titleize(r.status),
+        reference: r.reference ?? null,
+        type_name: head.typeName ?? '',
+        occurred_at: fmtDateTime(r.occurredAt),
+        site_name: head.siteName ?? '',
+        inspector_name: head.inspectorName ?? '',
+        supervisor_name: head.supervisorName ?? '',
+        notes: r.notes ?? '',
+        // FK ids for conditions / recipient `field` targets.
+        type_id: r.typeId ?? null,
+        site_org_unit_id: r.siteOrgUnitId ?? null,
+        inspector_tenant_user_id: r.inspectorTenantUserId ?? null,
+        // Collections.
+        criteria: criteria.map((c) => ({
+          group: c.groupLabel ?? '',
+          question: c.question ?? '',
+          answer: titleize(c.answer),
+          severity: titleize(c.severity),
+          non_compliance: c.nonCompliance ?? '',
+          action_taken: c.actionTaken ?? '',
+        })),
+        photos: photos.map((p) => ({ url: publicUrl(p.r2Key), caption: p.caption ?? '' })),
       }
     },
 

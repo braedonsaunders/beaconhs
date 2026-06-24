@@ -47,3 +47,10 @@ export function yesNo(v: unknown): string {
 export function yesBlank(v: unknown): string {
   return v ? 'Yes' : ''
 }
+
+/** snake_case / enum value → sentence-case label ('near_miss' → 'Near miss'). */
+export function titleize(s: string | null | undefined): string {
+  if (!s) return ''
+  const t = String(s).replace(/_/g, ' ').trim()
+  return t.charAt(0).toUpperCase() + t.slice(1)
+}
