@@ -14,6 +14,7 @@ export type PpeTableRow = {
   size: string | null
   status: 'in_stock' | 'issued' | 'returned' | 'damaged' | 'discarded' | 'expired'
   holderName: string | null
+  lastInspectionOn: string | null
   nextInspectionDue: string | null
 }
 
@@ -87,7 +88,11 @@ export function PpeRecordsTable({
             }
             title={r.typeName}
             meta={
-              [r.size, r.nextInspectionDue ? `Due ${r.nextInspectionDue}` : null]
+              [
+                r.size,
+                r.lastInspectionOn ? `Inspected ${r.lastInspectionOn}` : null,
+                r.nextInspectionDue ? `Due ${r.nextInspectionDue}` : null,
+              ]
                 .filter(Boolean)
                 .join(' · ') || undefined
             }
@@ -117,6 +122,9 @@ export function PpeRecordsTable({
               </SortTh>
               <SortTh column="holder" {...sortProps}>
                 Holder
+              </SortTh>
+              <SortTh column="last_inspection" {...sortProps}>
+                Last inspected
               </SortTh>
               <SortTh column="next_inspection" {...sortProps}>
                 Next inspection
@@ -163,6 +171,9 @@ export function PpeRecordsTable({
                   </td>
                   <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
                     {r.holderName ?? '—'}
+                  </td>
+                  <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
+                    {r.lastInspectionOn ?? '—'}
                   </td>
                   <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
                     {r.nextInspectionDue ?? '—'}

@@ -5,6 +5,11 @@
 // annual inspection on an item of that type. Severity drives auto-CA escalation
 // on `fail`; `requiresPhoto` forces the inspector to attach evidence.
 //
+// Criteria are organised into kind-scoped sections (`ppe_type_criteria_groups`)
+// so the type builder mirrors the inspections module: drag-reorderable sections
+// plus an "Import from bank" path that snapshots a criteria bank in as a new
+// section. A criterion with `group_id = null` is "Ungrouped" and still renders.
+//
 // Legacy parity (app/Models/PPETypeRecord.php → table PPETYPESRECORDS):
 //   PPETypeID, Criteria, Description, EntityOrder, Type ('PreUse' | 'Annual')
 //
@@ -30,6 +35,34 @@ export const ppeCriterionSeverity = pgEnum('ppe_criterion_severity', [
   'critical',
 ])
 
+// A kind-scoped section within a PPE type's checklist. Pre-use and annual each
+// keep their own sections so the two checklists stay cleanly separated in the
+// builder. Deleting a section orphans its criteria back to "Ungrouped".
+export const ppeTypeCriteriaGroups = pgTable(
+  'ppe_type_criteria_groups',
+  {
+    id: id(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    ppeTypeId: uuid('ppe_type_id')
+      .notNull()
+      .references(() => ppeTypes.id, { onDelete: 'cascade' }),
+    inspectionKind: ppeCriterionInspectionKind('inspection_kind').notNull().default('pre_use'),
+    label: text('label').notNull(),
+    sequence: integer('sequence').default(0).notNull(),
+    ...timestamps,
+  },
+  (t) => ({
+    tenantIdx: index('ppe_type_criteria_groups_tenant_idx').on(t.tenantId),
+    typeIdx: index('ppe_type_criteria_groups_type_idx').on(
+      t.ppeTypeId,
+      t.inspectionKind,
+      t.sequence,
+    ),
+  }),
+)
+
 export const ppeTypeInspectionCriteria = pgTable(
   'ppe_type_inspection_criteria',
   {
@@ -40,12 +73,20 @@ export const ppeTypeInspectionCriteria = pgTable(
     ppeTypeId: uuid('ppe_type_id')
       .notNull()
       .references(() => ppeTypes.id, { onDelete: 'cascade' }),
+    // Optional kind-scoped section. Null = "Ungrouped". Set null on group delete
+    // so the criterion survives and resurfaces in the ungrouped bucket.
+    groupId: uuid('group_id').references(() => ppeTypeCriteriaGroups.id, {
+      onDelete: 'set null',
+    }),
     inspectionKind: ppeCriterionInspectionKind('inspection_kind').notNull().default('pre_use'),
     question: text('question').notNull(),
     description: text('description'),
     severity: ppeCriterionSeverity('severity').default('medium').notNull(),
     requiresPhoto: boolean('requires_photo').default(false).notNull(),
     entityOrder: integer('entity_order').default(0).notNull(),
+    // Soft provenance when copied in from a bank (no FK — mirrors inspections).
+    sourceBankId: uuid('source_bank_id'),
+    sourceBankCriterionId: uuid('source_bank_criterion_id'),
     ...timestamps,
   },
   (t) => ({
@@ -55,8 +96,21 @@ export const ppeTypeInspectionCriteria = pgTable(
       t.inspectionKind,
       t.entityOrder,
     ),
+    groupIdx: index('ppe_type_inspection_criteria_group_idx').on(t.groupId),
   }),
 )
+
+export const ppeTypeCriteriaGroupsRelations = relations(ppeTypeCriteriaGroups, ({ one, many }) => ({
+  tenant: one(tenants, {
+    fields: [ppeTypeCriteriaGroups.tenantId],
+    references: [tenants.id],
+  }),
+  ppeType: one(ppeTypes, {
+    fields: [ppeTypeCriteriaGroups.ppeTypeId],
+    references: [ppeTypes.id],
+  }),
+  criteria: many(ppeTypeInspectionCriteria),
+}))
 
 export const ppeTypeInspectionCriteriaRelations = relations(
   ppeTypeInspectionCriteria,
@@ -68,6 +122,10 @@ export const ppeTypeInspectionCriteriaRelations = relations(
     ppeType: one(ppeTypes, {
       fields: [ppeTypeInspectionCriteria.ppeTypeId],
       references: [ppeTypes.id],
+    }),
+    group: one(ppeTypeCriteriaGroups, {
+      fields: [ppeTypeInspectionCriteria.groupId],
+      references: [ppeTypeCriteriaGroups.id],
     }),
   }),
 )

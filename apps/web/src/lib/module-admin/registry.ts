@@ -289,18 +289,21 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
     managePath: '/ppe/manage',
     iconKey: 'hard-hat',
     permission: 'ppe.read.all',
-    tabs: [
-      { key: 'records', label: 'Records', href: '/ppe' },
-      { key: 'issue', label: 'Issue', href: '/ppe/issue' },
-      { key: 'reports', label: 'Reports', href: '/ppe/reports/expired' },
-    ],
+    tabs: [{ key: 'records', label: 'Records', href: '/ppe' }],
     sections: [
       {
         key: 'types',
         label: 'Types',
         href: '/ppe/types',
         iconKey: 'layers',
-        desc: 'Catalogue of PPE kinds, with sizing and criteria sub-tabs.',
+        desc: 'Catalogue of PPE kinds — build each type’s inspection checklist with sections and banks.',
+      },
+      {
+        key: 'banks',
+        label: 'Criteria banks',
+        href: '/ppe/banks',
+        iconKey: 'library',
+        desc: 'Reusable criteria question banks shared across PPE types.',
       },
       {
         key: 'inspection-criteria',

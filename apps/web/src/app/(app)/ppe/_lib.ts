@@ -10,7 +10,7 @@
 // We keep these in a server-only module so that every place in the UI that
 // touches a PPE item lifecycle goes through the same hardened path.
 
-import { and, count, eq, sql } from 'drizzle-orm'
+import { and, asc, count, eq, sql } from 'drizzle-orm'
 import type { RequestContext } from '@beaconhs/tenant'
 import {
   correctiveActions,
@@ -18,6 +18,7 @@ import {
   ppeInspections,
   ppeIssues,
   ppeItems,
+  ppeTypeCriteriaGroups,
   ppeTypes,
   ppeTypeInspectionCriteria,
 } from '@beaconhs/db/schema'
@@ -176,8 +177,8 @@ export async function recordPpeIssueAction(
 
 /**
  * Look up the criteria catalog for a PPE type filtered by inspection kind.
- * Sorted by entityOrder so the on-screen render order matches the admin
- * configuration.
+ * Ordered by section sequence then entityOrder so the on-screen render order
+ * matches the builder (grouped criteria in section order, ungrouped last).
  */
 export async function loadInspectionCriteriaForType(
   ctx: RequestContext,
@@ -195,15 +196,29 @@ export async function loadInspectionCriteriaForType(
 > {
   return ctx.db(async (tx) => {
     const rows = await tx
-      .select()
+      .select({
+        id: ppeTypeInspectionCriteria.id,
+        question: ppeTypeInspectionCriteria.question,
+        description: ppeTypeInspectionCriteria.description,
+        severity: ppeTypeInspectionCriteria.severity,
+        requiresPhoto: ppeTypeInspectionCriteria.requiresPhoto,
+        entityOrder: ppeTypeInspectionCriteria.entityOrder,
+      })
       .from(ppeTypeInspectionCriteria)
+      .leftJoin(
+        ppeTypeCriteriaGroups,
+        eq(ppeTypeCriteriaGroups.id, ppeTypeInspectionCriteria.groupId),
+      )
       .where(
         and(
           eq(ppeTypeInspectionCriteria.ppeTypeId, typeId),
           eq(ppeTypeInspectionCriteria.inspectionKind, kind),
         ),
       )
-      .orderBy(ppeTypeInspectionCriteria.entityOrder)
+      .orderBy(
+        asc(sql`coalesce(${ppeTypeCriteriaGroups.sequence}, 2147483647)`),
+        asc(ppeTypeInspectionCriteria.entityOrder),
+      )
     return rows.map((r) => ({
       id: r.id,
       question: r.question,

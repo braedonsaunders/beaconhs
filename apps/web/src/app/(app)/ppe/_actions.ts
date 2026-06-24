@@ -18,6 +18,7 @@ import { people, ppeIssues, ppeItems, ppeTypes } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { csvRow } from '@/lib/csv'
+import { recordPpeIssueAction } from './_lib'
 
 export type BulkActionResult =
   | { ok: true; updated: number; skipped: number }
@@ -281,6 +282,83 @@ export async function bulkExportPpeCsv(args: { ppeItemIds: string[] }): Promise<
   })
 
   return { ok: true, filename, content }
+}
+
+// ---------- Register + (optionally) issue, from the list flyout -------------
+
+/**
+ * Register a new PPE item and, if a holder is chosen, issue it to them in the
+ * same step. Person blank ⇒ the item simply lands in stock. Replaces the old
+ * full-page /ppe/new + /ppe/issue flows with a single drawer action.
+ */
+export async function createAndIssuePpe(input: {
+  typeId: string
+  serialNumber?: string | null
+  size?: string | null
+  purchaseDate?: string | null
+  expiresOn?: string | null
+  notes?: string | null
+  personId?: string | null
+  note?: string | null
+}): Promise<{ ok: true; id: string; issued: boolean } | { ok: false; error: string }> {
+  const ctx = await requireRequestContext()
+  if (!input.typeId) return { ok: false, error: 'Pick a PPE type.' }
+  // Issuing writes a ledger row attributed to a tenant user — super-admin can't.
+  if (input.personId && !safeTenantUserId(ctx)) {
+    return { ok: false, error: 'Super-admin cannot issue PPE — switch to a tenant user.' }
+  }
+
+  let itemId: string | null
+  try {
+    itemId = await ctx.db(async (tx) => {
+      const [row] = await tx
+        .insert(ppeItems)
+        .values({
+          tenantId: ctx.tenantId,
+          typeId: input.typeId,
+          serialNumber: input.serialNumber?.trim() || null,
+          size: input.size?.trim() || null,
+          purchaseDate: input.purchaseDate?.trim() || null,
+          expiresOn: input.expiresOn?.trim() || null,
+          notes: input.notes?.trim() || null,
+          status: 'in_stock',
+        })
+        .returning({ id: ppeItems.id })
+      return row?.id ?? null
+    })
+  } catch (e) {
+    if ((e as { code?: string })?.code === '23505') {
+      return { ok: false, error: 'That serial number is already in use for this tenant.' }
+    }
+    return { ok: false, error: e instanceof Error ? e.message : 'Failed to create PPE item.' }
+  }
+  if (!itemId) return { ok: false, error: 'Failed to create PPE item.' }
+
+  await recordAudit(ctx, {
+    entityType: 'ppe_item',
+    entityId: itemId,
+    action: 'create',
+    summary: `Added PPE item${input.serialNumber ? ` ${input.serialNumber}` : ''}`,
+    after: {
+      typeId: input.typeId,
+      serialNumber: input.serialNumber ?? null,
+      size: input.size ?? null,
+    },
+  })
+
+  let issued = false
+  if (input.personId) {
+    await recordPpeIssueAction(ctx, {
+      itemId,
+      personId: input.personId,
+      action: 'issue',
+      note: input.note?.trim() || null,
+    })
+    issued = true
+  }
+
+  revalidatePath('/ppe')
+  return { ok: true, id: itemId, issued }
 }
 
 // ---------- Lookups (used by bulk-bar dropdowns) ----------------------------

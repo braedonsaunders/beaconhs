@@ -556,6 +556,59 @@ async function main() {
             limit: 5000,
           },
         },
+        {
+          slug: 'ppe_expiring',
+          kind: 'built_in',
+          name: 'PPE — Expiring soon',
+          description: 'Active PPE whose service life expires within 30 days, soonest first.',
+          category: 'ppe',
+          queryKind: 'custom_query',
+          customQuery: {
+            entity: 'ppe',
+            mode: 'rows',
+            columns: ['serial_number', 'size', 'status', 'expires_on'],
+            filtersV2: {
+              combinator: 'and',
+              rules: [
+                { field: 'status', op: 'in', value: ['issued', 'in_stock'] },
+                { field: 'expires_on', op: 'gte', value: '2000-01-01' },
+                { field: 'expires_on', op: 'due_within_days', value: 30 },
+              ],
+            },
+            sort: { column: 'expires_on', direction: 'asc' },
+            limit: 5000,
+          },
+        },
+        {
+          slug: 'ppe_inspection_due',
+          kind: 'built_in',
+          name: 'PPE — Inspection due',
+          description:
+            'Active PPE whose next pre-use inspection is overdue or due within 14 days, soonest first.',
+          category: 'ppe',
+          queryKind: 'custom_query',
+          customQuery: {
+            entity: 'ppe',
+            mode: 'rows',
+            columns: [
+              'serial_number',
+              'size',
+              'status',
+              'last_inspection_on',
+              'next_inspection_due',
+            ],
+            filtersV2: {
+              combinator: 'and',
+              rules: [
+                { field: 'status', op: 'in', value: ['issued', 'in_stock'] },
+                { field: 'next_inspection_due', op: 'gte', value: '2000-01-01' },
+                { field: 'next_inspection_due', op: 'due_within_days', value: 14 },
+              ],
+            },
+            sort: { column: 'next_inspection_due', direction: 'asc' },
+            limit: 5000,
+          },
+        },
       ])
       .onConflictDoNothing({ target: reportDefinitions.slug })
   })

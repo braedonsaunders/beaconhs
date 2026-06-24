@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { HardHat } from 'lucide-react'
-import { and, asc, count, desc, eq, ilike, isNull, or, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, isNull, or, sql, type SQL } from 'drizzle-orm'
 import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
 import { people, ppeItems, ppeTypes } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
@@ -11,12 +11,21 @@ import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
 import { TableToolbar } from '@/components/table-toolbar'
 import { PpeSubNav } from '@/components/ppe-sub-nav'
-import { listPeopleForBulkPpe } from './_actions'
+import { createAndIssuePpe, listPeopleForBulkPpe } from './_actions'
+import { PpeDrawers } from './_drawers'
 import { PpeRecordsTable, type PpeTableRow } from './_records-table'
 
 export const metadata = { title: 'PPE' }
 
-const SORTS = ['type', 'serial', 'size', 'status', 'holder', 'next_inspection'] as const
+const SORTS = [
+  'type',
+  'serial',
+  'size',
+  'status',
+  'holder',
+  'last_inspection',
+  'next_inspection',
+] as const
 
 const STATUS_OPTIONS = [
   { value: 'in_stock', label: 'In stock' },
@@ -33,11 +42,19 @@ export default async function PpePage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const sp = await searchParams
-  const params = parseListParams(sp, { sort: 'type', dir: 'asc', perPage: 25, allowedSorts: SORTS })
-  const statusFilter = pickString(sp.status)
+  const params = parseListParams(sp, {
+    sort: 'last_inspection',
+    dir: 'desc',
+    perPage: 25,
+    allowedSorts: SORTS,
+  })
+  // Default the register to issued items; an explicit `status=all` (the "All
+  // statuses" chip) clears the default so every status shows.
+  const statusRaw = pickString(sp.status) ?? 'issued'
+  const statusFilter = statusRaw === 'all' ? undefined : statusRaw
   const ctx = await requireRequestContext()
 
-  const { rows, total, statusCounts } = await ctx.db(async (tx) => {
+  const { rows, total, statusCounts, types } = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = [isNull(ppeItems.deletedAt)]
     if (params.q) {
       const term = `%${params.q}%`
@@ -57,9 +74,16 @@ export default async function PpePage({
             ? [dirFn(ppeItems.status)]
             : params.sort === 'holder'
               ? [dirFn(people.lastName)]
-              : params.sort === 'next_inspection'
-                ? [dirFn(ppeItems.nextInspectionDue)]
-                : [dirFn(ppeTypes.name)]
+              : params.sort === 'last_inspection'
+                ? // Never-inspected items sink to the bottom in both directions.
+                  [
+                    params.dir === 'asc'
+                      ? sql`${ppeItems.lastInspectionOn} asc nulls last`
+                      : sql`${ppeItems.lastInspectionOn} desc nulls last`,
+                  ]
+                : params.sort === 'next_inspection'
+                  ? [dirFn(ppeItems.nextInspectionDue)]
+                  : [dirFn(ppeTypes.name)]
 
     const [tot] = await tx
       .select({ c: count() })
@@ -79,14 +103,25 @@ export default async function PpePage({
       .select({ s: ppeItems.status, c: count() })
       .from(ppeItems)
       .groupBy(ppeItems.status)
+    const typeRows = await tx
+      .select({ id: ppeTypes.id, name: ppeTypes.name, category: ppeTypes.category })
+      .from(ppeTypes)
+      .orderBy(asc(ppeTypes.name))
     return {
       rows: data,
       total: Number(tot?.c ?? 0),
       statusCounts: Object.fromEntries(ss.map((x) => [x.s, Number(x.c)])),
+      types: typeRows,
     }
   })
 
   const holders = await listPeopleForBulkPpe()
+  const peopleOptions = holders.map((h) => ({
+    value: h.id,
+    label: h.name,
+    hint: h.employeeNo ?? undefined,
+  }))
+  const issueDrawer = pickString(sp.drawer) === 'issue' ? 'issue' : null
 
   const tableRows: PpeTableRow[] = rows.map(({ item, type, holder }) => ({
     id: item.id,
@@ -95,6 +130,7 @@ export default async function PpePage({
     size: item.size,
     status: item.status,
     holderName: holder ? `${holder.firstName} ${holder.lastName}` : null,
+    lastInspectionOn: item.lastInspectionOn,
     nextInspectionDue: item.nextInspectionDue,
   }))
 
@@ -111,8 +147,8 @@ export default async function PpePage({
                 <Link href={buildExportHref('/ppe/export.csv', sp)}>
                   <Button variant="outline">Export CSV</Button>
                 </Link>
-                <Link href="/ppe/new">
-                  <Button>New PPE item</Button>
+                <Link href="/ppe?drawer=issue" scroll={false}>
+                  <Button>Issue PPE</Button>
                 </Link>
               </div>
             }
@@ -124,6 +160,8 @@ export default async function PpePage({
               currentParams={sp}
               paramKey="status"
               label="Status"
+              allLabel="All statuses"
+              defaultValue="issued"
               options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
             />
           </TableToolbar>
@@ -136,8 +174,8 @@ export default async function PpePage({
           title={params.q || statusFilter ? 'No PPE matches these filters' : 'No PPE registered'}
           description="Track helmets, harnesses, glasses, gloves, and every other inspectable item."
           action={
-            <Link href="/ppe/new">
-              <Button>New PPE item</Button>
+            <Link href="/ppe?drawer=issue" scroll={false}>
+              <Button>Issue PPE</Button>
             </Link>
           }
         />
@@ -160,6 +198,13 @@ export default async function PpePage({
           />
         </>
       )}
+      <PpeDrawers
+        openDrawer={issueDrawer}
+        closeHref="/ppe"
+        types={types}
+        people={peopleOptions}
+        issueAction={createAndIssuePpe}
+      />
     </ListPageLayout>
   )
 }
