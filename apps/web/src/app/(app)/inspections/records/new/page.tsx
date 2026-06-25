@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { asc, eq } from 'drizzle-orm'
+import { and, asc, count, eq, isNull } from 'drizzle-orm'
 import {
   Alert,
   AlertDescription,
@@ -15,15 +15,23 @@ import {
   Select,
   Textarea,
 } from '@beaconhs/ui'
-import { inspectionRecords, inspectionTypes, orgUnits } from '@beaconhs/db/schema'
+import {
+  inspectionRecords,
+  inspectionTypeCriteria,
+  inspectionTypes,
+  orgUnits,
+} from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { pickString } from '@/lib/list-params'
 import { PageContainer } from '@/components/page-layout'
 import { materialiseCriteriaForRecord, nextInspectionReference } from '../../_lib'
+import { localDatetimeValue } from '../../_datetime'
+import { TypePicker, type TypeCard } from './_type-picker'
 
 export const metadata = { title: 'New inspection' }
+export const dynamic = 'force-dynamic'
 
 async function createRecord(formData: FormData) {
   'use server'
@@ -31,7 +39,6 @@ async function createRecord(formData: FormData) {
   const typeId = String(formData.get('typeId') ?? '').trim()
   if (!typeId) throw new Error('Inspection type is required')
 
-  // Load the type so we can enforce its requires-foreman / requires-customer-sig flags.
   const type = await ctx.db(async (tx) => {
     const [t] = await tx
       .select()
@@ -48,7 +55,6 @@ async function createRecord(formData: FormData) {
 
   const siteOrgUnitId = String(formData.get('siteOrgUnitId') ?? '').trim() || null
   const foremanText = String(formData.get('foremanText') ?? '').trim() || null
-  const customerSignerName = String(formData.get('customerSignerName') ?? '').trim() || null
   const notes = String(formData.get('notes') ?? '').trim() || null
 
   if (type.requiresForeman && !foremanText) {
@@ -70,7 +76,6 @@ async function createRecord(formData: FormData) {
         foremanText,
         foremanPersonIds: [],
         inspectorTenantUserId: ctx.membership?.id ?? null,
-        customerSignerName,
         notes,
       })
       .returning()
@@ -79,7 +84,6 @@ async function createRecord(formData: FormData) {
 
   if (!row) throw new Error('Failed to create inspection record')
 
-  // Materialise per-criterion rows from the type's own grouped criteria
   const materialised = await materialiseCriteriaForRecord(ctx, row.id, typeId)
 
   await recordAudit(ctx, {
@@ -87,19 +91,13 @@ async function createRecord(formData: FormData) {
     entityId: row.id,
     action: 'create',
     summary: `Started ${row.reference} (${type.name}) — materialised ${materialised} criteria`,
-    after: {
-      reference: row.reference,
-      typeId,
-      occurredAt,
-      siteOrgUnitId,
-      criteriaMaterialised: materialised,
-    },
+    after: { reference: row.reference, typeId, occurredAt, siteOrgUnitId },
   })
 
   await runModuleFlows(ctx, { moduleKey: 'inspections', event: 'on_create', subjectId: row.id })
 
   revalidatePath('/inspections/records')
-  redirect(`/inspections/records/${row.id}?tab=criteria`)
+  redirect(`/inspections/records/${row.id}`)
 }
 
 export default async function NewInspectionRecordPage({
@@ -111,35 +109,46 @@ export default async function NewInspectionRecordPage({
   const presetTypeId = pickString(sp.typeId)
   const ctx = await requireRequestContext()
 
-  const [types, sites] = await ctx.db(async (tx) => {
+  const { types, sites } = await ctx.db(async (tx) => {
     const tt = await tx
       .select({
         id: inspectionTypes.id,
         name: inspectionTypes.name,
+        description: inspectionTypes.description,
         requiresForeman: inspectionTypes.requiresForeman,
         requiresCustomerSignature: inspectionTypes.requiresCustomerSignature,
-        description: inspectionTypes.description,
+        criteriaCount: count(inspectionTypeCriteria.id),
       })
       .from(inspectionTypes)
+      .leftJoin(inspectionTypeCriteria, eq(inspectionTypeCriteria.typeId, inspectionTypes.id))
       .where(eq(inspectionTypes.isPublished, true))
+      .groupBy(inspectionTypes.id)
       .orderBy(asc(inspectionTypes.name))
     const ss = await tx
       .select({ id: orgUnits.id, name: orgUnits.name })
       .from(orgUnits)
-      .where(eq(orgUnits.level, 'site'))
+      .where(and(eq(orgUnits.level, 'site'), isNull(orgUnits.deletedAt)))
       .orderBy(asc(orgUnits.name))
-    return [tt, ss]
+    return { types: tt, sites: ss }
   })
 
-  const nowLocal = new Date().toISOString().slice(0, 16)
-  const defaultType = types.find((t) => t.id === presetTypeId) ?? types[0] ?? null
+  const nowLocal = localDatetimeValue()
+  const typeCards: TypeCard[] = types.map((t) => ({
+    id: t.id,
+    name: t.name,
+    description: t.description,
+    criteriaCount: Number(t.criteriaCount ?? 0),
+    requiresForeman: t.requiresForeman,
+    requiresCustomerSignature: t.requiresCustomerSignature,
+  }))
 
   return (
     <PageContainer>
-      <div className="max-w-3xl space-y-6">
+      <div className="mx-auto max-w-3xl space-y-6">
         <DetailHeader
           back={{ href: '/inspections/records', label: 'Back to inspection records' }}
           title="New inspection"
+          subtitle="Pick a type, say where and when — every criterion is pre-loaded so you can start answering."
         />
         {types.length === 0 ? (
           <Alert variant="warning">
@@ -149,51 +158,41 @@ export default async function NewInspectionRecordPage({
               <Link href="/inspections/types" className="text-teal-700 hover:underline">
                 inspection type
               </Link>{' '}
-              before you can start a record. Each type bundles the criteria the inspector will
-              answer.
+              before you can start a record. Each type bundles the criteria the inspector answers.
             </AlertDescription>
           </Alert>
         ) : null}
-        {defaultType ? (
-          <Alert variant="info">
-            <AlertTitle>What happens after I submit?</AlertTitle>
-            <AlertDescription>
-              We'll create the record in draft state and pre-load every criterion from this type,
-              grouped into its sections. You'll land on the criteria tab to start answering.
-              {defaultType.requiresForeman ? (
-                <>
-                  <br />
-                  <strong>Foreman name is required</strong> for this type.
-                </>
-              ) : null}
-              {defaultType.requiresCustomerSignature ? (
-                <>
-                  <br />
-                  <strong>Customer signature is required</strong> — capture it on the Signature tab
-                  before closing.
-                </>
-              ) : null}
-            </AlertDescription>
-          </Alert>
-        ) : null}
-        <Card>
-          <CardContent className="pt-6">
-            <form action={createRecord} className="space-y-4">
+
+        <form action={createRecord} className="space-y-6">
+          <Card>
+            <CardContent className="space-y-3 pt-6">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  1 · Inspection type
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  The type decides which checks appear and what gets pre-filled.
+                </p>
+              </div>
+              <TypePicker
+                types={typeCards}
+                name="typeId"
+                defaultValue={presetTypeId ?? undefined}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="space-y-4 pt-6">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  2 · Details
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Where the inspection happened and who ran the crew.
+                </p>
+              </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Field label="Inspection type" required className="sm:col-span-2">
-                  <Select name="typeId" required defaultValue={defaultType?.id ?? ''}>
-                    {!defaultType ? (
-                      <option value="" disabled>
-                        No types available
-                      </option>
-                    ) : null}
-                    {types.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
                 <Field label="Occurred at" required>
                   <Input name="occurredAt" type="datetime-local" required defaultValue={nowLocal} />
                 </Field>
@@ -207,24 +206,9 @@ export default async function NewInspectionRecordPage({
                     ))}
                   </Select>
                 </Field>
-                <Field
-                  label={`Foreman ${defaultType?.requiresForeman ? '(required)' : '(optional)'}`}
-                  className="sm:col-span-2"
-                >
-                  <Input
-                    name="foremanText"
-                    placeholder="Crew foreman on shift"
-                    required={Boolean(defaultType?.requiresForeman)}
-                  />
+                <Field label="Foreman" className="sm:col-span-2">
+                  <Input name="foremanText" placeholder="Crew foreman on shift" />
                 </Field>
-                {defaultType?.requiresCustomerSignature ? (
-                  <Field
-                    label="Customer signer (name to print under signature)"
-                    className="sm:col-span-2"
-                  >
-                    <Input name="customerSignerName" placeholder="Customer rep on site" />
-                  </Field>
-                ) : null}
                 <Field label="Notes" className="sm:col-span-2">
                   <Textarea
                     name="notes"
@@ -233,14 +217,15 @@ export default async function NewInspectionRecordPage({
                   />
                 </Field>
               </div>
-              <div className="flex items-center justify-end gap-2">
-                <Button type="submit" disabled={types.length === 0}>
-                  Create inspection
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+
+          <div className="flex items-center justify-end gap-2">
+            <Button type="submit" disabled={types.length === 0}>
+              Create inspection
+            </Button>
+          </div>
+        </form>
       </div>
     </PageContainer>
   )

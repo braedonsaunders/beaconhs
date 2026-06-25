@@ -7,6 +7,7 @@ import {
   Award,
   BellRing,
   BookOpen,
+  Building2,
   CheckCircle2,
   CircleUser,
   ClipboardCheck,
@@ -21,12 +22,14 @@ import {
   LibraryBig,
   Link2,
   ListChecks,
+  Mail,
   MapPin,
   MessageSquare,
   NotebookPen,
   PanelLeft,
   Radiation,
   Rss,
+  ScrollText,
   Settings,
   ShieldCheck,
   Star,
@@ -46,6 +49,7 @@ const ICONS: Record<string, LucideIcon> = {
   award: Award,
   bell: BellRing,
   book: BookOpen,
+  building: Building2,
   check: CheckCircle2,
   'circle-user': CircleUser,
   'clipboard-check': ClipboardCheck,
@@ -60,12 +64,14 @@ const ICONS: Record<string, LucideIcon> = {
   library: LibraryBig,
   link: Link2,
   'list-checks': ListChecks,
+  mail: Mail,
   pin: MapPin,
   message: MessageSquare,
   journal: NotebookPen,
   'panel-left': PanelLeft,
   radiation: Radiation,
   rss: Rss,
+  scroll: ScrollText,
   settings: Settings,
   shield: ShieldCheck,
   star: Star,
@@ -80,6 +86,9 @@ export type SidebarNavItem = {
   href: string
   label: string
   iconKey: keyof typeof ICONS | string
+  /** When set, the item is active ONLY on an exact path match (no greedy
+   * prefix). Used for hub/overview links that are a prefix of their siblings. */
+  exact?: boolean
 }
 
 export type SidebarNavGroup = {
@@ -121,7 +130,7 @@ export function SidebarNav({
             </div>
           )}
           {group.items.map((item) => {
-            const active = isActive(pathname, item.href)
+            const active = item.exact ? pathname === item.href : isActive(pathname, item.href)
             const Icon = ICONS[item.iconKey] ?? Gauge
             return (
               <Link

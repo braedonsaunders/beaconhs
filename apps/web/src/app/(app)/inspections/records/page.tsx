@@ -235,7 +235,7 @@ export default async function InspectionRecordsPage({
                   type="date"
                   name="dateFrom"
                   defaultValue={dateFromRaw ?? ''}
-                  className="h-8 rounded-md border border-slate-300 px-2 text-xs"
+                  className="h-8 rounded-md border border-slate-300 px-2 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
                 />
               </label>
               <label className="flex items-center gap-1 text-slate-500">
@@ -244,12 +244,12 @@ export default async function InspectionRecordsPage({
                   type="date"
                   name="dateTo"
                   defaultValue={dateToRaw ?? ''}
-                  className="h-8 rounded-md border border-slate-300 px-2 text-xs"
+                  className="h-8 rounded-md border border-slate-300 px-2 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
                 />
               </label>
               <button
                 type="submit"
-                className="h-8 rounded-md border border-slate-200 px-2 text-xs hover:bg-slate-50"
+                className="h-8 rounded-md border border-slate-200 px-2 text-xs hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
               >
                 Apply
               </button>
@@ -419,7 +419,7 @@ export default async function InspectionRecordsPage({
                       <TableCell className="font-mono text-xs">
                         <Link
                           href={`/inspections/records/${r.record.id}`}
-                          className="font-medium text-slate-900 hover:underline"
+                          className="font-medium text-slate-900 hover:underline dark:text-slate-100"
                         >
                           {r.record.reference}
                         </Link>
@@ -432,12 +432,16 @@ export default async function InspectionRecordsPage({
                           {r.type.name}
                         </Link>
                       </TableCell>
-                      <TableCell className="text-xs text-slate-600 tabular-nums">
+                      <TableCell className="text-xs text-slate-600 tabular-nums dark:text-slate-400">
                         {new Date(r.record.occurredAt).toLocaleDateString()}
                       </TableCell>
-                      <TableCell className="text-slate-600">{r.site?.name ?? '—'}</TableCell>
-                      <TableCell className="text-slate-600">{r.inspectorName ?? '—'}</TableCell>
-                      <TableCell className="text-xs text-slate-600">
+                      <TableCell className="text-slate-600 dark:text-slate-400">
+                        {r.site?.name ?? '—'}
+                      </TableCell>
+                      <TableCell className="text-slate-600 dark:text-slate-400">
+                        {r.inspectorName ?? '—'}
+                      </TableCell>
+                      <TableCell className="text-xs text-slate-600 dark:text-slate-400">
                         {r.record.foremanText ? (
                           <span>{r.record.foremanText}</span>
                         ) : r.record.foremanPersonIds.length > 0 ? (

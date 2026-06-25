@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react'
 import { CheckCircle2, Loader2, Send, XCircle } from 'lucide-react'
 import { Button, Input, cn } from '@beaconhs/ui'
-import { testEmailConnection } from './_actions'
+import { testEmailConnection } from '@/lib/email-settings-actions'
 
 export function EmailTestButton({
   scope,

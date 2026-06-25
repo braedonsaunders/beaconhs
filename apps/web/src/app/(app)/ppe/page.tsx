@@ -157,7 +157,6 @@ export default async function PpePage({
     <ListPageLayout
       header={
         <>
-          <PpeSubNav active="records" />
           <PageHeader
             title="PPE"
             description="Issue, inspect, and track PPE through its lifecycle."
@@ -172,6 +171,7 @@ export default async function PpePage({
               </div>
             }
           />
+          <PpeSubNav active="records" />
           <TableToolbar>
             <SearchInput placeholder="Search type or serial #" />
             <FilterChips

@@ -182,7 +182,6 @@ export async function AssessmentsListPage({
     <ListPageLayout
       header={
         <>
-          <HazidSubNav pathname={basePath} />
           <PageHeader
             title={mineOnly ? 'My hazard assessments' : 'Hazard assessments'}
             description={
@@ -196,6 +195,7 @@ export async function AssessmentsListPage({
               </Link>
             }
           />
+          <HazidSubNav pathname={basePath} />
           <TableToolbar>
             <SearchInput placeholder="Search reference, scope, location…" />
             {/* Date range is a desk feature; phones get search + filter chips. */}

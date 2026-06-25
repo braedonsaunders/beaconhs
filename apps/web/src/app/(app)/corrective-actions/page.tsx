@@ -150,7 +150,6 @@ export default async function CorrectiveActionsPage({
     <ListPageLayout
       header={
         <>
-          <CorrectiveActionsSubNav active="records" />
           <PageHeader
             title="Corrective Actions"
             description="Standalone records, linkable to incidents, inspections, audits, JSHAs."
@@ -170,6 +169,7 @@ export default async function CorrectiveActionsPage({
               </div>
             }
           />
+          <CorrectiveActionsSubNav active="records" />
           <TableToolbar>
             <SearchInput placeholder="Search reference, title, description…" />
             <FilterChips

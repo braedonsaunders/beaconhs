@@ -1,6 +1,7 @@
 import { ShieldAlert, UserCircle2 } from 'lucide-react'
 import { SignOutButton } from './sign-out-button'
 import { TenantSwitcher } from './tenant-switcher'
+import { PlatformMenu } from './platform-menu'
 import { NotificationsBell } from './notifications-bell'
 import { GlobalSearch } from './global-search'
 import { type SidebarNavGroup } from './sidebar-nav'
@@ -71,6 +72,7 @@ export function AppShell({
               available={availableTenants}
               isSuperAdmin={ctx.isSuperAdmin}
             />
+            {ctx.isSuperAdmin ? <PlatformMenu /> : null}
             <div className="hidden flex-1 justify-center md:flex">
               <GlobalSearch />
             </div>

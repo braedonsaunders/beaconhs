@@ -12,6 +12,7 @@ import { Menu } from 'lucide-react'
 import { cn } from '@beaconhs/ui'
 import { useMobileNav } from './mobile-nav'
 import { NavIcon, type SidebarNavGroup } from './sidebar-nav'
+import { useNavGroups } from './use-platform-nav'
 
 const TAB_COUNT = 4
 
@@ -26,8 +27,9 @@ const tabClass = (active: boolean) =>
 export function MobileTabBar({ groups }: { groups: SidebarNavGroup[] }) {
   const pathname = usePathname()
   const { setOpen } = useMobileNav()
+  const navGroups = useNavGroups(groups)
 
-  const tabs = groups
+  const tabs = navGroups
     .flatMap((g) => g.items)
     .filter((item, i, arr) => arr.findIndex((x) => x.href === item.href) === i)
     .slice(0, TAB_COUNT)
@@ -40,7 +42,9 @@ export function MobileTabBar({ groups }: { groups: SidebarNavGroup[] }) {
       className="flex shrink-0 border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] lg:hidden dark:border-slate-800 dark:bg-slate-900"
     >
       {tabs.map((t) => {
-        const active = pathname === t.href || pathname.startsWith(t.href + '/')
+        const active = t.exact
+          ? pathname === t.href
+          : pathname === t.href || pathname.startsWith(t.href + '/')
         return (
           <Link key={t.href} href={t.href as never} className={tabClass(active)}>
             <NavIcon iconKey={t.iconKey} size={20} />

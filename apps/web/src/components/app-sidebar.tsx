@@ -9,6 +9,7 @@ import { PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { Badge, cn } from '@beaconhs/ui'
 import { Logo } from './brand-logo'
 import { SidebarNav, type SidebarNavGroup } from './sidebar-nav'
+import { useNavGroups } from './use-platform-nav'
 import { ThemeToggle } from './theme-toggle'
 
 const COOKIE = 'sidebar_collapsed'
@@ -21,6 +22,7 @@ export function AppSidebar({
   defaultCollapsed?: boolean
 }) {
   const [collapsed, setCollapsed] = useState(defaultCollapsed)
+  const navGroups = useNavGroups(groups)
 
   const toggle = useCallback(() => {
     setCollapsed((c) => {
@@ -63,7 +65,7 @@ export function AppSidebar({
         </button>
       </div>
 
-      <SidebarNav groups={groups} collapsed={collapsed} />
+      <SidebarNav groups={navGroups} collapsed={collapsed} />
 
       <div className="border-t border-slate-200 p-3 dark:border-slate-800">
         {collapsed ? (

@@ -1,17 +1,17 @@
+import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { EMAIL_PROVIDER_SPECS } from '@beaconhs/emails'
 import { Button, Card, CardContent, DetailHeader } from '@beaconhs/ui'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
-import {
-  getEmailPolicyMode,
-  getPlatformEmailSettings,
-  getTenantEmailSettings,
-} from '@/lib/email-config'
+import { getEmailPolicyMode, getTenantEmailSettings } from '@/lib/email-config'
 import { PageContainer } from '@/components/page-layout'
-import { clearTenantEmail, savePlatformEmail, saveTenantEmail } from './_actions'
-import { EmailTestButton } from './_test-button'
-import { EmailSettingsForm, type EmailProviderSpecLite } from './_settings-form'
+import { clearTenantEmail, saveTenantEmail } from '@/lib/email-settings-actions'
+import { EmailTestButton } from '@/components/email-settings/test-button'
+import {
+  EmailSettingsForm,
+  type EmailProviderSpecLite,
+} from '@/components/email-settings/settings-form'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Email settings' }
@@ -34,7 +34,6 @@ export default async function EmailSettingsPage() {
 
   const tenant = await getTenantEmailSettings(ctx)
   const mode = await getEmailPolicyMode()
-  const platform = ctx.isSuperAdmin ? await getPlatformEmailSettings() : null
 
   return (
     <PageContainer>
@@ -42,50 +41,11 @@ export default async function EmailSettingsPage() {
         <DetailHeader
           back={{ href: '/admin', label: 'Back to admin' }}
           title="Email"
-          subtitle="Provider, sender and encrypted credentials. Each tenant can use its own provider, with a platform-wide default and policy controlled by super-admins."
+          subtitle="This tenant's email provider, sender and encrypted credentials. The platform-wide default and policy are set by your platform administrator."
         />
-
-        {platform ? (
-          <Card>
-            <CardContent className="space-y-6 pt-6">
-              <div>
-                <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  Platform default — all tenants
-                </h2>
-                <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                  The fallback provider plus the policy that governs tenant overrides and the global
-                  kill switch.
-                </p>
-              </div>
-              <EmailSettingsForm
-                scope="platform"
-                action={savePlatformEmail}
-                specs={specs}
-                initial={{ ...platform, mode: platform.mode }}
-              />
-              <div className="space-y-2 border-t border-slate-100 pt-4 dark:border-slate-800">
-                <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                  Send a test through the platform provider
-                </p>
-                <EmailTestButton scope="platform" />
-              </div>
-            </CardContent>
-          </Card>
-        ) : null}
 
         <Card>
           <CardContent className="space-y-6 pt-6">
-            <div>
-              <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                This tenant
-              </h2>
-              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                {mode === 'tenant_optional'
-                  ? "This tenant's own provider. Leave it unset to use the platform default."
-                  : 'Managed centrally by your platform administrator.'}
-              </p>
-            </div>
-
             {mode === 'tenant_optional' ? (
               <>
                 <EmailSettingsForm
@@ -119,6 +79,19 @@ export default async function EmailSettingsPage() {
             )}
           </CardContent>
         </Card>
+
+        {ctx.isSuperAdmin ? (
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Platform-wide email defaults &amp; policy live in{' '}
+            <Link
+              href="/platform/email"
+              className="font-medium text-teal-700 hover:underline dark:text-teal-300"
+            >
+              Platform → Email
+            </Link>
+            .
+          </p>
+        ) : null}
       </div>
     </PageContainer>
   )

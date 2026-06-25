@@ -74,6 +74,13 @@ const nextConfig: NextConfig = {
       // Manage hub (and atmospheric sensors moved under Equipment).
       { source: '/admin/plugins', destination: '/admin/integrations', permanent: false },
       { source: '/admin/library', destination: '/admin', permanent: false },
+      // Tenant management moved into the dedicated super-admin area.
+      { source: '/admin/tenants', destination: '/platform/tenants', permanent: false },
+      {
+        source: '/admin/tenants/:path*',
+        destination: '/platform/tenants/:path*',
+        permanent: false,
+      },
     ]
   },
 }

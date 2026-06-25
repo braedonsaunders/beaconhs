@@ -49,7 +49,7 @@ async function seedOne(formData: FormData): Promise<void> {
     await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
     await seedLiftPlanTemplate(tx as any, tenantId)
   })
-  revalidatePath('/admin/tenants/seed-templates')
+  revalidatePath('/platform/tenants/seed-templates')
 }
 
 async function seedAll(): Promise<void> {
@@ -64,7 +64,7 @@ async function seedAll(): Promise<void> {
       await seedLiftPlanTemplate(tx as any, t.id)
     }
   })
-  revalidatePath('/admin/tenants/seed-templates')
+  revalidatePath('/platform/tenants/seed-templates')
 }
 
 export default async function SeedTemplatesPage() {
@@ -95,7 +95,7 @@ export default async function SeedTemplatesPage() {
     <PageContainer>
       <div className="space-y-5">
         <DetailHeader
-          back={{ href: '/admin/tenants', label: 'Back to tenants' }}
+          back={{ href: '/platform/tenants', label: 'Back to tenants' }}
           title="Seed built-in templates"
           subtitle="Backfill per-tenant form templates that ship as built-ins. Idempotent — re-running is a no-op."
           actions={

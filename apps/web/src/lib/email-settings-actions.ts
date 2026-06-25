@@ -95,7 +95,7 @@ export async function savePlatformEmail(formData: FormData) {
     summary: `Updated platform email settings (policy: ${mode})`,
     metadata: { provider: input.provider, mode, enabled: input.enabled },
   })
-  revalidatePath('/admin/email')
+  revalidatePath('/platform/email')
 }
 
 /**

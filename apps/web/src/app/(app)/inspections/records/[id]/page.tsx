@@ -3,11 +3,14 @@ import { notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
 import {
-  AlertOctagon,
+  Building2,
+  Camera,
+  CheckCircle2,
   ClipboardCheck,
-  FileText,
+  History,
+  ListChecks,
   Lock,
-  Pencil,
+  PenLine,
   ShieldAlert,
   Unlock,
 } from 'lucide-react'
@@ -17,16 +20,9 @@ import {
   AlertTitle,
   Badge,
   Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
   DetailHeader,
-  Input,
   Label,
   Select,
-  Textarea,
-  UrlDrawer,
 } from '@beaconhs/ui'
 import {
   attachments,
@@ -46,16 +42,14 @@ import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { FlowApprovals } from '@/components/flows/flow-approvals'
 import { getPendingFlowGatesForSubject } from '@/lib/flows/gate-store'
 import { canManageSubjectGates } from '@/lib/flows/registry'
-import { pickString } from '@/lib/list-params'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { ActivityFeed } from '@/components/activity-feed'
-import { DetailGrid } from '@/components/detail-grid'
-import { PersonSelectField } from '@/components/person-select-field'
 import { DetailPageLayout } from '@/components/page-layout'
 import { PhotoGallery } from '@/components/photo-gallery'
 import { PhotoUploaderSection } from '@/components/photo-uploader-section'
-import { Section } from '@/components/section'
-import { TabNav, pickActiveTab } from '@/components/tab-nav'
+import { PremiumSection as Section } from '@/components/premium-section'
+import { SectionNav, type SectionNavItem } from '@/components/section-nav'
+import { LiveDateTime, LiveField, LiveSelect } from '@/components/live-field'
 import {
   findIncompleteCriteria,
   logRecordAudit,
@@ -63,18 +57,17 @@ import {
   parseSeverity,
   syncCorrectiveActionForCriterion,
 } from '../../_lib'
+import { localDatetimeValue } from '../../_datetime'
 import { CustomerSignatureCard } from './customer-signature'
+import { CriterionCard, type CriterionResponseType, type CriterionSeverity } from './_criteria'
 
 export const dynamic = 'force-dynamic'
-
-const TABS = ['overview', 'criteria', 'action-taken', 'photos', 'signature', 'activity'] as const
-type Tab = (typeof TABS)[number]
 
 const STATUSES = ['draft', 'in_progress', 'submitted', 'closed'] as const
 
 // Bucket already-ordered criteria rows into contiguous runs that share a
-// snapshotted group label, so the fill / action-taken views can render section
-// headers. Rows are materialised in group order, so same-label rows are adjacent.
+// snapshotted group label, so the fill view can render section headers. Rows
+// are materialised in group order, so same-label rows are adjacent.
 function groupCriteriaByLabel<T extends { c: { groupLabelSnapshot: string | null } }>(
   rows: T[],
 ): { label: string | null; rows: T[] }[] {
@@ -88,6 +81,30 @@ function groupCriteriaByLabel<T extends { c: { groupLabelSnapshot: string | null
   return out
 }
 
+/**
+ * A finding is overdue when it's a `fail`, has an assigned due date in the
+ * past, and has NOT been corrected. The inspection's `occurredAt` is the floor
+ * so a due date that pre-dates the inspection isn't flagged.
+ */
+function isOverdue(args: {
+  answer: 'pass' | 'fail' | 'n_a' | null
+  assignedDueDate: string | null
+  correctedOn: string | null
+  recordOccurredAt: Date
+}): boolean {
+  if (args.answer !== 'fail') return false
+  if (args.correctedOn) return false
+  if (!args.assignedDueDate) return false
+  const due = new Date(args.assignedDueDate + 'T00:00:00')
+  if (Number.isNaN(due.getTime())) return false
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  if (due >= today) return false
+  const floor = new Date(args.recordOccurredAt)
+  floor.setHours(0, 0, 0, 0)
+  return due >= floor
+}
+
 // ----------------------------------------------------------------------------
 // Server actions
 // ----------------------------------------------------------------------------
@@ -99,13 +116,10 @@ async function updateStatus(formData: FormData) {
   const status = String(formData.get('status') ?? '')
   if (!STATUSES.includes(status as (typeof STATUSES)[number])) return
 
-  // Submit gate — refuse to flip to submitted/closed if any criterion is incomplete
+  // Submit gate — refuse to flip to submitted/closed if any criterion is incomplete.
   if (status === 'submitted' || status === 'closed') {
     const missing = await findIncompleteCriteria(ctx, id)
     if (missing.length > 0) {
-      // Soft-fail: stash the missing list as a flash via the URL hash. Server
-      // actions can't easily set cookies inside a transaction; redirecting
-      // with a query param is the lightest user-visible signal.
       throw new Error(
         `Cannot submit: ${missing.length} item${missing.length === 1 ? '' : 's'} still incomplete. First missing: ${missing[0]}`,
       )
@@ -117,7 +131,7 @@ async function updateStatus(formData: FormData) {
     tx
       .update(inspectionRecords)
       .set({
-        status: status as any,
+        status: status as (typeof STATUSES)[number],
         submittedAt: status === 'submitted' || status === 'closed' ? new Date() : null,
         closedAt: closing ? new Date() : null,
         closedByTenantUserId: closing ? (ctx.membership?.id ?? null) : null,
@@ -153,6 +167,49 @@ async function toggleLock(formData: FormData) {
   revalidatePath(`/inspections/records/${id}`)
 }
 
+// Generic inline field save for the single-page general-info live fields.
+async function updateRecordField(formData: FormData) {
+  'use server'
+  const ctx = await requireRequestContext()
+  const id = String(formData.get('id') ?? '')
+  const field = String(formData.get('field') ?? '')
+  const value = String(formData.get('value') ?? '')
+  if (!id || !field) throw new Error('Missing id/field')
+
+  const ALLOWED = new Set(['occurredAt', 'siteOrgUnitId', 'foremanText', 'notes'])
+  if (!ALLOWED.has(field)) throw new Error('Field not allowed')
+
+  // Refuse edits on a locked record.
+  const [rec] = await ctx.db((tx) =>
+    tx
+      .select({ locked: inspectionRecords.locked })
+      .from(inspectionRecords)
+      .where(eq(inspectionRecords.id, id))
+      .limit(1),
+  )
+  if (rec?.locked) throw new Error('Record is locked')
+
+  const NULLABLE_IDS = new Set(['siteOrgUnitId'])
+  const DATES = new Set(['occurredAt'])
+
+  let val: unknown = value.trim() || null
+  if (NULLABLE_IDS.has(field)) val = value || null
+  if (DATES.has(field)) {
+    const d = value ? new Date(value) : null
+    if (!d || Number.isNaN(d.getTime())) throw new Error('Invalid date')
+    val = d
+  }
+
+  await ctx.db((tx) =>
+    tx
+      .update(inspectionRecords)
+      .set({ [field]: val } as Record<string, unknown>)
+      .where(eq(inspectionRecords.id, id)),
+  )
+  await logRecordAudit(ctx, id, `Updated ${field}`, 'update', { [field]: val })
+  revalidatePath(`/inspections/records/${id}`)
+}
+
 async function setCriterionAnswer(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
@@ -161,7 +218,7 @@ async function setCriterionAnswer(formData: FormData) {
   const answer = parseAnswer(formData.get('answer'))
   if (!recordId || !rowId || !answer) return
 
-  // When flipping to pass / N-A, wipe the fail-only fields too.
+  // Flipping to pass / N-A wipes the fail-only fields.
   const clear = answer !== 'fail'
   await ctx.db(async (tx) => {
     await tx
@@ -182,7 +239,7 @@ async function setCriterionAnswer(formData: FormData) {
           : {}),
       })
       .where(eq(inspectionRecordCriteria.id, rowId))
-    // Auto-transition the record from draft -> in_progress on the first answer.
+    // Auto-transition draft -> in_progress on the first answer.
     await tx
       .update(inspectionRecords)
       .set({ status: 'in_progress' })
@@ -202,10 +259,7 @@ async function setCriterionAnswer(formData: FormData) {
     'update',
     { rowId, answer },
   )
-  // Cleanup any orphan CA if we flipped away from fail
-  if (clear) {
-    await syncCorrectiveActionForCriterion(ctx, rowId)
-  }
+  if (clear) await syncCorrectiveActionForCriterion(ctx, rowId)
   revalidatePath(`/inspections/records/${recordId}`)
 }
 
@@ -342,142 +396,35 @@ async function setCriterionCorrectedOn(formData: FormData) {
   revalidatePath(`/inspections/records/${recordId}`)
 }
 
-/**
- * Bulk-save the full set of per-criterion answer fields. Typed object input
- * + `{ ok, error? }` return value to match the in-house server-action shape.
- *
- * If `answer` flips to 'pass'/'n_a' we wipe the fail-only fields to keep the
- * row coherent (same behaviour as `setCriterionAnswer`). If it flips to
- * 'fail' we wipe `compliantNote`. If no answer is provided we patch the
- * loose fields without touching `answer` itself.
- */
-async function saveCriterionDetails(input: {
-  recordId: string
-  rowId: string
-  answer: 'pass' | 'fail' | 'n_a' | null
-  severity: 'low' | 'medium' | 'high' | 'critical' | null
-  nonComplianceDescription: string | null
-  actionTaken: string | null
-  compliantNote: string | null
-  assignedToPersonId: string | null
-  assignedDueDate: string | null
-  correctedOn: string | null
-}): Promise<{ ok: true } | { ok: false; error: string }> {
-  'use server'
-  try {
-    const ctx = await requireRequestContext()
-    if (!input.recordId || !input.rowId) {
-      return { ok: false, error: 'Missing recordId or rowId' }
-    }
-
-    const isFail = input.answer === 'fail'
-    const patch: Record<string, unknown> = {
-      ...(input.answer
-        ? {
-            answer: input.answer,
-            answeredAt: new Date(),
-            answeredByTenantUserId: ctx.membership?.id ?? null,
-          }
-        : {}),
-      ...(isFail
-        ? {
-            severity: input.severity ?? null,
-            nonComplianceDescription: input.nonComplianceDescription,
-            actionTaken: input.actionTaken,
-            assignedToPersonId: input.assignedToPersonId,
-            assignedDueDate: input.assignedDueDate,
-            correctedOn: input.correctedOn,
-            compliantNote: null,
-          }
-        : input.answer
-          ? {
-              severity: null,
-              nonComplianceDescription: null,
-              actionTaken: null,
-              assignedToPersonId: null,
-              assignedDueDate: null,
-              correctedOn: null,
-              compliantNote: input.compliantNote,
-            }
-          : {
-              severity: input.severity ?? null,
-              nonComplianceDescription: input.nonComplianceDescription,
-              actionTaken: input.actionTaken,
-              compliantNote: input.compliantNote,
-              assignedToPersonId: input.assignedToPersonId,
-              assignedDueDate: input.assignedDueDate,
-              correctedOn: input.correctedOn,
-            }),
-    }
-
-    await ctx.db(async (tx) => {
-      await tx
-        .update(inspectionRecordCriteria)
-        .set(patch as any)
-        .where(eq(inspectionRecordCriteria.id, input.rowId))
-      // Mirror the auto-transition behaviour from setCriterionAnswer.
-      if (input.answer) {
-        await tx
-          .update(inspectionRecords)
-          .set({ status: 'in_progress' })
-          .where(
-            and(eq(inspectionRecords.id, input.recordId), eq(inspectionRecords.status, 'draft')),
-          )
-      }
-    })
-    await logRecordAudit(ctx, input.recordId, 'Edited criterion details', 'update', {
-      ...input,
-    })
-    await syncCorrectiveActionForCriterion(ctx, input.rowId)
-    revalidatePath(`/inspections/records/${input.recordId}`)
-    return { ok: true }
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) }
-  }
-}
-
-/**
- * Form-action adapter — drawer form posts FormData; we parse + delegate to the
- * typed `saveCriterionDetails` and throw on failure so the redirect flow stays
- * clean.
- */
-async function saveCriterionDetailsForm(formData: FormData): Promise<void> {
-  'use server'
-  const result = await saveCriterionDetails({
-    recordId: String(formData.get('recordId') ?? ''),
-    rowId: String(formData.get('rowId') ?? ''),
-    answer: parseAnswer(formData.get('answer')),
-    severity: parseSeverity(formData.get('severity')),
-    nonComplianceDescription: String(formData.get('nonComplianceDescription') ?? '').trim() || null,
-    actionTaken: String(formData.get('actionTaken') ?? '').trim() || null,
-    compliantNote: String(formData.get('compliantNote') ?? '').trim() || null,
-    assignedToPersonId: String(formData.get('assignedToPersonId') ?? '').trim() || null,
-    assignedDueDate: String(formData.get('assignedDueDate') ?? '').trim() || null,
-    correctedOn: String(formData.get('correctedOn') ?? '').trim() || null,
-  })
-  if (!result.ok) throw new Error(result.error)
-}
-
-async function addCriterionPhoto(formData: FormData) {
+async function addCriterionPhotos(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
   const recordId = String(formData.get('recordId') ?? '')
   const rowId = String(formData.get('rowId') ?? '')
-  const attachmentId = String(formData.get('attachmentId') ?? '').trim()
-  if (!recordId || !rowId || !attachmentId) return
+  const ids = String(formData.get('attachmentIds') ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  if (!recordId || !rowId || ids.length === 0) return
   await ctx.db(async (tx) => {
     const [cur] = await tx
       .select({ ids: inspectionRecordCriteria.photoAttachmentIds })
       .from(inspectionRecordCriteria)
       .where(eq(inspectionRecordCriteria.id, rowId))
       .limit(1)
-    const next = [...(cur?.ids ?? []), attachmentId]
+    const next = [...(cur?.ids ?? []), ...ids]
     await tx
       .update(inspectionRecordCriteria)
       .set({ photoAttachmentIds: next })
       .where(eq(inspectionRecordCriteria.id, rowId))
   })
-  await logRecordAudit(ctx, recordId, 'Attached a photo to a criterion', 'update', { rowId })
+  await logRecordAudit(
+    ctx,
+    recordId,
+    `Attached ${ids.length} photo${ids.length === 1 ? '' : 's'} to a criterion`,
+    'update',
+    { rowId },
+  )
   revalidatePath(`/inspections/records/${recordId}`)
 }
 
@@ -510,7 +457,6 @@ async function passAll(formData: FormData) {
           isNull(inspectionRecordCriteria.answer),
         ),
       )
-    // Auto-transition draft → in_progress
     await tx
       .update(inspectionRecords)
       .set({ status: 'in_progress' })
@@ -554,6 +500,28 @@ async function saveCustomerSignature(formData: FormData) {
   revalidatePath(`/inspections/records/${recordId}`)
 }
 
+// Plain helper — invoked by the inline photo-attach server action below.
+async function attachRecordPhotos(recordId: string, ids: string[]) {
+  const ctx = await requireRequestContext()
+  if (ids.length === 0) return
+  await ctx.db((tx) =>
+    tx.insert(inspectionRecordAttachments).values(
+      ids.map((attachmentId) => ({
+        tenantId: ctx.tenantId,
+        recordId,
+        attachmentId,
+      })),
+    ),
+  )
+  await logRecordAudit(
+    ctx,
+    recordId,
+    `Attached ${ids.length} photo${ids.length === 1 ? '' : 's'}`,
+    'update',
+  )
+  revalidatePath(`/inspections/records/${recordId}`)
+}
+
 // Helper used by setCriterionSeverity to know whether a CA was newly spawned.
 async function getCriterionCAId(
   ctx: Awaited<ReturnType<typeof requireRequestContext>>,
@@ -580,14 +548,10 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
 export default async function InspectionRecordDetailPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ id: string }>
-  searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { id } = await params
-  const sp = await searchParams
-  const active: Tab = pickActiveTab(sp, TABS, 'overview')
   const ctx = await requireRequestContext()
   const pendingGates = await getPendingFlowGatesForSubject(
     ctx,
@@ -645,8 +609,13 @@ export default async function InspectionRecordDetailPage({
       .where(eq(people.status, 'active'))
       .orderBy(asc(people.lastName), asc(people.firstName))
 
-    // For per-criterion photo previews, fetch attachments referenced in any
-    // photoAttachmentIds in one pass.
+    const siteOptions = await tx
+      .select({ id: orgUnits.id, name: orgUnits.name })
+      .from(orgUnits)
+      .where(and(eq(orgUnits.level, 'site'), isNull(orgUnits.deletedAt)))
+      .orderBy(asc(orgUnits.name))
+
+    // Resolve per-criterion photo previews in one pass.
     const allPhotoIds = Array.from(new Set(criteria.flatMap((c) => c.c.photoAttachmentIds ?? [])))
     const criterionPhotoMap = new Map<string, { id: string; url: string; filename: string }>()
     if (allPhotoIds.length > 0) {
@@ -659,11 +628,11 @@ export default async function InspectionRecordDetailPage({
       }
     }
 
-    return { ...row, criteria, photos, peopleList, criterionPhotoMap }
+    return { ...row, criteria, photos, peopleList, siteOptions, criterionPhotoMap }
   })
 
   if (!data) notFound()
-  const { record, type, site, inspector, criteria, photos, peopleList, criterionPhotoMap } = data
+  const { record, type, site, inspector, criteria, photos, peopleList, siteOptions } = data
 
   // Summary counts
   const total = criteria.length
@@ -671,19 +640,17 @@ export default async function InspectionRecordDetailPage({
   const failCount = criteria.filter((c) => c.c.answer === 'fail').length
   const naCount = criteria.filter((c) => c.c.answer === 'n_a').length
   const unansweredCount = criteria.filter((c) => !c.c.answer).length
-  const failRows = criteria.filter((c) => c.c.answer === 'fail')
+  const answeredCount = total - unansweredCount
   const compliantPct =
-    total > 0 ? Math.round((passCount / Math.max(1, passCount + failCount)) * 100) : 0
+    passCount + failCount > 0 ? Math.round((passCount / (passCount + failCount)) * 100) : 0
+  const completionPct = total > 0 ? Math.round((answeredCount / total) * 100) : 0
+  const ringCirc = 2 * Math.PI * 26
 
-  // Group criteria by their snapshotted section label for the fill view. Rows
-  // are materialised in group order, so same-label rows are already adjacent.
-  const indexById = new Map(criteria.map((row, i) => [row.c.id, i]))
   const criteriaGroups = groupCriteriaByLabel(criteria)
-  const failGroups = groupCriteriaByLabel(failRows)
   const multiSection = criteriaGroups.length > 1
+  const indexById = new Map(criteria.map((row, i) => [row.c.id, i]))
 
-  const activity =
-    active === 'activity' ? await recentActivityForEntity(ctx, 'inspection_record', id, 50) : []
+  const activity = await recentActivityForEntity(ctx, 'inspection_record', id, 25)
 
   const galleryPhotos = photos.map((p) => ({
     id: p.link.id,
@@ -692,25 +659,46 @@ export default async function InspectionRecordDetailPage({
     caption: p.link.caption,
   }))
 
-  const basePath = `/inspections/records/${id}`
+  const peopleOptions = peopleList.map((p) => ({
+    value: p.id,
+    label: `${p.lastName}, ${p.firstName}`,
+    hint: p.employeeNo ?? undefined,
+  }))
 
-  // Drawer state: ?drawer=edit-criterion&id=<rowId>. Close URL keeps the
-  // current tab so the user lands back on the criteria view.
-  const drawerKey = pickString(sp.drawer)
-  const drawerRowId = pickString(sp.id)
-  const closeHref = `${basePath}?tab=${active}`
-  const editingRow =
-    drawerKey === 'edit-criterion' && drawerRowId
-      ? (criteria.find((c) => c.c.id === drawerRowId) ?? null)
-      : null
+  const criterionActions = {
+    setAnswer: setCriterionAnswer,
+    setSeverity: setCriterionSeverity,
+    setNonCompliance: setCriterionNonCompliance,
+    setActionTaken: setCriterionActionTaken,
+    setCompliantNote: setCriterionCompliantNote,
+    setAssignment: setCriterionAssignment,
+    setCorrected: setCriterionCorrectedOn,
+    addPhotos: addCriterionPhotos,
+  }
+
+  const needsSignature = type.requiresCustomerSignature
+  const signed = Boolean(record.customerSignatureDataUrl)
+
+  const sectionItems: SectionNavItem[] = [
+    { id: 'overview', label: 'Overview' },
+    {
+      id: 'criteria',
+      label: 'Criteria',
+      count: total,
+      done: total > 0 && unansweredCount === 0,
+    },
+    { id: 'photos', label: 'Photos', count: photos.length },
+    ...(needsSignature ? [{ id: 'signature', label: 'Sign-off', done: signed }] : []),
+    { id: 'activity', label: 'Activity' },
+  ]
 
   return (
     <DetailPageLayout
       header={
         <DetailHeader
           back={{ href: '/inspections/records', label: 'Back to inspection records' }}
-          title={`${record.reference} · ${type.name}`}
-          subtitle={`${new Date(record.occurredAt).toLocaleString()} · inspector ${inspector?.name ?? 'unknown'}`}
+          title={`${type.name}`}
+          subtitle={`${record.reference} · ${new Date(record.occurredAt).toLocaleString()}`}
           badge={
             <div className="flex items-center gap-2">
               <Badge
@@ -725,26 +713,35 @@ export default async function InspectionRecordDetailPage({
                 {record.status.replace(/_/g, ' ')}
               </Badge>
               {record.locked ? (
-                <Badge variant="outline" className="border-amber-300 text-amber-800">
+                <Badge variant="success">
                   <Lock size={10} /> Locked
                 </Badge>
               ) : null}
               {failCount > 0 ? (
-                <Badge variant="outline" className="border-red-300 text-red-800">
+                <Badge variant="destructive">
                   <ShieldAlert size={10} /> {failCount} failure{failCount === 1 ? '' : 's'}
                 </Badge>
               ) : null}
             </div>
           }
           actions={
-            <>
-              <Link href={`/inspections/records?type=${record.typeId}`}>
-                <Button variant="outline">
-                  <FileText size={14} />
-                  All of this type
+            <div className="flex items-center gap-2">
+              <form action={toggleLock}>
+                <input type="hidden" name="id" value={id} />
+                <input type="hidden" name="lock" value={record.locked ? 'false' : 'true'} />
+                <Button variant="outline" type="submit">
+                  {record.locked ? (
+                    <>
+                      <Unlock size={14} /> Unlock
+                    </>
+                  ) : (
+                    <>
+                      <Lock size={14} /> Lock
+                    </>
+                  )}
                 </Button>
-              </Link>
-            </>
+              </form>
+            </div>
           }
         />
       }
@@ -753,158 +750,230 @@ export default async function InspectionRecordDetailPage({
           {record.locked ? (
             <Alert variant="warning">
               <AlertTitle>This inspection is locked</AlertTitle>
-              <AlertDescription className="flex items-center justify-between">
-                <span>
-                  Closed on {record.closedAt ? new Date(record.closedAt).toLocaleDateString() : '—'}
-                  . Unlock to make further edits.
-                </span>
-                <form action={toggleLock} className="inline">
-                  <input type="hidden" name="id" value={id} />
-                  <input type="hidden" name="lock" value="false" />
-                  <Button variant="outline" size="sm" type="submit">
-                    <Unlock size={12} /> Unlock
-                  </Button>
-                </form>
+              <AlertDescription>
+                Closed on {record.closedAt ? new Date(record.closedAt).toLocaleDateString() : '—'}.
+                Unlock from the header to make further edits.
               </AlertDescription>
             </Alert>
           ) : null}
-          {type.requiresCustomerSignature && !record.customerSignatureDataUrl ? (
+          {needsSignature && !signed ? (
             <Alert variant="info">
               <AlertTitle>Signature required</AlertTitle>
               <AlertDescription>
-                This type requires a customer signature.{' '}
-                <Link
-                  href={`/inspections/records/${id}?tab=signature`}
-                  className="font-medium text-teal-700 hover:underline"
-                >
-                  Capture it →
-                </Link>
+                This inspection type requires a customer signature before it can be closed.
               </AlertDescription>
             </Alert>
           ) : null}
         </>
       }
-      subtabs={
-        <TabNav
-          basePath={basePath}
-          currentParams={sp}
-          active={active}
-          tabs={[
-            { key: 'overview', label: 'Overview' },
-            { key: 'criteria', label: 'Criteria', count: total },
-            { key: 'action-taken', label: 'Action taken', count: failCount },
-            { key: 'photos', label: 'Photos', count: photos.length },
-            { key: 'signature', label: 'Signature', hidden: !type.requiresCustomerSignature },
-            { key: 'activity', label: 'Activity' },
-          ]}
-        />
-      }
+      subtabs={<SectionNav sections={sectionItems} />}
     >
-      <div className="space-y-5">
+      <div className="ff-surface space-y-5">
         {pendingGates.length > 0 ? <FlowApprovals gates={pendingGates} /> : null}
-        {active === 'overview' ? (
-          <>
-            <Section title="General information">
-              <DetailGrid
-                rows={[
-                  {
-                    label: 'Reference',
-                    value: <span className="font-mono">{record.reference}</span>,
-                  },
-                  {
-                    label: 'Type',
-                    value: (
-                      <Link
-                        className="hover:underline"
-                        href={`/inspections/types/${record.typeId}`}
-                      >
-                        {type.name}
-                      </Link>
-                    ),
-                  },
-                  { label: 'Occurred', value: new Date(record.occurredAt).toLocaleString() },
-                  { label: 'Site', value: site?.name ?? '—' },
-                  { label: 'Inspector', value: inspector?.name ?? '—' },
-                  { label: 'Foreman', value: record.foremanText ?? '—' },
-                  {
-                    label: 'Customer signer',
-                    value: record.customerSignerName ?? '—',
-                  },
-                  {
-                    label: 'Customer signed at',
-                    value: record.customerSignedAt
-                      ? new Date(record.customerSignedAt).toLocaleString()
-                      : '—',
-                  },
-                  {
-                    label: 'Submitted',
-                    value: record.submittedAt ? new Date(record.submittedAt).toLocaleString() : '—',
-                  },
-                  {
-                    label: 'Closed',
-                    value: record.closedAt ? new Date(record.closedAt).toLocaleString() : '—',
-                  },
-                ]}
-              />
-              {record.notes ? (
-                <div className="mt-4 text-sm">
-                  <div className="text-xs tracking-wide text-slate-500 uppercase">Notes</div>
-                  <p className="mt-1 whitespace-pre-wrap text-slate-800">{record.notes}</p>
-                </div>
-              ) : null}
-            </Section>
 
-            <Section title="Compliance summary">
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-                <Stat label="Pass" value={passCount} accent="emerald" />
-                <Stat label="Fail" value={failCount} accent="red" />
-                <Stat label="N/A" value={naCount} accent="slate" />
-                <Stat label="Unanswered" value={unansweredCount} accent="amber" />
-                <Stat label="Compliant %" value={`${compliantPct}%`} accent="teal" />
+        {/* ---------------------------------------------------------------- */}
+        {/* Overview — completion hero + compliance tiles + general info    */}
+        {/* ---------------------------------------------------------------- */}
+        <section id="section-overview" className="scroll-mt-2 space-y-5">
+          <div className="flex flex-col gap-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex items-center gap-4">
+              <div className="relative h-16 w-16 shrink-0">
+                <svg viewBox="0 0 64 64" className="h-16 w-16 -rotate-90">
+                  <circle
+                    cx="32"
+                    cy="32"
+                    r="26"
+                    fill="none"
+                    strokeWidth="6"
+                    className="stroke-slate-200 dark:stroke-slate-700"
+                  />
+                  <circle
+                    cx="32"
+                    cy="32"
+                    r="26"
+                    fill="none"
+                    strokeWidth="6"
+                    strokeLinecap="round"
+                    strokeDasharray={ringCirc}
+                    strokeDashoffset={ringCirc * (1 - completionPct / 100)}
+                    className={completionPct >= 100 ? 'stroke-emerald-500' : 'stroke-teal-500'}
+                  />
+                </svg>
+                <span className="absolute inset-0 flex items-center justify-center text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  {completionPct}%
+                </span>
               </div>
+              <div className="min-w-0">
+                <div className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                  {answeredCount} of {total} answered
+                </div>
+                <div className="mt-0.5 truncate text-sm text-slate-500 dark:text-slate-400">
+                  {type.name}
+                  {site ? ` · ${site.name}` : ''}
+                  {inspector?.name ? ` · ${inspector.name}` : ''}
+                </div>
+              </div>
+            </div>
+            <div className="rounded-xl bg-slate-50 px-4 py-3 dark:bg-slate-800/50">
+              <div className="text-[11px] font-medium tracking-wide text-slate-500 uppercase">
+                Compliant
+              </div>
+              <div className="mt-1 flex items-baseline gap-1">
+                <span
+                  className={`text-2xl font-semibold ${
+                    failCount === 0
+                      ? 'text-emerald-600'
+                      : compliantPct >= 60
+                        ? 'text-amber-600'
+                        : 'text-red-600'
+                  }`}
+                >
+                  {compliantPct}%
+                </span>
+                <span className="text-xs text-slate-400">
+                  {passCount}/{failCount}/{naCount}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Compliance tiles */}
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <StatTile label="Pass" value={passCount} accent="emerald" />
+            <StatTile label="Fail" value={failCount} accent="red" />
+            <StatTile label="N/A" value={naCount} accent="slate" />
+            <StatTile label="Unanswered" value={unansweredCount} accent="amber" />
+          </div>
+
+          <Section
+            title="General information"
+            subtitle="Who, what, where, when"
+            icon={<Building2 size={20} />}
+            tone="slate"
+          >
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <LiveDateTime
+                id={record.id}
+                field="occurredAt"
+                label="Occurred at"
+                initialValue={localDatetimeValue(new Date(record.occurredAt))}
+                disabled={record.locked}
+                updateAction={updateRecordField}
+              />
+              <LiveSelect
+                id={record.id}
+                field="siteOrgUnitId"
+                label="Site"
+                initialValue={record.siteOrgUnitId}
+                options={siteOptions.map((s) => ({ value: s.id, label: s.name }))}
+                disabled={record.locked}
+                updateAction={updateRecordField}
+              />
+              <div className="sm:col-span-2">
+                <LiveField
+                  id={record.id}
+                  field="foremanText"
+                  label="Foreman"
+                  initialValue={record.foremanText}
+                  placeholder="Crew foreman on shift"
+                  disabled={record.locked}
+                  updateAction={updateRecordField}
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <LiveField
+                  id={record.id}
+                  field="notes"
+                  label="Notes"
+                  initialValue={record.notes}
+                  multiline
+                  rows={3}
+                  placeholder="Anything important about this inspection"
+                  disabled={record.locked}
+                  updateAction={updateRecordField}
+                />
+              </div>
+            </div>
+
+            {/* Read-only context */}
+            <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 border-t border-slate-100 pt-4 text-sm sm:grid-cols-4 dark:border-slate-800">
+              <Meta
+                label="Reference"
+                value={<span className="font-mono">{record.reference}</span>}
+              />
+              <Meta
+                label="Type"
+                value={
+                  <Link
+                    className="text-teal-700 hover:underline dark:text-teal-400"
+                    href={`/inspections/types/${record.typeId}`}
+                  >
+                    {type.name}
+                  </Link>
+                }
+              />
+              <Meta
+                label="Submitted"
+                value={record.submittedAt ? new Date(record.submittedAt).toLocaleDateString() : '—'}
+              />
+              <Meta
+                label="Closed"
+                value={record.closedAt ? new Date(record.closedAt).toLocaleDateString() : '—'}
+              />
+            </dl>
+          </Section>
+
+          <Section
+            title="Status & workflow"
+            subtitle="Move the record through its lifecycle"
+            icon={<ClipboardCheck size={20} />}
+            tone="teal"
+            defaultOpen={false}
+          >
+            <div className="space-y-4">
+              <form action={updateStatus} className="flex flex-wrap items-end gap-3">
+                <input type="hidden" name="id" value={id} />
+                <div className="space-y-1.5">
+                  <Label>Move to</Label>
+                  <Select name="status" defaultValue={record.status} disabled={record.locked}>
+                    {STATUSES.map((s) => (
+                      <option key={s} value={s}>
+                        {s.replace(/_/g, ' ')}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <Button type="submit" disabled={record.locked}>
+                  Update status
+                </Button>
+              </form>
               {unansweredCount > 0 && !record.locked ? (
-                <form action={passAll} className="mt-4">
+                <form action={passAll}>
                   <input type="hidden" name="recordId" value={id} />
                   <Button type="submit" variant="outline">
-                    <ClipboardCheck size={14} />
-                    Mark all unanswered as pass ({unansweredCount})
+                    <CheckCircle2 size={14} /> Mark {unansweredCount} unanswered as pass
                   </Button>
                 </form>
               ) : null}
-            </Section>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Submitting or closing requires every criterion to be answered. Closing locks the
+                record.
+              </p>
+            </div>
+          </Section>
+        </section>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Status</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <form action={updateStatus} className="flex items-end gap-3">
-                  <input type="hidden" name="id" value={id} />
-                  <div className="space-y-1.5">
-                    <Label>Move to</Label>
-                    <Select name="status" defaultValue={record.status} disabled={record.locked}>
-                      {STATUSES.map((s) => (
-                        <option key={s} value={s}>
-                          {s.replace(/_/g, ' ')}
-                        </option>
-                      ))}
-                    </Select>
-                  </div>
-                  <Button type="submit" disabled={record.locked}>
-                    Update
-                  </Button>
-                </form>
-                <p className="mt-2 text-xs text-slate-500">
-                  Moving to "submitted" or "closed" requires every criterion to be answered. Move to
-                  "closed" to lock the record.
-                </p>
-              </CardContent>
-            </Card>
-          </>
-        ) : null}
-
-        {active === 'criteria' ? (
-          <div className="space-y-5">
+        {/* ---------------------------------------------------------------- */}
+        {/* Criteria — one live card per criterion, grouped by section      */}
+        {/* ---------------------------------------------------------------- */}
+        <section id="section-criteria" className="scroll-mt-2">
+          <Section
+            title={`Criteria (${total})`}
+            subtitle="Tap an answer — failures capture severity and remediation inline."
+            icon={<ListChecks size={20} />}
+            tone="blue"
+            defaultOpen
+          >
             {criteria.length === 0 ? (
               <Alert variant="info">
                 <AlertTitle>No criteria</AlertTitle>
@@ -912,750 +981,174 @@ export default async function InspectionRecordDetailPage({
                   This record's type has no criteria. Add some in{' '}
                   <Link
                     href={`/inspections/types/${record.typeId}`}
-                    className="text-teal-700 hover:underline"
+                    className="text-teal-700 hover:underline dark:text-teal-400"
                   >
                     the type builder
                   </Link>
                   , then start a new inspection.
                 </AlertDescription>
               </Alert>
-            ) : null}
-            {criteriaGroups.map((group, gi) => (
-              <div key={group.label ?? `__ungrouped_${gi}`} className="space-y-3">
-                {group.label || multiSection ? (
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-semibold tracking-wide text-slate-700 uppercase dark:text-slate-300">
-                      {group.label ?? 'Ungrouped'}
-                    </h3>
-                    <span className="text-xs text-slate-400">
-                      {group.rows.length} item{group.rows.length === 1 ? '' : 's'}
-                    </span>
-                  </div>
-                ) : null}
-                {group.rows.map((row) => (
-                  <CriterionCard
-                    key={row.c.id}
-                    rowId={row.c.id}
-                    recordId={id}
-                    index={indexById.get(row.c.id) ?? 0}
-                    question={row.c.questionTextSnapshot}
-                    answer={row.c.answer}
-                    severity={row.c.severity}
-                    nonComplianceDescription={row.c.nonComplianceDescription}
-                    actionTaken={row.c.actionTaken}
-                    compliantNote={row.c.compliantNote}
-                    assignedToPersonId={row.c.assignedToPersonId}
-                    assignedDueDate={row.c.assignedDueDate}
-                    correctedOn={row.c.correctedOn}
-                    photoAttachmentIds={row.c.photoAttachmentIds ?? []}
-                    correctiveActionRef={row.ca?.reference ?? null}
-                    correctiveActionId={row.c.correctiveActionId}
-                    requiresPhoto={row.c.requiresPhoto ?? false}
-                    requiresComment={row.c.requiresComment ?? false}
-                    assignee={
-                      row.assignee
-                        ? {
-                            id: row.assignee.id,
-                            name: `${row.assignee.firstName} ${row.assignee.lastName}`,
-                          }
-                        : null
-                    }
-                    peopleList={peopleList.map((p) => ({
-                      id: p.id,
-                      name: `${p.firstName} ${p.lastName}`,
-                      hint: p.employeeNo ?? undefined,
-                    }))}
-                    criterionPhotoMap={criterionPhotoMap}
-                    locked={record.locked}
-                    allowCompliantNotes={type.allowCompliantNotes}
-                    recordOccurredAt={record.occurredAt}
-                    editHref={`${basePath}?tab=${active}&drawer=edit-criterion&id=${row.c.id}`}
-                  />
-                ))}
-              </div>
-            ))}
-          </div>
-        ) : null}
-
-        {active === 'action-taken' ? (
-          <Section
-            title={`Action taken on failed items (${failRows.length})`}
-            subtitle="Record what was done to remediate. This text flows into the linked corrective action."
-          >
-            {failRows.length === 0 ? (
-              <p className="text-sm text-slate-500">
-                No failed items recorded. The action-taken view stays empty until you mark a
-                criterion as fail.
-              </p>
             ) : (
               <div className="space-y-5">
-                {failGroups.map((group, gi) => (
+                {criteriaGroups.map((group, gi) => (
                   <div key={group.label ?? `__ungrouped_${gi}`} className="space-y-3">
                     {group.label || multiSection ? (
-                      <h3 className="text-sm font-semibold tracking-wide text-slate-700 uppercase dark:text-slate-300">
-                        {group.label ?? 'Ungrouped'}
-                      </h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-sm font-semibold tracking-wide text-slate-700 uppercase dark:text-slate-300">
+                          {group.label ?? 'Ungrouped'}
+                        </h3>
+                        <span className="text-xs text-slate-400">
+                          {group.rows.length} item{group.rows.length === 1 ? '' : 's'}
+                        </span>
+                      </div>
                     ) : null}
                     {group.rows.map((row) => (
-                      <div
+                      <CriterionCard
                         key={row.c.id}
-                        className="rounded-md border border-slate-200 bg-white p-3"
-                      >
-                        <div className="mb-2 flex items-start justify-between gap-2">
-                          <div>
-                            <div className="text-sm font-medium text-slate-900">
-                              {row.c.questionTextSnapshot}
-                            </div>
-                            <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                              {row.c.severity ? (
-                                <Badge variant="outline">{row.c.severity}</Badge>
-                              ) : null}
-                              {row.ca?.reference ? (
-                                <Link
-                                  href={`/corrective-actions/${row.c.correctiveActionId}`}
-                                  className="text-teal-700 hover:underline"
-                                >
-                                  {row.ca.reference}
-                                </Link>
-                              ) : null}
-                            </div>
-                            {row.c.nonComplianceDescription ? (
-                              <p className="mt-1 text-xs text-slate-600">
-                                <strong>Non-compliance:</strong> {row.c.nonComplianceDescription}
-                              </p>
-                            ) : null}
-                          </div>
-                        </div>
-                        {!record.locked ? (
-                          <form action={setCriterionActionTaken} className="space-y-2">
-                            <input type="hidden" name="recordId" value={id} />
-                            <input type="hidden" name="rowId" value={row.c.id} />
-                            <Textarea
-                              name="value"
-                              rows={2}
-                              defaultValue={row.c.actionTaken ?? ''}
-                              placeholder="What was done to remediate?"
-                            />
-                            <div className="flex justify-end">
-                              <Button type="submit" size="sm">
-                                Save action
-                              </Button>
-                            </div>
-                          </form>
-                        ) : row.c.actionTaken ? (
-                          <p className="text-sm">{row.c.actionTaken}</p>
-                        ) : (
-                          <p className="text-xs text-slate-400">No action recorded.</p>
-                        )}
-                      </div>
+                        recordId={id}
+                        rowId={row.c.id}
+                        index={indexById.get(row.c.id) ?? 0}
+                        question={row.c.questionTextSnapshot}
+                        responseType={row.c.responseType as CriterionResponseType}
+                        requiresPhoto={row.c.requiresPhoto ?? false}
+                        requiresComment={row.c.requiresComment ?? false}
+                        answer={row.c.answer}
+                        severity={row.c.severity as CriterionSeverity | null}
+                        nonComplianceDescription={row.c.nonComplianceDescription}
+                        actionTaken={row.c.actionTaken}
+                        compliantNote={row.c.compliantNote}
+                        assignedToPersonId={row.c.assignedToPersonId}
+                        assignedDueDate={row.c.assignedDueDate}
+                        correctedOn={row.c.correctedOn}
+                        overdue={isOverdue({
+                          answer: row.c.answer,
+                          assignedDueDate: row.c.assignedDueDate,
+                          correctedOn: row.c.correctedOn,
+                          recordOccurredAt: record.occurredAt,
+                        })}
+                        photoPreviews={(row.c.photoAttachmentIds ?? [])
+                          .map((aid) => data.criterionPhotoMap.get(aid))
+                          .filter((p): p is { id: string; url: string; filename: string } =>
+                            Boolean(p),
+                          )}
+                        correctiveActionRef={row.ca?.reference ?? null}
+                        correctiveActionId={row.c.correctiveActionId}
+                        peopleOptions={peopleOptions}
+                        locked={record.locked}
+                        allowCompliantNotes={type.allowCompliantNotes}
+                        actions={criterionActions}
+                      />
                     ))}
                   </div>
                 ))}
               </div>
             )}
           </Section>
-        ) : null}
+        </section>
 
-        {active === 'photos' ? (
-          <Section title={`Photos (${photos.length})`} defaultOpen={true}>
+        {/* ---------------------------------------------------------------- */}
+        {/* Photos                                                          */}
+        {/* ---------------------------------------------------------------- */}
+        <section id="section-photos" className="scroll-mt-2">
+          <Section
+            title={`Photos (${photos.length})`}
+            icon={<Camera size={20} />}
+            tone="slate"
+            defaultOpen={photos.length > 0}
+          >
             <div className="space-y-3">
               <PhotoGallery photos={galleryPhotos} />
               {!record.locked ? (
                 <PhotoUploaderSection
                   attachAction={async (ids) => {
                     'use server'
-                    const ctx = await requireRequestContext()
-                    if (ids.length === 0) return
-                    await ctx.db((tx) =>
-                      tx.insert(inspectionRecordAttachments).values(
-                        ids.map((attachmentId) => ({
-                          tenantId: ctx.tenantId,
-                          recordId: id,
-                          attachmentId,
-                        })),
-                      ),
-                    )
-                    await logRecordAudit(
-                      ctx,
-                      id,
-                      `Attached ${ids.length} photo${ids.length === 1 ? '' : 's'}`,
-                      'update',
-                    )
-                    revalidatePath(`/inspections/records/${id}`)
+                    await attachRecordPhotos(id, ids)
                   }}
                 />
               ) : null}
             </div>
           </Section>
+        </section>
+
+        {/* ---------------------------------------------------------------- */}
+        {/* Customer signature                                              */}
+        {/* ---------------------------------------------------------------- */}
+        {needsSignature ? (
+          <section id="section-signature" className="scroll-mt-2">
+            <Section
+              title="Customer sign-off"
+              icon={<PenLine size={20} />}
+              tone="emerald"
+              defaultOpen
+            >
+              <CustomerSignatureCard
+                recordId={id}
+                currentSignature={record.customerSignatureDataUrl}
+                currentSignerName={record.customerSignerName}
+                signedAt={record.customerSignedAt}
+                locked={record.locked}
+                saveAction={saveCustomerSignature}
+              />
+            </Section>
+          </section>
         ) : null}
 
-        {active === 'signature' ? (
-          <CustomerSignatureCard
-            recordId={id}
-            currentSignature={record.customerSignatureDataUrl}
-            currentSignerName={record.customerSignerName}
-            signedAt={record.customerSignedAt}
-            locked={record.locked}
-            saveAction={saveCustomerSignature}
-          />
-        ) : null}
-
-        {active === 'activity' ? (
-          <Section title={`Activity (${activity.length})`} defaultOpen={true}>
+        {/* ---------------------------------------------------------------- */}
+        {/* Activity                                                        */}
+        {/* ---------------------------------------------------------------- */}
+        <section id="section-activity" className="scroll-mt-2">
+          <Section
+            title={`Activity (${activity.length})`}
+            icon={<History size={20} />}
+            tone="slate"
+            defaultOpen={false}
+          >
             <ActivityFeed entries={activity} />
           </Section>
-        ) : null}
+        </section>
       </div>
-
-      {/*
-       * Per-criterion edit drawer. URL-driven via `?drawer=edit-criterion&id=…`.
-       * Lets the inspector adjust every answer field in one place — handy for
-       * follow-up clean-ups (mark corrected, switch severity, reassign) without
-       * piecemeal form submits.
-       */}
-      <UrlDrawer
-        open={Boolean(editingRow) && !record.locked}
-        closeHref={closeHref}
-        title="Edit criterion answer"
-        description={editingRow?.c.questionTextSnapshot ?? undefined}
-        size="lg"
-        footer={
-          <>
-            <Link href={closeHref}>
-              <Button variant="ghost">Cancel</Button>
-            </Link>
-            <Button type="submit" form="criterion-edit-form">
-              Save
-            </Button>
-          </>
-        }
-      >
-        {editingRow ? (
-          <CriterionEditForm
-            formId="criterion-edit-form"
-            recordId={id}
-            row={editingRow}
-            peopleList={peopleList.map((p) => ({
-              id: p.id,
-              name: `${p.firstName} ${p.lastName}`,
-              hint: p.employeeNo ?? undefined,
-            }))}
-            recordOccurredAt={record.occurredAt}
-            action={saveCriterionDetailsForm}
-          />
-        ) : null}
-      </UrlDrawer>
     </DetailPageLayout>
   )
 }
 
 // ----------------------------------------------------------------------------
-// Inline subcomponents — kept route-local so the page file is self-contained
+// Local presentational helpers
 // ----------------------------------------------------------------------------
 
-function Stat({
+function StatTile({
   label,
   value,
   accent,
 }: {
   label: string
-  value: number | string
-  accent: 'emerald' | 'red' | 'slate' | 'amber' | 'teal'
+  value: number
+  accent: 'emerald' | 'red' | 'slate' | 'amber'
 }) {
-  const tone =
+  const valueTone =
     accent === 'emerald'
-      ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+      ? 'text-emerald-600'
       : accent === 'red'
-        ? 'text-red-700 bg-red-50 border-red-200'
+        ? 'text-red-600'
         : accent === 'amber'
-          ? 'text-amber-700 bg-amber-50 border-amber-200'
-          : accent === 'teal'
-            ? 'text-teal-700 bg-teal-50 border-teal-200'
-            : 'text-slate-700 bg-slate-50 border-slate-200'
+          ? 'text-amber-600'
+          : 'text-slate-900 dark:text-slate-100'
   return (
-    <div className={`rounded-md border px-3 py-2 ${tone}`}>
-      <div className="text-xs tracking-wide uppercase">{label}</div>
-      <div className="text-xl font-semibold tabular-nums">{value}</div>
+    <div className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div className={`text-2xl font-semibold tabular-nums ${valueTone}`}>{value}</div>
+      <div className="mt-1 text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
+        {label}
+      </div>
     </div>
   )
 }
 
-/**
- * Severity → Tailwind class triple. Mirrors the legacy app's colour map:
- * low=slate, medium=amber, high=orange, critical=rose.
- */
-function severityBadgeClasses(severity: 'low' | 'medium' | 'high' | 'critical' | null): string {
-  switch (severity) {
-    case 'low':
-      return 'border-slate-300 bg-slate-100 text-slate-700'
-    case 'medium':
-      return 'border-amber-300 bg-amber-100 text-amber-800'
-    case 'high':
-      return 'border-orange-300 bg-orange-100 text-orange-800'
-    case 'critical':
-      return 'border-rose-300 bg-rose-100 text-rose-800'
-    default:
-      return 'border-slate-200 bg-white text-slate-500'
-  }
-}
-
-/**
- * A finding is overdue when:
- *   - it's marked `fail`
- *   - it has an assigned due date that's strictly in the past
- *   - it has NOT been corrected yet (`correctedOn` is null)
- * The inspection's `occurredAt` is the floor: if the due date is before the
- * inspection itself we treat that as a data-entry artefact and don't flag.
- */
-function isOverdue(args: {
-  answer: 'pass' | 'fail' | 'n_a' | null
-  assignedDueDate: string | null
-  correctedOn: string | null
-  recordOccurredAt: Date
-}): boolean {
-  if (args.answer !== 'fail') return false
-  if (args.correctedOn) return false
-  if (!args.assignedDueDate) return false
-  const due = new Date(args.assignedDueDate + 'T00:00:00')
-  if (Number.isNaN(due.getTime())) return false
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  if (due >= today) return false
-  // Don't flag findings whose due date pre-dates the inspection itself.
-  const floor = new Date(args.recordOccurredAt)
-  floor.setHours(0, 0, 0, 0)
-  return due >= floor
-}
-
-function CriterionCard(props: {
-  rowId: string
-  recordId: string
-  index: number
-  question: string
-  answer: 'pass' | 'fail' | 'n_a' | null
-  severity: 'low' | 'medium' | 'high' | 'critical' | null
-  nonComplianceDescription: string | null
-  actionTaken: string | null
-  compliantNote: string | null
-  assignedToPersonId: string | null
-  assignedDueDate: string | null
-  correctedOn: string | null
-  photoAttachmentIds: string[]
-  correctiveActionRef: string | null
-  correctiveActionId: string | null
-  requiresPhoto: boolean
-  requiresComment: boolean
-  assignee: { id: string; name: string } | null
-  peopleList: { id: string; name: string; hint?: string }[]
-  criterionPhotoMap: Map<string, { id: string; url: string; filename: string }>
-  locked: boolean
-  allowCompliantNotes: boolean
-  recordOccurredAt: Date
-  editHref: string
-}) {
-  const {
-    rowId,
-    recordId,
-    index,
-    question,
-    answer,
-    severity,
-    nonComplianceDescription,
-    actionTaken,
-    compliantNote,
-    assignedToPersonId,
-    assignedDueDate,
-    correctedOn,
-    photoAttachmentIds,
-    correctiveActionRef,
-    correctiveActionId,
-    requiresPhoto,
-    assignee,
-    peopleList,
-    criterionPhotoMap,
-    locked,
-    allowCompliantNotes,
-    recordOccurredAt,
-    editHref,
-  } = props
-  const overdue = isOverdue({ answer, assignedDueDate, correctedOn, recordOccurredAt })
-
-  const photoPreviews = photoAttachmentIds
-    .map((aid) => criterionPhotoMap.get(aid))
-    .filter((p): p is { id: string; url: string; filename: string } => Boolean(p))
-
+function Meta({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div
-      className={`rounded-md border bg-white p-3 transition-colors ${
-        answer === 'fail'
-          ? 'border-red-200 bg-red-50/40'
-          : answer === 'pass'
-            ? 'border-emerald-200 bg-emerald-50/40'
-            : answer === 'n_a'
-              ? 'border-slate-200 bg-slate-50/40'
-              : 'border-slate-200'
-      }`}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="text-xs text-slate-500">#{index + 1}</div>
-          <div className="mt-0.5 text-sm font-medium text-slate-900">{question}</div>
-          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
-            {requiresPhoto ? <Badge variant="secondary">Photo required</Badge> : null}
-            {severity && answer === 'fail' ? (
-              <span
-                className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase ${severityBadgeClasses(severity)}`}
-              >
-                {severity}
-              </span>
-            ) : null}
-            {overdue ? (
-              <span className="inline-flex items-center gap-1 rounded-full border border-red-300 bg-red-50 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-red-700 uppercase">
-                <AlertOctagon size={10} /> Overdue
-              </span>
-            ) : null}
-            {correctedOn && answer === 'fail' ? (
-              <span className="inline-flex items-center rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-emerald-700 uppercase">
-                Corrected {correctedOn}
-              </span>
-            ) : null}
-            {correctiveActionRef ? (
-              <Link
-                href={`/corrective-actions/${correctiveActionId}`}
-                className="text-teal-700 hover:underline"
-              >
-                ↳ {correctiveActionRef}
-              </Link>
-            ) : null}
-            {!locked ? (
-              <Link
-                href={editHref as any}
-                className="ml-auto inline-flex items-center gap-1 text-xs text-teal-700 hover:underline"
-              >
-                <Pencil size={11} /> Edit details
-              </Link>
-            ) : null}
-          </div>
-        </div>
-        {locked ? null : (
-          <form action={setCriterionAnswer} className="flex shrink-0 items-center gap-1">
-            <input type="hidden" name="recordId" value={recordId} />
-            <input type="hidden" name="rowId" value={rowId} />
-            {(['pass', 'fail', 'n_a'] as const).map((opt) => (
-              <button
-                key={opt}
-                type="submit"
-                name="answer"
-                value={opt}
-                className={`rounded-md border px-2 py-1 text-xs font-medium transition-colors ${
-                  answer === opt
-                    ? opt === 'pass'
-                      ? 'border-emerald-500 bg-emerald-500 text-white'
-                      : opt === 'fail'
-                        ? 'border-red-500 bg-red-500 text-white'
-                        : 'border-slate-500 bg-slate-500 text-white'
-                    : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                }`}
-              >
-                {opt === 'n_a' ? 'N/A' : opt[0]!.toUpperCase() + opt.slice(1)}
-              </button>
-            ))}
-          </form>
-        )}
-        {locked ? (
-          <Badge variant="outline">{answer ? (answer === 'n_a' ? 'N/A' : answer) : '—'}</Badge>
-        ) : null}
-      </div>
-
-      {answer === 'fail' && !locked ? (
-        <div className="mt-3 space-y-2 border-t border-slate-200 pt-3 text-sm">
-          <form action={setCriterionSeverity} className="flex flex-wrap items-end gap-2">
-            <input type="hidden" name="recordId" value={recordId} />
-            <input type="hidden" name="rowId" value={rowId} />
-            <div className="space-y-1">
-              <Label className="text-xs">Severity</Label>
-              <Select name="severity" defaultValue={severity ?? ''}>
-                <option value="">— pick —</option>
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High (spawns CA)</option>
-                <option value="critical">Critical (spawns CA)</option>
-              </Select>
-            </div>
-            <Button type="submit" size="sm" variant="outline">
-              Save
-            </Button>
-          </form>
-
-          <form action={setCriterionNonCompliance} className="space-y-1">
-            <input type="hidden" name="recordId" value={recordId} />
-            <input type="hidden" name="rowId" value={rowId} />
-            <Label className="text-xs">Reason for non-compliance</Label>
-            <Textarea
-              name="value"
-              rows={2}
-              defaultValue={nonComplianceDescription ?? ''}
-              placeholder="What's wrong?"
-            />
-            <div className="flex justify-end">
-              <Button type="submit" size="sm" variant="outline">
-                Save reason
-              </Button>
-            </div>
-          </form>
-
-          <form action={setCriterionAssignment} className="flex flex-wrap items-end gap-2">
-            <input type="hidden" name="recordId" value={recordId} />
-            <input type="hidden" name="rowId" value={rowId} />
-            <div className="space-y-1">
-              <Label className="text-xs">Assigned to</Label>
-              <PersonSelectField
-                name="assignedToPersonId"
-                defaultValue={assignedToPersonId ?? ''}
-                options={peopleList.map((p) => ({ value: p.id, label: p.name, hint: p.hint }))}
-                placeholder="— unassigned —"
-                clearable
-                emptyLabel="— unassigned —"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Due date</Label>
-              <Input name="assignedDueDate" type="date" defaultValue={assignedDueDate ?? ''} />
-            </div>
-            <Button type="submit" size="sm" variant="outline">
-              Save
-            </Button>
-          </form>
-
-          <form action={addCriterionPhoto} className="flex flex-wrap items-end gap-2">
-            <input type="hidden" name="recordId" value={recordId} />
-            <input type="hidden" name="rowId" value={rowId} />
-            <div className="flex-1 space-y-1">
-              <Label className="text-xs">Attach photo (by attachment id)</Label>
-              <Input name="attachmentId" placeholder="Attachment ID from the Photos tab" />
-            </div>
-            <Button type="submit" size="sm" variant="outline">
-              Link photo
-            </Button>
-          </form>
-          <p className="text-xs text-slate-500">
-            Upload from the Photos tab, then paste the attachment ID here.
-          </p>
-        </div>
-      ) : null}
-
-      {allowCompliantNotes && answer && answer !== 'fail' && !locked ? (
-        <form
-          action={setCriterionCompliantNote}
-          className="mt-3 space-y-1 border-t border-slate-200 pt-3"
-        >
-          <input type="hidden" name="recordId" value={recordId} />
-          <input type="hidden" name="rowId" value={rowId} />
-          <Label className="text-xs">Compliant notes (optional)</Label>
-          <Textarea
-            name="value"
-            rows={1}
-            defaultValue={compliantNote ?? ''}
-            placeholder="Anything worth noting?"
-          />
-          <div className="flex justify-end">
-            <Button type="submit" size="sm" variant="ghost">
-              Save note
-            </Button>
-          </div>
-        </form>
-      ) : null}
-
-      {photoPreviews.length > 0 ? (
-        <div className="mt-3 border-t border-slate-200 pt-3">
-          <div className="mb-1 text-xs tracking-wide text-slate-500 uppercase">
-            Photos ({photoPreviews.length})
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {photoPreviews.map((p) => (
-              <a
-                key={p.id}
-                href={p.url}
-                target="_blank"
-                rel="noreferrer"
-                className="block h-16 w-16 overflow-hidden rounded border border-slate-200"
-              >
-                <img src={p.url} alt={p.filename} className="h-full w-full object-cover" />
-              </a>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
-      {locked ? (
-        <div className="mt-2 space-y-1 text-xs text-slate-600">
-          {severity ? <div>Severity: {severity}</div> : null}
-          {nonComplianceDescription ? <div>Non-compliance: {nonComplianceDescription}</div> : null}
-          {actionTaken ? <div>Action taken: {actionTaken}</div> : null}
-          {assignee ? <div>Assigned: {assignee.name}</div> : null}
-          {assignedDueDate ? <div>Due: {assignedDueDate}</div> : null}
-          {correctedOn ? <div>Corrected on: {correctedOn}</div> : null}
-          {compliantNote ? <div>Notes: {compliantNote}</div> : null}
-        </div>
-      ) : null}
+    <div>
+      <dt className="text-[11px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">
+        {label}
+      </dt>
+      <dd className="mt-0.5 text-slate-800 dark:text-slate-200">{value}</dd>
     </div>
-  )
-}
-
-// ----------------------------------------------------------------------------
-// Per-criterion edit form (rendered inside the drawer). Captures every
-// answer-depth field in one go and posts to the bulk save action.
-// ----------------------------------------------------------------------------
-function CriterionEditForm({
-  formId,
-  recordId,
-  row,
-  peopleList,
-  recordOccurredAt,
-  action,
-}: {
-  formId: string
-  recordId: string
-  row: {
-    c: {
-      id: string
-      answer: 'pass' | 'fail' | 'n_a' | null
-      severity: 'low' | 'medium' | 'high' | 'critical' | null
-      nonComplianceDescription: string | null
-      actionTaken: string | null
-      compliantNote: string | null
-      assignedToPersonId: string | null
-      assignedDueDate: string | null
-      correctedOn: string | null
-      questionTextSnapshot: string
-    }
-    ca: { reference: string } | null
-  }
-  peopleList: { id: string; name: string; hint?: string }[]
-  recordOccurredAt: Date
-  action: (formData: FormData) => Promise<void>
-}) {
-  const a = row.c.answer
-  const overdue = isOverdue({
-    answer: a,
-    assignedDueDate: row.c.assignedDueDate,
-    correctedOn: row.c.correctedOn,
-    recordOccurredAt,
-  })
-  return (
-    <form id={formId} action={action} className="space-y-4">
-      <input type="hidden" name="recordId" value={recordId} />
-      <input type="hidden" name="rowId" value={row.c.id} />
-
-      {overdue ? (
-        <Alert variant="destructive">
-          <AlertTitle className="flex items-center gap-2">
-            <AlertOctagon size={14} /> This finding is overdue
-          </AlertTitle>
-          <AlertDescription>
-            Due date {row.c.assignedDueDate} has passed without a correction. Set the "Corrected on"
-            date below to clear the flag.
-          </AlertDescription>
-        </Alert>
-      ) : null}
-
-      <div className="space-y-1.5">
-        <Label className="text-xs tracking-wide text-slate-500 uppercase">Result</Label>
-        <Select name="answer" defaultValue={a ?? ''}>
-          <option value="">— Unanswered —</option>
-          <option value="pass">Pass</option>
-          <option value="fail">Fail (non-compliant)</option>
-          <option value="n_a">N/A</option>
-        </Select>
-        <p className="text-xs text-slate-500">
-          Switching to pass or N/A clears the failure metadata below.
-        </p>
-      </div>
-
-      <fieldset className="space-y-3 rounded-md border border-slate-200 bg-slate-50/60 p-3">
-        <legend className="px-1 text-xs font-semibold tracking-wide text-slate-500 uppercase">
-          Non-compliance
-        </legend>
-
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label className="text-xs">Severity</Label>
-            <Select name="severity" defaultValue={row.c.severity ?? ''}>
-              <option value="">— pick —</option>
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High (spawns CA)</option>
-              <option value="critical">Critical (spawns CA)</option>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Assigned to</Label>
-            <PersonSelectField
-              name="assignedToPersonId"
-              defaultValue={row.c.assignedToPersonId ?? ''}
-              options={peopleList.map((p) => ({ value: p.id, label: p.name, hint: p.hint }))}
-              placeholder="— unassigned —"
-              clearable
-              emptyLabel="— unassigned —"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Due date</Label>
-            <Input name="assignedDueDate" type="date" defaultValue={row.c.assignedDueDate ?? ''} />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Corrected on</Label>
-            <Input name="correctedOn" type="date" defaultValue={row.c.correctedOn ?? ''} />
-            <p className="text-[11px] text-slate-500">
-              Fill this in once the fix is verified — clears the overdue flag.
-            </p>
-          </div>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label className="text-xs">Reason for non-compliance</Label>
-          <Textarea
-            name="nonComplianceDescription"
-            rows={3}
-            defaultValue={row.c.nonComplianceDescription ?? ''}
-            placeholder="What's wrong?"
-          />
-        </div>
-
-        <div className="space-y-1.5">
-          <Label className="text-xs">Action taken on the spot</Label>
-          <Textarea
-            name="actionTaken"
-            rows={3}
-            defaultValue={row.c.actionTaken ?? ''}
-            placeholder="What did the inspector do about it right away?"
-          />
-          {row.ca?.reference ? (
-            <p className="text-[11px] text-slate-500">
-              Synced to corrective action{' '}
-              <Link href="/corrective-actions" className="text-teal-700 hover:underline">
-                {row.ca.reference}
-              </Link>
-              .
-            </p>
-          ) : null}
-        </div>
-      </fieldset>
-
-      <fieldset className="space-y-2 rounded-md border border-slate-200 p-3">
-        <legend className="px-1 text-xs font-semibold tracking-wide text-slate-500 uppercase">
-          Compliant context (only used on pass / N/A)
-        </legend>
-        <div className="space-y-1.5">
-          <Label className="text-xs">Compliant note</Label>
-          <Textarea
-            name="compliantNote"
-            rows={2}
-            defaultValue={row.c.compliantNote ?? ''}
-            placeholder='e.g. "torque verified at 50 ft-lbs"'
-          />
-        </div>
-      </fieldset>
-    </form>
   )
 }

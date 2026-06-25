@@ -73,8 +73,8 @@ async function createTenant(formData: FormData): Promise<void> {
     }
   })
 
-  revalidatePath('/admin/tenants')
-  redirect('/admin/tenants')
+  revalidatePath('/platform/tenants')
+  redirect('/platform/tenants')
 }
 
 export default function NewTenantPage() {
@@ -82,7 +82,7 @@ export default function NewTenantPage() {
     <PageContainer>
       <div className="mx-auto max-w-2xl">
         <div>
-          <Link href="/admin/tenants" className="text-xs text-slate-500 hover:text-teal-700">
+          <Link href="/platform/tenants" className="text-xs text-slate-500 hover:text-teal-700">
             ← Back to tenants
           </Link>
           <PageHeader
@@ -131,7 +131,7 @@ export default function NewTenantPage() {
             </p>
           </div>
           <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-4">
-            <Link href="/admin/tenants">
+            <Link href="/platform/tenants">
               <Button type="button" variant="outline">
                 Cancel
               </Button>

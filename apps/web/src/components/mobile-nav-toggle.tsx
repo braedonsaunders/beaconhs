@@ -12,10 +12,12 @@ import { Badge } from '@beaconhs/ui'
 import { Logo } from './brand-logo'
 import { useMobileNav } from './mobile-nav'
 import { SidebarNav, type SidebarNavGroup } from './sidebar-nav'
+import { useNavGroups } from './use-platform-nav'
 import { ThemeToggle } from './theme-toggle'
 
 export function MobileNavToggle({ groups }: { groups: SidebarNavGroup[] }) {
   const { open, setOpen } = useMobileNav()
+  const navGroups = useNavGroups(groups)
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
 
@@ -78,7 +80,7 @@ export function MobileNavToggle({ groups }: { groups: SidebarNavGroup[] }) {
                         <X size={18} />
                       </button>
                     </div>
-                    <SidebarNav groups={groups} />
+                    <SidebarNav groups={navGroups} />
 
                     {/* Footer: theme switcher + build tag — mirrors the desktop
                         rail. Safe-area padding clears the iOS home indicator. */}

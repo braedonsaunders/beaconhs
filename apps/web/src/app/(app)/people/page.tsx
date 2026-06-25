@@ -116,7 +116,6 @@ export default async function PeoplePage({
     <ListPageLayout
       header={
         <>
-          <PeopleSubNav active="directory" />
           <PageHeader
             title="People"
             description="Your organization's directory of workers, contractors, and supervisors."
@@ -134,6 +133,7 @@ export default async function PeoplePage({
               </div>
             }
           />
+          <PeopleSubNav active="directory" />
           <div className="flex flex-wrap items-center gap-3">
             <SearchInput placeholder="Search by name or employee #" />
             <FilterChips

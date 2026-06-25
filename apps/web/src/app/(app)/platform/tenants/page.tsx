@@ -50,15 +50,15 @@ export default async function AdminTenantsPage() {
     <PageContainer>
       <div className="space-y-5">
         <DetailHeader
-          back={{ href: '/admin', label: 'Back to admin' }}
+          back={{ href: '/platform', label: 'Back to platform' }}
           title="All tenants"
           subtitle="Super-admin view of every tenant on this deployment"
           actions={
             <div className="flex items-center gap-2">
-              <Link href="/admin/tenants/seed-templates">
+              <Link href="/platform/tenants/seed-templates">
                 <Button variant="outline">Seed built-in templates</Button>
               </Link>
-              <Link href="/admin/tenants/new">
+              <Link href="/platform/tenants/new">
                 <Button>New tenant</Button>
               </Link>
             </div>
