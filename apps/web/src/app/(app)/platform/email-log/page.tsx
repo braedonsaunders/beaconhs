@@ -1,9 +1,9 @@
 import { EmailLogListView } from '@/components/email-log/list-view'
 
-export const metadata = { title: 'Email log' }
+export const metadata = { title: 'Email log · Platform' }
 export const dynamic = 'force-dynamic'
 
-export default async function EmailLogPage({
+export default async function PlatformEmailLogPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
@@ -12,9 +12,9 @@ export default async function EmailLogPage({
   return (
     <EmailLogListView
       searchParams={sp}
-      scope="tenant"
-      basePath="/admin/email-log"
-      back={{ href: '/admin', label: 'Back to admin' }}
+      scope="platform"
+      basePath="/platform/email-log"
+      back={{ href: '/platform', label: 'Back to platform' }}
     />
   )
 }

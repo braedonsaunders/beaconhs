@@ -2,8 +2,9 @@
 
 // Client-side filter bar for the email log list: recipient text input +
 // from/to date pickers. We push updates to the URL via router.replace so
-// the list page (server component) re-renders. Mirrors the pattern in
-// SearchInput but for the date + recipient fields specifically.
+// the list page (server component) re-renders. Route-agnostic — it pushes to
+// the current pathname, so it works under both /admin/email-log and
+// /platform/email-log.
 
 import { useEffect, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
@@ -16,6 +17,8 @@ export function RecipientFilter() {
   const [value, setValue] = useState(search.get('recipient') ?? '')
 
   useEffect(() => {
+    // Re-sync the input when the URL changes externally (back/forward, chip clear).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setValue(search.get('recipient') ?? '')
   }, [search])
 
@@ -57,8 +60,11 @@ export function DateRangeFilter() {
   const [to, setTo] = useState(search.get('to') ?? '')
 
   useEffect(() => {
+    // Re-sync the inputs when the URL changes externally (back/forward, chip clear).
+    /* eslint-disable react-hooks/set-state-in-effect */
     setFrom(search.get('from') ?? '')
     setTo(search.get('to') ?? '')
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [search])
 
   function apply(nextFrom: string, nextTo: string) {

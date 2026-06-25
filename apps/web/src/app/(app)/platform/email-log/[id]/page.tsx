@@ -7,13 +7,17 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   return { title: `Email · ${id.slice(0, 8)}` }
 }
 
-export default async function EmailLogDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function PlatformEmailLogDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>
+}) {
   const { id } = await params
   return (
     <EmailLogDetailView
       id={id}
-      scope="tenant"
-      back={{ href: '/admin/email-log', label: 'Back to email log' }}
+      scope="platform"
+      back={{ href: '/platform/email-log', label: 'Back to email log' }}
     />
   )
 }
