@@ -11,7 +11,7 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { and, asc, desc, eq } from 'drizzle-orm'
-import type { RequestContext } from '@beaconhs/tenant'
+import { can, type RequestContext } from '@beaconhs/tenant'
 import {
   people,
   trainingAssessmentResults,
@@ -26,10 +26,12 @@ import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { recomputeEnrollmentCompletion } from './_lib/completion'
 
-// Resolve the signed-in user's People record (workers without an app login have
-// no people.user_id, so an explicit personId must be passed for those).
-async function resolvePersonId(ctx: RequestContext): Promise<string> {
-  const id = await ctx.db(async (tx) => {
+// Resolve the signed-in user's People record id, or null when no People row is
+// linked to their login (e.g. an admin with no worker profile). Workers without
+// an app login have no people.user_id, so an explicit personId must be passed
+// for those. Mirrors resolveMyPersonId() in ../_actions/assessments.ts.
+async function resolveMyPersonId(ctx: RequestContext): Promise<string | null> {
+  return ctx.db(async (tx) => {
     const [p] = await tx
       .select({ id: people.id })
       .from(people)
@@ -37,6 +39,12 @@ async function resolvePersonId(ctx: RequestContext): Promise<string> {
       .limit(1)
     return p?.id ?? null
   })
+}
+
+// Own-action paths (self-enroll, lesson progress) require a linked People record;
+// throw a clear error when nothing is linked.
+async function resolvePersonId(ctx: RequestContext): Promise<string> {
+  const id = await resolveMyPersonId(ctx)
   if (!id) {
     throw new Error(
       'No worker profile is linked to your account — ask an admin to link your People record.',
@@ -45,12 +53,38 @@ async function resolvePersonId(ctx: RequestContext): Promise<string> {
   return id
 }
 
+// Enrolling someone OTHER than yourself is a training-staff action: it assigns a
+// course to them and ultimately mints a training record on their behalf. Either
+// training-write permission qualifies — the admin roles grant them together.
+// Mirrors canProctorAssessments() in ../_actions/assessments.ts.
+function canAssignTraining(ctx: RequestContext): boolean {
+  return can(ctx, 'training.record.create') || can(ctx, 'training.class.manage')
+}
+
 export async function enrollInCourse(courseId: string, personIdArg?: string) {
   const ctx = await requireRequestContext()
   if (!ctx.tenantId) throw new Error('No active tenant')
   const tenantId = ctx.tenantId
-  const assigning = Boolean(personIdArg && personIdArg.trim())
-  const personId = assigning ? personIdArg!.trim() : await resolvePersonId(ctx)
+
+  // Assigning a course to another person is a privileged action. A server action
+  // is a POST endpoint, so without this gate any authenticated tenant user could
+  // enroll an arbitrary person on their behalf (source: 'assigned'). Self-enroll
+  // (no personId, or your own personId) stays open; enrolling anyone else needs
+  // an explicit training-write permission — same cross-user integrity class as
+  // the assessment-attempt guards in ../_actions/assessments.ts.
+  const requested = personIdArg?.trim()
+  let assigning = false
+  let personId: string
+  if (!requested) {
+    personId = await resolvePersonId(ctx)
+  } else {
+    const ownPersonId = await resolveMyPersonId(ctx)
+    assigning = requested !== ownPersonId
+    if (assigning && !canAssignTraining(ctx)) {
+      throw new Error('You do not have permission to assign training to other people.')
+    }
+    personId = requested
+  }
 
   await ctx.db(async (tx) => {
     const [existing] = await tx
@@ -191,6 +225,18 @@ export async function startLessonQuiz(enrollmentId: string, lessonId: string) {
   const personId = await resolvePersonId(ctx)
 
   const attemptId = await ctx.db(async (tx) => {
+    // Ownership: the attempt + lesson-progress rows are written against this
+    // enrollment, so confirm it belongs to the caller before touching it (mirrors
+    // markLessonComplete). Without this any tenant user could spawn an attempt on
+    // and mutate someone else's enrollment progress.
+    const [enr] = await tx
+      .select({ personId: trainingEnrollments.personId })
+      .from(trainingEnrollments)
+      .where(eq(trainingEnrollments.id, enrollmentId))
+      .limit(1)
+    if (!enr) throw new Error('Enrollment not found')
+    if (enr.personId !== personId) throw new Error('That enrollment is not yours')
+
     const [lesson] = await tx
       .select()
       .from(trainingLessons)
