@@ -128,12 +128,12 @@ export default async function ObligationDetailPage({
           </Badge>
         </div>
 
-        {ob.notes ? <p className="text-sm text-slate-600">{ob.notes}</p> : null}
+        {ob.notes ? <p className="text-sm text-slate-600 dark:text-slate-400">{ob.notes}</p> : null}
 
         <SummaryStrip percent={result.percent} totals={result.totals} title="Compliance" />
 
         {result.rows.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 p-8 text-center text-sm text-slate-500">
+          <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 dark:border-slate-700 dark:bg-slate-800/40 p-8 text-center text-sm text-slate-500 dark:text-slate-400">
             No subjects resolved for this obligation.
           </div>
         ) : (
@@ -156,17 +156,17 @@ export default async function ObligationDetailPage({
             <TableBody>
               {result.rows.map((r, i) => (
                 <TableRow key={r.key}>
-                  <TableCell className="text-slate-500">{i + 1}</TableCell>
-                  <TableCell className="text-slate-900">{r.label}</TableCell>
+                  <TableCell className="text-slate-500 dark:text-slate-400">{i + 1}</TableCell>
+                  <TableCell className="text-slate-900 dark:text-slate-100">{r.label}</TableCell>
                   <TableCell>
                     <StatusBadge status={r.status} />
                   </TableCell>
-                  <TableCell className="text-slate-700">{r.dueOn ?? '—'}</TableCell>
-                  <TableCell className="text-slate-700">{r.completedOn ?? '—'}</TableCell>
+                  <TableCell className="text-slate-700 dark:text-slate-300">{r.dueOn ?? '—'}</TableCell>
+                  <TableCell className="text-slate-700 dark:text-slate-300">{r.completedOn ?? '—'}</TableCell>
                   {hasCounts ? (
                     <>
-                      <TableCell className="text-slate-700">{r.count ?? '—'}</TableCell>
-                      <TableCell className="text-slate-700">{r.expected ?? '—'}</TableCell>
+                      <TableCell className="text-slate-700 dark:text-slate-300">{r.count ?? '—'}</TableCell>
+                      <TableCell className="text-slate-700 dark:text-slate-300">{r.expected ?? '—'}</TableCell>
                     </>
                   ) : null}
                 </TableRow>

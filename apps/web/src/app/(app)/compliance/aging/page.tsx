@@ -53,7 +53,7 @@ export default async function AgingPage() {
     >
       <div className="space-y-6">
         {grandTotal === 0 ? (
-          <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 p-8 text-center text-sm text-slate-500">
+          <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 dark:border-slate-700 dark:bg-slate-800/40 p-8 text-center text-sm text-slate-500 dark:text-slate-400">
             Nothing overdue or expiring — nice work.
           </div>
         ) : (
@@ -78,7 +78,7 @@ export default async function AgingPage() {
                       <AgingCell count={matrix.get(`${k}::${b.key}`) ?? 0} tone={b.tone} />
                     </TableCell>
                   ))}
-                  <TableCell className="font-semibold text-slate-900">{totalByKind(k)}</TableCell>
+                  <TableCell className="font-semibold text-slate-900 dark:text-slate-100">{totalByKind(k)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

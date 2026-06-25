@@ -16,7 +16,7 @@ export function PercentBar({ percent, large = false }: { percent: number; large?
   const tone = percent >= 80 ? 'bg-green-500' : percent >= 50 ? 'bg-amber-500' : 'bg-red-500'
   return (
     <div
-      className={`relative w-full overflow-hidden rounded-full bg-slate-100 ${large ? 'h-3' : 'h-2'}`}
+      className={`relative w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800 ${large ? 'h-3' : 'h-2'}`}
     >
       <div
         className={`absolute inset-y-0 left-0 ${tone}`}
@@ -36,12 +36,12 @@ export function SummaryStrip({
   title: string
 }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4">
+    <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
       <div className="flex items-end justify-between gap-3">
         <div className="min-w-0">
-          <div className="truncate text-sm text-slate-500">{title}</div>
-          <div className="text-3xl font-semibold text-slate-900">{percent}%</div>
-          <div className="text-xs text-slate-500">
+          <div className="truncate text-sm text-slate-500 dark:text-slate-400">{title}</div>
+          <div className="text-3xl font-semibold text-slate-900 dark:text-slate-100">{percent}%</div>
+          <div className="text-xs text-slate-500 dark:text-slate-400">
             {totals.completed} of {totals.total} completed · {totals.overdue} overdue ·{' '}
             {totals.pending} pending
           </div>
