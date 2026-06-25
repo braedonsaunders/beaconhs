@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { revalidatePath } from 'next/cache'
 import { Boxes, Plus, Trash2 } from 'lucide-react'
-import { asc, count, eq, or } from 'drizzle-orm'
+import { asc, count, eq } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -14,12 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from '@beaconhs/ui'
-import {
-  equipmentCategories,
-  equipmentItems,
-  equipmentTypes,
-  formTemplates,
-} from '@beaconhs/db/schema'
+import { equipmentCategories, equipmentItems, equipmentTypes } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { requireModuleManage, assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
@@ -41,24 +36,19 @@ async function saveType(input: {
   categoryId: string | null
   everyDays: number | null
   oilMonths: number | null
-  templateKey: string | null
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   'use server'
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'equipment')
   const name = input.name.trim()
   if (!name) return { ok: false, error: 'Name is required' }
-  const inspectionSchedule =
-    input.everyDays != null || input.templateKey
-      ? { everyDays: input.everyDays ?? undefined, templateKey: input.templateKey ?? undefined }
-      : null
+  const inspectionSchedule = input.everyDays != null ? { everyDays: input.everyDays } : null
   const values = {
     name,
     description: input.description,
     categoryId: input.categoryId,
     defaultOilChangeIntervalMonths: input.oilMonths,
     inspectionSchedule,
-    requiresPreUseInspection: input.templateKey ? { templateKey: input.templateKey } : null,
   }
   const id = await ctx.db(async (tx) => {
     if (input.id) {
@@ -109,7 +99,7 @@ export default async function EquipmentTypesPage({
   const perPage = 25
   const ctx = await requireModuleManage('equipment')
 
-  const { types, total, categories, counts, editingRow, templates } = await ctx.db(async (tx) => {
+  const { types, total, categories, counts, editingRow } = await ctx.db(async (tx) => {
     const [tot] = await tx.select({ c: count() }).from(equipmentTypes)
     const t = await tx
       .select({ type: equipmentTypes, cat: equipmentCategories })
@@ -137,25 +127,12 @@ export default async function EquipmentTypesPage({
               .limit(1)
           )[0] ?? null)
         : null
-    // Form templates usable as a pre-use inspection — the dropdown source.
-    const tmpls = await tx
-      .select({ key: formTemplates.key, name: formTemplates.name })
-      .from(formTemplates)
-      .where(
-        or(
-          eq(formTemplates.moduleBinding, 'equipment_inspection'),
-          eq(formTemplates.category, 'inspection'),
-        ),
-      )
-      .orderBy(asc(formTemplates.name))
-      .limit(200)
     return {
       types: t,
       total: Number(tot?.c ?? 0),
       categories: c,
       counts: Object.fromEntries(tally.map((x) => [x.typeId, Number(x.c)])),
       editingRow: ed,
-      templates: tmpls,
     }
   })
 
@@ -167,7 +144,6 @@ export default async function EquipmentTypesPage({
         categoryId: editingRow.categoryId,
         everyDays: editingRow.inspectionSchedule?.everyDays ?? null,
         oilMonths: editingRow.defaultOilChangeIntervalMonths ?? null,
-        templateKey: editingRow.requiresPreUseInspection?.templateKey ?? null,
       }
     : null
   const mode: 'new' | 'edit' | null = drawerParam === 'new' ? 'new' : editing ? 'edit' : null
@@ -298,7 +274,6 @@ export default async function EquipmentTypesPage({
         editing={editing}
         closeHref={closeHref}
         categories={categories.map((c) => ({ id: c.id, name: c.name }))}
-        templates={templates}
         saveAction={saveType}
       />
     </ListPageLayout>

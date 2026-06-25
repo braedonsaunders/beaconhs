@@ -25,7 +25,6 @@ import {
 
 function revalidateRecord(id: string) {
   revalidatePath(`/equipment/inspections/${id}`)
-  revalidatePath('/equipment/inspections/records')
   revalidatePath('/equipment/inspections')
 }
 
@@ -83,7 +82,7 @@ export async function startEquipmentInspection(formData: FormData) {
     action: 'create',
     summary: `Started ${row.reference} (${type.name}) on ${item.name} — ${materialised} criteria`,
   })
-  revalidatePath('/equipment/inspections/records')
+  revalidatePath('/equipment/inspections')
   redirect(`/equipment/inspections/${row.id}`)
 }
 

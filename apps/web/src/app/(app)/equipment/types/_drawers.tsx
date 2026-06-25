@@ -15,7 +15,6 @@ export type TypeEditing = {
   categoryId: string | null
   everyDays: number | null
   oilMonths: number | null
-  templateKey: string | null
 }
 
 type SaveAction = (input: {
@@ -25,7 +24,6 @@ type SaveAction = (input: {
   categoryId: string | null
   everyDays: number | null
   oilMonths: number | null
-  templateKey: string | null
 }) => Promise<{ ok: true } | { ok: false; error: string }>
 
 export function EquipmentTypeDrawer({
@@ -33,14 +31,12 @@ export function EquipmentTypeDrawer({
   editing,
   closeHref,
   categories,
-  templates,
   saveAction,
 }: {
   mode: 'new' | 'edit' | null
   editing: TypeEditing | null
   closeHref: string
   categories: { id: string; name: string }[]
-  templates: { key: string; name: string }[]
   saveAction: SaveAction
 }) {
   const router = useRouter()
@@ -53,14 +49,13 @@ export function EquipmentTypeDrawer({
       open={mode !== null}
       closeHref={closeHref}
       title={mode === 'edit' ? 'Edit equipment type' : 'New equipment type'}
-      description="Group the asset register and set a default inspection cadence + pre-use template."
+      description="Group the asset register and set a default inspection cadence."
       size="md"
     >
       <TypeForm
         key={editing?.id ?? 'new'}
         editing={editing}
         categories={categories}
-        templates={templates}
         saveAction={saveAction}
         onDone={close}
       />
@@ -71,13 +66,11 @@ export function EquipmentTypeDrawer({
 function TypeForm({
   editing,
   categories,
-  templates,
   saveAction,
   onDone,
 }: {
   editing: TypeEditing | null
   categories: { id: string; name: string }[]
-  templates: { key: string; name: string }[]
   saveAction: SaveAction
   onDone: () => void
 }) {
@@ -89,7 +82,6 @@ function TypeForm({
   const [oilMonths, setOilMonths] = useState(
     editing?.oilMonths != null ? String(editing.oilMonths) : '',
   )
-  const [templateKey, setTemplateKey] = useState(editing?.templateKey ?? '')
   const [description, setDescription] = useState(editing?.description ?? '')
   const [error, setError] = useState<string | null>(null)
   const [pending, start] = useTransition()
@@ -109,7 +101,6 @@ function TypeForm({
         categoryId: categoryId || null,
         everyDays: everyDays.trim() ? Number(everyDays) : null,
         oilMonths: oilMonths.trim() ? Number(oilMonths) : null,
-        templateKey: templateKey.trim() || null,
       })
       if (res.ok) onDone()
       else setError(res.error)
@@ -173,24 +164,6 @@ function TypeForm({
             placeholder="e.g. 6"
           />
         </div>
-      </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="et-template">Pre-use inspection template</Label>
-        <Select
-          id="et-template"
-          value={templateKey}
-          onChange={(e) => setTemplateKey(e.currentTarget.value)}
-        >
-          <option value="">— None (no pre-use inspection) —</option>
-          {templates.map((t) => (
-            <option key={t.key} value={t.key}>
-              {t.name}
-            </option>
-          ))}
-          {templateKey && !templates.some((t) => t.key === templateKey) ? (
-            <option value={templateKey}>{templateKey} (current)</option>
-          ) : null}
-        </Select>
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="et-description">Description</Label>

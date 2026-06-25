@@ -12,13 +12,15 @@ import { startEquipmentInspection } from '../_actions'
 export function NewInspectionForm({
   itemOptions,
   typeOptions,
+  defaultItemId,
   defaultTypeId,
 }: {
   itemOptions: SelectOption[]
   typeOptions: SelectOption[]
+  defaultItemId: string
   defaultTypeId: string
 }) {
-  const [itemId, setItemId] = useState('')
+  const [itemId, setItemId] = useState(defaultItemId)
   const [typeId, setTypeId] = useState(defaultTypeId)
 
   return (

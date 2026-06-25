@@ -141,7 +141,7 @@ export default async function EquipmentInspectionRecordPage({
         <PageHeader
           title={record.reference}
           description={`${item?.name ?? 'Equipment'}${type ? ` · ${type.name}` : ''}`}
-          back={{ href: '/equipment/inspections/records', label: 'Back to inspections' }}
+          back={{ href: '/equipment/inspections', label: 'Back to inspections' }}
           actions={
             <div className="flex items-center gap-2">
               <Badge variant={STATUS_VARIANT[record.status] ?? 'secondary'}>

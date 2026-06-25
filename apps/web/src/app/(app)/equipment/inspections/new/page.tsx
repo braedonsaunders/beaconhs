@@ -23,9 +23,9 @@ export const metadata = { title: 'Start equipment inspection · BeaconHS' }
 export default async function NewEquipmentInspectionPage({
   searchParams,
 }: {
-  searchParams: Promise<{ typeId?: string }>
+  searchParams: Promise<{ typeId?: string; itemId?: string }>
 }) {
-  const { typeId } = await searchParams
+  const { typeId, itemId } = await searchParams
   const ctx = await requireRequestContext()
 
   const { items, types } = await ctx.db(async (tx) => {
@@ -72,6 +72,7 @@ export default async function NewEquipmentInspectionPage({
         <NewInspectionForm
           itemOptions={itemOptions}
           typeOptions={typeOptions}
+          defaultItemId={itemId ?? ''}
           defaultTypeId={typeId ?? ''}
         />
       </div>
