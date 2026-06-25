@@ -1,4 +1,3 @@
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { and, asc, eq, isNull, sql } from 'drizzle-orm'
 import { ClipboardCheck } from 'lucide-react'
@@ -15,6 +14,7 @@ import { recentActivityForEntity } from '@/lib/audit'
 import { DetailPageLayout } from '@/components/page-layout'
 import { ActivityFeed } from '@/components/activity-feed'
 import { InspectionTypeBuilder } from './_type-builder'
+import { startInspection } from '../../records/_actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -91,11 +91,12 @@ export default async function InspectionTypeDetailPage({
             </Badge>
           }
           actions={
-            <Link href={`/inspections/records/new?typeId=${id}`}>
-              <Button variant="outline">
+            <form action={startInspection}>
+              <input type="hidden" name="typeId" value={id} />
+              <Button variant="outline" type="submit">
                 <ClipboardCheck size={14} /> Start inspection
               </Button>
-            </Link>
+            </form>
           }
         />
       }

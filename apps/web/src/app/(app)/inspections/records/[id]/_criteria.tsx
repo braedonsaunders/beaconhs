@@ -169,6 +169,7 @@ export function CriterionCard({
   rowId,
   index,
   question,
+  subtext,
   responseType,
   requiresPhoto,
   requiresComment,
@@ -193,6 +194,8 @@ export function CriterionCard({
   rowId: string
   index: number
   question: string
+  /** Optional guidance/help line shown under the question. */
+  subtext?: string | null
   responseType: CriterionResponseType
   requiresPhoto: boolean
   requiresComment: boolean
@@ -259,86 +262,101 @@ export function CriterionCard({
           ? 'border-slate-200 bg-slate-50/60 dark:border-slate-800 dark:bg-slate-800/30'
           : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'
 
-  return (
-    <div className={cn('rounded-xl border p-3 transition-colors sm:p-4', tone)}>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-            <span>#{index + 1}</span>
-            <SaveDot state={state} />
-          </div>
-          <div className="mt-0.5 text-sm font-medium text-slate-900 dark:text-slate-100">
-            {question}
-          </div>
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs">
-            {requiresPhoto ? (
-              <Badge variant="secondary" className="gap-1">
-                <Camera size={10} /> Photo required
-              </Badge>
-            ) : null}
-            {requiresComment ? <Badge variant="secondary">Comment required</Badge> : null}
-            {severity && answer === 'fail' ? (
-              <span
-                className={cn(
-                  'inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase',
-                  SEVERITY_OPTS.find((o) => o.value === severity)?.active,
-                )}
-              >
-                {severity}
-              </span>
-            ) : null}
-            {overdue ? (
-              <span className="inline-flex items-center gap-1 rounded-full border border-red-300 bg-red-50 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-red-700 uppercase dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
-                <AlertOctagon size={10} /> Overdue
-              </span>
-            ) : null}
-            {corrected && answer === 'fail' ? (
-              <span className="inline-flex items-center rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-emerald-700 uppercase dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
-                Corrected {corrected}
-              </span>
-            ) : null}
-            {correctiveActionRef ? (
-              <Link
-                href={`/corrective-actions/${correctiveActionId}`}
-                className="text-teal-700 hover:underline dark:text-teal-400"
-              >
-                ↳ {correctiveActionRef}
-              </Link>
-            ) : null}
-          </div>
-        </div>
+  const hasBadges =
+    requiresPhoto ||
+    requiresComment ||
+    (Boolean(severity) && answer === 'fail') ||
+    overdue ||
+    (Boolean(corrected) && answer === 'fail') ||
+    Boolean(correctiveActionRef)
 
-        {locked ? (
-          <Badge variant="outline" className="self-start">
-            {answer ? labels[answer] : '—'}
-          </Badge>
-        ) : (
-          <div className="flex shrink-0 items-center gap-1.5">
-            {(['pass', 'fail', 'n_a'] as const).map((opt) => {
-              const active = answer === opt
-              return (
-                <button
-                  key={opt}
-                  type="button"
-                  onClick={() => pickAnswer(opt)}
-                  aria-pressed={active}
+  return (
+    <div className={cn('rounded-lg border p-2.5 transition-colors sm:p-3', tone)}>
+      <div className="flex items-start justify-between gap-2.5">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm leading-snug text-slate-900 dark:text-slate-100">
+            <span className="mr-1.5 align-baseline text-xs font-normal text-slate-400 tabular-nums dark:text-slate-500">
+              {index + 1}.
+            </span>
+            <span className="font-medium">{question}</span>
+          </p>
+          {subtext ? (
+            <p className="mt-0.5 text-xs leading-snug text-slate-500 dark:text-slate-400">
+              {subtext}
+            </p>
+          ) : null}
+          {hasBadges ? (
+            <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
+              {requiresPhoto ? (
+                <Badge variant="secondary" className="gap-1">
+                  <Camera size={10} /> Photo
+                </Badge>
+              ) : null}
+              {requiresComment ? <Badge variant="secondary">Comment</Badge> : null}
+              {severity && answer === 'fail' ? (
+                <span
                   className={cn(
-                    'min-h-10 flex-1 rounded-lg border px-3 text-sm font-medium transition-colors sm:min-h-0 sm:flex-none sm:px-3 sm:py-1.5',
-                    active
-                      ? opt === 'pass'
-                        ? 'border-emerald-500 bg-emerald-500 text-white'
-                        : opt === 'fail'
-                          ? 'border-red-500 bg-red-500 text-white'
-                          : 'border-slate-500 bg-slate-500 text-white'
-                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800',
+                    'inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase',
+                    SEVERITY_OPTS.find((o) => o.value === severity)?.active,
                   )}
                 >
-                  {labels[opt]}
-                </button>
-              )
-            })}
-          </div>
-        )}
+                  {severity}
+                </span>
+              ) : null}
+              {overdue ? (
+                <span className="inline-flex items-center gap-1 rounded-full border border-red-300 bg-red-50 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-red-700 uppercase dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
+                  <AlertOctagon size={10} /> Overdue
+                </span>
+              ) : null}
+              {corrected && answer === 'fail' ? (
+                <span className="inline-flex items-center rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-emerald-700 uppercase dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
+                  Corrected {corrected}
+                </span>
+              ) : null}
+              {correctiveActionRef ? (
+                <Link
+                  href={`/corrective-actions/${correctiveActionId}`}
+                  className="text-teal-700 hover:underline dark:text-teal-400"
+                >
+                  ↳ {correctiveActionRef}
+                </Link>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <SaveDot state={state} />
+          {locked ? (
+            <Badge variant="outline">{answer ? labels[answer] : '—'}</Badge>
+          ) : (
+            <div className="flex items-center gap-1">
+              {(['pass', 'fail', 'n_a'] as const).map((opt) => {
+                const active = answer === opt
+                return (
+                  <button
+                    key={opt}
+                    type="button"
+                    onClick={() => pickAnswer(opt)}
+                    aria-pressed={active}
+                    className={cn(
+                      'min-h-9 rounded-md border px-2.5 text-sm font-medium transition-colors sm:min-h-0 sm:py-1 sm:text-xs',
+                      active
+                        ? opt === 'pass'
+                          ? 'border-emerald-500 bg-emerald-500 text-white'
+                          : opt === 'fail'
+                            ? 'border-red-500 bg-red-500 text-white'
+                            : 'border-slate-500 bg-slate-500 text-white'
+                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800',
+                    )}
+                  >
+                    {labels[opt]}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Failure metadata — only when failed and editable. */}

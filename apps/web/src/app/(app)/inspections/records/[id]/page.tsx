@@ -989,12 +989,12 @@ export default async function InspectionRecordDetailPage({
                 </AlertDescription>
               </Alert>
             ) : (
-              <div className="space-y-5">
+              <div className="space-y-4">
                 {criteriaGroups.map((group, gi) => (
-                  <div key={group.label ?? `__ungrouped_${gi}`} className="space-y-3">
+                  <div key={group.label ?? `__ungrouped_${gi}`} className="space-y-2">
                     {group.label || multiSection ? (
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-sm font-semibold tracking-wide text-slate-700 uppercase dark:text-slate-300">
+                      <div className="sticky top-0 z-[1] -mx-1 flex items-center gap-2 bg-white/90 px-1 py-1 backdrop-blur dark:bg-slate-900/90">
+                        <h3 className="text-xs font-semibold tracking-wide text-slate-700 uppercase dark:text-slate-300">
                           {group.label ?? 'Ungrouped'}
                         </h3>
                         <span className="text-xs text-slate-400">

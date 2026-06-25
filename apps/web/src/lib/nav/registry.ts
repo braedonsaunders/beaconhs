@@ -56,6 +56,14 @@ export function defaultGroupId(label: string): string {
 export const NAV_MODULES: NavModule[] = [
   // Overview
   { key: 'dashboard', href: '/dashboard', label: 'Dashboard', iconKey: 'gauge', group: 'Overview' },
+  {
+    key: 'assistant',
+    href: '/assistant',
+    label: 'Assistant',
+    iconKey: 'sparkles',
+    requiredPermission: 'assistant.use',
+    group: 'Overview',
+  },
   { key: 'feed', href: '/feed', label: 'Feed', iconKey: 'rss', group: 'Overview' },
   { key: 'my', href: '/my', label: 'Workspace', iconKey: 'circle-user', group: 'Overview' },
   {

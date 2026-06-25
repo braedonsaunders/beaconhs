@@ -87,6 +87,7 @@ export const TENANT_SCOPED_TABLES = [
   'form_response_checkins',
   'ai_conversations',
   'ai_messages',
+  'ai_conversation_shares',
   'incidents',
   'incident_injuries',
   'incident_lost_time_events',

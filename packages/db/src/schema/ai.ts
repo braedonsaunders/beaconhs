@@ -4,10 +4,11 @@
 // id) and appends messages. NOT feature-specific — one table for the whole
 // platform so the same history flyout component works everywhere.
 
-import { index, jsonb, pgEnum, pgTable, text, uuid } from 'drizzle-orm/pg-core'
+import { index, jsonb, pgEnum, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 import { id, timestamps } from './_helpers'
 import { tenants, users } from './core'
+import { roles } from './iam'
 
 export const aiConversations = pgTable(
   'ai_conversations',
@@ -56,9 +57,50 @@ export const aiMessages = pgTable(
   }),
 )
 
+// Opt-in sharing. A conversation is private to its `userId` owner; the owner can
+// grant READ-ONLY access to specific people (target_user_id) or whole roles
+// (target_role_id). Visibility is resolved in ai-conversations.ts: own OR a share
+// row that matches the current user or one of their roles.
+export const aiShareTargetType = pgEnum('ai_share_target_type', ['user', 'role'])
+
+export const aiConversationShares = pgTable(
+  'ai_conversation_shares',
+  {
+    id: id(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    conversationId: uuid('conversation_id')
+      .notNull()
+      .references(() => aiConversations.id, { onDelete: 'cascade' }),
+    targetType: aiShareTargetType('target_type').notNull(),
+    // Exactly one of these is set, per targetType.
+    targetUserId: text('target_user_id').references(() => users.id, { onDelete: 'cascade' }),
+    targetRoleId: uuid('target_role_id').references(() => roles.id, { onDelete: 'cascade' }),
+    createdByUserId: text('created_by_user_id').references(() => users.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    conversationIdx: index('ai_conversation_shares_conversation_idx').on(
+      t.tenantId,
+      t.conversationId,
+    ),
+    userIdx: index('ai_conversation_shares_user_idx').on(t.tenantId, t.targetUserId),
+    roleIdx: index('ai_conversation_shares_role_idx').on(t.tenantId, t.targetRoleId),
+  }),
+)
+
 export const aiConversationsRelations = relations(aiConversations, ({ many, one }) => ({
   tenant: one(tenants, { fields: [aiConversations.tenantId], references: [tenants.id] }),
   messages: many(aiMessages),
+  shares: many(aiConversationShares),
+}))
+
+export const aiConversationSharesRelations = relations(aiConversationShares, ({ one }) => ({
+  conversation: one(aiConversations, {
+    fields: [aiConversationShares.conversationId],
+    references: [aiConversations.id],
+  }),
 }))
 
 export const aiMessagesRelations = relations(aiMessages, ({ one }) => ({
@@ -70,3 +112,4 @@ export const aiMessagesRelations = relations(aiMessages, ({ one }) => ({
 
 export type AiConversation = typeof aiConversations.$inferSelect
 export type AiMessage = typeof aiMessages.$inferSelect
+export type AiConversationShare = typeof aiConversationShares.$inferSelect

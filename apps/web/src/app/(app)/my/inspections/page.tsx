@@ -154,7 +154,7 @@ export default async function MyInspectionsPage({
                 <Link href="/inspections/records">
                   <Button variant="outline">All inspections</Button>
                 </Link>
-                <Link href="/inspections/records/new">
+                <Link href="/inspections/records?drawer=new">
                   <Button>New inspection</Button>
                 </Link>
               </div>
@@ -179,7 +179,7 @@ export default async function MyInspectionsPage({
           title={params.q || statusFilter ? 'No inspections match these filters' : 'No inspections'}
           description="Inspections you carry out appear here."
           action={
-            <Link href="/inspections/records/new">
+            <Link href="/inspections/records?drawer=new">
               <Button>Start an inspection</Button>
             </Link>
           }

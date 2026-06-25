@@ -210,6 +210,14 @@ export const PERMISSION_CATALOGUE = [
   'insights.create',
   'insights.publish',
   'insights.manage',
+  // AI Assistant — the agentic chat assistant (/assistant).
+  // `use`  = open the assistant + run READ/SEARCH tools (each tool is further
+  //          gated by the underlying module's own read permission + record scope).
+  // `write` = may enter the propose→confirm flow for draft/create tools. The
+  //          COMMIT still independently requires the real module permission
+  //          (e.g. ca.create) — this is a feature flag, not an authorization.
+  'assistant.use',
+  'assistant.write',
   // Admin
   'admin.users.manage',
   // Sign in AS another user to see the app exactly as they do (scoped to the
@@ -252,6 +260,7 @@ export const BUILTIN_ROLES: Record<
       'journals.create',
       'journals.update.own',
       'journals.submit',
+      'assistant.use',
     ],
   },
   foreman: {
@@ -282,6 +291,8 @@ export const BUILTIN_ROLES: Record<
       'reports.read',
       'dashboards.read',
       'insights.read',
+      'assistant.use',
+      'assistant.write',
     ],
   },
   safety_manager: {
@@ -336,6 +347,8 @@ export const BUILTIN_ROLES: Record<
       'insights.create',
       'insights.publish',
       'admin.integrations.manage',
+      'assistant.use',
+      'assistant.write',
     ],
   },
   tenant_admin: {

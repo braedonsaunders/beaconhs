@@ -20,7 +20,8 @@ export type NewInspectionType = {
 function Chip({ label, tone }: { label: string; tone?: 'sky' }) {
   const tones = {
     sky: 'bg-sky-50 text-sky-700 ring-sky-600/20 dark:bg-sky-950/40 dark:text-sky-300',
-    default: 'bg-slate-50 text-slate-600 ring-slate-500/10 dark:bg-slate-800/50 dark:text-slate-400',
+    default:
+      'bg-slate-50 text-slate-600 ring-slate-500/10 dark:bg-slate-800/50 dark:text-slate-400',
   }
   return (
     <span

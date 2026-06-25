@@ -26,10 +26,12 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  UrlDrawer,
 } from '@beaconhs/ui'
 import {
   inspectionRecordCriteria,
   inspectionRecords,
+  inspectionTypeCriteria,
   inspectionTypes,
   orgUnits,
   tenantUsers,
@@ -45,6 +47,8 @@ import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListCard, MobileCardList } from '@/components/list-card'
 import { InspectionsSubNav } from '../_sub-nav'
+import { NewInspectionDrawer, type NewInspectionType } from './_new-drawer'
+import { startInspection } from './_actions'
 
 export const metadata = { title: 'Inspections' }
 export const dynamic = 'force-dynamic'
@@ -77,6 +81,7 @@ export default async function InspectionRecordsPage({
   const signedFilter = pickString(sp.signed) // 'yes' | 'no'
   const dateFromRaw = pickString(sp.dateFrom)
   const dateToRaw = pickString(sp.dateTo)
+  const drawerKey = pickString(sp.drawer)
   const ctx = await requireRequestContext()
 
   const { rows, total, statusCounts, types, sites, inspectors } = await ctx.db(async (tx) => {
@@ -205,320 +210,353 @@ export default async function InspectionRecordsPage({
     }
   })
 
+  // Type cards for the "Start an inspection" flyout — only loaded while it's open.
+  const newTypes: NewInspectionType[] =
+    drawerKey === 'new'
+      ? await ctx.db(async (tx) => {
+          const rows = await tx
+            .select({
+              id: inspectionTypes.id,
+              name: inspectionTypes.name,
+              description: inspectionTypes.description,
+              requiresCustomerSignature: inspectionTypes.requiresCustomerSignature,
+              criteriaCount: count(inspectionTypeCriteria.id),
+            })
+            .from(inspectionTypes)
+            .leftJoin(inspectionTypeCriteria, eq(inspectionTypeCriteria.typeId, inspectionTypes.id))
+            .where(eq(inspectionTypes.isPublished, true))
+            .groupBy(inspectionTypes.id)
+            .orderBy(asc(inspectionTypes.name))
+          return rows.map((t) => ({ ...t, criteriaCount: Number(t.criteriaCount ?? 0) }))
+        })
+      : []
+
   const sortProps = { basePath: '/inspections/records', currentParams: sp, dir: params.dir }
 
   return (
-    <ListPageLayout
-      header={
-        <>
-          <PageHeader
-            title="Inspections"
-            description="Completed inspections with results, signatures, and follow-up actions."
-            actions={
-              <div className="flex items-center gap-2">
-                <Link href={buildExportHref('/inspections/export.csv', sp)}>
-                  <Button variant="outline">Export CSV</Button>
-                </Link>
-                <Link href="/inspections/records/new">
-                  <Button>New inspection</Button>
-                </Link>
-              </div>
+    <>
+      <ListPageLayout
+        header={
+          <>
+            <PageHeader
+              title="Inspections"
+              description="Completed inspections with results, signatures, and follow-up actions."
+              actions={
+                <div className="flex items-center gap-2">
+                  <Link href={buildExportHref('/inspections/export.csv', sp)}>
+                    <Button variant="outline">Export CSV</Button>
+                  </Link>
+                  <Link href="/inspections/records?drawer=new">
+                    <Button>New inspection</Button>
+                  </Link>
+                </div>
+              }
+            />
+            <InspectionsSubNav active="records" />
+            <TableToolbar>
+              <SearchInput placeholder="Search by reference / type / foreman" />
+              <form className="flex items-center gap-1 text-xs">
+                <label className="flex items-center gap-1 text-slate-500">
+                  Occurred from
+                  <input
+                    type="date"
+                    name="dateFrom"
+                    defaultValue={dateFromRaw ?? ''}
+                    className="h-8 rounded-md border border-slate-300 px-2 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                  />
+                </label>
+                <label className="flex items-center gap-1 text-slate-500">
+                  to
+                  <input
+                    type="date"
+                    name="dateTo"
+                    defaultValue={dateToRaw ?? ''}
+                    className="h-8 rounded-md border border-slate-300 px-2 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                  />
+                </label>
+                <button
+                  type="submit"
+                  className="h-8 rounded-md border border-slate-200 px-2 text-xs hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                >
+                  Apply
+                </button>
+              </form>
+              <FilterChips
+                basePath="/inspections/records"
+                currentParams={sp}
+                paramKey="status"
+                label="Status"
+                options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
+              />
+              {types.length > 0 ? (
+                <FilterChips
+                  basePath="/inspections/records"
+                  currentParams={sp}
+                  paramKey="type"
+                  label="Type"
+                  options={types.slice(0, 12).map((t) => ({ value: t.id, label: t.name }))}
+                />
+              ) : null}
+              {sites.length > 0 ? (
+                <FilterChips
+                  basePath="/inspections/records"
+                  currentParams={sp}
+                  paramKey="site"
+                  label="Site"
+                  options={sites.slice(0, 12).map((s) => ({ value: s.id, label: s.name }))}
+                />
+              ) : null}
+              {inspectors.length > 0 ? (
+                <FilterChips
+                  basePath="/inspections/records"
+                  currentParams={sp}
+                  paramKey="inspector"
+                  label="Inspector"
+                  options={inspectors.slice(0, 12).map((i) => ({
+                    value: i.id,
+                    label: i.displayName ?? '—',
+                    count: Number(i.c),
+                  }))}
+                />
+              ) : null}
+              <FilterChips
+                basePath="/inspections/records"
+                currentParams={sp}
+                paramKey="signed"
+                label="Customer signed"
+                options={[
+                  { value: 'yes', label: 'Signed' },
+                  { value: 'no', label: 'Unsigned' },
+                ]}
+              />
+            </TableToolbar>
+          </>
+        }
+      >
+        {rows.length === 0 ? (
+          <EmptyState
+            icon={<ClipboardList size={32} />}
+            title={params.q ? `No records match "${params.q}"` : 'No inspection records'}
+            description="Select an inspection type to start one."
+            action={
+              <Link href="/inspections/records?drawer=new">
+                <Button>New inspection</Button>
+              </Link>
             }
           />
-          <InspectionsSubNav active="records" />
-          <TableToolbar>
-            <SearchInput placeholder="Search by reference / type / foreman" />
-            <form className="flex items-center gap-1 text-xs">
-              <label className="flex items-center gap-1 text-slate-500">
-                Occurred from
-                <input
-                  type="date"
-                  name="dateFrom"
-                  defaultValue={dateFromRaw ?? ''}
-                  className="h-8 rounded-md border border-slate-300 px-2 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
-                />
-              </label>
-              <label className="flex items-center gap-1 text-slate-500">
-                to
-                <input
-                  type="date"
-                  name="dateTo"
-                  defaultValue={dateToRaw ?? ''}
-                  className="h-8 rounded-md border border-slate-300 px-2 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
-                />
-              </label>
-              <button
-                type="submit"
-                className="h-8 rounded-md border border-slate-200 px-2 text-xs hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-              >
-                Apply
-              </button>
-            </form>
-            <FilterChips
-              basePath="/inspections/records"
-              currentParams={sp}
-              paramKey="status"
-              label="Status"
-              options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
-            />
-            {types.length > 0 ? (
-              <FilterChips
-                basePath="/inspections/records"
-                currentParams={sp}
-                paramKey="type"
-                label="Type"
-                options={types.slice(0, 12).map((t) => ({ value: t.id, label: t.name }))}
-              />
-            ) : null}
-            {sites.length > 0 ? (
-              <FilterChips
-                basePath="/inspections/records"
-                currentParams={sp}
-                paramKey="site"
-                label="Site"
-                options={sites.slice(0, 12).map((s) => ({ value: s.id, label: s.name }))}
-              />
-            ) : null}
-            {inspectors.length > 0 ? (
-              <FilterChips
-                basePath="/inspections/records"
-                currentParams={sp}
-                paramKey="inspector"
-                label="Inspector"
-                options={inspectors.slice(0, 12).map((i) => ({
-                  value: i.id,
-                  label: i.displayName ?? '—',
-                  count: Number(i.c),
-                }))}
-              />
-            ) : null}
-            <FilterChips
-              basePath="/inspections/records"
-              currentParams={sp}
-              paramKey="signed"
-              label="Customer signed"
-              options={[
-                { value: 'yes', label: 'Signed' },
-                { value: 'no', label: 'Unsigned' },
-              ]}
-            />
-          </TableToolbar>
-        </>
-      }
-    >
-      {rows.length === 0 ? (
-        <EmptyState
-          icon={<ClipboardList size={32} />}
-          title={params.q ? `No records match "${params.q}"` : 'No inspection records'}
-          description="Select an inspection type to start one."
-          action={
-            <Link href="/inspections/records/new">
-              <Button>New inspection</Button>
-            </Link>
-          }
-        />
-      ) : (
-        <>
-          {/* Phones: tappable cards. */}
-          <MobileCardList>
-            {rows.map((r) => {
-              const total = Number(r.totalCount ?? 0)
-              const pass = Number(r.passCount ?? 0)
-              const fail = Number(r.failCount ?? 0)
-              const na = Number(r.naCount ?? 0)
-              const passPct = total > 0 ? Math.round((pass / total) * 100) : null
-              return (
-                <ListCard
-                  key={r.record.id}
-                  href={`/inspections/records/${r.record.id}`}
-                  reference={r.record.reference}
-                  title={r.type.name}
-                  status={
-                    <Badge
-                      variant={
-                        r.record.status === 'closed' || r.record.status === 'submitted'
-                          ? 'success'
-                          : r.record.status === 'in_progress'
-                            ? 'warning'
-                            : 'secondary'
-                      }
-                    >
-                      {r.record.status.replace(/_/g, ' ')}
-                    </Badge>
-                  }
-                  person={r.inspectorName}
-                  meta={`${new Date(r.record.occurredAt).toLocaleDateString()}${
-                    r.site?.name ? ` · ${r.site.name}` : ''
-                  }`}
-                  footer={
-                    <>
-                      {passPct != null ? (
+        ) : (
+          <>
+            {/* Phones: tappable cards. */}
+            <MobileCardList>
+              {rows.map((r) => {
+                const total = Number(r.totalCount ?? 0)
+                const pass = Number(r.passCount ?? 0)
+                const fail = Number(r.failCount ?? 0)
+                const na = Number(r.naCount ?? 0)
+                const passPct = total > 0 ? Math.round((pass / total) * 100) : null
+                return (
+                  <ListCard
+                    key={r.record.id}
+                    href={`/inspections/records/${r.record.id}`}
+                    reference={r.record.reference}
+                    title={r.type.name}
+                    status={
+                      <Badge
+                        variant={
+                          r.record.status === 'closed' || r.record.status === 'submitted'
+                            ? 'success'
+                            : r.record.status === 'in_progress'
+                              ? 'warning'
+                              : 'secondary'
+                        }
+                      >
+                        {r.record.status.replace(/_/g, ' ')}
+                      </Badge>
+                    }
+                    person={r.inspectorName}
+                    meta={`${new Date(r.record.occurredAt).toLocaleDateString()}${
+                      r.site?.name ? ` · ${r.site.name}` : ''
+                    }`}
+                    footer={
+                      <>
+                        {passPct != null ? (
+                          <Badge
+                            variant={
+                              passPct >= 90 ? 'success' : passPct >= 60 ? 'warning' : 'destructive'
+                            }
+                            className="text-[10px]"
+                          >
+                            {passPct}% · {pass}/{fail}/{na}
+                          </Badge>
+                        ) : null}
                         <Badge
-                          variant={
-                            passPct >= 90 ? 'success' : passPct >= 60 ? 'warning' : 'destructive'
-                          }
+                          variant={r.record.customerSignedAt ? 'success' : 'outline'}
                           className="text-[10px]"
                         >
-                          {passPct}% · {pass}/{fail}/{na}
+                          {r.record.customerSignedAt ? 'Signed' : 'Unsigned'}
                         </Badge>
-                      ) : null}
-                      <Badge
-                        variant={r.record.customerSignedAt ? 'success' : 'outline'}
-                        className="text-[10px]"
-                      >
-                        {r.record.customerSignedAt ? 'Signed' : 'Unsigned'}
-                      </Badge>
-                    </>
-                  }
-                />
-              )
-            })}
-          </MobileCardList>
+                      </>
+                    }
+                  />
+                )
+              })}
+            </MobileCardList>
 
-          {/* Tablet/desktop: full sortable table. */}
-          <div className="hidden sm:block">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <SortableTh
-                    {...sortProps}
-                    column="reference"
-                    active={params.sort === 'reference'}
-                  >
-                    Reference
-                  </SortableTh>
-                  <SortableTh {...sortProps} column="type" active={params.sort === 'type'}>
-                    Type
-                  </SortableTh>
-                  <SortableTh
-                    {...sortProps}
-                    column="occurred_at"
-                    active={params.sort === 'occurred_at'}
-                  >
-                    Occurred
-                  </SortableTh>
-                  <TableHead>Site</TableHead>
-                  <TableHead>Inspector</TableHead>
-                  <TableHead>Foreman</TableHead>
-                  <TableHead>Pass / Fail / N-A</TableHead>
-                  <TableHead className="w-20">Signed</TableHead>
-                  <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>
-                    Status
-                  </SortableTh>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((r) => {
-                  const total = Number(r.totalCount ?? 0)
-                  const pass = Number(r.passCount ?? 0)
-                  const fail = Number(r.failCount ?? 0)
-                  const na = Number(r.naCount ?? 0)
-                  const passPct = total > 0 ? Math.round((pass / total) * 100) : null
-                  return (
-                    <TableRow key={r.record.id}>
-                      <TableCell className="font-mono text-xs">
-                        <Link
-                          href={`/inspections/records/${r.record.id}`}
-                          className="font-medium text-slate-900 hover:underline dark:text-slate-100"
-                        >
-                          {r.record.reference}
-                        </Link>
-                      </TableCell>
-                      <TableCell>
-                        <Link
-                          href={`/inspections/records/${r.record.id}`}
-                          className="hover:underline"
-                        >
-                          {r.type.name}
-                        </Link>
-                      </TableCell>
-                      <TableCell className="text-xs text-slate-600 tabular-nums dark:text-slate-400">
-                        {new Date(r.record.occurredAt).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell className="text-slate-600 dark:text-slate-400">
-                        {r.site?.name ?? '—'}
-                      </TableCell>
-                      <TableCell className="text-slate-600 dark:text-slate-400">
-                        {r.inspectorName ?? '—'}
-                      </TableCell>
-                      <TableCell className="text-xs text-slate-600 dark:text-slate-400">
-                        {r.record.foremanText ? (
-                          <span>{r.record.foremanText}</span>
-                        ) : r.record.foremanPersonIds.length > 0 ? (
-                          <Badge variant="secondary">
-                            {r.record.foremanPersonIds.length} assigned
+            {/* Tablet/desktop: full sortable table. */}
+            <div className="hidden sm:block">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <SortableTh
+                      {...sortProps}
+                      column="reference"
+                      active={params.sort === 'reference'}
+                    >
+                      Reference
+                    </SortableTh>
+                    <SortableTh {...sortProps} column="type" active={params.sort === 'type'}>
+                      Type
+                    </SortableTh>
+                    <SortableTh
+                      {...sortProps}
+                      column="occurred_at"
+                      active={params.sort === 'occurred_at'}
+                    >
+                      Occurred
+                    </SortableTh>
+                    <TableHead>Site</TableHead>
+                    <TableHead>Inspector</TableHead>
+                    <TableHead>Foreman</TableHead>
+                    <TableHead>Pass / Fail / N-A</TableHead>
+                    <TableHead className="w-20">Signed</TableHead>
+                    <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>
+                      Status
+                    </SortableTh>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {rows.map((r) => {
+                    const total = Number(r.totalCount ?? 0)
+                    const pass = Number(r.passCount ?? 0)
+                    const fail = Number(r.failCount ?? 0)
+                    const na = Number(r.naCount ?? 0)
+                    const passPct = total > 0 ? Math.round((pass / total) * 100) : null
+                    return (
+                      <TableRow key={r.record.id}>
+                        <TableCell className="font-mono text-xs">
+                          <Link
+                            href={`/inspections/records/${r.record.id}`}
+                            className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                          >
+                            {r.record.reference}
+                          </Link>
+                        </TableCell>
+                        <TableCell>
+                          <Link
+                            href={`/inspections/records/${r.record.id}`}
+                            className="hover:underline"
+                          >
+                            {r.type.name}
+                          </Link>
+                        </TableCell>
+                        <TableCell className="text-xs text-slate-600 tabular-nums dark:text-slate-400">
+                          {new Date(r.record.occurredAt).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell className="text-slate-600 dark:text-slate-400">
+                          {r.site?.name ?? '—'}
+                        </TableCell>
+                        <TableCell className="text-slate-600 dark:text-slate-400">
+                          {r.inspectorName ?? '—'}
+                        </TableCell>
+                        <TableCell className="text-xs text-slate-600 dark:text-slate-400">
+                          {r.record.foremanText ? (
+                            <span>{r.record.foremanText}</span>
+                          ) : r.record.foremanPersonIds.length > 0 ? (
+                            <Badge variant="secondary">
+                              {r.record.foremanPersonIds.length} assigned
+                            </Badge>
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-xs tabular-nums">
+                          {total === 0 ? (
+                            <span className="text-slate-400">—</span>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <span>
+                                <span className="text-emerald-700">{pass}</span> /{' '}
+                                <span className="text-red-700">{fail}</span> /{' '}
+                                <span className="text-slate-500">{na}</span>
+                                <span className="ml-1 text-slate-400">({total})</span>
+                              </span>
+                              {passPct != null ? (
+                                <Badge
+                                  variant={
+                                    passPct >= 90
+                                      ? 'success'
+                                      : passPct >= 60
+                                        ? 'warning'
+                                        : 'destructive'
+                                  }
+                                  className="text-[10px]"
+                                >
+                                  {passPct}%
+                                </Badge>
+                              ) : null}
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {r.record.customerSignedAt ? (
+                            <Badge variant="success" className="text-[10px]">
+                              Signed
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-[10px]">
+                              Unsigned
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              r.record.status === 'closed' || r.record.status === 'submitted'
+                                ? 'success'
+                                : r.record.status === 'in_progress'
+                                  ? 'warning'
+                                  : 'secondary'
+                            }
+                          >
+                            {r.record.status.replace(/_/g, ' ')}
                           </Badge>
-                        ) : (
-                          <span className="text-slate-400">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-xs tabular-nums">
-                        {total === 0 ? (
-                          <span className="text-slate-400">—</span>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            <span>
-                              <span className="text-emerald-700">{pass}</span> /{' '}
-                              <span className="text-red-700">{fail}</span> /{' '}
-                              <span className="text-slate-500">{na}</span>
-                              <span className="ml-1 text-slate-400">({total})</span>
-                            </span>
-                            {passPct != null ? (
-                              <Badge
-                                variant={
-                                  passPct >= 90
-                                    ? 'success'
-                                    : passPct >= 60
-                                      ? 'warning'
-                                      : 'destructive'
-                                }
-                                className="text-[10px]"
-                              >
-                                {passPct}%
-                              </Badge>
-                            ) : null}
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {r.record.customerSignedAt ? (
-                          <Badge variant="success" className="text-[10px]">
-                            Signed
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className="text-[10px]">
-                            Unsigned
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            r.record.status === 'closed' || r.record.status === 'submitted'
-                              ? 'success'
-                              : r.record.status === 'in_progress'
-                                ? 'warning'
-                                : 'secondary'
-                          }
-                        >
-                          {r.record.status.replace(/_/g, ' ')}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
-          </div>
-          <Pagination
-            basePath="/inspections/records"
-            currentParams={sp}
-            total={total}
-            page={params.page}
-            perPage={params.perPage}
-          />
-        </>
-      )}
-    </ListPageLayout>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+            <Pagination
+              basePath="/inspections/records"
+              currentParams={sp}
+              total={total}
+              page={params.page}
+              perPage={params.perPage}
+            />
+          </>
+        )}
+      </ListPageLayout>
+
+      <UrlDrawer
+        open={drawerKey === 'new'}
+        closeHref="/inspections/records"
+        title="Start an inspection"
+        description="Pick a type to begin — date, site, foreman and notes are captured on the record."
+        size="md"
+      >
+        <NewInspectionDrawer types={newTypes} startAction={startInspection} />
+      </UrlDrawer>
+    </>
   )
 }
