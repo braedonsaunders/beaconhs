@@ -7,9 +7,9 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import { Plus, X } from 'lucide-react'
-import { Badge, Button, Label, SearchSelect, Select, cn } from '@beaconhs/ui'
+import { Button, Label, SearchSelect, Select, cn } from '@beaconhs/ui'
 import { toast } from 'sonner'
-import { REMINDER_PRESETS, type NotificationCategory } from './_catalog'
+import { type NotificationCategory } from './_catalog'
 import {
   saveNotificationPolicy,
   saveNotificationSettings,
@@ -24,7 +24,6 @@ type CatConfig = {
   enabled: boolean
   roleKeys: string[]
   userIds: string[]
-  reminderHours: number | null
   channels: string[]
   escalation: EscalationStep[]
 }
@@ -270,7 +269,6 @@ export function NotificationSettingsForm({
         enabled: true,
         roleKeys: c.defaultRoles,
         userIds: [],
-        reminderHours: null,
         channels: ['in_app', 'email'],
         escalation: [],
       }
@@ -316,21 +314,6 @@ export function NotificationSettingsForm({
           </p>
         </div>
         <div className="space-y-4 px-4 py-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <Label>Unified detection</Label>
-              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                Use the compliance engine as the single detector. Retires the legacy cert/document/
-                corrective-action reminder scans so the same item never alerts twice.
-              </p>
-            </div>
-            <Toggle
-              checked={pol.unifiedDetection}
-              onChange={(v) => patchPol({ unifiedDetection: v })}
-              label="Unified detection"
-            />
-          </div>
-
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>Digest</Label>
@@ -426,16 +409,9 @@ export function NotificationSettingsForm({
           >
             <div className="flex items-start justify-between gap-3 p-4">
               <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                    {cat.label}
-                  </h3>
-                  {cat.recurring ? (
-                    <Badge variant="secondary" className="text-[10px]">
-                      Recurring
-                    </Badge>
-                  ) : null}
-                </div>
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  {cat.label}
+                </h3>
                 <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
                   {cat.description}
                 </p>
@@ -474,26 +450,6 @@ export function NotificationSettingsForm({
                     onChange={(v) => patch(cat.key, { channels: v })}
                   />
                 </div>
-
-                {cat.recurring ? (
-                  <div className="max-w-xs space-y-1.5">
-                    <Label>Reminder frequency</Label>
-                    <Select
-                      value={String(cfg.reminderHours ?? '')}
-                      onChange={(e) =>
-                        patch(cat.key, {
-                          reminderHours: e.target.value ? Number(e.target.value) : null,
-                        })
-                      }
-                    >
-                      {REMINDER_PRESETS.map((p) => (
-                        <option key={p.value} value={p.value}>
-                          {p.label}
-                        </option>
-                      ))}
-                    </Select>
-                  </div>
-                ) : null}
 
                 <div className="space-y-1.5">
                   <Label>Escalation ladder</Label>

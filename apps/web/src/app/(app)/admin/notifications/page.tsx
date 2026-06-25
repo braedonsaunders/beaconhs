@@ -69,7 +69,6 @@ export default async function NotificationSettingsPage() {
       enabled: boolean
       roleKeys: string[]
       userIds: string[]
-      reminderHours: number | null
       channels: string[]
       escalation: { afterDays: number; roleKeys: string[] }[]
     }
@@ -79,14 +78,12 @@ export default async function NotificationSettingsPage() {
       enabled: r.enabled,
       roleKeys: r.roleKeys ?? [],
       userIds: r.userIds ?? [],
-      reminderHours: r.reminderHours,
       channels: r.channels ?? [],
       escalation: r.escalation ?? [],
     }
   }
 
   const policy = {
-    unifiedDetection: policyRow?.unifiedDetection ?? false,
     digestMode: (policyRow?.digestMode ?? 'off') as 'off' | 'daily' | 'weekly',
     digestHourUtc: policyRow?.digestHourUtc ?? 7,
     quietHours: policyRow?.quietHours ?? null,
@@ -102,7 +99,7 @@ export default async function NotificationSettingsPage() {
         <DetailHeader
           back={{ href: '/admin', label: 'Back to admin' }}
           title="Notifications"
-          subtitle="Choose who is automatically notified for each kind of alert and how often recurring reminders repeat. These apply tenant-wide; individuals still control their own channels from their inbox settings."
+          subtitle="Choose who is notified for each kind of alert, through which channels, and how it escalates. These apply tenant-wide; individuals still control their own channels from their inbox settings."
         />
         <NotificationSettingsForm
           categories={NOTIFICATION_CATEGORIES}

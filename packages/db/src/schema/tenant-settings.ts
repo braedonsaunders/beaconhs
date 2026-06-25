@@ -44,10 +44,6 @@ export const tenantNotificationPolicy = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    // When true, the compliance obligation engine is the single detector for
-    // due/overdue/expiry — the legacy per-module scans (cert expiry, document
-    // review, CA overdue) stand down so the same fact never fires twice.
-    unifiedDetection: boolean('unified_detection').default(false).notNull(),
     // Batch non-critical alerts into a periodic digest instead of sending each
     // immediately. 'off' = immediate (today's behaviour).
     digestMode: text('digest_mode').default('off').notNull(), // 'off' | 'daily' | 'weekly'
@@ -81,9 +77,6 @@ export const tenantNotificationSettings = pgTable(
     roleKeys: jsonb('role_keys').$type<string[]>().default([]).notNull(),
     // Specific extra recipients (Better-Auth user ids), merged on top of roles.
     userIds: jsonb('user_ids').$type<string[]>().default([]).notNull(),
-    // For recurring "still overdue / still due" scans: re-alert at most this
-    // often (hours). null => the scan's built-in default window.
-    reminderHours: integer('reminder_hours'),
     // Routing (Phase 2): which channels this category may use. The notify worker
     // intersects this with each user's per-channel preferences. Empty => the
     // emitter's built-in channel set.

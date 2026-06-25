@@ -13,22 +13,17 @@ export type CategorySettingInput = {
   enabled: boolean
   roleKeys: string[]
   userIds: string[]
-  reminderHours: number | null
   channels: string[]
   escalation: EscalationStep[]
 }
 
 export type PolicyInput = {
-  unifiedDetection: boolean
   digestMode: 'off' | 'daily' | 'weekly'
   digestHourUtc: number
   quietHours: { start: number; end: number } | null
 }
 
 const VALID_CHANNELS = ['in_app', 'email', 'push', 'sms']
-
-const clampHours = (h: number | null): number | null =>
-  h == null || !Number.isFinite(h) ? null : Math.min(8760, Math.max(1, Math.round(h)))
 
 const cleanEscalation = (steps: EscalationStep[]): EscalationStep[] =>
   steps
@@ -54,7 +49,6 @@ export async function saveNotificationSettings(items: CategorySettingInput[]) {
     for (const item of items) {
       const roleKeys = [...new Set(item.roleKeys.filter(Boolean))]
       const userIds = [...new Set(item.userIds.filter(Boolean))]
-      const reminderHours = clampHours(item.reminderHours)
       const channels = item.channels.filter((c) => VALID_CHANNELS.includes(c))
       const escalation = cleanEscalation(item.escalation)
       await tx
@@ -65,7 +59,6 @@ export async function saveNotificationSettings(items: CategorySettingInput[]) {
           enabled: item.enabled,
           roleKeys,
           userIds,
-          reminderHours,
           channels,
           escalation,
         })
@@ -75,7 +68,6 @@ export async function saveNotificationSettings(items: CategorySettingInput[]) {
             enabled: item.enabled,
             roleKeys,
             userIds,
-            reminderHours,
             channels,
             escalation,
             updatedAt: new Date(),
@@ -117,7 +109,6 @@ export async function saveNotificationPolicy(input: PolicyInput) {
       await tx
         .update(tenantNotificationPolicy)
         .set({
-          unifiedDetection: input.unifiedDetection,
           digestMode,
           digestHourUtc,
           quietHours,
@@ -127,7 +118,6 @@ export async function saveNotificationPolicy(input: PolicyInput) {
     } else {
       await tx.insert(tenantNotificationPolicy).values({
         tenantId: ctx.tenantId,
-        unifiedDetection: input.unifiedDetection,
         digestMode,
         digestHourUtc,
         quietHours,
