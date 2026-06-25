@@ -35,7 +35,6 @@ async function saveEquipment(formData: FormData) {
       | 'retired',
     currentSiteOrgUnitId: String(formData.get('currentSiteOrgUnitId') ?? '').trim() || null,
     currentHolderPersonId: String(formData.get('currentHolderPersonId') ?? '').trim() || null,
-    billingRateCategory: String(formData.get('billingRateCategory') ?? '').trim() || null,
     purchaseDate: String(formData.get('purchaseDate') ?? '').trim() || null,
     warrantyExpiresOn: String(formData.get('warrantyExpiresOn') ?? '').trim() || null,
     requiresPreUseInspection: formData.get('requiresPreUseInspection') === 'on',
@@ -114,9 +113,6 @@ export async function EquipmentEditTab({ itemId }: { itemId: string }) {
                   </option>
                 ))}
               </Select>
-            </Field>
-            <Field label="Billing category">
-              <Input name="billingRateCategory" defaultValue={item.billingRateCategory ?? ''} />
             </Field>
             <Field label="Current site">
               <Select name="currentSiteOrgUnitId" defaultValue={item.currentSiteOrgUnitId ?? ''}>

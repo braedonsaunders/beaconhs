@@ -131,14 +131,11 @@ export const equipmentItems = pgTable(
     missingLastSeenLocation: text('missing_last_seen_location'),
     missingNotes: text('missing_notes'),
     missingFoundAt: timestamp('missing_found_at', { withTimezone: true }),
-    billingRateCategory: text('billing_rate_category'),
     // ----- Oil-change schedule (drives upcoming-oil-change report) -----
     requiresOilChange: boolean('requires_oil_change').default(false).notNull(),
     oilChangeIntervalMonths: integer('oil_change_interval_months'),
     lastOilChangeOn: date('last_oil_change_on'),
     nextOilChangeDue: date('next_oil_change_due'),
-    // ----- Purchase economics (drives ROI report) -----
-    purchasePrice: numeric('purchase_price', { precision: 12, scale: 2 }),
     // ----- Bulk-QR support -----
     // Token stamped on bulk-QR sheets so the same printed page can be
     // re-issued without regenerating each label. Distinct from `qrToken`

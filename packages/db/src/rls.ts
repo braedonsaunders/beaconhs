@@ -102,8 +102,6 @@ export const TENANT_SCOPED_TABLES = [
   'equipment_location_history',
   'equipment_work_orders',
   'truck_log_entries',
-  'equipment_rates',
-  'equipment_expenses',
   'equipment_log_entries',
   'equipment_inspection_types',
   'equipment_inspection_groups',

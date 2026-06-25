@@ -67,7 +67,6 @@ export default async function TruckLogSummaryPage({
         id: equipmentItems.id,
         assetTag: equipmentItems.assetTag,
         name: equipmentItems.name,
-        billing: equipmentItems.billingRateCategory,
         category: equipmentTypes.category,
         typeName: equipmentTypes.name,
       })

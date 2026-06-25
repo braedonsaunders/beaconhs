@@ -5,7 +5,6 @@ import { and, asc, desc, eq, sql } from 'drizzle-orm'
 import {
   Activity,
   ArrowLeftRight,
-  BarChart3,
   ClipboardCheck,
   FileText,
   LogIn,
@@ -49,11 +48,9 @@ import { pickString } from '@/lib/list-params'
 import {
   attachments,
   equipmentCheckouts,
-  equipmentExpenses,
   equipmentItems,
   equipmentLocationHistory,
   equipmentLogEntries,
-  equipmentRates,
   equipmentTypes,
   equipmentWorkOrders,
   formResponses,
@@ -84,25 +81,12 @@ const TABS = [
   'location',
   'certificates',
   'inspections',
-  'rates',
-  'expenses',
   'log',
   'checkouts',
   'activity',
   'edit',
 ] as const
 type Tab = (typeof TABS)[number]
-
-function fmtMoney(value: string | number | null | undefined, currency = 'CAD'): string {
-  if (value === null || value === undefined || value === '') return '—'
-  const n = Number(value)
-  if (Number.isNaN(n)) return '—'
-  return new Intl.NumberFormat('en-CA', {
-    style: 'currency',
-    currency,
-    maximumFractionDigits: 2,
-  }).format(n)
-}
 
 // ---------------- Server actions ----------------
 
@@ -261,49 +245,6 @@ async function createWorkOrder(formData: FormData) {
     after: { reference: ref, summary, status },
   })
   revalidatePath(`/equipment/${itemId}`)
-}
-
-async function addExpense(formData: FormData) {
-  'use server'
-  const ctx = await requireRequestContext()
-  const itemId = String(formData.get('itemId') ?? '').trim()
-  const incurredOn = String(formData.get('incurredOn') ?? '').trim()
-  const category = String(formData.get('category') ?? 'other').trim() || 'other'
-  const vendor = String(formData.get('vendor') ?? '').trim() || null
-  const description = String(formData.get('description') ?? '').trim() || null
-  const amount = String(formData.get('amount') ?? '').trim()
-  if (!itemId || !incurredOn || !amount) return
-  const amountNum = Number(amount)
-  if (!Number.isFinite(amountNum)) return
-
-  const inserted = await ctx.db(async (tx) => {
-    const [row] = await tx
-      .insert(equipmentExpenses)
-      .values({
-        tenantId: ctx.tenantId,
-        equipmentItemId: itemId,
-        incurredOn,
-        category,
-        vendor,
-        description,
-        amount: amountNum.toFixed(2),
-        createdByTenantUserId: ctx.membership?.id,
-      })
-      .returning({ id: equipmentExpenses.id })
-    return row
-  })
-  if (inserted?.id) {
-    await recordAudit(ctx, {
-      entityType: 'equipment_expense',
-      entityId: inserted.id,
-      action: 'create',
-      summary: `Logged ${amountNum.toFixed(2)} expense (${category})`,
-      after: { itemId, incurredOn, category, amount: amountNum, vendor },
-    })
-  }
-  revalidatePath(`/equipment/${itemId}`)
-  // Strip the ?drawer param by redirecting to a clean URL (keep active tab).
-  redirect(`/equipment/${itemId}?tab=expenses`)
 }
 
 async function addLogEntry(formData: FormData) {
@@ -605,8 +546,6 @@ export default async function EquipmentDetailPage({
       assignees,
       certAttachments,
       inspectionResponses,
-      rateRow,
-      expenseRows,
       logRows,
       checkoutRows,
     ] = await Promise.all([
@@ -665,17 +604,6 @@ export default async function EquipmentDetailPage({
         )
         .orderBy(desc(formResponses.submittedAt))
         .limit(50),
-      // Rate for this item's type (one-row-per-type).
-      row.type
-        ? tx.select().from(equipmentRates).where(eq(equipmentRates.typeId, row.type.id)).limit(1)
-        : Promise.resolve([]),
-      // Per-item expense ledger.
-      tx
-        .select()
-        .from(equipmentExpenses)
-        .where(eq(equipmentExpenses.equipmentItemId, id))
-        .orderBy(desc(equipmentExpenses.incurredOn))
-        .limit(100),
       // Per-item freeform log.
       tx
         .select({ log: equipmentLogEntries, person: people })
@@ -704,8 +632,6 @@ export default async function EquipmentDetailPage({
       assignees,
       certAttachments,
       inspectionResponses,
-      rate: rateRow[0] ?? null,
-      expenses: expenseRows,
       logEntries: logRows,
       checkouts: checkoutRows,
     }
@@ -725,20 +651,10 @@ export default async function EquipmentDetailPage({
     assignees,
     certAttachments,
     inspectionResponses,
-    rate,
-    expenses,
     logEntries,
     checkouts,
   } = data
   const openCheckout = checkouts.find((c) => c.co.returnedAt === null) ?? null
-  const expensesYtd = expenses
-    .filter((e) => {
-      const yearStart = new Date()
-      yearStart.setMonth(0, 1)
-      yearStart.setHours(0, 0, 0, 0)
-      return new Date(e.incurredOn) >= yearStart
-    })
-    .reduce((s, e) => s + (Number(e.amount) || 0), 0)
 
   const openWOs = workOrders.filter((w) => !['closed', 'cancelled'].includes(w.status))
   const basePath = `/equipment/${id}`
@@ -784,12 +700,6 @@ export default async function EquipmentDetailPage({
                 <Button variant="outline">
                   <Truck size={14} />
                   Log entry
-                </Button>
-              </Link>
-              <Link href={`/equipment/${id}/roi`}>
-                <Button variant="outline">
-                  <BarChart3 size={14} />
-                  View ROI
                 </Button>
               </Link>
               <Link href={`/equipment/${id}/qr`}>
@@ -873,7 +783,6 @@ export default async function EquipmentDetailPage({
                   <SidebarRow label="Holder">
                     {holder ? `${holder.firstName} ${holder.lastName}` : '—'}
                   </SidebarRow>
-                  <SidebarRow label="Billing">{item.billingRateCategory ?? '—'}</SidebarRow>
                   <SidebarRow label="Purchased">{item.purchaseDate ?? '—'}</SidebarRow>
                   <SidebarRow label="Warranty">{item.warrantyExpiresOn ?? '—'}</SidebarRow>
                 </div>
@@ -897,8 +806,6 @@ export default async function EquipmentDetailPage({
                   label: 'Inspections',
                   count: inspectionResponses.length,
                 },
-                { key: 'rates', label: 'Rates' },
-                { key: 'expenses', label: 'Expenses', count: expenses.length },
                 { key: 'log', label: 'Log', count: logEntries.length },
                 { key: 'checkouts', label: 'Check-outs', count: checkouts.length },
                 { key: 'activity', label: 'Activity' },
@@ -941,7 +848,6 @@ export default async function EquipmentDetailPage({
                       },
                       { label: 'Purchased', value: item.purchaseDate ?? '—' },
                       { label: 'Warranty expires', value: item.warrantyExpiresOn ?? '—' },
-                      { label: 'Billing category', value: item.billingRateCategory ?? '—' },
                       {
                         label: 'Last seen',
                         value: item.lastSeenAt ? new Date(item.lastSeenAt).toLocaleString() : '—',
@@ -1323,116 +1229,6 @@ export default async function EquipmentDetailPage({
                 </Card>
               ) : null}
 
-              {active === 'rates' ? (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Rates {type ? `(${type.name})` : ''}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {rate ? (
-                      <div className="space-y-3">
-                        <DetailGrid
-                          rows={[
-                            { label: 'Hourly', value: fmtMoney(rate.hourly, rate.currency) },
-                            { label: 'Daily', value: fmtMoney(rate.daily, rate.currency) },
-                            { label: 'Weekly', value: fmtMoney(rate.weekly, rate.currency) },
-                            { label: 'Monthly', value: fmtMoney(rate.monthly, rate.currency) },
-                            { label: 'Currency', value: rate.currency },
-                            { label: 'Category', value: rate.category ?? '—' },
-                          ]}
-                        />
-                        <div>
-                          <Link
-                            href="/equipment/rates"
-                            className="text-xs text-teal-700 hover:underline"
-                          >
-                            Edit rate matrix →
-                          </Link>
-                        </div>
-                      </div>
-                    ) : (
-                      <EmptyState
-                        title="No rate set for this type"
-                        description={
-                          type
-                            ? `Set hourly / daily / weekly / monthly rates for ${type.name}.`
-                            : 'Assign this item to an equipment type first.'
-                        }
-                        action={
-                          <Link href="/equipment/rates">
-                            <Button size="sm">Open rate matrix</Button>
-                          </Link>
-                        }
-                      />
-                    )}
-                  </CardContent>
-                </Card>
-              ) : null}
-
-              {active === 'expenses' ? (
-                <div className="space-y-4">
-                  <Card>
-                    <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
-                      <CardTitle>
-                        Expenses ({expenses.length}) ·{' '}
-                        <span className="text-sm font-normal text-slate-500">
-                          {fmtMoney(expensesYtd.toFixed(2))} YTD
-                        </span>
-                      </CardTitle>
-                      <Link href={`${basePath}?tab=expenses&drawer=add-expense` as any}>
-                        <Button size="sm">
-                          <Plus size={14} /> Add expense
-                        </Button>
-                      </Link>
-                    </CardHeader>
-                    <CardContent>
-                      {expenses.length === 0 ? (
-                        <EmptyState
-                          title="No expenses logged"
-                          description="Log fuel, repairs, parts, and registration against this item."
-                          action={
-                            <Link href={`${basePath}?tab=expenses&drawer=add-expense` as any}>
-                              <Button size="sm" variant="outline">
-                                <Plus size={14} /> Add expense
-                              </Button>
-                            </Link>
-                          }
-                        />
-                      ) : (
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Date</TableHead>
-                              <TableHead>Category</TableHead>
-                              <TableHead>Vendor</TableHead>
-                              <TableHead>Description</TableHead>
-                              <TableHead className="text-right">Amount</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {expenses.map((e) => (
-                              <TableRow key={e.id}>
-                                <TableCell className="font-mono text-xs">{e.incurredOn}</TableCell>
-                                <TableCell>
-                                  <Badge variant="secondary">{e.category}</Badge>
-                                </TableCell>
-                                <TableCell className="text-slate-600">{e.vendor ?? '—'}</TableCell>
-                                <TableCell className="text-slate-600">
-                                  {e.description ?? '—'}
-                                </TableCell>
-                                <TableCell className="text-right font-medium">
-                                  {fmtMoney(e.amount, e.currency)}
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      )}
-                    </CardContent>
-                  </Card>
-                </div>
-              ) : null}
-
               {active === 'log' ? (
                 <div className="space-y-4">
                   <Card>
@@ -1636,58 +1432,6 @@ export default async function EquipmentDetailPage({
        * Closing (X / backdrop / Esc) pops back to closeHref preserving the
        * active tab.
        */}
-      <UrlDrawer
-        open={drawerKey === 'add-expense'}
-        closeHref={closeHref}
-        title="Log expense"
-        description="Vendor invoice, fuel, repair, parts, etc — recorded against this asset's ledger."
-        size="md"
-        footer={
-          <Button type="submit" form="equipment-add-expense-form">
-            <Plus size={14} /> Log expense
-          </Button>
-        }
-      >
-        <form
-          id="equipment-add-expense-form"
-          action={addExpense}
-          className="grid grid-cols-1 gap-3 sm:grid-cols-2"
-        >
-          <input type="hidden" name="itemId" value={id} />
-          <Field label="Date" required>
-            <Input
-              name="incurredOn"
-              type="date"
-              required
-              defaultValue={new Date().toISOString().slice(0, 10)}
-            />
-          </Field>
-          <Field label="Category" required>
-            <Select name="category" defaultValue="other">
-              <option value="fuel">Fuel</option>
-              <option value="repair">Repair</option>
-              <option value="maintenance">Maintenance</option>
-              <option value="insurance">Insurance</option>
-              <option value="registration">Registration</option>
-              <option value="parts">Parts</option>
-              <option value="tires">Tires</option>
-              <option value="oil_change">Oil change</option>
-              <option value="inspection">Inspection</option>
-              <option value="other">Other</option>
-            </Select>
-          </Field>
-          <Field label="Amount" required>
-            <Input name="amount" type="number" step="0.01" min="0" required />
-          </Field>
-          <Field label="Vendor">
-            <Input name="vendor" placeholder="e.g. Acme Auto" />
-          </Field>
-          <Field label="Description" className="sm:col-span-2">
-            <Input name="description" placeholder="Optional short description" />
-          </Field>
-        </form>
-      </UrlDrawer>
-
       <UrlDrawer
         open={drawerKey === 'add-log'}
         closeHref={closeHref}

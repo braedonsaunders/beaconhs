@@ -29,7 +29,6 @@ export async function GET(req: NextRequest) {
         id: equipmentItems.id,
         assetTag: equipmentItems.assetTag,
         name: equipmentItems.name,
-        billing: equipmentItems.billingRateCategory,
         category: equipmentTypes.category,
         typeName: equipmentTypes.name,
       })
@@ -87,7 +86,6 @@ export async function GET(req: NextRequest) {
   const headers = [
     'Asset tag',
     'Name',
-    'Billing category',
     ...MONTHS.flatMap((m) => [`${m} km`, `${m} hours`, `${m} manpower`]),
     'Total km',
     'Total hours',
@@ -99,7 +97,7 @@ export async function GET(req: NextRequest) {
     let totalKm = 0
     let totalHours = 0
     let totalMan = 0
-    const cells: (string | number)[] = [t.assetTag, t.name, t.billing ?? '']
+    const cells: (string | number)[] = [t.assetTag, t.name]
     for (let i = 1; i <= 12; i++) {
       const m = months.get(i)
       const km = m?.km ?? 0

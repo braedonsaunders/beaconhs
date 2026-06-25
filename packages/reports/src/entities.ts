@@ -162,7 +162,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     label: 'Equipment fleet',
     category: 'equipment',
     description:
-      'One row per asset with type, current site/holder, YTD + all-time usage and cost, and ROI (revenue − expenses − purchase). Drives the fleet, ROI, and upcoming inspection/oil-change reports.',
+      'One row per asset with type, current site/holder, and YTD + all-time usage (hours/km). Operational only — equipment financials live in the admin app. Drives the fleet and upcoming inspection/oil-change reports.',
     // Join-baked view (packages/db/src/views.ts) — RLS flows through base tables.
     table: 'report_equipment_fleet',
     columns: [
@@ -183,39 +183,12 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'next_oil_change_due', label: 'Next oil change', kind: 'date' },
       { key: 'oil_change_interval_months', label: 'Oil change interval (mo.)', kind: 'number' },
       { key: 'purchase_date', label: 'Purchase date', kind: 'date' },
-      { key: 'purchase_price', label: 'Purchase price', kind: 'number' },
-      { key: 'hourly_rate', label: 'Hourly rate', kind: 'number' },
       { key: 'hours_ytd', label: 'Hours YTD', kind: 'number' },
       { key: 'km_ytd', label: 'Km YTD', kind: 'number' },
-      { key: 'expenses_ytd', label: 'Expenses YTD', kind: 'number' },
       { key: 'hours_total', label: 'Hours (all-time)', kind: 'number' },
-      { key: 'expenses_total', label: 'Expenses (all-time)', kind: 'number' },
-      { key: 'revenue_total', label: 'Revenue (all-time)', kind: 'number' },
-      { key: 'net_total', label: 'Net / ROI', kind: 'number' },
       { key: 'current_site_org_unit_id', label: 'Current site (id)', kind: 'uuid' },
     ],
     defaultSort: { column: 'asset_tag', direction: 'asc' },
-  },
-  {
-    key: 'equipment_charges',
-    label: 'Equipment charges',
-    category: 'equipment',
-    description:
-      'Chargeable lines across the fleet — truck-log usage (rate × hours) and expense-ledger entries — dimensioned by project/customer. Summarise by project for the monthly charges rollup.',
-    // Join-baked view (packages/db/src/views.ts) — RLS flows through base tables.
-    table: 'report_equipment_charges',
-    columns: [
-      { key: 'charged_on', label: 'Charged on', kind: 'date' },
-      { key: 'project_name', label: 'Project / customer', kind: 'text' },
-      { key: 'asset_tag', label: 'Asset tag', kind: 'text' },
-      { key: 'hours', label: 'Hours', kind: 'number' },
-      { key: 'revenue', label: 'Revenue', kind: 'number' },
-      { key: 'expenses', label: 'Expenses', kind: 'number' },
-      { key: 'total_chargeable', label: 'Total chargeable', kind: 'number' },
-      { key: 'equipment_item_id', label: 'Equipment (id)', kind: 'uuid' },
-      { key: 'project_org_unit_id', label: 'Project (id)', kind: 'uuid' },
-    ],
-    defaultSort: { column: 'charged_on', direction: 'desc' },
   },
   {
     key: 'ppe',

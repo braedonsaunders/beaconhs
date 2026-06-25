@@ -16,10 +16,8 @@ import {
   documentReferenceTypes,
   documentReferenceCategories,
   equipmentCategories,
-  equipmentExpenses,
   equipmentItems,
   equipmentLogEntries,
-  equipmentRates,
   equipmentTypes,
   equipmentWorkOrders,
   equipmentLocationHistory,
@@ -545,8 +543,8 @@ async function main() {
     // Equipment reports — migrated out of the retired native /equipment/reports
     // pages into the global engine. Upserted (not insert-once) so the upgraded
     // definitions reach already-seeded tenants too. They read the join-baked
-    // report_equipment_fleet / report_equipment_charges views, so type/site/holder
-    // names, YTD + all-time usage, ROI, and per-project charges all resolve.
+    // report_equipment_fleet view, so type/site/holder names and YTD usage all
+    // resolve. Operational only — equipment financials live in a separate financial system.
     await tx
       .insert(reportDefinitions)
       .values([
@@ -555,7 +553,7 @@ async function main() {
           kind: 'built_in',
           name: 'Equipment — Fleet',
           description:
-            'In-service assets with type, current site/holder, YTD usage and cost, and next annual inspection — the fleet register.',
+            'In-service assets with type, current site/holder, YTD usage, and next annual inspection — the fleet register.',
           category: 'equipment',
           queryKind: 'custom_query',
           customQuery: {
@@ -570,7 +568,6 @@ async function main() {
               'holder_name',
               'hours_ytd',
               'km_ytd',
-              'expenses_ytd',
               'last_annual_inspection_on',
               'next_annual_inspection_due',
             ],
@@ -579,32 +576,6 @@ async function main() {
               rules: [{ field: 'status', op: 'eq', value: 'in_service' }],
             },
             sort: { column: 'asset_tag', direction: 'asc' },
-            limit: 5000,
-          },
-        },
-        {
-          slug: 'legacy_equipment_roi',
-          kind: 'built_in',
-          name: 'Equipment — Return on investment',
-          description:
-            'Revenue (type rate × all-time hours) minus expenses minus purchase price per asset, highest net first.',
-          category: 'equipment',
-          queryKind: 'custom_query',
-          customQuery: {
-            entity: 'equipment_fleet',
-            mode: 'rows',
-            columns: [
-              'asset_tag',
-              'name',
-              'equipment_type',
-              'hours_total',
-              'hourly_rate',
-              'revenue_total',
-              'expenses_total',
-              'purchase_price',
-              'net_total',
-            ],
-            sort: { column: 'net_total', direction: 'desc' },
             limit: 5000,
           },
         },
@@ -667,29 +638,6 @@ async function main() {
               ],
             },
             sort: { column: 'next_oil_change_due', direction: 'asc' },
-            limit: 5000,
-          },
-        },
-        {
-          slug: 'legacy_equipment_charges',
-          kind: 'built_in',
-          name: 'Equipment — Charges by project',
-          description:
-            'Per-project rollup of expenses plus type rate × usage hours across the fleet. Filter “Charged on” for a billing period.',
-          category: 'equipment',
-          queryKind: 'custom_query',
-          customQuery: {
-            entity: 'equipment_charges',
-            mode: 'summarize',
-            columns: [],
-            breakouts: [{ column: 'project_name' }],
-            measures: [
-              { fn: 'sum', column: 'total_chargeable', label: 'Total chargeable' },
-              { fn: 'sum', column: 'revenue', label: 'Revenue' },
-              { fn: 'sum', column: 'expenses', label: 'Expenses' },
-              { fn: 'sum', column: 'hours', label: 'Hours' },
-              { fn: 'count_distinct', column: 'equipment_item_id', label: 'Equipment used' },
-            ],
             limit: 5000,
           },
         },
@@ -1118,7 +1066,6 @@ async function main() {
             ? isoDate(new Date(today.getTime() + 240 * dayMs))
             : null,
           lastPreUseInspectionAt: new Date(today.getTime() - 2 * dayMs),
-          billingRateCategory: isTool ? 'tools' : 'vehicles',
         })
         .returning()
       equipmentIds.push(eq!.id)
@@ -1931,8 +1878,8 @@ async function main() {
     // --- Inspection records (5 sample records against the seeded types) -
     await seedInspectionRecords(tx, tenant.id)
 
-    // --- Equipment rates + expenses + log + checkouts -------------------
-    await seedEquipmentRatesAndExpenses(tx, tenant.id)
+    // --- Equipment categories + sample log entries ----------------------
+    await seedEquipmentCategoriesAndLogs(tx, tenant.id)
 
     // --- HazID / JSHA library (hazards, sets, tasks, assessment types) --
     await seedHazidLibraries(tx, tenant.id)
@@ -2387,7 +2334,7 @@ export async function seedInspectionTypes(tx: any, tenantId: string): Promise<vo
  * `onConflictDoNothing` or pre-checks for existing rows so re-running the
  * seed never duplicates.
  */
-async function seedEquipmentRatesAndExpenses(tx: any, tenantId: string): Promise<void> {
+async function seedEquipmentCategoriesAndLogs(tx: any, tenantId: string): Promise<void> {
   // --- Categories ----------------------------------------------------
   const categoryDefs = [
     { slug: 'vehicles', name: 'Vehicles', description: 'Trucks, vans, pickups', sortOrder: 1 },
@@ -2407,138 +2354,13 @@ async function seedEquipmentRatesAndExpenses(tx: any, tenantId: string): Promise
       .onConflictDoNothing({ target: [equipmentCategories.tenantId, equipmentCategories.slug] })
   }
 
-  // --- Rates (one row per type) --------------------------------------
-  const types = await tx
-    .select({ id: equipmentTypes.id, name: equipmentTypes.name })
-    .from(equipmentTypes)
-    .where(eq(equipmentTypes.tenantId, tenantId))
-  const rateDefs: {
-    match: RegExp
-    hourly: string
-    daily: string
-    weekly: string
-    monthly: string
-  }[] = [
-    {
-      match: /tool|drill|hammer/i,
-      hourly: '5.00',
-      daily: '40.00',
-      weekly: '180.00',
-      monthly: '600.00',
-    },
-    {
-      match: /vehicle|truck|pickup|van/i,
-      hourly: '35.00',
-      daily: '275.00',
-      weekly: '1250.00',
-      monthly: '4250.00',
-    },
-    {
-      match: /lift|scissor|aerial/i,
-      hourly: '85.00',
-      daily: '650.00',
-      weekly: '2750.00',
-      monthly: '8500.00',
-    },
-  ]
-  let ratesCreated = 0
-  for (const t of types) {
-    const def = rateDefs.find((d) => d.match.test(t.name)) ?? rateDefs[0]
-    const [existing] = await tx
-      .select({ id: equipmentRates.id })
-      .from(equipmentRates)
-      .where(eq(equipmentRates.typeId, t.id))
-      .limit(1)
-    if (existing) continue
-    await tx.insert(equipmentRates).values({
-      tenantId,
-      typeId: t.id,
-      hourly: def!.hourly,
-      daily: def!.daily,
-      weekly: def!.weekly,
-      monthly: def!.monthly,
-      currency: 'CAD',
-    })
-    ratesCreated += 1
-  }
-
-  // --- Expenses (5 entries spread across recent months) ---------------
+  // --- One sample log entry per item (idempotent) ---------------------
   const items = await tx
     .select({ id: equipmentItems.id, name: equipmentItems.name })
     .from(equipmentItems)
     .where(eq(equipmentItems.tenantId, tenantId))
     .limit(5)
-  const expenseDefs = [
-    {
-      offsetDays: 7,
-      category: 'fuel',
-      vendor: 'Petro-Canada',
-      description: 'Weekly fuel-up',
-      amount: '125.40',
-    },
-    {
-      offsetDays: 21,
-      category: 'repair',
-      vendor: 'AAA Tire & Auto',
-      description: 'Replaced front-left tire',
-      amount: '320.00',
-    },
-    {
-      offsetDays: 45,
-      category: 'insurance',
-      vendor: 'Intact Insurance',
-      description: 'Quarterly premium installment',
-      amount: '880.00',
-    },
-    {
-      offsetDays: 60,
-      category: 'oil_change',
-      vendor: 'Mr Lube',
-      description: 'Synthetic oil change + filter',
-      amount: '95.50',
-    },
-    {
-      offsetDays: 90,
-      category: 'registration',
-      vendor: 'ServiceOntario',
-      description: 'Annual plate renewal',
-      amount: '120.00',
-    },
-  ]
   const dayMs = 24 * 60 * 60 * 1000
-  let expensesCreated = 0
-  for (let i = 0; i < Math.min(items.length, expenseDefs.length); i++) {
-    const item = items[i]
-    const def = expenseDefs[i]
-    if (!item || !def) continue
-    // Pre-check to keep idempotent (vendor + amount + item is unique enough
-    // for the seed corpus).
-    const [existing] = await tx
-      .select({ id: equipmentExpenses.id })
-      .from(equipmentExpenses)
-      .where(
-        and(
-          eq(equipmentExpenses.equipmentItemId, item.id),
-          eq(equipmentExpenses.vendor, def.vendor),
-          eq(equipmentExpenses.amount, def.amount),
-        ),
-      )
-      .limit(1)
-    if (existing) continue
-    await tx.insert(equipmentExpenses).values({
-      tenantId,
-      equipmentItemId: item.id,
-      incurredOn: new Date(Date.now() - def.offsetDays * dayMs).toISOString().slice(0, 10),
-      category: def.category,
-      vendor: def.vendor,
-      description: def.description,
-      amount: def.amount,
-      currency: 'CAD',
-    })
-    expensesCreated += 1
-  }
-
-  // --- One sample log entry per item (idempotent) ---------------------
   let logsCreated = 0
   for (const item of items) {
     const [existing] = await tx
@@ -2558,9 +2380,7 @@ async function seedEquipmentRatesAndExpenses(tx: any, tenantId: string): Promise
     logsCreated += 1
   }
 
-  console.log(
-    `  · equipment rates/expenses: ${ratesCreated} rates, ${expensesCreated} expenses, ${logsCreated} log entries`,
-  )
+  console.log(`  · equipment categories + ${logsCreated} sample log entries`)
 }
 
 /**

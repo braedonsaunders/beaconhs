@@ -150,7 +150,7 @@ export default async function NewTruckLogEntryPage({
         <DetailHeader
           back={{ href: '/equipment/truck-log', label: 'Back to truck log' }}
           title="New truck log entry"
-          subtitle="One row per truck per day. Odometer in/out drives kilometres for billing."
+          subtitle="One row per truck per day. Odometer in/out captures kilometres driven."
         />
         <Card>
           <CardContent className="pt-6">
@@ -216,7 +216,7 @@ export default async function NewTruckLogEntryPage({
                 <Textarea
                   name="notes"
                   rows={3}
-                  placeholder="Anything noteworthy for billing or maintenance."
+                  placeholder="Anything noteworthy for this trip or maintenance."
                 />
               </Field>
               <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-4">

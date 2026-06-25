@@ -73,7 +73,6 @@ export default async function TruckLogPage({
         id: equipmentItems.id,
         assetTag: equipmentItems.assetTag,
         name: equipmentItems.name,
-        billing: equipmentItems.billingRateCategory,
         category: equipmentTypes.category,
         typeName: equipmentTypes.name,
       })
@@ -126,7 +125,7 @@ export default async function TruckLogPage({
           <EquipmentSubNav active="truck-log" />
           <PageHeader
             title="Truck log"
-            description="Per-day per-truck odometer, manpower, and hours. Powers the monthly billing summary."
+            description="Per-day per-truck odometer, kilometres, manpower, and hours on site."
             actions={
               <div className="flex items-center gap-2">
                 <Link href={'/equipment/truck-log/summary' as any}>

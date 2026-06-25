@@ -5,6 +5,14 @@
 // so rows are tenant-scoped by the app.tenant_id GUC exactly as usual.
 
 export const REPORT_VIEWS_SQL: string[] = [
+  // report_equipment_fleet shed its financial columns and report_equipment_charges
+  // was removed entirely (equipment financials moved to a separate financial system).
+  // CREATE OR REPLACE can neither shrink a view's column set nor drop a removed
+  // view, so drop both up front every migrate (idempotent); the operational fleet view
+  // is recreated further down.
+  `DROP VIEW IF EXISTS report_equipment_charges;
+   DROP VIEW IF EXISTS report_equipment_fleet`,
+
   // Externally-issued skills & certifications per person (the shape the old
   // hardcoded CWB welder report produced — now any tenant user can build /
   // clone reports over it).
@@ -111,12 +119,12 @@ export const REPORT_VIEWS_SQL: string[] = [
    LEFT JOIN hrs ON hrs.tenant_id = m.tenant_id AND hrs.month = m.month`,
 
   // Fleet register — one row per (non-deleted) asset with type/site/holder names
-  // baked in, the hourly rate, YTD + all-time usage (hours/km) and cost, and ROI
-  // (revenue = rate × all-time hours; net = revenue − expenses − purchase). This
-  // is everything the retired native Equipment reports (Fleet, ROI, Upcoming
-  // inspections, Upcoming oil changes) rendered, now queryable by the engine.
-  // All base tables are FORCE-RLS, so every row is tenant-scoped by app.tenant_id;
-  // the explicit tenant equality on each join keeps the projection within a tenant.
+  // baked in plus YTD + all-time usage (hours/km). OPERATIONAL ONLY: equipment
+  // financials (rates, expenses, purchase price, ROI, project charges) are owned by
+  // a separate financial system, not this app. Drives the Fleet, Upcoming-inspection
+  // and Upcoming-oil-change reports. All base tables are FORCE-RLS, so every row is
+  // tenant-scoped by app.tenant_id; the explicit tenant equality on each join keeps
+  // the projection within a tenant.
   `CREATE OR REPLACE VIEW report_equipment_fleet AS
    SELECT
      e.id                                 AS id,
@@ -140,20 +148,11 @@ export const REPORT_VIEWS_SQL: string[] = [
      e.next_oil_change_due                AS next_oil_change_due,
      e.oil_change_interval_months         AS oil_change_interval_months,
      e.purchase_date                      AS purchase_date,
-     COALESCE(e.purchase_price, 0)        AS purchase_price,
-     COALESCE(r.hourly, 0)                AS hourly_rate,
      usage.hours_ytd                      AS hours_ytd,
      usage.km_ytd                         AS km_ytd,
-     exp.expenses_ytd                     AS expenses_ytd,
-     usage.hours_total                    AS hours_total,
-     exp.expenses_total                   AS expenses_total,
-     COALESCE(r.hourly, 0) * usage.hours_total                          AS revenue_total,
-     COALESCE(r.hourly, 0) * usage.hours_total
-       - exp.expenses_total
-       - COALESCE(e.purchase_price, 0)                                  AS net_total
+     usage.hours_total                    AS hours_total
    FROM equipment_items e
    LEFT JOIN equipment_types t ON t.id = e.type_id AND t.tenant_id = e.tenant_id
-   LEFT JOIN equipment_rates r ON r.type_id = e.type_id AND r.tenant_id = e.tenant_id
    LEFT JOIN org_units site ON site.id = e.current_site_org_unit_id AND site.tenant_id = e.tenant_id
    LEFT JOIN people holder ON holder.id = e.current_holder_person_id AND holder.tenant_id = e.tenant_id
    LEFT JOIN LATERAL (
@@ -164,50 +163,5 @@ export const REPORT_VIEWS_SQL: string[] = [
      FROM truck_log_entries tl
      WHERE tl.equipment_item_id = e.id AND tl.tenant_id = e.tenant_id
    ) usage ON true
-   LEFT JOIN LATERAL (
-     SELECT
-       COALESCE(SUM(ex.amount) FILTER (WHERE ex.incurred_on >= date_trunc('year', CURRENT_DATE)::date), 0) AS expenses_ytd,
-       COALESCE(SUM(ex.amount), 0) AS expenses_total
-     FROM equipment_expenses ex
-     WHERE ex.equipment_item_id = e.id AND ex.tenant_id = e.tenant_id
-   ) exp ON true
    WHERE e.deleted_at IS NULL`,
-
-  // Chargeable lines across the fleet — one row per billable event, dimensioned by
-  // the project/customer org unit it belongs to: truck-log usage (revenue = type
-  // rate × hours on site) and expense-ledger entries (re-charged amounts). Summarise
-  // by project to rebuild the monthly Charges report; filter charged_on for a period.
-  `CREATE OR REPLACE VIEW report_equipment_charges AS
-   SELECT
-     ('usage:' || tl.id::text)              AS id,
-     tl.tenant_id                           AS tenant_id,
-     tl.entry_date                          AS charged_on,
-     tl.site_org_unit_id                    AS project_org_unit_id,
-     ou.name                                AS project_name,
-     tl.equipment_item_id                   AS equipment_item_id,
-     e.asset_tag                            AS asset_tag,
-     COALESCE(tl.hours_on_site, 0)          AS hours,
-     COALESCE(r.hourly, 0) * COALESCE(tl.hours_on_site, 0) AS revenue,
-     0::numeric                             AS expenses,
-     COALESCE(r.hourly, 0) * COALESCE(tl.hours_on_site, 0) AS total_chargeable
-   FROM truck_log_entries tl
-   JOIN equipment_items e ON e.id = tl.equipment_item_id AND e.tenant_id = tl.tenant_id
-   LEFT JOIN equipment_rates r ON r.type_id = e.type_id AND r.tenant_id = tl.tenant_id
-   LEFT JOIN org_units ou ON ou.id = tl.site_org_unit_id AND ou.tenant_id = tl.tenant_id
-   UNION ALL
-   SELECT
-     ('expense:' || ex.id::text)            AS id,
-     ex.tenant_id                           AS tenant_id,
-     ex.incurred_on                         AS charged_on,
-     ex.charged_to_org_unit_id              AS project_org_unit_id,
-     ou.name                                AS project_name,
-     ex.equipment_item_id                   AS equipment_item_id,
-     e.asset_tag                            AS asset_tag,
-     0::numeric                             AS hours,
-     0::numeric                             AS revenue,
-     COALESCE(ex.amount, 0)                 AS expenses,
-     COALESCE(ex.amount, 0)                 AS total_chargeable
-   FROM equipment_expenses ex
-   JOIN equipment_items e ON e.id = ex.equipment_item_id AND e.tenant_id = ex.tenant_id
-   LEFT JOIN org_units ou ON ou.id = ex.charged_to_org_unit_id AND ou.tenant_id = ex.tenant_id`,
 ]
