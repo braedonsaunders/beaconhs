@@ -1,10 +1,10 @@
 // Per-app records list — the "home" of a Builder app when pinned to the
 // sidebar. Behaves like a native module: a list of entries (form responses)
-// for THIS template, each row opening the entry's view page
-// (/apps/responses/[id]). New entries are created via the filler; editors get
-// a "Configure" link into the designer. Uses the same shared native list
-// chrome (ListPageLayout / PageHeader / Table / SortableTh / Pagination) as
-// every other records page.
+// for THIS template, each row opening the entry's record page
+// (/apps/responses/[id]). Columns, default sort and the default status filter
+// are app-configurable via recordConfig.list (designer → List tab). New entries
+// are created via the filler (guided) or a draft + record page (inline). Uses
+// the shared native list chrome (ListPageLayout / PageHeader / Table / etc.).
 
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
@@ -25,6 +25,7 @@ import {
 import { can } from '@beaconhs/tenant'
 import {
   formResponses,
+  formTemplateVersions,
   formTemplates,
   orgUnits,
   people,
@@ -53,6 +54,62 @@ const STATUS_OPTIONS = [
   { value: 'rejected', label: 'Rejected' },
 ]
 
+// --- App-configurable list (recordConfig.list, authored in designer → List) --
+
+type ListColumnConfig = { key: string; source: 'builtin' | 'field'; label?: string }
+type ListConfig = {
+  columns?: ListColumnConfig[]
+  defaultSort?: { key: string; dir: 'asc' | 'desc' }
+  defaultStatus?: string
+}
+
+const BUILTIN_LABEL: Record<string, string> = {
+  id: 'ID',
+  subject: 'Subject',
+  site: 'Site',
+  status: 'Status',
+  created_at: 'Started',
+  submitted_at: 'Submitted',
+  submittedBy: 'By',
+  pdf: 'PDF',
+}
+const SORTABLE_BUILTINS = new Set(['status', 'created_at', 'submitted_at'])
+const DEFAULT_COLUMNS: ListColumnConfig[] = [
+  { key: 'id', source: 'builtin' },
+  { key: 'subject', source: 'builtin' },
+  { key: 'site', source: 'builtin' },
+  { key: 'status', source: 'builtin' },
+  { key: 'created_at', source: 'builtin' },
+  { key: 'submitted_at', source: 'builtin' },
+  { key: 'submittedBy', source: 'builtin' },
+  { key: 'pdf', source: 'builtin' },
+]
+
+type SchemaField = {
+  id: string
+  label?: { en?: string }
+  type?: string
+  validation?: { options?: { value: string; label?: { en?: string } }[] }
+}
+
+// Lightweight cell formatter for app-field columns (scalars / selects / arrays).
+function formatListCell(field: SchemaField | undefined, raw: unknown): string {
+  if (raw == null || raw === '') return '—'
+  if (Array.isArray(raw)) return raw.map((v) => String(v)).join(', ') || '—'
+  if (typeof raw === 'object') {
+    const o = raw as Record<string, unknown>
+    if (typeof o.answer === 'string') return o.answer
+    if (typeof o.name === 'string') return o.name
+    return '—'
+  }
+  const opts = field?.validation?.options
+  if (opts) {
+    const match = opts.find((o) => o.value === raw)
+    if (match) return match.label?.en ?? String(raw)
+  }
+  return String(raw)
+}
+
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const ctx = await requireRequestContext()
@@ -75,15 +132,34 @@ export default async function AppRecordsPage({
 }) {
   const { id } = await params
   const sp = await searchParams
+  const ctx = await requireRequestContext()
+  const canConfigure = can(ctx, 'forms.template.create')
+
+  // App-level list config (recordConfig.list) seeds columns, default sort, and
+  // the default status filter — loaded before parseListParams so the configured
+  // default sort applies on first load.
+  const [cfgRow] = await ctx.db((tx) =>
+    tx
+      .select({ recordConfig: formTemplates.recordConfig })
+      .from(formTemplates)
+      .where(eq(formTemplates.id, id))
+      .limit(1),
+  )
+  const listConfig = ((cfgRow?.recordConfig as { list?: ListConfig } | null)?.list ??
+    {}) as ListConfig
+  const defaultSortKey: (typeof SORTS)[number] =
+    listConfig.defaultSort && (SORTS as readonly string[]).includes(listConfig.defaultSort.key)
+      ? (listConfig.defaultSort.key as (typeof SORTS)[number])
+      : 'submitted_at'
   const listParams = parseListParams(sp, {
-    sort: 'submitted_at',
-    dir: 'desc',
+    sort: defaultSortKey,
+    dir: listConfig.defaultSort?.dir ?? 'desc',
     perPage: 25,
     allowedSorts: SORTS,
   })
-  const statusFilter = pickString(sp.status)
-  const ctx = await requireRequestContext()
-  const canConfigure = can(ctx, 'forms.template.create')
+  // Default status filter applies on first load (no explicit ?status= param).
+  const statusFilter =
+    sp.status !== undefined ? pickString(sp.status) : listConfig.defaultStatus || undefined
 
   const result = await ctx.db(async (tx) => {
     const [tmpl] = await tx
@@ -98,6 +174,13 @@ export default async function AppRecordsPage({
       .where(eq(formTemplates.id, id))
       .limit(1)
     if (!tmpl) return null
+
+    const [ver] = await tx
+      .select({ schema: formTemplateVersions.schema })
+      .from(formTemplateVersions)
+      .where(eq(formTemplateVersions.templateId, id))
+      .orderBy(desc(formTemplateVersions.version))
+      .limit(1)
 
     const filters: SQL<unknown>[] = [eq(formResponses.templateId, id)]
     if (statusFilter) filters.push(eq(formResponses.status, statusFilter as never))
@@ -143,6 +226,7 @@ export default async function AppRecordsPage({
       .groupBy(formResponses.status)
     return {
       tmpl,
+      schema: ver?.schema ?? null,
       rows: data,
       total: Number(tot?.c ?? 0),
       statusCounts: Object.fromEntries(ss.map((x) => [x.s, Number(x.c)])),
@@ -150,7 +234,7 @@ export default async function AppRecordsPage({
   })
 
   if (!result) notFound()
-  const { tmpl, rows, total, statusCounts } = result
+  const { tmpl, schema, rows, total, statusCounts } = result
   const basePath = `/apps/templates/${id}/records`
   const newHref = `/apps/templates/${id}/fill`
   const sortProps = { basePath, currentParams: sp, dir: listParams.dir }
@@ -185,6 +269,21 @@ export default async function AppRecordsPage({
       </Button>
     </Link>
   )
+
+  // Resolve display columns from config; index app fields by id for headers + cells.
+  const columns =
+    listConfig.columns && listConfig.columns.length > 0 ? listConfig.columns : DEFAULT_COLUMNS
+  const fieldMap = new Map<string, SchemaField>()
+  if (schema) {
+    for (const sec of schema.sections) {
+      for (const f of sec.fields) fieldMap.set(f.id, f as SchemaField)
+    }
+  }
+  const colLabel = (col: ListColumnConfig) =>
+    col.label ??
+    (col.source === 'builtin'
+      ? (BUILTIN_LABEL[col.key] ?? col.key)
+      : (fieldMap.get(col.key)?.label?.en ?? col.key))
 
   return (
     <ListPageLayout
@@ -230,28 +329,22 @@ export default async function AppRecordsPage({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>ID</TableHead>
-                <TableHead>Subject</TableHead>
-                <TableHead>Site</TableHead>
-                <SortableTh {...sortProps} column="status" active={listParams.sort === 'status'}>
-                  Status
-                </SortableTh>
-                <SortableTh
-                  {...sortProps}
-                  column="created_at"
-                  active={listParams.sort === 'created_at'}
-                >
-                  Started
-                </SortableTh>
-                <SortableTh
-                  {...sortProps}
-                  column="submitted_at"
-                  active={listParams.sort === 'submitted_at'}
-                >
-                  Submitted
-                </SortableTh>
-                <TableHead>By</TableHead>
-                <TableHead className="w-16">PDF</TableHead>
+                {columns.map((col) =>
+                  col.source === 'builtin' && SORTABLE_BUILTINS.has(col.key) ? (
+                    <SortableTh
+                      key={col.key}
+                      {...sortProps}
+                      column={col.key}
+                      active={listParams.sort === col.key}
+                    >
+                      {colLabel(col)}
+                    </SortableTh>
+                  ) : (
+                    <TableHead key={col.key} className={col.key === 'pdf' ? 'w-16' : undefined}>
+                      {colLabel(col)}
+                    </TableHead>
+                  ),
+                )}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -260,50 +353,86 @@ export default async function AppRecordsPage({
                   subjectFirst || subjectLast
                     ? `${subjectLast ?? ''}${subjectLast ? ', ' : ''}${subjectFirst ?? ''}`.trim()
                     : null
-                return (
-                  <TableRow key={response.id}>
-                    <TableCell className="font-mono text-xs">
-                      <Link href={`/apps/responses/${response.id}`} className="hover:underline">
-                        {response.id.slice(0, 8)}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="text-xs text-slate-600">
-                      {subject || <span className="text-slate-400">—</span>}
-                    </TableCell>
-                    <TableCell className="text-xs text-slate-600">{site?.name ?? '—'}</TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={
-                          response.status === 'closed' || response.status === 'submitted'
-                            ? 'success'
-                            : response.status === 'rejected'
-                              ? 'destructive'
-                              : 'warning'
-                        }
-                      >
-                        {response.status.replace('_', ' ')}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-xs text-slate-600 tabular-nums">
-                      {response.createdAt ? new Date(response.createdAt).toLocaleDateString() : '—'}
-                    </TableCell>
-                    <TableCell className="text-xs text-slate-600 tabular-nums">
-                      {response.submittedAt
-                        ? new Date(response.submittedAt).toLocaleDateString()
-                        : '—'}
-                    </TableCell>
-                    <TableCell className="text-xs text-slate-600">
-                      {submittedByName ?? <span className="text-slate-400">—</span>}
-                    </TableCell>
-                    <TableCell>
-                      {response.pdfAttachmentId ? (
+                const data = (response.data as Record<string, unknown> | null) ?? {}
+                const cell = (col: ListColumnConfig) => {
+                  if (col.source === 'field') {
+                    return (
+                      <span className="text-xs text-slate-600">
+                        {formatListCell(fieldMap.get(col.key), data[col.key])}
+                      </span>
+                    )
+                  }
+                  switch (col.key) {
+                    case 'id':
+                      return (
+                        <Link
+                          href={`/apps/responses/${response.id}`}
+                          className="font-mono text-xs hover:underline"
+                        >
+                          {response.id.slice(0, 8)}
+                        </Link>
+                      )
+                    case 'subject':
+                      return (
+                        <span className="text-xs text-slate-600">
+                          {subject || <span className="text-slate-400">—</span>}
+                        </span>
+                      )
+                    case 'site':
+                      return <span className="text-xs text-slate-600">{site?.name ?? '—'}</span>
+                    case 'status':
+                      return (
+                        <Badge
+                          variant={
+                            response.status === 'closed' || response.status === 'submitted'
+                              ? 'success'
+                              : response.status === 'rejected'
+                                ? 'destructive'
+                                : 'warning'
+                          }
+                        >
+                          {response.status.replace('_', ' ')}
+                        </Badge>
+                      )
+                    case 'created_at':
+                      return (
+                        <span className="text-xs text-slate-600 tabular-nums">
+                          {response.createdAt
+                            ? new Date(response.createdAt).toLocaleDateString()
+                            : '—'}
+                        </span>
+                      )
+                    case 'submitted_at':
+                      return (
+                        <span className="text-xs text-slate-600 tabular-nums">
+                          {response.submittedAt
+                            ? new Date(response.submittedAt).toLocaleDateString()
+                            : '—'}
+                        </span>
+                      )
+                    case 'submittedBy':
+                      return (
+                        <span className="text-xs text-slate-600">
+                          {submittedByName ?? <span className="text-slate-400">—</span>}
+                        </span>
+                      )
+                    case 'pdf':
+                      return response.pdfAttachmentId ? (
                         <Badge variant="success" className="text-[10px]">
                           PDF
                         </Badge>
                       ) : (
                         <span className="text-xs text-slate-400">—</span>
-                      )}
-                    </TableCell>
+                      )
+                    default:
+                      return <span className="text-slate-400">—</span>
+                  }
+                }
+                return (
+                  <TableRow key={response.id}>
+                    {columns.map((col) => (
+                      <TableCell key={col.key}>{cell(col)}</TableCell>
+                    ))}
                   </TableRow>
                 )
               })}

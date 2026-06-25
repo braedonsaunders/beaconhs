@@ -9,6 +9,18 @@ import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import type { RecordConfig } from './_record-behavior-panel'
 
+// Records-list configuration (recordConfig.list). The CONTRACT mirrors the
+// records page (apps/templates/[id]/records) exactly — keep them in lockstep.
+//   • columns    — ordered display columns; empty/absent ⇒ default columns.
+//   • defaultSort — initial sort (sortable builtins only).
+//   • defaultStatus — initial status filter; '' = none.
+export type ListColumnConfig = { key: string; source: 'builtin' | 'field'; label?: string }
+export type ListConfig = {
+  columns?: ListColumnConfig[]
+  defaultSort?: { key: 'submitted_at' | 'created_at' | 'status'; dir: 'asc' | 'desc' }
+  defaultStatus?: string
+}
+
 // A sensible, editable default flow seeded for monitored apps so an overdue
 // check-in is never silent. Alerting stays flow-driven (per-tenant, editable in
 // the canvas) — a default, not hardcoded special treatment.
@@ -160,21 +172,34 @@ export async function updateAppOverview(args: {
 // (guided wizard vs. inline autosave) and record locking rules. Stored in the
 // jsonb `recordConfig` column; the record page reads it to choose the renderer
 // and gate lock/unlock. Mirrors updateAppOverview's assert + tx + audit pattern.
+//
+// MERGES into the existing recordConfig: only editingMode + locking are written
+// here, so the List-tab config (recordConfig.list) and any other keys survive.
 export async function updateRecordBehavior(args: {
   templateId: string
   recordConfig: RecordConfig
 }): Promise<{ ok: boolean; error?: string }> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'forms.template.create')
-  await ctx.db((tx) =>
-    tx
+  await ctx.db(async (tx) => {
+    const [row] = await tx
+      .select({ recordConfig: formTemplates.recordConfig })
+      .from(formTemplates)
+      .where(eq(formTemplates.id, args.templateId))
+      .limit(1)
+    const current = (row?.recordConfig ?? {}) as Record<string, unknown>
+    await tx
       .update(formTemplates)
       .set({
-        recordConfig: args.recordConfig as Record<string, unknown>,
+        recordConfig: {
+          ...current,
+          editingMode: args.recordConfig.editingMode,
+          locking: args.recordConfig.locking,
+        } as Record<string, unknown>,
         updatedAt: new Date(),
       })
-      .where(eq(formTemplates.id, args.templateId)),
-  )
+      .where(eq(formTemplates.id, args.templateId))
+  })
   await recordAudit(ctx, {
     entityType: 'form_template',
     entityId: args.templateId,
@@ -182,6 +207,43 @@ export async function updateRecordBehavior(args: {
     summary: 'Updated record behaviour',
   })
   revalidatePath(`/apps/templates/${args.templateId}`)
+  revalidatePath('/apps')
+  return { ok: true }
+}
+
+// Configure the records LIST table for this App — the columns shown (ordered),
+// the default sort, and the default status filter on /apps/templates/[id]/records.
+// Stored under recordConfig.list (jsonb); the records page reads it to build the
+// table. MERGES so editingMode/locking (and any other keys) survive. Mirrors the
+// assert + tx + audit pattern above.
+export async function updateListConfig(input: {
+  templateId: string
+  list: ListConfig
+}): Promise<{ ok: boolean; error?: string }> {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'forms.template.create')
+  await ctx.db(async (tx) => {
+    const [row] = await tx
+      .select({ recordConfig: formTemplates.recordConfig })
+      .from(formTemplates)
+      .where(eq(formTemplates.id, input.templateId))
+      .limit(1)
+    const current = (row?.recordConfig ?? {}) as Record<string, unknown>
+    await tx
+      .update(formTemplates)
+      .set({
+        recordConfig: { ...current, list: input.list } as Record<string, unknown>,
+        updatedAt: new Date(),
+      })
+      .where(eq(formTemplates.id, input.templateId))
+  })
+  await recordAudit(ctx, {
+    entityType: 'form_template',
+    entityId: input.templateId,
+    action: 'update',
+    summary: 'Updated records list',
+  })
+  revalidatePath(`/apps/templates/${input.templateId}`)
   revalidatePath('/apps')
   return { ok: true }
 }

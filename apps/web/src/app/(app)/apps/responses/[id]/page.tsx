@@ -63,7 +63,6 @@ import { requireRequestContext } from '@/lib/auth'
 import { canSeeRecord } from '@/lib/visibility'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { ActivityFeed } from '@/components/activity-feed'
-import { DetailGrid } from '@/components/detail-grid'
 import { Section } from '@/components/section'
 import { DetailPageLayout } from '@/components/page-layout'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
@@ -302,9 +301,6 @@ export default async function FormResponsePage({
     response,
     template,
     version,
-    site,
-    subjectPerson,
-    submitterAccount,
     steps,
     comments,
     scoreRows,
@@ -608,45 +604,6 @@ export default async function FormResponsePage({
                 }))}
               />
             ) : null}
-            <Section title="Overview">
-              <DetailGrid
-                rows={[
-                  {
-                    label: 'Template',
-                    value: (
-                      <Link
-                        href={`/apps/templates/${template.id}`}
-                        className="text-teal-700 hover:underline"
-                      >
-                        {template.name}
-                      </Link>
-                    ),
-                  },
-                  { label: 'Template version', value: `v${version.version}` },
-                  { label: 'Status', value: response.status.replace('_', ' ') },
-                  { label: 'Current step', value: response.currentStep ?? '—' },
-                  { label: 'Site', value: site?.name ?? '—' },
-                  {
-                    label: 'Subject',
-                    value: subjectPerson
-                      ? `${subjectPerson.firstName} ${subjectPerson.lastName}`
-                      : '—',
-                  },
-                  { label: 'Submitted by', value: submitterAccount?.name ?? '—' },
-                  {
-                    label: 'Submitted at',
-                    value: response.submittedAt
-                      ? new Date(response.submittedAt).toLocaleString()
-                      : '—',
-                  },
-                  {
-                    label: 'Closed at',
-                    value: response.closedAt ? new Date(response.closedAt).toLocaleString() : '—',
-                  },
-                ]}
-              />
-            </Section>
-
             {failedFieldKeys.length > 0 ? (
               <Section
                 title={`Failed checks (${failedFieldKeys.length})`}

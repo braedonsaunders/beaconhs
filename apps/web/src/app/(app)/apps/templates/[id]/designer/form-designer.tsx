@@ -94,6 +94,8 @@ import { toast } from '@/lib/toast'
 import { publishNewVersion, updateAppOverview, updateAppPermissions } from './actions'
 import { RecordBehaviorPanel, type RecordConfig } from './_record-behavior-panel'
 import { RecordActionsPanel } from './_record-actions-panel'
+import { RecordListPanel } from './_record-list-panel'
+import type { ListConfig } from './actions'
 import { LogicBuilder } from './logic-builder'
 import { FormulaBuilder } from './formula-builder'
 import { CanvasEditor, defaultBox } from './_canvas-editor'
@@ -334,7 +336,7 @@ export function FormDesigner({
   const [appName, setAppName] = useState(templateName)
   // Unified editor: left rail tab + right surface.
   const [leftTab, setLeftTab] = useState<
-    'overview' | 'build' | 'record' | 'actions' | 'assignments' | 'permissions'
+    'overview' | 'build' | 'record' | 'list' | 'actions' | 'assignments' | 'permissions'
   >('build')
   const [surface, setSurface] = useState<'build' | 'flows'>(initialSurface)
   const [designerTab, setDesignerTab] = useState<string>(() => initialSchema.tabs?.[0]?.id ?? '')
@@ -362,6 +364,23 @@ export function FormDesigner({
     for (const sec of schema.sections) for (const f of sec.fields) ids.push(f.id)
     return ids
   }, [schema])
+
+  // Selectable fields for the records-list "List" tab — real answer fields only
+  // (content-only display elements carry no data to show in a column).
+  const listFields = useMemo(() => {
+    const skip = new Set(['heading', 'paragraph', 'divider', 'image', 'metric'])
+    const out: { id: string; label: string }[] = []
+    for (const sec of schema.sections)
+      for (const f of sec.fields) {
+        if (skip.has(f.type)) continue
+        out.push({ id: f.id, label: f.label?.en?.trim() || f.id })
+      }
+    return out
+  }, [schema])
+
+  // Current records-list config lives under recordConfig.list (the page passes
+  // the full recordConfig jsonb; its type omits `list`, but it's there at runtime).
+  const listConfig = (recordConfig as { list?: ListConfig } | undefined)?.list
 
   // The form-template flow subject: the full Builder vocabulary, fields = live ids.
   const flowProfile = useMemo<FlowSubjectProfile>(
@@ -741,6 +760,12 @@ export function FormDesigner({
               label="Record behaviour"
             />
             <LeftTab
+              active={leftTab === 'list'}
+              onClick={() => setLeftTab('list')}
+              icon={<Table2 size={16} />}
+              label="Records list"
+            />
+            <LeftTab
               active={leftTab === 'actions'}
               onClick={() => setLeftTab('actions')}
               icon={<MousePointerClick size={16} />}
@@ -771,6 +796,8 @@ export function FormDesigner({
               />
             ) : leftTab === 'record' ? (
               <RecordBehaviorPanel templateId={templateId} initial={recordConfig} roles={roles} />
+            ) : leftTab === 'list' ? (
+              <RecordListPanel templateId={templateId} initial={listConfig} fields={listFields} />
             ) : leftTab === 'actions' ? (
               <RecordActionsPanel templateId={templateId} flows={flows} />
             ) : leftTab === 'assignments' ? (
