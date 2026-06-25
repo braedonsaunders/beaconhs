@@ -194,10 +194,16 @@ Before implementing a new feature or helper:
   "clean up" files you did not intentionally edit.
 - Inspect `git status --short` before broad edits.
 - Keep changes scoped. Avoid formatting unrelated files.
-- Prefer small, reviewable commits when asked to commit.
+- Commit your changes atomically to local `main` as you work: make a focused,
+  self-contained commit for each logical change instead of batching everything
+  into one commit at the end. Stage only the files you intentionally touched
+  (never sweep in unrelated working-tree changes), and keep each commit small
+  and reviewable.
 
 ## Agent Handoff Notes
 
+- When returning completed work, always end with a condensed checklist the user
+  can use to check and test every change you made.
 - State what you changed, what you verified, and what remains risky.
 - Mention any bug you discovered and fixed while working.
 - If a required verification could not run, say why.
