@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { RLS_POLICY_SQL, TENANT_SCOPED_TABLES } from './rls'
 import { REPORT_VIEWS_SQL } from './views'
+import { STATS_SQL, STATS_HIGH_VOLUME_TABLES } from './stats'
 
 function firstRow<T = Record<string, unknown>>(result: unknown): T | undefined {
   const rows = (result as { rows?: T[] }).rows ?? (result as T[])
@@ -59,8 +60,12 @@ async function reconcileMigrationTracker(db: ReturnType<typeof drizzle>) {
 }
 
 async function main() {
-  const url = process.env.DATABASE_URL
-  if (!url) throw new Error('DATABASE_URL is required')
+  // Migrations + DDL must NOT run through the PgBouncer transaction pooler
+  // (the migration advisory lock + session-scoped DDL need a dedicated session)
+  // and must connect as the table owner. DIRECT_DATABASE_URL targets Postgres
+  // directly (port 5432); fall back to DATABASE_URL for local/un-pooled setups.
+  const url = process.env.DIRECT_DATABASE_URL ?? process.env.DATABASE_URL
+  if (!url) throw new Error('DIRECT_DATABASE_URL or DATABASE_URL is required')
 
   const migrationClient = postgres(url, { max: 1 })
   const db = drizzle(migrationClient)
@@ -101,6 +106,33 @@ async function main() {
     }
   }
   console.log('✔ RLS applied')
+
+  console.log('▶ Applying planner statistics targets…')
+  let statsApplied = 0
+  const statsFailures: string[] = []
+  for (const stmt of STATS_SQL) {
+    try {
+      await db.execute(sql.raw(stmt))
+      statsApplied++
+    } catch (err) {
+      // A targeted column may not exist on every listed table — tolerate it.
+      const causeMsg = err instanceof Error && err.cause instanceof Error ? err.cause.message : ''
+      statsFailures.push(`${stmt} — ${causeMsg || (err as Error).message}`)
+    }
+  }
+  // ANALYZE so the raised targets take effect immediately (best-effort).
+  for (const table of STATS_HIGH_VOLUME_TABLES) {
+    try {
+      await db.execute(sql.raw(`ANALYZE ${table};`))
+    } catch {
+      // table may not exist yet on a partial schema — ignore.
+    }
+  }
+  console.log(`✔ Statistics applied (${statsApplied}/${STATS_SQL.length})`)
+  if (statsFailures.length > 0) {
+    console.log(`  ${statsFailures.length} skipped (missing table/column):`)
+    for (const f of statsFailures.slice(0, 5)) console.log(`    · ${f}`)
+  }
 
   console.log('▶ Applying reporting views…')
   for (const viewSql of REPORT_VIEWS_SQL) {

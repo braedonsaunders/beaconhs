@@ -1,10 +1,14 @@
 import { sql } from 'drizzle-orm'
-import type { Database } from './client'
+import { superDb, type Database } from './client'
 
-// All tenant-scoped tables have RLS enabled with the policy:
+// Every tenant-scoped table enforces isolation with FORCE ROW LEVEL SECURITY and
+// the policy:
 //   tenant_id = current_setting('app.tenant_id')::uuid
-// Application code must SET LOCAL app.tenant_id before any tenant-scoped query.
-// Super-admin sessions set app.bypass_rls = 'on' to read across tenants.
+// Application code runs every tenant query inside withTenant(), which sets
+// app.tenant_id for the transaction. Cross-tenant / super-admin access uses a
+// dedicated BYPASSRLS role (beaconhs_super) via withSuperAdmin() — the bypass is
+// a ROLE attribute now, not a GUC, so the policy carries no "OR bypass" branch
+// (an OR against a session setting is not index-usable and forces a seq scan).
 
 export async function withTenant<T>(
   db: Database,
@@ -13,17 +17,19 @@ export async function withTenant<T>(
 ): Promise<T> {
   return db.transaction(async (tx) => {
     await tx.execute(sql`SELECT set_config('app.tenant_id', ${tenantId}, true)`)
-    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'off', true)`)
     return fn(tx as unknown as Database)
   })
 }
 
+// Cross-tenant / super-admin access. Always runs on the dedicated BYPASSRLS pool
+// (superDb / beaconhs_super). The first parameter is retained so existing call
+// sites — withSuperAdmin(db, fn) — keep compiling unchanged; the connection
+// itself always comes from superDb, never the passed handle.
 export async function withSuperAdmin<T>(
-  db: Database,
+  _db: Database,
   fn: (tx: Database) => Promise<T>,
 ): Promise<T> {
-  return db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
+  return superDb.transaction(async (tx) => {
     return fn(tx as unknown as Database)
   })
 }
@@ -32,31 +38,32 @@ export async function withSuperAdmin<T>(
 // Generate via drizzle-kit then append this.
 //
 // FORCE ROW LEVEL SECURITY is required because a table OWNER bypasses non-forced RLS — and the
-// runtime app may connect as the owner of its tables. Without FORCE, tenant isolation silently
-// does nothing for the owner role (critical once more than one tenant shares the database). The
-// postgres superuser (and any BYPASSRLS role, e.g. the ETL) still bypasses RLS regardless.
+// runtime app connects as the owner of its tables (beaconhs_app). Without FORCE, tenant isolation
+// silently does nothing for the owner role (critical once more than one tenant shares the
+// database). Cross-tenant access goes through the dedicated BYPASSRLS role (beaconhs_super); the
+// postgres superuser still bypasses regardless.
+//
+// The predicate is a SINGLE equality on purpose: `tenant_id = current_setting('app.tenant_id')`.
+// current_setting() is STABLE, so the planner can push this into an index Cond and use the
+// (tenant_id, …) composite indexes. The previous "OR current_setting('app.bypass_rls') = 'on'"
+// branch made the whole predicate non-sargable — every RLS-only query degraded to a Seq Scan.
+// Bypass is now a ROLE attribute (beaconhs_super), so it needs no branch in the policy.
 //
 // DROP POLICY IF EXISTS makes this idempotent, so re-running migrate cleanly re-applies the policy
 // + FORCE flag instead of erroring on "policy already exists".
 //
 // nullif(current_setting('app.tenant_id', true), '')::uuid — a custom GUC reverts to '' (empty
 // string), not NULL, after a SET LOCAL ends on a pooled connection. Casting ''::uuid throws 22P02,
-// and because FORCE RLS makes the owner role evaluate this predicate, that crash surfaces on any
-// query whose connection previously ran a tenant-scoped tx (e.g. the super-admin resolution path).
-// nullif maps '' → NULL so the cast is safe; bypass_rls still grants super-admin access.
+// and because FORCE RLS makes the owner role evaluate this predicate, that crash would surface on
+// any query whose connection previously ran a tenant-scoped tx with no tenant set. nullif maps
+// '' → NULL so the cast is safe and the row simply does not match (no rows, not an error).
 export const RLS_POLICY_SQL = (table: string) => `
 ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ${table} FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS tenant_isolation ON ${table};
 CREATE POLICY tenant_isolation ON ${table}
-  USING (
-    tenant_id = nullif(current_setting('app.tenant_id', true), '')::uuid
-    OR current_setting('app.bypass_rls', true) = 'on'
-  )
-  WITH CHECK (
-    tenant_id = nullif(current_setting('app.tenant_id', true), '')::uuid
-    OR current_setting('app.bypass_rls', true) = 'on'
-  );
+  USING (tenant_id = nullif(current_setting('app.tenant_id', true), '')::uuid)
+  WITH CHECK (tenant_id = nullif(current_setting('app.tenant_id', true), '')::uuid);
 `
 
 // Tables that have a `tenant_id` column and need RLS enforcement.
