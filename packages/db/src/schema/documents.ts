@@ -143,6 +143,38 @@ export const documentComments = pgTable(
   }),
 )
 
+// A group sign-off "sheet": one facilitator-led session against a document
+// version that collects many people's signatures on a single device
+// (toolbox-talk style). Each attendee still writes their own
+// document_acknowledgments row (with session_id set) so the per-person
+// compliance engine is satisfied exactly as it is for self-service acks.
+export const documentAcknowledgmentSessions = pgTable(
+  'document_acknowledgment_sessions',
+  {
+    id: id(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    documentId: uuid('document_id')
+      .notNull()
+      .references(() => documents.id, { onDelete: 'cascade' }),
+    versionId: uuid('version_id')
+      .notNull()
+      .references(() => documentVersions.id),
+    title: text('title'), // defaults to the document title in the UI
+    location: text('location'),
+    notes: text('notes'),
+    conductedByTenantUserId: uuid('conducted_by_tenant_user_id').references(() => tenantUsers.id),
+    conductedAt: timestamp('conducted_at', { withTimezone: true }).defaultNow().notNull(),
+    ...timestamps,
+    ...softDelete,
+  },
+  (t) => ({
+    docIdx: index('document_ack_sessions_doc_idx').on(t.documentId),
+    tenantIdx: index('document_ack_sessions_tenant_idx').on(t.tenantId),
+  }),
+)
+
 export const documentAcknowledgments = pgTable(
   'document_acknowledgments',
   {
@@ -159,12 +191,17 @@ export const documentAcknowledgments = pgTable(
     personId: uuid('person_id')
       .notNull()
       .references(() => people.id, { onDelete: 'cascade' }),
+    // Null for self-service acks; set when recorded via a group sign-off sheet.
+    sessionId: uuid('session_id').references(() => documentAcknowledgmentSessions.id, {
+      onDelete: 'set null',
+    }),
     acknowledgedAt: timestamp('acknowledged_at', { withTimezone: true }).defaultNow().notNull(),
     signatureAttachmentId: uuid('signature_attachment_id'),
     ...timestamps,
   },
   (t) => ({
     docPersonIdx: index('document_acks_doc_person_idx').on(t.documentId, t.personId),
+    sessionIdx: index('document_acks_session_idx').on(t.sessionId),
     tenantIdx: index('document_acks_tenant_idx').on(t.tenantId),
   }),
 )
@@ -243,4 +280,30 @@ export const documentsRelations = relations(documents, ({ one, many }) => ({
   versions: many(documentVersions),
   acknowledgments: many(documentAcknowledgments),
   reviews: many(documentReviews),
+}))
+
+export const documentAcknowledgmentSessionsRelations = relations(
+  documentAcknowledgmentSessions,
+  ({ one, many }) => ({
+    document: one(documents, {
+      fields: [documentAcknowledgmentSessions.documentId],
+      references: [documents.id],
+    }),
+    version: one(documentVersions, {
+      fields: [documentAcknowledgmentSessions.versionId],
+      references: [documentVersions.id],
+    }),
+    acknowledgments: many(documentAcknowledgments),
+  }),
+)
+
+export const documentAcknowledgmentsRelations = relations(documentAcknowledgments, ({ one }) => ({
+  session: one(documentAcknowledgmentSessions, {
+    fields: [documentAcknowledgments.sessionId],
+    references: [documentAcknowledgmentSessions.id],
+  }),
+  person: one(people, {
+    fields: [documentAcknowledgments.personId],
+    references: [people.id],
+  }),
 }))

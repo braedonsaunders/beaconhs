@@ -35,6 +35,8 @@ export const emailTargetSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('submitter_manager') }), // the submitter's reporting manager
   // every reporting manager of the chosen department's people
   z.object({ type: z.literal('department_manager'), departmentId: z.string() }),
+  // a reusable, composable notification group (/admin/notifications → Groups)
+  z.object({ type: z.literal('group'), groupId: z.string() }),
 ])
 export type EmailTarget = z.infer<typeof emailTargetSchema>
 
@@ -102,6 +104,11 @@ export const actionDataSchema = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('send_email'),
     to: z.array(emailTargetSchema),
+    // Delivery channel. Absent ⇒ 'email' (back-compat). 'sms' texts the resolved
+    // recipients' phones (critical-style, truncated); 'in_app' posts an inbox
+    // notification. Each is gated at send-time by whether that transport is set
+    // up for the tenant.
+    channel: z.enum(['email', 'sms', 'in_app']).optional(),
     // How the body is composed. Absent ⇒ legacy 'inline' (back-compat: every
     // stored graph still validates because subject/bodyTemplate stay optional).
     mode: z.enum(['inline', 'template', 'design']).optional(),
@@ -143,7 +150,7 @@ export const actionDataSchema = z.discriminatedUnion('action', [
     action: z.literal('notify_role'),
     role: z.string(),
     message: z.string(),
-    channel: z.enum(['in_app', 'email']).optional(),
+    channel: z.enum(['in_app', 'email', 'sms']).optional(),
   }),
   z.object({
     action: z.literal('set_field'),

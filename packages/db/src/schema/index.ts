@@ -4,6 +4,7 @@
 export * from './core'
 export * from './iam'
 export * from './org'
+export * from './notification-groups'
 export * from './locations'
 export * from './audit'
 export * from './attachments'

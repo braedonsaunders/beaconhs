@@ -635,3 +635,6 @@ export async function emitComplianceTransitions(
     logFailure('emitComplianceTransitions', err)
   }
 }
+
+// Notification-group resolution (groups → people / userIds / emails). Server-only.
+export * from './recipients'

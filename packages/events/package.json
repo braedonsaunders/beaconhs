@@ -13,6 +13,7 @@
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
+    "@beaconhs/compliance": "workspace:*",
     "@beaconhs/db": "workspace:*",
     "@beaconhs/emails": "workspace:*",
     "@beaconhs/jobs": "workspace:*",

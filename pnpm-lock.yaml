@@ -620,6 +620,9 @@ importers:
 
   packages/events:
     dependencies:
+      '@beaconhs/compliance':
+        specifier: workspace:*
+        version: link:../compliance
       '@beaconhs/db':
         specifier: workspace:*
         version: link:../db

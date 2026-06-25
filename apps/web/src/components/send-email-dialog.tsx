@@ -21,6 +21,9 @@ export type SendEmailDialogProps = {
   description?: string
   /** Comma-separated email addresses to pre-fill in the recipients field. */
   defaultRecipients?: string
+  /** Helper text under the recipients field. Override when the caller does not
+   *  fall back to a default distribution list. */
+  recipientsHint?: string
   defaultCc?: string
   defaultSubjectPrefix?: string
   /** Reference shown in the dialog title for context (e.g. "WO-2026-0042"). */
@@ -36,6 +39,7 @@ export function GenericSendEmailDialog({
   title = 'Send email',
   description,
   defaultRecipients = '',
+  recipientsHint = 'Each address gets its own copy. Leave blank to send to the default tenant admin distribution list.',
   defaultCc = '',
   defaultSubjectPrefix = 'Update',
   reference,
@@ -99,10 +103,7 @@ export function GenericSendEmailDialog({
               defaultValue={defaultRecipients}
               placeholder="alice@example.com, bob@example.com"
             />
-            <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              Each address gets its own copy. Leave blank to send to the default tenant admin
-              distribution list.
-            </p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">{recipientsHint}</p>
           </div>
 
           <div className="space-y-1.5">

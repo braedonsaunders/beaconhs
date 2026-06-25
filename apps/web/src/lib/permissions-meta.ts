@@ -71,6 +71,7 @@ const PERMISSION_LABELS: Record<string, string> = {
   'equipment.workorder.close': 'Close work orders',
 
   'ppe.read.all': 'View all PPE',
+  'ppe.manage': 'Manage PPE',
   'ppe.issue': 'Issue PPE',
   'ppe.return': 'Return PPE',
   'ppe.inspect': 'Inspect PPE',

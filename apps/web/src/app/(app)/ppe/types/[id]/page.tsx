@@ -113,6 +113,7 @@ export default async function PpeTypeDetailPage({ params }: { params: Promise<{ 
           category: type.category,
           isInspectable: type.isInspectable,
           everyDays: type.inspectionSchedule?.everyDays ?? null,
+          requiresCertificate: type.inspectionSchedule?.requiresCertificate ?? false,
           sizingScheme: type.sizingScheme,
         }}
         groups={groups}

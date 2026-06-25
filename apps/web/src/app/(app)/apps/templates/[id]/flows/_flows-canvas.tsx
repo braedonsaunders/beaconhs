@@ -1124,6 +1124,8 @@ export function FlowsCanvas({
               nodesConnectable={canEdit}
               colorMode={isDark ? 'dark' : 'light'}
               fitView
+              fitViewOptions={{ padding: 0.3, maxZoom: 0.8 }}
+              minZoom={0.2}
               proOptions={{ hideAttribution: true }}
             >
               <Background />

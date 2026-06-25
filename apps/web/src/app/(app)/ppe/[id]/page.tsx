@@ -19,13 +19,13 @@ import { revalidatePath } from 'next/cache'
 import { and, asc, desc, eq } from 'drizzle-orm'
 import {
   AlertTriangle,
-  Camera,
   ClipboardCheck,
-  HardHat,
+  FileText,
   Mail,
   Plus,
   RefreshCw,
   ShieldCheck,
+  Trash2,
   UserPlus,
 } from 'lucide-react'
 import {
@@ -64,9 +64,14 @@ import {
   ppeTypeInspectionCriteria,
   ppeTypes,
 } from '@beaconhs/db/schema'
+import { can } from '@beaconhs/tenant'
+import { publicUrl } from '@beaconhs/storage'
 import { requireRequestContext } from '@/lib/auth'
 import { PersonSelectField } from '@/components/person-select-field'
+import { LiveField, LiveSelect } from '@/components/live-field'
 import { recordAudit } from '@/lib/audit'
+import { CertificateDrawer, type CertificateInput } from './_certificate-drawer'
+import { PpeInspectionForm } from './_inspection-form'
 import { pickString } from '@/lib/list-params'
 import { DetailGrid } from '@/components/detail-grid'
 import { Section } from '@/components/section'
@@ -90,27 +95,80 @@ type PpeTab = (typeof PPE_TABS)[number]
 
 // --- Server actions -----------------------------------------------------
 
+// Inline auto-save for the unified edit/view Overview. Mirrors the incidents
+// `updateTextField` whitelist pattern: only user-owned identity fields are
+// editable here — lifecycle (status/holder) and derived schedule dates stay
+// read-only and are maintained by the issuance / inspection actions.
+async function updatePpeField(formData: FormData) {
+  'use server'
+  const ctx = await requireRequestContext()
+  if (!can(ctx, 'ppe.manage')) throw new Error('You do not have permission to manage PPE')
+  const id = String(formData.get('id') ?? '')
+  const field = String(formData.get('field') ?? '')
+  const raw = formData.get('value')
+  const value = typeof raw === 'string' ? raw : ''
+  if (!id || !field) throw new Error('Missing id/field')
+
+  const TEXT = new Set(['serialNumber', 'size', 'notes'])
+  const DATE_ONLY = new Set(['purchaseDate', 'expiresOn'])
+  const FK_REQUIRED = new Set(['typeId'])
+  if (!TEXT.has(field) && !DATE_ONLY.has(field) && !FK_REQUIRED.has(field)) {
+    throw new Error('Field not allowed')
+  }
+
+  let val: unknown
+  if (DATE_ONLY.has(field)) {
+    val = value || null
+  } else if (FK_REQUIRED.has(field)) {
+    if (!value) throw new Error('This field is required')
+    val = value
+  } else {
+    const trimmed = value.trim()
+    val = trimmed === '' ? null : value
+  }
+
+  await ctx.db((tx) =>
+    tx
+      .update(ppeItems)
+      .set({ [field]: val } as any)
+      .where(eq(ppeItems.id, id)),
+  )
+  await recordAudit(ctx, {
+    entityType: 'ppe_item',
+    entityId: id,
+    action: 'update',
+    summary: `Updated ${field}`,
+    after: { [field]: val },
+  })
+  revalidatePath(`/ppe/${id}`)
+  revalidatePath('/ppe')
+}
+
 async function recordInspection(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
   const itemId = String(formData.get('itemId') ?? '')
   const typeId = String(formData.get('typeId') ?? '')
   const kind = String(formData.get('kind') ?? 'pre_use') as 'pre_use' | 'annual'
-  const overallResult = String(formData.get('result') ?? 'pass') as 'pass' | 'fail' | 'n_a'
   const notes = String(formData.get('notes') ?? '').trim() || null
   const today = new Date().toISOString().slice(0, 10)
 
   // Pull the criteria list so we can validate the per-row answers + compute
-  // whether any fail is high+ severity (drives the auto-CA).
+  // whether any fail is high+ severity (drives the auto-CA). The overall result
+  // is DERIVED from the answers — there is no manual override.
   const criteria = await loadInspectionCriteriaForType(ctx, typeId, kind)
   let highestSeverityFailQuestion: { question: string; severity: 'high' | 'critical' } | null = null
   let anyFail = false
   for (const c of criteria) {
-    const answer = String(formData.get(`criterion_${c.id}`) ?? 'n_a') as 'pass' | 'fail' | 'n_a'
-    if (answer === 'fail') {
+    const raw = String(formData.get(`criterion_${c.id}`) ?? '')
+    // Every criterion must be answered (the client enforces this too).
+    if (raw !== 'pass' && raw !== 'fail' && raw !== 'n_a') {
+      throw new Error('Answer every criterion before recording the inspection')
+    }
+    if (raw === 'fail') {
       anyFail = true
       if (
-        shouldSpawnCorrectiveAction(answer, c.severity) &&
+        shouldSpawnCorrectiveAction(raw, c.severity) &&
         (!highestSeverityFailQuestion ||
           c.severity === 'critical' ||
           highestSeverityFailQuestion.severity === 'high')
@@ -122,10 +180,9 @@ async function recordInspection(formData: FormData) {
       }
     }
   }
-  // The form-level "Result" is a manual override that becomes the row's
-  // canonical result; if any per-criterion fail was logged we force it to
-  // fail so the data stays consistent.
-  const finalResult: 'pass' | 'fail' | 'n_a' = anyFail ? 'fail' : overallResult
+  // Derived result: any failed criterion fails the inspection; otherwise it
+  // passes (an all-N/A checklist counts as a pass — nothing was found wrong).
+  const finalResult: 'pass' | 'fail' = anyFail ? 'fail' : 'pass'
 
   const inspectionId = await ctx.db(async (tx) => {
     const [row] = await tx
@@ -270,64 +327,97 @@ async function resolveIssue(formData: FormData) {
   revalidatePath(`/ppe/${itemId}`)
 }
 
-async function addAnnualRecord(formData: FormData) {
+// Save a third-party recertification certificate. Object-arg (not FormData) so
+// the client drawer can upload the file first, then hand us the attachment id.
+// Returns {ok} so the drawer can surface validation/permission errors inline.
+async function addCertificate(
+  input: CertificateInput,
+): Promise<{ ok: true } | { ok: false; error: string }> {
   'use server'
   const ctx = await requireRequestContext()
-  const itemId = String(formData.get('itemId') ?? '').trim()
-  const inspectedOn = String(formData.get('inspectedOn') ?? '').trim()
-  const inspectedByPersonId = String(formData.get('inspectedByPersonId') ?? '').trim() || null
-  const inspectorName = String(formData.get('inspectorName') ?? '').trim() || null
-  const inspectorCompany = String(formData.get('inspectorCompany') ?? '').trim() || null
-  const certificateAttachmentId =
-    String(formData.get('certificateAttachmentId') ?? '').trim() || null
-  const result = String(formData.get('result') ?? 'pass') as 'pass' | 'fail' | 'remediated'
-  const notes = String(formData.get('notes') ?? '').trim() || null
-  if (!itemId || !inspectedOn) return
+  if (!can(ctx, 'ppe.manage')) {
+    return { ok: false, error: 'You do not have permission to manage PPE.' }
+  }
+  const itemId = input.itemId.trim()
+  const inspectedOn = input.inspectedOn.trim()
+  if (!itemId || !inspectedOn) return { ok: false, error: 'Inspection date is required.' }
+  const result: 'pass' | 'fail' | 'remediated' = ['pass', 'fail', 'remediated'].includes(
+    input.result,
+  )
+    ? input.result
+    : 'pass'
   const year = deriveAnnualYear(inspectedOn)
   const nextDueOn = (() => {
     const d = new Date(inspectedOn)
     d.setFullYear(d.getFullYear() + 1)
     return d.toISOString().slice(0, 10)
   })()
-  const id = await ctx.db(async (tx) => {
-    const [row] = await tx
-      .insert(ppeAnnualRecords)
-      .values({
-        tenantId: ctx.tenantId,
-        itemId,
-        year,
-        inspectedOn,
-        nextDueOn,
-        inspectedByPersonId,
-        inspectorName,
-        inspectorCompany,
-        certificateAttachmentId,
-        result,
-        notes,
-      })
-      .returning({ id: ppeAnnualRecords.id })
-    // Cache the new annual dates on the item for the reports.
-    await tx
-      .update(ppeItems)
-      .set({ lastAnnualInspectionOn: inspectedOn, nextAnnualInspectionDue: nextDueOn })
-      .where(eq(ppeItems.id, itemId))
-    return row?.id ?? null
-  })
+  let id: string | null = null
+  try {
+    id = await ctx.db(async (tx) => {
+      const [row] = await tx
+        .insert(ppeAnnualRecords)
+        .values({
+          tenantId: ctx.tenantId,
+          itemId,
+          year,
+          inspectedOn,
+          nextDueOn,
+          inspectedByPersonId: input.inspectedByPersonId,
+          inspectorName: input.inspectorName,
+          inspectorCompany: input.inspectorCompany,
+          certificateAttachmentId: input.certificateAttachmentId,
+          result,
+          notes: input.notes,
+        })
+        .returning({ id: ppeAnnualRecords.id })
+      // Cache the new annual dates on the item for the reports.
+      await tx
+        .update(ppeItems)
+        .set({ lastAnnualInspectionOn: inspectedOn, nextAnnualInspectionDue: nextDueOn })
+        .where(eq(ppeItems.id, itemId))
+      return row?.id ?? null
+    })
+  } catch {
+    return { ok: false, error: `A certificate for ${year} already exists on this item.` }
+  }
   await recordAudit(ctx, {
     entityType: 'ppe_annual_record',
     entityId: id ?? undefined,
     action: 'create',
-    summary: `Annual recertification recorded — ${result}`,
+    summary: `Certificate recorded — ${result}`,
     after: {
       itemId,
       year,
       inspectedOn,
       result,
-      certificateAttachmentId,
+      certificateAttachmentId: input.certificateAttachmentId,
     },
   })
   revalidatePath(`/ppe/${itemId}`)
-  redirect(`/ppe/${itemId}?tab=annual`)
+  return { ok: true }
+}
+
+async function deleteCertificate(formData: FormData) {
+  'use server'
+  const ctx = await requireRequestContext()
+  if (!can(ctx, 'ppe.manage')) throw new Error('You do not have permission to manage PPE')
+  const recordId = String(formData.get('id') ?? '').trim()
+  const itemId = String(formData.get('itemId') ?? '').trim()
+  if (!recordId || !itemId) return
+  await ctx.db((tx) =>
+    tx
+      .delete(ppeAnnualRecords)
+      .where(and(eq(ppeAnnualRecords.id, recordId), eq(ppeAnnualRecords.itemId, itemId))),
+  )
+  await recordAudit(ctx, {
+    entityType: 'ppe_annual_record',
+    entityId: recordId,
+    action: 'delete',
+    summary: 'Deleted certificate',
+    before: { itemId },
+  })
+  revalidatePath(`/ppe/${itemId}`)
 }
 
 // Inline server action for the Send-email dialog. Allows shipping an
@@ -377,7 +467,6 @@ export default async function PpeDetailPage({
 }) {
   const { id } = await params
   const sp = await searchParams
-  const active: PpeTab = pickActiveTab(sp, PPE_TABS, 'overview')
   const ctx = await requireRequestContext()
 
   const data = await ctx.db(async (tx) => {
@@ -447,10 +536,16 @@ export default async function PpeDetailPage({
           .limit(50),
       ])
 
-    // Pre-load the criteria for the next inspection form (we render two
-    // toggles — one for pre_use, one for annual; default pre_use).
+    // The inspection flyout is launched per-kind, so we load both lists and
+    // hand the drawer only the one matching the clicked button.
     const preUseCriteria = await loadInspectionCriteriaForType(ctx, row.type.id, 'pre_use')
     const annualCriteria = await loadInspectionCriteriaForType(ctx, row.type.id, 'annual')
+
+    // All PPE types for the Type select on the editable Overview.
+    const typesList = await tx
+      .select({ id: ppeTypes.id, name: ppeTypes.name })
+      .from(ppeTypes)
+      .orderBy(asc(ppeTypes.name))
 
     // Cross-reference CAs back to this item's inspections so we can show them
     // in the inspection list.
@@ -466,6 +561,7 @@ export default async function PpeDetailPage({
       issueReports,
       annualRecords,
       peopleList,
+      typesList,
       preUseCriteria,
       annualCriteria,
       itemCAs,
@@ -482,6 +578,7 @@ export default async function PpeDetailPage({
     issueReports,
     annualRecords,
     peopleList,
+    typesList,
     preUseCriteria,
     annualCriteria,
     itemCAs,
@@ -490,6 +587,44 @@ export default async function PpeDetailPage({
   const expiringIn = daysUntil(item.expiresOn)
   const inspectionDueIn = daysUntil(item.nextInspectionDue)
   const annualDueIn = daysUntil(item.nextAnnualInspectionDue)
+  // Editing the register-level fields requires the Manage PPE permission;
+  // everyone else gets a read-only view of the same page.
+  const canManage = can(ctx, 'ppe.manage')
+
+  // The inspection flyout is opened per-kind from the Pre-use / Annual buttons,
+  // so render only the criteria for the launched kind (they are separate
+  // inspection types and must not be mixed in one form).
+  const inspectionKind: 'pre_use' | 'annual' =
+    pickString(sp.kind) === 'annual' ? 'annual' : 'pre_use'
+  const inspectionCriteria = inspectionKind === 'annual' ? annualCriteria : preUseCriteria
+
+  const peopleOptions = peopleList.map((p) => ({
+    value: p.id,
+    label: `${p.lastName}, ${p.firstName}`,
+    hint: p.employeeNo ?? undefined,
+  }))
+
+  // Tab visibility is driven by the PPE type's configuration:
+  //   • Inspections — shown only when the type has a pre-use and/or annual
+  //     checklist (the criteria themselves are the "requires inspection" signal).
+  //   • Certificates — shown when the type is flagged as requiring third-party
+  //     recertification (configurable on the type), or it already has records.
+  const hasPreUse = preUseCriteria.length > 0
+  const hasAnnual = annualCriteria.length > 0
+  const hasInspections = hasPreUse || hasAnnual
+  const requiresCertificate = type.inspectionSchedule?.requiresCertificate ?? false
+  const showCertificates = requiresCertificate || annualRecords.length > 0
+
+  const visibleTabs: PpeTab[] = [
+    'overview',
+    ...(hasInspections ? (['inspections'] as const) : []),
+    ...(showCertificates ? (['annual'] as const) : []),
+    'issues',
+    'history',
+    'status',
+  ]
+  // Fall back to Overview when a now-hidden tab is requested via the URL.
+  const active: PpeTab = pickActiveTab(sp, visibleTabs, 'overview')
 
   const basePath = `/ppe/${id}`
   // Drawer state is URL-driven; preserve the active tab in the close URL so
@@ -529,21 +664,14 @@ export default async function PpeDetailPage({
             </div>
           }
           actions={
-            <>
-              <Link href={`${basePath}?tab=issues&drawer=report-issue` as any}>
-                <Button variant="outline">
-                  <AlertTriangle size={14} /> Report issue
-                </Button>
-              </Link>
-              <Link
-                href={`/ppe/${id}?send=1${active !== 'overview' ? `&tab=${active}` : ''}` as any}
-                scroll={false}
-              >
-                <Button variant="outline">
-                  <Mail size={14} /> Send email
-                </Button>
-              </Link>
-            </>
+            <Link
+              href={`/ppe/${id}?send=1${active !== 'overview' ? `&tab=${active}` : ''}` as any}
+              scroll={false}
+            >
+              <Button variant="outline">
+                <Mail size={14} /> Send email
+              </Button>
+            </Link>
           }
         />
       }
@@ -555,7 +683,7 @@ export default async function PpeDetailPage({
               <AlertDescription>{openIssues[0]!.description}</AlertDescription>
             </Alert>
           ) : null}
-          {inspectionDueIn !== null && inspectionDueIn <= 0 ? (
+          {hasInspections && inspectionDueIn !== null && inspectionDueIn <= 0 ? (
             <Alert variant="destructive">
               <AlertTitle>Inspection overdue</AlertTitle>
               <AlertDescription>
@@ -564,11 +692,11 @@ export default async function PpeDetailPage({
               </AlertDescription>
             </Alert>
           ) : null}
-          {annualDueIn !== null && annualDueIn <= 0 ? (
+          {showCertificates && annualDueIn !== null && annualDueIn <= 0 ? (
             <Alert variant="destructive">
-              <AlertTitle>Annual recertification overdue</AlertTitle>
+              <AlertTitle>Certificate overdue</AlertTitle>
               <AlertDescription>
-                The annual third-party recertification was due on {item.nextAnnualInspectionDue}.
+                The third-party recertification was due on {item.nextAnnualInspectionDue}.
               </AlertDescription>
             </Alert>
           ) : null}
@@ -581,8 +709,12 @@ export default async function PpeDetailPage({
           active={active}
           tabs={[
             { key: 'overview', label: 'Overview' },
-            { key: 'inspections', label: 'Inspections', count: inspections.length },
-            { key: 'annual', label: 'Annual records', count: annualRecords.length },
+            ...(hasInspections
+              ? [{ key: 'inspections', label: 'Inspections', count: inspections.length }]
+              : []),
+            ...(showCertificates
+              ? [{ key: 'annual', label: 'Certificates', count: annualRecords.length }]
+              : []),
             { key: 'issues', label: 'Issues', count: issueReports.length },
             { key: 'history', label: 'History', count: issuesLog.length },
             { key: 'status', label: 'Status' },
@@ -592,81 +724,175 @@ export default async function PpeDetailPage({
     >
       <div className="space-y-5">
         {active === 'overview' ? (
-          <Section title="General">
-            <DetailGrid
-              rows={[
-                {
-                  label: 'Type',
-                  value: (
-                    <Link href={`/ppe/types/${type.id}`} className="text-teal-700 hover:underline">
-                      {type.name}
-                    </Link>
-                  ),
-                },
-                { label: 'Serial #', value: item.serialNumber ?? '—' },
-                { label: 'Size', value: item.size ?? '—' },
-                {
-                  label: 'Currently with',
-                  value: holder ? (
-                    <Link href={`/people/${holder.id}`} className="text-teal-700 hover:underline">
-                      {holder.firstName} {holder.lastName}
-                    </Link>
-                  ) : (
-                    '—'
-                  ),
-                },
-                { label: 'Purchased', value: item.purchaseDate ?? '—' },
-                {
-                  label: 'Expires',
-                  value: item.expiresOn ? (
-                    <span
-                      className={
-                        expiringIn !== null && expiringIn < 0
-                          ? 'text-red-700'
-                          : expiringIn !== null && expiringIn <= 30
-                            ? 'text-amber-700'
-                            : ''
-                      }
-                    >
-                      {item.expiresOn}
-                      {expiringIn !== null
-                        ? ` (${expiringIn < 0 ? `${-expiringIn}d overdue` : `${expiringIn}d`})`
-                        : ''}
-                    </span>
-                  ) : (
-                    '—'
-                  ),
-                },
-                { label: 'Last inspection', value: item.lastInspectionOn ?? '—' },
-                {
-                  label: 'Next inspection due',
-                  value: item.nextInspectionDue ? (
-                    <span
-                      className={
-                        inspectionDueIn !== null && inspectionDueIn < 0 ? 'text-red-700' : ''
-                      }
-                    >
-                      {item.nextInspectionDue}
-                    </span>
-                  ) : (
-                    '—'
-                  ),
-                },
-                { label: 'Last annual', value: item.lastAnnualInspectionOn ?? '—' },
-                {
-                  label: 'Next annual due',
-                  value: item.nextAnnualInspectionDue ? (
-                    <span className={annualDueIn !== null && annualDueIn < 0 ? 'text-red-700' : ''}>
-                      {item.nextAnnualInspectionDue}
-                    </span>
-                  ) : (
-                    '—'
-                  ),
-                },
-                { label: 'Notes', value: item.notes ?? '—' },
-              ]}
-            />
-          </Section>
+          <div className="space-y-5">
+            <Section
+              title="Details"
+              subtitle={
+                canManage
+                  ? 'Changes save automatically.'
+                  : 'Read-only — editing requires the Manage PPE permission.'
+              }
+            >
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <LiveSelect
+                  id={id}
+                  field="typeId"
+                  label="Type"
+                  initialValue={type.id}
+                  options={typesList.map((t) => ({ value: t.id, label: t.name }))}
+                  allowEmpty={false}
+                  disabled={!canManage}
+                  updateAction={updatePpeField}
+                />
+                <LiveField
+                  id={id}
+                  field="serialNumber"
+                  label="Serial #"
+                  initialValue={item.serialNumber}
+                  placeholder="Serial number"
+                  disabled={!canManage}
+                  updateAction={updatePpeField}
+                />
+                <LiveField
+                  id={id}
+                  field="size"
+                  label="Size"
+                  initialValue={item.size}
+                  placeholder="e.g. L"
+                  disabled={!canManage}
+                  updateAction={updatePpeField}
+                />
+                <LiveField
+                  id={id}
+                  field="purchaseDate"
+                  label="Purchased"
+                  type="date"
+                  initialValue={item.purchaseDate}
+                  disabled={!canManage}
+                  updateAction={updatePpeField}
+                />
+                <LiveField
+                  id={id}
+                  field="expiresOn"
+                  label="Expires"
+                  type="date"
+                  initialValue={item.expiresOn}
+                  disabled={!canManage}
+                  updateAction={updatePpeField}
+                />
+              </div>
+              <div className="mt-4">
+                <LiveField
+                  id={id}
+                  field="notes"
+                  label="Notes"
+                  multiline
+                  rows={3}
+                  initialValue={item.notes}
+                  placeholder="Anything noteworthy about this item"
+                  disabled={!canManage}
+                  updateAction={updatePpeField}
+                />
+              </div>
+            </Section>
+
+            <Section
+              title="Status & schedule"
+              subtitle="Maintained automatically by issuance, inspection, and certificate records."
+            >
+              <DetailGrid
+                rows={[
+                  {
+                    label: 'Status',
+                    value: (
+                      <Badge
+                        variant={
+                          item.status === 'issued'
+                            ? 'success'
+                            : item.status === 'in_stock'
+                              ? 'secondary'
+                              : 'warning'
+                        }
+                      >
+                        {item.status.replace('_', ' ')}
+                      </Badge>
+                    ),
+                  },
+                  {
+                    label: 'Currently with',
+                    value: holder ? (
+                      <Link href={`/people/${holder.id}`} className="text-teal-700 hover:underline">
+                        {holder.firstName} {holder.lastName}
+                      </Link>
+                    ) : (
+                      '—'
+                    ),
+                  },
+                  {
+                    label: 'Expires',
+                    value: item.expiresOn ? (
+                      <span
+                        className={
+                          expiringIn !== null && expiringIn < 0
+                            ? 'text-red-700'
+                            : expiringIn !== null && expiringIn <= 30
+                              ? 'text-amber-700'
+                              : ''
+                        }
+                      >
+                        {item.expiresOn}
+                        {expiringIn !== null
+                          ? ` (${expiringIn < 0 ? `${-expiringIn}d overdue` : `${expiringIn}d`})`
+                          : ''}
+                      </span>
+                    ) : (
+                      '—'
+                    ),
+                  },
+                  ...(hasInspections
+                    ? [
+                        { label: 'Last inspection', value: item.lastInspectionOn ?? '—' },
+                        {
+                          label: 'Next inspection due',
+                          value: item.nextInspectionDue ? (
+                            <span
+                              className={
+                                inspectionDueIn !== null && inspectionDueIn < 0
+                                  ? 'text-red-700'
+                                  : ''
+                              }
+                            >
+                              {item.nextInspectionDue}
+                            </span>
+                          ) : (
+                            '—'
+                          ),
+                        },
+                      ]
+                    : []),
+                  ...(showCertificates
+                    ? [
+                        { label: 'Last certificate', value: item.lastAnnualInspectionOn ?? '—' },
+                        {
+                          label: 'Next certificate due',
+                          value: item.nextAnnualInspectionDue ? (
+                            <span
+                              className={
+                                annualDueIn !== null && annualDueIn < 0 ? 'text-red-700' : ''
+                              }
+                            >
+                              {item.nextAnnualInspectionDue}
+                            </span>
+                          ) : (
+                            '—'
+                          ),
+                        },
+                      ]
+                    : []),
+                ]}
+              />
+            </Section>
+          </div>
         ) : null}
 
         {active === 'inspections' ? (
@@ -675,22 +901,28 @@ export default async function PpeDetailPage({
               title={`Inspections (${inspections.length})`}
               actions={
                 <div className="flex items-center gap-2">
-                  <Link
-                    href={
-                      `${basePath}?tab=inspections&drawer=record-inspection&kind=pre_use` as any
-                    }
-                  >
-                    <Button size="sm">
-                      <ClipboardCheck size={14} /> Pre-use
-                    </Button>
-                  </Link>
-                  <Link
-                    href={`${basePath}?tab=inspections&drawer=record-inspection&kind=annual` as any}
-                  >
-                    <Button size="sm" variant="outline">
-                      <ShieldCheck size={14} /> Annual
-                    </Button>
-                  </Link>
+                  {hasPreUse ? (
+                    <Link
+                      href={
+                        `${basePath}?tab=inspections&drawer=record-inspection&kind=pre_use` as any
+                      }
+                    >
+                      <Button size="sm">
+                        <ClipboardCheck size={14} /> Pre-use
+                      </Button>
+                    </Link>
+                  ) : null}
+                  {hasAnnual ? (
+                    <Link
+                      href={
+                        `${basePath}?tab=inspections&drawer=record-inspection&kind=annual` as any
+                      }
+                    >
+                      <Button size="sm" variant={hasPreUse ? 'outline' : 'default'}>
+                        <ShieldCheck size={14} /> Annual
+                      </Button>
+                    </Link>
+                  ) : null}
                 </div>
               }
             >
@@ -701,11 +933,12 @@ export default async function PpeDetailPage({
                   action={
                     <Link
                       href={
-                        `${basePath}?tab=inspections&drawer=record-inspection&kind=pre_use` as any
+                        `${basePath}?tab=inspections&drawer=record-inspection&kind=${hasPreUse ? 'pre_use' : 'annual'}` as any
                       }
                     >
                       <Button size="sm" variant="outline">
-                        <ClipboardCheck size={14} /> Record pre-use inspection
+                        <ClipboardCheck size={14} /> Record {hasPreUse ? 'pre-use' : 'annual'}{' '}
+                        inspection
                       </Button>
                     </Link>
                   }
@@ -767,91 +1000,111 @@ export default async function PpeDetailPage({
         ) : null}
 
         {active === 'annual' ? (
-          <>
-            <Section
-              title={`Annual records (${annualRecords.length})`}
-              actions={
-                <Link href={`${basePath}?tab=annual&drawer=add-annual` as any}>
+          <Section
+            title={`Certificates (${annualRecords.length})`}
+            subtitle="Third-party recertification certificates (e.g. annual harness or fall-arrest inspections)."
+            actions={
+              canManage ? (
+                <Link href={`${basePath}?tab=annual&drawer=add-certificate` as any}>
                   <Button size="sm">
-                    <Plus size={14} /> Add annual record
+                    <Plus size={14} /> Add certificate
                   </Button>
                 </Link>
-              }
-            >
-              {annualRecords.length === 0 ? (
-                <EmptyState
-                  icon={<ShieldCheck size={24} />}
-                  title="No annual records"
-                  description="Upload the most recent third-party recertification to start the history."
-                  action={
-                    <Link href={`${basePath}?tab=annual&drawer=add-annual` as any}>
+              ) : null
+            }
+          >
+            {annualRecords.length === 0 ? (
+              <EmptyState
+                icon={<ShieldCheck size={24} />}
+                title="No certificates yet"
+                description="Upload the most recent third-party recertification to start the history."
+                action={
+                  canManage ? (
+                    <Link href={`${basePath}?tab=annual&drawer=add-certificate` as any}>
                       <Button size="sm" variant="outline">
-                        <Plus size={14} /> Add the first record
+                        <Plus size={14} /> Add the first certificate
                       </Button>
                     </Link>
-                  }
-                />
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Year</TableHead>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Inspector</TableHead>
-                      <TableHead>Result</TableHead>
-                      <TableHead>Next due</TableHead>
-                      <TableHead>Certificate</TableHead>
-                      <TableHead>Notes</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {annualRecords.map(({ rec, person, cert }) => (
-                      <TableRow key={rec.id}>
-                        <TableCell className="font-mono">{rec.year}</TableCell>
-                        <TableCell>{rec.inspectedOn}</TableCell>
-                        <TableCell>
-                          {person
-                            ? `${person.firstName} ${person.lastName}`
-                            : rec.inspectorName
-                              ? `${rec.inspectorName}${rec.inspectorCompany ? ` (${rec.inspectorCompany})` : ''}`
-                              : '—'}
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={
-                              rec.result === 'pass'
-                                ? 'success'
-                                : rec.result === 'fail'
-                                  ? 'destructive'
-                                  : 'warning'
-                            }
+                  ) : null
+                }
+              />
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Year</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Inspector</TableHead>
+                    <TableHead>Result</TableHead>
+                    <TableHead>Next due</TableHead>
+                    <TableHead>Certificate</TableHead>
+                    <TableHead>Notes</TableHead>
+                    {canManage ? <TableHead className="text-right">Actions</TableHead> : null}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {annualRecords.map(({ rec, person, cert }) => (
+                    <TableRow key={rec.id}>
+                      <TableCell className="font-mono">{rec.year}</TableCell>
+                      <TableCell>{rec.inspectedOn}</TableCell>
+                      <TableCell>
+                        {person
+                          ? `${person.firstName} ${person.lastName}`
+                          : rec.inspectorName
+                            ? `${rec.inspectorName}${rec.inspectorCompany ? ` (${rec.inspectorCompany})` : ''}`
+                            : '—'}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            rec.result === 'pass'
+                              ? 'success'
+                              : rec.result === 'fail'
+                                ? 'destructive'
+                                : 'warning'
+                          }
+                        >
+                          {rec.result}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-slate-600">{rec.nextDueOn ?? '—'}</TableCell>
+                      <TableCell>
+                        {cert ? (
+                          <a
+                            href={publicUrl(cert.r2Key)}
+                            className="inline-flex items-center gap-1.5 text-teal-700 hover:underline"
+                            target="_blank"
+                            rel="noreferrer"
                           >
-                            {rec.result}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-slate-600">{rec.nextDueOn ?? '—'}</TableCell>
-                        <TableCell>
-                          {cert ? (
-                            <a
-                              href={`/api/attachments/${cert.id}`}
-                              className="text-teal-700 hover:underline"
-                              target="_blank"
-                              rel="noreferrer"
+                            <FileText size={13} /> {cert.filename}
+                          </a>
+                        ) : (
+                          <span className="text-slate-400">No file</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-slate-600">{rec.notes ?? '—'}</TableCell>
+                      {canManage ? (
+                        <TableCell className="text-right">
+                          <form action={deleteCertificate} className="inline">
+                            <input type="hidden" name="id" value={rec.id} />
+                            <input type="hidden" name="itemId" value={id} />
+                            <Button
+                              type="submit"
+                              size="sm"
+                              variant="ghost"
+                              aria-label="Delete certificate"
                             >
-                              {cert.filename}
-                            </a>
-                          ) : (
-                            '—'
-                          )}
+                              <Trash2 size={14} className="text-red-500" />
+                            </Button>
+                          </form>
                         </TableCell>
-                        <TableCell className="text-slate-600">{rec.notes ?? '—'}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </Section>
-          </>
+                      ) : null}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </Section>
         ) : null}
 
         {active === 'issues' ? (
@@ -860,13 +1113,24 @@ export default async function PpeDetailPage({
             actions={
               <Link href={`${basePath}?tab=issues&drawer=report-issue` as any}>
                 <Button size="sm" variant="destructive">
-                  <AlertTriangle size={14} /> Report defective
+                  <AlertTriangle size={14} /> Report defect
                 </Button>
               </Link>
             }
           >
             {issueReports.length === 0 ? (
-              <p className="text-sm text-slate-500">No issues reported.</p>
+              <EmptyState
+                icon={<AlertTriangle size={24} />}
+                title="No defects reported"
+                description="Report a defect when an item is damaged, contaminated, or fails inspection."
+                action={
+                  <Link href={`${basePath}?tab=issues&drawer=report-issue` as any}>
+                    <Button size="sm" variant="outline">
+                      <AlertTriangle size={14} /> Report defect
+                    </Button>
+                  </Link>
+                }
+              />
             ) : (
               <Table>
                 <TableHeader>
@@ -1032,9 +1296,10 @@ export default async function PpeDetailPage({
         title={openIssues.length > 0 ? 'Send PPE issue report' : 'Send PPE item summary'}
         description={
           openIssues.length > 0
-            ? 'Sends the most-recent open issue report to maintenance. Recipients default to the tenant admin distribution list when blank.'
-            : 'Sends a PPE item summary. Recipients default to the tenant admin distribution list when blank.'
+            ? 'Emails the most-recent open defect report (item summary + the report details) to the addresses you enter below.'
+            : 'Emails a summary of this PPE item (type, serial, status, holder, size, expiry) to the addresses you enter below.'
         }
+        recipientsHint="Enter at least one recipient — each gets their own copy. Nothing is sent if this is left blank."
         reference={item.serialNumber ?? id.slice(0, 8)}
         defaultSubjectPrefix={openIssues.length > 0 ? 'Action required' : 'FYI'}
         sendAction={async (fd) => {
@@ -1054,22 +1319,21 @@ export default async function PpeDetailPage({
       <UrlDrawer
         open={drawerKey === 'record-inspection'}
         closeHref={closeHref}
-        title="Record inspection"
-        description="Walks through the criteria configured on this PPE type. High+ severity failures auto-spawn a corrective action."
-        size="lg"
-        footer={
-          <Button type="submit" form="ppe-record-inspection-form">
-            <HardHat size={14} /> Record inspection
-          </Button>
+        title={
+          inspectionKind === 'annual' ? 'Record annual inspection' : 'Record pre-use inspection'
         }
+        description={
+          inspectionKind === 'annual'
+            ? 'Answer every annual criterion. The result is derived from the answers; high+ severity failures auto-spawn a corrective action.'
+            : 'Answer every pre-use criterion. The result is derived from the answers; high+ severity failures auto-spawn a corrective action.'
+        }
+        size="lg"
       >
-        <CriteriaInspectionForm
-          formId="ppe-record-inspection-form"
+        <PpeInspectionForm
           itemId={id}
           typeId={type.id}
-          defaultKind={pickString(sp.kind) === 'annual' ? 'annual' : 'pre_use'}
-          preUseCriteria={preUseCriteria}
-          annualCriteria={annualCriteria}
+          kind={inspectionKind}
+          criteria={inspectionCriteria}
           action={recordInspection}
         />
       </UrlDrawer>
@@ -1077,7 +1341,7 @@ export default async function PpeDetailPage({
       <UrlDrawer
         open={drawerKey === 'report-issue'}
         closeHref={closeHref}
-        title="Report defective issue"
+        title="Report defect"
         description="Logs a defect report against this PPE item. Open reports surface on the dashboard and the item header."
         size="md"
         footer={
@@ -1181,266 +1445,17 @@ export default async function PpeDetailPage({
         </form>
       </UrlDrawer>
 
-      <UrlDrawer
-        open={drawerKey === 'add-annual'}
+      <CertificateDrawer
+        open={drawerKey === 'add-certificate'}
         closeHref={closeHref}
-        title="Add annual recertification"
-        description="Capture the third-party inspector's signed certificate. The item's next-annual-due date updates automatically."
-        size="lg"
-        footer={
-          <Button type="submit" form="ppe-add-annual-form">
-            <Plus size={14} /> Save annual record
-          </Button>
-        }
-      >
-        <form
-          id="ppe-add-annual-form"
-          action={addAnnualRecord}
-          className="grid grid-cols-1 gap-3 sm:grid-cols-2"
-        >
-          <input type="hidden" name="itemId" value={id} />
-          <div className="space-y-1.5">
-            <Label>
-              Inspected on <span className="text-red-600">*</span>
-            </Label>
-            <Input
-              type="date"
-              name="inspectedOn"
-              required
-              defaultValue={new Date().toISOString().slice(0, 10)}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label>
-              Result <span className="text-red-600">*</span>
-            </Label>
-            <Select name="result" defaultValue="pass">
-              <option value="pass">Pass</option>
-              <option value="fail">Fail</option>
-              <option value="remediated">Pass after remediation</option>
-            </Select>
-          </div>
-          <div className="space-y-1.5 sm:col-span-2">
-            <Label>Inspected by (person)</Label>
-            <PersonSelectField
-              name="inspectedByPersonId"
-              defaultValue=""
-              options={peopleList.map((p) => ({
-                value: p.id,
-                label: `${p.lastName}, ${p.firstName}`,
-                hint: p.employeeNo ?? undefined,
-              }))}
-              placeholder="Select a person…"
-              clearable
-              emptyLabel="— External inspector —"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Inspector name (free-text)</Label>
-            <Input name="inspectorName" placeholder="e.g. Joe Rigger" />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Inspector company</Label>
-            <Input name="inspectorCompany" placeholder="e.g. Acme Riggers Ltd" />
-          </div>
-          <div className="space-y-1.5 sm:col-span-2">
-            <Label>Certificate attachment ID</Label>
-            <Input name="certificateAttachmentId" placeholder="UUID from /api/attachments" />
-            <p className="text-xs text-slate-500">
-              Upload via the file uploader elsewhere then paste the attachment id here.
-            </p>
-          </div>
-          <div className="space-y-1.5 sm:col-span-2">
-            <Label>Notes</Label>
-            <Textarea name="notes" rows={3} />
-          </div>
-        </form>
-      </UrlDrawer>
+        itemId={id}
+        peopleOptions={peopleOptions}
+        todayIso={new Date().toISOString().slice(0, 10)}
+        saveAction={async (input: CertificateInput) => {
+          'use server'
+          return addCertificate({ ...input, itemId: id })
+        }}
+      />
     </DetailPageLayout>
-  )
-}
-
-function CriteriaInspectionForm({
-  formId,
-  itemId,
-  typeId,
-  defaultKind = 'pre_use',
-  preUseCriteria,
-  annualCriteria,
-  action,
-}: {
-  formId?: string
-  itemId: string
-  typeId: string
-  defaultKind?: 'pre_use' | 'annual'
-  preUseCriteria: {
-    id: string
-    question: string
-    description: string | null
-    severity: 'low' | 'medium' | 'high' | 'critical'
-    requiresPhoto: boolean
-  }[]
-  annualCriteria: {
-    id: string
-    question: string
-    description: string | null
-    severity: 'low' | 'medium' | 'high' | 'critical'
-    requiresPhoto: boolean
-  }[]
-  action: (fd: FormData) => Promise<void>
-}) {
-  // The form ships both lists; the user picks kind in the Select. We render
-  // both critera lists in <details> so the form stays tight by default. The
-  // submit button lives in the parent drawer's sticky footer (connected via
-  // the `form` attribute on the button matching `formId`).
-  return (
-    <form id={formId} action={action} className="space-y-4">
-      <input type="hidden" name="itemId" value={itemId} />
-      <input type="hidden" name="typeId" value={typeId} />
-
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <div className="space-y-1.5">
-          <Label>Kind</Label>
-          <Select name="kind" defaultValue={defaultKind}>
-            <option value="pre_use">Pre-use</option>
-            <option value="annual">Annual</option>
-          </Select>
-        </div>
-        <div className="space-y-1.5">
-          <Label>Manual overall result</Label>
-          <Select name="result" defaultValue="pass">
-            <option value="pass">Pass</option>
-            <option value="fail">Fail</option>
-            <option value="n_a">N/A</option>
-          </Select>
-        </div>
-        <div className="space-y-1.5">
-          <Label>Notes</Label>
-          <Input name="notes" placeholder="Anything to flag overall?" />
-        </div>
-      </div>
-
-      {preUseCriteria.length > 0 ? (
-        <details
-          open={defaultKind === 'pre_use'}
-          className="rounded-md border border-slate-200 bg-slate-50/50 p-4"
-        >
-          <summary className="cursor-pointer text-sm font-semibold text-slate-800">
-            Pre-use criteria ({preUseCriteria.length}) — answer per criterion. High+ failures
-            auto-spawn a corrective action.
-          </summary>
-          <ul className="mt-3 space-y-2">
-            {preUseCriteria.map((c, i) => (
-              <CriterionRow key={c.id} index={i} criterion={c} />
-            ))}
-          </ul>
-        </details>
-      ) : null}
-
-      {annualCriteria.length > 0 ? (
-        <details
-          open={defaultKind === 'annual'}
-          className="rounded-md border border-slate-200 bg-slate-50/50 p-4"
-        >
-          <summary className="cursor-pointer text-sm font-semibold text-slate-800">
-            Annual criteria ({annualCriteria.length}) — answer when recording an annual.
-          </summary>
-          <ul className="mt-3 space-y-2">
-            {annualCriteria.map((c, i) => (
-              <CriterionRow key={c.id} index={i} criterion={c} />
-            ))}
-          </ul>
-        </details>
-      ) : null}
-
-      {preUseCriteria.length === 0 && annualCriteria.length === 0 ? (
-        <Alert>
-          <AlertTitle>No criteria configured on this PPE type</AlertTitle>
-          <AlertDescription>
-            Go to{' '}
-            <Link
-              href={`/ppe/types/${typeId}?tab=inspection-criteria`}
-              className="text-teal-700 hover:underline"
-            >
-              the type detail page
-            </Link>{' '}
-            and add criteria — they appear here automatically.
-          </AlertDescription>
-        </Alert>
-      ) : null}
-    </form>
-  )
-}
-
-function CriterionRow({
-  index,
-  criterion,
-}: {
-  index: number
-  criterion: {
-    id: string
-    question: string
-    description: string | null
-    severity: 'low' | 'medium' | 'high' | 'critical'
-    requiresPhoto: boolean
-  }
-}) {
-  return (
-    <li className="rounded border border-slate-200 bg-white p-3">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2 text-sm font-medium text-slate-900">
-            <span className="text-slate-500">{index + 1}.</span>
-            <span className="flex-1">{criterion.question}</span>
-            {criterion.requiresPhoto ? (
-              <Badge variant="warning">
-                <Camera size={10} /> photo
-              </Badge>
-            ) : null}
-            <Badge
-              variant={
-                criterion.severity === 'critical' || criterion.severity === 'high'
-                  ? 'destructive'
-                  : criterion.severity === 'medium'
-                    ? 'warning'
-                    : 'secondary'
-              }
-            >
-              {criterion.severity}
-            </Badge>
-          </div>
-          {criterion.description ? (
-            <p className="mt-1 text-xs text-slate-500">{criterion.description}</p>
-          ) : null}
-          {criterion.requiresPhoto ? (
-            <div className="mt-2">
-              <Label className="text-xs text-slate-500">Attach photo evidence</Label>
-              <Input
-                type="file"
-                accept="image/*"
-                name={`photo_${criterion.id}`}
-                className="mt-1 text-xs"
-              />
-            </div>
-          ) : null}
-        </div>
-        <div className="flex shrink-0 items-center gap-1.5 text-xs">
-          {(['pass', 'fail', 'n_a'] as const).map((v) => (
-            <label
-              key={v}
-              className="flex cursor-pointer items-center gap-1 rounded border border-slate-200 bg-white px-2 py-1"
-            >
-              <input
-                type="radio"
-                name={`criterion_${criterion.id}`}
-                value={v}
-                defaultChecked={v === 'n_a'}
-              />
-              {v === 'n_a' ? 'N/A' : v.charAt(0).toUpperCase() + v.slice(1)}
-            </label>
-          ))}
-        </div>
-      </div>
-    </li>
   )
 }

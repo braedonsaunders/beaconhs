@@ -53,11 +53,18 @@ export async function updateType(input: {
   category: string | null
   isInspectable: boolean
   everyDays: number | null
+  requiresCertificate: boolean
   sizingScheme: string[] | null
 }) {
   const ctx = await manageCtx()
   const name = input.name.trim()
   if (!name) throw new Error('Name is required')
+  // The jsonb config blob carries both the inspection cadence and the
+  // certificate-required flag; build it from whichever pieces are set so the
+  // cert flag survives toggling inspectability on/off.
+  const schedule: { everyDays?: number; requiresCertificate?: boolean } = {}
+  if (input.isInspectable && input.everyDays) schedule.everyDays = input.everyDays
+  if (input.requiresCertificate) schedule.requiresCertificate = true
   await ctx.db((tx) =>
     tx
       .update(ppeTypes)
@@ -65,8 +72,7 @@ export async function updateType(input: {
         name,
         category: input.category?.trim() || null,
         isInspectable: input.isInspectable,
-        inspectionSchedule:
-          input.isInspectable && input.everyDays ? { everyDays: input.everyDays } : null,
+        inspectionSchedule: Object.keys(schedule).length > 0 ? schedule : null,
         sizingScheme:
           input.sizingScheme && input.sizingScheme.length > 0 ? input.sizingScheme : null,
       })
@@ -77,7 +83,12 @@ export async function updateType(input: {
     entityId: input.id,
     action: 'update',
     summary: `Updated PPE type "${name}"`,
-    after: { name, category: input.category, isInspectable: input.isInspectable },
+    after: {
+      name,
+      category: input.category,
+      isInspectable: input.isInspectable,
+      requiresCertificate: input.requiresCertificate,
+    },
   })
   revalidateType(input.id)
 }

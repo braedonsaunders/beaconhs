@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { asc, desc, eq, isNull } from 'drizzle-orm'
+import { and, asc, desc, eq, isNull } from 'drizzle-orm'
 import {
   Activity,
   BadgeCheck,
@@ -11,6 +11,7 @@ import {
   History,
   Info,
   Mail,
+  ShieldCheck,
 } from 'lucide-react'
 import {
   Alert,
@@ -26,6 +27,8 @@ import {
 } from '@beaconhs/ui'
 import { DocumentDrawers } from './_drawers'
 import {
+  attachments,
+  documentAcknowledgmentSessions,
   documentAcknowledgments,
   documentCategories,
   documentDrafts,
@@ -37,6 +40,8 @@ import {
   tenantUsers,
   user,
 } from '@beaconhs/db/schema'
+import { publicUrl } from '@beaconhs/storage'
+import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { getTenantAiSettings } from '@/lib/ai-config'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
@@ -49,10 +54,12 @@ import { sendDocumentEmail } from './_send-email'
 import { listDocumentComments, publishDraft } from './_actions'
 import { DocumentPdfButton } from './_pdf-viewer'
 import { DocumentPane } from './_document-pane'
+import { AcknowledgmentsPanel, type AckRow } from './_acknowledgments-panel'
+import { DocumentCompliancePanel, loadDocumentObligations } from './_compliance-panel'
 
 export const dynamic = 'force-dynamic'
 
-const TABS = ['overview', 'versions', 'acknowledgments', 'reviews', 'activity'] as const
+const TABS = ['overview', 'versions', 'acknowledgments', 'reviews', 'compliance', 'activity'] as const
 type Tab = (typeof TABS)[number]
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
@@ -86,52 +93,6 @@ async function unpublish(formData: FormData) {
   })
   revalidatePath(`/documents/${id}`)
   revalidatePath('/documents')
-}
-
-async function acknowledge(formData: FormData) {
-  'use server'
-  const ctx = await requireRequestContext()
-  const documentId = String(formData.get('documentId') ?? '')
-  const versionId = String(formData.get('versionId') ?? '')
-  if (!documentId || !versionId) return
-
-  // Find the person record for the current user
-  const person = await ctx.db(async (tx) => {
-    const [p] = await tx.select().from(people).where(eq(people.userId, ctx.userId)).limit(1)
-    return p ?? null
-  })
-  if (!person) return
-
-  // Skip if already acked for this version
-  const existing = await ctx.db(async (tx) => {
-    const [e] = await tx
-      .select()
-      .from(documentAcknowledgments)
-      .where(eq(documentAcknowledgments.documentId, documentId))
-      .limit(1)
-    return e
-  })
-
-  if (existing && existing.versionId === versionId && existing.personId === person.id) {
-    return
-  }
-
-  await ctx.db((tx) =>
-    tx.insert(documentAcknowledgments).values({
-      tenantId: ctx.tenantId,
-      documentId,
-      versionId,
-      personId: person.id,
-    }),
-  )
-  await recordAudit(ctx, {
-    entityType: 'document',
-    entityId: documentId,
-    action: 'sign',
-    summary: 'Acknowledged by current user',
-    after: { personId: person.id, versionId },
-  })
-  revalidatePath(`/documents/${documentId}`)
 }
 
 async function recordReviewAction(input: {
@@ -235,8 +196,20 @@ export default async function DocumentDetailPage({
   const active: Tab = pickActiveTab(sp, TABS, 'overview')
 
   const ctx = await requireRequestContext()
+  // Viewing a document requires documents.read; managers hold it implicitly via
+  // documents.manage. Mirrors the /documents list page so the direct-URL detail
+  // route can't leak drafts / under-review / archived docs to users who only see
+  // the published library (or have no document access at all).
+  const canManage = ctx.isSuperAdmin || can(ctx, 'documents.manage')
+  const canRead = canManage || can(ctx, 'documents.read')
+  if (!canRead) notFound()
+
   const data = await ctx.db(async (tx) => {
-    const [doc] = await tx.select().from(documents).where(eq(documents.id, id)).limit(1)
+    const [doc] = await tx
+      .select()
+      .from(documents)
+      .where(and(eq(documents.id, id), isNull(documents.deletedAt)))
+      .limit(1)
     if (!doc) return null
     const [versions, acks, reviews, currentPerson, draft] = await Promise.all([
       tx
@@ -245,11 +218,27 @@ export default async function DocumentDetailPage({
         .where(eq(documentVersions.documentId, id))
         .orderBy(desc(documentVersions.version)),
       tx
-        .select({ ack: documentAcknowledgments, person: people })
+        .select({
+          ackId: documentAcknowledgments.id,
+          personId: documentAcknowledgments.personId,
+          firstName: people.firstName,
+          lastName: people.lastName,
+          acknowledgedAt: documentAcknowledgments.acknowledgedAt,
+          versionId: documentAcknowledgments.versionId,
+          sessionId: documentAcknowledgments.sessionId,
+          sessionTitle: documentAcknowledgmentSessions.title,
+          r2Key: attachments.r2Key,
+        })
         .from(documentAcknowledgments)
         .innerJoin(people, eq(people.id, documentAcknowledgments.personId))
+        .leftJoin(
+          documentAcknowledgmentSessions,
+          eq(documentAcknowledgmentSessions.id, documentAcknowledgments.sessionId),
+        )
+        .leftJoin(attachments, eq(attachments.id, documentAcknowledgments.signatureAttachmentId))
         .where(eq(documentAcknowledgments.documentId, id))
-        .orderBy(desc(documentAcknowledgments.acknowledgedAt)),
+        .orderBy(desc(documentAcknowledgments.acknowledgedAt))
+        .limit(2000),
       tx
         .select({ review: documentReviews, member: tenantUsers, account: user })
         .from(documentReviews)
@@ -284,6 +273,9 @@ export default async function DocumentDetailPage({
 
   if (!data) notFound()
   const { doc, versions, acks, reviews, currentPerson, draft, categories, types } = data
+  // Non-managers may only view PUBLISHED documents — same rule the list page
+  // applies via `eq(documents.status, 'published')`.
+  if (!canManage && doc.status !== 'published') notFound()
   const currentVersion = versions[0]
   const publishedVersion = versions.find((v) => v.publishedAt) ?? null
   const basePath = `/documents/${id}`
@@ -306,13 +298,35 @@ export default async function DocumentDetailPage({
   const aiSettings = await getTenantAiSettings(ctx)
   const aiEnabled = aiSettings.enabled && aiSettings.hasKey
 
+  // Acknowledgments → flat rows for the panel (with signature thumbnails).
+  const ackRows: AckRow[] = acks.map((a) => ({
+    ackId: a.ackId,
+    personId: a.personId,
+    name: `${a.firstName} ${a.lastName}`.trim() || '(unnamed)',
+    acknowledgedAt: a.acknowledgedAt.toISOString(),
+    sessionId: a.sessionId,
+    sessionTitle: a.sessionTitle,
+    signatureUrl: a.r2Key ? publicUrl(a.r2Key) : null,
+  }))
   const myAck = currentPerson
     ? acks.find(
         (a) =>
-          a.ack.personId === currentPerson.id &&
-          (!publishedVersion || a.ack.versionId === publishedVersion.id),
+          a.personId === currentPerson.id &&
+          (!publishedVersion || a.versionId === publishedVersion.id),
       )
     : null
+  const selfStatus: 'can' | 'acked' | 'unpublished' | 'no-person' = !currentPerson
+    ? 'no-person'
+    : myAck
+      ? 'acked'
+      : !publishedVersion
+        ? 'unpublished'
+        : 'can'
+  const selfAckedAt = myAck ? myAck.acknowledgedAt.toISOString() : null
+
+  // Compliance tab: obligations that require this document.
+  const canAssign = can(ctx, 'compliance.assign')
+  const obligations = active === 'compliance' ? await loadDocumentObligations(ctx, id) : []
 
   const activity =
     active === 'activity' ? await recentActivityForEntity(ctx, 'document', id, 50) : []
@@ -402,6 +416,7 @@ export default async function DocumentDetailPage({
                   count: reviews.length,
                   icon: <ClipboardCheck size={16} />,
                 },
+                { key: 'compliance', label: 'Compliance', icon: <ShieldCheck size={16} /> },
                 { key: 'activity', label: 'Activity', icon: <Activity size={16} /> },
               ]}
             />
@@ -500,76 +515,22 @@ export default async function DocumentDetailPage({
             ) : null}
 
             {active === 'acknowledgments' ? (
-              <div className="space-y-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Acknowledgments ({acks.length})</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {currentPerson ? (
-                      myAck ? (
-                        <Alert variant="success">
-                          <Check size={16} />
-                          <AlertTitle>You've acknowledged this</AlertTitle>
-                          <AlertDescription>
-                            Recorded {new Date(myAck.ack.acknowledgedAt).toLocaleString()}.
-                          </AlertDescription>
-                        </Alert>
-                      ) : publishedVersion ? (
-                        <form
-                          action={acknowledge}
-                          className="flex items-center justify-between gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm dark:border-slate-800 dark:bg-slate-900"
-                        >
-                          <span>
-                            By acknowledging you confirm you've read and understood this document.
-                          </span>
-                          <input type="hidden" name="documentId" value={id} />
-                          <input type="hidden" name="versionId" value={publishedVersion.id} />
-                          <Button type="submit">
-                            <Check size={14} /> Acknowledge
-                          </Button>
-                        </form>
-                      ) : (
-                        <Alert variant="warning">
-                          <AlertTitle>Not yet published</AlertTitle>
-                          <AlertDescription>
-                            Publish a version of this document before users can acknowledge it.
-                          </AlertDescription>
-                        </Alert>
-                      )
-                    ) : (
-                      <Alert variant="warning">
-                        <AlertTitle>Your account isn't linked to a person record</AlertTitle>
-                        <AlertDescription>
-                          Acknowledgments require a person record in the directory.
-                        </AlertDescription>
-                      </Alert>
-                    )}
+              <AcknowledgmentsPanel
+                documentId={id}
+                versionId={publishedVersion?.id ?? null}
+                signOffHref={`${basePath}/sign-off`}
+                acks={ackRows}
+                selfStatus={selfStatus}
+                selfAckedAt={selfAckedAt}
+              />
+            ) : null}
 
-                    {acks.length === 0 ? (
-                      <p className="text-sm text-slate-500 dark:text-slate-400">
-                        No acknowledgments recorded.
-                      </p>
-                    ) : (
-                      <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
-                        {acks.map((row) => (
-                          <li key={row.ack.id} className="flex items-center justify-between py-2">
-                            <Link
-                              href={`/people/${row.person.id}`}
-                              className="font-medium hover:underline"
-                            >
-                              {row.person.firstName} {row.person.lastName}
-                            </Link>
-                            <span className="text-xs text-slate-500 dark:text-slate-400">
-                              {new Date(row.ack.acknowledgedAt).toLocaleString()}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
+            {active === 'compliance' ? (
+              <DocumentCompliancePanel
+                documentId={id}
+                obligations={obligations}
+                canAssign={canAssign}
+              />
             ) : null}
 
             {active === 'reviews' ? (

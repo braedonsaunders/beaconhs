@@ -28,10 +28,15 @@ export const ppeTypes = pgTable(
     name: text('name').notNull(),
     category: text('category'), // 'head' | 'eye' | 'hand' | 'foot' | 'fall' | 'respiratory' | …
     isInspectable: boolean('is_inspectable').default(false).notNull(),
+    // Inspection / recertification config blob for the type. `requiresCertificate`
+    // flags that this type needs third-party recertification certificates (drives
+    // the Certificates tab on the record page) — stored here rather than as a
+    // dedicated column to avoid a migration on this RLS-managed table.
     inspectionSchedule: jsonb('inspection_schedule').$type<{
       cron?: string
       everyDays?: number
       templateKey?: string
+      requiresCertificate?: boolean
     } | null>(),
     sizingScheme: jsonb('sizing_scheme').$type<string[] | null>(), // e.g. ['S','M','L','XL']
     ...timestamps,

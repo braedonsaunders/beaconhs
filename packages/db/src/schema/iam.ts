@@ -175,6 +175,7 @@ export const PERMISSION_CATALOGUE = [
   'equipment.workorder.close',
   // PPE
   'ppe.read.all',
+  'ppe.manage',
   'ppe.issue',
   'ppe.return',
   'ppe.inspect',
@@ -335,6 +336,7 @@ export const BUILTIN_ROLES: Record<
       'equipment.workorder.create',
       'equipment.workorder.close',
       'ppe.read.all',
+      'ppe.manage',
       'ppe.issue',
       'ppe.return',
       'ppe.inspect',

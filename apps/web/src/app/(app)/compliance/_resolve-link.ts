@@ -21,7 +21,11 @@ export function resolveComplianceLink(
   const ref = targetRef ?? {}
   switch (kind) {
     case 'document':
-      return ref.documentId ? { href: `/documents/${ref.documentId}`, prefetch: true } : null
+      // Land on the Acknowledgments tab so the acknowledge action + signature
+      // are front-and-centre, with the document shown in the right pane.
+      return ref.documentId
+        ? { href: `/documents/${ref.documentId}?tab=acknowledgments`, prefetch: true }
+        : null
     case 'journal':
       // The journals workspace is where today's entry is logged.
       return { href: '/journals', prefetch: true }

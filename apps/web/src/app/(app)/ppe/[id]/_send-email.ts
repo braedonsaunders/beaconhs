@@ -6,7 +6,7 @@
 // caller-supplied recipients (defaults to tenant admin list, since
 // "maintenance" is just an admin distribution downstream).
 
-import { and, desc, eq, sql } from 'drizzle-orm'
+import { and, desc, eq } from 'drizzle-orm'
 import {
   people,
   ppeIssueReports,
@@ -15,7 +15,6 @@ import {
   ppeTypes,
   tenantUsers,
   user,
-  users,
 } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 import { recordAudit } from '@/lib/audit'
@@ -64,25 +63,14 @@ export async function sendPpeIssueEmail(
       .orderBy(desc(ppeIssueReports.reportedAt))
       .limit(1)
 
-    const adminRecipients = await tx
-      .select({ email: users.email })
-      .from(tenantUsers)
-      .innerJoin(users, eq(users.id, tenantUsers.userId))
-      .where(
-        and(
-          eq(tenantUsers.tenantId, row.item.tenantId),
-          eq(tenantUsers.status, 'active'),
-          sql`${users.email} IS NOT NULL`,
-        ),
-      )
-
-    return { ...row, activeIssue, openReport, adminRecipients }
+    return { ...row, activeIssue, openReport }
   })
   if (!data) return null
 
-  const explicit = (options?.recipients ?? []).filter((s) => /@/.test(s))
-  const adminEmails = data.adminRecipients.map((r) => r.email).filter((s): s is string => !!s)
-  const to = explicit.length > 0 ? explicit : Array.from(new Set(adminEmails))
+  // Recipients are whoever the sender explicitly typed — no silent fallback.
+  // (This previously defaulted to EVERY active tenant user, which blasted the
+  // whole company on a blank field; that behaviour is removed.)
+  const to = Array.from(new Set((options?.recipients ?? []).filter((s) => /@/.test(s))))
   if (to.length === 0) return null
   const cc = (options?.cc ?? []).filter((s) => /@/.test(s))
 

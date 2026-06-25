@@ -67,6 +67,7 @@ export type BuilderType = {
   category: string | null
   isInspectable: boolean
   everyDays: number | null
+  requiresCertificate: boolean
   sizingScheme: string[] | null
 }
 export type BuilderGroup = { id: string; label: string; sequence: number; inspectionKind: Kind }
@@ -822,6 +823,7 @@ function SettingsPanel({
   const [category, setCategory] = React.useState(type.category ?? '')
   const [isInspectable, setIsInspectable] = React.useState(type.isInspectable)
   const [everyDays, setEveryDays] = React.useState(type.everyDays ? String(type.everyDays) : '')
+  const [requiresCertificate, setRequiresCertificate] = React.useState(type.requiresCertificate)
   const [sizing, setSizing] = React.useState(
     type.sizingScheme && type.sizingScheme.length > 0 ? type.sizingScheme.join(', ') : '',
   )
@@ -835,6 +837,7 @@ function SettingsPanel({
           category: category || null,
           isInspectable,
           everyDays: everyDays.trim() ? Number(everyDays) : null,
+          requiresCertificate,
           sizingScheme: sizing.trim()
             ? sizing
                 .split(/[,\n]/)
@@ -903,6 +906,22 @@ function SettingsPanel({
             />
           </div>
         ) : null}
+      </fieldset>
+      <fieldset className="space-y-2 rounded-md border border-slate-200 p-3 dark:border-slate-800">
+        <legend className="px-1 text-xs font-medium text-slate-500">Certificates</legend>
+        <label className="flex cursor-pointer items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={requiresCertificate}
+            onChange={(e) => setRequiresCertificate(e.target.checked)}
+            className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-700"
+          />
+          <span>This PPE type requires third-party recertification certificates</span>
+        </label>
+        <p className="px-1 text-xs text-slate-500 dark:text-slate-400">
+          When on, items of this type get a Certificates tab for uploading the signed annual
+          recertification (e.g. a harness inspection by a certified rigger).
+        </p>
       </fieldset>
       <div className="space-y-1.5">
         <Label>Sizing scheme</Label>
