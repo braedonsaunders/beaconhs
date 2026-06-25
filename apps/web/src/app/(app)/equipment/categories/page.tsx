@@ -1,12 +1,11 @@
+import Link from 'next/link'
 import { revalidatePath } from 'next/cache'
-import { Tags, Trash2 } from 'lucide-react'
+import { Plus, Tags, Trash2 } from 'lucide-react'
 import { asc, count, eq } from 'drizzle-orm'
 import {
   Badge,
   Button,
   EmptyState,
-  Input,
-  Label,
   PageHeader,
   Table,
   TableBody,
@@ -14,18 +13,20 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-  Textarea,
 } from '@beaconhs/ui'
 import { equipmentCategories, equipmentTypes } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { requireModuleManage, assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
+import { mergeHref, pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
-import { Section } from '@/components/section'
 import { EquipmentSubNav } from '@/components/equipment-sub-nav'
+import { EquipmentCategoryDrawer, type CategoryEditing } from './_drawers'
 
 export const metadata = { title: 'Equipment categories' }
 export const dynamic = 'force-dynamic'
+
+const BASE = '/equipment/categories'
 
 function slugify(s: string): string {
   return s
@@ -35,61 +36,51 @@ function slugify(s: string): string {
     .replace(/^-+|-+$/g, '')
 }
 
-async function createCategory(formData: FormData) {
+async function saveCategory(input: {
+  id?: string
+  name: string
+  description: string | null
+  sortOrder: number
+}): Promise<{ ok: true } | { ok: false; error: string }> {
   'use server'
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'equipment')
-  const name = String(formData.get('name') ?? '').trim()
-  const description = String(formData.get('description') ?? '').trim() || null
-  const sortOrder = Number(String(formData.get('sortOrder') ?? '0')) || 0
-  if (!name) return
-  const slug = slugify(name)
-
-  const inserted = await ctx.db(async (tx) => {
+  const name = input.name.trim()
+  if (!name) return { ok: false, error: 'Name is required' }
+  const id = await ctx.db(async (tx) => {
+    if (input.id) {
+      await tx
+        .update(equipmentCategories)
+        .set({ name, description: input.description, sortOrder: input.sortOrder })
+        .where(eq(equipmentCategories.id, input.id))
+      return input.id
+    }
     const [row] = await tx
       .insert(equipmentCategories)
-      .values({ tenantId: ctx.tenantId, name, slug, description, sortOrder })
-      .onConflictDoNothing({
-        target: [equipmentCategories.tenantId, equipmentCategories.slug],
+      .values({
+        tenantId: ctx.tenantId,
+        name,
+        slug: slugify(name),
+        description: input.description,
+        sortOrder: input.sortOrder,
       })
+      .onConflictDoNothing({ target: [equipmentCategories.tenantId, equipmentCategories.slug] })
       .returning({ id: equipmentCategories.id })
-    return row
+    return row?.id
   })
-  if (inserted?.id) {
-    await recordAudit(ctx, {
-      entityType: 'equipment_category',
-      entityId: inserted.id,
-      action: 'create',
-      summary: `Created equipment category "${name}"`,
-      after: { name, slug, description, sortOrder },
-    })
-  }
-  revalidatePath('/equipment/categories')
-}
-
-async function updateCategory(formData: FormData) {
-  'use server'
-  const ctx = await requireRequestContext()
-  assertCanManageModule(ctx, 'equipment')
-  const id = String(formData.get('id') ?? '').trim()
-  const name = String(formData.get('name') ?? '').trim()
-  const description = String(formData.get('description') ?? '').trim() || null
-  const sortOrder = Number(String(formData.get('sortOrder') ?? '0')) || 0
-  if (!id || !name) return
-  await ctx.db((tx) =>
-    tx
-      .update(equipmentCategories)
-      .set({ name, description, sortOrder })
-      .where(eq(equipmentCategories.id, id)),
-  )
+  if (!id)
+    return {
+      ok: false,
+      error: input.id ? 'Failed to save category' : 'A category with that name already exists',
+    }
   await recordAudit(ctx, {
     entityType: 'equipment_category',
     entityId: id,
-    action: 'update',
-    summary: `Updated equipment category "${name}"`,
-    after: { name, description, sortOrder },
+    action: input.id ? 'update' : 'create',
+    summary: `${input.id ? 'Updated' : 'Created'} equipment category "${name}"`,
   })
-  revalidatePath('/equipment/categories')
+  revalidatePath(BASE)
+  return { ok: true }
 }
 
 async function deleteCategory(formData: FormData) {
@@ -105,11 +96,18 @@ async function deleteCategory(formData: FormData) {
     action: 'delete',
     summary: 'Deleted equipment category',
   })
-  revalidatePath('/equipment/categories')
+  revalidatePath(BASE)
 }
 
-export default async function EquipmentCategoriesPage() {
+export default async function EquipmentCategoriesPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  const sp = await searchParams
+  const drawerParam = pickString(sp.drawer)
   const ctx = await requireModuleManage('equipment')
+
   const { categories, typeCounts } = await ctx.db(async (tx) => {
     const c = await tx
       .select()
@@ -129,118 +127,133 @@ export default async function EquipmentCategoriesPage() {
     }
   })
 
+  const editingRow =
+    drawerParam && drawerParam !== 'new'
+      ? categories.find((c) => c.id === drawerParam)
+      : undefined
+  const editing: CategoryEditing | null = editingRow
+    ? {
+        id: editingRow.id,
+        name: editingRow.name,
+        description: editingRow.description,
+        sortOrder: editingRow.sortOrder,
+      }
+    : null
+  const mode: 'new' | 'edit' | null = drawerParam === 'new' ? 'new' : editing ? 'edit' : null
+  const closeHref = mergeHref(BASE, sp, { drawer: undefined })
+  const newHref = mergeHref(BASE, sp, { drawer: 'new' })
+
   return (
     <ListPageLayout
       header={
         <>
-          <EquipmentSubNav active="categories" />
           <PageHeader
             title="Equipment categories"
-            description="Buckets that group equipment types — e.g. Tools, Vehicles, Lifts, Trailers. Used in the rate matrix and reports."
+            description="Buckets that group equipment types — e.g. Tools, Vehicles, Lifts. Used in the rate matrix and reports."
+            actions={
+              <Link href={newHref as never} scroll={false}>
+                <Button>
+                  <Plus size={14} /> New category
+                </Button>
+              </Link>
+            }
           />
+          <EquipmentSubNav active="categories" />
         </>
       }
     >
-      <div className="space-y-6">
-        <Section title={`Categories (${categories.length})`} defaultOpen>
-          {categories.length === 0 ? (
-            <EmptyState
-              icon={<Tags size={28} />}
-              title="No categories"
-              description="Create a category to organise equipment types in the rate matrix."
-            />
-          ) : (
-            <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Slug</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead className="text-right">Order</TableHead>
-                    <TableHead className="text-right">Types</TableHead>
-                    <TableHead></TableHead>
+      {categories.length === 0 ? (
+        <EmptyState
+          icon={<Tags size={32} />}
+          title="No categories"
+          description="Create a category to organise equipment types in the rate matrix."
+          action={
+            <Link href={newHref as never} scroll={false}>
+              <Button>New category</Button>
+            </Link>
+          }
+        />
+      ) : (
+        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Slug</TableHead>
+                <TableHead className="text-right">Order</TableHead>
+                <TableHead className="text-right">Types</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {categories.map((c) => {
+                const used = typeCounts[c.id] ?? 0
+                const editHref = mergeHref(BASE, sp, { drawer: c.id })
+                return (
+                  <TableRow key={c.id}>
+                    <TableCell>
+                      <Link
+                        href={editHref as never}
+                        scroll={false}
+                        className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                      >
+                        {c.name}
+                      </Link>
+                      {c.description ? (
+                        <div className="mt-0.5 line-clamp-1 text-xs text-slate-500 dark:text-slate-400">
+                          {c.description}
+                        </div>
+                      ) : null}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-slate-500 dark:text-slate-400">
+                      {c.slug}
+                    </TableCell>
+                    <TableCell className="text-right text-slate-600 tabular-nums dark:text-slate-400">
+                      {c.sortOrder}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Badge variant="secondary">{used}</Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="inline-flex items-center gap-1">
+                        <Link
+                          href={editHref as never}
+                          scroll={false}
+                          className="rounded px-2 py-1 text-xs text-teal-700 hover:bg-teal-50 hover:underline dark:text-teal-400 dark:hover:bg-teal-500/10"
+                        >
+                          Edit
+                        </Link>
+                        <form action={deleteCategory} className="inline">
+                          <input type="hidden" name="id" value={c.id} />
+                          <button
+                            type="submit"
+                            disabled={used > 0}
+                            title={
+                              used > 0
+                                ? `${used} type(s) reference this category — reassign before deleting`
+                                : 'Delete category'
+                            }
+                            className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-400 dark:hover:bg-red-500/10 dark:hover:text-red-400"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </form>
+                      </div>
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {categories.map((c) => {
-                    const used = typeCounts[c.id] ?? 0
-                    return (
-                      <TableRow key={c.id}>
-                        <TableCell>
-                          <form action={updateCategory} className="flex items-center gap-2">
-                            <input type="hidden" name="id" value={c.id} />
-                            <input type="hidden" name="sortOrder" value={c.sortOrder} />
-                            <Input name="name" defaultValue={c.name} className="h-8 max-w-xs" />
-                            <input
-                              type="hidden"
-                              name="description"
-                              defaultValue={c.description ?? ''}
-                            />
-                            <Button type="submit" size="sm" variant="outline">
-                              Save
-                            </Button>
-                          </form>
-                        </TableCell>
-                        <TableCell className="font-mono text-xs text-slate-500 dark:text-slate-400">
-                          {c.slug}
-                        </TableCell>
-                        <TableCell className="max-w-xs truncate text-sm text-slate-600 dark:text-slate-400">
-                          {c.description ?? '—'}
-                        </TableCell>
-                        <TableCell className="text-right text-slate-600 dark:text-slate-400">
-                          {c.sortOrder}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Badge variant="secondary">{used}</Badge>
-                        </TableCell>
-                        <TableCell>
-                          <form action={deleteCategory} className="flex justify-end">
-                            <input type="hidden" name="id" value={c.id} />
-                            <Button
-                              type="submit"
-                              size="sm"
-                              variant="outline"
-                              disabled={used > 0}
-                              title={
-                                used > 0
-                                  ? `Cannot delete — ${used} type(s) reference this category`
-                                  : 'Delete category'
-                              }
-                            >
-                              <Trash2 size={12} />
-                            </Button>
-                          </form>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </Section>
+                )
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      )}
 
-        <Section title="Add a new category" defaultOpen>
-          <form action={createCategory} className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <div className="space-y-1.5">
-              <Label>Name *</Label>
-              <Input name="name" required placeholder="e.g. Vehicles" />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Sort order</Label>
-              <Input name="sortOrder" type="number" defaultValue="0" />
-            </div>
-            <div className="space-y-1.5 sm:col-span-3">
-              <Label>Description</Label>
-              <Textarea name="description" rows={2} />
-            </div>
-            <div className="flex justify-end sm:col-span-3">
-              <Button type="submit">Add category</Button>
-            </div>
-          </form>
-        </Section>
-      </div>
+      <EquipmentCategoryDrawer
+        mode={mode}
+        editing={editing}
+        closeHref={closeHref}
+        saveAction={saveCategory}
+      />
     </ListPageLayout>
   )
 }

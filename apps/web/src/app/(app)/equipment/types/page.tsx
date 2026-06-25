@@ -1,119 +1,79 @@
 import Link from 'next/link'
 import { revalidatePath } from 'next/cache'
-import { Boxes, Pencil, Trash2 } from 'lucide-react'
-import { asc, count, eq, sql } from 'drizzle-orm'
+import { Boxes, Plus, Trash2 } from 'lucide-react'
+import { asc, count, eq } from 'drizzle-orm'
 import {
   Badge,
   Button,
   EmptyState,
-  Input,
-  Label,
   PageHeader,
-  Select,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
-  Textarea,
 } from '@beaconhs/ui'
 import { equipmentCategories, equipmentItems, equipmentTypes } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { requireModuleManage, assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
+import { mergeHref, pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
-import { Section } from '@/components/section'
 import { EquipmentSubNav } from '@/components/equipment-sub-nav'
+import { EquipmentTypeDrawer, type TypeEditing } from './_drawers'
 
 export const metadata = { title: 'Equipment types' }
 export const dynamic = 'force-dynamic'
 
-async function createType(formData: FormData) {
+const BASE = '/equipment/types'
+
+async function saveType(input: {
+  id?: string
+  name: string
+  description: string | null
+  categoryId: string | null
+  everyDays: number | null
+  oilMonths: number | null
+  templateKey: string | null
+}): Promise<{ ok: true } | { ok: false; error: string }> {
   'use server'
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'equipment')
-  const name = String(formData.get('name') ?? '').trim()
-  const description = String(formData.get('description') ?? '').trim() || null
-  const categoryId = String(formData.get('categoryId') ?? '').trim() || null
-  const interval = String(formData.get('intervalDays') ?? '').trim()
-  const oilMonths = String(formData.get('oilMonths') ?? '').trim()
-  const templateKey = String(formData.get('templateKey') ?? '').trim() || null
-  if (!name) return
-
-  const inserted = await ctx.db(async (tx) => {
+  const name = input.name.trim()
+  if (!name) return { ok: false, error: 'Name is required' }
+  const inspectionSchedule =
+    input.everyDays != null || input.templateKey
+      ? { everyDays: input.everyDays ?? undefined, templateKey: input.templateKey ?? undefined }
+      : null
+  const values = {
+    name,
+    description: input.description,
+    categoryId: input.categoryId,
+    defaultOilChangeIntervalMonths: input.oilMonths,
+    inspectionSchedule,
+    requiresPreUseInspection: input.templateKey ? { templateKey: input.templateKey } : null,
+  }
+  const id = await ctx.db(async (tx) => {
+    if (input.id) {
+      await tx.update(equipmentTypes).set(values).where(eq(equipmentTypes.id, input.id))
+      return input.id
+    }
     const [row] = await tx
       .insert(equipmentTypes)
-      .values({
-        tenantId: ctx.tenantId,
-        name,
-        description,
-        categoryId,
-        defaultOilChangeIntervalMonths: oilMonths ? Number(oilMonths) : null,
-        inspectionSchedule:
-          interval || templateKey
-            ? {
-                everyDays: interval ? Number(interval) : undefined,
-                templateKey: templateKey ?? undefined,
-              }
-            : null,
-        requiresPreUseInspection: templateKey ? { templateKey } : null,
-      })
+      .values({ tenantId: ctx.tenantId, ...values })
       .returning({ id: equipmentTypes.id })
-    return row
+    return row?.id
   })
-  if (inserted?.id) {
-    await recordAudit(ctx, {
-      entityType: 'equipment_type',
-      entityId: inserted.id,
-      action: 'create',
-      summary: `Created equipment type "${name}"`,
-      after: { name, description, categoryId, intervalDays: interval, oilMonths, templateKey },
-    })
-  }
-  revalidatePath('/equipment/types')
-}
-
-async function updateType(formData: FormData) {
-  'use server'
-  const ctx = await requireRequestContext()
-  assertCanManageModule(ctx, 'equipment')
-  const id = String(formData.get('id') ?? '').trim()
-  const name = String(formData.get('name') ?? '').trim()
-  const description = String(formData.get('description') ?? '').trim() || null
-  const categoryId = String(formData.get('categoryId') ?? '').trim() || null
-  const interval = String(formData.get('intervalDays') ?? '').trim()
-  const oilMonths = String(formData.get('oilMonths') ?? '').trim()
-  const templateKey = String(formData.get('templateKey') ?? '').trim() || null
-  if (!id || !name) return
-
-  await ctx.db((tx) =>
-    tx
-      .update(equipmentTypes)
-      .set({
-        name,
-        description,
-        categoryId,
-        defaultOilChangeIntervalMonths: oilMonths ? Number(oilMonths) : null,
-        inspectionSchedule:
-          interval || templateKey
-            ? {
-                everyDays: interval ? Number(interval) : undefined,
-                templateKey: templateKey ?? undefined,
-              }
-            : null,
-        requiresPreUseInspection: templateKey ? { templateKey } : null,
-      })
-      .where(eq(equipmentTypes.id, id)),
-  )
+  if (!id) return { ok: false, error: 'Failed to save equipment type' }
   await recordAudit(ctx, {
     entityType: 'equipment_type',
     entityId: id,
-    action: 'update',
-    summary: `Updated equipment type "${name}"`,
-    after: { name, description, categoryId, intervalDays: interval, oilMonths, templateKey },
+    action: input.id ? 'update' : 'create',
+    summary: `${input.id ? 'Updated' : 'Created'} equipment type "${name}"`,
   })
-  revalidatePath('/equipment/types')
+  revalidatePath(BASE)
+  return { ok: true }
 }
 
 async function deleteType(formData: FormData) {
@@ -129,17 +89,21 @@ async function deleteType(formData: FormData) {
     action: 'delete',
     summary: 'Deleted equipment type',
   })
-  revalidatePath('/equipment/types')
+  revalidatePath(BASE)
 }
 
-export default async function EquipmentTypesPage() {
+export default async function EquipmentTypesPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  const sp = await searchParams
+  const drawerParam = pickString(sp.drawer)
   const ctx = await requireModuleManage('equipment')
+
   const { types, categories, counts } = await ctx.db(async (tx) => {
     const t = await tx
-      .select({
-        type: equipmentTypes,
-        cat: equipmentCategories,
-      })
+      .select({ type: equipmentTypes, cat: equipmentCategories })
       .from(equipmentTypes)
       .leftJoin(equipmentCategories, eq(equipmentCategories.id, equipmentTypes.categoryId))
       .orderBy(asc(equipmentTypes.name))
@@ -158,214 +122,139 @@ export default async function EquipmentTypesPage() {
     }
   })
 
+  const editingRow =
+    drawerParam && drawerParam !== 'new' ? types.find((r) => r.type.id === drawerParam) : undefined
+  const editing: TypeEditing | null = editingRow
+    ? {
+        id: editingRow.type.id,
+        name: editingRow.type.name,
+        description: editingRow.type.description,
+        categoryId: editingRow.type.categoryId,
+        everyDays: editingRow.type.inspectionSchedule?.everyDays ?? null,
+        oilMonths: editingRow.type.defaultOilChangeIntervalMonths ?? null,
+        templateKey: editingRow.type.requiresPreUseInspection?.templateKey ?? null,
+      }
+    : null
+  const mode: 'new' | 'edit' | null = drawerParam === 'new' ? 'new' : editing ? 'edit' : null
+  const closeHref = mergeHref(BASE, sp, { drawer: undefined })
+  const newHref = mergeHref(BASE, sp, { drawer: 'new' })
+
   return (
     <ListPageLayout
       header={
         <>
-          <EquipmentSubNav active="types" />
           <PageHeader
             title="Equipment types"
             description="Equipment groupings with default schedules and templates."
+            actions={
+              <Link href={newHref as never} scroll={false}>
+                <Button>
+                  <Plus size={14} /> New type
+                </Button>
+              </Link>
+            }
           />
+          <EquipmentSubNav active="types" />
         </>
       }
     >
-      <div className="space-y-6">
-        <Section title={`Equipment types (${types.length})`} defaultOpen>
-          {types.length === 0 ? (
-            <EmptyState
-              icon={<Boxes size={28} />}
-              title="No equipment types"
-              description="Add a type to group the asset register and define inspection cadence."
-            />
-          ) : (
-            <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Pre-use template</TableHead>
-                    <TableHead>Inspection every (days)</TableHead>
-                    <TableHead>Oil change every (mo.)</TableHead>
-                    <TableHead className="text-right">Items</TableHead>
-                    <TableHead></TableHead>
+      {types.length === 0 ? (
+        <EmptyState
+          icon={<Boxes size={32} />}
+          title="No equipment types"
+          description="Add a type to group the asset register and define inspection cadence."
+          action={
+            <Link href={newHref as never} scroll={false}>
+              <Button>New type</Button>
+            </Link>
+          }
+        />
+      ) : (
+        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Category</TableHead>
+                <TableHead className="text-right">Inspection (days)</TableHead>
+                <TableHead className="text-right">Oil change (mo.)</TableHead>
+                <TableHead className="text-right">Items</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {types.map(({ type, cat }) => {
+                const n = counts[type.id] ?? 0
+                const editHref = mergeHref(BASE, sp, { drawer: type.id })
+                return (
+                  <TableRow key={type.id}>
+                    <TableCell>
+                      <Link
+                        href={editHref as never}
+                        scroll={false}
+                        className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                      >
+                        {type.name}
+                      </Link>
+                      {type.description ? (
+                        <div className="mt-0.5 line-clamp-1 text-xs text-slate-500 dark:text-slate-400">
+                          {type.description}
+                        </div>
+                      ) : null}
+                    </TableCell>
+                    <TableCell className="text-slate-600 dark:text-slate-400">
+                      {cat?.name ?? type.category ?? <span className="text-slate-400">—</span>}
+                    </TableCell>
+                    <TableCell className="text-right text-slate-600 tabular-nums dark:text-slate-400">
+                      {type.inspectionSchedule?.everyDays ?? '—'}
+                    </TableCell>
+                    <TableCell className="text-right text-slate-600 tabular-nums dark:text-slate-400">
+                      {type.defaultOilChangeIntervalMonths ?? '—'}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Badge variant="secondary">{n}</Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="inline-flex items-center gap-1">
+                        <Link
+                          href={editHref as never}
+                          scroll={false}
+                          className="rounded px-2 py-1 text-xs text-teal-700 hover:bg-teal-50 hover:underline dark:text-teal-400 dark:hover:bg-teal-500/10"
+                        >
+                          Edit
+                        </Link>
+                        <form action={deleteType} className="inline">
+                          <input type="hidden" name="id" value={type.id} />
+                          <button
+                            type="submit"
+                            disabled={n > 0}
+                            title={
+                              n > 0
+                                ? `${n} item(s) reference this type — reassign before deleting`
+                                : 'Delete type'
+                            }
+                            className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-400 dark:hover:bg-red-500/10 dark:hover:text-red-400"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </form>
+                      </div>
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {types.map(({ type, cat }) => {
-                    const sched = type.inspectionSchedule ?? null
-                    const preUse = type.requiresPreUseInspection ?? null
-                    const n = counts[type.id] ?? 0
-                    return (
-                      <TableRow key={type.id}>
-                        <TableCell>
-                          <div className="font-medium text-slate-900 dark:text-slate-100">
-                            {type.name}
-                          </div>
-                          {type.description ? (
-                            <div className="text-xs text-slate-500 dark:text-slate-400">
-                              {type.description}
-                            </div>
-                          ) : null}
-                        </TableCell>
-                        <TableCell className="text-slate-600 dark:text-slate-400">
-                          {cat?.name ?? type.category ?? '—'}
-                        </TableCell>
-                        <TableCell className="text-slate-600 dark:text-slate-400">
-                          {preUse?.templateKey ? (
-                            <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs dark:bg-slate-800">
-                              {preUse.templateKey}
-                            </code>
-                          ) : (
-                            '—'
-                          )}
-                        </TableCell>
-                        <TableCell className="text-slate-600 dark:text-slate-400">
-                          {sched?.everyDays ?? '—'}
-                        </TableCell>
-                        <TableCell className="text-slate-600 dark:text-slate-400">
-                          {type.defaultOilChangeIntervalMonths ?? '—'}
-                        </TableCell>
-                        <TableCell className="text-right text-slate-600 dark:text-slate-400">
-                          <Badge variant="secondary">{n}</Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex justify-end gap-2">
-                            <details className="relative">
-                              <summary className="cursor-pointer list-none text-xs text-teal-700 hover:underline dark:text-teal-400">
-                                Edit
-                              </summary>
-                              <div className="absolute right-0 z-10 mt-1 w-[28rem] rounded-md border border-slate-200 bg-white p-4 shadow-lg dark:border-slate-800 dark:bg-slate-900">
-                                <form action={updateType} className="space-y-3">
-                                  <input type="hidden" name="id" value={type.id} />
-                                  <div className="grid grid-cols-2 gap-3">
-                                    <div className="space-y-1.5">
-                                      <Label>Name</Label>
-                                      <Input name="name" defaultValue={type.name} required />
-                                    </div>
-                                    <div className="space-y-1.5">
-                                      <Label>Category</Label>
-                                      <Select
-                                        name="categoryId"
-                                        defaultValue={type.categoryId ?? ''}
-                                      >
-                                        <option value="">— None —</option>
-                                        {categories.map((c) => (
-                                          <option key={c.id} value={c.id}>
-                                            {c.name}
-                                          </option>
-                                        ))}
-                                      </Select>
-                                    </div>
-                                    <div className="space-y-1.5">
-                                      <Label>Inspection every (days)</Label>
-                                      <Input
-                                        name="intervalDays"
-                                        type="number"
-                                        min={1}
-                                        defaultValue={sched?.everyDays ?? ''}
-                                      />
-                                    </div>
-                                    <div className="space-y-1.5">
-                                      <Label>Oil change every (months)</Label>
-                                      <Input
-                                        name="oilMonths"
-                                        type="number"
-                                        min={1}
-                                        defaultValue={type.defaultOilChangeIntervalMonths ?? ''}
-                                      />
-                                    </div>
-                                    <div className="col-span-2 space-y-1.5">
-                                      <Label>Pre-use template key</Label>
-                                      <Input
-                                        name="templateKey"
-                                        defaultValue={preUse?.templateKey ?? ''}
-                                      />
-                                    </div>
-                                    <div className="col-span-2 space-y-1.5">
-                                      <Label>Description</Label>
-                                      <Textarea
-                                        name="description"
-                                        rows={2}
-                                        defaultValue={type.description ?? ''}
-                                      />
-                                    </div>
-                                  </div>
-                                  <div className="flex justify-end gap-2">
-                                    <Button size="sm" type="submit">
-                                      <Pencil size={12} /> Save
-                                    </Button>
-                                  </div>
-                                </form>
-                              </div>
-                            </details>
-                            <form action={deleteType}>
-                              <input type="hidden" name="id" value={type.id} />
-                              <Button
-                                type="submit"
-                                size="sm"
-                                variant="outline"
-                                disabled={n > 0}
-                                title={
-                                  n > 0
-                                    ? `Cannot delete — ${n} item(s) reference this type`
-                                    : 'Delete type'
-                                }
-                              >
-                                <Trash2 size={12} />
-                              </Button>
-                            </form>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </Section>
+                )
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      )}
 
-        <Section title="Add a new equipment type" defaultOpen>
-          <form action={createType} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div className="space-y-1.5 sm:col-span-2">
-              <Label>Name *</Label>
-              <Input name="name" required placeholder="e.g. Pickup truck" />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Category</Label>
-              <Select name="categoryId" defaultValue="">
-                <option value="">— None —</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Pre-use template key</Label>
-              <Input name="templateKey" placeholder="e.g. vehicle_pre_use" />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Inspection every (days)</Label>
-              <Input name="intervalDays" type="number" min={1} placeholder="e.g. 365" />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Oil change every (months)</Label>
-              <Input name="oilMonths" type="number" min={1} placeholder="e.g. 6" />
-            </div>
-            <div className="space-y-1.5 sm:col-span-2">
-              <Label>Description</Label>
-              <Textarea name="description" rows={2} />
-            </div>
-            <div className="flex justify-end sm:col-span-2">
-              <Button type="submit">Add type</Button>
-            </div>
-          </form>
-        </Section>
-      </div>
+      <EquipmentTypeDrawer
+        mode={mode}
+        editing={editing}
+        closeHref={closeHref}
+        categories={categories.map((c) => ({ id: c.id, name: c.name }))}
+        saveAction={saveType}
+      />
     </ListPageLayout>
   )
 }
