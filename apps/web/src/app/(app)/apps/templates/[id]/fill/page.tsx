@@ -1,4 +1,4 @@
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { and, asc, desc, eq } from 'drizzle-orm'
 import {
   formResponses,
@@ -133,6 +133,27 @@ export default async function FillTemplatePage({
     notFound()
   }
 
+  // The unified record page (/apps/responses/[id]) is the single surface for
+  // inline-record apps and for any already-submitted entry — redirect there so
+  // we never show the old fill→review split. Guided-fill DRAFTS keep using the
+  // wizard here; embeds (returnTo) keep their in-overlay filler.
+  const recordCfg = data.tmpl.recordConfig as {
+    editingMode?: 'guided_fill' | 'inline_record' | 'both'
+  } | null
+  const editingMode =
+    recordCfg?.editingMode ??
+    (data.tmpl.kind !== 'wizard' && data.tmpl.kind !== 'checklist'
+      ? 'inline_record'
+      : 'guided_fill')
+  const inlineApp = editingMode !== 'guided_fill'
+  if (
+    !returnTo &&
+    response &&
+    (inlineApp || (response.status !== 'draft' && response.status !== 'in_progress'))
+  ) {
+    redirect(`/apps/responses/${response.id}`)
+  }
+
   // A response is editable only while in a pre-submit state AND the user can
   // fill the app. Submitted/closed entries (or view-only users) render
   // read-only — the same record surface, just locked.
@@ -142,8 +163,8 @@ export default async function FillTemplatePage({
   const readOnly = !editable
   // Reviewers/admins get a link to the richer review surface (CAPA/comments/
   // audit/sign-off) for an existing response.
-  const reviewHref =
-    response && can(ctx, 'forms.response.read.all') ? `/apps/responses/${response.id}` : null
+  // The record page IS the review surface now — no separate Review round-trip.
+  const reviewHref = null
 
   // Hydrate the renderer: drafts from draftData; submitted/closed from the
   // final `data` (repeating-section rows live at data[sectionId]).

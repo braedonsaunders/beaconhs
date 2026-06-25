@@ -7,7 +7,7 @@
 // every other records page.
 
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { ClipboardCheck, Plus, Settings2 } from 'lucide-react'
 import { and, asc, count, desc, eq, type SQL } from 'drizzle-orm'
 import {
@@ -32,6 +32,7 @@ import {
   user,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { createDraftResponse } from '@/app/(app)/apps/templates/[id]/fill/actions'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
@@ -90,6 +91,8 @@ export default async function AppRecordsPage({
         id: formTemplates.id,
         name: formTemplates.name,
         description: formTemplates.description,
+        kind: formTemplates.kind,
+        recordConfig: formTemplates.recordConfig,
       })
       .from(formTemplates)
       .where(eq(formTemplates.id, id))
@@ -152,6 +155,37 @@ export default async function AppRecordsPage({
   const newHref = `/apps/templates/${id}/fill`
   const sortProps = { basePath, currentParams: sp, dir: listParams.dir }
 
+  const recordConfig = tmpl.recordConfig as {
+    editingMode?: 'guided_fill' | 'inline_record' | 'both'
+  } | null
+  const editingMode =
+    recordConfig?.editingMode ??
+    (tmpl.kind !== 'wizard' && tmpl.kind !== 'checklist' ? 'inline_record' : 'guided_fill')
+  const inlineApp = editingMode !== 'guided_fill'
+
+  // Inline apps have no wizard: "New entry" creates a draft and opens the unified
+  // record page directly. A server action (not a Link) so a prefetch can never
+  // create stray drafts. Guided-fill apps still start in the wizard.
+  async function createEntry() {
+    'use server'
+    const res = await createDraftResponse({ templateId: id })
+    if (res.ok) redirect(`/apps/responses/${res.responseId}`)
+  }
+
+  const newEntryButton = inlineApp ? (
+    <form action={createEntry}>
+      <Button type="submit">
+        <Plus size={14} /> New entry
+      </Button>
+    </form>
+  ) : (
+    <Link href={newHref}>
+      <Button>
+        <Plus size={14} /> New entry
+      </Button>
+    </Link>
+  )
+
   return (
     <ListPageLayout
       header={
@@ -168,11 +202,7 @@ export default async function AppRecordsPage({
                     </Button>
                   </Link>
                 ) : null}
-                <Link href={newHref}>
-                  <Button>
-                    <Plus size={14} /> New entry
-                  </Button>
-                </Link>
+                {newEntryButton}
               </>
             }
           />
@@ -193,11 +223,7 @@ export default async function AppRecordsPage({
           icon={<ClipboardCheck size={32} />}
           title={statusFilter ? 'No entries match this filter' : 'No entries yet'}
           description="Create the first entry for this app."
-          action={
-            <Link href={newHref}>
-              <Button>New entry</Button>
-            </Link>
-          }
+          action={newEntryButton}
         />
       ) : (
         <>
@@ -237,10 +263,7 @@ export default async function AppRecordsPage({
                 return (
                   <TableRow key={response.id}>
                     <TableCell className="font-mono text-xs">
-                      <Link
-                        href={`/apps/templates/${id}/fill?responseId=${response.id}`}
-                        className="hover:underline"
-                      >
+                      <Link href={`/apps/responses/${response.id}`} className="hover:underline">
                         {response.id.slice(0, 8)}
                       </Link>
                     </TableCell>
