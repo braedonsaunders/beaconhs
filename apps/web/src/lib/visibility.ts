@@ -15,7 +15,7 @@ import { eq, inArray, or, sql, type SQL } from 'drizzle-orm'
 import type { PgColumn } from 'drizzle-orm/pg-core'
 import { people } from '@beaconhs/db/schema'
 import type { Database } from '@beaconhs/db'
-import type { RequestContext } from '@beaconhs/tenant'
+import { can, type RequestContext } from '@beaconhs/tenant'
 
 export type RecordOwnerColumns = {
   /** Person the record is about/assigned to (holder, owner, assignee, author). */
@@ -102,4 +102,123 @@ export async function recordVisibilityWhere(
   // No scope grants anything → see nothing (defensive; never fall through to all).
   if (conds.length === 0) return sql`false`
   return conds.length === 1 ? conds[0] : or(...conds)
+}
+
+// ---------------------------------------------------------------------------
+// Tiered per-module record visibility (the "most people see only their own"
+// model). Permission-driven (not scope-driven like recordVisibilityWhere above):
+// each record module declares `<prefix>.read.{all,site,self}` keys, and these
+// helpers turn the caller's tier into a list predicate (`moduleScopeWhere`) or a
+// single-record guard (`canSeeRecord`). Generalises the Journals approach
+// (journals/_lib.ts `journalScopeWhere`) to every record module.
+// ---------------------------------------------------------------------------
+
+export type VisibilityTier = 'all' | 'site' | 'self'
+
+/**
+ * The record-visibility tier this context holds for a module, from its tiered
+ * read permissions: `<prefix>.read.all` (or super-admin) → all; `.read.site` →
+ * site; otherwise self (the safe default — a role with no read tier still only
+ * ever sees its own records, never the whole tenant).
+ */
+export function resolveVisibilityTier(ctx: RequestContext, prefix: string): VisibilityTier {
+  if (ctx.isSuperAdmin || can(ctx, `${prefix}.read.all`)) return 'all'
+  if (can(ctx, `${prefix}.read.site`)) return 'site'
+  return 'self'
+}
+
+function mySiteIds(ctx: RequestContext): string[] {
+  return ctx.scopes.flatMap((s) => (s.type === 'sites' ? s.siteIds : []))
+}
+
+function myTenantUserId(ctx: RequestContext): string | null {
+  const id = ctx.membership?.id
+  return !id || id === 'super-admin' ? null : id
+}
+
+export type ModuleScopeCols = {
+  /** Permission-key prefix, e.g. 'incidents' | 'ca' | 'hazid' | 'inspections' | 'forms.response'. */
+  prefix: string
+  /** tenant_users columns identifying who owns/created/submitted the record. */
+  ownerCols?: PgColumn[]
+  /** The record's site/org-unit column, for the `site` tier. */
+  siteCol?: PgColumn
+  /** A person column when the viewer can also be the record's SUBJECT. */
+  personCol?: PgColumn
+}
+
+/** The "this record is mine" conditions: an owner column equals me, or I'm the subject. */
+async function ownPredicates(
+  ctx: RequestContext,
+  tx: Database,
+  cols: ModuleScopeCols,
+): Promise<SQL[]> {
+  const conds: SQL[] = []
+  const tuId = myTenantUserId(ctx)
+  if (tuId && cols.ownerCols) for (const c of cols.ownerCols) conds.push(eq(c, tuId))
+  if (cols.personCol) {
+    const pid = await resolveMyPersonId(ctx, tx)
+    if (pid) conds.push(eq(cols.personCol, pid))
+  }
+  return conds
+}
+
+/**
+ * List predicate enforcing the caller's read tier for a module. AND this into a
+ * list query's WHERE. Returns:
+ *   all  → undefined (no extra filter; RLS already bounds to tenant)
+ *   site → records at the caller's scoped sites, unioned with their own
+ *   self → records the caller owns/created or is the subject of (else `false`)
+ * Call inside `ctx.db((tx) => …)` so the person sub-select runs under the same tx.
+ */
+export async function moduleScopeWhere(
+  ctx: RequestContext,
+  tx: Database,
+  cols: ModuleScopeCols,
+): Promise<SQL | undefined> {
+  const tier = resolveVisibilityTier(ctx, cols.prefix)
+  if (tier === 'all') return undefined
+
+  const ownConds = await ownPredicates(ctx, tx, cols)
+
+  if (tier === 'site' && cols.siteCol) {
+    const sites = mySiteIds(ctx)
+    if (sites.length > 0) return or(inArray(cols.siteCol, sites), ...ownConds)
+    // read.site but no site scope assigned → fall through to own-only.
+  }
+
+  if (ownConds.length === 0) return sql`false`
+  return ownConds.length === 1 ? ownConds[0] : or(...ownConds)
+}
+
+export type RecordOwnership = {
+  prefix: string
+  /** tenant_users ids that own/created/submitted the record (nullish ignored). */
+  ownerIds?: (string | null | undefined)[]
+  siteId?: string | null
+  /** person id the record is about, compared to the caller's person. */
+  personId?: string | null
+}
+
+/**
+ * Detail-page guard mirroring `moduleScopeWhere` for a single loaded record —
+ * `notFound()` when this returns false. Closes the read-by-guessing-the-URL gap:
+ * all → always; site → record at one of my sites (or mine); self → mine only.
+ */
+export async function canSeeRecord(
+  ctx: RequestContext,
+  tx: Database,
+  rec: RecordOwnership,
+): Promise<boolean> {
+  const tier = resolveVisibilityTier(ctx, rec.prefix)
+  if (tier === 'all') return true
+  if (tier === 'site' && rec.siteId && mySiteIds(ctx).includes(rec.siteId)) return true
+
+  const tuId = myTenantUserId(ctx)
+  if (tuId && rec.ownerIds?.some((o) => o === tuId)) return true
+  if (rec.personId) {
+    const pid = await resolveMyPersonId(ctx, tx)
+    if (pid && pid === rec.personId) return true
+  }
+  return false
 }

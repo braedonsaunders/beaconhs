@@ -52,6 +52,7 @@ import {
 import { publicUrl } from '@beaconhs/storage'
 import { revalidatePath } from 'next/cache'
 import { requireRequestContext } from '@/lib/auth'
+import { canSeeRecord } from '@/lib/visibility'
 import { FlowApprovals } from '@/components/flows/flow-approvals'
 import { getPendingFlowGatesForSubject } from '@/lib/flows/gate-store'
 import { canManageSubjectGates } from '@/lib/flows/registry'
@@ -364,6 +365,18 @@ export default async function HazidAssessmentDetailPage({
   })
 
   if (!data) notFound()
+  // Per-user record visibility: read.all → any; read.site → my sites; else → ones
+  // I reported.
+  if (
+    !(await ctx.db((tx) =>
+      canSeeRecord(ctx, tx, {
+        prefix: 'hazid',
+        ownerIds: [data.a.reportedByTenantUserId],
+        siteId: data.a.siteOrgUnitId,
+      }),
+    ))
+  )
+    notFound()
 
   const {
     a,

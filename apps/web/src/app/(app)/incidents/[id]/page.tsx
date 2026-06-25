@@ -75,6 +75,7 @@ import { IncidentHeaderActions } from './_header-actions'
 import { pickString } from '@/lib/list-params'
 import { publicUrl } from '@beaconhs/storage'
 import { requireRequestContext } from '@/lib/auth'
+import { canSeeRecord } from '@/lib/visibility'
 import { canManageModule } from '@/lib/module-admin/guard'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { runModuleFlows } from '@/lib/flows/run-module-flows'
@@ -1206,6 +1207,18 @@ export default async function IncidentDetailPage({
   })
 
   if (!data) notFound()
+  // Per-user record visibility: don't expose an incident the viewer may not see
+  // (read.all → any; read.site → my sites; else → ones I reported).
+  if (
+    !(await ctx.db((tx) =>
+      canSeeRecord(ctx, tx, {
+        prefix: 'incidents',
+        ownerIds: [data.incident.reportedByTenantUserId],
+        siteId: data.incident.siteOrgUnitId,
+      }),
+    ))
+  )
+    notFound()
   const {
     incident,
     site,

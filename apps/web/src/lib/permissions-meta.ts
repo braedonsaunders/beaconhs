@@ -10,6 +10,8 @@ import { PERMISSION_CATALOGUE, type CataloguePermission } from '@beaconhs/db/sch
 const GROUP_LABELS: Record<string, string> = {
   forms: 'Builder',
   incidents: 'Incidents',
+  inspections: 'Inspections',
+  hazid: 'Hazard assessments',
   training: 'Training',
   equipment: 'Equipment',
   ppe: 'PPE',
@@ -45,6 +47,14 @@ const PERMISSION_LABELS: Record<string, string> = {
   'incidents.update': 'Edit incidents',
   'incidents.investigate': 'Investigate incidents',
   'incidents.close': 'Close incidents',
+
+  'inspections.read.all': 'View all inspections',
+  'inspections.read.site': 'View site inspections',
+  'inspections.read.self': 'View own inspections',
+
+  'hazid.read.all': 'View all hazard assessments',
+  'hazid.read.site': 'View site hazard assessments',
+  'hazid.read.self': 'View own hazard assessments',
 
   'training.read.all': 'View all training',
   'training.read.self': 'View own training',

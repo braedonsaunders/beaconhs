@@ -57,6 +57,7 @@ import { loadEntitiesForPickers, type EntitiesByField } from '@/app/(app)/apps/_
 import { canvasCss, columnsCss, gridClass, resolveCanvas } from '@/app/(app)/apps/_lib/canvas'
 import type { AttachedFile } from '@/components/file-upload'
 import { requireRequestContext } from '@/lib/auth'
+import { canSeeRecord } from '@/lib/visibility'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { ActivityFeed } from '@/components/activity-feed'
 import { DetailGrid } from '@/components/detail-grid'
@@ -240,6 +241,19 @@ export default async function FormResponsePage({
   })
 
   if (!data) notFound()
+  // Per-user record visibility: read.all → any; read.site → my sites; else → ones I
+  // submitted or am the subject of.
+  if (
+    !(await ctx.db((tx) =>
+      canSeeRecord(ctx, tx, {
+        prefix: 'forms.response',
+        ownerIds: [data.response.submittedBy],
+        personId: data.response.subjectPersonId,
+        siteId: data.response.siteOrgUnitId,
+      }),
+    ))
+  )
+    notFound()
   const pendingFlowGates = await getPendingFlowGatesForSubject(
     ctx,
     'form_template',

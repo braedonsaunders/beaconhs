@@ -38,6 +38,7 @@ import {
   user,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { moduleScopeWhere } from '@/lib/visibility'
 import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
 import { TableToolbar } from '@/components/table-toolbar'
@@ -85,7 +86,18 @@ export default async function InspectionRecordsPage({
   const ctx = await requireRequestContext()
 
   const { rows, total, statusCounts, types, sites, inspectors } = await ctx.db(async (tx) => {
+    // Per-user record visibility: read.all → everything, read.site → my sites,
+    // else → inspections I performed or submitted.
+    const vis = await moduleScopeWhere(ctx, tx, {
+      prefix: 'inspections',
+      ownerCols: [
+        inspectionRecords.inspectorTenantUserId,
+        inspectionRecords.submittedByTenantUserId,
+      ],
+      siteCol: inspectionRecords.siteOrgUnitId,
+    })
     const filters: SQL<unknown>[] = []
+    if (vis) filters.push(vis)
     if (params.q) {
       const term = `%${params.q}%`
       const c = or(
@@ -170,6 +182,7 @@ export default async function InspectionRecordsPage({
     const ss = await tx
       .select({ s: inspectionRecords.status, c: count() })
       .from(inspectionRecords)
+      .where(vis)
       .groupBy(inspectionRecords.status)
     const sc: Record<string, number> = {}
     for (const r of ss) sc[r.s] = Number(r.c)
@@ -184,6 +197,7 @@ export default async function InspectionRecordsPage({
       .select({ id: orgUnits.id, name: orgUnits.name })
       .from(orgUnits)
       .innerJoin(inspectionRecords, eq(inspectionRecords.siteOrgUnitId, orgUnits.id))
+      .where(vis)
       .groupBy(orgUnits.id, orgUnits.name)
       .orderBy(asc(orgUnits.name))
       .limit(30)
@@ -196,6 +210,7 @@ export default async function InspectionRecordsPage({
       })
       .from(tenantUsers)
       .innerJoin(inspectionRecords, eq(inspectionRecords.inspectorTenantUserId, tenantUsers.id))
+      .where(vis)
       .groupBy(tenantUsers.id, tenantUsers.displayName)
       .orderBy(desc(count()))
       .limit(20)

@@ -26,6 +26,7 @@ import {
 } from '@beaconhs/db/schema'
 import { publicUrl } from '@beaconhs/storage'
 import { requireRequestContext } from '@/lib/auth'
+import { canSeeRecord } from '@/lib/visibility'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { FlowApprovals } from '@/components/flows/flow-approvals'
@@ -274,6 +275,17 @@ export default async function CorrectiveActionPage({
     return { ca, source, photoRows, stepsRaw, verifierName, siteOptions }
   })
   if (!data) notFound()
+  // Per-user record visibility: read.all → any; read.site → my sites; else → ones I own.
+  if (
+    !(await ctx.db((tx) =>
+      canSeeRecord(ctx, tx, {
+        prefix: 'ca',
+        ownerIds: [data.ca.ownerTenantUserId],
+        siteId: data.ca.siteOrgUnitId,
+      }),
+    ))
+  )
+    notFound()
   const { ca, source, photoRows, stepsRaw, verifierName, siteOptions } = data
 
   const owners = await listTenantOwners()

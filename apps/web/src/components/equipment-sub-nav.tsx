@@ -1,7 +1,8 @@
 // Equipment sub-nav — a thin delegate to the shared, registry-driven <ModuleNav>.
 // Operational tabs (register, work orders, truck log, inspections, check-in/out,
-// rates, expenses, log, reports) + a Manage pill; the admin taxonomies (types,
-// categories, inspection types) live in /equipment/manage.
+// rates, expenses, log) + a Manage pill; the admin taxonomies (types,
+// categories, inspection types) live in /equipment/manage. Reporting lives in
+// the global reports engine (/reports), not a per-module tab.
 
 import { ModuleNav } from '@/components/module-admin/module-nav'
 
@@ -17,7 +18,6 @@ export type EquipmentSubNavKey =
   | 'types'
   | 'categories'
   | 'inspection-types'
-  | 'reports'
 
 export function EquipmentSubNav({ active }: { active: EquipmentSubNavKey }) {
   return <ModuleNav moduleKey="equipment" active={active} />

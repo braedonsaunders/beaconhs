@@ -130,12 +130,8 @@ export const DEFAULT_LAYOUTS: Record<RoleTier, DashboardLayoutData> = {
       { id: 'personal-my-equipment', x: 6, y: 7, w: 6, h: 5 },
       // Row 4 — inbox
       { id: 'personal-inbox', x: 0, y: 12, w: 12, h: 5 },
-      // Row 5 — personal status
-      { id: 'kpi-days-since-recordable', x: 0, y: 17, w: 4, h: 3 },
-      { id: 'kpi-expiring-certs', x: 4, y: 17, w: 4, h: 3 },
-      { id: 'kpi-ppe-overdue', x: 8, y: 17, w: 4, h: 3 },
-      // Row 6 — my training (we re-use expiring-training as "my")
-      { id: 'list-expiring-training', x: 0, y: 20, w: 12, h: 5 },
+      // No org/aggregate cards: a worker's homepage is personal-only. (The
+      // render filter in dashboard/page.tsx enforces this regardless of layout.)
     ],
   },
 }

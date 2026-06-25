@@ -8,6 +8,8 @@ import { ROLE_TIER_LABELS } from '../_role-tier'
 import { DashboardGrid } from '../_dashboard-grid'
 import { WidgetCard } from '../_widget-views'
 import { WIDGETS, WIDGET_CARD_KEY } from '../_widget-registry'
+import { canSeeWidget } from '../_widget-access'
+import { canViewInsights } from '../../insights/_access'
 import { loadCardsForPalette } from '../../insights/cards/_data'
 import { loadDashboardCardRenders } from '../../insights/_data'
 import { ensureSystemCards } from '../../insights/_system-cards'
@@ -77,11 +79,13 @@ export default async function CustomiseDashboardPage() {
     const renders = await loadDashboardCardRenders(ctx, placedCards)
     for (const r of renders) nodes[r.id] = <CardCell key={r.id} render={r} />
   }
-  const libraryCards = paletteCards.map((c) => ({
-    id: c.id,
-    name: c.name,
-    description: c.description ?? '',
-  }))
+  // Palette is permission-gated to match the live dashboard: a self-tier user is
+  // only offered personal widgets, and the Insights library only when they have
+  // analytics access — so they can't add a card that the view-mode filter drops.
+  const allowedWidgetIds = Object.keys(WIDGETS).filter((id) => canSeeWidget(ctx, id))
+  const libraryCards = canViewInsights(ctx)
+    ? paletteCards.map((c) => ({ id: c.id, name: c.name, description: c.description ?? '' }))
+    : []
 
   return (
     <PageContainer>
@@ -111,6 +115,7 @@ export default async function CustomiseDashboardPage() {
           role={role}
           mode="edit"
           libraryCards={libraryCards}
+          allowedWidgetIds={allowedWidgetIds}
         />
       </div>
     </PageContainer>

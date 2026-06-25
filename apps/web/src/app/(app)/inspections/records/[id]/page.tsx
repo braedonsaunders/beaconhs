@@ -39,6 +39,7 @@ import {
 } from '@beaconhs/db/schema'
 import { publicUrl } from '@beaconhs/storage'
 import { requireRequestContext } from '@/lib/auth'
+import { canSeeRecord } from '@/lib/visibility'
 import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { FlowApprovals } from '@/components/flows/flow-approvals'
 import { getPendingFlowGatesForSubject } from '@/lib/flows/gate-store'
@@ -633,6 +634,18 @@ export default async function InspectionRecordDetailPage({
   })
 
   if (!data) notFound()
+  // Per-user record visibility: read.all → any; read.site → my sites; else → ones
+  // I performed or submitted.
+  if (
+    !(await ctx.db((tx) =>
+      canSeeRecord(ctx, tx, {
+        prefix: 'inspections',
+        ownerIds: [data.record.inspectorTenantUserId, data.record.submittedByTenantUserId],
+        siteId: data.record.siteOrgUnitId,
+      }),
+    ))
+  )
+    notFound()
   const { record, type, site, inspector, criteria, photos, peopleList, siteOptions } = data
 
   // Summary counts

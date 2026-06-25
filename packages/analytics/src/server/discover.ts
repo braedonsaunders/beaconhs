@@ -128,7 +128,6 @@ const PREFIX_CATEGORY: [string, string][] = [
   ['insight_', 'Insights'],
   ['report_', 'Reports'],
   ['safe_distance', 'Tools'],
-  ['atmospheric_', 'Tools'],
   ['kiosk', 'Tools'],
   ['notification', 'Notifications'],
   ['webpush', 'Notifications'],

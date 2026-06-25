@@ -168,8 +168,6 @@ export const TENANT_SCOPED_TABLES = [
   'training_enrollments',
   'training_lesson_progress',
   'training_content_items',
-  'atmospheric_sensors',
-  'atmospheric_calibrations',
   'report_schedules',
   'report_runs',
   'tenant_notification_recipients',

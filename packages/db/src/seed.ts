@@ -2,8 +2,6 @@ import { randomUUID } from 'node:crypto'
 import { and, eq, sql } from 'drizzle-orm'
 import { createClient } from './client'
 import {
-  atmosphericCalibrations,
-  atmosphericSensors,
   BUILTIN_ROLES,
   correctiveActions,
   crews,
@@ -1823,56 +1821,6 @@ async function main() {
         code: 'PWELD',
         validForMonths: 24,
         description: 'Provincially-recognised pressure welding ticket.',
-      })
-    }
-
-    // --- Atmospheric Sensors + Calibrations -----------------------------
-    const [sensor1] = await tx
-      .insert(atmosphericSensors)
-      .values({
-        tenantId: tenant.id,
-        identifier: 'GASMON-04',
-        make: 'BW Technologies',
-        model: 'GasAlertMicro 5',
-        serialNumber: 'GA5-2024-04',
-        type: 'multi_gas',
-        gases: ['O2', 'LEL', 'H2S', 'CO'],
-        lastCalibrationOn: isoDate(new Date(today.getTime() - 30 * dayMs)),
-        nextCalibrationDue: isoDate(new Date(today.getTime() + 60 * dayMs)),
-        status: 'active',
-      })
-      .returning()
-    const [sensor2] = await tx
-      .insert(atmosphericSensors)
-      .values({
-        tenantId: tenant.id,
-        identifier: 'GASMON-07',
-        make: 'BW Technologies',
-        model: 'GasAlertMicro 5',
-        serialNumber: 'GA5-2023-12',
-        type: 'multi_gas',
-        gases: ['O2', 'LEL', 'H2S', 'CO'],
-        lastCalibrationOn: isoDate(new Date(today.getTime() - 200 * dayMs)),
-        nextCalibrationDue: isoDate(new Date(today.getTime() - 10 * dayMs)),
-        status: 'active',
-      })
-      .returning()
-    if (sensor1 && membership) {
-      await tx.insert(atmosphericCalibrations).values({
-        tenantId: tenant.id,
-        sensorId: sensor1.id,
-        calibratedOn: isoDate(new Date(today.getTime() - 30 * dayMs)),
-        calibratedByTenantUserId: membership.id,
-        notes: 'Routine bump test + span calibration with certified gas.',
-      })
-    }
-    if (sensor2 && membership) {
-      await tx.insert(atmosphericCalibrations).values({
-        tenantId: tenant.id,
-        sensorId: sensor2.id,
-        calibratedOn: isoDate(new Date(today.getTime() - 200 * dayMs)),
-        calibratedByTenantUserId: membership.id,
-        notes: 'Previous calibration — now overdue.',
       })
     }
 

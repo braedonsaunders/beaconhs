@@ -5,6 +5,7 @@ import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
 import { incidentPeople, incidents, orgUnits, people } from '@beaconhs/db/schema'
 import { IncidentsSubNav } from './_sub-nav'
 import { requireRequestContext } from '@/lib/auth'
+import { moduleScopeWhere } from '@/lib/visibility'
 import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
 import { Pagination } from '@/components/pagination'
@@ -53,7 +54,15 @@ export default async function IncidentsPage({
   const ctx = await requireRequestContext()
 
   const { rows, total, typeCounts, statusCounts, involved } = await ctx.db(async (tx) => {
+    // Per-user record visibility: read.all → everything, read.site → my sites,
+    // else → incidents I reported. AND'd into every count + the page query.
+    const vis = await moduleScopeWhere(ctx, tx, {
+      prefix: 'incidents',
+      ownerCols: [incidents.reportedByTenantUserId],
+      siteCol: incidents.siteOrgUnitId,
+    })
     const filters: SQL<unknown>[] = [isNull(incidents.deletedAt)]
+    if (vis) filters.push(vis)
     if (params.q) {
       const term = `%${params.q}%`
       const cond = or(
@@ -93,13 +102,16 @@ export default async function IncidentsPage({
       .limit(params.perPage)
       .offset((params.page - 1) * params.perPage)
 
+    const facetWhere = and(isNull(incidents.deletedAt), vis)
     const types = await tx
       .select({ type: incidents.type, c: count() })
       .from(incidents)
+      .where(facetWhere)
       .groupBy(incidents.type)
     const statuses = await tx
       .select({ status: incidents.status, c: count() })
       .from(incidents)
+      .where(facetWhere)
       .groupBy(incidents.status)
 
     const pageIds = data.map((d) => d.incident.id)

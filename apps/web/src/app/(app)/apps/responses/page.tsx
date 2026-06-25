@@ -23,6 +23,7 @@ import {
   user,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { moduleScopeWhere } from '@/lib/visibility'
 import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
@@ -68,7 +69,16 @@ export default async function FormResponsesPage({
   const ctx = await requireRequestContext()
 
   const { rows, total, statusCounts, templateOptions } = await ctx.db(async (tx) => {
+    // Per-user record visibility: read.all → everything, read.site → my sites,
+    // else → responses I submitted or am the subject of.
+    const vis = await moduleScopeWhere(ctx, tx, {
+      prefix: 'forms.response',
+      ownerCols: [formResponses.submittedBy],
+      personCol: formResponses.subjectPersonId,
+      siteCol: formResponses.siteOrgUnitId,
+    })
     const filters: SQL<unknown>[] = []
+    if (vis) filters.push(vis)
     if (statusFilter) filters.push(eq(formResponses.status, statusFilter as any))
     if (templateFilter) filters.push(eq(formResponses.templateId, templateFilter))
     if (categoryFilter) filters.push(eq(formTemplates.category, categoryFilter))
@@ -120,7 +130,7 @@ export default async function FormResponsesPage({
     const ss = await tx
       .select({ s: formResponses.status, c: count() })
       .from(formResponses)
-      .where(templateFilter ? eq(formResponses.templateId, templateFilter) : undefined)
+      .where(and(templateFilter ? eq(formResponses.templateId, templateFilter) : undefined, vis))
       .groupBy(formResponses.status)
     // App filter options: every template that has at least one response, most-used
     // first so the dominant apps are easy to find.
@@ -128,6 +138,7 @@ export default async function FormResponsesPage({
       .select({ id: formTemplates.id, name: formTemplates.name, c: count(formResponses.id) })
       .from(formResponses)
       .innerJoin(formTemplates, eq(formTemplates.id, formResponses.templateId))
+      .where(vis)
       .groupBy(formTemplates.id, formTemplates.name)
       .orderBy(desc(count(formResponses.id)))
     return {

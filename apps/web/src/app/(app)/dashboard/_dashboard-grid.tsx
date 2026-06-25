@@ -62,12 +62,15 @@ export function DashboardGrid({
   role,
   mode,
   libraryCards = [],
+  allowedWidgetIds,
 }: {
   initialLayout: DashboardLayoutData
   nodes: Record<string, ReactNode>
   role: RoleTier
   mode: 'view' | 'edit'
   libraryCards?: LibraryCard[]
+  /** Registry widget ids the viewer is permitted to add (omit = all). */
+  allowedWidgetIds?: readonly string[]
 }) {
   const cardNameById = useMemo(
     () => new Map(libraryCards.map((c) => [c.id, c.name])),
@@ -346,6 +349,7 @@ export function DashboardGrid({
             onAdd={handleAdd}
             libraryCards={libraryCards}
             onAddCard={handleAddCard}
+            allowedWidgetIds={allowedWidgetIds}
           />
         ) : null}
       </div>
@@ -428,14 +432,17 @@ function WidgetPalette({
   onAdd,
   libraryCards,
   onAddCard,
+  allowedWidgetIds,
 }: {
   role: RoleTier
   presentIds: Set<string>
   onAdd: (w: WidgetMeta) => void
   libraryCards: LibraryCard[]
   onAddCard: (c: LibraryCard) => void
+  allowedWidgetIds?: readonly string[]
 }) {
-  const visible = widgetsForRole(role)
+  const allowed = allowedWidgetIds ? new Set(allowedWidgetIds) : null
+  const visible = widgetsForRole(role).filter((w) => !allowed || allowed.has(w.id))
   const byCategory = new Map<WidgetCategory, WidgetMeta[]>()
   for (const w of visible) {
     const arr = byCategory.get(w.category) ?? []

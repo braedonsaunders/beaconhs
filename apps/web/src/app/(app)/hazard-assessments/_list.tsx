@@ -42,6 +42,7 @@ import {
   personGroupMemberships,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { moduleScopeWhere } from '@/lib/visibility'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
@@ -82,7 +83,15 @@ export async function AssessmentsListPage({
   const ctx = await requireRequestContext()
 
   const data = await ctx.db(async (tx) => {
+    // Per-user record visibility: read.all → everything, read.site → my sites,
+    // else → assessments I reported. Composes with the `mineOnly` "my" page flag.
+    const vis = await moduleScopeWhere(ctx, tx, {
+      prefix: 'hazid',
+      ownerCols: [hazidAssessments.reportedByTenantUserId],
+      siteCol: hazidAssessments.siteOrgUnitId,
+    })
     const filters: SQL<unknown>[] = [sql`${hazidAssessments.deletedAt} is null`]
+    if (vis) filters.push(vis)
     if (mineOnly && ctx.membership?.id) {
       filters.push(eq(hazidAssessments.reportedByTenantUserId, ctx.membership.id))
     }
@@ -182,6 +191,7 @@ export async function AssessmentsListPage({
       .select({ id: orgUnits.id, name: orgUnits.name })
       .from(orgUnits)
       .innerJoin(hazidAssessments, eq(hazidAssessments.siteOrgUnitId, orgUnits.id))
+      .where(vis)
       .groupBy(orgUnits.id, orgUnits.name)
       .orderBy(asc(orgUnits.name))
 

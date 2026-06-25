@@ -241,7 +241,7 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
     iconKey: 'wrench',
     permission: 'equipment.manage',
     tabs: [
-      { key: 'equipment', label: 'All equipment', href: '/equipment' },
+      { key: 'equipment', label: 'Equipment', href: '/equipment' },
       { key: 'work-orders', label: 'Work orders', href: '/equipment/work-orders' },
       { key: 'truck-log', label: 'Truck log', href: '/equipment/truck-log' },
       { key: 'inspections', label: 'Inspections', href: '/equipment/inspections' },
@@ -249,7 +249,6 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
       { key: 'rates', label: 'Rates', href: '/equipment/rates' },
       { key: 'expenses', label: 'Expenses', href: '/equipment/expenses' },
       { key: 'log', label: 'Log', href: '/equipment/log' },
-      { key: 'reports', label: 'Reports', href: '/equipment/reports' },
     ],
     sections: [
       {
@@ -272,13 +271,6 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
         href: '/equipment/inspection-types',
         iconKey: 'clipboard',
         desc: 'Define the recurring inspections each asset class requires.',
-      },
-      {
-        key: 'sensors',
-        label: 'Atmospheric sensors',
-        href: '/confined-space/sensors',
-        iconKey: 'radiation',
-        desc: 'Calibration register for 4-gas monitors used on confined-space entries.',
       },
       {
         key: 'flows',
