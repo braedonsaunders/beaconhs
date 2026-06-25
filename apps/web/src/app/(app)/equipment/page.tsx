@@ -43,7 +43,10 @@ export default async function EquipmentPage({
     perPage: 25,
     allowedSorts: SORTS,
   })
-  const statusFilter = pickString(sp.status)
+  // Default the register to in-service assets; the "All statuses" chip
+  // (status=all) clears the default so every status shows.
+  const statusRaw = pickString(sp.status) ?? 'in_service'
+  const statusFilter = statusRaw === 'all' ? undefined : statusRaw
   const availabilityFilter = pickString(sp.availability)
   const ctx = await requireRequestContext()
 
@@ -135,10 +138,10 @@ export default async function EquipmentPage({
             description="Asset registry. QR scan + inspections + work orders."
             actions={
               <div className="flex items-center gap-2">
-                <Link href="/equipment/reports/fleet">
-                  <Button variant="outline">Fleet report</Button>
+                <Link href="/reports">
+                  <Button variant="outline">Reports</Button>
                 </Link>
-                <Link href={buildExportHref('/equipment/export.csv', sp)}>
+                <Link href={buildExportHref('/equipment/export.csv', { ...sp, status: statusRaw })}>
                   <Button variant="outline">Export CSV</Button>
                 </Link>
                 <Link href="/equipment/qr/bulk">
@@ -158,6 +161,8 @@ export default async function EquipmentPage({
               currentParams={sp}
               paramKey="status"
               label="Status"
+              allLabel="All statuses"
+              defaultValue="in_service"
               options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
             />
             <FilterChips

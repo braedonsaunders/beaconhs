@@ -437,74 +437,6 @@ async function main() {
           },
         },
         {
-          slug: 'legacy_equipment_fleet',
-          kind: 'built_in',
-          name: 'Equipment — Fleet',
-          description:
-            'All in-service equipment assets with tag, serial, status, and current site. Mirrors the legacy Equipment Fleet listing (broadened from vehicles/trailers to all in-service assets).',
-          category: 'equipment',
-          queryKind: 'custom_query',
-          customQuery: {
-            entity: 'equipment',
-            mode: 'rows',
-            columns: ['asset_tag', 'name', 'serial_number', 'status', 'current_site_org_unit_id'],
-            filtersV2: {
-              combinator: 'and',
-              rules: [{ field: 'status', op: 'eq', value: 'in_service' }],
-            },
-            sort: { column: 'asset_tag', direction: 'asc' },
-            limit: 5000,
-          },
-        },
-        {
-          slug: 'legacy_equipment_inspections',
-          kind: 'built_in',
-          name: 'Equipment — Upcoming & Overdue Inspections',
-          description:
-            'Equipment whose next annual inspection is overdue or due within 30 days, soonest first. Mirrors the legacy Equipment Upcoming Inspections report.',
-          category: 'equipment',
-          queryKind: 'custom_query',
-          customQuery: {
-            entity: 'equipment',
-            mode: 'rows',
-            columns: ['asset_tag', 'name', 'status', 'next_annual_inspection_due'],
-            filtersV2: {
-              combinator: 'and',
-              rules: [
-                { field: 'status', op: 'eq', value: 'in_service' },
-                { field: 'next_annual_inspection_due', op: 'gte', value: '2000-01-01' },
-                { field: 'next_annual_inspection_due', op: 'due_within_days', value: 30 },
-              ],
-            },
-            sort: { column: 'next_annual_inspection_due', direction: 'asc' },
-            limit: 5000,
-          },
-        },
-        {
-          slug: 'legacy_equipment_oilchange',
-          kind: 'built_in',
-          name: 'Equipment — Upcoming & Overdue Oil Changes',
-          description:
-            'Equipment whose next oil change is overdue or due within 30 days, soonest first. Mirrors the legacy Equipment Upcoming Oil Changes report.',
-          category: 'equipment',
-          queryKind: 'custom_query',
-          customQuery: {
-            entity: 'equipment',
-            mode: 'rows',
-            columns: ['asset_tag', 'name', 'status', 'next_oil_change_due'],
-            filtersV2: {
-              combinator: 'and',
-              rules: [
-                { field: 'status', op: 'eq', value: 'in_service' },
-                { field: 'next_oil_change_due', op: 'gte', value: '2000-01-01' },
-                { field: 'next_oil_change_due', op: 'due_within_days', value: 30 },
-              ],
-            },
-            sort: { column: 'next_oil_change_due', direction: 'asc' },
-            limit: 5000,
-          },
-        },
-        {
           slug: 'legacy_ppe_list',
           kind: 'built_in',
           name: 'PPE — List',
@@ -609,6 +541,170 @@ async function main() {
         },
       ])
       .onConflictDoNothing({ target: reportDefinitions.slug })
+
+    // Equipment reports — migrated out of the retired native /equipment/reports
+    // pages into the global engine. Upserted (not insert-once) so the upgraded
+    // definitions reach already-seeded tenants too. They read the join-baked
+    // report_equipment_fleet / report_equipment_charges views, so type/site/holder
+    // names, YTD + all-time usage, ROI, and per-project charges all resolve.
+    await tx
+      .insert(reportDefinitions)
+      .values([
+        {
+          slug: 'legacy_equipment_fleet',
+          kind: 'built_in',
+          name: 'Equipment — Fleet',
+          description:
+            'In-service assets with type, current site/holder, YTD usage and cost, and next annual inspection — the fleet register.',
+          category: 'equipment',
+          queryKind: 'custom_query',
+          customQuery: {
+            entity: 'equipment_fleet',
+            mode: 'rows',
+            columns: [
+              'asset_tag',
+              'name',
+              'equipment_type',
+              'status',
+              'site_name',
+              'holder_name',
+              'hours_ytd',
+              'km_ytd',
+              'expenses_ytd',
+              'last_annual_inspection_on',
+              'next_annual_inspection_due',
+            ],
+            filtersV2: {
+              combinator: 'and',
+              rules: [{ field: 'status', op: 'eq', value: 'in_service' }],
+            },
+            sort: { column: 'asset_tag', direction: 'asc' },
+            limit: 5000,
+          },
+        },
+        {
+          slug: 'legacy_equipment_roi',
+          kind: 'built_in',
+          name: 'Equipment — Return on investment',
+          description:
+            'Revenue (type rate × all-time hours) minus expenses minus purchase price per asset, highest net first.',
+          category: 'equipment',
+          queryKind: 'custom_query',
+          customQuery: {
+            entity: 'equipment_fleet',
+            mode: 'rows',
+            columns: [
+              'asset_tag',
+              'name',
+              'equipment_type',
+              'hours_total',
+              'hourly_rate',
+              'revenue_total',
+              'expenses_total',
+              'purchase_price',
+              'net_total',
+            ],
+            sort: { column: 'net_total', direction: 'desc' },
+            limit: 5000,
+          },
+        },
+        {
+          slug: 'legacy_equipment_inspections',
+          kind: 'built_in',
+          name: 'Equipment — Upcoming & overdue inspections',
+          description:
+            'Assets whose annual inspection is overdue or due within 30 days, soonest first.',
+          category: 'equipment',
+          queryKind: 'custom_query',
+          customQuery: {
+            entity: 'equipment_fleet',
+            mode: 'rows',
+            columns: [
+              'asset_tag',
+              'name',
+              'equipment_type',
+              'site_name',
+              'holder_name',
+              'last_annual_inspection_on',
+              'next_annual_inspection_due',
+            ],
+            filtersV2: {
+              combinator: 'and',
+              rules: [
+                { field: 'requires_annual_inspection', op: 'is_true' },
+                { field: 'next_annual_inspection_due', op: 'due_within_days', value: 30 },
+              ],
+            },
+            sort: { column: 'next_annual_inspection_due', direction: 'asc' },
+            limit: 5000,
+          },
+        },
+        {
+          slug: 'legacy_equipment_oilchange',
+          kind: 'built_in',
+          name: 'Equipment — Upcoming & overdue oil changes',
+          description: 'Assets whose oil change is overdue or due within 30 days, soonest first.',
+          category: 'equipment',
+          queryKind: 'custom_query',
+          customQuery: {
+            entity: 'equipment_fleet',
+            mode: 'rows',
+            columns: [
+              'asset_tag',
+              'name',
+              'equipment_type',
+              'site_name',
+              'holder_name',
+              'last_oil_change_on',
+              'next_oil_change_due',
+              'oil_change_interval_months',
+            ],
+            filtersV2: {
+              combinator: 'and',
+              rules: [
+                { field: 'requires_oil_change', op: 'is_true' },
+                { field: 'next_oil_change_due', op: 'due_within_days', value: 30 },
+              ],
+            },
+            sort: { column: 'next_oil_change_due', direction: 'asc' },
+            limit: 5000,
+          },
+        },
+        {
+          slug: 'legacy_equipment_charges',
+          kind: 'built_in',
+          name: 'Equipment — Charges by project',
+          description:
+            'Per-project rollup of expenses plus type rate × usage hours across the fleet. Filter “Charged on” for a billing period.',
+          category: 'equipment',
+          queryKind: 'custom_query',
+          customQuery: {
+            entity: 'equipment_charges',
+            mode: 'summarize',
+            columns: [],
+            breakouts: [{ column: 'project_name' }],
+            measures: [
+              { fn: 'sum', column: 'total_chargeable', label: 'Total chargeable' },
+              { fn: 'sum', column: 'revenue', label: 'Revenue' },
+              { fn: 'sum', column: 'expenses', label: 'Expenses' },
+              { fn: 'sum', column: 'hours', label: 'Hours' },
+              { fn: 'count_distinct', column: 'equipment_item_id', label: 'Equipment used' },
+            ],
+            limit: 5000,
+          },
+        },
+      ])
+      .onConflictDoUpdate({
+        target: reportDefinitions.slug,
+        set: {
+          name: sql`excluded.name`,
+          description: sql`excluded.description`,
+          category: sql`excluded.category`,
+          queryKind: sql`excluded.query_kind`,
+          customQuery: sql`excluded.custom_query`,
+          updatedAt: sql`now()`,
+        },
+      })
   })
 
   await db.transaction(async (tx) => {
