@@ -23,6 +23,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import { createPortal } from 'react-dom'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
@@ -135,6 +136,16 @@ export function DashboardGrid({
     }
   }, [initialLayout])
 
+  // Esc closes the widget palette — standard drawer ergonomics.
+  useEffect(() => {
+    if (!paletteOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPaletteOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [paletteOpen])
+
   const rglLayout = useMemo<LayoutItem[]>(
     () =>
       layout.map((w) => {
@@ -212,12 +223,11 @@ export function DashboardGrid({
     }
   }, [router])
 
-  // Only commit layout changes triggered by user drag/resize — NOT every
-  // `onLayoutChange` event. If we commit on every event, opening the palette
-  // (which narrows the container, sometimes crossing a breakpoint) makes RGL
-  // reflow and emit "new" positions; we'd save those, and on close the grid
-  // would stay squished because our saved layout no longer matches the
-  // full-width geometry.
+  // Persist geometry only from real user gestures — wired to onDragStop /
+  // onResizeStop, never a passive onLayoutChange. RGL re-emits positions on any
+  // width change (e.g. a window resize crossing a breakpoint); committing those
+  // would overwrite the saved full-width geometry with a transient reflow. The
+  // widget palette is now an overlay, so opening it no longer narrows the canvas.
   const commitLayout = useCallback(
     (next: Layout) => {
       if (mode !== 'edit') return
@@ -272,13 +282,7 @@ export function DashboardGrid({
         />
       ) : null}
 
-      <div
-        className={
-          mode === 'edit' && paletteOpen
-            ? 'grid grid-cols-1 gap-4 lg:grid-cols-[1fr_280px]'
-            : 'w-full'
-        }
-      >
+      <div className="w-full">
         <div ref={measureRef} className="min-w-0">
           <Responsive
             className="layout"
@@ -350,6 +354,7 @@ export function DashboardGrid({
             libraryCards={libraryCards}
             onAddCard={handleAddCard}
             allowedWidgetIds={allowedWidgetIds}
+            onClose={() => setPaletteOpen(false)}
           />
         ) : null}
       </div>
@@ -433,6 +438,7 @@ function WidgetPalette({
   libraryCards,
   onAddCard,
   allowedWidgetIds,
+  onClose,
 }: {
   role: RoleTier
   presentIds: Set<string>
@@ -440,6 +446,7 @@ function WidgetPalette({
   libraryCards: LibraryCard[]
   onAddCard: (c: LibraryCard) => void
   allowedWidgetIds?: readonly string[]
+  onClose: () => void
 }) {
   const allowed = allowedWidgetIds ? new Set(allowedWidgetIds) : null
   const visible = widgetsForRole(role).filter((w) => !allowed || allowed.has(w.id))
@@ -450,20 +457,40 @@ function WidgetPalette({
     byCategory.set(w.category, arr)
   }
 
-  return (
+  // A floating overlay drawer — NOT a layout column. The canvas underneath keeps
+  // its full width, so opening the palette never reflows the grid and what you
+  // arrange is exactly what saves.
+  const panel = (
     <motion.aside
-      initial={{ opacity: 0, x: 12 }}
+      initial={{ opacity: 0, x: 16 }}
       animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.3 }}
-      className="app-scroll sticky top-16 max-h-[calc(100vh-160px)] overflow-y-auto rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900"
+      transition={{ duration: 0.25, ease: [0.22, 0.61, 0.36, 1] }}
+      className="fixed top-28 right-4 z-40 flex max-h-[calc(100dvh-8rem)] w-[320px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900"
     >
-      <div className="mb-2 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Widget library</h3>
-        <span className="text-[10px] tracking-wider text-slate-400 uppercase dark:text-slate-500">
-          {visible.length} available
-        </span>
+      <div className="flex shrink-0 items-start justify-between gap-2 border-b border-slate-200 px-3 py-2.5 dark:border-slate-800">
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+            Widget library
+          </h3>
+          <p className="text-[10px] text-slate-500 dark:text-slate-400">
+            Click to add — the canvas keeps its layout
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <span className="text-[10px] tracking-wider text-slate-400 uppercase dark:text-slate-500">
+            {visible.length}
+          </span>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close widget library"
+            className="inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+          >
+            <X size={14} />
+          </button>
+        </div>
       </div>
-      <div className="space-y-3">
+      <div className="app-scroll flex-1 space-y-3 overflow-y-auto p-3">
         {[...byCategory.entries()].map(([cat, widgets]) => (
           <div key={cat}>
             <h4 className="mb-1 px-1 text-[10px] font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
@@ -554,4 +581,11 @@ function WidgetPalette({
       </div>
     </motion.aside>
   )
+
+  // Portal to <body> so the drawer anchors to the viewport. The page's
+  // FadeInBody wrapper carries a framer-motion transform, which would otherwise
+  // become the containing block for position:fixed and pin the drawer to the
+  // scrolling content instead of the screen.
+  if (typeof document === 'undefined') return null
+  return createPortal(panel, document.body)
 }
