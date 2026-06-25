@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Boxes, Mail, MessageSquare, Plus, ScrollText, Sparkles } from 'lucide-react'
+import { Boxes, Mail, MessageSquare, Plus, ScrollText, Sparkles, Users } from 'lucide-react'
 import { PageContainer } from '@/components/page-layout'
 
 export const metadata = { title: 'Platform' }
@@ -19,6 +19,12 @@ const TILES: Tile[] = [
     title: 'Create tenant',
     desc: 'Provision a new tenant + seed built-ins',
     icon: <Plus size={18} />,
+  },
+  {
+    href: '/platform/users',
+    title: 'Users',
+    desc: 'Global identities + cross-tenant membership',
+    icon: <Users size={18} />,
   },
   {
     href: '/platform/email',
