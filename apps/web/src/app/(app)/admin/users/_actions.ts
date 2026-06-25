@@ -778,5 +778,11 @@ export async function startImpersonation(formData: FormData): Promise<void> {
     metadata: { targetUserId: member.account.id, expiresAt: expiresAt.toISOString(), reason },
   })
 
+  // Bust the shared (app) layout cache so the shell re-renders as the target:
+  // the rose banner appears and the sidebar reflects their permissions. Without
+  // this the redirect reuses the cached layout segment (only the page subtree
+  // remounts) and the banner/nav stay stale until a manual refresh. Mirrors
+  // stopImpersonation, which revalidates the layout the same way.
+  revalidatePath('/', 'layout')
   redirect('/dashboard')
 }
