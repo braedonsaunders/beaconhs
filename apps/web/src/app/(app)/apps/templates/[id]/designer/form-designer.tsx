@@ -425,10 +425,6 @@ export function FormDesigner({
     setSelection({ kind: 'section', sectionId })
     setRightPanel('props')
   }
-  function openFormSettings() {
-    setSelection({ kind: 'form' })
-    setRightPanel('props')
-  }
   function openWorkflow() {
     setSelection({ kind: 'workflow' })
     setRightPanel('none')
@@ -714,14 +710,6 @@ export function FormDesigner({
               <ClipboardCheck size={14} /> Fill
             </Button>
           </Link>
-          <Button
-            variant={selection.kind === 'form' && rightPanel === 'props' ? 'secondary' : 'outline'}
-            size="sm"
-            onClick={openFormSettings}
-          >
-            <Sliders size={14} />
-            Settings
-          </Button>
           <Button
             variant={rightPanel === 'preview' ? 'secondary' : 'outline'}
             size="sm"
@@ -1081,13 +1069,7 @@ export function FormDesigner({
       <Drawer
         open={rightPanel === 'props'}
         onClose={() => setRightPanel('none')}
-        title={
-          selection.kind === 'field'
-            ? 'Element properties'
-            : selection.kind === 'section'
-              ? 'Section'
-              : 'App settings'
-        }
+        title={selection.kind === 'field' ? 'Element properties' : 'Section'}
         size="sm"
       >
         {selection.kind === 'field' && selectedField ? (
@@ -1107,12 +1089,7 @@ export function FormDesigner({
             schema={schema}
             onChange={(patch) => updateSection(selectedSection.id, patch)}
           />
-        ) : (
-          <FormProperties
-            schema={schema}
-            onChange={(patch) => setSchema((s) => ({ ...s, ...patch }))}
-          />
-        )}
+        ) : null}
       </Drawer>
 
       {/* Preview flyout — live render of the filler experience. */}
@@ -1357,44 +1334,6 @@ function FieldRow({
 }
 
 // --- Form-level properties -------------------------------------------------
-
-function FormProperties({
-  schema,
-  onChange,
-}: {
-  schema: FormSchemaV1
-  onChange: (patch: Partial<FormSchemaV1>) => void
-}) {
-  return (
-    <div className="space-y-3 text-sm">
-      <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">App properties</h3>
-      <div className="space-y-1">
-        <Label className="text-xs">Title (EN)</Label>
-        <Input
-          value={schema.title.en ?? ''}
-          onChange={(e) => onChange({ title: { ...schema.title, en: e.target.value } })}
-        />
-      </div>
-      <div className="space-y-1">
-        <Label className="text-xs">Description (EN)</Label>
-        <Textarea
-          rows={3}
-          value={schema.description?.en ?? ''}
-          onChange={(e) =>
-            onChange({
-              description: e.target.value
-                ? { ...(schema.description ?? {}), en: e.target.value }
-                : undefined,
-            })
-          }
-        />
-      </div>
-      <p className="text-xs text-slate-500">
-        Select a section or field from the canvas to edit its properties.
-      </p>
-    </div>
-  )
-}
 
 // --- Workflow editor -------------------------------------------------------
 
