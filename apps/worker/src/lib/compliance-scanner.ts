@@ -1,13 +1,16 @@
-// Unified compliance scan. Once a day: for every tenant, re-materialise every
-// active obligation into compliance_status (the scoreboard the hub reads) and
-// emit an overdue/expiring reminder per obligation that has out-of-compliance
-// subjects. Obligation create/update materialise instantly on the write path,
-// so this is the periodic refresh + the reminder driver.
+// Unified compliance scan — the single detection brain. Once a day: for every
+// tenant, re-materialise every active obligation into compliance_status (the
+// scoreboard the hub reads) and emit PERSON-TARGETED alerts for the subjects
+// whose status changed this run (pending→overdue, →expiring). Obligation
+// create/update materialise instantly on the write path, so this is the periodic
+// refresh + the transition-driven alert driver. Firing only on transitions means
+// a still-overdue item never re-spams; escalation re-reminders are layered on by
+// the routing engine (Phase 2), not by re-firing here.
 
 import { db, withSuperAdmin, withTenant } from '@beaconhs/db'
 import { tenants } from '@beaconhs/db/schema'
 import { materializeTenant } from '@beaconhs/compliance'
-import { emitComplianceObligationOverdue } from '@beaconhs/events'
+import { emitComplianceTransitions } from '@beaconhs/events'
 
 export type ComplianceScanResult = {
   tenants: number
@@ -34,9 +37,10 @@ export async function scanCompliance(): Promise<ComplianceScanResult> {
       continue
     }
     result.obligations += materialized.length
-    for (const { obligation, result: ev } of materialized) {
-      if (ev.totals.overdue > 0) {
-        await emitComplianceObligationOverdue(t.id, obligation.id, ev.totals.overdue)
+    for (const { obligation, transitions } of materialized) {
+      const actionable = transitions.filter((t) => t.to === 'overdue' || t.to === 'expiring')
+      if (actionable.length > 0) {
+        await emitComplianceTransitions(t.id, obligation.id, actionable)
         result.reminders += 1
       }
     }

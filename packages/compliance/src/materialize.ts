@@ -6,9 +6,31 @@ import { and, eq, isNull, notInArray } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
 import { complianceAudience, complianceObligations, complianceStatus } from '@beaconhs/db/schema'
 import { type AudienceItem } from './audience'
-import { type ComplianceObligation, type EvalResult, evaluateObligation } from './evaluate'
+import {
+  type ComplianceObligation,
+  type EvalResult,
+  type EvalStatus,
+  evaluateObligation,
+} from './evaluate'
 
 type Tx = Database
+
+/**
+ * A per-subject status change detected during materialisation. This is the
+ * heartbeat of the unified detection layer: the worker turns transitions INTO an
+ * actionable state (overdue/expiring) into person-targeted notifications, and we
+ * only fire when the status actually changes — no more "re-alert every scan".
+ */
+export type ComplianceTransition = {
+  subjectKey: string
+  personId: string | null
+  label: string
+  from: EvalStatus | null
+  to: EvalStatus
+  dueOn: string | null
+}
+
+export type MaterializeResult = { result: EvalResult; transitions: ComplianceTransition[] }
 
 /** Load an obligation's audience rows as engine AudienceItems. */
 export async function loadAudience(tx: Tx, obligationId: string): Promise<AudienceItem[]> {
@@ -29,12 +51,36 @@ export async function materializeObligation(
   tenantId: string,
   ob: ComplianceObligation,
   today: string = new Date().toISOString().slice(0, 10),
-): Promise<EvalResult> {
+): Promise<MaterializeResult> {
   const audience = await loadAudience(tx, ob.id)
   const result = await evaluateObligation(tx, tenantId, ob, audience, today)
 
   const now = new Date()
   const keys = result.rows.map((r) => r.key)
+
+  // Snapshot prior status per subject so we can detect transitions (this scan's
+  // status vs. last scan's). New subjects transition from `null`.
+  const priorRows = await tx
+    .select({ subjectKey: complianceStatus.subjectKey, status: complianceStatus.status })
+    .from(complianceStatus)
+    .where(eq(complianceStatus.obligationId, ob.id))
+  const prior = new Map<string, EvalStatus>(
+    priorRows.map((r) => [r.subjectKey, r.status as EvalStatus]),
+  )
+  const transitions: ComplianceTransition[] = []
+  for (const r of result.rows) {
+    const from = prior.get(r.key) ?? null
+    if (from !== r.status) {
+      transitions.push({
+        subjectKey: r.key,
+        personId: r.personId,
+        label: r.label,
+        from,
+        to: r.status,
+        dueOn: r.dueOn,
+      })
+    }
+  }
 
   for (const r of result.rows) {
     const percent =
@@ -91,7 +137,7 @@ export async function materializeObligation(
     .set({ lastScannedAt: now })
     .where(eq(complianceObligations.id, ob.id))
 
-  return result
+  return { result, transitions }
 }
 
 /**
@@ -103,7 +149,7 @@ export async function materializeTenant(
   tx: Tx,
   tenantId: string,
   today?: string,
-): Promise<{ obligation: ComplianceObligation; result: EvalResult }[]> {
+): Promise<{ obligation: ComplianceObligation; result: EvalResult; transitions: ComplianceTransition[] }[]> {
   const obligations = await tx
     .select()
     .from(complianceObligations)
@@ -114,10 +160,14 @@ export async function materializeTenant(
         isNull(complianceObligations.deletedAt),
       ),
     )
-  const out: { obligation: ComplianceObligation; result: EvalResult }[] = []
+  const out: {
+    obligation: ComplianceObligation
+    result: EvalResult
+    transitions: ComplianceTransition[]
+  }[] = []
   for (const ob of obligations) {
-    const result = await materializeObligation(tx, tenantId, ob, today)
-    out.push({ obligation: ob, result })
+    const { result, transitions } = await materializeObligation(tx, tenantId, ob, today)
+    out.push({ obligation: ob, result, transitions })
   }
   return out
 }

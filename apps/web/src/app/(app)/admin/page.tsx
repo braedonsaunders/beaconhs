@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import Link from 'next/link'
 import {
   ArrowUpRight,
-  Boxes,
+  Bell,
   Building2,
   Database,
   FileText,
@@ -83,13 +83,6 @@ const STATIC_GROUPS: Group[] = [
         title: 'Org hierarchy',
         desc: 'Customers, projects, sites, areas, crews',
       },
-      {
-        href: '/admin/tenants',
-        icon: <Boxes size={18} />,
-        title: 'Tenants',
-        desc: 'List + view-as every tenant',
-        badge: 'Super-admin',
-      },
     ],
   },
   {
@@ -102,6 +95,12 @@ const STATIC_GROUPS: Group[] = [
         icon: <SlidersHorizontal size={18} />,
         title: 'Tenant settings',
         desc: 'Branding, languages, risk matrix, hierarchy',
+      },
+      {
+        href: '/admin/notifications',
+        icon: <Bell size={18} />,
+        title: 'Notifications',
+        desc: 'Who gets automatic alerts & how often reminders repeat',
       },
       {
         href: '/admin/navigation',

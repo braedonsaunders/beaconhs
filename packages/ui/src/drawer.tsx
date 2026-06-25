@@ -16,6 +16,7 @@ import { cn } from './utils'
 //   toast        : z-70
 
 export type DrawerSize = 'sm' | 'md' | 'lg' | 'xl' | 'full'
+export type DrawerSide = 'left' | 'right'
 
 const SIZE_CLASS: Record<DrawerSize, string> = {
   sm: 'w-full sm:max-w-md',
@@ -26,8 +27,9 @@ const SIZE_CLASS: Record<DrawerSize, string> = {
 }
 
 /**
- * Right-side slide-in drawer for sub-entity create/edit forms.
+ * Slide-in drawer for sub-entity create/edit forms and mobile flyouts.
  * Portals to body, spring slide-in, backdrop fade, Esc + click-out + scroll lock.
+ * Slides from the right by default; pass `side="left"` for nav-style flyouts.
  */
 export function Drawer({
   open,
@@ -35,6 +37,7 @@ export function Drawer({
   title,
   description,
   size = 'md',
+  side = 'right',
   children,
   footer,
 }: {
@@ -43,6 +46,7 @@ export function Drawer({
   title?: React.ReactNode
   description?: React.ReactNode
   size?: DrawerSize
+  side?: DrawerSide
   children: React.ReactNode
   footer?: React.ReactNode
 }) {
@@ -87,12 +91,13 @@ export function Drawer({
           <motion.aside
             role="dialog"
             aria-modal="true"
-            initial={{ x: '100%' }}
+            initial={{ x: side === 'left' ? '-100%' : '100%' }}
             animate={{ x: 0 }}
-            exit={{ x: '100%' }}
+            exit={{ x: side === 'left' ? '-100%' : '100%' }}
             transition={{ type: 'spring', damping: 32, stiffness: 320, mass: 0.8 }}
             className={cn(
-              'absolute top-0 right-0 flex h-full flex-col overflow-hidden border-l border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900',
+              'absolute top-0 flex h-full flex-col overflow-hidden border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900',
+              side === 'left' ? 'left-0 border-r' : 'right-0 border-l',
               SIZE_CLASS[size],
             )}
           >

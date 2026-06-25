@@ -35,6 +35,7 @@ import {
   roleAssignments,
   roles,
   tenantNotificationRecipients,
+  tenantNotificationSettings,
   tenantUsers,
   tenants,
   trainingCourses,
@@ -78,7 +79,10 @@ function appUrl(linkPath: string): string {
 
 // --- Audience resolver ----------------------------------------------------
 
-const DEFAULT_ROLES_BY_CATEGORY: Record<string, string[]> = {
+// Built-in audience when a tenant hasn't customised a category in
+// /admin/notifications. Exported so the admin UI can pre-fill the role pickers
+// with the same defaults the dispatcher falls back to.
+export const DEFAULT_ROLES_BY_CATEGORY: Record<string, string[]> = {
   incident: ['safety_manager', 'tenant_admin'],
   ca: ['safety_manager', 'tenant_admin'],
   training: ['safety_manager', 'tenant_admin'],
@@ -88,14 +92,18 @@ const DEFAULT_ROLES_BY_CATEGORY: Record<string, string[]> = {
 }
 
 /**
- * Resolve the audience (user ids) for an event in a tenant.
+ * Resolve the audience (user ids) for an event in a tenant, honouring the
+ * tenant's /admin/notifications configuration (tenant_notification_settings).
  *
  * Order:
- *   1. Custom rows in tenant_notification_recipients for (tenantId, category) if present
- *   2. Otherwise: all active tenant_users in the tenant whose role keys match the
- *      default role list for the category
+ *   1. If a settings row exists and is disabled → nobody (the category is muted,
+ *      including the `extra` reporter/assignee).
+ *   2. Active members of the configured role keys (or the category default when
+ *      none are configured), plus any hand-picked extra recipients.
+ *   3. Legacy: if no settings row exists but tenant_notification_recipients does,
+ *      those users replace the role-based audience (pre-settings behaviour).
  *
- * `extra` user ids are always merged in (e.g. the reporter, assignee).
+ * `extra` user ids (reporter, assignee, …) are merged in unless muted.
  */
 async function resolveAudience(
   ctx: EventCtx,
@@ -104,31 +112,64 @@ async function resolveAudience(
   extra: (string | null | undefined)[] = [],
 ): Promise<string[]> {
   const audience = new Set<string>()
-  for (const u of extra) if (u) audience.add(u)
 
   await ctx.db(async (tx) => {
-    let custom: { userId: string }[] = []
+    let settings: typeof tenantNotificationSettings.$inferSelect | null = null
     try {
-      custom = await tx
-        .select({ userId: tenantNotificationRecipients.userId })
-        .from(tenantNotificationRecipients)
+      const [row] = await tx
+        .select()
+        .from(tenantNotificationSettings)
         .where(
           and(
-            eq(tenantNotificationRecipients.tenantId, tenantId),
-            eq(tenantNotificationRecipients.category, category),
+            eq(tenantNotificationSettings.tenantId, tenantId),
+            eq(tenantNotificationSettings.category, category),
           ),
         )
+        .limit(1)
+      settings = row ?? null
     } catch {
-      // Table may not exist yet (pre-migration); fall through.
-      custom = []
+      // Table may not exist yet (pre-migration); fall through to defaults.
+      settings = null
     }
 
-    if (custom.length > 0) {
-      for (const r of custom) audience.add(r.userId)
-      return
+    // Muted category → no audience at all.
+    if (settings && settings.enabled === false) return
+
+    for (const u of extra) if (u) audience.add(u)
+
+    if (!settings) {
+      // Legacy override layer: recipients replace the role-based audience.
+      try {
+        const custom = await tx
+          .select({ userId: tenantNotificationRecipients.userId })
+          .from(tenantNotificationRecipients)
+          .where(
+            and(
+              eq(tenantNotificationRecipients.tenantId, tenantId),
+              eq(tenantNotificationRecipients.category, category),
+            ),
+          )
+        if (custom.length > 0) {
+          for (const r of custom) audience.add(r.userId)
+          return
+        }
+      } catch {
+        // ignore — table may not exist yet
+      }
+    } else {
+      for (const u of settings.userIds ?? []) audience.add(u)
     }
 
-    const roleKeys = DEFAULT_ROLES_BY_CATEGORY[category] ?? ['tenant_admin']
+    // A saved row's roles are authoritative — an empty list means the admin
+    // deliberately chose no role-based recipients (relying on the specific
+    // people above). Defaults only apply when the tenant has never configured
+    // this category.
+    const roleKeys = settings
+      ? settings.roleKeys
+      : (DEFAULT_ROLES_BY_CATEGORY[category] ?? ['tenant_admin'])
+
+    if (roleKeys.length === 0) return
+
     const rows = await tx
       .select({ userId: tenantUsers.userId })
       .from(tenantUsers)
@@ -884,5 +925,113 @@ export async function emitComplianceObligationOverdue(
     }
   } catch (err) {
     logFailure('emitComplianceObligationOverdue', err)
+  }
+}
+
+/** One state change of a single subject against an obligation. */
+export type ComplianceTransitionEvent = {
+  subjectKey: string
+  personId: string | null
+  label: string
+  to: 'completed' | 'overdue' | 'pending' | 'in_progress' | 'expiring'
+  dueOn: string | null
+}
+
+/**
+ * The unified detection emit: turns per-subject status transitions into
+ * PERSON-TARGETED alerts. Each affected person hears about their own item; the
+ * obligation's audience (safety managers/admins) gets a single rollup, not one
+ * blast per subject. Fires only on the scan where the status actually changed,
+ * so a still-overdue item doesn't re-spam every run.
+ */
+export async function emitComplianceTransitions(
+  tenantId: string,
+  obligationId: string,
+  transitions: ComplianceTransitionEvent[],
+): Promise<void> {
+  const actionable = transitions.filter((t) => t.to === 'overdue' || t.to === 'expiring')
+  if (actionable.length === 0) return
+  const ctx = workerEventCtx(tenantId)
+  try {
+    const ob = await ctx.db(async (tx) => {
+      const [o] = await tx
+        .select()
+        .from(complianceObligations)
+        .where(eq(complianceObligations.id, obligationId))
+        .limit(1)
+      return o ?? null
+    })
+    if (!ob) return
+
+    const linkPath = `/compliance/obligations/${ob.id}`
+    const url = appUrl(linkPath)
+
+    // Map the affected persons → their login user id, for self-targeting.
+    const personIds = [...new Set(actionable.map((t) => t.personId).filter(Boolean))] as string[]
+    const personUser = new Map<string, string>()
+    if (personIds.length > 0) {
+      const rows = await ctx.db((tx) =>
+        tx
+          .select({ id: people.id, userId: people.userId })
+          .from(people)
+          .where(and(eq(people.tenantId, tenantId), inArray(people.id, personIds))),
+      )
+      for (const r of rows) if (r.userId) personUser.set(r.id, r.userId)
+    }
+
+    // 1. Self-targeted alert to each affected person.
+    for (const t of actionable) {
+      const userId = t.personId ? personUser.get(t.personId) : null
+      if (!userId) continue
+      const verb = t.to === 'overdue' ? 'is overdue' : 'is due soon'
+      await enqueueNotification({
+        tenantId,
+        userIds: [userId],
+        category: 'compliance',
+        type: `compliance.${t.to}`,
+        title: `${ob.title} ${verb}`,
+        body: t.dueOn ? `Due ${t.dueOn}.` : 'Action required.',
+        linkPath,
+        data: { obligationId: ob.id, subjectKey: t.subjectKey, status: t.to, self: true },
+      })
+    }
+
+    // 2. Single rollup to the obligation's audience (managers/admins).
+    const audience = await resolveAudience(ctx, tenantId, 'compliance', [])
+    if (audience.length > 0) {
+      const overdue = actionable.filter((t) => t.to === 'overdue').length
+      const expiring = actionable.filter((t) => t.to === 'expiring').length
+      const parts: string[] = []
+      if (overdue) parts.push(`${overdue} newly overdue`)
+      if (expiring) parts.push(`${expiring} newly due soon`)
+      const body = `${parts.join(' · ')}.`
+      const title = `${ob.title}: ${parts.join(' · ')}`
+      await enqueueNotification({
+        tenantId,
+        userIds: audience,
+        category: 'compliance',
+        type: 'compliance.rollup',
+        title,
+        body,
+        linkPath,
+        data: { obligationId: ob.id, overdue, expiring },
+      })
+      const recipients = await emailsForUserIds(ctx, audience)
+      if (recipients.length > 0) {
+        const list = actionable
+          .slice(0, 25)
+          .map((t) => `<li>${t.label} — ${t.to}${t.dueOn ? ` (due ${t.dueOn})` : ''}</li>`)
+          .join('')
+        await enqueueEmail({
+          to: recipients,
+          subject: title,
+          html: `<p>${body}</p><ul>${list}</ul><p><a href="${url}">View obligation</a></p>`,
+          text: `${body}\n${url}`,
+          meta: { tenantId, category: 'compliance' },
+        })
+      }
+    }
+  } catch (err) {
+    logFailure('emitComplianceTransitions', err)
   }
 }

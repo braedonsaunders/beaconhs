@@ -6,6 +6,9 @@ import {
   documents,
   formResponseCheckins,
   formResponses,
+  notifications,
+  tenantNotificationPolicy,
+  tenantNotificationSettings,
   tenantUsers,
   trainingRecords,
   users,
@@ -83,6 +86,8 @@ async function scanCertExpiry(): Promise<void> {
   // Walk all the typical "reminder" buckets, plus the "already expired" bucket.
   // Each match emits an event scoped to the record's tenant.
   await withSuperAdmin(db, async (tx) => {
+    // Tenants where compliance owns detection stand down here (Phase 1).
+    const unified = await unifiedDetectionTenants(tx)
     const today = new Date()
     const todayYmd = today.toISOString().slice(0, 10)
     const buckets = [90, 30, 7, 1]
@@ -93,6 +98,7 @@ async function scanCertExpiry(): Promise<void> {
         .from(trainingRecords)
         .where(and(isNotNull(trainingRecords.expiresOn), eq(trainingRecords.expiresOn, target)))
       for (const r of rows) {
+        if (unified.has(r.tenantId)) continue
         await emitTrainingExpiring(r.tenantId, r.id, days)
       }
     }
@@ -103,9 +109,19 @@ async function scanCertExpiry(): Promise<void> {
       .from(trainingRecords)
       .where(and(isNotNull(trainingRecords.expiresOn), eq(trainingRecords.expiresOn, todayYmd)))
     for (const r of expiredRows) {
+      if (unified.has(r.tenantId)) continue
       await emitTrainingExpired(r.tenantId, r.id)
     }
   })
+}
+
+/** Tenants that have switched detection to the compliance engine (Phase 1). */
+async function unifiedDetectionTenants(tx: typeof db): Promise<Set<string>> {
+  const rows = await tx
+    .select({ tenantId: tenantNotificationPolicy.tenantId })
+    .from(tenantNotificationPolicy)
+    .where(eq(tenantNotificationPolicy.unifiedDetection, true))
+  return new Set(rows.map((r) => r.tenantId))
 }
 
 // Generic monitored-session overdue scan — the Builder-app successor to
@@ -175,11 +191,30 @@ async function scanDocumentReview(): Promise<void> {
     const rows = await tx
       .select({ id: documents.id, tenantId: documents.tenantId })
       .from(documents)
+      .leftJoin(
+        tenantNotificationSettings,
+        and(
+          eq(tenantNotificationSettings.tenantId, documents.tenantId),
+          eq(tenantNotificationSettings.category, 'document'),
+        ),
+      )
       .where(
         and(
           isNotNull(documents.nextReviewOn),
           lte(documents.nextReviewOn, today),
           inArray(documents.status, ['draft', 'published', 'under_review']),
+          // Stand down where compliance owns detection (Phase 1).
+          sql`not exists (select 1 from ${tenantNotificationPolicy} p where p.tenant_id = ${documents.tenantId} and p.unified_detection = true)`,
+          // Respect the tenant's /admin/notifications config: skip if muted, and
+          // re-alert at most once per configured window (default 24h) so a doc
+          // that stays overdue for review doesn't ping daily forever.
+          sql`coalesce(${tenantNotificationSettings.enabled}, true) = true`,
+          sql`not exists (
+            select 1 from ${notifications} n
+            where n.type = 'document.review_due'
+              and n.data->>'documentId' = ${documents.id}::text
+              and n.occurred_at >= now() - ((coalesce(${tenantNotificationSettings.reminderHours}, 24))::text || ' hours')::interval
+          )`,
         ),
       )
     for (const d of rows) {
@@ -196,11 +231,33 @@ async function scanCorrectiveActionOverdue(): Promise<void> {
     const rows = await tx
       .select({ id: correctiveActions.id, tenantId: correctiveActions.tenantId })
       .from(correctiveActions)
+      .leftJoin(
+        tenantNotificationSettings,
+        and(
+          eq(tenantNotificationSettings.tenantId, correctiveActions.tenantId),
+          eq(tenantNotificationSettings.category, 'ca'),
+        ),
+      )
       .where(
         and(
           isNotNull(correctiveActions.dueOn),
           sql`${correctiveActions.dueOn} < ${today}`,
           inArray(correctiveActions.status, ['open', 'in_progress']),
+          // Stand down where compliance owns detection (Phase 1).
+          sql`not exists (select 1 from ${tenantNotificationPolicy} p where p.tenant_id = ${correctiveActions.tenantId} and p.unified_detection = true)`,
+          // Skip tenants that muted CA alerts in /admin/notifications.
+          sql`coalesce(${tenantNotificationSettings.enabled}, true) = true`,
+          // De-dupe: this tick runs hourly, but without a guard every overdue CA
+          // would re-notify its whole audience (owner + assigner + safety
+          // managers/admins) on every single run. Skip any CA already alerted
+          // within the tenant's configured reminder window (default 24h), so a
+          // still-overdue CA nudges at most that often instead of once an hour.
+          sql`not exists (
+            select 1 from ${notifications} n
+            where n.type = 'ca.overdue'
+              and n.data->>'caId' = ${correctiveActions.id}::text
+              and n.occurred_at >= now() - ((coalesce(${tenantNotificationSettings.reminderHours}, 24))::text || ' hours')::interval
+          )`,
         ),
       )
     for (const c of rows) {

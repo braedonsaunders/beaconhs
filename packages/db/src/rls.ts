@@ -168,6 +168,8 @@ export const TENANT_SCOPED_TABLES = [
   'report_schedules',
   'report_runs',
   'tenant_notification_recipients',
+  'tenant_notification_settings',
+  'tenant_notification_policy',
   'form_assignment_dispatches',
   'plugin_runs',
   'document_book_items',
