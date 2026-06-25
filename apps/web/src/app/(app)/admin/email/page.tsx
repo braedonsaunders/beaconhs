@@ -1,4 +1,3 @@
-import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { EMAIL_PROVIDER_SPECS } from '@beaconhs/emails'
 import { Button, Card, CardContent, DetailHeader } from '@beaconhs/ui'
@@ -79,19 +78,6 @@ export default async function EmailSettingsPage() {
             )}
           </CardContent>
         </Card>
-
-        {ctx.isSuperAdmin ? (
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            Platform-wide email defaults &amp; policy live in{' '}
-            <Link
-              href="/platform/email"
-              className="font-medium text-teal-700 hover:underline dark:text-teal-300"
-            >
-              Platform → Email
-            </Link>
-            .
-          </p>
-        ) : null}
       </div>
     </PageContainer>
   )

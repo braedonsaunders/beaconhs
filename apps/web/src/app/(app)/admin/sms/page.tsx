@@ -1,4 +1,3 @@
-import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { SMS_PROVIDER_SPECS } from '@beaconhs/sms'
 import { Button, Card, CardContent, DetailHeader } from '@beaconhs/ui'
@@ -75,19 +74,6 @@ export default async function SmsSettingsPage() {
             )}
           </CardContent>
         </Card>
-
-        {ctx.isSuperAdmin ? (
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            Platform-wide SMS defaults &amp; policy live in{' '}
-            <Link
-              href="/platform/sms"
-              className="font-medium text-teal-700 hover:underline dark:text-teal-300"
-            >
-              Platform → SMS
-            </Link>
-            .
-          </p>
-        ) : null}
       </div>
     </PageContainer>
   )
