@@ -6,6 +6,9 @@
 //
 // On a failed criterion the calling code spawns an equipment_work_order
 // automatically — same behaviour as the legacy app's "fail = WO" rule.
+//
+// Criteria can be grouped into sections (equipment_inspection_groups) so the
+// 1/3-2/3 builder mirrors the PPE + inspection type builders exactly.
 
 import { relations } from 'drizzle-orm'
 import { boolean, index, integer, pgEnum, pgTable, text, uuid } from 'drizzle-orm/pg-core'
@@ -55,6 +58,34 @@ export const equipmentInspectionTypes = pgTable(
   }),
 )
 
+// Sections inside a type's checklist (e.g. "Engine bay", "Cab", "Hydraulics").
+// Mirrors inspection_type_groups so the 1/3-2/3 builder can drag-reorder
+// sections and bucket criteria. A criterion with group_id = null is "ungrouped"
+// and renders in a trailing catch-all section.
+export const equipmentInspectionGroups = pgTable(
+  'equipment_inspection_groups',
+  {
+    id: id(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    inspectionTypeId: uuid('inspection_type_id')
+      .notNull()
+      .references(() => equipmentInspectionTypes.id, { onDelete: 'cascade' }),
+    sequence: integer('sequence').default(0).notNull(),
+    label: text('label').notNull(),
+    description: text('description'),
+    ...timestamps,
+  },
+  (t) => ({
+    tenantIdx: index('equipment_inspection_groups_tenant_idx').on(t.tenantId),
+    typeSeqIdx: index('equipment_inspection_groups_type_seq_idx').on(
+      t.inspectionTypeId,
+      t.sequence,
+    ),
+  }),
+)
+
 export const equipmentInspectionCriterionKind = pgEnum('equipment_inspection_criterion_kind', [
   'pass_fail',
   'pass_fail_na',
@@ -78,6 +109,10 @@ export const equipmentInspectionCriteria = pgTable(
     inspectionTypeId: uuid('inspection_type_id')
       .notNull()
       .references(() => equipmentInspectionTypes.id, { onDelete: 'cascade' }),
+    // Section this criterion belongs to; null = ungrouped (catch-all section).
+    groupId: uuid('group_id').references(() => equipmentInspectionGroups.id, {
+      onDelete: 'set null',
+    }),
     sequence: integer('sequence').notNull(),
     question: text('question').notNull(),
     description: text('description'),
@@ -100,6 +135,7 @@ export const equipmentInspectionCriteria = pgTable(
       t.inspectionTypeId,
       t.sequence,
     ),
+    groupIdx: index('equipment_inspection_criteria_group_idx').on(t.groupId),
     tenantIdx: index('equipment_inspection_criteria_tenant_idx').on(t.tenantId),
   }),
 )
@@ -115,6 +151,22 @@ export const equipmentInspectionTypesRelations = relations(
       fields: [equipmentInspectionTypes.appliesToTypeId],
       references: [equipmentTypes.id],
     }),
+    groups: many(equipmentInspectionGroups),
+    criteria: many(equipmentInspectionCriteria),
+  }),
+)
+
+export const equipmentInspectionGroupsRelations = relations(
+  equipmentInspectionGroups,
+  ({ one, many }) => ({
+    tenant: one(tenants, {
+      fields: [equipmentInspectionGroups.tenantId],
+      references: [tenants.id],
+    }),
+    type: one(equipmentInspectionTypes, {
+      fields: [equipmentInspectionGroups.inspectionTypeId],
+      references: [equipmentInspectionTypes.id],
+    }),
     criteria: many(equipmentInspectionCriteria),
   }),
 )
@@ -129,6 +181,10 @@ export const equipmentInspectionCriteriaRelations = relations(
     type: one(equipmentInspectionTypes, {
       fields: [equipmentInspectionCriteria.inspectionTypeId],
       references: [equipmentInspectionTypes.id],
+    }),
+    group: one(equipmentInspectionGroups, {
+      fields: [equipmentInspectionCriteria.groupId],
+      references: [equipmentInspectionGroups.id],
     }),
   }),
 )
