@@ -8,6 +8,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { and, asc, count, desc, eq, isNull, max, sql } from 'drizzle-orm'
 import type { RequestContext } from '@beaconhs/tenant'
+import { htmlToText } from '@beaconhs/forms-core'
 import {
   attachments,
   formResponses,
@@ -159,7 +160,9 @@ export async function createAssessment(formData: FormData): Promise<{ id: string
   const locationOnSite = String(formData.get('locationOnSite') ?? '').trim() || null
   const occurredAtRaw = String(formData.get('occurredAt') ?? '')
   const supervisorPersonId = String(formData.get('supervisorPersonId') ?? '').trim() || null
-  const jobScope = String(formData.get('jobScope') ?? '').trim() || null
+  // jobScope is rich-text HTML; treat an empty editor (`<p></p>`) as null.
+  const jobScopeRaw = String(formData.get('jobScope') ?? '').trim()
+  const jobScope = htmlToText(jobScopeRaw) ? jobScopeRaw : null
   const copyFromId = String(formData.get('copyFromId') ?? '').trim() || null
 
   const occurredAt = occurredAtRaw ? new Date(occurredAtRaw) : new Date()
@@ -429,6 +432,19 @@ export async function createAssessment(formData: FormData): Promise<{ id: string
   return { id: created.id }
 }
 
+/**
+ * Create a draft assessment from the list flyout (type only) and jump straight
+ * to its detail page. The type seeds PPE/questions/default hazards/site tasks;
+ * everything else — site, project, supervisor, job scope, location — is captured
+ * inline on the detail page's live General-information section.
+ */
+export async function startAssessment(formData: FormData) {
+  const assessmentTypeId = String(formData.get('assessmentTypeId') ?? '').trim()
+  if (!assessmentTypeId) throw new Error('Assessment type is required')
+  const { id } = await createAssessment(formData)
+  redirect(`/hazard-assessments/${id}`)
+}
+
 export async function openAssessmentApp(formData: FormData) {
   const ctx = await ctxWithTenant()
   const assessmentId = String(formData.get('assessmentId') ?? '')
@@ -584,8 +600,12 @@ export async function updateTextField(formData: FormData) {
   // Array-string fields (multi-select text) come comma-separated.
   const ARRAYS = new Set<string>()
 
+  // Rich-text columns store HTML; an empty editor sends `<p></p>` — store null.
+  const RICH = new Set(['jobScope'])
+
   let val: unknown = value
   if (BOOLS.has(field)) val = value === 'on' || value === 'true' || value === '1'
+  if (RICH.has(field)) val = htmlToText(value).length > 0 ? value : null
   if (ARRAYS.has(field)) {
     val = (value ?? '')
       .split(',')

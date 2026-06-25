@@ -2,6 +2,7 @@
 // can re-use them from /reports/dashboard previews later.
 
 import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lte, sql } from 'drizzle-orm'
+import { htmlToSnippet } from '@beaconhs/forms-core'
 import type { RequestContext } from '@beaconhs/tenant'
 import {
   complianceObligations,
@@ -877,7 +878,7 @@ export async function loadDashboardMetrics(
         inProgressEntries.push({
           id: r.id,
           kind: 'hazard_assessment',
-          title: r.jobScope?.trim() || r.reference,
+          title: htmlToSnippet(r.jobScope, 120) || r.reference,
           href: `/hazard-assessments/${r.id}`,
           updatedAt: toIso(r.updatedAt),
         })

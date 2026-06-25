@@ -294,7 +294,7 @@ export async function getFeed(
           actorName: r.actor ?? null,
           siteName: r.siteName ?? null,
           title:
-            (r.jobScope?.trim() ? snippetOf(r.jobScope, 120) : null) ||
+            snippetOf(htmlToText(r.jobScope), 120) ||
             r.typeName ||
             r.reference ||
             'Hazard assessment',

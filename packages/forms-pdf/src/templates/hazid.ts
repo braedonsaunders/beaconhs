@@ -14,6 +14,8 @@
 // longer native sub-forms — they are Builder Apps (form templates) attached to
 // the assessment type, and render through the forms PDF path.
 
+import { sanitizeDocumentHtml } from '@beaconhs/forms-core'
+
 export type HazidRenderInput = {
   tenantName: string
   tenantLogoUrl?: string | null
@@ -205,6 +207,11 @@ export function renderHazidHtml(input: HazidRenderInput): string {
     .info-table td { padding: 5px 8px; border-bottom: 1px solid #eee; vertical-align: top; font-size: 10pt; }
     .info-table td.lbl { width: 22%; font-weight: 600; color: #555; }
     .info-table td.val { width: 28%; }
+    /* Rich-text (job scope): keep narrative formatting tight in the table cell. */
+    .info-table td.rich :first-child { margin-top: 0; }
+    .info-table td.rich :last-child { margin-bottom: 0; }
+    .info-table td.rich p { margin: 0 0 4px; }
+    .info-table td.rich ul, .info-table td.rich ol { margin: 0 0 4px; padding-left: 18px; }
     .data-table { width: 100%; border-collapse: collapse; margin: 6px 0; font-size: 9.5pt; }
     .data-table th, .data-table td { border: 1px solid #d0d0d0; padding: 5px 7px; text-align: left; vertical-align: top; }
     .data-table th { background: #f0f3f8; color: var(--primary); font-weight: 700; }
@@ -264,7 +271,7 @@ export function renderHazidHtml(input: HazidRenderInput): string {
         <td class="lbl">Supervisor</td><td class="val">${esc(a.supervisorName ?? '—')}</td>
       </tr>
       <tr>
-        <td class="lbl">Job scope</td><td class="val" colspan="3" style="white-space:pre-wrap;">${esc(a.jobScope ?? '—')}</td>
+        <td class="lbl">Job scope</td><td class="val rich" colspan="3">${a.jobScope ? sanitizeDocumentHtml(a.jobScope) : '—'}</td>
       </tr>
     </table>
   </section>

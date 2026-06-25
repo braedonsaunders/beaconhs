@@ -116,7 +116,13 @@ import {
 } from './_sections'
 import { AssessmentHeaderActions } from './_header-actions'
 import { SectionNav, type SectionNavItem } from '@/components/section-nav'
-import { LiveDateTime, LiveField, LivePersonSelect, LiveSelect } from '@/components/live-field'
+import {
+  LiveDateTime,
+  LiveField,
+  LivePersonSelect,
+  LiveRichText,
+  LiveSelect,
+} from '@/components/live-field'
 import { localDatetimeValue } from '../_datetime'
 import { AddSignatureDrawerBody } from '../_signature-form'
 import { HazidPhotoUploader } from '../_photo-uploader'
@@ -882,13 +888,11 @@ export default async function HazidAssessmentDetailPage({
                 </div>
               </div>
               <div className="mt-4">
-                <LiveField
+                <LiveRichText
                   id={a.id}
                   field="jobScope"
                   initialValue={a.jobScope}
                   label="Job scope"
-                  multiline
-                  rows={4}
                   disabled={locked}
                   updateAction={updateTextField}
                   placeholder="Describe the work to be performed."

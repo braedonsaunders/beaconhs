@@ -7,6 +7,7 @@
 
 import { NextResponse } from 'next/server'
 import { and, count, desc, gte, ilike, isNull, or, sql, type SQL } from 'drizzle-orm'
+import { htmlToSnippet } from '@beaconhs/forms-core'
 import {
   correctiveActions,
   documents,
@@ -382,7 +383,8 @@ export async function GET(req: Request): Promise<NextResponse> {
         id: r.id,
         label: r.reference,
         sublabel:
-          r.jobScope ?? (r.occurredAt ? new Date(r.occurredAt).toLocaleDateString() : undefined),
+          htmlToSnippet(r.jobScope, 100) ||
+          (r.occurredAt ? new Date(r.occurredAt).toLocaleDateString() : undefined),
         href: `/hazard-assessments/${r.id}`,
       })),
     })

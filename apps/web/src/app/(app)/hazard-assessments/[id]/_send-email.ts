@@ -19,6 +19,7 @@ import {
   users,
 } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
+import { htmlToText, sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import { recordAudit } from '@/lib/audit'
 
 export async function sendHazidEmail(
@@ -110,7 +111,7 @@ export async function sendHazidEmail(
     `Site: ${data.site?.name ?? '—'}`,
     `Location on site: ${data.a.locationOnSite ?? '—'}`,
     `Supervisor: ${supervisorName}`,
-    `Job scope: ${data.a.jobScope ?? '—'}`,
+    `Job scope: ${htmlToText(data.a.jobScope) || '—'}`,
     `Status: ${data.a.locked ? 'locked / completed' : 'in progress'}`,
     ``,
     options?.messageOverride ? `Note: ${options.messageOverride}\n` : '',
@@ -157,8 +158,8 @@ export async function sendHazidEmail(
             <td style="padding:4px 0;">${escapeHtml(data.a.locationOnSite ?? '—')}</td></tr>
         <tr><td style="padding:4px 12px 4px 0;color:#64748b;">Supervisor</td>
             <td style="padding:4px 0;">${escapeHtml(supervisorName)}</td></tr>
-        <tr><td style="padding:4px 12px 4px 0;color:#64748b;">Job scope</td>
-            <td style="padding:4px 0;">${escapeHtml(data.a.jobScope ?? '—')}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0;color:#64748b;vertical-align:top;">Job scope</td>
+            <td style="padding:4px 0;">${data.a.jobScope ? sanitizeDocumentHtml(data.a.jobScope) : '—'}</td></tr>
       </table>
       <h3 style="margin:18px 0 4px;font-size:14px;">Tasks (${data.tasks.length})</h3>
       ${
