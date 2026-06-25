@@ -11,9 +11,12 @@ import {
   equipmentItems,
   equipmentTypes,
   formResponses,
+  hazidAssessments,
   incidentHoursPeriods,
   incidents,
   inspectionRecords,
+  inspectionTypes,
+  journalEntries,
   notifications,
   orgUnits,
   people,
@@ -139,6 +142,7 @@ export type DashboardMetrics = {
   }>
   myEquipment: Array<{
     id: string
+    checkoutId: string
     name: string
     assetTag: string
     typeName: string | null
@@ -165,6 +169,17 @@ export type DashboardMetrics = {
       dueOn: string | null
     }>
   }
+
+  // In-progress entries the current user has started but not finished, across
+  // modules (journals, hazard assessments, incidents, inspections). Newest-
+  // touched first. Empty for accounts with no tenant membership (e.g. super-admin).
+  inProgressEntries: Array<{
+    id: string
+    kind: 'journal' | 'hazard_assessment' | 'incident' | 'inspection'
+    title: string
+    href: string
+    updatedAt: string
+  }>
 }
 
 /** Returns the per-tenant dashboard payload. Single transaction. */
@@ -675,6 +690,7 @@ export async function loadDashboardMetrics(
           await tx
             .select({
               id: equipmentItems.id,
+              checkoutId: equipmentCheckouts.id,
               name: equipmentItems.name,
               assetTag: equipmentItems.assetTag,
               status: equipmentItems.status,
@@ -697,6 +713,7 @@ export async function loadDashboardMetrics(
             .limit(12)
         ).map((r) => ({
           id: r.id,
+          checkoutId: r.checkoutId,
           name: r.name,
           assetTag: r.assetTag,
           typeName: r.typeName,
@@ -769,6 +786,122 @@ export async function loadDashboardMetrics(
       outstanding: cOutstanding,
     }
 
+    // --- In-progress entries (current user's unfinished work) ------------
+    // Drafts / in-progress records the logged-in user authored across modules,
+    // newest-touched first. Keyed by tenant-user id (ctx.membership.id); an
+    // account without a membership (e.g. super-admin) simply gets an empty list.
+    const myTenantUserId = ctx.membership?.id ?? null
+    const inProgressEntries: DashboardMetrics['inProgressEntries'] = []
+    if (myTenantUserId) {
+      const toIso = (d: unknown) => (d instanceof Date ? d.toISOString() : String(d))
+      const [jDrafts, hzDrafts, incDrafts, insDrafts] = await Promise.all([
+        tx
+          .select({
+            id: journalEntries.id,
+            title: journalEntries.title,
+            updatedAt: journalEntries.updatedAt,
+          })
+          .from(journalEntries)
+          .where(
+            and(
+              eq(journalEntries.createdByTenantUserId, myTenantUserId),
+              eq(journalEntries.status, 'draft'),
+              isNull(journalEntries.deletedAt),
+            ),
+          )
+          .orderBy(desc(journalEntries.updatedAt))
+          .limit(8),
+        tx
+          .select({
+            id: hazidAssessments.id,
+            reference: hazidAssessments.reference,
+            jobScope: hazidAssessments.jobScope,
+            updatedAt: hazidAssessments.updatedAt,
+          })
+          .from(hazidAssessments)
+          .where(
+            and(
+              eq(hazidAssessments.reportedByTenantUserId, myTenantUserId),
+              eq(hazidAssessments.inProgress, true),
+              eq(hazidAssessments.locked, false),
+              isNull(hazidAssessments.deletedAt),
+            ),
+          )
+          .orderBy(desc(hazidAssessments.updatedAt))
+          .limit(8),
+        tx
+          .select({
+            id: incidents.id,
+            title: incidents.title,
+            reference: incidents.reference,
+            updatedAt: incidents.updatedAt,
+          })
+          .from(incidents)
+          .where(
+            and(
+              eq(incidents.reportedByTenantUserId, myTenantUserId),
+              eq(incidents.isDraft, true),
+              isNull(incidents.deletedAt),
+            ),
+          )
+          .orderBy(desc(incidents.updatedAt))
+          .limit(8),
+        tx
+          .select({
+            id: inspectionRecords.id,
+            reference: inspectionRecords.reference,
+            typeName: inspectionTypes.name,
+            updatedAt: inspectionRecords.updatedAt,
+          })
+          .from(inspectionRecords)
+          .leftJoin(inspectionTypes, eq(inspectionTypes.id, inspectionRecords.typeId))
+          .where(
+            and(
+              eq(inspectionRecords.inspectorTenantUserId, myTenantUserId),
+              inArray(inspectionRecords.status, ['draft', 'in_progress']),
+              isNull(inspectionRecords.deletedAt),
+            ),
+          )
+          .orderBy(desc(inspectionRecords.updatedAt))
+          .limit(8),
+      ])
+      for (const r of jDrafts)
+        inProgressEntries.push({
+          id: r.id,
+          kind: 'journal',
+          title: r.title?.trim() || 'Untitled journal entry',
+          href: `/journals/${r.id}`,
+          updatedAt: toIso(r.updatedAt),
+        })
+      for (const r of hzDrafts)
+        inProgressEntries.push({
+          id: r.id,
+          kind: 'hazard_assessment',
+          title: r.jobScope?.trim() || r.reference,
+          href: `/hazard-assessments/${r.id}`,
+          updatedAt: toIso(r.updatedAt),
+        })
+      for (const r of incDrafts)
+        inProgressEntries.push({
+          id: r.id,
+          kind: 'incident',
+          title: r.title?.trim() || r.reference,
+          href: `/incidents/${r.id}`,
+          updatedAt: toIso(r.updatedAt),
+        })
+      for (const r of insDrafts)
+        inProgressEntries.push({
+          id: r.id,
+          kind: 'inspection',
+          title: r.typeName?.trim() || r.reference,
+          href: `/inspections/records/${r.id}`,
+          updatedAt: toIso(r.updatedAt),
+        })
+      // Newest-touched first across every module, then cap the merged list.
+      inProgressEntries.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      inProgressEntries.splice(12)
+    }
+
     return {
       incidents30: Number(incRow?.c ?? 0),
       incidentsPrev30: Number(incPrev?.c ?? 0),
@@ -822,6 +955,7 @@ export async function loadDashboardMetrics(
       myPpe,
       myEquipment,
       myCompliance,
+      inProgressEntries,
     }
   })
 }

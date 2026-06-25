@@ -13,7 +13,14 @@
 
 import { revalidatePath } from 'next/cache'
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
-import { equipmentItems, equipmentTypes, orgUnits, people } from '@beaconhs/db/schema'
+import {
+  equipmentCheckouts,
+  equipmentItems,
+  equipmentLocationHistory,
+  equipmentTypes,
+  orgUnits,
+  people,
+} from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { csvRow } from '@/lib/csv'
@@ -346,4 +353,71 @@ export async function listPeopleForBulkHolder(): Promise<
       employeeNo: r.employeeNo,
     }))
   })
+}
+
+// ---------- Check-in (sign in) ----------------------------------------------
+// Shared by the /equipment/check-out page and the dashboard "My equipment"
+// widget's one-tap check-in. Returns the item to base: closes the open checkout,
+// clears the holder, and flips the item back to available. Condition defaults to
+// "good" when the caller doesn't supply one (the dashboard one-tap case).
+
+const RETURN_CONDITIONS = ['good', 'fair', 'damaged', 'unusable'] as const
+type ReturnCondition = (typeof RETURN_CONDITIONS)[number]
+
+export async function checkInEquipment(formData: FormData) {
+  const ctx = await requireRequestContext()
+  const id = String(formData.get('id') ?? '').trim()
+  const rawCondition = String(formData.get('returnedCondition') ?? 'good').trim()
+  const condition: ReturnCondition = (RETURN_CONDITIONS as readonly string[]).includes(rawCondition)
+    ? (rawCondition as ReturnCondition)
+    : 'good'
+  const returnedNotes = String(formData.get('returnedNotes') ?? '').trim() || null
+  if (!id) return
+
+  const itemId = await ctx.db(async (tx) => {
+    const [co] = await tx
+      .select()
+      .from(equipmentCheckouts)
+      .where(eq(equipmentCheckouts.id, id))
+      .limit(1)
+    // Already returned (or unknown) — nothing to do; keeps the action idempotent.
+    if (!co || co.returnedAt) return null
+    await tx
+      .update(equipmentCheckouts)
+      .set({
+        returnedAt: new Date(),
+        returnedCondition: condition,
+        returnedNotes,
+        checkedInByTenantUserId: ctx.membership?.id,
+      })
+      .where(eq(equipmentCheckouts.id, id))
+    await tx
+      .update(equipmentItems)
+      .set({
+        currentHolderPersonId: null,
+        isAvailableForCheckout: true,
+        lastSeenAt: new Date(),
+      })
+      .where(eq(equipmentItems.id, co.equipmentItemId))
+    await tx.insert(equipmentLocationHistory).values({
+      tenantId: ctx.tenantId,
+      itemId: co.equipmentItemId,
+      siteOrgUnitId: null,
+      holderPersonId: null,
+      recordedByTenantUserId: ctx.membership?.id,
+      note: `Checked in (${condition})${returnedNotes ? ` — ${returnedNotes}` : ''}`,
+    })
+    return co.equipmentItemId
+  })
+
+  await recordAudit(ctx, {
+    entityType: 'equipment_checkout',
+    entityId: id,
+    action: 'update',
+    summary: 'Checked equipment in',
+    after: { condition, returnedNotes },
+  })
+  revalidatePath('/equipment/check-out')
+  revalidatePath('/dashboard')
+  if (itemId) revalidatePath(`/equipment/${itemId}`)
 }

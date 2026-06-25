@@ -232,6 +232,15 @@ export const WIDGETS: Record<string, WidgetMeta> = {
   },
 
   // ---- Personal -----------------------------------------------------------
+  'personal-in-progress': {
+    id: 'personal-in-progress',
+    category: 'personal',
+    label: 'In progress',
+    description:
+      'Your unfinished entries — draft journals, hazard assessments, incidents, and inspections — newest first, to pick up where you left off.',
+    defaultSize: { w: 6, h: 5 },
+    minSize: { w: 3, h: 4 },
+  },
   'personal-my-ppe': {
     id: 'personal-my-ppe',
     category: 'personal',

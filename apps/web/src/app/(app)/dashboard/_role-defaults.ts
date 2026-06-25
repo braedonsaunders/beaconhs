@@ -112,6 +112,9 @@ export const DEFAULT_LAYOUTS: Record<RoleTier, DashboardLayoutData> = {
       // Row 6 — my personal compliance + gear
       { id: 'personal-my-compliance', x: 0, y: 16, w: 6, h: 5 },
       { id: 'personal-my-ppe', x: 6, y: 16, w: 6, h: 5 },
+      // Row 7 — what I'm working on + my equipment (one-tap sign in/out)
+      { id: 'personal-in-progress', x: 0, y: 21, w: 6, h: 5 },
+      { id: 'personal-my-equipment', x: 6, y: 21, w: 6, h: 5 },
     ],
   },
 
@@ -119,18 +122,20 @@ export const DEFAULT_LAYOUTS: Record<RoleTier, DashboardLayoutData> = {
     widgets: [
       // Row 1 — quick actions only (no exec rates)
       { id: 'personal-actions', x: 0, y: 0, w: 12, h: 2 },
-      // Row 2 — my compliance + my PPE (the field worker's daily view)
-      { id: 'personal-my-compliance', x: 0, y: 2, w: 6, h: 5 },
-      { id: 'personal-my-ppe', x: 6, y: 2, w: 6, h: 5 },
-      // Row 3 — my equipment + inbox
-      { id: 'personal-my-equipment', x: 0, y: 7, w: 6, h: 5 },
-      { id: 'personal-inbox', x: 6, y: 7, w: 6, h: 5 },
-      // Row 4 — personal status
-      { id: 'kpi-days-since-recordable', x: 0, y: 12, w: 4, h: 3 },
-      { id: 'kpi-expiring-certs', x: 4, y: 12, w: 4, h: 3 },
-      { id: 'kpi-ppe-overdue', x: 8, y: 12, w: 4, h: 3 },
-      // Row 5 — my training (we re-use expiring-training as "my")
-      { id: 'list-expiring-training', x: 0, y: 15, w: 12, h: 5 },
+      // Row 2 — what I'm working on + my compliance (the field worker's daily view)
+      { id: 'personal-in-progress', x: 0, y: 2, w: 6, h: 5 },
+      { id: 'personal-my-compliance', x: 6, y: 2, w: 6, h: 5 },
+      // Row 3 — my PPE + my equipment (one-tap inspect + sign in/out)
+      { id: 'personal-my-ppe', x: 0, y: 7, w: 6, h: 5 },
+      { id: 'personal-my-equipment', x: 6, y: 7, w: 6, h: 5 },
+      // Row 4 — inbox
+      { id: 'personal-inbox', x: 0, y: 12, w: 12, h: 5 },
+      // Row 5 — personal status
+      { id: 'kpi-days-since-recordable', x: 0, y: 17, w: 4, h: 3 },
+      { id: 'kpi-expiring-certs', x: 4, y: 17, w: 4, h: 3 },
+      { id: 'kpi-ppe-overdue', x: 8, y: 17, w: 4, h: 3 },
+      // Row 6 — my training (we re-use expiring-training as "my")
+      { id: 'list-expiring-training', x: 0, y: 20, w: 12, h: 5 },
     ],
   },
 }

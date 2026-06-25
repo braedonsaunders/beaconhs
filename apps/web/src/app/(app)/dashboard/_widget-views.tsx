@@ -27,8 +27,11 @@ import {
   HardHat,
   Inbox,
   ListChecks,
+  LogIn,
   MapPin,
   Minus,
+  NotebookPen,
+  PencilLine,
   Radio,
   ShieldAlert,
   ShieldCheck,
@@ -44,6 +47,7 @@ import { Sparkline } from './_sparkline'
 import { AnimatedBar } from './_bar'
 import { QuickActions } from './_quick-actions'
 import type { QuickAction } from './_quick-actions-shared'
+import { checkInEquipment } from '../equipment/_actions'
 
 // =====================================================================
 // Public entry — switch on widget id and render the right card
@@ -274,6 +278,8 @@ export function WidgetCard({ widgetId, data, todayIso, quickActions }: Props) {
       return <MyEquipmentCard items={data.myEquipment} todayIso={todayIso} />
     case 'personal-my-compliance':
       return <MyComplianceCard data={data.myCompliance} />
+    case 'personal-in-progress':
+      return <InProgressList items={data.inProgressEntries} />
     case 'personal-inbox':
       return <InboxList items={data.myInbox} />
     case 'personal-actions':
@@ -946,6 +952,108 @@ function InboxList({ items }: { items: DashboardMetrics['myInbox'] }) {
 }
 
 // =====================================================================
+// In progress — the current user's unfinished entries across modules,
+// newest-touched first, each linking back to resume the work.
+// =====================================================================
+
+type InProgressKind = DashboardMetrics['inProgressEntries'][number]['kind']
+
+const IN_PROGRESS_KIND: Record<
+  InProgressKind,
+  { label: string; icon: LucideIcon; badge: string }
+> = {
+  journal: {
+    label: 'Journal',
+    icon: NotebookPen,
+    badge:
+      'bg-teal-50 text-teal-700 ring-teal-100 dark:bg-teal-950/50 dark:text-teal-300 dark:ring-teal-900/40',
+  },
+  hazard_assessment: {
+    label: 'Hazard assessment',
+    icon: ShieldAlert,
+    badge:
+      'bg-amber-50 text-amber-700 ring-amber-100 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-900/40',
+  },
+  incident: {
+    label: 'Incident',
+    icon: AlertTriangle,
+    badge:
+      'bg-rose-50 text-rose-700 ring-rose-100 dark:bg-rose-950/40 dark:text-rose-300 dark:ring-rose-900/40',
+  },
+  inspection: {
+    label: 'Inspection',
+    icon: ClipboardCheck,
+    badge:
+      'bg-sky-50 text-sky-700 ring-sky-100 dark:bg-sky-950/50 dark:text-sky-300 dark:ring-sky-900/40',
+  },
+}
+
+function InProgressList({ items }: { items: DashboardMetrics['inProgressEntries'] }) {
+  return (
+    <CardShell
+      title="In progress"
+      caption={
+        items.length === 0
+          ? 'Pick up where you left off'
+          : `${items.length} unfinished ${items.length === 1 ? 'entry' : 'entries'}`
+      }
+      icon={PencilLine}
+      accent="amber"
+    >
+      {items.length === 0 ? (
+        <EmptyRow>
+          <span className="inline-flex items-center gap-2">
+            <ShieldCheck size={12} className="text-emerald-500" />
+            Nothing in progress — you’re all caught up.
+          </span>
+        </EmptyRow>
+      ) : (
+        <ul className="space-y-0.5 px-2 pb-2">
+          {items.map((e, idx) => {
+            const meta = IN_PROGRESS_KIND[e.kind]
+            const Icon = meta.icon
+            return (
+              <motion.li
+                key={`${e.kind}-${e.id}`}
+                initial={{ opacity: 0, x: -6 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.06 + idx * 0.04, duration: 0.3 }}
+              >
+                <Link
+                  href={e.href as any}
+                  className="group flex items-center gap-2.5 rounded-lg px-3 py-2 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60"
+                >
+                  <span
+                    className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ring-1 ring-inset ${meta.badge}`}
+                  >
+                    <Icon size={15} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-medium text-slate-900 group-hover:text-teal-700 dark:text-slate-100 dark:group-hover:text-teal-300">
+                      {e.title}
+                    </div>
+                    <div className="mt-0.5 truncate text-[11px] text-slate-500 dark:text-slate-400">
+                      {meta.label} · {relativeTime(e.updatedAt)}
+                    </div>
+                  </div>
+                  <span className="inline-flex shrink-0 items-center gap-1 text-[11px] font-medium text-slate-400 transition-colors group-hover:text-teal-600 dark:text-slate-500 dark:group-hover:text-teal-300">
+                    Resume
+                    <ArrowRight
+                      size={12}
+                      className="transition-transform group-hover:translate-x-0.5"
+                    />
+                  </span>
+                </Link>
+              </motion.li>
+            )
+          })}
+        </ul>
+      )}
+    </CardShell>
+  )
+}
+
+// =====================================================================
 // Personal — My PPE / My equipment (gear issued/checked out to me, with a
 // one-tap "Inspect" CTA) + My compliance (a drillable completion ring)
 // =====================================================================
@@ -963,6 +1071,23 @@ function InspectButton({ href, tone = 'teal' }: { href: string; tone?: 'teal' | 
     >
       <ClipboardCheck size={12} /> Inspect
     </Link>
+  )
+}
+
+/** One-tap "Check in" (sign in) for a piece of equipment I'm holding. Posts the
+ *  open checkout id to the shared server action; condition defaults to "good". */
+function CheckInButton({ checkoutId }: { checkoutId: string }) {
+  return (
+    <form action={checkInEquipment} className="shrink-0">
+      <input type="hidden" name="id" value={checkoutId} />
+      <button
+        type="submit"
+        title="Check this item back in"
+        className="inline-flex shrink-0 items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700 transition-colors hover:bg-emerald-100 dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-900/50"
+      >
+        <LogIn size={12} /> Check in
+      </button>
+    </form>
   )
 }
 
@@ -1058,7 +1183,8 @@ function MyEquipmentCard({
           : `${items.length} items checked out to you`
       }
       icon={Boxes}
-      href="/equipment"
+      href="/equipment/check-out"
+      hrefLabel="Check in / out"
       accent="sky"
     >
       {items.length === 0 ? (
@@ -1104,10 +1230,13 @@ function MyEquipmentCard({
                     {sub}
                   </div>
                 </div>
-                <InspectButton
-                  href={`/apps?category=inspection&sourceEntityType=equipment&sourceEntityId=${e.id}`}
-                  tone="sky"
-                />
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <InspectButton
+                    href={`/apps?category=inspection&sourceEntityType=equipment&sourceEntityId=${e.id}`}
+                    tone="sky"
+                  />
+                  <CheckInButton checkoutId={e.checkoutId} />
+                </div>
               </motion.li>
             )
           })}

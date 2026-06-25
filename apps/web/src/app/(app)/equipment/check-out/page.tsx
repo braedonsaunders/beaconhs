@@ -35,6 +35,7 @@ import { ListPageLayout } from '@/components/page-layout'
 import { Section } from '@/components/section'
 import { EquipmentSubNav } from '@/components/equipment-sub-nav'
 import { PersonSelectField } from '@/components/person-select-field'
+import { checkInEquipment } from '../_actions'
 
 export const metadata = { title: 'Check in / out' }
 export const dynamic = 'force-dynamic'
@@ -103,60 +104,6 @@ async function checkOut(formData: FormData) {
   })
   revalidatePath('/equipment/check-out')
   revalidatePath(`/equipment/${itemId}`)
-}
-
-async function checkIn(formData: FormData) {
-  'use server'
-  const ctx = await requireRequestContext()
-  const id = String(formData.get('id') ?? '').trim()
-  const condition = String(formData.get('returnedCondition') ?? 'good').trim() || 'good'
-  const returnedNotes = String(formData.get('returnedNotes') ?? '').trim() || null
-  if (!id) return
-
-  const itemId = await ctx.db(async (tx) => {
-    const [co] = await tx
-      .select()
-      .from(equipmentCheckouts)
-      .where(eq(equipmentCheckouts.id, id))
-      .limit(1)
-    if (!co) return null
-    await tx
-      .update(equipmentCheckouts)
-      .set({
-        returnedAt: new Date(),
-        returnedCondition: condition as any,
-        returnedNotes,
-        checkedInByTenantUserId: ctx.membership?.id,
-      })
-      .where(eq(equipmentCheckouts.id, id))
-    await tx
-      .update(equipmentItems)
-      .set({
-        currentHolderPersonId: null,
-        isAvailableForCheckout: true,
-        lastSeenAt: new Date(),
-      })
-      .where(eq(equipmentItems.id, co.equipmentItemId))
-    await tx.insert(equipmentLocationHistory).values({
-      tenantId: ctx.tenantId,
-      itemId: co.equipmentItemId,
-      siteOrgUnitId: null,
-      holderPersonId: null,
-      recordedByTenantUserId: ctx.membership?.id,
-      note: `Checked in (${condition})${returnedNotes ? ` — ${returnedNotes}` : ''}`,
-    })
-    return co.equipmentItemId
-  })
-
-  await recordAudit(ctx, {
-    entityType: 'equipment_checkout',
-    entityId: id,
-    action: 'update',
-    summary: 'Checked equipment in',
-    after: { condition, returnedNotes },
-  })
-  revalidatePath('/equipment/check-out')
-  if (itemId) revalidatePath(`/equipment/${itemId}`)
 }
 
 export default async function CheckInOutPage() {
@@ -337,7 +284,7 @@ export default async function CheckInOutPage() {
                           ) : null}
                         </TableCell>
                         <TableCell>
-                          <form action={checkIn} className="flex items-center gap-2">
+                          <form action={checkInEquipment} className="flex items-center gap-2">
                             <input type="hidden" name="id" value={co.id} />
                             <Select
                               name="returnedCondition"
