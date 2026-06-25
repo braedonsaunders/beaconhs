@@ -101,6 +101,43 @@ export async function updateEquipmentInspectionType(input: {
   revalidateType(input.id)
 }
 
+export async function createEquipmentInspectionType(input: {
+  name: string
+  description: string | null
+  interval: string
+  appliesToTypeId: string | null
+  allowPassAll: boolean
+  failsSpawnWorkOrders: boolean
+}): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  const ctx = await manageCtx()
+  const name = input.name.trim()
+  if (!name) return { ok: false, error: 'Name is required' }
+  const row = await ctx.db(async (tx) => {
+    const [r] = await tx
+      .insert(equipmentInspectionTypes)
+      .values({
+        tenantId: ctx.tenantId,
+        name,
+        description: input.description?.trim() || null,
+        interval: parseInterval(input.interval),
+        appliesToTypeId: input.appliesToTypeId || null,
+        allowPassAll: input.allowPassAll,
+        failsSpawnWorkOrders: input.failsSpawnWorkOrders,
+      })
+      .returning({ id: equipmentInspectionTypes.id })
+    return r
+  })
+  if (!row) return { ok: false, error: 'Failed to create inspection type' }
+  await recordAudit(ctx, {
+    entityType: 'equipment_inspection_type',
+    entityId: row.id,
+    action: 'create',
+    summary: `Created inspection type "${name}"`,
+  })
+  revalidatePath('/equipment/inspection-types')
+  return { ok: true, id: row.id }
+}
+
 export async function deleteEquipmentInspectionType(input: { id: string }) {
   const ctx = await manageCtx()
   // Hard delete — criteria + groups cascade; historical records keep their
