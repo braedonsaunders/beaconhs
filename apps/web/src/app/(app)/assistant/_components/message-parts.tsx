@@ -6,6 +6,7 @@
 import { ChatMarkdown } from './markdown'
 import { ToolUseCard } from './tool-use-card'
 import { ProposalCard, proposalFromOutput } from './proposal-card'
+import { ToolResultView } from './result-views'
 
 type AnyPart = { type: string; [k: string]: unknown }
 
@@ -39,6 +40,8 @@ function PartView({ part }: { part: AnyPart }) {
     return (
       <div className="space-y-2">
         <ToolUseCard name={name} state={state} input={part.input} output={part.output} />
+        {/* Search and read tool results render as interactive, deep-linked cards. */}
+        {proposal ? null : <ToolResultView name={name} output={part.output} />}
         {proposal ? <ProposalCard proposal={proposal} /> : null}
       </div>
     )

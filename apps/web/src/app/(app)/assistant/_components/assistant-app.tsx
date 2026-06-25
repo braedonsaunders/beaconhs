@@ -30,6 +30,7 @@ import { Button, EmptyState, cn } from '@beaconhs/ui'
 import { deleteAssistantConversation, renameAssistantConversation } from '../_actions'
 import { MessageParts } from './message-parts'
 import { ShareDrawer } from './share-drawer'
+import { DocumentReaderProvider } from './document-reader'
 
 type Role = 'user' | 'assistant' | 'system'
 type ChatMessage = { id: string; role: Role; parts: unknown[] }
@@ -248,161 +249,163 @@ export function AssistantApp({
   )
 
   return (
-    <div className="flex h-full min-h-0">
-      {/* Desktop sidebar — collapses to a thin icon rail */}
-      {sidebarCollapsed ? (
-        <aside className="hidden w-12 shrink-0 flex-col items-center gap-1 border-r border-slate-200 bg-white py-3 lg:flex dark:border-slate-800 dark:bg-slate-900">
-          <button
-            type="button"
-            onClick={toggleSidebar}
-            title="Expand sidebar"
-            aria-label="Expand sidebar"
-            className="flex h-9 w-9 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
-          >
-            <PanelLeftOpen className="h-4 w-4" />
-          </button>
-          <Link
-            href="/assistant"
-            title="New chat"
-            aria-label="New chat"
-            className="flex h-9 w-9 items-center justify-center rounded-md text-teal-700 hover:bg-teal-50 dark:text-teal-300 dark:hover:bg-teal-950/40"
-          >
-            <Plus className="h-4 w-4" />
-          </Link>
-        </aside>
-      ) : (
-        <aside className="hidden w-72 shrink-0 border-r border-slate-200 bg-white lg:flex lg:flex-col dark:border-slate-800 dark:bg-slate-900">
-          {sidebar}
-        </aside>
-      )}
-
-      {/* Mobile sidebar drawer */}
-      {sidebarOpen ? (
-        <div className="fixed inset-0 z-40 lg:hidden">
-          <div
-            className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]"
-            onClick={() => setSidebarOpen(false)}
-          />
-          <div className="absolute inset-y-0 left-0 w-72 border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-            {sidebar}
-          </div>
-        </div>
-      ) : null}
-
-      {/* Thread pane */}
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-12 shrink-0 items-center gap-2 border-b border-slate-200 px-3 dark:border-slate-800">
-          <button
-            type="button"
-            onClick={() => setSidebarOpen(true)}
-            className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 lg:hidden dark:text-slate-400 dark:hover:bg-slate-800"
-            aria-label="Conversations"
-          >
-            <MoreHorizontal className="h-5 w-5" />
-          </button>
-          <div className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
-            <Sparkles className="h-4 w-4 text-teal-600 dark:text-teal-400" />
-            Assistant
-          </div>
-          {readOnly ? (
-            <span className="ml-auto rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-              Shared · read-only
-            </span>
-          ) : currentId ? (
+    <DocumentReaderProvider>
+      <div className="flex h-full min-h-0">
+        {/* Desktop sidebar — collapses to a thin icon rail */}
+        {sidebarCollapsed ? (
+          <aside className="hidden w-12 shrink-0 flex-col items-center gap-1 border-r border-slate-200 bg-white py-3 lg:flex dark:border-slate-800 dark:bg-slate-900">
             <button
               type="button"
-              onClick={() => setShareFor(currentId)}
-              className="ml-auto inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+              onClick={toggleSidebar}
+              title="Expand sidebar"
+              aria-label="Expand sidebar"
+              className="flex h-9 w-9 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
             >
-              <Share2 className="h-3.5 w-3.5" />
-              Share
+              <PanelLeftOpen className="h-4 w-4" />
             </button>
-          ) : null}
-        </header>
+            <Link
+              href="/assistant"
+              title="New chat"
+              aria-label="New chat"
+              className="flex h-9 w-9 items-center justify-center rounded-md text-teal-700 hover:bg-teal-50 dark:text-teal-300 dark:hover:bg-teal-950/40"
+            >
+              <Plus className="h-4 w-4" />
+            </Link>
+          </aside>
+        ) : (
+          <aside className="hidden w-72 shrink-0 border-r border-slate-200 bg-white lg:flex lg:flex-col dark:border-slate-800 dark:bg-slate-900">
+            {sidebar}
+          </aside>
+        )}
 
-        <div className="app-scroll min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-3xl px-4 py-6">
-            {messages.length === 0 ? (
-              <Welcome onPick={(t) => setInput(t)} canSend={canSend} />
-            ) : (
-              <div className="space-y-6">
-                {messages.map((m) =>
-                  m.role === 'system' ? null : (
-                    <MessageRow key={m.id} message={m} streaming={streaming} />
-                  ),
-                )}
-                {error ? (
-                  <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300">
-                    {error}
-                  </div>
-                ) : null}
-              </div>
-            )}
-            <div ref={bottomRef} />
+        {/* Mobile sidebar drawer */}
+        {sidebarOpen ? (
+          <div className="fixed inset-0 z-40 lg:hidden">
+            <div
+              className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]"
+              onClick={() => setSidebarOpen(false)}
+            />
+            <div className="absolute inset-y-0 left-0 w-72 border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+              {sidebar}
+            </div>
           </div>
-        </div>
+        ) : null}
 
-        {/* Composer */}
-        <div className="shrink-0 border-t border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
-          <div className="mx-auto w-full max-w-3xl">
+        {/* Thread pane */}
+        <div className="flex min-w-0 flex-1 flex-col">
+          <header className="flex h-12 shrink-0 items-center gap-2 border-b border-slate-200 px-3 dark:border-slate-800">
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(true)}
+              className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 lg:hidden dark:text-slate-400 dark:hover:bg-slate-800"
+              aria-label="Conversations"
+            >
+              <MoreHorizontal className="h-5 w-5" />
+            </button>
+            <div className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+              <Sparkles className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+              Assistant
+            </div>
             {readOnly ? (
-              <p className="py-2 text-center text-sm text-slate-500 dark:text-slate-400">
-                This conversation was shared with you. Only the owner can continue it.
-              </p>
-            ) : !aiEnabled ? (
-              <p className="py-2 text-center text-sm text-slate-500 dark:text-slate-400">
-                The assistant isn’t configured for this workspace yet. An admin can enable it under
-                Admin → AI.
-              </p>
-            ) : (
-              <div className="flex items-end gap-2 rounded-2xl border border-slate-300 bg-white p-2 shadow-sm focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-950">
-                <textarea
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={onComposerKey}
-                  rows={1}
-                  placeholder="Ask about incidents, corrective actions, training, documents…"
-                  className="max-h-40 flex-1 resize-none appearance-none overflow-y-auto border-0 bg-transparent px-2 py-1.5 text-base text-slate-900 shadow-none outline-none placeholder:text-slate-400 focus:border-0 focus:ring-0 focus:outline-none sm:text-sm dark:text-slate-100"
-                />
-                {streaming ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    onClick={stop}
-                    aria-label="Stop"
-                  >
-                    <Square className="h-4 w-4" />
-                  </Button>
-                ) : (
-                  <Button
-                    type="button"
-                    size="icon"
-                    onClick={() => send()}
-                    disabled={!input.trim()}
-                    aria-label="Send"
-                  >
-                    <Send className="h-4 w-4" />
-                  </Button>
-                )}
-              </div>
-            )}
-            {canWrite && !readOnly ? (
-              <p className="mt-1.5 text-center text-[11px] text-slate-400 dark:text-slate-500">
-                The assistant drafts changes for your approval — nothing is created until you
-                confirm.
-              </p>
+              <span className="ml-auto rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                Shared · read-only
+              </span>
+            ) : currentId ? (
+              <button
+                type="button"
+                onClick={() => setShareFor(currentId)}
+                className="ml-auto inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+              >
+                <Share2 className="h-3.5 w-3.5" />
+                Share
+              </button>
             ) : null}
+          </header>
+
+          <div className="app-scroll min-h-0 flex-1 overflow-y-auto">
+            <div className="mx-auto w-full max-w-3xl px-4 py-6">
+              {messages.length === 0 ? (
+                <Welcome onPick={(t) => setInput(t)} canSend={canSend} />
+              ) : (
+                <div className="space-y-6">
+                  {messages.map((m) =>
+                    m.role === 'system' ? null : (
+                      <MessageRow key={m.id} message={m} streaming={streaming} />
+                    ),
+                  )}
+                  {error ? (
+                    <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300">
+                      {error}
+                    </div>
+                  ) : null}
+                </div>
+              )}
+              <div ref={bottomRef} />
+            </div>
+          </div>
+
+          {/* Composer */}
+          <div className="shrink-0 border-t border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
+            <div className="mx-auto w-full max-w-3xl">
+              {readOnly ? (
+                <p className="py-2 text-center text-sm text-slate-500 dark:text-slate-400">
+                  This conversation was shared with you. Only the owner can continue it.
+                </p>
+              ) : !aiEnabled ? (
+                <p className="py-2 text-center text-sm text-slate-500 dark:text-slate-400">
+                  The assistant isn’t configured for this workspace yet. An admin can enable it
+                  under Admin → AI.
+                </p>
+              ) : (
+                <div className="flex items-end gap-2 rounded-2xl border border-slate-300 bg-white p-2 shadow-sm focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-950">
+                  <textarea
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={onComposerKey}
+                    rows={1}
+                    placeholder="Ask about incidents, corrective actions, training, documents…"
+                    className="max-h-40 flex-1 resize-none appearance-none overflow-y-auto border-0 bg-transparent px-2 py-1.5 text-base text-slate-900 shadow-none outline-none placeholder:text-slate-400 focus:border-0 focus:ring-0 focus:outline-none sm:text-sm dark:text-slate-100"
+                  />
+                  {streaming ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={stop}
+                      aria-label="Stop"
+                    >
+                      <Square className="h-4 w-4" />
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      size="icon"
+                      onClick={() => send()}
+                      disabled={!input.trim()}
+                      aria-label="Send"
+                    >
+                      <Send className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+              )}
+              {canWrite && !readOnly ? (
+                <p className="mt-1.5 text-center text-[11px] text-slate-400 dark:text-slate-500">
+                  The assistant drafts changes for your approval — nothing is created until you
+                  confirm.
+                </p>
+              ) : null}
+            </div>
           </div>
         </div>
-      </div>
 
-      <ShareDrawer
-        conversationId={shareFor}
-        open={shareFor !== null}
-        onClose={() => setShareFor(null)}
-      />
-    </div>
+        <ShareDrawer
+          conversationId={shareFor}
+          open={shareFor !== null}
+          onClose={() => setShareFor(null)}
+        />
+      </div>
+    </DocumentReaderProvider>
   )
 }
 

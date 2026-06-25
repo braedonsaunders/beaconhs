@@ -20,6 +20,7 @@ import {
 } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { recordVisibilityWhere } from '@/lib/visibility'
+import { documentReadFilter } from './doc-access'
 import { truncateText, type AssistantToolDef, type ToolResult } from './types'
 
 // ---- helpers ---------------------------------------------------------------
@@ -353,6 +354,8 @@ const findDocuments: AssistantToolDef = {
     const limit = Math.min(a.limit ?? 25, 50)
     return ctx.db(async (tx) => {
       const conds: SQL[] = [isNull(documents.deletedAt)]
+      const pubOnly = documentReadFilter(ctx)
+      if (pubOnly) conds.push(pubOnly)
       if (a.query) {
         const t = like(a.query)
         const m = or(ilike(documents.title, t), ilike(documents.key, t))
@@ -394,6 +397,9 @@ const readDocument: AssistantToolDef = {
   execute: async (raw, ctx): Promise<ToolResult> => {
     const a = raw as { id: string }
     return ctx.db(async (tx) => {
+      const docConds: SQL[] = [eq(documents.id, a.id), isNull(documents.deletedAt)]
+      const pubOnly = documentReadFilter(ctx)
+      if (pubOnly) docConds.push(pubOnly)
       const [doc] = await tx
         .select({
           id: documents.id,
@@ -402,7 +408,7 @@ const readDocument: AssistantToolDef = {
           status: documents.status,
         })
         .from(documents)
-        .where(and(eq(documents.id, a.id), isNull(documents.deletedAt)))
+        .where(and(...docConds))
         .limit(1)
       if (!doc) return { ok: false, error: 'not_found' }
       const [pub] = await tx
