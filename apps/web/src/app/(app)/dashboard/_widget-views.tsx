@@ -1229,10 +1229,7 @@ function MyEquipmentCard({
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
-                  <InspectButton
-                    href={`/apps?category=inspection&sourceEntityType=equipment&sourceEntityId=${e.id}`}
-                    tone="sky"
-                  />
+                  <InspectButton href={`/equipment/inspections/new?itemId=${e.id}`} tone="sky" />
                   <CheckInButton checkoutId={e.checkoutId} />
                 </div>
               </motion.li>
