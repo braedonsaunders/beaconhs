@@ -21,6 +21,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { getTenantAiConfig, getTenantAutoJournalAi } from '@/lib/ai-config'
 import { recordAudit } from '@/lib/audit'
 import { runModuleFlows } from '@/lib/flows/run-module-flows'
+import { emitJournalEntrySubmitted } from '@beaconhs/integrations'
 import { getAuthorPersonId, htmlToText, journalCanReadAll, journalScopeWhere } from './_lib'
 import {
   buildTree,
@@ -126,6 +127,12 @@ export async function submitEntry(id: string): Promise<ActionOk | ActionErr> {
   })
   // Fire any "on submit" journal Flows (email/notify/CAPA/approval). Guarded.
   await runModuleFlows(ctx, { moduleKey: 'journals', event: 'on_submit', subjectId: id })
+  await emitJournalEntrySubmitted(ctx, {
+    id,
+    reference: row.reference,
+    status: 'submitted',
+    submittedAt: new Date(),
+  }).catch(() => {})
   // Background categorisation: when enabled (Admin → AI → Automation), summarise
   // and tag the submitted entry so logs stay organised without the worker doing
   // it. Best-effort — never block a submit on AI.

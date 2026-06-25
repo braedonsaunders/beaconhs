@@ -36,6 +36,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 import { runModuleFlows } from '@/lib/flows/run-module-flows'
+import { emitHazardAssessmentCreated } from '@beaconhs/integrations'
 
 // All HazID server actions assume a tenant is active. requireRequestContext
 // types tenantId as string | null because some admin pages run pre-tenant —
@@ -417,6 +418,13 @@ export async function createAssessment(formData: FormData): Promise<{ id: string
     after: { reference: created.reference, assessmentTypeId, siteOrgUnitId },
   })
   await runModuleFlows(ctx, { moduleKey: 'hazid', event: 'on_create', subjectId: created.id })
+  await emitHazardAssessmentCreated(ctx, {
+    id: created.id,
+    reference: created.reference,
+    status: 'in_progress',
+    occurredAt: created.occurredAt,
+    locationOnSite: created.locationOnSite,
+  }).catch(() => {})
   revalidatePath('/hazard-assessments')
   return { id: created.id }
 }

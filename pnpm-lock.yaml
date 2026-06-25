@@ -71,6 +71,9 @@ importers:
       '@beaconhs/forms-pdf':
         specifier: workspace:*
         version: link:../../packages/forms-pdf
+      '@beaconhs/integrations':
+        specifier: workspace:*
+        version: link:../../packages/integrations
       '@beaconhs/jobs':
         specifier: workspace:*
         version: link:../../packages/jobs
@@ -80,6 +83,9 @@ importers:
       '@beaconhs/reports':
         specifier: workspace:*
         version: link:../../packages/reports
+      '@beaconhs/sms':
+        specifier: workspace:*
+        version: link:../../packages/sms
       '@beaconhs/storage':
         specifier: workspace:*
         version: link:../../packages/storage
@@ -339,6 +345,9 @@ importers:
       '@beaconhs/forms-pdf':
         specifier: workspace:*
         version: link:../../packages/forms-pdf
+      '@beaconhs/integrations':
+        specifier: workspace:*
+        version: link:../../packages/integrations
       '@beaconhs/jobs':
         specifier: workspace:*
         version: link:../../packages/jobs
@@ -348,6 +357,9 @@ importers:
       '@beaconhs/reports':
         specifier: workspace:*
         version: link:../../packages/reports
+      '@beaconhs/sms':
+        specifier: workspace:*
+        version: link:../../packages/sms
       '@beaconhs/storage':
         specifier: workspace:*
         version: link:../../packages/storage
@@ -369,9 +381,6 @@ importers:
       qrcode:
         specifier: ^1.5.4
         version: 1.5.4
-      twilio:
-        specifier: ^6.0.2
-        version: 6.0.2
       web-push:
         specifier: ^3.6.7
         version: 3.6.7
@@ -663,6 +672,31 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
 
+  packages/integrations:
+    dependencies:
+      '@beaconhs/db':
+        specifier: workspace:*
+        version: link:../db
+      '@beaconhs/jobs':
+        specifier: workspace:*
+        version: link:../jobs
+      '@beaconhs/sync':
+        specifier: workspace:*
+        version: link:../sync
+      '@beaconhs/tenant':
+        specifier: workspace:*
+        version: link:../tenant
+      drizzle-orm:
+        specifier: ^0.45.2
+        version: 0.45.2(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(kysely@0.28.17)(mysql2@3.22.5(@types/node@25.9.2))(pg@8.21.0)(postgres@3.4.9)
+    devDependencies:
+      '@types/node':
+        specifier: ^25.9.2
+        version: 25.9.2
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+
   packages/jobs:
     dependencies:
       bullmq:
@@ -704,6 +738,21 @@ importers:
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
+
+  packages/sms:
+    devDependencies:
+      '@types/node':
+        specifier: ^25.9.2
+        version: 25.9.2
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vite:
+        specifier: ^8.0.16
+        version: 8.0.16(@types/node@25.9.2)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4)
+      vitest:
+        specifier: ^4.1.8
+        version: 4.1.8(@opentelemetry/api@1.9.1)(@types/node@25.9.2)(jsdom@29.1.1(@noble/hashes@2.2.0)(canvas@3.2.3))(vite@8.0.16(@types/node@25.9.2)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4))
 
   packages/storage:
     dependencies:
@@ -6956,10 +7005,6 @@ packages:
     engines: {node: '>=10.13.0'}
     hasBin: true
 
-  qs@6.15.2:
-    resolution: {integrity: sha512-Rzq0KEyX/w/tEybncDgdkZrJgVUsUMk3xjh3t5bv3S1HTAtg+uOYt72+ZfwiQwKdysThkTBdL/rTi6HDmX9Ddw==}
-    engines: {node: '>=0.6'}
-
   queue-microtask@1.2.3:
     resolution: {integrity: sha512-NuaNSa6flKT5JaSYQzJok04JzTL1CA6aGhv5rfLW3PgqA+M2ChpZQnAC8h8i4ZFkBS8X5RqkDBHA7r4hej3K9A==}
 
@@ -7237,10 +7282,6 @@ packages:
 
   scheduler@0.27.0:
     resolution: {integrity: sha512-eNv+WrVbKu1f3vbYJT/xtiF5syA5HPIMtf9IgY/nKg0sWqzAUEvqY/xm7OcZc/qafLx/iO9FgOmeSAp4v5ti/Q==}
-
-  scmp@2.1.0:
-    resolution: {integrity: sha512-o/mRQGk9Rcer/jEEw/yw4mwo3EU/NvYvp577/Btqrym9Qy5/MdWGBqipbALgd2lrdWTJ5/gqDusxfnQBxOxT2Q==}
-    deprecated: Just use Node.js's crypto.timingSafeEqual()
 
   semver@6.3.1:
     resolution: {integrity: sha512-BR7VvDCVHO+q2xBEWskxS6DJE1qRnb7DxzUrogb71CWoSficBxYsiAGd+Kl0mmq/MprG9yArRkyrQxTO6XjMzA==}
@@ -7616,10 +7657,6 @@ packages:
     resolution: {integrity: sha512-NqgRQy6j6dPYcdSdv0q1g9QsZg7SWg87RERM8otw/1AtKU2yTFVClOM7cbwKzOonZr/Ek1blTBucw64L9H0Bwg==}
     hasBin: true
 
-  twilio@6.0.2:
-    resolution: {integrity: sha512-RN3TZxUtxLz2HBZVt62+LdZxQbrMVgYKtuzLgwmO7nqKvR+gQS5mCackD9hf4Y7MmoK/bX7tCm7kaJC8kC8zFA==}
-    engines: {node: '>=20.0.0'}
-
   type-check@0.4.0:
     resolution: {integrity: sha512-XleUoc9uwGXqjWwXaUTZAmzMcFZ5858QA2vvx1Ur5xIcixXIP+8LnFDgRplU30us6teqdlskFfu+ae4K79Ooew==}
     engines: {node: '>= 0.8.0'}
@@ -7993,10 +8030,6 @@ packages:
   xmlbuilder@10.1.1:
     resolution: {integrity: sha512-OyzrcFLL/nb6fMGHbiRDuPup9ljBycsdCypwuyg5AAHvyWzGfChJpCXMG88AGTIMFhGZ9RccFN1e6lhg3hkwKg==}
     engines: {node: '>=4.0'}
-
-  xmlbuilder@13.0.2:
-    resolution: {integrity: sha512-Eux0i2QdDYKbdbA6AM6xE4m6ZTZr4G4xF9kahI2ukSEMCzwce2eX9WlTI5J3s+NU7hpasFsr8hWIONae7LluAQ==}
-    engines: {node: '>=6.0'}
 
   xmlchars@2.2.0:
     resolution: {integrity: sha512-JZnDKK8B0RCDw84FNdDAIpZK+JuJw+s7Lz8nksI7SIuU3UXJJslUthsi+uWBUYOwPFwW7W7PRLRfUKpxjtjFCw==}
@@ -14956,10 +14989,6 @@ snapshots:
       pngjs: 5.0.0
       yargs: 15.4.1
 
-  qs@6.15.2:
-    dependencies:
-      side-channel: 1.1.0
-
   queue-microtask@1.2.3: {}
 
   rc@1.2.8:
@@ -15325,8 +15354,6 @@ snapshots:
       xmlchars: 2.2.0
 
   scheduler@0.27.0: {}
-
-  scmp@2.1.0: {}
 
   semver@6.3.1: {}
 
@@ -15780,19 +15807,6 @@ snapshots:
       '@turbo/windows-64': 2.9.16
       '@turbo/windows-arm64': 2.9.16
 
-  twilio@6.0.2:
-    dependencies:
-      axios: 1.17.0
-      dayjs: 1.11.21
-      https-proxy-agent: 5.0.1
-      jsonwebtoken: 9.0.3
-      qs: 6.15.2
-      scmp: 2.1.0
-      xmlbuilder: 13.0.2
-    transitivePeerDependencies:
-      - debug
-      - supports-color
-
   type-check@0.4.0:
     dependencies:
       prelude-ls: 1.2.1
@@ -16206,8 +16220,6 @@ snapshots:
       '@oozcitak/util': 8.3.3
 
   xmlbuilder@10.1.1: {}
-
-  xmlbuilder@13.0.2: {}
 
   xmlchars@2.2.0: {}
 

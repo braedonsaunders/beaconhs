@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition } from 'react'
 import { Loader2, RefreshCw } from 'lucide-react'
 import { Button, Input, Label, SearchSelect, type SelectOption } from '@beaconhs/ui'
-import { listAiModels } from './_actions'
+import { listAiModels } from '@/lib/ai-settings-actions'
 
 // Serializable slice of a provider spec (no SDK code reaches the client bundle).
 export type ProviderSpecLite = {
@@ -17,33 +17,52 @@ export type ProviderSpecLite = {
   modelHint?: string
 }
 
-type Initial = {
+export type AiFormInitial = {
   enabled: boolean
   provider: string
   modelFast: string
   modelSmart: string
   baseUrl: string
   hasKey: boolean
-  autoJournalAi: boolean
+  autoJournalAi?: boolean
+  mode?: string
 }
 
-// Reactive AI settings form: the provider selector drives the base-URL field,
-// the API-key hint and the model dropdowns. The model lists are fetched live
-// from the provider's API (via the listAiModels action). Submits via saveAiSettings.
+const MODE_OPTIONS = [
+  { value: 'tenant_optional', label: 'Tenants choose their own (recommended)' },
+  { value: 'global_only', label: 'Force the platform default for all tenants' },
+  { value: 'disabled', label: 'Disable all AI (kill switch)' },
+]
+
+const MODE_HELP: Record<string, string> = {
+  tenant_optional:
+    'Each tenant may configure its own provider below. Tenants with none fall back to this platform default.',
+  global_only: 'Every tenant uses this platform default. Per-tenant provider settings are ignored.',
+  disabled: 'No AI runs for any tenant. Every AI feature is turned off platform-wide.',
+}
+
+// Reactive AI settings form: the provider selector drives the base-URL field, the
+// API-key hint and the model dropdowns. Model lists are fetched live from the
+// provider's API (via listAiModels). Reused for the per-tenant and platform
+// (super-admin) scope — the platform scope adds the policy selector and omits the
+// tenant-only journal automation toggle.
 export function AiSettingsForm({
   action,
   specs,
   initial,
+  scope,
 }: {
   action: (formData: FormData) => void | Promise<void>
   specs: ProviderSpecLite[]
-  initial: Initial
+  initial: AiFormInitial
+  scope: 'tenant' | 'platform'
 }) {
   const [provider, setProvider] = useState(initial.provider)
   const [apiKey, setApiKey] = useState('')
   const [baseUrl, setBaseUrl] = useState(initial.baseUrl)
   const [modelFast, setModelFast] = useState(initial.modelFast)
   const [modelSmart, setModelSmart] = useState(initial.modelSmart)
+  const [mode, setMode] = useState(initial.mode ?? 'tenant_optional')
 
   const [models, setModels] = useState<{ id: string; label?: string }[]>([])
   const [modelsError, setModelsError] = useState<string | null>(null)
@@ -64,7 +83,7 @@ export function AiSettingsForm({
 
   function loadModels(p = provider, key = apiKey, base = baseUrl) {
     startLoad(async () => {
-      const r = await listAiModels({ provider: p, baseUrl: base, apiKey: key })
+      const r = await listAiModels({ scope, provider: p, baseUrl: base, apiKey: key })
       if (r.ok) {
         setModels(r.models)
         setModelsError(null)
@@ -157,9 +176,26 @@ export function AiSettingsForm({
           className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-600"
         />
         <span className="text-sm font-medium text-slate-800 dark:text-slate-100">
-          Enable AI features for this tenant
+          {scope === 'platform'
+            ? 'Enable the platform default provider'
+            : 'Enable AI features for this tenant'}
         </span>
       </label>
+
+      {scope === 'platform' ? (
+        <div className="space-y-1.5">
+          <Label>Policy</Label>
+          <input type="hidden" name="mode" value={mode} />
+          <SearchSelect
+            value={mode}
+            onChange={setMode}
+            options={MODE_OPTIONS}
+            sheetTitle="AI policy"
+            ariaLabel="AI policy"
+          />
+          <p className="text-xs text-slate-400 dark:text-slate-500">{MODE_HELP[mode]}</p>
+        </div>
+      ) : null}
 
       <div className="space-y-1.5">
         <Label>Provider</Label>
@@ -270,30 +306,34 @@ export function AiSettingsForm({
         )}
       </div>
 
-      <div className="space-y-2 border-t border-slate-100 pt-4 dark:border-slate-800">
-        <Label>Automation</Label>
-        <label className="flex items-start gap-2.5">
-          <input
-            type="checkbox"
-            name="autoJournalAi"
-            defaultChecked={initial.autoJournalAi}
-            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-600"
-          />
-          <span className="text-sm">
-            <span className="font-medium text-slate-800 dark:text-slate-100">
-              Auto-summarise &amp; tag journals
+      {scope === 'tenant' ? (
+        <div className="space-y-2 border-t border-slate-100 pt-4 dark:border-slate-800">
+          <Label>Automation</Label>
+          <label className="flex items-start gap-2.5">
+            <input
+              type="checkbox"
+              name="autoJournalAi"
+              defaultChecked={initial.autoJournalAi}
+              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-600"
+            />
+            <span className="text-sm">
+              <span className="font-medium text-slate-800 dark:text-slate-100">
+                Auto-summarise &amp; tag journals
+              </span>
+              <span className="mt-0.5 block text-xs text-slate-400 dark:text-slate-500">
+                When a journal is submitted, generate a short summary and suggested tags in the
+                background. Keeps logs categorised without workers doing it themselves. Requires a
+                key.
+              </span>
             </span>
-            <span className="mt-0.5 block text-xs text-slate-400 dark:text-slate-500">
-              When a journal is submitted, generate a short summary and suggested tags in the
-              background. Keeps logs categorised without workers doing it themselves. Requires a
-              key.
-            </span>
-          </span>
-        </label>
-      </div>
+          </label>
+        </div>
+      ) : null}
 
       <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">
-        <Button type="submit">Save AI settings</Button>
+        <Button type="submit">
+          {scope === 'platform' ? 'Save platform AI' : 'Save AI settings'}
+        </Button>
       </div>
     </form>
   )

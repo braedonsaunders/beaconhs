@@ -23,7 +23,7 @@ import { can } from '@beaconhs/tenant'
 import { syncConnections, tenantIntegrations } from '@beaconhs/db/schema'
 import { listConnectors, toConnectorSummary } from '@beaconhs/sync'
 import { requireRequestContext } from '@/lib/auth'
-import { listOutboundIntegrations } from '@/lib/integrations'
+import { getDestination, getTrigger, listDestinations } from '@beaconhs/integrations'
 import { PageContainer } from '@/components/page-layout'
 import { AdminBackLink } from '../_back-link'
 import { deleteConnection } from './_actions'
@@ -48,10 +48,6 @@ const ENTITY_LABELS: Record<string, string> = {
   equipment: 'Equipment',
 }
 
-const EVENT_LABELS: Record<string, string> = {
-  'training.class.completed': 'Training class completed',
-}
-
 type Connected = {
   id: string
   dir: 'in' | 'out'
@@ -71,7 +67,6 @@ export default async function IntegrationsPage() {
   if (!ctx.isSuperAdmin && !can(ctx, 'admin.integrations.manage')) redirect('/admin')
 
   const connectors = listConnectors().map(toConnectorSummary)
-  const outboundDefs = listOutboundIntegrations()
   const iconFor = (key: string) => connectors.find((c) => c.key === key)?.iconKey ?? 'database'
   const connectorName = (key: string) => connectors.find((c) => c.key === key)?.name ?? key
 
@@ -94,7 +89,9 @@ export default async function IntegrationsPage() {
     const out = await tx
       .select({
         id: tenantIntegrations.id,
-        integrationKey: tenantIntegrations.integrationKey,
+        name: tenantIntegrations.name,
+        triggerKey: tenantIntegrations.triggerKey,
+        destinationKey: tenantIntegrations.destinationKey,
         status: tenantIntegrations.status,
         enabled: tenantIntegrations.enabled,
         lastError: tenantIntegrations.lastError,
@@ -126,12 +123,15 @@ export default async function IntegrationsPage() {
       }),
     ),
     ...outbound.map((o): Connected => {
-      const def = outboundDefs.find((d) => d.key === o.integrationKey)
+      const dest = getDestination(o.destinationKey)
+      const trig = getTrigger(o.triggerKey)
+      const subtitle =
+        trig && dest ? `${trig.label} → ${dest.name}` : (dest?.name ?? 'Not configured')
       return {
         id: o.id,
         dir: 'out',
-        title: def?.name ?? o.integrationKey,
-        subtitle: def ? def.events.map((e) => EVENT_LABELS[e] ?? e).join(', ') : 'Unknown',
+        title: o.name || dest?.name || 'Untitled automation',
+        subtitle,
         status: o.enabled ? o.status : 'disabled',
         href: `/admin/integrations/outbound/${o.id}`,
         meta: o.lastError
@@ -159,20 +159,18 @@ export default async function IntegrationsPage() {
         added: false,
       }),
     ),
-    ...outboundDefs.map((d): CatalogItem => {
-      const inst = outbound.find((o) => o.integrationKey === d.key)
-      return {
+    ...listDestinations().map(
+      (d): CatalogItem => ({
         key: `out:${d.key}`,
         addValue: `outbound:${d.key}`,
-        name: d.name,
+        name: `Send to ${d.name}`,
         description: d.description,
         dir: 'out',
         iconKey: 'upload',
-        detail: `Pushes on ${d.events.map((e) => EVENT_LABELS[e] ?? e).join(', ')}`,
-        added: !!inst,
-        addedHref: inst ? `/admin/integrations/outbound/${inst.id}` : undefined,
-      }
-    }),
+        detail: 'Any trigger → this service',
+        added: false,
+      }),
+    ),
   ]
 
   return (

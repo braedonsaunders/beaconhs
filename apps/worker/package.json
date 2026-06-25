@@ -21,9 +21,11 @@
     "@beaconhs/events": "workspace:*",
     "@beaconhs/forms-core": "workspace:*",
     "@beaconhs/forms-pdf": "workspace:*",
+    "@beaconhs/integrations": "workspace:*",
     "@beaconhs/jobs": "workspace:*",
     "@beaconhs/plugin-sdk": "workspace:*",
     "@beaconhs/reports": "workspace:*",
+    "@beaconhs/sms": "workspace:*",
     "@beaconhs/storage": "workspace:*",
     "@beaconhs/sync": "workspace:*",
     "bullmq": "^5.78.0",
@@ -31,7 +33,6 @@
     "ioredis": "^5.11.1",
     "jszip": "^3.10.1",
     "qrcode": "^1.5.4",
-    "twilio": "^6.0.2",
     "web-push": "^3.6.7"
   },
   "devDependencies": {

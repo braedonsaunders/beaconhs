@@ -16,6 +16,7 @@ import {
 } from '@beaconhs/ui'
 import { correctiveActions, incidents, orgUnits } from '@beaconhs/db/schema'
 import { emitCorrectiveActionAssigned } from '@beaconhs/events'
+import { emitCorrectiveActionCreated } from '@beaconhs/integrations'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { runModuleFlows } from '@/lib/flows/run-module-flows'
@@ -97,6 +98,16 @@ async function createCA(formData: FormData) {
       event: 'on_create',
       subjectId: row.id,
     })
+    await emitCorrectiveActionCreated(ctx, {
+      id: row.id,
+      reference: row.reference,
+      title,
+      status: 'open',
+      severity,
+      source,
+      dueOn,
+      assignedOn,
+    }).catch(() => {})
     redirect(`/corrective-actions/${row.id}`)
   }
   redirect('/corrective-actions')

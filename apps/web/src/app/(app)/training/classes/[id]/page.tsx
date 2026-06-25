@@ -27,7 +27,7 @@ import {
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
-import { runIntegrations, type TrainingClassCompletedEvent } from '@/lib/integrations'
+import { emitTrainingClassCompleted } from '@beaconhs/integrations'
 import { PersonSelectField } from '@/components/person-select-field'
 import { ClassDetailFields } from '../_class-fields'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
@@ -197,8 +197,8 @@ async function markClassComplete(formData: FormData) {
   })
 
   // Emit a generic completion event for any enabled outbound integration
-  // (e.g. the adminapp2 training-time export). Best-effort: an integration must
-  // never break class completion.
+  // (e.g. exporting training time to an external SQL system). Best-effort: an
+  // integration must never break class completion.
   if (completed) {
     try {
       const { cls, course } = completed
@@ -233,9 +233,7 @@ async function markClassComplete(formData: FormData) {
           .leftJoin(departments, eq(departments.id, people.departmentId))
           .where(eq(trainingClassAttendees.classId, classId)),
       )
-      const event: TrainingClassCompletedEvent = {
-        type: 'training.class.completed',
-        tenantId: ctx.tenantId,
+      await emitTrainingClassCompleted(ctx, {
         classId,
         course: { code: course.code, name: course.name },
         startsAt: startsAt.toISOString(),
@@ -254,8 +252,7 @@ async function markClassComplete(formData: FormData) {
             hours: attended ? hoursPerDay * lengthDays : 0,
           }
         }),
-      }
-      await runIntegrations(ctx, event)
+      })
     } catch {
       // Swallow — completion already succeeded.
     }

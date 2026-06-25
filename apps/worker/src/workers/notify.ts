@@ -5,6 +5,7 @@ import {
   notificationPreferences,
   notifications,
   people,
+  smsLog,
   tenantNotificationPolicy,
   tenantNotificationSettings,
   users,
@@ -12,7 +13,8 @@ import {
 } from '@beaconhs/db/schema'
 import { enqueueEmail, type NotifyJobData } from '@beaconhs/jobs'
 import webpush from 'web-push'
-import { sendSms, smsConfigured } from '../lib/twilio'
+import { sendSms, sendSmsVia } from '@beaconhs/sms'
+import { resolveSmsDelivery } from '../lib/resolve-sms-transport'
 
 /** True when `hourUtc` falls inside the quiet window (handles overnight wrap). */
 function inQuietHours(qh: { start: number; end: number } | null, hourUtc: number): boolean {
@@ -96,6 +98,27 @@ export async function processNotification(job: Job<NotifyJobData>): Promise<void
       })
     }
 
+    // SMS transport resolved once per job (tenant constant): platform → tenant →
+    // env. Critical-only by design — SMS costs money, so it is reserved for the
+    // notifications a tenant routes to SMS and that are flagged critical.
+    const smsDelivery = critical && smsAllowed ? await resolveSmsDelivery(d.tenantId) : null
+    if (smsDelivery?.kind === 'suppressed') {
+      // Kill switch: record one suppressed row for the whole job (no per-recipient
+      // phone lookups) so the SMS log shows the deliberate non-delivery.
+      const body = d.body ? `${d.title}\n${d.body}` : d.title
+      await tx.insert(smsLog).values({
+        tenantId: d.tenantId,
+        jobId: String(job.id ?? ''),
+        status: 'suppressed',
+        categoryKey: d.category,
+        body,
+        bodyLength: body.length,
+        errorMessage: 'SMS delivery is disabled by the platform administrator.',
+        meta: { recipients: d.userIds.length },
+      })
+      console.log('[sms] suppressed: SMS is disabled by the platform administrator')
+    }
+
     // 2. Email + push fan-out
     for (const t of targets) {
       const emailPref = t.pref?.channel === 'email' ? t.pref.enabled !== false : true
@@ -133,29 +156,66 @@ export async function processNotification(job: Job<NotifyJobData>): Promise<void
         }
       }
 
-      // SMS only for critical + channel selected.
-      if (critical && smsAllowed) {
-        if (!smsConfigured()) {
-          console.log(
-            `[sms] skipped: TWILIO_* not configured (would send to ${t.user.email}: ${d.title})`,
-          )
+      // SMS via the resolved provider (tenant → platform → env Twilio fallback).
+      // Every attempt is written to sms_log so the support team can answer "did
+      // X get the text?" — mirrors the email_log audit trail.
+      if (smsDelivery && smsDelivery.kind !== 'suppressed') {
+        const via = smsDelivery.kind === 'transport' ? smsDelivery.transport.provider : 'env'
+        const text = (d.body ? `${d.title}\n${d.body}` : d.title).slice(0, 1500)
+        const [person] = await tx
+          .select({ phone: people.phone })
+          .from(people)
+          .where(eq(people.userId, t.user.id))
+          .limit(1)
+        const phone = person?.phone?.trim()
+        if (!phone) {
+          await tx.insert(smsLog).values({
+            tenantId: d.tenantId,
+            jobId: String(job.id ?? ''),
+            provider: via,
+            status: 'skipped',
+            categoryKey: d.category,
+            body: text,
+            bodyLength: text.length,
+            errorMessage: 'No phone number on file for this user.',
+            meta: { userEmail: t.user.email },
+          })
+          console.log(`[sms] skipped: no phone on file for ${t.user.email}`)
         } else {
-          const [person] = await tx
-            .select({ phone: people.phone })
-            .from(people)
-            .where(eq(people.userId, t.user.id))
-            .limit(1)
-          const phone = person?.phone?.trim()
-          if (!phone) {
-            console.log(`[sms] skipped: no phone on file for ${t.user.email}`)
-          } else {
-            const text = d.body ? `${d.title}\n${d.body}` : d.title
-            const result = await sendSms({ to: phone, body: text.slice(0, 1500) })
-            if (result.sent) {
-              console.log(`[sms] sent ${result.sid} to ${t.user.email}`)
-            } else {
-              console.warn(`[sms] failed for ${t.user.email}: ${result.reason}`)
-            }
+          try {
+            const result =
+              smsDelivery.kind === 'transport'
+                ? await sendSmsVia(smsDelivery.transport, { to: phone, body: text })
+                : await sendSms({ to: phone, body: text })
+            await tx.insert(smsLog).values({
+              tenantId: d.tenantId,
+              jobId: String(job.id ?? ''),
+              provider: via,
+              providerMessageId: result.id || null,
+              recipient: phone,
+              status: 'sent',
+              categoryKey: d.category,
+              body: text,
+              bodyLength: text.length,
+              sentAt: new Date(),
+              meta: { userEmail: t.user.email },
+            })
+            console.log(`[sms] sent ${result.id || '(no id)'} to ${t.user.email} via ${via}`)
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err)
+            await tx.insert(smsLog).values({
+              tenantId: d.tenantId,
+              jobId: String(job.id ?? ''),
+              provider: via,
+              recipient: phone,
+              status: 'failed',
+              categoryKey: d.category,
+              body: text,
+              bodyLength: text.length,
+              errorMessage: msg,
+              meta: { userEmail: t.user.email },
+            })
+            console.warn(`[sms] failed for ${t.user.email}: ${msg}`)
           }
         }
       }

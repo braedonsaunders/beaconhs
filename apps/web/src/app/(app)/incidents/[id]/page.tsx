@@ -97,6 +97,7 @@ import {
   LiveToggle,
 } from '@/components/live-field'
 import { emitIncidentStatusChanged } from '@beaconhs/events'
+import { emitIncidentStatusChanged as fireIncidentStatusIntegration } from '@beaconhs/integrations'
 import { SeverityBadge, StatusBadge } from '../_badges'
 
 export const dynamic = 'force-dynamic'
@@ -130,14 +131,21 @@ async function updateStatus(formData: FormData) {
   const status = String(formData.get('status') ?? '')
   if (!STATUSES.includes(status as (typeof STATUSES)[number])) return
   const closing = status === 'closed'
-  const fromStatus = await ctx.db(async (tx) => {
+  const prior = await ctx.db(async (tx) => {
     const [row] = await tx
-      .select({ status: incidents.status })
+      .select({
+        status: incidents.status,
+        reference: incidents.reference,
+        title: incidents.title,
+        type: incidents.type,
+        severity: incidents.severity,
+      })
       .from(incidents)
       .where(eq(incidents.id, id))
       .limit(1)
-    return row?.status ?? null
+    return row ?? null
   })
+  const fromStatus = prior?.status ?? null
   await ctx.db((tx) =>
     tx
       .update(incidents)
@@ -164,6 +172,15 @@ async function updateStatus(formData: FormData) {
       subjectId: id,
       toStatus: status,
     })
+    await fireIncidentStatusIntegration(ctx, {
+      id,
+      reference: prior?.reference,
+      title: prior?.title,
+      type: prior?.type,
+      severity: prior?.severity,
+      fromStatus,
+      toStatus: status,
+    }).catch(() => {})
   }
   revalidatePath(`/incidents/${id}`)
   revalidatePath('/incidents')

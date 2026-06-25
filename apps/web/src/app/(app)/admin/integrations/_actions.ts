@@ -12,7 +12,7 @@ import { can } from '@beaconhs/tenant'
 import { type ConnectorRunContext, getConnector, sealSecret, unsealSecret } from '@beaconhs/sync'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
-import { getOutboundIntegration } from '@/lib/integrations'
+import { getDestination } from '@beaconhs/integrations'
 import type { RequestContext } from '@beaconhs/tenant'
 
 const PERM = 'admin.integrations.manage'
@@ -66,29 +66,23 @@ export async function createConnection(formData: FormData): Promise<void> {
   if (!ctx) return
   const source = String(formData.get('connectorKey') ?? '').trim()
 
-  // Push-out integration — add a tenant_integrations instance (one per key) and
-  // jump to its config page. Encoded as "outbound:<key>" in the picker.
+  // Push-out automation — create a fresh tenant_integrations draft for this
+  // destination and jump to the builder. Encoded as "outbound:<destinationKey>".
+  // Multiple automations per destination are allowed.
   if (source.startsWith('outbound:')) {
-    const key = source.slice('outbound:'.length)
-    const def = getOutboundIntegration(key)
-    if (!def) {
+    const destinationKey = source.slice('outbound:'.length)
+    const dest = getDestination(destinationKey)
+    if (!dest) {
       revalidatePath('/admin/integrations')
       return
     }
     const id = await ctx.db(async (tx) => {
-      const [existing] = await tx
-        .select({ id: tenantIntegrations.id })
-        .from(tenantIntegrations)
-        .where(
-          and(eq(tenantIntegrations.integrationKey, key), isNull(tenantIntegrations.deletedAt)),
-        )
-        .limit(1)
-      if (existing) return existing.id
       const [row] = await tx
         .insert(tenantIntegrations)
         .values({
           tenantId: ctx.tenantId,
-          integrationKey: key,
+          destinationKey,
+          integrationKey: null,
           enabled: false,
           config: {},
           secrets: {},
@@ -102,7 +96,7 @@ export async function createConnection(formData: FormData): Promise<void> {
         entityType: 'tenant_integration',
         entityId: id,
         action: 'create',
-        summary: `Added integration "${def.name}"`,
+        summary: `Added "Send to ${dest.name}" automation`,
       })
       redirect(`/admin/integrations/outbound/${id}`)
     }

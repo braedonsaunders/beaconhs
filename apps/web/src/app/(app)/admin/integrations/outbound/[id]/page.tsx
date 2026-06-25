@@ -1,87 +1,32 @@
-// /admin/integrations/outbound/[id] — configure one outbound-integration
-// instance (a tenant_integrations row): enable it, set its config + sealed
-// secrets, test connectivity, or remove it. Gated by admin.integrations.manage.
+// /admin/integrations/outbound/[id] — build one outbound automation: pick a
+// trigger + destination, configure + map, test, enable. Gated by
+// admin.integrations.manage.
 
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { and, eq, isNull } from 'drizzle-orm'
-import { ArrowLeft, Send, Trash2 } from 'lucide-react'
-import {
-  Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  Input,
-  Label,
-  Select,
-  Textarea,
-  cn,
-} from '@beaconhs/ui'
+import { ArrowLeft, Trash2 } from 'lucide-react'
+import { Button, Card, CardContent, cn } from '@beaconhs/ui'
 import { can } from '@beaconhs/tenant'
 import { tenantIntegrations } from '@beaconhs/db/schema'
-import type { ConfigField } from '@beaconhs/sync'
 import { requireRequestContext } from '@/lib/auth'
-import { getOutboundIntegration } from '@/lib/integrations'
+import { getTrigger, listDestinations, listTriggers } from '@beaconhs/integrations'
 import { PageContainer } from '@/components/page-layout'
-import { deleteOutbound, saveOutbound, testOutbound } from '../_actions'
+import { deleteOutbound } from '../_actions'
+import { IntegrationBuilder, type DestLite } from './_builder.client'
 
-export const metadata = { title: 'Outbound integration' }
+export const metadata = { title: 'Outbound automation' }
 export const dynamic = 'force-dynamic'
 
 const STATUS_PILL: Record<string, string> = {
-  ready: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
-  draft: 'bg-slate-50 text-slate-600 ring-slate-200',
-  disabled: 'bg-slate-50 text-slate-500 ring-slate-200',
-  error: 'bg-red-50 text-red-700 ring-red-200',
-}
-
-function FieldInput({ field, value }: { field: ConfigField; value: unknown }) {
-  const v = value == null ? '' : String(value)
-  return (
-    <div className={cn('space-y-1.5', field.type === 'textarea' && 'sm:col-span-2')}>
-      <Label htmlFor={field.key}>
-        {field.label}
-        {field.required ? <span className="text-red-600"> *</span> : null}
-      </Label>
-      {field.type === 'textarea' ? (
-        <Textarea
-          id={field.key}
-          name={field.key}
-          rows={5}
-          defaultValue={v}
-          placeholder={field.placeholder}
-          className="font-mono text-xs"
-        />
-      ) : field.type === 'select' ? (
-        <Select id={field.key} name={field.key} defaultValue={v}>
-          {(field.options ?? []).map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </Select>
-      ) : field.type === 'boolean' ? (
-        <div className="pt-1">
-          <input
-            type="checkbox"
-            name={field.key}
-            defaultChecked={value === true || value === 'true'}
-            className="h-4 w-4 rounded border-slate-300"
-          />
-        </div>
-      ) : (
-        <Input
-          id={field.key}
-          name={field.key}
-          type={field.type === 'number' ? 'number' : 'text'}
-          defaultValue={v}
-          placeholder={field.placeholder}
-        />
-      )}
-      {field.help ? <p className="text-xs text-slate-400">{field.help}</p> : null}
-    </div>
-  )
+  ready:
+    'bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-900',
+  draft:
+    'bg-slate-50 text-slate-600 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700',
+  disabled:
+    'bg-slate-50 text-slate-500 ring-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:ring-slate-700',
+  error:
+    'bg-red-50 text-red-700 ring-red-200 dark:bg-red-950/40 dark:text-red-300 dark:ring-red-900',
 }
 
 export default async function OutboundIntegrationPage({
@@ -103,25 +48,36 @@ export default async function OutboundIntegrationPage({
   })
   if (!row) notFound()
 
-  const def = getOutboundIntegration(row.integrationKey)
   const config = (row.config as Record<string, unknown>) ?? {}
   const secrets = (row.secrets as Record<string, unknown>) ?? {}
   const status = row.enabled ? row.status : 'disabled'
+  const trigger = getTrigger(row.triggerKey)
+
+  // Strip the (non-serialisable) deliver/test fns for the client.
+  const destinations: DestLite[] = listDestinations().map((d) => ({
+    key: d.key,
+    name: d.name,
+    description: d.description,
+    mappingKind: d.mappingKind,
+    reversible: d.reversible,
+    configFields: d.configFields,
+    secretFields: d.secretFields,
+  }))
 
   return (
     <PageContainer>
       <div className="space-y-6">
         <Link
           href="/admin/integrations"
-          className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800"
+          className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
         >
           <ArrowLeft size={14} /> Back to integrations
         </Link>
 
         <header className="space-y-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-semibold text-slate-900">
-              {def?.name ?? row.integrationKey}
+            <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">
+              {row.name || trigger?.label || 'New automation'}
             </h1>
             <span
               className={cn(
@@ -132,83 +88,34 @@ export default async function OutboundIntegrationPage({
               {status}
             </span>
           </div>
-          {def ? <p className="max-w-2xl text-sm text-slate-500">{def.description}</p> : null}
           {row.lastError ? (
-            <p className="text-xs text-red-600">Last error: {row.lastError}</p>
+            <p className="text-xs text-red-600 dark:text-red-400">Last error: {row.lastError}</p>
           ) : row.lastRunAt ? (
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-400 dark:text-slate-500">
               Last run {new Date(row.lastRunAt).toLocaleString()}
             </p>
           ) : null}
         </header>
 
-        {!def ? (
-          <Card>
-            <CardContent className="py-6 text-sm text-slate-600">
-              This integration is no longer available in this build. You can remove it below.
-            </CardContent>
-          </Card>
-        ) : (
-          <Card>
-            <CardHeader>
-              <CardTitle>Configuration</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <form action={saveOutbound} className="space-y-4">
-                <input type="hidden" name="id" value={row.id} />
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    name="enabled"
-                    defaultChecked={row.enabled}
-                    className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
-                  />
-                  <span className="text-sm font-medium text-slate-800">Enabled</span>
-                </label>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  {def.configFields.map((f) => (
-                    <FieldInput key={f.key} field={f} value={config[f.key]} />
-                  ))}
-                </div>
-                {def.secretFields.length > 0 ? (
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    {def.secretFields.map((s) => (
-                      <div key={s.key} className="space-y-1.5">
-                        <Label htmlFor={s.key}>
-                          {s.label}
-                          {s.required ? <span className="text-red-600"> *</span> : null}
-                        </Label>
-                        <Input
-                          id={s.key}
-                          name={s.key}
-                          type="password"
-                          autoComplete="new-password"
-                          placeholder={secrets[s.key] ? '•••••••• (unchanged)' : ''}
-                        />
-                        {s.help ? <p className="text-xs text-slate-400">{s.help}</p> : null}
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-                <div className="flex justify-end">
-                  <Button type="submit">Save</Button>
-                </div>
-              </form>
-
-              {def.test ? (
-                <form
-                  action={testOutbound}
-                  className="flex justify-end border-t border-slate-100 pt-3"
-                >
-                  <input type="hidden" name="id" value={row.id} />
-                  <Button type="submit" variant="outline" size="sm">
-                    <Send size={14} /> Test connection
-                  </Button>
-                </form>
-              ) : null}
-            </CardContent>
-          </Card>
-        )}
+        <Card>
+          <CardContent className="pt-6">
+            <IntegrationBuilder
+              id={row.id}
+              initial={{
+                name: row.name ?? '',
+                enabled: row.enabled,
+                oncePerRecord: config.oncePerRecord === true,
+                triggerKey: row.triggerKey ?? '',
+                destinationKey: row.destinationKey ?? '',
+                config,
+                secretsPresent: Object.fromEntries(Object.keys(secrets).map((k) => [k, true])),
+                mapping: (config.mapping as Record<string, unknown>) ?? {},
+              }}
+              triggers={listTriggers()}
+              destinations={destinations}
+            />
+          </CardContent>
+        </Card>
 
         <form action={deleteOutbound}>
           <input type="hidden" name="id" value={row.id} />
@@ -216,9 +123,9 @@ export default async function OutboundIntegrationPage({
             type="submit"
             variant="outline"
             size="sm"
-            className="text-red-600 hover:bg-red-50 hover:text-red-700"
+            className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40"
           >
-            <Trash2 size={14} /> Remove integration
+            <Trash2 size={14} /> Remove automation
           </Button>
         </form>
       </div>

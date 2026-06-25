@@ -15,7 +15,10 @@ export const PLATFORM_NAV_GROUPS: SidebarNavGroup[] = [
       { href: '/platform', label: 'Overview', iconKey: 'grid', exact: true },
       { href: '/platform/tenants', label: 'Tenants', iconKey: 'building' },
       { href: '/platform/email', label: 'Email provider', iconKey: 'mail' },
+      { href: '/platform/sms', label: 'SMS provider', iconKey: 'message' },
+      { href: '/platform/ai', label: 'AI provider', iconKey: 'sparkles' },
       { href: '/platform/email-log', label: 'Email log', iconKey: 'scroll' },
+      { href: '/platform/sms-log', label: 'SMS log', iconKey: 'scroll' },
     ],
   },
 ]

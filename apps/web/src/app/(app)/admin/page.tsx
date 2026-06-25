@@ -8,6 +8,7 @@ import {
   FileText,
   KeyRound,
   Mail,
+  MessageSquare,
   PanelLeft,
   RefreshCw,
   ScrollText,
@@ -146,6 +147,12 @@ const STATIC_GROUPS: Group[] = [
         desc: 'Provider, sender & encrypted credentials',
       },
       {
+        href: '/admin/sms',
+        icon: <MessageSquare size={18} />,
+        title: 'SMS',
+        desc: 'Provider, sender & encrypted credentials',
+      },
+      {
         href: '/admin/integrations',
         icon: <RefreshCw size={18} />,
         title: 'Integrations',
@@ -175,6 +182,12 @@ const STATIC_GROUPS: Group[] = [
         icon: <Mail size={18} />,
         title: 'Email log',
         desc: 'Every email the worker dispatched',
+      },
+      {
+        href: '/admin/sms-log',
+        icon: <MessageSquare size={18} />,
+        title: 'SMS log',
+        desc: 'Every text the worker dispatched',
       },
     ],
   },

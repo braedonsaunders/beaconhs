@@ -25,6 +25,7 @@ import { fetchSingleEntityAttrs } from '@/app/(app)/apps/_lib/entity-loader'
 import { repopulateParticipants } from '@/app/(app)/apps/_lib/participants'
 import { sendFormResponseRecapEmail } from '@/app/(app)/apps/_lib/recap-email'
 import { runOnSubmitAutomations } from '@/app/(app)/apps/_lib/run-automations'
+import { emitFormSubmitted } from '@beaconhs/integrations'
 
 export async function submitFormResponse(args: {
   templateId: string
@@ -257,6 +258,20 @@ export async function submitFormResponse(args: {
       })
     } catch {
       // swallow — automations are non-critical to the submit
+    }
+    // Best-effort: fire any outbound integrations bound to form.submitted.
+    try {
+      await emitFormSubmitted(ctx, {
+        id: result.responseId,
+        templateId: args.templateId,
+        status: result.verdict.status,
+        submittedAt: new Date(),
+        complianceScore: result.verdict.score,
+        complianceStatus: result.verdict.status,
+        data: args.data,
+      })
+    } catch {
+      // swallow — integrations are non-critical to the submit
     }
     revalidatePath('/apps/responses')
     const returnTo =

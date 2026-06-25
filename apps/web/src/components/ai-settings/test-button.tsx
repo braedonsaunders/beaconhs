@@ -3,9 +3,9 @@
 import { useState, useTransition } from 'react'
 import { CheckCircle2, Loader2, XCircle, Zap } from 'lucide-react'
 import { Button, cn } from '@beaconhs/ui'
-import { testAiConnection } from './_actions'
+import { testAiConnection } from '@/lib/ai-settings-actions'
 
-export function AiTestButton() {
+export function AiTestButton({ scope }: { scope: 'tenant' | 'platform' }) {
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null)
   const [pending, start] = useTransition()
 
@@ -15,7 +15,7 @@ export function AiTestButton() {
         type="button"
         variant="outline"
         disabled={pending}
-        onClick={() => start(async () => setResult(await testAiConnection()))}
+        onClick={() => start(async () => setResult(await testAiConnection({ scope })))}
       >
         {pending ? (
           <Loader2 size={14} className="mr-1.5 animate-spin" />

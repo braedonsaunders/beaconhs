@@ -25,7 +25,7 @@ import { createConnection } from './_actions'
 
 export type CatalogItem = {
   key: string
-  addValue: string // 'database' (inbound) | 'outbound:adminapp2-timesheet'
+  addValue: string // 'database' (inbound) | 'outbound:training-sql-export'
   name: string
   description: string
   dir: 'in' | 'out'

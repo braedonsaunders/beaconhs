@@ -34,7 +34,14 @@ export const tenantIntegrations = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    integrationKey: text('integration_key').notNull(), // registry key, e.g. 'adminapp2-timesheet'
+    // A built automation sets trigger_key + destination_key (integration_key is
+    // left null). integration_key is retained (nullable) only for any legacy
+    // code-adapter rows. Multiple builder rows per tenant coexist because the
+    // unique (tenant, integration_key) index treats NULLs as distinct.
+    integrationKey: text('integration_key'),
+    name: text('name'), // user label for a built automation
+    triggerKey: text('trigger_key'), // event that fires it, e.g. 'incident.created'
+    destinationKey: text('destination_key'), // service it sends to, e.g. 'http'
     enabled: boolean('enabled').default(false).notNull(),
     config: jsonb('config').$type<Record<string, unknown>>().default({}).notNull(),
     secrets: jsonb('secrets')
@@ -50,13 +57,14 @@ export const tenantIntegrations = pgTable(
   (t) => ({
     tenantIdx: index('tenant_integrations_tenant_idx').on(t.tenantId),
     tenantKeyUx: uniqueIndex('tenant_integrations_tenant_key_ux').on(t.tenantId, t.integrationKey),
+    triggerIdx: index('tenant_integrations_trigger_idx').on(t.tenantId, t.triggerKey),
   }),
 )
 
 // One row per external record an integration created. Re-firing the same event
 // (e.g. re-completing a training class) reverses the prior push — delete the
 // external rows by external_ref — before re-inserting, so re-completion never
-// double-posts. This is the idempotency the legacy "dump time on close" lacked.
+// double-posts. This is the idempotency a naive re-insert would lack.
 export const integrationExportLog = pgTable(
   'integration_export_log',
   {
@@ -67,7 +75,7 @@ export const integrationExportLog = pgTable(
     integrationKey: text('integration_key').notNull(),
     subjectType: text('subject_type').notNull(), // e.g. 'training_class'
     subjectId: uuid('subject_id').notNull(), // the internal subject (e.g. class id)
-    externalSystem: text('external_system').notNull(), // e.g. 'adminapp2'
+    externalSystem: text('external_system').notNull(), // label for the target system, e.g. 'payroll-sql'
     externalRef: text('external_ref'), // id of the row we created in the external system
     status: text('status').notNull(), // 'pushed' | 'failed' | 'reversed'
     detail: jsonb('detail').$type<Record<string, unknown>>(),

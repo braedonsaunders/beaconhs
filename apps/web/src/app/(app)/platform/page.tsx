@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Boxes, Mail, Plus, ScrollText } from 'lucide-react'
+import { Boxes, Mail, MessageSquare, Plus, ScrollText, Sparkles } from 'lucide-react'
 import { PageContainer } from '@/components/page-layout'
 
 export const metadata = { title: 'Platform' }
@@ -27,9 +27,27 @@ const TILES: Tile[] = [
     icon: <Mail size={18} />,
   },
   {
+    href: '/platform/sms',
+    title: 'Platform SMS',
+    desc: 'Global default provider + tenant policy',
+    icon: <MessageSquare size={18} />,
+  },
+  {
+    href: '/platform/ai',
+    title: 'Platform AI',
+    desc: 'Global default provider + tenant policy',
+    icon: <Sparkles size={18} />,
+  },
+  {
     href: '/platform/email-log',
     title: 'Email log',
     desc: 'Every email dispatched, across all tenants',
+    icon: <ScrollText size={18} />,
+  },
+  {
+    href: '/platform/sms-log',
+    title: 'SMS log',
+    desc: 'Every text dispatched, across all tenants',
     icon: <ScrollText size={18} />,
   },
 ]

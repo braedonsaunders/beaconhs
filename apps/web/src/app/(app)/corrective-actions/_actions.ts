@@ -21,6 +21,7 @@ import {
   user,
 } from '@beaconhs/db/schema'
 import { emitCorrectiveActionAssigned, emitCorrectiveActionCompleted } from '@beaconhs/events'
+import { emitCorrectiveActionClosed } from '@beaconhs/integrations'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { runModuleFlows } from '@/lib/flows/run-module-flows'
@@ -292,6 +293,14 @@ export async function closeCorrectiveAction(args: {
     after: { status: 'closed', closedAt: new Date().toISOString(), costImpact: parsedCost },
   })
   await emitCorrectiveActionCompleted(ctx, { caId: args.caId, completerUserId: ctx.userId })
+  await emitCorrectiveActionClosed(ctx, {
+    id: args.caId,
+    reference: ca.reference,
+    title: ca.title,
+    status: 'closed',
+    severity: ca.severity,
+    closedAt: new Date(),
+  }).catch(() => {})
   await runModuleFlows(ctx, {
     moduleKey: 'corrective-actions',
     event: 'status_change',

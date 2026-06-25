@@ -14,6 +14,7 @@ const nextConfig: NextConfig = {
     '@beaconhs/ui',
     '@beaconhs/audit',
     '@beaconhs/emails',
+    '@beaconhs/integrations',
     '@beaconhs/jobs',
     '@beaconhs/plugin-sdk',
     '@beaconhs/storage',

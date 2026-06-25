@@ -20,6 +20,14 @@ export type AiProvider =
 
 export type ModelTier = 'fast' | 'smart'
 
+/**
+ * Platform-wide AI policy governing per-tenant overrides (mirrors the email/SMS
+ * policy modes). 'disabled' is a global kill switch; 'global_only' forces the
+ * platform provider for every tenant; 'tenant_optional' lets each tenant use its
+ * own provider and falls back to the platform default.
+ */
+export type AiPolicyMode = 'tenant_optional' | 'global_only' | 'disabled'
+
 export type AiConfig = {
   provider: AiProvider
   apiKey: string
