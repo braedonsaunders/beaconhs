@@ -14,6 +14,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { desc, eq } from 'drizzle-orm'
 import { trainingCertificates, trainingRecords } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { canSeeRecord } from '@/lib/visibility'
 import {
   pdfResponse,
   renderTrainingCredentialPdf,
@@ -38,6 +39,27 @@ export async function GET(
   }
 
   const result = await ctx.db(async (tx) => {
+    const [record] = await tx
+      .select({
+        id: trainingRecords.id,
+        personId: trainingRecords.personId,
+        deletedAt: trainingRecords.deletedAt,
+      })
+      .from(trainingRecords)
+      .where(eq(trainingRecords.id, recordId))
+      .limit(1)
+    if (!record) return { error: 'Training record not found.', status: 404 } as const
+
+    // Same per-record visibility gate as the detail page: read.all/super-admin →
+    // any record; otherwise only the viewer's own training. Without this any
+    // authenticated user could download (and lazily issue) anyone's certificate
+    // PDF by guessing the record id.
+    const visible = await canSeeRecord(ctx, tx, {
+      prefix: 'training',
+      personId: record.personId,
+    })
+    if (!visible) return { error: 'Training record not found.', status: 404 } as const
+
     let [cert] = await tx
       .select()
       .from(trainingCertificates)
@@ -47,12 +69,6 @@ export async function GET(
 
     // Lazy issuance: any live (non-revoked) record can produce a credential.
     if (!cert) {
-      const [record] = await tx
-        .select({ id: trainingRecords.id, deletedAt: trainingRecords.deletedAt })
-        .from(trainingRecords)
-        .where(eq(trainingRecords.id, recordId))
-        .limit(1)
-      if (!record) return { error: 'Training record not found.', status: 404 } as const
       if (record.deletedAt) {
         return {
           error: 'This record has been revoked; no certificate can be issued.',

@@ -43,6 +43,7 @@ import {
 } from '@beaconhs/db/schema'
 import { publicUrl } from '@beaconhs/storage'
 import { requireRequestContext } from '@/lib/auth'
+import { canSeeRecord } from '@/lib/visibility'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { ActivityFeed } from '@/components/activity-feed'
 import { CredentialDownloadButton } from '@/components/credential-download-button'
@@ -215,6 +216,18 @@ export default async function TrainingRecordPage({
   })
 
   if (!data) notFound()
+  // Per-record visibility: training.read.all (or super-admin) → any record;
+  // otherwise only the viewer's own training (record.personId === my person).
+  // Closes the read-by-URL gap for users who hold only training.read.self.
+  if (
+    !(await ctx.db((tx) =>
+      canSeeRecord(ctx, tx, {
+        prefix: 'training',
+        personId: data.record.personId,
+      }),
+    ))
+  )
+    notFound()
   const { record, person, course, certAttachments, tenantSettings } = data
   const isRevoked = record.deletedAt != null
   const credentialOutputs = enabledCredentialOutputs(tenantSettings)

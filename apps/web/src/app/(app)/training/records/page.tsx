@@ -10,6 +10,7 @@
 //   - Sort by completedOn / expiresOn / source / employee / course
 
 import Link from 'next/link'
+import { notFound } from 'next/navigation'
 import { Award } from 'lucide-react'
 import {
   and,
@@ -27,7 +28,9 @@ import {
 } from 'drizzle-orm'
 import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
 import { people, tenants, trainingCourses, trainingRecords } from '@beaconhs/db/schema'
+import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { moduleScopeWhere } from '@/lib/visibility'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { enabledCredentialOutputs } from '@/lib/credential-designs'
 import { SearchInput } from '@/components/search-input'
@@ -71,11 +74,27 @@ export default async function TrainingRecordsPage({
   const sourceFilter = pickString(sp.source)
   const expiryFilter = pickString(sp.expiry)
   const ctx = await requireRequestContext()
+  // Access control: viewing certificates requires a training-read permission.
+  // read.all (or super-admin) sees the whole tenant; read.self is scoped to the
+  // viewer's own person by moduleScopeWhere below. No training-read permission
+  // at all → 404, mirroring the find_training_records assistant-tool gate.
+  if (
+    !ctx.isSuperAdmin &&
+    !can(ctx, 'training.read.all') &&
+    !can(ctx, 'training.read.self')
+  )
+    notFound()
   const today = new Date().toISOString().slice(0, 10)
   const todayMs = new Date(today).getTime()
 
   const { rows, total, sourceCounts, expiryCounts, tenantSettings } = await ctx.db(async (tx) => {
+    // read.self → only the viewer's own records; read.all → the whole tenant.
+    const vis = await moduleScopeWhere(ctx, tx, {
+      prefix: 'training',
+      personCol: trainingRecords.personId,
+    })
     const filters: SQL<unknown>[] = [isNull(trainingRecords.deletedAt)]
+    if (vis) filters.push(vis)
     if (params.q) {
       const term = `%${params.q}%`
       const cond = or(
@@ -139,7 +158,7 @@ export default async function TrainingRecordsPage({
     const sources = await tx
       .select({ s: trainingRecords.source, c: count() })
       .from(trainingRecords)
-      .where(isNull(trainingRecords.deletedAt))
+      .where(and(isNull(trainingRecords.deletedAt), vis))
       .groupBy(trainingRecords.source)
 
     const [expiredCount] = await tx
@@ -150,6 +169,7 @@ export default async function TrainingRecordsPage({
           isNull(trainingRecords.deletedAt),
           isNotNull(trainingRecords.expiresOn),
           lte(trainingRecords.expiresOn, today),
+          vis,
         ),
       )
     const [currentCount] = await tx
@@ -159,6 +179,7 @@ export default async function TrainingRecordsPage({
         and(
           isNull(trainingRecords.deletedAt),
           or(isNull(trainingRecords.expiresOn), gt(trainingRecords.expiresOn, today)),
+          vis,
         ),
       )
 
