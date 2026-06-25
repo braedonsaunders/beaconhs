@@ -97,6 +97,8 @@ export const equipmentItems = pgTable(
     serialNumber: text('serial_number'),
     name: text('name').notNull(),
     description: text('description'),
+    // Free-form maintenance / status notes (legacy EQUIPMENT.Notes).
+    notes: text('notes'),
     qrToken: text('qr_token').notNull(), // unique scannable token
     status: equipmentStatus('status').default('in_service').notNull(),
     // Draft-first (badged): instant-created items show in the register with a

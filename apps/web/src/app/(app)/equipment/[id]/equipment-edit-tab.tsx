@@ -26,6 +26,7 @@ async function saveEquipment(formData: FormData) {
     assetTag: String(formData.get('assetTag') ?? '').trim(),
     serialNumber: String(formData.get('serialNumber') ?? '').trim() || null,
     description: String(formData.get('description') ?? '').trim() || null,
+    notes: String(formData.get('notes') ?? '').trim() || null,
     typeId: String(formData.get('typeId') ?? '').trim() || null,
     status: String(formData.get('status') ?? 'in_service') as
       | 'in_service'
@@ -150,6 +151,14 @@ export async function EquipmentEditTab({ itemId }: { itemId: string }) {
             </Field>
             <Field label="Description" className="sm:col-span-2">
               <Textarea name="description" rows={3} defaultValue={item.description ?? ''} />
+            </Field>
+            <Field label="Notes" className="sm:col-span-2">
+              <Textarea
+                name="notes"
+                rows={3}
+                defaultValue={item.notes ?? ''}
+                placeholder="Maintenance / status notes"
+              />
             </Field>
             <label className="flex items-center gap-2 text-sm sm:col-span-2">
               <input
