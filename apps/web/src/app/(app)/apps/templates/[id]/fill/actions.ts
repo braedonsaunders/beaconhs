@@ -525,6 +525,128 @@ export async function createDraftResponse(args: {
   }
 }
 
+/**
+ * Per-field inline autosave for a single response (LiveField parity).
+ *
+ * Powers the renderer's `inlineAutosave` mode: each field saves itself on
+ * blur / debounce by writing exactly one key into the response's canonical
+ * `data` jsonb (read-modify-write). Unlike `persistDraft` (which writes the
+ * separate `draft_data` blob during the guided wizard) this commits straight
+ * to `data` and recomputes compliance on every edit — the record is already
+ * a live entity being edited in place.
+ *
+ * Gates (mirrors persistDraft):
+ *   - response exists in the active tenant (RLS via ctx.db)
+ *   - `locked` must be false
+ *   - caller owns the row (submittedBy = membership) OR has write-any /
+ *     wildcard / super-admin; adopts ownership when submittedBy is null
+ *   - fieldId must be a top-level field id OR a repeating-section id
+ */
+export async function updateResponseField(input: {
+  responseId: string
+  fieldId: string
+  value: unknown
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!input.responseId || !input.fieldId) {
+    return { ok: false, error: 'Invalid request' }
+  }
+  const ctx = await requireRequestContext()
+  try {
+    const result = await ctx.db(async (tx) => {
+      const [row] = await tx
+        .select({
+          id: formResponses.id,
+          status: formResponses.status,
+          locked: formResponses.locked,
+          submittedBy: formResponses.submittedBy,
+          data: formResponses.data,
+          schema: formTemplateVersions.schema,
+        })
+        .from(formResponses)
+        .innerJoin(
+          formTemplateVersions,
+          eq(formResponses.templateVersionId, formTemplateVersions.id),
+        )
+        .where(
+          and(eq(formResponses.id, input.responseId), eq(formResponses.tenantId, ctx.tenantId)),
+        )
+        .limit(1)
+
+      if (!row) return { ok: false as const, error: 'Response not found' }
+      if (row.locked) return { ok: false as const, error: 'This record is locked' }
+
+      // Ownership — same logic as persistDraft.
+      const submitterId = row.submittedBy
+      const callerMembershipId = ctx.membership?.id ?? null
+      const isOwner = submitterId !== null && submitterId === callerMembershipId
+      const hasOverride =
+        ctx.isSuperAdmin ||
+        ctx.permissions.has('*') ||
+        ctx.permissions.has('forms.responses.write_any') ||
+        ctx.permissions.has('forms.responses.*')
+      const isAdopting = submitterId === null
+      if (!isOwner && !hasOverride && !isAdopting) {
+        return { ok: false as const, error: 'You do not have permission to edit this record' }
+      }
+
+      // Validate the field id against the schema: a top-level field or a
+      // repeating-section id (whose value is the whole row array).
+      const schema = row.schema
+      const isTopLevelField = schema.sections.some((sec) =>
+        sec.fields.some((f) => f.id === input.fieldId),
+      )
+      const isSectionId = schema.sections.some((sec) => sec.id === input.fieldId && sec.repeating)
+      if (!isTopLevelField && !isSectionId) {
+        return { ok: false as const, error: 'Unknown field' }
+      }
+
+      // Read-modify-write the single key into the canonical payload.
+      const existing = (row.data ?? {}) as Record<string, unknown>
+      const newData = { ...existing, [input.fieldId]: input.value }
+
+      // Recompute compliance from the merged payload. Hoist repeating-section
+      // rows so section-aware score operators resolve (same as submit).
+      const rows: Record<string, Array<Record<string, unknown>>> = {}
+      for (const sec of schema.sections) {
+        if (!sec.repeating) continue
+        const v = newData[sec.id]
+        rows[sec.id] = Array.isArray(v) ? (v as Array<Record<string, unknown>>) : []
+      }
+      const verdict = computeFormScore(schema, newData, rows)
+
+      await tx
+        .update(formResponses)
+        .set({
+          data: newData,
+          complianceScore: String(verdict.score),
+          complianceStatus: verdict.status,
+          // First edit on a fresh draft promotes it to in_progress so list
+          // views distinguish an empty shell from one being filled.
+          ...(row.status === 'draft' ? { status: 'in_progress' as const } : {}),
+          // Adopt ownership on the first edit if it was unset.
+          ...(isAdopting && callerMembershipId ? { submittedBy: callerMembershipId } : {}),
+        })
+        .where(eq(formResponses.id, input.responseId))
+
+      return { ok: true as const }
+    })
+
+    if (!result.ok) return result
+
+    await recordAudit(ctx, {
+      entityType: 'form_response',
+      entityId: input.responseId,
+      action: 'update',
+      summary: 'Updated record',
+    })
+    revalidatePath('/apps/responses/' + input.responseId)
+    return { ok: true }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'save failed'
+    return { ok: false, error: message }
+  }
+}
+
 // Fill-time safety analysis for a `photo_ai` element. Gated by forms.ai.generate
 // + a configured AI provider; returns a friendly error rather than throwing so
 // the filler can surface it inline. Never persists — the client stores the

@@ -67,6 +67,8 @@ export const formTemplates = pgTable(
     // When true, this published template also appears in the /tools catalogue as
     // a user-built tool (calculator / utility), alongside the native tools.
     surfaceAsTool: boolean('surface_as_tool').default(false).notNull(),
+    // App-level record behaviour config (editingMode + locking rules). Shape = RecordConfig in @beaconhs/forms-core.
+    recordConfig: jsonb('record_config').$type<Record<string, unknown>>(),
     createdBy: text('created_by').references(() => users.id),
     ...timestamps,
     ...softDelete,
@@ -279,6 +281,11 @@ export const formResponses = pgTable(
     submittedBy: uuid('submitted_by').references(() => tenantUsers.id),
     submittedAt: timestamp('submitted_at', { withTimezone: true }),
     closedAt: timestamp('closed_at', { withTimezone: true }),
+    // Record-level lock — a locked response is read-only in the record page
+    // (no field edits / workflow actions) until an authorised user unlocks it.
+    locked: boolean('locked').default(false).notNull(),
+    lockedAt: timestamp('locked_at', { withTimezone: true }),
+    lockedByTenantUserId: uuid('locked_by_tenant_user_id').references(() => tenantUsers.id),
     // The actual response payload (keyed by field id)
     data: jsonb('data').$type<Record<string, unknown>>().default({}).notNull(),
     // In-flight draft state — written by the autosave path while the user is

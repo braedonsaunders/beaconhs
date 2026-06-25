@@ -89,6 +89,7 @@ import {
   listOrgUnitOptions,
   saveFormResponseDraft,
   submitFormResponse,
+  updateResponseField,
 } from './actions'
 import type { SafetyVisionAnalysis } from '@beaconhs/ai'
 import {
@@ -104,6 +105,7 @@ import { FileUpload, dataUrlToFile, type AttachedFile } from '@/components/file-
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
 import { WizardLayout } from '@/components/page-layout'
 import { PremiumSection } from '@/components/premium-section'
+import { Section } from '@/components/section'
 import { toast } from '@/lib/toast'
 import { canvasCss, columnsCss, gridClass, resolveCanvas } from '@/app/(app)/apps/_lib/canvas'
 
@@ -149,6 +151,7 @@ export function FormRenderer({
   readOnly = false,
   responseStatus = null,
   reviewHref = null,
+  inlineAutosave = false,
 }: {
   templateId: string
   templateName: string
@@ -181,6 +184,12 @@ export function FormRenderer({
   // Admin review surface (CAPA/comments/audit) for this response, shown as a
   // "Review" header action. Null hides it (no responseId or no permission).
   reviewHref?: string | null
+  // Opt-in INLINE editing mode (native LiveField parity). When true the
+  // renderer drops the wizard stepper / footer / DetailHeader entirely and
+  // renders every section as a vertical stack of self-autosaving fields, each
+  // writing one key to the canonical `data` via `updateResponseField`. The
+  // parent page owns all chrome. `initialResponseId` is always present here.
+  inlineAutosave?: boolean
 }) {
   // Per-step progress so users can click back into completed steps.
   const [completedSteps, setCompletedSteps] = useState<Set<string>>(new Set())
@@ -769,6 +778,116 @@ export function FormRenderer({
 
   const completion = Math.round(((stepIndex + 1) / Math.max(1, totalSteps)) * 100)
 
+  // --- Inline autosave mode -------------------------------------------------
+  //
+  // An opt-in body that REPLACES the wizard (no stepper, no footer, no
+  // DetailHeader — the parent page owns chrome). Renders every section as a
+  // vertical stack; each visible field saves itself via `updateResponseField`.
+  // Repeating sections + `table` fields persist their WHOLE array on any row
+  // add/remove/cell change. Computed/static elements never save.
+  if (inlineAutosave) {
+    // `initialResponseId` is always present in this mode (the parent page
+    // creates/loads the row). Fall back to live `responseId` defensively.
+    const rid = (initialResponseId ?? responseId) as string
+
+    // Persist one top-level field (scalar/array/object) by its id, validating
+    // first. Returns void; the per-field hook owns the status indicator.
+    const saveField = (field: FormField, v: unknown) => {
+      const err = validateOne(field, v)
+      setErrors((m) => {
+        const next = new Map(m)
+        if (err) next.set(field.id, err)
+        else next.delete(field.id)
+        return next
+      })
+      if (err) return Promise.resolve<{ ok: boolean; error?: string }>({ ok: false, error: err })
+      return updateResponseField({ responseId: rid, fieldId: field.id, value: v })
+    }
+
+    // Persist a whole repeating-section / table array under its id (no
+    // per-field validation — submit-time still runs full validation).
+    const saveArray = (id: string, arr: unknown) =>
+      updateResponseField({ responseId: rid, fieldId: id, value: arr })
+
+    return (
+      <FillReadOnlyContext.Provider value={readOnly}>
+        <fieldset disabled={readOnly} className="m-0 min-w-0 space-y-5 border-0 p-0">
+          {schema.sections.map((sec) => {
+            if (sec.showIf && !evaluateLogicRule(sec.showIf, evalCtx)) return null
+            return (
+              <Section
+                key={sec.id}
+                title={sec.title?.en ?? sec.id}
+                subtitle={sec.description?.en ?? (sec.repeating ? 'Repeatable section' : undefined)}
+              >
+                <div className="space-y-4">
+                  {sec.repeating ? (
+                    <RepeatingSection
+                      section={sec}
+                      rows={rowsByStep[sec.id] ?? []}
+                      onAdd={() => {
+                        addRow(sec)
+                        // addRow mutates state async; persist the resulting array.
+                        const existing = rowsByStep[sec.id] ?? []
+                        if (sec.maxRows !== undefined && existing.length >= sec.maxRows) return
+                        const next: Record<string, unknown> = {}
+                        for (const f of sec.fields) {
+                          if (!f.defaultValue) continue
+                          const dv = resolveDefaultValue(
+                            f.defaultValue as DefaultValueExpression,
+                            evalCtx,
+                          )
+                          if (dv !== undefined && dv !== null) next[f.id] = dv
+                        }
+                        void saveArray(sec.id, [...existing, next])
+                      }}
+                      onRemove={(i) => {
+                        removeRow(sec, i)
+                        const arr = (rowsByStep[sec.id] ?? []).filter((_, idx) => idx !== i)
+                        void saveArray(sec.id, arr)
+                      }}
+                      onUpdate={(i, patch) => {
+                        updateRow(sec, i, patch)
+                        const arr = (rowsByStep[sec.id] ?? []).map((r, idx) =>
+                          idx === i ? { ...r, ...patch } : r,
+                        )
+                        void saveArray(sec.id, arr)
+                      }}
+                      people={people}
+                      evalCtx={evalCtx}
+                      errors={errors}
+                      sectionError={errors.get(`__section_${sec.id}`) ?? null}
+                    />
+                  ) : (
+                    sec.fields.map((f) => {
+                      if (f.showIf && !evaluateLogicRule(f.showIf, evalCtx)) return null
+                      return (
+                        <InlineFieldRow
+                          key={f.id}
+                          field={f}
+                          value={values[f.id]}
+                          onChange={(v) => setValue(f.id, v)}
+                          setFieldValue={setValue}
+                          error={errors.get(f.id)}
+                          people={people}
+                          evalCtx={evalCtx}
+                          loading={pickerLoading.has(f.id)}
+                          readOnly={readOnly}
+                          saveField={saveField}
+                          saveArray={saveArray}
+                        />
+                      )
+                    })
+                  )}
+                </div>
+              </Section>
+            )
+          })}
+        </fieldset>
+      </FillReadOnlyContext.Provider>
+    )
+  }
+
   // Single-step apps + any read-only view render with a native DetailHeader
   // (like the hazard/incident detail pages). Multi-step editing keeps the
   // wizard header (with its step progress strip).
@@ -1311,6 +1430,187 @@ function FieldRow({
         field={field}
         value={value}
         onChange={onChange}
+        people={people}
+        evalCtx={evalCtx}
+        setFieldValue={setFieldValue}
+      />
+      {error ? <p className="text-xs text-red-600">{error}</p> : null}
+    </div>
+  )
+}
+
+// --- Inline autosave field (LiveField parity) ------------------------------
+//
+// Render-only element types that hold no value and must never trigger a save
+// in inline mode. Their FieldInput render path is purely presentational.
+const INLINE_NON_SAVING_TYPES = new Set([
+  'formula',
+  'calc',
+  'metric',
+  'heading',
+  'paragraph',
+  'divider',
+  'image',
+])
+
+type InlineSaveState = 'idle' | 'saving' | 'saved' | 'error'
+
+/**
+ * Per-field autosave hook for inline mode — modelled on live-field.tsx
+ * `useAutoSave` but value-agnostic: it accepts any JSON `value: unknown` and
+ * persists it through a caller-supplied saver (which wires the right
+ * `updateResponseField` payload). Coalesces while a save is in flight and
+ * re-saves the latest value when the previous round-trip returns.
+ */
+// Sentinel so the very first save always runs even when the value is undefined.
+const UNSAVED = Symbol('unsaved')
+
+function useFieldAutosave(saver: (value: unknown) => Promise<{ ok: boolean; error?: string }>) {
+  const [state, setState] = useState<InlineSaveState>('idle')
+  const [, start] = useTransition()
+  const latest = useRef<unknown>(undefined)
+  const saved = useRef<unknown>(UNSAVED)
+  const inFlight = useRef(false)
+  const saverRef = useRef(saver)
+  useEffect(() => {
+    saverRef.current = saver
+  }, [saver])
+
+  const save = useCallback((value: unknown) => {
+    latest.current = value
+    if (inFlight.current) return
+    inFlight.current = true
+    setState('saving')
+    start(async () => {
+      let ok = true
+      // Drain: keep persisting until the newest value is saved (the user may
+      // have typed more while a round-trip was in flight). A loop, not
+      // recursion, so the callback never references itself before declaration.
+      while (latest.current !== saved.current) {
+        const v = latest.current
+        try {
+          const res = await saverRef.current(v)
+          if (!res.ok) {
+            ok = false
+            break
+          }
+          saved.current = v
+        } catch {
+          ok = false
+          break
+        }
+      }
+      inFlight.current = false
+      if (ok) {
+        setState('saved')
+        setTimeout(() => setState((s) => (s === 'saved' ? 'idle' : s)), 2000)
+      } else {
+        setState('error')
+      }
+    })
+  }, [])
+
+  return { state, save }
+}
+
+function InlineSaveDot({ state }: { state: InlineSaveState }) {
+  if (state === 'idle') return null
+  return (
+    <span
+      className={
+        state === 'saving'
+          ? 'text-[11px] font-medium text-slate-400'
+          : state === 'saved'
+            ? 'text-[11px] font-medium text-emerald-600'
+            : 'text-[11px] font-medium text-red-600'
+      }
+    >
+      {state === 'saving' ? 'Saving…' : state === 'saved' ? 'Saved ✓' : 'Not saved — retry'}
+    </span>
+  )
+}
+
+/**
+ * Inline-mode field wrapper. Reuses the exact `FieldInput` control but
+ * autosaves THIS field on its own: debounce ~800ms after a change + save on
+ * blur. `table` fields persist their whole array; render-only element types
+ * never save. The per-field status dot mirrors live-field.tsx.
+ */
+function InlineFieldRow({
+  field,
+  value,
+  onChange,
+  setFieldValue,
+  error,
+  people,
+  evalCtx,
+  loading,
+  readOnly,
+  saveField,
+  saveArray,
+}: {
+  field: FormField
+  value: unknown
+  onChange: (v: unknown) => void
+  setFieldValue?: (fieldId: string, v: unknown) => void
+  error?: string
+  people: { id: string; firstName: string; lastName: string; employeeNo?: string | null }[]
+  evalCtx: EvalContext
+  loading?: boolean
+  readOnly: boolean
+  // Saves one top-level field (validates first). Resolves to {ok}.
+  saveField: (field: FormField, v: unknown) => Promise<{ ok: boolean; error?: string }>
+  // Saves a whole array (table / repeating) by id. Resolves to {ok}.
+  saveArray: (id: string, arr: unknown) => Promise<{ ok: boolean; error?: string }>
+}) {
+  const nonSaving = INLINE_NON_SAVING_TYPES.has(field.type)
+  const isTable = field.type === 'table'
+
+  const { state, save } = useFieldAutosave(
+    useCallback(
+      (v: unknown) => (isTable ? saveArray(field.id, v) : saveField(field, v)),
+      [isTable, field, saveField, saveArray],
+    ),
+  )
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function commit(v: unknown) {
+    if (timer.current) {
+      clearTimeout(timer.current)
+      timer.current = null
+    }
+    if (readOnly || nonSaving) return
+    save(v)
+  }
+
+  function handleChange(v: unknown) {
+    onChange(v)
+    if (readOnly || nonSaving) return
+    if (timer.current) clearTimeout(timer.current)
+    timer.current = setTimeout(() => commit(v), 800)
+  }
+
+  return (
+    <div className="space-y-1" onBlur={() => commit(value)}>
+      <div className="flex items-center justify-between gap-2">
+        <Label>
+          {field.label?.en ?? field.id}
+          {field.required || field.validation?.required ? (
+            <span className="text-red-600"> *</span>
+          ) : null}
+          {loading ? (
+            <span className="ml-2 text-[10px] font-normal text-slate-400">Looking up…</span>
+          ) : null}
+        </Label>
+        {nonSaving ? null : <InlineSaveDot state={state} />}
+      </div>
+      {field.helpText?.en ? (
+        <p className="text-xs text-slate-500 dark:text-slate-400">{field.helpText.en}</p>
+      ) : null}
+      <FieldInput
+        field={field}
+        value={value}
+        onChange={handleChange}
         people={people}
         evalCtx={evalCtx}
         setFieldValue={setFieldValue}

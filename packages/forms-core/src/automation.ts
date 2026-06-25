@@ -65,6 +65,34 @@ export const triggerDataSchema = z.discriminatedUnion('trigger', [
   z.object({ trigger: z.literal('on_lock') }),
   z.object({ trigger: z.literal('on_unlock') }),
   z.object({ trigger: z.literal('on_delete') }),
+  // A user-clickable button rendered on a record that runs THIS flow on demand
+  // (vs. firing automatically on a lifecycle event). Multiple manual triggers
+  // can coexist on one graph — each is a distinct button keyed by `buttonId`,
+  // and `planAutomation(graph, 'manual', ctx, { buttonId })` plans just that
+  // button's branch. `inputs` collects ad-hoc values from the user at click
+  // time; `showIf` / `requirePermission` gate the button's visibility/use.
+  z.object({
+    trigger: z.literal('manual'),
+    buttonId: z.string(),
+    label: z.string(),
+    icon: z.string().optional(),
+    variant: z.enum(['default', 'outline', 'destructive', 'secondary']).optional(),
+    confirm: z.string().optional(),
+    showIf: logicRuleSchema.optional(),
+    requirePermission: z.string().optional(),
+    inputs: z
+      .array(
+        z.object({
+          id: z.string(),
+          label: z.string(),
+          type: z.enum(['text', 'textarea', 'number', 'date', 'select', 'person']),
+          required: z.boolean().optional(),
+          options: z.array(z.object({ value: z.string(), label: z.string() })).optional(),
+        }),
+      )
+      .optional(),
+    order: z.number().int().optional(),
+  }),
 ])
 export type TriggerData = z.infer<typeof triggerDataSchema>
 
@@ -163,6 +191,14 @@ export const actionDataSchema = z.discriminatedUnion('action', [
     graceFieldKey: z.string().optional(),
     durationFieldKey: z.string().optional(),
   }),
+  // Move the record to a new status. `lock` additionally locks the record
+  // (read-only) once moved. Pair with a `manual` button or a lifecycle trigger.
+  z.object({ action: z.literal('change_status'), to: z.string(), lock: z.boolean().optional() }),
+  // Clone the current record into a fresh draft.
+  z.object({ action: z.literal('duplicate_record') }),
+  // Render a PDF of the record. 'full' = the subject's rich record PDF;
+  // 'summary' = a generic field-summary table. Absent ⇒ the subject's default.
+  z.object({ action: z.literal('export_pdf'), pdfFormat: z.enum(['full', 'summary']).optional() }),
 ])
 export type ActionData = z.infer<typeof actionDataSchema>
 
@@ -328,10 +364,19 @@ export function planAutomation(
   graph: AutomationGraph,
   trigger: TriggerData['trigger'],
   evalCtx: EvalContext,
+  // For the `manual` trigger: pick a specific button by id. Absent ⇒ the first
+  // manual trigger node. Ignored for every other (parameterless) trigger.
+  opts?: { buttonId?: string },
 ): AutomationPlan {
-  const triggerNode = graph.nodes.find(
-    (n) => n.data.kind === 'trigger' && n.data.trigger.trigger === trigger,
-  )
+  const triggerNode = graph.nodes.find((n) => {
+    if (n.data.kind !== 'trigger' || n.data.trigger.trigger !== trigger) return false
+    // A graph may carry several manual buttons; disambiguate by buttonId when
+    // one is supplied, otherwise take the first manual trigger.
+    if (trigger === 'manual' && opts?.buttonId !== undefined) {
+      return n.data.trigger.trigger === 'manual' && n.data.trigger.buttonId === opts.buttonId
+    }
+    return true
+  })
   if (!triggerNode || triggerNode.data.kind !== 'trigger') return { actions: [], gates: [] }
   const td = triggerNode.data.trigger
   if (td.trigger === 'on_field_value' && !evaluateLogicRule(td.rule, evalCtx)) {

@@ -22,6 +22,19 @@ import type { ExtraActionHelpers, FlowSubjectAdapter } from '@/lib/flows/types'
 
 const SEVERITY_ORDER: Record<string, number> = { low: 1, medium: 2, high: 3 }
 
+// Valid form_response.status values — guards the dynamic `change_status` action
+// against writing a value outside the enum.
+const RESPONSE_STATUSES = [
+  'draft',
+  'in_progress',
+  'submitted',
+  'in_review',
+  'closed',
+  'rejected',
+  'non_compliant',
+] as const
+type ResponseStatus = (typeof RESPONSE_STATUSES)[number]
+
 // Pull attachment ids out of a photo / photo_upload (AttachedFile[]) or photo_ai
 // ({ attachments: AttachedFile[] }) field value.
 function attachmentIdsFromValue(raw: unknown): string[] {
@@ -237,6 +250,79 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
             .where(eq(formResponses.id, responseId)),
         )
         ran.push('start_monitored_session')
+        return { ran, failed }
+      }
+
+      // Transition the record's workflow status (and optionally lock it). Used by
+      // manual action buttons (e.g. "Close + lock") and automated status flows.
+      if (action.action === 'change_status') {
+        if (!(RESPONSE_STATUSES as readonly string[]).includes(action.to)) {
+          failed.push('change_status (invalid status)')
+          return { ran, failed }
+        }
+        const set: Record<string, unknown> = { status: action.to as ResponseStatus }
+        if (action.lock) {
+          set.locked = true
+          set.lockedAt = new Date()
+          set.lockedByTenantUserId = ctx.membership?.id ?? null
+        }
+        await ctx.db((tx) =>
+          tx.update(formResponses).set(set).where(eq(formResponses.id, responseId)),
+        )
+        ran.push(`change_status→${action.to}`)
+        return { ran, failed }
+      }
+
+      // Clone this record into a fresh draft (same template version + data).
+      if (action.action === 'duplicate_record') {
+        const [src] = await ctx.db((tx) =>
+          tx
+            .select({
+              templateId: formResponses.templateId,
+              templateVersionId: formResponses.templateVersionId,
+              data: formResponses.data,
+              siteOrgUnitId: formResponses.siteOrgUnitId,
+              subjectPersonId: formResponses.subjectPersonId,
+            })
+            .from(formResponses)
+            .where(eq(formResponses.id, responseId))
+            .limit(1),
+        )
+        if (!src) {
+          failed.push('duplicate_record (source not found)')
+          return { ran, failed }
+        }
+        await ctx.db((tx) =>
+          tx.insert(formResponses).values({
+            tenantId: ctx.tenantId,
+            templateId: src.templateId,
+            templateVersionId: src.templateVersionId,
+            status: 'draft',
+            data: (src.data as Record<string, unknown>) ?? {},
+            siteOrgUnitId: src.siteOrgUnitId,
+            subjectPersonId: src.subjectPersonId,
+            submittedBy: ctx.membership?.id ?? null,
+          }),
+        )
+        ran.push('duplicate_record')
+        return { ran, failed }
+      }
+
+      // Render + store this record's PDF in the worker (manual PDF buttons
+      // navigate to the /pdf route directly; in a flow this stores one).
+      if (action.action === 'export_pdf') {
+        try {
+          const jobs = (await import('@beaconhs/jobs')) as Record<string, unknown>
+          const enqueuePdf = jobs.enqueuePdf as ((j: unknown) => Promise<unknown>) | undefined
+          if (typeof enqueuePdf === 'function') {
+            await enqueuePdf({ kind: 'form_response', tenantId: ctx.tenantId, responseId })
+            ran.push('export_pdf')
+          } else {
+            failed.push('export_pdf (queue unavailable)')
+          }
+        } catch {
+          failed.push('export_pdf (error)')
+        }
         return { ran, failed }
       }
 

@@ -70,6 +70,7 @@ export const FORM_TEMPLATE_TRIGGERS: TriggerData['trigger'][] = [
   'status_change',
   'scheduled',
   'session_overdue',
+  'manual',
 ]
 
 export const FORM_TEMPLATE_ACTIONS: ActionData['action'][] = [
@@ -83,6 +84,9 @@ export const FORM_TEMPLATE_ACTIONS: ActionData['action'][] = [
   'create_response',
   'analyze_photos',
   'start_monitored_session',
+  'change_status',
+  'duplicate_record',
+  'export_pdf',
 ]
 
 export const FORM_STATUS_VALUES: string[] = [

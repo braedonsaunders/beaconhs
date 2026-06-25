@@ -7,6 +7,7 @@ import { formAutomations, formTemplateVersions, formTemplates } from '@beaconhs/
 import { validateFormSchema, type AutomationGraph, type FormSchemaV1 } from '@beaconhs/forms-core'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import type { RecordConfig } from './_record-behavior-panel'
 
 // A sensible, editable default flow seeded for monitored apps so an overdue
 // check-in is never silent. Alerting stays flow-driven (per-tenant, editable in
@@ -149,6 +150,36 @@ export async function updateAppOverview(args: {
     entityId: args.templateId,
     action: 'update',
     summary: 'Updated app overview',
+  })
+  revalidatePath(`/apps/templates/${args.templateId}`)
+  revalidatePath('/apps')
+  return { ok: true }
+}
+
+// Save how a record built from this App behaves once created — its editing mode
+// (guided wizard vs. inline autosave) and record locking rules. Stored in the
+// jsonb `recordConfig` column; the record page reads it to choose the renderer
+// and gate lock/unlock. Mirrors updateAppOverview's assert + tx + audit pattern.
+export async function updateRecordBehavior(args: {
+  templateId: string
+  recordConfig: RecordConfig
+}): Promise<{ ok: boolean; error?: string }> {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'forms.template.create')
+  await ctx.db((tx) =>
+    tx
+      .update(formTemplates)
+      .set({
+        recordConfig: args.recordConfig as Record<string, unknown>,
+        updatedAt: new Date(),
+      })
+      .where(eq(formTemplates.id, args.templateId)),
+  )
+  await recordAudit(ctx, {
+    entityType: 'form_template',
+    entityId: args.templateId,
+    action: 'update',
+    summary: 'Updated record behaviour',
   })
   revalidatePath(`/apps/templates/${args.templateId}`)
   revalidatePath('/apps')

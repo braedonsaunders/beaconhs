@@ -92,6 +92,8 @@ import {
 } from '@beaconhs/forms-core'
 import { toast } from '@/lib/toast'
 import { publishNewVersion, updateAppOverview, updateAppPermissions } from './actions'
+import { RecordBehaviorPanel, type RecordConfig } from './_record-behavior-panel'
+import { RecordActionsPanel } from './_record-actions-panel'
 import { LogicBuilder } from './logic-builder'
 import { FormulaBuilder } from './formula-builder'
 import { CanvasEditor, defaultBox } from './_canvas-editor'
@@ -105,10 +107,12 @@ import {
   Briefcase,
   Building2,
   Database,
+  Info,
   LayoutGrid,
   ListOrdered,
   Map as MapIcon,
   MapPinned,
+  MousePointerClick,
   PanelLeft,
   PenTool,
   ScanLine,
@@ -296,6 +300,7 @@ export function FormDesigner({
   currentVersion,
   initialSurface = 'build',
   overview,
+  recordConfig,
   allowedRoles = [],
   roles = [],
   flows = [],
@@ -313,6 +318,7 @@ export function FormDesigner({
   currentVersion: number
   initialSurface?: 'build' | 'flows'
   overview?: AppOverview
+  recordConfig?: RecordConfig
   allowedRoles?: string[]
   roles?: { key: string; name: string }[]
   flows?: FlowSummary[]
@@ -327,9 +333,9 @@ export function FormDesigner({
   const [schema, setSchema] = useState<FormSchemaV1>(initialSchema)
   const [appName, setAppName] = useState(templateName)
   // Unified editor: left rail tab + right surface.
-  const [leftTab, setLeftTab] = useState<'overview' | 'build' | 'assignments' | 'permissions'>(
-    'build',
-  )
+  const [leftTab, setLeftTab] = useState<
+    'overview' | 'build' | 'record' | 'actions' | 'assignments' | 'permissions'
+  >('build')
   const [surface, setSurface] = useState<'build' | 'flows'>(initialSurface)
   const [designerTab, setDesignerTab] = useState<string>(() => initialSchema.tabs?.[0]?.id ?? '')
   const [showAiAssistant, setShowAiAssistant] = useState(false)
@@ -719,7 +725,7 @@ export function FormDesigner({
             <LeftTab
               active={leftTab === 'overview'}
               onClick={() => setLeftTab('overview')}
-              icon={<SlidersHorizontal size={16} />}
+              icon={<Info size={16} />}
               label="Overview"
             />
             <LeftTab
@@ -727,6 +733,18 @@ export function FormDesigner({
               onClick={() => setLeftTab('build')}
               icon={<PanelLeft size={16} />}
               label="Build"
+            />
+            <LeftTab
+              active={leftTab === 'record'}
+              onClick={() => setLeftTab('record')}
+              icon={<SlidersHorizontal size={16} />}
+              label="Record behaviour"
+            />
+            <LeftTab
+              active={leftTab === 'actions'}
+              onClick={() => setLeftTab('actions')}
+              icon={<MousePointerClick size={16} />}
+              label="Record actions"
             />
             <LeftTab
               active={leftTab === 'assignments'}
@@ -751,6 +769,10 @@ export function FormDesigner({
                 canPin={canPin}
                 pinned={pinned}
               />
+            ) : leftTab === 'record' ? (
+              <RecordBehaviorPanel templateId={templateId} initial={recordConfig} roles={roles} />
+            ) : leftTab === 'actions' ? (
+              <RecordActionsPanel templateId={templateId} flows={flows} />
             ) : leftTab === 'assignments' ? (
               <AssignmentsPanel templateId={templateId} />
             ) : leftTab === 'permissions' ? (

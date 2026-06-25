@@ -316,6 +316,8 @@ function triggerSummary(t: TriggerData): string {
       return 'On unlock / reopen'
     case 'on_delete':
       return 'On delete'
+    case 'manual':
+      return `Button: ${t.label || 'Run flow'}`
   }
 }
 
@@ -330,6 +332,9 @@ const ACTION_LABEL: Record<ActionData['action'], string> = {
   create_response: 'Start another form',
   analyze_photos: 'Analyze photos (AI)',
   start_monitored_session: 'Start monitored session',
+  change_status: 'Change status',
+  duplicate_record: 'Duplicate record',
+  export_pdf: 'Export PDF',
 }
 
 const TRIGGER_LABEL: Record<TriggerData['trigger'], string> = {
@@ -343,6 +348,7 @@ const TRIGGER_LABEL: Record<TriggerData['trigger'], string> = {
   on_lock: 'A record is locked / closed',
   on_unlock: 'A record is unlocked / reopened',
   on_delete: 'A record is deleted',
+  manual: 'A user clicks a button',
 }
 
 // Build a fresh TriggerData from a trigger kind (used by the picker + defaults).
@@ -355,6 +361,12 @@ function buildTrigger(
     return { trigger: 'on_field_value', rule: { op: 'isSet', field: firstField } }
   if (v === 'status_change') return { trigger: 'status_change', to: firstStatus }
   if (v === 'scheduled') return { trigger: 'scheduled', cron: '0 8 * * 1' }
+  if (v === 'manual')
+    return {
+      trigger: 'manual',
+      buttonId: `btn_${Math.random().toString(36).slice(2, 10)}`,
+      label: 'Run flow',
+    }
   return { trigger: v } as TriggerData
 }
 
@@ -1356,6 +1368,101 @@ function NodeInspector({
             />
           </Field>
         ) : null}
+        {t.trigger === 'manual' ? (
+          <>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              This flow runs when someone clicks a button on a record. The button shows on the
+              record action bar.
+            </p>
+            <Field label="Button label">
+              <Input
+                value={t.label}
+                disabled={readOnly}
+                placeholder="e.g. Close out"
+                onChange={(e) =>
+                  onChange({ kind: 'trigger', trigger: { ...t, label: e.target.value } })
+                }
+              />
+            </Field>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Style">
+                <Select
+                  value={t.variant ?? 'default'}
+                  disabled={readOnly}
+                  onChange={(e) =>
+                    onChange({
+                      kind: 'trigger',
+                      trigger: { ...t, variant: e.target.value as NonNullable<typeof t.variant> },
+                    })
+                  }
+                >
+                  <option value="default">Primary</option>
+                  <option value="outline">Outline</option>
+                  <option value="secondary">Secondary</option>
+                  <option value="destructive">Destructive</option>
+                </Select>
+              </Field>
+              <Field label="Icon">
+                <Input
+                  value={t.icon ?? ''}
+                  disabled={readOnly}
+                  placeholder="lucide, e.g. check"
+                  onChange={(e) =>
+                    onChange({
+                      kind: 'trigger',
+                      trigger: { ...t, icon: e.target.value.trim() ? e.target.value : undefined },
+                    })
+                  }
+                />
+              </Field>
+            </div>
+            <Field label="Confirmation prompt">
+              <Input
+                value={t.confirm ?? ''}
+                disabled={readOnly}
+                placeholder="Optional — shown before the action runs"
+                onChange={(e) =>
+                  onChange({
+                    kind: 'trigger',
+                    trigger: { ...t, confirm: e.target.value.trim() ? e.target.value : undefined },
+                  })
+                }
+              />
+            </Field>
+            <Field label="Order">
+              <Input
+                type="number"
+                value={t.order ?? ''}
+                disabled={readOnly}
+                placeholder="Position in the bar (lower shows first)"
+                onChange={(e) => {
+                  const raw = e.target.value.trim()
+                  const n = raw === '' ? undefined : Number.parseInt(raw, 10)
+                  onChange({
+                    kind: 'trigger',
+                    trigger: {
+                      ...t,
+                      order: Number.isFinite(n as number) ? (n as number) : undefined,
+                    },
+                  })
+                }}
+              />
+            </Field>
+            <Field label="Show button only when">
+              <LogicBuilder
+                rule={t.showIf}
+                availableFields={availableFields}
+                onChange={(rule) =>
+                  onChange({ kind: 'trigger', trigger: { ...t, showIf: rule ?? undefined } })
+                }
+              />
+              <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">
+                Leave empty to always show the button. Internal id:{' '}
+                <span className="font-mono">{t.buttonId}</span>
+              </p>
+            </Field>
+          </>
+        ) : null}
       </div>
     )
   }
@@ -2009,6 +2116,12 @@ function defaultAction(kind: ActionData['action'], fieldIds: string[]): ActionDa
         durationMinutes: 120,
         requireGeo: false,
       }
+    case 'change_status':
+      return { action: 'change_status', to: '' }
+    case 'duplicate_record':
+      return { action: 'duplicate_record' }
+    case 'export_pdf':
+      return { action: 'export_pdf' }
   }
 }
 

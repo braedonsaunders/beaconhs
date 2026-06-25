@@ -14,6 +14,7 @@ import { listActiveEmailTemplatesForSubject } from '@/lib/email-templates'
 import { listActivePdfTemplatesForSubject } from '@/lib/pdf-templates'
 import { loadRecipientOptions } from '@/lib/flows/recipient-options'
 import { FormDesigner } from './form-designer'
+import type { RecordConfig } from './_record-behavior-panel'
 import type { FlowSummary } from '../flows/_flows-canvas'
 
 export const dynamic = 'force-dynamic'
@@ -131,6 +132,7 @@ export default async function FormDesignerPage({
         emailOnSubmit: data.tmpl.emailOnSubmit,
         surfaceAsTool: data.tmpl.surfaceAsTool,
       }}
+      recordConfig={(data.tmpl.recordConfig ?? undefined) as RecordConfig | undefined}
       allowedRoles={data.tmpl.allowedRoles ?? []}
       roles={data.tenantRoles}
       flows={data.flows as FlowSummary[]}

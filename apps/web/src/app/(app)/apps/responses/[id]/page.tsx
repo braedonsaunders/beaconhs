@@ -1,12 +1,14 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { aliasedTable, asc, desc, eq } from 'drizzle-orm'
+import { aliasedTable, and, asc, desc, eq } from 'drizzle-orm'
 import {
   AlertTriangle,
   CheckCircle2,
   Clock,
   FileText,
+  Lock,
+  LockOpen,
   MessageSquare,
   Plus,
   Send,
@@ -29,6 +31,7 @@ import {
 } from '@beaconhs/ui'
 import {
   correctiveActions,
+  formAutomations,
   formResponseCheckins,
   formResponseComments,
   formResponseScores,
@@ -74,6 +77,16 @@ import { createCorrectiveActionFromResponse, createIncidentFromResponse } from '
 import { buildSpawnPrefill, labelForField } from './_spawn-prefill'
 import { SpawnDrawers, type SpawnDrawerKind } from './_spawn-drawers'
 import { MonitorPanel, type MonitorStatus } from './_monitor-panel'
+import { can } from '@beaconhs/tenant'
+import { appVisibleTo, getUserRoleKeys } from '@/app/(app)/apps/_lib/access'
+import { FormRenderer } from '@/app/(app)/apps/templates/[id]/fill/form-renderer'
+import {
+  finalizeResponse,
+  lockResponse,
+  reopenResponse,
+  unlockResponse,
+} from './_lifecycle-actions'
+import { RecordActionBar } from './_record-action-bar'
 
 export const dynamic = 'force-dynamic'
 
@@ -111,25 +124,8 @@ async function addComment(formData: FormData) {
   revalidatePath(`/apps/responses/${responseId}`)
 }
 
-async function reopenResponse(formData: FormData) {
-  'use server'
-  const ctx = await requireRequestContext()
-  const responseId = String(formData.get('responseId') ?? '')
-  if (!responseId) return
-  await ctx.db((tx) =>
-    tx
-      .update(formResponses)
-      .set({ status: 'in_progress', closedAt: null })
-      .where(eq(formResponses.id, responseId)),
-  )
-  await recordAudit(ctx, {
-    entityType: 'form_response',
-    entityId: responseId,
-    action: 'update',
-    summary: 'Response reopened',
-  })
-  revalidatePath(`/apps/responses/${responseId}`)
-}
+// `reopenResponse` / `lockResponse` / `unlockResponse` / `finalizeResponse` are
+// the shared record-lifecycle server actions, imported from `./_lifecycle-actions`.
 
 // ---------- Page ----------
 
@@ -237,7 +233,49 @@ export default async function FormResponsePage({
         .orderBy(desc(formResponseCheckins.recordedAt))
         .limit(20),
     ])
-    return { ...row, steps, comments, scoreRows, spawnedCAs, spawnedIncidents, checkins }
+    // Loaders for the inline record editor (same shapes as the fill page) plus
+    // the template's enabled manual-button flows for the configurable action bar.
+    const [sites, allPeople, currentPersonRows, manualFlows] = await Promise.all([
+      tx
+        .select({ id: orgUnits.id, name: orgUnits.name })
+        .from(orgUnits)
+        .where(eq(orgUnits.level, 'site'))
+        .orderBy(asc(orgUnits.name)),
+      tx
+        .select({
+          id: people.id,
+          firstName: people.firstName,
+          lastName: people.lastName,
+          employeeNo: people.employeeNo,
+        })
+        .from(people)
+        .where(eq(people.status, 'active'))
+        .orderBy(asc(people.lastName), asc(people.firstName)),
+      tx
+        .select({ id: people.id, firstName: people.firstName, lastName: people.lastName })
+        .from(people)
+        .where(eq(people.userId, ctx.userId ?? ''))
+        .limit(1),
+      tx
+        .select({ id: formAutomations.id, graph: formAutomations.graph })
+        .from(formAutomations)
+        .where(
+          and(eq(formAutomations.templateId, row.template.id), eq(formAutomations.enabled, true)),
+        ),
+    ])
+    return {
+      ...row,
+      steps,
+      comments,
+      scoreRows,
+      spawnedCAs,
+      spawnedIncidents,
+      checkins,
+      sites,
+      allPeople,
+      currentPerson: currentPersonRows[0] ?? null,
+      manualFlows,
+    }
   })
 
   if (!data) notFound()
@@ -273,12 +311,74 @@ export default async function FormResponsePage({
     spawnedCAs,
     spawnedIncidents,
     checkins,
+    sites,
+    allPeople,
+    currentPerson,
+    manualFlows,
   } = data
 
   // Resolve picker-bound entity attributes so `entity_attr` formula fields
   // in the response viewer show the same live values the filler did.
   // RLS-scoped via the request context.
   const entitiesByField = await loadEntitiesForPickers(ctx, version.schema, response.data)
+
+  // ---------- Record-page behaviour (editing mode + lock) ----------
+  // Mirrors the shape authored in the designer's Record tab.
+  type RecordConfig = {
+    editingMode?: 'guided_fill' | 'inline_record' | 'both'
+    locking?: {
+      enabled?: boolean
+      trigger?: string
+      lockRoles?: string[]
+      unlockRoles?: string[]
+      autoLockOnFinalize?: boolean
+    }
+  }
+  const recordConfig = (template.recordConfig as RecordConfig | null) ?? null
+  // Inline-record editing is the default for non-wizard, non-checklist apps;
+  // wizards/checklists keep the guided fill flow unless explicitly overridden.
+  const defaultInline = template.kind !== 'wizard' && template.kind !== 'checklist'
+  const editingMode = recordConfig?.editingMode ?? (defaultInline ? 'inline_record' : 'guided_fill')
+  const inlineMode = editingMode === 'inline_record' || editingMode === 'both'
+  const locked = !!response.locked
+  const userRoleKeys = await getUserRoleKeys(ctx)
+  const canFillApp = appVisibleTo(ctx, template.allowedRoles, userRoleKeys)
+
+  // ---------- Configurable record-action buttons ----------
+  // Each enabled flow may expose one manual-trigger button. Keep a button only
+  // when its authored permission/showIf gates pass for this user + record.
+  const manualButtons: {
+    flowId: string
+    buttonId: string
+    label: string
+    icon?: string
+    variant?: 'default' | 'outline' | 'destructive' | 'secondary'
+    confirm?: string
+    order: number
+  }[] = []
+  for (const flow of manualFlows) {
+    for (const node of flow.graph.nodes) {
+      if (node.data.kind !== 'trigger') continue
+      const t = node.data.trigger
+      if (t.trigger !== 'manual') continue
+      if (t.requirePermission && !can(ctx, t.requirePermission)) continue
+      if (
+        t.showIf &&
+        !evaluateLogicRule(t.showIf, { values: response.data, rows: {}, entities: {} })
+      )
+        continue
+      manualButtons.push({
+        flowId: flow.id,
+        buttonId: t.buttonId,
+        label: t.label,
+        icon: t.icon,
+        variant: t.variant,
+        confirm: t.confirm,
+        order: t.order ?? 0,
+      })
+    }
+  }
+  manualButtons.sort((a, b) => a.order - b.order)
 
   const failCount = scoreRows.filter((r) => r.score === 0).length
   const passCount = scoreRows.filter((r) => r.score === 1).length
@@ -410,6 +510,32 @@ export default async function FormResponsePage({
                   <ShieldAlert size={14} /> Create incident
                 </Button>
               </Link>
+              <RecordActionBar responseId={id} buttons={manualButtons} />
+              {!locked ? (
+                <>
+                  {response.status === 'draft' || response.status === 'in_progress' ? (
+                    <form action={finalizeResponse} className="inline">
+                      <input type="hidden" name="responseId" value={id} />
+                      <Button type="submit" variant="default">
+                        <CheckCircle2 size={14} /> Finalize
+                      </Button>
+                    </form>
+                  ) : null}
+                  <form action={lockResponse} className="inline">
+                    <input type="hidden" name="responseId" value={id} />
+                    <Button type="submit" variant="outline">
+                      <Lock size={14} /> Lock
+                    </Button>
+                  </form>
+                </>
+              ) : (
+                <form action={unlockResponse} className="inline">
+                  <input type="hidden" name="responseId" value={id} />
+                  <Button type="submit" variant="outline">
+                    <LockOpen size={14} /> Unlock
+                  </Button>
+                </form>
+              )}
               {supportsReopen ? (
                 <form action={reopenResponse} className="inline">
                   <input type="hidden" name="responseId" value={id} />
@@ -633,37 +759,89 @@ export default async function FormResponsePage({
               </Section>
             ) : null}
 
-            {(() => {
-              // Build a shared eval context once for the entire response page.
-              // Repeating-section row arrays are hoisted out of `data` into
-              // `ctx.rows` so cross-section formulas (sum_section) resolve.
-              const rows: Record<string, Array<Record<string, unknown>>> = {}
-              for (const sec of version.schema.sections) {
-                if (!sec.repeating) continue
-                const v = response.data[sec.id]
-                rows[sec.id] = Array.isArray(v) ? (v as Array<Record<string, unknown>>) : []
-              }
-              const evalCtx: EvalContext = {
-                values: response.data,
-                rows,
-                entities: entitiesByField,
-              }
-              return version.schema.sections.map((sec) => {
-                // Section-level conditional visibility — skip entirely if false.
-                if (sec.showIf && !evaluateLogicRule(sec.showIf, evalCtx)) return null
+            {inlineMode ? (
+              // Inline record editing (native LiveField parity): every section
+              // renders as a vertical stack of self-autosaving fields. Locked or
+              // view-only records render the same surface, read-only.
+              (() => {
+                const initialRows: Record<string, Array<Record<string, unknown>>> = {}
+                for (const sec of version.schema.sections) {
+                  const rows = response.data?.[sec.id]
+                  if (sec.repeating && Array.isArray(rows)) {
+                    initialRows[sec.id] = rows as Array<Record<string, unknown>>
+                  }
+                }
                 return (
-                  <Section
-                    key={sec.id}
-                    title={sec.title?.en ?? sec.id}
-                    subtitle={sec.repeating ? 'repeating section' : undefined}
-                  >
-                    {sec.repeating
-                      ? renderRepeating(sec, response.data, evalCtx)
-                      : renderFlat(sec, response.data, evalCtx)}
-                  </Section>
+                  <FormRenderer
+                    inlineAutosave
+                    readOnly={locked || !canFillApp}
+                    templateId={template.id}
+                    templateName={template.name}
+                    version={version.version}
+                    schema={version.schema}
+                    sites={sites}
+                    people={allPeople}
+                    entitiesByField={entitiesByField}
+                    currentUser={{
+                      personId: currentPerson?.id ?? null,
+                      name: currentPerson
+                        ? `${currentPerson.firstName} ${currentPerson.lastName}`
+                        : (ctx.membership?.displayName ?? null),
+                    }}
+                    initialResponseId={id}
+                    initialValues={response.data}
+                    initialRows={initialRows}
+                    initialStepIndex={0}
+                    isResumed={false}
+                    returnTo={null}
+                    responseStatus={response.status}
+                  />
                 )
-              })
-            })()}
+              })()
+            ) : (
+              <>
+                {canFillApp && !locked ? (
+                  <div className="flex justify-end">
+                    <Link href={`/apps/templates/${template.id}/fill?responseId=${id}`}>
+                      <Button variant="outline">
+                        <FileText size={14} /> Open in form
+                      </Button>
+                    </Link>
+                  </div>
+                ) : null}
+                {(() => {
+                  // Build a shared eval context once for the entire response page.
+                  // Repeating-section row arrays are hoisted out of `data` into
+                  // `ctx.rows` so cross-section formulas (sum_section) resolve.
+                  const rows: Record<string, Array<Record<string, unknown>>> = {}
+                  for (const sec of version.schema.sections) {
+                    if (!sec.repeating) continue
+                    const v = response.data[sec.id]
+                    rows[sec.id] = Array.isArray(v) ? (v as Array<Record<string, unknown>>) : []
+                  }
+                  const evalCtx: EvalContext = {
+                    values: response.data,
+                    rows,
+                    entities: entitiesByField,
+                  }
+                  return version.schema.sections.map((sec) => {
+                    // Section-level conditional visibility — skip entirely if false.
+                    if (sec.showIf && !evaluateLogicRule(sec.showIf, evalCtx)) return null
+                    return (
+                      <Section
+                        key={sec.id}
+                        title={sec.title?.en ?? sec.id}
+                        subtitle={sec.repeating ? 'repeating section' : undefined}
+                      >
+                        {sec.repeating
+                          ? renderRepeating(sec, response.data, evalCtx)
+                          : renderFlat(sec, response.data, evalCtx)}
+                      </Section>
+                    )
+                  })
+                })()}
+              </>
+            )}
 
             {pendingFlowGates.length > 0 ? <FlowApprovals gates={pendingFlowGates} /> : null}
 
