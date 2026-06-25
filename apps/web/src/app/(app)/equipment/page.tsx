@@ -2,7 +2,13 @@ import Link from 'next/link'
 import { Wrench } from 'lucide-react'
 import { and, asc, count, desc, eq, ilike, isNull, or, type SQL } from 'drizzle-orm'
 import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
-import { equipmentItems, equipmentTypes, orgUnits, people } from '@beaconhs/db/schema'
+import {
+  equipmentCategories,
+  equipmentItems,
+  equipmentTypes,
+  orgUnits,
+  people,
+} from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
@@ -13,6 +19,7 @@ import { TableToolbar } from '@/components/table-toolbar'
 import { EquipmentSubNav } from '@/components/equipment-sub-nav'
 import { listPeopleForBulkHolder, listSiteOrgUnits } from './_actions'
 import { EquipmentRecordsTable, type EquipmentTableRow } from './_records-table'
+import { EquipmentTypeCategoryFilters } from './_filters'
 
 export const metadata = { title: 'Equipment' }
 
@@ -48,74 +55,95 @@ export default async function EquipmentPage({
   const statusRaw = pickString(sp.status) ?? 'in_service'
   const statusFilter = statusRaw === 'all' ? undefined : statusRaw
   const availabilityFilter = pickString(sp.availability)
+  const typeFilter = pickString(sp.type)
+  const categoryFilter = pickString(sp.category)
   const ctx = await requireRequestContext()
 
-  const { rows, total, statusCounts, availabilityCounts } = await ctx.db(async (tx) => {
-    const filters: SQL<unknown>[] = [isNull(equipmentItems.deletedAt)]
-    if (params.q) {
-      const term = `%${params.q}%`
-      const cond = or(
-        ilike(equipmentItems.assetTag, term),
-        ilike(equipmentItems.name, term),
-        ilike(equipmentItems.serialNumber, term),
-      )
-      if (cond) filters.push(cond)
-    }
-    if (statusFilter) filters.push(eq(equipmentItems.status, statusFilter as any))
-    if (availabilityFilter === 'available') {
-      filters.push(eq(equipmentItems.isAvailableForCheckout, true))
-    } else if (availabilityFilter === 'checked_out') {
-      filters.push(eq(equipmentItems.isAvailableForCheckout, false))
-    }
-    const whereClause = and(...filters)
+  const { rows, total, statusCounts, availabilityCounts, allTypes, allCats } = await ctx.db(
+    async (tx) => {
+      const allTypes = await tx
+        .select({ id: equipmentTypes.id, name: equipmentTypes.name })
+        .from(equipmentTypes)
+        .where(eq(equipmentTypes.tenantId, ctx.tenantId))
+        .orderBy(asc(equipmentTypes.name))
+      const allCats = await tx
+        .select({ id: equipmentCategories.id, name: equipmentCategories.name })
+        .from(equipmentCategories)
+        .where(eq(equipmentCategories.tenantId, ctx.tenantId))
+        .orderBy(asc(equipmentCategories.sortOrder), asc(equipmentCategories.name))
+      const filters: SQL<unknown>[] = [isNull(equipmentItems.deletedAt)]
+      if (params.q) {
+        const term = `%${params.q}%`
+        const cond = or(
+          ilike(equipmentItems.assetTag, term),
+          ilike(equipmentItems.name, term),
+          ilike(equipmentItems.serialNumber, term),
+        )
+        if (cond) filters.push(cond)
+      }
+      if (statusFilter) filters.push(eq(equipmentItems.status, statusFilter as any))
+      if (availabilityFilter === 'available') {
+        filters.push(eq(equipmentItems.isAvailableForCheckout, true))
+      } else if (availabilityFilter === 'checked_out') {
+        filters.push(eq(equipmentItems.isAvailableForCheckout, false))
+      }
+      if (typeFilter) filters.push(eq(equipmentItems.typeId, typeFilter))
+      if (categoryFilter) filters.push(eq(equipmentItems.categoryId, categoryFilter))
+      const whereClause = and(...filters)
 
-    const dirFn = params.dir === 'asc' ? asc : desc
-    const orderBy =
-      params.sort === 'name'
-        ? [dirFn(equipmentItems.name)]
-        : params.sort === 'type'
-          ? [dirFn(equipmentTypes.name)]
-          : params.sort === 'status'
-            ? [dirFn(equipmentItems.status)]
-            : params.sort === 'site'
-              ? [dirFn(orgUnits.name)]
-              : params.sort === 'holder'
-                ? [dirFn(people.lastName)]
-                : params.sort === 'purchase_date'
-                  ? [dirFn(equipmentItems.purchaseDate)]
-                  : [dirFn(equipmentItems.assetTag)]
+      const dirFn = params.dir === 'asc' ? asc : desc
+      const orderBy =
+        params.sort === 'name'
+          ? [dirFn(equipmentItems.name)]
+          : params.sort === 'type'
+            ? [dirFn(equipmentTypes.name)]
+            : params.sort === 'status'
+              ? [dirFn(equipmentItems.status)]
+              : params.sort === 'site'
+                ? [dirFn(orgUnits.name)]
+                : params.sort === 'holder'
+                  ? [dirFn(people.lastName)]
+                  : params.sort === 'purchase_date'
+                    ? [dirFn(equipmentItems.purchaseDate)]
+                    : [dirFn(equipmentItems.assetTag)]
 
-    const [tot] = await tx.select({ c: count() }).from(equipmentItems).where(whereClause)
-    const data = await tx
-      .select({ item: equipmentItems, type: equipmentTypes, site: orgUnits, holder: people })
-      .from(equipmentItems)
-      .leftJoin(equipmentTypes, eq(equipmentTypes.id, equipmentItems.typeId))
-      .leftJoin(orgUnits, eq(orgUnits.id, equipmentItems.currentSiteOrgUnitId))
-      .leftJoin(people, eq(people.id, equipmentItems.currentHolderPersonId))
-      .where(whereClause)
-      .orderBy(...orderBy)
-      .limit(params.perPage)
-      .offset((params.page - 1) * params.perPage)
-    const ss = await tx
-      .select({ s: equipmentItems.status, c: count() })
-      .from(equipmentItems)
-      .groupBy(equipmentItems.status)
-    const av = await tx
-      .select({ a: equipmentItems.isAvailableForCheckout, c: count() })
-      .from(equipmentItems)
-      .groupBy(equipmentItems.isAvailableForCheckout)
-    return {
-      rows: data,
-      total: Number(tot?.c ?? 0),
-      statusCounts: Object.fromEntries(ss.map((x) => [x.s, Number(x.c)])),
-      availabilityCounts: {
-        available: Number(av.find((x) => x.a === true)?.c ?? 0),
-        checked_out: Number(av.find((x) => x.a === false)?.c ?? 0),
-      } as Record<string, number>,
-    }
-  })
+      const [tot] = await tx.select({ c: count() }).from(equipmentItems).where(whereClause)
+      const data = await tx
+        .select({ item: equipmentItems, type: equipmentTypes, site: orgUnits, holder: people })
+        .from(equipmentItems)
+        .leftJoin(equipmentTypes, eq(equipmentTypes.id, equipmentItems.typeId))
+        .leftJoin(orgUnits, eq(orgUnits.id, equipmentItems.currentSiteOrgUnitId))
+        .leftJoin(people, eq(people.id, equipmentItems.currentHolderPersonId))
+        .where(whereClause)
+        .orderBy(...orderBy)
+        .limit(params.perPage)
+        .offset((params.page - 1) * params.perPage)
+      const ss = await tx
+        .select({ s: equipmentItems.status, c: count() })
+        .from(equipmentItems)
+        .groupBy(equipmentItems.status)
+      const av = await tx
+        .select({ a: equipmentItems.isAvailableForCheckout, c: count() })
+        .from(equipmentItems)
+        .groupBy(equipmentItems.isAvailableForCheckout)
+      return {
+        rows: data,
+        total: Number(tot?.c ?? 0),
+        statusCounts: Object.fromEntries(ss.map((x) => [x.s, Number(x.c)])),
+        availabilityCounts: {
+          available: Number(av.find((x) => x.a === true)?.c ?? 0),
+          checked_out: Number(av.find((x) => x.a === false)?.c ?? 0),
+        } as Record<string, number>,
+        allTypes,
+        allCats,
+      }
+    },
+  )
 
   const [sites, holders] = await Promise.all([listSiteOrgUnits(), listPeopleForBulkHolder()])
+
+  const typeOptions = allTypes.map((t) => ({ value: t.id, label: t.name }))
+  const categoryOptions = allCats.map((c) => ({ value: c.id, label: c.name }))
 
   const tableRows: EquipmentTableRow[] = rows.map(({ item, type, site, holder }) => ({
     id: item.id,
@@ -168,6 +196,12 @@ export default async function EquipmentPage({
                 ...o,
                 count: availabilityCounts[o.value],
               }))}
+            />
+            <EquipmentTypeCategoryFilters
+              basePath="/equipment"
+              currentParams={sp}
+              types={typeOptions}
+              categories={categoryOptions}
             />
           </TableToolbar>
         </>

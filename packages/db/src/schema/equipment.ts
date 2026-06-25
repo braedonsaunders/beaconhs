@@ -93,6 +93,12 @@ export const equipmentItems = pgTable(
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
     typeId: uuid('type_id').references(() => equipmentTypes.id),
+    // Per-item category. Legacy EQUIPMENT.Category is a free-text name set per
+    // item, independent of Type (a generic type like "Cordless" spans 13
+    // categories) — so category lives on the item, not derived through the type.
+    categoryId: uuid('category_id').references(() => equipmentCategories.id, {
+      onDelete: 'set null',
+    }),
     assetTag: text('asset_tag').notNull(),
     serialNumber: text('serial_number'),
     name: text('name').notNull(),
@@ -159,6 +165,7 @@ export const equipmentItems = pgTable(
     tenantIdx: index('equipment_items_tenant_idx').on(t.tenantId),
     siteIdx: index('equipment_items_site_idx').on(t.tenantId, t.currentSiteOrgUnitId),
     availableIdx: index('equipment_items_available_idx').on(t.tenantId, t.isAvailableForCheckout),
+    categoryIdx: index('equipment_items_category_idx').on(t.tenantId, t.categoryId),
   }),
 )
 
@@ -236,6 +243,10 @@ export const equipmentItemsRelations = relations(equipmentItems, ({ one, many })
   type: one(equipmentTypes, {
     fields: [equipmentItems.typeId],
     references: [equipmentTypes.id],
+  }),
+  category: one(equipmentCategories, {
+    fields: [equipmentItems.categoryId],
+    references: [equipmentCategories.id],
   }),
   currentSite: one(orgUnits, {
     fields: [equipmentItems.currentSiteOrgUnitId],
