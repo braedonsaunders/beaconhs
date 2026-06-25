@@ -83,7 +83,10 @@ export const tenantNotificationSettings = pgTable(
     channels: jsonb('channels').$type<string[]>().default([]).notNull(),
     // Escalation ladder (Phase 2): once a subject has been overdue for N days,
     // also alert these roles. Evaluated daily against compliance_status.
-    escalation: jsonb('escalation').$type<{ afterDays: number; roleKeys: string[] }[]>().default([]).notNull(),
+    escalation: jsonb('escalation')
+      .$type<{ afterDays: number; roleKeys: string[] }[]>()
+      .default([])
+      .notNull(),
     ...timestamps,
   },
   (t) => ({

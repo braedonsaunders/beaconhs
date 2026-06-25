@@ -26,7 +26,9 @@ export async function processScheduledTick(job: Job<ScheduledTick>): Promise<voi
     }
     case 'escalation_scan': {
       const r = await scanEscalations()
-      console.log(`[scheduled] escalation_scan: ${r.escalated} escalated across ${r.tenants} tenants`)
+      console.log(
+        `[scheduled] escalation_scan: ${r.escalated} escalated across ${r.tenants} tenants`,
+      )
       return
     }
     case 'digest_scan': {

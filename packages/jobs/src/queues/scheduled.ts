@@ -63,10 +63,14 @@ export async function registerSchedules() {
     jobId: 'tick:digest',
   })
   // Every minute: run flows whose `scheduled` cron matches this minute (Phase 4).
-  await scheduledQueue.add('tick:scheduled_flow', { kind: 'scheduled_flow_scan' } as ScheduledTick, {
-    repeat: { pattern: '* * * * *' },
-    jobId: 'tick:scheduled_flow',
-  })
+  await scheduledQueue.add(
+    'tick:scheduled_flow',
+    { kind: 'scheduled_flow_scan' } as ScheduledTick,
+    {
+      repeat: { pattern: '* * * * *' },
+      jobId: 'tick:scheduled_flow',
+    },
+  )
   await scheduledQueue.add(
     'tick:plugin_hourly',
     { kind: 'plugin_cron', cadence: 'hourly' } as ScheduledTick,

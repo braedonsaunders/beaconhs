@@ -243,7 +243,7 @@ export async function EmailLogListView({
                 const otherCount = Array.isArray(log.recipients) ? log.recipients.length - 1 : 0
                 return (
                   <TableRow key={log.id}>
-                    <TableCell className="text-slate-600 whitespace-nowrap dark:text-slate-300">
+                    <TableCell className="whitespace-nowrap text-slate-600 dark:text-slate-300">
                       {new Date(log.createdAt).toLocaleString()}
                     </TableCell>
                     <TableCell className="text-slate-900 dark:text-slate-100">

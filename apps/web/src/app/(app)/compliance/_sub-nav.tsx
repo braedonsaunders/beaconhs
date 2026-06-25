@@ -12,13 +12,7 @@ const TABS = [
   { key: 'mine', label: 'Mine', href: '/compliance/mine' },
 ]
 
-export type ComplianceTab =
-  | 'overview'
-  | 'obligations'
-  | 'by-person'
-  | 'aging'
-  | 'expiring'
-  | 'mine'
+export type ComplianceTab = 'overview' | 'obligations' | 'by-person' | 'aging' | 'expiring' | 'mine'
 
 export function ComplianceSubNav({ active }: { active: ComplianceTab }) {
   return <ModuleSubNav tabs={TABS} active={active} />

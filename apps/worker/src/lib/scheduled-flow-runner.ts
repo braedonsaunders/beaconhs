@@ -61,7 +61,11 @@ export async function scanScheduledFlows(): Promise<ScheduledFlowScanResult> {
         result.flows += 1
 
         try {
-          const plan = planAutomation(flow.graph, 'scheduled', { values: {}, rows: {}, entities: {} })
+          const plan = planAutomation(flow.graph, 'scheduled', {
+            values: {},
+            rows: {},
+            entities: {},
+          })
           for (const action of plan.actions) {
             try {
               if (action.action === 'notify_role') {

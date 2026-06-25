@@ -411,7 +411,10 @@ function MessageRow({
 
 /* ---------------------------------------------------------------- to-dos */
 
-const TODO_META: Record<TodoItem['kind'], { label: string; Icon: typeof Inbox; bg: string; fg: string }> = {
+const TODO_META: Record<
+  TodoItem['kind'],
+  { label: string; Icon: typeof Inbox; bg: string; fg: string }
+> = {
   compliance: {
     label: 'Compliance',
     Icon: ShieldCheck,
@@ -443,10 +446,7 @@ function TodoRow({ todo, onOpen }: { todo: TodoItem; onOpen: () => void }) {
       className="group flex w-full cursor-pointer items-center gap-3 border-b border-slate-100 px-3 py-2.5 text-left transition-colors hover:bg-slate-50 sm:px-4 dark:border-slate-800/70 dark:hover:bg-slate-800/40"
     >
       <span
-        className={cn(
-          'flex h-9 w-9 shrink-0 items-center justify-center rounded-full',
-          meta.bg,
-        )}
+        className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-full', meta.bg)}
       >
         <Icon size={16} className={meta.fg} />
       </span>
@@ -799,9 +799,7 @@ export function OutlookInbox({
         <div className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
           <ListChecks size={26} className="text-slate-400" />
         </div>
-        <p className="mt-3 text-sm font-medium text-slate-600 dark:text-slate-300">
-          Nothing to do
-        </p>
+        <p className="mt-3 text-sm font-medium text-slate-600 dark:text-slate-300">Nothing to do</p>
         <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
           No tasks are assigned to you right now.
         </p>

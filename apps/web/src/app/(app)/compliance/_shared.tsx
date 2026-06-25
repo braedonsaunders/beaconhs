@@ -40,7 +40,9 @@ export function SummaryStrip({
       <div className="flex items-end justify-between gap-3">
         <div className="min-w-0">
           <div className="truncate text-sm text-slate-500 dark:text-slate-400">{title}</div>
-          <div className="text-3xl font-semibold text-slate-900 dark:text-slate-100">{percent}%</div>
+          <div className="text-3xl font-semibold text-slate-900 dark:text-slate-100">
+            {percent}%
+          </div>
           <div className="text-xs text-slate-500 dark:text-slate-400">
             {totals.completed} of {totals.total} completed · {totals.overdue} overdue ·{' '}
             {totals.pending} pending

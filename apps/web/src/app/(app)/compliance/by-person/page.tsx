@@ -77,11 +77,11 @@ export default async function ByPersonPage({
         <PersonPicker people={personOptions} selected={personId ?? ''} />
 
         {!personId ? (
-          <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 dark:border-slate-700 dark:bg-slate-800/40 p-8 text-center text-sm text-slate-500 dark:text-slate-400">
+          <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 p-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-800/40 dark:text-slate-400">
             Pick a person above to see every obligation they are scoped into.
           </div>
         ) : rows.length === 0 ? (
-          <div className="rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 p-6 text-sm text-slate-700 dark:text-slate-300">
+          <div className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
             This person isn&apos;t a subject of any active obligation.
           </div>
         ) : (
@@ -107,8 +107,12 @@ export default async function ByPersonPage({
                     <TableCell>
                       <StatusBadge status={r.status} />
                     </TableCell>
-                    <TableCell className="text-slate-700 dark:text-slate-300">{r.dueOn ?? '—'}</TableCell>
-                    <TableCell className="text-slate-700 dark:text-slate-300">{r.completedOn ?? '—'}</TableCell>
+                    <TableCell className="text-slate-700 dark:text-slate-300">
+                      {r.dueOn ?? '—'}
+                    </TableCell>
+                    <TableCell className="text-slate-700 dark:text-slate-300">
+                      {r.completedOn ?? '—'}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

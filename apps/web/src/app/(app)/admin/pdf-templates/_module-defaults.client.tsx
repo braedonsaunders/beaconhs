@@ -36,7 +36,9 @@ function ModuleRow({ row }: { row: ModulePdfDefaultRow }) {
         templateId: next || null,
       })
       if (res.ok) {
-        toast.success(next ? 'Default print template updated.' : 'Reverted to the built-in template.')
+        toast.success(
+          next ? 'Default print template updated.' : 'Reverted to the built-in template.',
+        )
         router.refresh()
       } else {
         toast.error(res.error ?? 'Could not update the default.')

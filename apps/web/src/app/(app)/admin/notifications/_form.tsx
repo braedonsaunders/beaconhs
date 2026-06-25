@@ -308,7 +308,9 @@ export function NotificationSettingsForm({
       {/* Tenant-wide routing policy */}
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-800">
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Routing policy</h3>
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+            Routing policy
+          </h3>
           <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
             Tenant-wide defaults for how alerts are detected and delivered.
           </p>
@@ -365,7 +367,10 @@ export function NotificationSettingsForm({
                     value={pol.quietHours.start}
                     onChange={(e) =>
                       patchPol({
-                        quietHours: { start: Number(e.target.value) || 0, end: pol.quietHours!.end },
+                        quietHours: {
+                          start: Number(e.target.value) || 0,
+                          end: pol.quietHours!.end,
+                        },
                       })
                     }
                     className={numInput}

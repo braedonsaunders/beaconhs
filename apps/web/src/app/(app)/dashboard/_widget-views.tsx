@@ -958,35 +958,33 @@ function InboxList({ items }: { items: DashboardMetrics['myInbox'] }) {
 
 type InProgressKind = DashboardMetrics['inProgressEntries'][number]['kind']
 
-const IN_PROGRESS_KIND: Record<
-  InProgressKind,
-  { label: string; icon: LucideIcon; badge: string }
-> = {
-  journal: {
-    label: 'Journal',
-    icon: NotebookPen,
-    badge:
-      'bg-teal-50 text-teal-700 ring-teal-100 dark:bg-teal-950/50 dark:text-teal-300 dark:ring-teal-900/40',
-  },
-  hazard_assessment: {
-    label: 'Hazard assessment',
-    icon: ShieldAlert,
-    badge:
-      'bg-amber-50 text-amber-700 ring-amber-100 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-900/40',
-  },
-  incident: {
-    label: 'Incident',
-    icon: AlertTriangle,
-    badge:
-      'bg-rose-50 text-rose-700 ring-rose-100 dark:bg-rose-950/40 dark:text-rose-300 dark:ring-rose-900/40',
-  },
-  inspection: {
-    label: 'Inspection',
-    icon: ClipboardCheck,
-    badge:
-      'bg-sky-50 text-sky-700 ring-sky-100 dark:bg-sky-950/50 dark:text-sky-300 dark:ring-sky-900/40',
-  },
-}
+const IN_PROGRESS_KIND: Record<InProgressKind, { label: string; icon: LucideIcon; badge: string }> =
+  {
+    journal: {
+      label: 'Journal',
+      icon: NotebookPen,
+      badge:
+        'bg-teal-50 text-teal-700 ring-teal-100 dark:bg-teal-950/50 dark:text-teal-300 dark:ring-teal-900/40',
+    },
+    hazard_assessment: {
+      label: 'Hazard assessment',
+      icon: ShieldAlert,
+      badge:
+        'bg-amber-50 text-amber-700 ring-amber-100 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-900/40',
+    },
+    incident: {
+      label: 'Incident',
+      icon: AlertTriangle,
+      badge:
+        'bg-rose-50 text-rose-700 ring-rose-100 dark:bg-rose-950/40 dark:text-rose-300 dark:ring-rose-900/40',
+    },
+    inspection: {
+      label: 'Inspection',
+      icon: ClipboardCheck,
+      badge:
+        'bg-sky-50 text-sky-700 ring-sky-100 dark:bg-sky-950/50 dark:text-sky-300 dark:ring-sky-900/40',
+    },
+  }
 
 function InProgressList({ items }: { items: DashboardMetrics['inProgressEntries'] }) {
   return (
