@@ -1,6 +1,8 @@
+import { redirect } from 'next/navigation'
 import { asc, eq } from 'drizzle-orm'
 import { PageHeader } from '@beaconhs/ui'
 import { orgUnits, tenantUsers, trainingCourses, users } from '@beaconhs/db/schema'
+import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
 import { LazyRecordProvider } from '@/components/lazy-record'
@@ -19,6 +21,9 @@ function toLocalInput(d: Date): string {
 
 export default async function NewClassPage() {
   const ctx = await requireRequestContext()
+  // Scheduling a class requires class-management; non-managers are bounced back
+  // to the list (createClassDraft also re-checks server-side).
+  if (!can(ctx, 'training.class.manage')) redirect('/training/classes')
   const options = await ctx.db(async (tx) => {
     const [courses, sites, instructors] = await Promise.all([
       tx

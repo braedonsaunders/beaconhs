@@ -14,6 +14,7 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { asc, eq } from 'drizzle-orm'
 import { trainingClasses, trainingCourses, trainingRecords } from '@beaconhs/db/schema'
+import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 
@@ -26,6 +27,9 @@ export async function createClassDraft(): Promise<
   { ok: true; id: string } | { ok: false; error: string }
 > {
   const ctx = await requireRequestContext()
+  // Scheduling a class is a class-management mutation. Server actions are POST
+  // endpoints, so gate here — the page render gate alone is not protection.
+  assertCan(ctx, 'training.class.manage')
   const startsAt = new Date()
   const endsAt = new Date(startsAt.getTime() + 60 * 60_000)
 
@@ -71,6 +75,7 @@ const CLASS_TEXT = new Set(['notes'])
 
 export async function updateClassField(formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'training.class.manage')
   const id = String(formData.get('id') ?? '')
   const field = String(formData.get('field') ?? '')
   const raw = formData.get('value')
@@ -140,6 +145,7 @@ export async function updateClassField(formData: FormData): Promise<void> {
 
 export async function cancelClass(id: string, _formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'training.class.manage')
   if (!id) return
   await ctx.db((tx) =>
     tx.update(trainingClasses).set({ cancelledAt: new Date() }).where(eq(trainingClasses.id, id)),
@@ -156,6 +162,7 @@ export async function cancelClass(id: string, _formData: FormData): Promise<void
 
 export async function reopenClass(id: string, _formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'training.class.manage')
   if (!id) return
   await ctx.db((tx) =>
     tx.update(trainingClasses).set({ cancelledAt: null }).where(eq(trainingClasses.id, id)),
@@ -174,6 +181,7 @@ export async function reopenClass(id: string, _formData: FormData): Promise<void
 // records — those are protected (FK restrict); cancel such a class instead.
 export async function deleteClass(id: string, _formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'training.class.manage')
   if (!id) return
   const hasRecords = await ctx.db(async (tx) => {
     const [rec] = await tx

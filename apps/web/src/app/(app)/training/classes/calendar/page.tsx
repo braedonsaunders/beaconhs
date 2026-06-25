@@ -14,6 +14,7 @@ import { CalendarDays, ChevronLeft, ChevronRight, List, Plus } from 'lucide-reac
 import { Badge, Button, PageHeader } from '@beaconhs/ui'
 import { trainingClasses, trainingCourses } from '@beaconhs/db/schema'
 import { eq } from 'drizzle-orm'
+import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
@@ -111,6 +112,7 @@ export default async function TrainingClassesCalendarPage({
   const sp = await searchParams
   const { year, month } = parseMonth(pickString(sp.month))
   const ctx = await requireRequestContext()
+  const canManageClasses = can(ctx, 'training.class.manage')
 
   // Window: [first of visible month minus the leading Sundays] .. [last grid day + 1]
   const { days } = buildGrid(year, month)
@@ -180,11 +182,13 @@ export default async function TrainingClassesCalendarPage({
                     <List size={14} /> List view
                   </Button>
                 </Link>
-                <Link href="/training/classes/new">
-                  <Button>
-                    <Plus size={14} /> Schedule new class
-                  </Button>
-                </Link>
+                {canManageClasses ? (
+                  <Link href="/training/classes/new">
+                    <Button>
+                      <Plus size={14} /> Schedule new class
+                    </Button>
+                  </Link>
+                ) : null}
               </div>
             }
           />

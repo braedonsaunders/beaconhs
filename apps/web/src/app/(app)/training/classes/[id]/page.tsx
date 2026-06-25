@@ -25,6 +25,7 @@ import {
   trainingRecords,
   users,
 } from '@beaconhs/db/schema'
+import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { emitTrainingClassCompleted } from '@beaconhs/integrations'
@@ -50,6 +51,9 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 async function addClassAttendee(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  // Editing a class roster is a class-management mutation; the page render gate
+  // does not protect this POST endpoint.
+  assertCan(ctx, 'training.class.manage')
   const classId = String(formData.get('classId') ?? '')
   const personId = String(formData.get('personId') ?? '')
   if (!classId || !personId) return
@@ -86,6 +90,7 @@ async function addClassAttendee(formData: FormData) {
 async function removeClassAttendee(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'training.class.manage')
   const classId = String(formData.get('classId') ?? '')
   const personId = String(formData.get('personId') ?? '')
   if (!classId || !personId) return
@@ -113,6 +118,10 @@ async function removeClassAttendee(formData: FormData) {
 async function markClassComplete(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  // Completing a class mints training_records for the roster — a privileged
+  // write. Without this gate any authenticated tenant user could POST here and
+  // issue training records for arbitrary people.
+  assertCan(ctx, 'training.class.manage')
   const classId = String(formData.get('classId') ?? '')
   if (!classId) return
 
@@ -345,6 +354,10 @@ export default async function TrainingClassPage({
 
   if (!data) notFound()
   const { cls, course, attendees, availablePeople, courses, sites, instructors } = data
+  // Managing a class (roster edits, completion, lifecycle, field edits) requires
+  // training.class.manage — mirrors the assertCan in every class mutation. A
+  // viewer without it sees the class read-only.
+  const canManageClasses = can(ctx, 'training.class.manage')
   const basePath = `/training/classes/${id}`
   const startsAt = new Date(cls.startsAt)
   const endsAt = new Date(cls.endsAt)
@@ -374,7 +387,7 @@ export default async function TrainingClassPage({
             )
           }
           actions={
-            isCompleted ? null : (
+            isCompleted || !canManageClasses ? null : (
               <div className="flex items-center gap-2">
                 {isCancelled ? (
                   <form action={reopenAction}>
@@ -425,13 +438,18 @@ export default async function TrainingClassPage({
               notes: cls.notes,
             }}
             options={{ courses, sites, instructors }}
-            disabled={isCompleted}
+            disabled={isCompleted || !canManageClasses}
             courseHref={course ? `/training/courses/${course.id}` : null}
             notice={
               isCompleted ? (
                 <p className="text-sm text-slate-600 dark:text-slate-400">
                   This class is complete — details are locked. Training records have been issued
                   from the roster.
+                </p>
+              ) : !canManageClasses ? (
+                <p className="text-sm text-slate-600 dark:text-slate-400">
+                  You have read-only access to this class. Managing classes requires the Manage
+                  classes permission.
                 </p>
               ) : null
             }
@@ -445,7 +463,7 @@ export default async function TrainingClassPage({
               <CardTitle>Roster ({attendees.length})</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {!isCompleted ? (
+              {!isCompleted && canManageClasses ? (
                 availablePeople.length === 0 ? (
                   <p className="text-sm text-slate-500 dark:text-slate-400">
                     Every active person is already on this roster.
@@ -504,7 +522,7 @@ export default async function TrainingClassPage({
                       </div>
                       <div className="flex items-center gap-2">
                         <Badge variant="secondary">{row.att.status}</Badge>
-                        {!isCompleted ? (
+                        {!isCompleted && canManageClasses ? (
                           <form action={removeClassAttendee} className="inline">
                             <input type="hidden" name="classId" value={id} />
                             <input type="hidden" name="personId" value={row.person.id} />
@@ -537,6 +555,11 @@ export default async function TrainingClassPage({
                 <p className="text-sm text-slate-600 dark:text-slate-400">
                   Class was marked complete on {new Date(cls.completedAt!).toLocaleString()}.
                   Training records have been created for everyone who passed.
+                </p>
+              ) : !canManageClasses ? (
+                <p className="text-sm text-slate-600 dark:text-slate-400">
+                  You have read-only access to this class. Marking completion and issuing training
+                  records requires the Manage classes permission.
                 </p>
               ) : attendees.length === 0 ? (
                 <EmptyState

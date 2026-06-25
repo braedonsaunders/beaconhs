@@ -19,6 +19,7 @@ import {
   trainingClassAttendees,
   trainingCourses,
 } from '@beaconhs/db/schema'
+import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { SortableTh } from '@/components/sortable-th'
@@ -52,6 +53,9 @@ export default async function TrainingClassesPage({
   })
   const whenFilter = pickString(sp.when) ?? 'upcoming'
   const ctx = await requireRequestContext()
+  // Only class managers get the create affordances; viewing the schedule stays
+  // open. Scheduling itself is enforced server-side in createClassDraft.
+  const canManageClasses = can(ctx, 'training.class.manage')
 
   const now = new Date()
 
@@ -131,9 +135,11 @@ export default async function TrainingClassesPage({
                     <CalendarDays size={14} /> Calendar
                   </Button>
                 </Link>
-                <Link href="/training/classes/new">
-                  <Button>Schedule new class</Button>
-                </Link>
+                {canManageClasses ? (
+                  <Link href="/training/classes/new">
+                    <Button>Schedule new class</Button>
+                  </Link>
+                ) : null}
               </div>
             }
           />
@@ -157,9 +163,11 @@ export default async function TrainingClassesPage({
           title={whenFilter === 'past' ? 'No past classes' : 'No classes scheduled'}
           description="Schedule a class for any course in the catalogue."
           action={
-            <Link href="/training/classes/new">
-              <Button>Schedule a class</Button>
-            </Link>
+            canManageClasses ? (
+              <Link href="/training/classes/new">
+                <Button>Schedule a class</Button>
+              </Link>
+            ) : undefined
           }
         />
       ) : (
