@@ -3,10 +3,40 @@
 import { revalidatePath } from 'next/cache'
 import { desc, eq } from 'drizzle-orm'
 import { assertCan } from '@beaconhs/tenant'
-import { formTemplateVersions, formTemplates } from '@beaconhs/db/schema'
-import { validateFormSchema, type FormSchemaV1 } from '@beaconhs/forms-core'
+import { formAutomations, formTemplateVersions, formTemplates } from '@beaconhs/db/schema'
+import { validateFormSchema, type AutomationGraph, type FormSchemaV1 } from '@beaconhs/forms-core'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+
+// A sensible, editable default flow seeded for monitored apps so an overdue
+// check-in is never silent. Alerting stays flow-driven (per-tenant, editable in
+// the canvas) — a default, not hardcoded special treatment.
+function defaultOverdueFlowGraph(): AutomationGraph {
+  return {
+    schemaVersion: 1,
+    nodes: [
+      {
+        id: 'trg',
+        position: { x: 60, y: 80 },
+        data: { kind: 'trigger', trigger: { trigger: 'session_overdue' } },
+      },
+      {
+        id: 'act',
+        position: { x: 380, y: 80 },
+        data: {
+          kind: 'action',
+          action: {
+            action: 'notify_role',
+            role: 'safety_manager',
+            message: 'A monitored session check-in is overdue — follow up now.',
+            channel: 'in_app',
+          },
+        },
+      },
+    ],
+    edges: [{ id: 'e1', source: 'trg', target: 'act', sourceHandle: 'next' }],
+  }
+}
 
 export async function publishNewVersion(args: {
   templateId: string
@@ -37,6 +67,32 @@ export async function publishNewVersion(args: {
         .update(formTemplates)
         .set({ status: 'published' })
         .where(eq(formTemplates.id, args.templateId))
+
+      // Monitored app? Ensure an overdue-alert flow exists so a missed check-in
+      // never escalates silently. Seed a sensible default ONCE (the tenant edits
+      // or replaces it in the flow canvas).
+      if (validated.monitor) {
+        const flows = await tx
+          .select({ graph: formAutomations.graph })
+          .from(formAutomations)
+          .where(eq(formAutomations.templateId, args.templateId))
+        const hasOverdueFlow = flows.some((f) =>
+          f.graph?.nodes?.some(
+            (n) => n.data.kind === 'trigger' && n.data.trigger.trigger === 'session_overdue',
+          ),
+        )
+        if (!hasOverdueFlow) {
+          await tx.insert(formAutomations).values({
+            tenantId: ctx.tenantId,
+            subjectType: 'form_template',
+            subjectKey: args.templateId,
+            templateId: args.templateId,
+            name: 'Overdue check-in alert',
+            enabled: true,
+            graph: defaultOverdueFlowGraph(),
+          })
+        }
+      }
       return nextVersion
     })
 

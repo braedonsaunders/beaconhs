@@ -102,7 +102,7 @@ export async function runSessionOverdueFlows(args: {
             await enqueueNotification({
               tenantId,
               userIds,
-              category: 'lone_worker',
+              category: 'monitored_session',
               type: 'monitored_session.overdue',
               title: interpolate(action.message, data) || 'Monitored session check-in overdue',
               linkPath: `/apps/responses/${responseId}`,
