@@ -13,6 +13,8 @@ export type ScheduledTick =
   | { kind: 'report_run'; tenantId: string; scheduleId: string }
   | { kind: 'ca_overdue_scan' }
   | { kind: 'compliance_scan' }
+  | { kind: 'escalation_scan' }
+  | { kind: 'digest_scan' }
   | { kind: 'plugin_cron'; cadence: 'hourly' | 'daily' | 'weekly' }
   | { kind: 'sync_scan' }
   | { kind: 'sync_run'; tenantId: string; connectionId: string; trigger: 'scheduled' | 'manual' }
@@ -64,6 +66,17 @@ export async function registerSchedules() {
   await scheduledQueue.add('tick:compliance_scan', { kind: 'compliance_scan' } as ScheduledTick, {
     repeat: { pattern: '0 6 * * *' },
     jobId: 'tick:compliance_scan',
+  })
+  // Daily 06:30: escalation ladder — re-alert higher roles for items that have
+  // stayed overdue past each ladder step (runs after the compliance scan).
+  await scheduledQueue.add('tick:escalation', { kind: 'escalation_scan' } as ScheduledTick, {
+    repeat: { pattern: '30 6 * * *' },
+    jobId: 'tick:escalation',
+  })
+  // Hourly: digest dispatch — self-gates to each tenant's configured digest hour.
+  await scheduledQueue.add('tick:digest', { kind: 'digest_scan' } as ScheduledTick, {
+    repeat: { pattern: '5 * * * *' },
+    jobId: 'tick:digest',
   })
   await scheduledQueue.add(
     'tick:plugin_hourly',

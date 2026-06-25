@@ -1,6 +1,12 @@
 import { redirect } from 'next/navigation'
 import { and, asc, eq } from 'drizzle-orm'
-import { roles as rolesTable, tenantNotificationSettings, tenantUsers, users } from '@beaconhs/db/schema'
+import {
+  roles as rolesTable,
+  tenantNotificationPolicy,
+  tenantNotificationSettings,
+  tenantUsers,
+  users,
+} from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { DetailHeader } from '@beaconhs/ui'
 import { requireRequestContext } from '@/lib/auth'
@@ -34,9 +40,10 @@ export default async function NotificationSettingsPage() {
     return { roleRows, memberRows }
   })
 
-  // Read separately + guarded: the settings table is additive, so the page still
-  // renders with defaults during the window before its DDL is applied.
+  // Read separately + guarded: the settings/policy tables are additive, so the
+  // page still renders with defaults during the window before their DDL applies.
   let settingRows: (typeof tenantNotificationSettings.$inferSelect)[] = []
+  let policyRow: typeof tenantNotificationPolicy.$inferSelect | null = null
   try {
     settingRows = await ctx.db((tx) =>
       tx
@@ -44,13 +51,28 @@ export default async function NotificationSettingsPage() {
         .from(tenantNotificationSettings)
         .where(eq(tenantNotificationSettings.tenantId, ctx.tenantId)),
     )
+    const [p] = await ctx.db((tx) =>
+      tx
+        .select()
+        .from(tenantNotificationPolicy)
+        .where(eq(tenantNotificationPolicy.tenantId, ctx.tenantId))
+        .limit(1),
+    )
+    policyRow = p ?? null
   } catch {
     settingRows = []
   }
 
   const initial: Record<
     string,
-    { enabled: boolean; roleKeys: string[]; userIds: string[]; reminderHours: number | null }
+    {
+      enabled: boolean
+      roleKeys: string[]
+      userIds: string[]
+      reminderHours: number | null
+      channels: string[]
+      escalation: { afterDays: number; roleKeys: string[] }[]
+    }
   > = {}
   for (const r of settingRows) {
     initial[r.category] = {
@@ -58,7 +80,16 @@ export default async function NotificationSettingsPage() {
       roleKeys: r.roleKeys ?? [],
       userIds: r.userIds ?? [],
       reminderHours: r.reminderHours,
+      channels: r.channels ?? [],
+      escalation: r.escalation ?? [],
     }
+  }
+
+  const policy = {
+    unifiedDetection: policyRow?.unifiedDetection ?? false,
+    digestMode: (policyRow?.digestMode ?? 'off') as 'off' | 'daily' | 'weekly',
+    digestHourUtc: policyRow?.digestHourUtc ?? 7,
+    quietHours: policyRow?.quietHours ?? null,
   }
 
   const members = memberRows
@@ -78,6 +109,7 @@ export default async function NotificationSettingsPage() {
           roles={roleRows}
           members={members}
           initial={initial}
+          policy={policy}
         />
       </div>
     </PageContainer>

@@ -84,6 +84,13 @@ export const tenantNotificationSettings = pgTable(
     // For recurring "still overdue / still due" scans: re-alert at most this
     // often (hours). null => the scan's built-in default window.
     reminderHours: integer('reminder_hours'),
+    // Routing (Phase 2): which channels this category may use. The notify worker
+    // intersects this with each user's per-channel preferences. Empty => the
+    // emitter's built-in channel set.
+    channels: jsonb('channels').$type<string[]>().default([]).notNull(),
+    // Escalation ladder (Phase 2): once a subject has been overdue for N days,
+    // also alert these roles. Evaluated daily against compliance_status.
+    escalation: jsonb('escalation').$type<{ afterDays: number; roleKeys: string[] }[]>().default([]).notNull(),
     ...timestamps,
   },
   (t) => ({
