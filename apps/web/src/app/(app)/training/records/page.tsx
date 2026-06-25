@@ -78,12 +78,14 @@ export default async function TrainingRecordsPage({
   // read.all (or super-admin) sees the whole tenant; read.self is scoped to the
   // viewer's own person by moduleScopeWhere below. No training-read permission
   // at all → 404, mirroring the find_training_records assistant-tool gate.
-  if (
-    !ctx.isSuperAdmin &&
-    !can(ctx, 'training.read.all') &&
-    !can(ctx, 'training.read.self')
-  )
+  if (!ctx.isSuperAdmin && !can(ctx, 'training.read.all') && !can(ctx, 'training.read.self'))
     notFound()
+  // Bulk-action availability — the floating bar and row checkboxes render only
+  // when the viewer can act. Renew/Revoke need training.record.create; bulk CSV
+  // export is restricted to all-viewers (a self-only viewer must not export
+  // arbitrary ids). The server actions re-check these via assertCan.
+  const canManage = can(ctx, 'training.record.create')
+  const canExport = can(ctx, 'training.read.all')
   const today = new Date().toISOString().slice(0, 10)
   const todayMs = new Date(today).getTime()
 
@@ -291,6 +293,8 @@ export default async function TrainingRecordsPage({
             currentParams={sp}
             sort={params.sort}
             dir={params.dir}
+            canManage={canManage}
+            canExport={canExport}
           />
           <Pagination
             basePath="/training/records"

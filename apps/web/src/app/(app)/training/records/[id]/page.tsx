@@ -42,6 +42,7 @@ import {
   trainingRecords,
 } from '@beaconhs/db/schema'
 import { publicUrl } from '@beaconhs/storage'
+import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { canSeeRecord } from '@/lib/visibility'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
@@ -73,6 +74,9 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 async function renewRecord(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  // A server action is a POST endpoint; the page's render-time gate does not
+  // protect it. Recording (renewing) training requires training.record.create.
+  assertCan(ctx, 'training.record.create')
   const id = String(formData.get('id') ?? '')
   const completedOnRaw = String(formData.get('completedOn') ?? '').trim()
   const expiresOnRaw = String(formData.get('expiresOn') ?? '').trim() || null
@@ -140,6 +144,9 @@ async function renewRecord(formData: FormData) {
 async function revokeRecord(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  // Mutating (revoking) a training record requires training.record.create,
+  // matching renewRecord and the bulk actions. Direct POSTs bypass the page gate.
+  assertCan(ctx, 'training.record.create')
   const id = String(formData.get('id') ?? '')
   const reason = String(formData.get('reason') ?? '').trim() || null
   if (!id) return
@@ -232,6 +239,10 @@ export default async function TrainingRecordPage({
   const isRevoked = record.deletedAt != null
   const credentialOutputs = enabledCredentialOutputs(tenantSettings)
   const canDesignCredentials = canDesignTrainingCredentials(ctx)
+  // Recording training (renew/revoke) is gated separately from viewing: a
+  // read-only viewer (e.g. foreman with training.read.all) sees the record but
+  // not the mutate forms. Mirrors the assertCan in renewRecord/revokeRecord.
+  const canRecord = can(ctx, 'training.record.create')
 
   const today = new Date()
   const exp = record.expiresOn ? new Date(record.expiresOn) : null
@@ -350,65 +361,71 @@ export default async function TrainingRecordPage({
               </Card>
             ) : null}
 
-            <Section title="Renew this training">
-              <p className="mb-3 text-sm text-slate-600 dark:text-slate-400">
-                Creates a new training record for the same person and course with a fresh expiry.
-                Useful for refresher courses or external recertification.
-              </p>
-              <form action={renewRecord} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <input type="hidden" name="id" value={id} />
-                <Field label="Completed on" required>
-                  <Input
-                    name="completedOn"
-                    type="date"
-                    required
-                    defaultValue={new Date().toISOString().slice(0, 10)}
-                  />
-                </Field>
-                <Field label="Expires on">
-                  <Input
-                    name="expiresOn"
-                    type="date"
-                    placeholder={
-                      course.validForMonths ? `Defaults to +${course.validForMonths} months` : ''
-                    }
-                  />
-                </Field>
-                <Field label="Instructor">
-                  <Input name="instructor" defaultValue={record.instructor ?? ''} />
-                </Field>
-                <Field label="Grade %">
-                  <Input name="grade" type="number" min="0" max="100" placeholder="Optional" />
-                </Field>
-                <Field label="Notes" className="sm:col-span-2">
-                  <Textarea name="notes" rows={2} placeholder="Notes about this renewal" />
-                </Field>
-                <div className="flex justify-end sm:col-span-2">
-                  <Button type="submit">
-                    <RotateCcw size={14} /> Renew
-                  </Button>
-                </div>
-              </form>
-            </Section>
+            {canRecord ? (
+              <>
+                <Section title="Renew this training">
+                  <p className="mb-3 text-sm text-slate-600 dark:text-slate-400">
+                    Creates a new training record for the same person and course with a fresh
+                    expiry. Useful for refresher courses or external recertification.
+                  </p>
+                  <form action={renewRecord} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <input type="hidden" name="id" value={id} />
+                    <Field label="Completed on" required>
+                      <Input
+                        name="completedOn"
+                        type="date"
+                        required
+                        defaultValue={new Date().toISOString().slice(0, 10)}
+                      />
+                    </Field>
+                    <Field label="Expires on">
+                      <Input
+                        name="expiresOn"
+                        type="date"
+                        placeholder={
+                          course.validForMonths
+                            ? `Defaults to +${course.validForMonths} months`
+                            : ''
+                        }
+                      />
+                    </Field>
+                    <Field label="Instructor">
+                      <Input name="instructor" defaultValue={record.instructor ?? ''} />
+                    </Field>
+                    <Field label="Grade %">
+                      <Input name="grade" type="number" min="0" max="100" placeholder="Optional" />
+                    </Field>
+                    <Field label="Notes" className="sm:col-span-2">
+                      <Textarea name="notes" rows={2} placeholder="Notes about this renewal" />
+                    </Field>
+                    <div className="flex justify-end sm:col-span-2">
+                      <Button type="submit">
+                        <RotateCcw size={14} /> Renew
+                      </Button>
+                    </div>
+                  </form>
+                </Section>
 
-            {!isRevoked ? (
-              <Section title="Revoke this record">
-                <p className="mb-3 text-sm text-slate-600 dark:text-slate-400">
-                  Marks the record and any active certificates as revoked. Verification pages will
-                  return a revoked status. This action is recorded in the audit log.
-                </p>
-                <form action={revokeRecord} className="space-y-3 text-sm">
-                  <input type="hidden" name="id" value={id} />
-                  <Field label="Reason">
-                    <Input name="reason" placeholder="Reason for revocation" />
-                  </Field>
-                  <div className="flex justify-end">
-                    <Button type="submit" variant="destructive">
-                      <ShieldOff size={14} /> Revoke
-                    </Button>
-                  </div>
-                </form>
-              </Section>
+                {!isRevoked ? (
+                  <Section title="Revoke this record">
+                    <p className="mb-3 text-sm text-slate-600 dark:text-slate-400">
+                      Marks the record and any active certificates as revoked. Verification pages
+                      will return a revoked status. This action is recorded in the audit log.
+                    </p>
+                    <form action={revokeRecord} className="space-y-3 text-sm">
+                      <input type="hidden" name="id" value={id} />
+                      <Field label="Reason">
+                        <Input name="reason" placeholder="Reason for revocation" />
+                      </Field>
+                      <div className="flex justify-end">
+                        <Button type="submit" variant="destructive">
+                          <ShieldOff size={14} /> Revoke
+                        </Button>
+                      </div>
+                    </form>
+                  </Section>
+                ) : null}
+              </>
             ) : null}
           </>
         ) : null}

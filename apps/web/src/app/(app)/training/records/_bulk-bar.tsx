@@ -10,19 +10,40 @@ import {
   bulkRevokeTrainingRecords,
 } from './_actions'
 
+type BulkAction = 'renew' | 'revoke' | 'export'
+
 export function BulkTrainingRecordsBar({
   selectedIds,
   onClear,
+  canManage,
+  canExport,
 }: {
   selectedIds: string[]
   onClear: () => void
+  /** training.record.create — gates Renew/Revoke. */
+  canManage: boolean
+  /** training.read.all — gates Export (only all-viewers may bulk-export). */
+  canExport: boolean
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
-  const [action, setAction] = useState<'renew' | 'revoke' | 'export'>('renew')
+  const [action, setAction] = useState<BulkAction>(canManage ? 'renew' : 'export')
   const [reason, setReason] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
+
+  const actionOptions = useMemo<{ value: BulkAction; label: string }[]>(
+    () => [
+      ...(canManage
+        ? [
+            { value: 'renew' as const, label: 'Renew (create new record)' },
+            { value: 'revoke' as const, label: 'Revoke' },
+          ]
+        : []),
+      ...(canExport ? [{ value: 'export' as const, label: 'Export selected to CSV' }] : []),
+    ],
+    [canManage, canExport],
+  )
 
   const label = useMemo(
     () => `${selectedIds.length} record${selectedIds.length === 1 ? '' : 's'} selected`,
@@ -30,6 +51,8 @@ export function BulkTrainingRecordsBar({
   )
 
   if (selectedIds.length === 0) return null
+  // No actionable permission → no bar (the list also hides the row checkboxes).
+  if (actionOptions.length === 0) return null
 
   function go() {
     setError(null)
@@ -110,13 +133,15 @@ export function BulkTrainingRecordsBar({
 
         <Select
           value={action}
-          onChange={(e) => setAction(e.target.value as typeof action)}
+          onChange={(e) => setAction(e.target.value as BulkAction)}
           className="h-8 min-w-[10rem]"
           disabled={pending}
         >
-          <option value="renew">Renew (create new record)</option>
-          <option value="revoke">Revoke</option>
-          <option value="export">Export selected to CSV</option>
+          {actionOptions.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
         </Select>
 
         {action === 'revoke' ? (

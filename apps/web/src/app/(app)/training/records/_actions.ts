@@ -17,6 +17,7 @@
 import { revalidatePath } from 'next/cache'
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
 import { people, trainingCourses, trainingRecords } from '@beaconhs/db/schema'
+import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { csvRow } from '@/lib/csv'
@@ -64,6 +65,9 @@ export async function bulkRenewTrainingRecords(args: {
   recordIds: string[]
 }): Promise<BulkActionResult> {
   const ctx = await requireRequestContext()
+  // Server actions are POST endpoints — gate the mutation here, not just in the
+  // list UI. Renewing mints new training_records rows → training.record.create.
+  assertCan(ctx, 'training.record.create')
   if (args.recordIds.length === 0) return { ok: false, error: 'No records selected.' }
   const ids = args.recordIds.slice(0, MAX_BULK)
   const batchId = makeBatchId()
@@ -163,6 +167,8 @@ export async function bulkRevokeTrainingRecords(args: {
   reason?: string | null
 }): Promise<BulkActionResult> {
   const ctx = await requireRequestContext()
+  // Revoking soft-deletes training_records — same write privilege as renew.
+  assertCan(ctx, 'training.record.create')
   if (args.recordIds.length === 0) return { ok: false, error: 'No records selected.' }
   const ids = args.recordIds.slice(0, MAX_BULK)
   const batchId = makeBatchId()
@@ -214,6 +220,10 @@ export async function bulkExportTrainingRecordsCsv(args: {
   recordIds: string[]
 }): Promise<BulkCsvResult> {
   const ctx = await requireRequestContext()
+  // Bulk export takes caller-supplied ids and is not otherwise scoped, so a
+  // self-only viewer could exfiltrate anyone's records. Restrict to all-viewers
+  // (training.read.all / super-admin); the list UI hides Export for everyone else.
+  assertCan(ctx, 'training.read.all')
   if (args.recordIds.length === 0) return { ok: false, error: 'No records selected.' }
   const ids = args.recordIds.slice(0, MAX_BULK)
   const batchId = makeBatchId()

@@ -32,6 +32,8 @@ export function TrainingRecordsTable({
   currentParams,
   sort,
   dir,
+  canManage,
+  canExport,
 }: {
   rows: TrainingRecordsTableRow[]
   credentialOutputs: CredentialOutput[]
@@ -39,7 +41,14 @@ export function TrainingRecordsTable({
   currentParams: Record<string, string | string[] | undefined>
   sort: string
   dir: 'asc' | 'desc'
+  /** training.record.create — gates the bulk Renew/Revoke actions. */
+  canManage: boolean
+  /** training.read.all — gates the bulk CSV export. */
+  canExport: boolean
 }) {
+  // No bulk action available → no row selection at all (e.g. a self-only viewer
+  // who can see their own records but neither manage nor bulk-export them).
+  const bulkEnabled = canManage || canExport
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
   const allSelected = useMemo(
@@ -85,7 +94,9 @@ export function TrainingRecordsTable({
               key={r.id}
               href={`/training/records/${r.id}`}
               leading={
-                <SelectionCheckbox id={r.id} selected={selected.has(r.id)} onToggle={toggleOne} />
+                bulkEnabled ? (
+                  <SelectionCheckbox id={r.id} selected={selected.has(r.id)} onToggle={toggleOne} />
+                ) : undefined
               }
               person={`${r.personLastName}, ${r.personFirstName}`}
               reference={r.courseCode}
@@ -114,9 +125,11 @@ export function TrainingRecordsTable({
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-400">
-              <th className="w-8 px-3 py-2">
-                <HeaderSelectAll allSelected={allSelected} onToggleAll={toggleAll} />
-              </th>
+              {bulkEnabled ? (
+                <th className="w-8 px-3 py-2">
+                  <HeaderSelectAll allSelected={allSelected} onToggleAll={toggleAll} />
+                </th>
+              ) : null}
               <SortTh column="employee" {...sortProps}>
                 Employee
               </SortTh>
@@ -155,9 +168,11 @@ export function TrainingRecordsTable({
                       : 'hover:bg-slate-50/50 dark:hover:bg-slate-800/60'
                   }
                 >
-                  <td className="w-8 px-3 py-2">
-                    <SelectionCheckbox id={r.id} selected={isSelected} onToggle={toggleOne} />
-                  </td>
+                  {bulkEnabled ? (
+                    <td className="w-8 px-3 py-2">
+                      <SelectionCheckbox id={r.id} selected={isSelected} onToggle={toggleOne} />
+                    </td>
+                  ) : null}
                   <td className="px-3 py-2">
                     <Link
                       href={`/training/transcripts/${r.personId}` as any}
@@ -234,7 +249,14 @@ export function TrainingRecordsTable({
           </tbody>
         </table>
       </div>
-      <BulkTrainingRecordsBar selectedIds={Array.from(selected)} onClear={clear} />
+      {bulkEnabled ? (
+        <BulkTrainingRecordsBar
+          selectedIds={Array.from(selected)}
+          onClear={clear}
+          canManage={canManage}
+          canExport={canExport}
+        />
+      ) : null}
     </>
   )
 }
