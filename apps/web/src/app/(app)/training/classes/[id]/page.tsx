@@ -28,8 +28,8 @@ import {
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { runIntegrations, type TrainingClassCompletedEvent } from '@/lib/integrations'
-import { LiveDateTime, LiveField, LivePersonSelect, LiveSelect } from '@/components/live-field'
 import { PersonSelectField } from '@/components/person-select-field'
+import { ClassDetailFields } from '../_class-fields'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { DetailPageLayout } from '@/components/page-layout'
 import { cancelClass, deleteClass, reopenClass, updateClassField } from '../_actions'
@@ -357,11 +357,6 @@ export default async function TrainingClassPage({
   const cancelAction = cancelClass.bind(null, id)
   const reopenAction = reopenClass.bind(null, id)
   const deleteAction = deleteClass.bind(null, id)
-  const instructorOptions = instructors.map((i) => ({
-    value: i.id,
-    label: i.displayName ?? i.name ?? '(no name)',
-    hint: i.email ?? undefined,
-  }))
 
   return (
     <DetailPageLayout
@@ -420,108 +415,31 @@ export default async function TrainingClassPage({
     >
       <div className="space-y-5">
         {active === 'details' ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>Class details</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {isCompleted ? (
+          <ClassDetailFields
+            id={id}
+            initial={{
+              courseId: cls.courseId,
+              title: cls.title,
+              startsAt: toLocalInput(startsAt),
+              endsAt: toLocalInput(endsAt),
+              siteOrgUnitId: cls.siteOrgUnitId,
+              instructorTenantUserId: cls.instructorTenantUserId,
+              capacity: cls.capacity != null ? String(cls.capacity) : null,
+              notes: cls.notes,
+            }}
+            options={{ courses, sites, instructors }}
+            disabled={isCompleted}
+            courseHref={course ? `/training/courses/${course.id}` : null}
+            notice={
+              isCompleted ? (
                 <p className="text-sm text-slate-600 dark:text-slate-400">
                   This class is complete — details are locked. Training records have been issued
                   from the roster.
                 </p>
-              ) : null}
-              <div className="space-y-1">
-                <LiveSelect
-                  id={id}
-                  field="courseId"
-                  label="Course"
-                  initialValue={cls.courseId}
-                  allowEmpty={false}
-                  options={courses.map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))}
-                  disabled={isCompleted}
-                  updateAction={updateClassField}
-                />
-                {course ? (
-                  <Link
-                    href={`/training/courses/${course.id}`}
-                    className="text-xs text-teal-700 hover:underline dark:text-teal-400"
-                  >
-                    Open course page →
-                  </Link>
-                ) : null}
-              </div>
-              <LiveField
-                id={id}
-                field="title"
-                label="Title"
-                initialValue={cls.title}
-                disabled={isCompleted}
-                updateAction={updateClassField}
-              />
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <LiveDateTime
-                  id={id}
-                  field="startsAt"
-                  label="Starts at"
-                  initialValue={toLocalInput(startsAt)}
-                  disabled={isCompleted}
-                  updateAction={updateClassField}
-                />
-                <LiveDateTime
-                  id={id}
-                  field="endsAt"
-                  label="Ends at"
-                  initialValue={toLocalInput(endsAt)}
-                  disabled={isCompleted}
-                  updateAction={updateClassField}
-                />
-              </div>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <LiveSelect
-                  id={id}
-                  field="siteOrgUnitId"
-                  label="Site (location)"
-                  initialValue={cls.siteOrgUnitId}
-                  options={sites.map((s) => ({ value: s.id, label: s.name }))}
-                  emptyLabel="— No site —"
-                  disabled={isCompleted}
-                  updateAction={updateClassField}
-                />
-                <LivePersonSelect
-                  id={id}
-                  field="instructorTenantUserId"
-                  label="Instructor"
-                  initialValue={cls.instructorTenantUserId}
-                  options={instructorOptions}
-                  sheetTitle="Select an instructor"
-                  placeholder="Pick an instructor…"
-                  searchPlaceholder="Search instructors…"
-                  disabled={isCompleted}
-                  updateAction={updateClassField}
-                />
-              </div>
-              <LiveField
-                id={id}
-                field="capacity"
-                label="Max attendees"
-                initialValue={cls.capacity != null ? String(cls.capacity) : null}
-                type="number"
-                disabled={isCompleted}
-                updateAction={updateClassField}
-              />
-              <LiveField
-                id={id}
-                field="notes"
-                label="Notes"
-                initialValue={cls.notes}
-                multiline
-                rows={3}
-                disabled={isCompleted}
-                updateAction={updateClassField}
-              />
-            </CardContent>
-          </Card>
+              ) : null
+            }
+            updateAction={updateClassField}
+          />
         ) : null}
 
         {active === 'roster' ? (

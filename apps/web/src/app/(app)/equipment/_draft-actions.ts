@@ -1,19 +1,21 @@
 'use server'
 
-import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { randomBytes } from 'crypto'
+import { eq } from 'drizzle-orm'
 import { equipmentItems } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 
 /**
- * Instant-create a DRAFT equipment item and land in its detail editor (Edit
- * tab). The item appears in the register immediately with a "Draft" badge; the
- * flag clears the first time its details are saved. Asset tag + name get
- * placeholders the user replaces.
+ * Lazy draft create: called by the /equipment/new page's LazyRecordProvider on
+ * the user's first name edit — so glancing at "new" and leaving creates
+ * nothing. Returns the id; the provider then navigates into the detail editor.
+ * The item stays flagged `isDraft` (Draft badge) until the edit form is saved.
  */
-export async function createEquipmentDraft(): Promise<void> {
+export async function createEquipmentDraft(): Promise<
+  { ok: true; id: string } | { ok: false; error: string }
+> {
   const ctx = await requireRequestContext()
   const qrToken = randomBytes(12).toString('base64url')
   const assetTag = `DRAFT-${randomBytes(3).toString('hex').toUpperCase()}`
@@ -31,7 +33,7 @@ export async function createEquipmentDraft(): Promise<void> {
       .returning({ id: equipmentItems.id })
     return row?.id
   })
-  if (!itemId) return
+  if (!itemId) return { ok: false, error: 'Failed to create equipment.' }
   await recordAudit(ctx, {
     entityType: 'equipment_item',
     entityId: itemId,
@@ -39,5 +41,18 @@ export async function createEquipmentDraft(): Promise<void> {
     summary: 'Started a draft equipment item',
   })
   revalidatePath('/equipment')
-  redirect(`/equipment/${itemId}?tab=edit`)
+  return { ok: true, id: itemId }
+}
+
+// Name field-update for the lazy /equipment/new name field (LiveField FormData
+// contract). The full edit form on the detail page clears the draft flag.
+export async function updateEquipmentName(formData: FormData): Promise<void> {
+  const ctx = await requireRequestContext()
+  const id = String(formData.get('id') ?? '')
+  const value = String(formData.get('value') ?? '')
+  if (!id) throw new Error('Missing id')
+  const name = value.trim() || 'Untitled equipment'
+  await ctx.db((tx) => tx.update(equipmentItems).set({ name }).where(eq(equipmentItems.id, id)))
+  revalidatePath(`/equipment/${id}`)
+  revalidatePath('/equipment')
 }

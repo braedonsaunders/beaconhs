@@ -12,16 +12,17 @@
 // per affected document plus a summary entry, sharing a batchId.
 
 import { revalidatePath } from 'next/cache'
-import { redirect } from 'next/navigation'
 import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { documentBookItems, documentBooks, documentDrafts, documents } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 
-// Creates a blank draft document and jumps straight to its manage page, where
-// all header info is filled in and the editor is launched. (No separate create
-// form — the manage page is the single hub.)
-export async function createBlankDocument(): Promise<void> {
+// Lazy draft create: called by the /documents/new page's LazyRecordProvider on
+// the user's first title edit — so glancing at "new" and leaving creates
+// nothing. Returns the id; the provider then navigates to the manage page.
+export async function createBlankDocument(): Promise<
+  { ok: true; id: string } | { ok: false; error: string }
+> {
   const ctx = await requireRequestContext()
   const key = `untitled-${Math.random().toString(36).slice(2, 8)}`
   const id = await ctx.db(async (tx) => {
@@ -46,7 +47,20 @@ export async function createBlankDocument(): Promise<void> {
     summary: 'Created document',
   })
   revalidatePath('/documents')
-  redirect(`/documents/${id}`)
+  return { ok: true, id }
+}
+
+// Title field-update for the lazy /documents/new title field (LiveField FormData
+// contract). Existing docs rename via the editor's renameDocument.
+export async function updateDocumentTitle(formData: FormData): Promise<void> {
+  const ctx = await requireRequestContext()
+  const id = String(formData.get('id') ?? '')
+  const value = String(formData.get('value') ?? '')
+  if (!id) throw new Error('Missing id')
+  const title = value.trim() || 'Untitled document'
+  await ctx.db((tx) => tx.update(documents).set({ title }).where(eq(documents.id, id)))
+  revalidatePath(`/documents/${id}`)
+  revalidatePath('/documents')
 }
 
 export type BulkActionResult =

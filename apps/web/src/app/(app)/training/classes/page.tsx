@@ -26,7 +26,6 @@ import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
 import { TrainingSubNav } from '../_components/training-sub-nav'
-import { createClassDraft } from './_actions'
 
 export const metadata = { title: 'Training classes' }
 export const dynamic = 'force-dynamic'
@@ -132,9 +131,9 @@ export default async function TrainingClassesPage({
                     <CalendarDays size={14} /> Calendar
                   </Button>
                 </Link>
-                <form action={createClassDraft}>
-                  <Button type="submit">Schedule new class</Button>
-                </form>
+                <Link href="/training/classes/new">
+                  <Button>Schedule new class</Button>
+                </Link>
               </div>
             }
           />
@@ -158,9 +157,9 @@ export default async function TrainingClassesPage({
           title={whenFilter === 'past' ? 'No past classes' : 'No classes scheduled'}
           description="Schedule a class for any course in the catalogue."
           action={
-            <form action={createClassDraft}>
-              <Button type="submit">Schedule a class</Button>
-            </form>
+            <Link href="/training/classes/new">
+              <Button>Schedule a class</Button>
+            </Link>
           }
         />
       ) : (

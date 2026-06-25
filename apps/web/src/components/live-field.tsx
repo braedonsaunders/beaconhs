@@ -20,6 +20,7 @@ import {
   cn,
   type SelectOption,
 } from '@beaconhs/ui'
+import { useLazyRecord } from './lazy-record'
 
 type SaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error'
 
@@ -28,10 +29,13 @@ function useAutoSave({
   field,
   updateAction,
 }: {
-  id: string
+  // Absent on a lazy "new record" page — the id is created on first save via
+  // the LazyRecordProvider context.
+  id?: string
   field: string
   updateAction: (formData: FormData) => Promise<void>
 }) {
+  const lazy = useLazyRecord()
   const [state, setState] = useState<SaveState>('idle')
   const [, start] = useTransition()
   const latest = useRef<string>('')
@@ -42,12 +46,20 @@ function useAutoSave({
     if (inFlight.current) return // the in-flight completion re-checks latest
     inFlight.current = true
     setState('saving')
-    const fd = new FormData()
-    fd.set('id', id)
-    fd.set('field', field)
-    fd.set('value', value)
     start(async () => {
       try {
+        // Existing record: use the given id. New record: create the draft row
+        // on the first save (once), then write against it.
+        const rid = id ?? (lazy ? await lazy.ensureId() : null)
+        if (!rid) {
+          inFlight.current = false
+          setState('error')
+          return
+        }
+        const fd = new FormData()
+        fd.set('id', rid)
+        fd.set('field', field)
+        fd.set('value', value)
         await updateAction(fd)
         inFlight.current = false
         if (latest.current !== value) {
@@ -55,6 +67,8 @@ function useAutoSave({
         } else {
           setState('saved')
           setTimeout(() => setState((s) => (s === 'saved' ? 'idle' : s)), 2000)
+          // Lazy record: hand off to the real record URL after the first save.
+          if (!id && lazy) lazy.notifySaved()
         }
       } catch {
         inFlight.current = false
@@ -112,7 +126,7 @@ export function LiveField({
   disabled,
   updateAction,
 }: {
-  id: string
+  id?: string
   field: string
   label: string
   initialValue: string | null
@@ -187,7 +201,7 @@ export function LiveSelect({
   disabled,
   updateAction,
 }: {
-  id: string
+  id?: string
   field: string
   label: string
   initialValue: string | null
@@ -235,7 +249,7 @@ export function LivePersonSelect({
   disabled,
   updateAction,
 }: {
-  id: string
+  id?: string
   field: string
   label: string
   initialValue: string | null
@@ -279,7 +293,7 @@ export function LiveDateTime({
   disabled,
   updateAction,
 }: {
-  id: string
+  id?: string
   field: string
   label: string
   /** datetime-local formatted string, e.g. 2026-06-11T14:30 */
@@ -319,7 +333,7 @@ export function LiveToggle({
   disabled,
   updateAction,
 }: {
-  id: string
+  id?: string
   field: string
   label: string
   initialValue: boolean
@@ -409,7 +423,7 @@ export function LiveSeverityRating({
   disabled,
   updateAction,
 }: {
-  id: string
+  id?: string
   field: string
   label: string
   initialValue: number | null
@@ -495,7 +509,7 @@ export function LiveRichText({
   disabled,
   updateAction,
 }: {
-  id: string
+  id?: string
   field: string
   label: string
   initialValue: string | null

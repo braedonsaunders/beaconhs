@@ -17,36 +17,41 @@ import { trainingClasses, trainingCourses, trainingRecords } from '@beaconhs/db/
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 
-// Draft-first create (documents "New document" pattern): instantly insert a
-// draft class and land on its unified record — no intermediary form page. The
-// course defaults to the first in the catalogue (or is passed from a course
-// page); everything is then adjusted in place via the auto-saving fields.
-export async function createClassDraft(formData: FormData): Promise<void> {
+// Lazy draft create: called by the /training/classes/new page's
+// LazyRecordProvider on the user's FIRST field edit — so glancing at "new" and
+// leaving creates nothing. Returns the id; the provider then navigates to the
+// real record. The course defaults to the first in the catalogue and is then
+// adjusted in place via the auto-saving field.
+export async function createClassDraft(): Promise<
+  { ok: true; id: string } | { ok: false; error: string }
+> {
   const ctx = await requireRequestContext()
-  let courseId = String(formData.get('courseId') ?? '').trim()
   const startsAt = new Date()
   const endsAt = new Date(startsAt.getTime() + 60 * 60_000)
 
   const newId = await ctx.db(async (tx) => {
-    if (!courseId) {
-      const [first] = await tx
-        .select({ id: trainingCourses.id })
-        .from(trainingCourses)
-        .orderBy(asc(trainingCourses.name))
-        .limit(1)
-      if (!first) return null // no courses in the catalogue yet
-      courseId = first.id
-    }
+    const [first] = await tx
+      .select({ id: trainingCourses.id })
+      .from(trainingCourses)
+      .orderBy(asc(trainingCourses.name))
+      .limit(1)
+    if (!first) return null // no courses in the catalogue yet
     const [row] = await tx
       .insert(trainingClasses)
-      .values({ tenantId: ctx.tenantId, courseId, title: 'Untitled class', startsAt, endsAt })
+      .values({
+        tenantId: ctx.tenantId,
+        courseId: first.id,
+        title: 'Untitled class',
+        startsAt,
+        endsAt,
+      })
       .returning({ id: trainingClasses.id })
     return row?.id ?? null
   })
 
-  // A class needs a course; send them to create one first if the catalogue is empty.
-  if (!newId) redirect('/training/courses/new')
-
+  if (!newId) {
+    return { ok: false, error: 'Add a course to the catalogue before scheduling a class.' }
+  }
   await recordAudit(ctx, {
     entityType: 'training_class',
     entityId: newId,
@@ -54,7 +59,7 @@ export async function createClassDraft(formData: FormData): Promise<void> {
     summary: 'Created class draft',
   })
   revalidatePath('/training/classes')
-  redirect(`/training/classes/${newId}`)
+  return { ok: true, id: newId }
 }
 
 const CLASS_REQUIRED_IDS = new Set(['courseId'])
