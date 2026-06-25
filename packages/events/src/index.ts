@@ -17,7 +17,6 @@ import {
   caAssignedEmail,
   caCompletedEmail,
   incidentReportedEmail,
-  loneWorkerOverdueEmail,
 } from '@beaconhs/emails'
 import { enqueueEmail, enqueueNotification } from '@beaconhs/jobs'
 import {
@@ -78,12 +77,13 @@ function appUrl(linkPath: string): string {
 // Built-in audience when a tenant hasn't customised a category in
 // /admin/notifications. Exported so the admin UI can pre-fill the role pickers
 // with the same defaults the dispatcher falls back to.
+// Only NATIVE, guaranteed-to-exist sources get a built-in category: the
+// incidents module, corrective actions, and the compliance engine. Builder apps
+// (lone worker, any monitored/custom app) route their alerts through Flows —
+// they're per-tenant + dynamic, so they must NOT have hardcoded categories here.
 export const DEFAULT_ROLES_BY_CATEGORY: Record<string, string[]> = {
   incident: ['safety_manager', 'tenant_admin'],
   ca: ['safety_manager', 'tenant_admin'],
-  training: ['safety_manager', 'tenant_admin'],
-  document: ['safety_manager', 'tenant_admin'],
-  lone_worker: ['safety_manager', 'tenant_admin'],
   compliance: ['safety_manager', 'tenant_admin'],
 }
 
@@ -522,94 +522,6 @@ export async function emitCorrectiveActionCompleted(
     }
   } catch (err) {
     logFailure('emitCorrectiveActionCompleted', err)
-  }
-}
-
-// --- Monitored sessions (Lone Worker + any monitored Builder app) --------
-
-/**
- * Overdue escalation for a monitored-session response — the generic engine that
- * powers Lone Worker and any future monitored app (permit timers, periodic
- * checks…). Fired by the worker's `form_session_overdue_scan` once a session
- * passes `nextCheckinDueAt + grace`, keyed off a `form_response`. Reuses the
- * `lone_worker` audience category + recipient overrides. Never throws.
- */
-export async function emitMonitoredSessionOverdue(
-  tenantId: string,
-  responseId: string,
-): Promise<void> {
-  const ctx = workerEventCtx(tenantId)
-  try {
-    const res = await ctx.db(async (tx) => {
-      const [r] = await tx
-        .select({
-          id: formResponses.id,
-          templateId: formResponses.templateId,
-          nextCheckinDueAt: formResponses.nextCheckinDueAt,
-          startedAt: formResponses.createdAt,
-        })
-        .from(formResponses)
-        .where(eq(formResponses.id, responseId))
-        .limit(1)
-      return r ?? null
-    })
-    if (!res) return
-
-    const tenant = await getTenant(ctx, tenantId)
-    if (!tenant) return
-
-    const tmpl = await ctx.db(async (tx) => {
-      const [t] = await tx
-        .select({ name: formTemplates.name })
-        .from(formTemplates)
-        .where(eq(formTemplates.id, res.templateId))
-        .limit(1)
-      return t ?? null
-    })
-    const appName = tmpl?.name ?? 'Monitored session'
-
-    // Role-based safety net (safety_manager / tenant_admin or the tenant's
-    // configured 'lone_worker' recipients). Per-session supervisor targeting is
-    // layered on by the app in a later phase.
-    const audience = await resolveAudience(ctx, tenantId, 'lone_worker')
-    if (audience.length === 0) return
-
-    const linkPath = `/apps/responses/${res.id}`
-    const url = appUrl(linkPath)
-    const dueAt = res.nextCheckinDueAt ?? new Date()
-    const title = `CRITICAL: ${appName} — check-in overdue`
-
-    await enqueueNotification({
-      tenantId,
-      userIds: audience,
-      category: 'lone_worker',
-      type: 'monitored_session.overdue',
-      title,
-      body: `Check-in was due at ${dueAt.toISOString()}`,
-      linkPath,
-      data: { responseId: res.id, templateId: res.templateId },
-      isCritical: true,
-      channels: ['in_app', 'email', 'push', 'sms'],
-    })
-
-    const recipients = await emailsForUserIds(ctx, audience)
-    if (recipients.length > 0) {
-      const tpl = loneWorkerOverdueEmail({
-        tenant,
-        session: { task: appName, startedAt: res.startedAt, nextCheckinDueAt: dueAt },
-        worker: { name: appName },
-        url,
-      })
-      await enqueueEmail({
-        to: recipients,
-        subject: tpl.subject,
-        html: tpl.html,
-        text: tpl.text,
-        meta: { tenantId, category: 'lone_worker' },
-      })
-    }
-  } catch (err) {
-    logFailure('emitMonitoredSessionOverdue', err)
   }
 }
 

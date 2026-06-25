@@ -2,7 +2,6 @@ import type { Job } from 'bullmq'
 import { and, eq, sql } from 'drizzle-orm'
 import { db, withSuperAdmin } from '@beaconhs/db'
 import { formResponseCheckins, formResponses, tenantUsers, users } from '@beaconhs/db/schema'
-import { emitMonitoredSessionOverdue } from '@beaconhs/events'
 import { type ScheduledTick } from '@beaconhs/jobs'
 import { scanReportSchedules } from '../lib/report-scheduler'
 import { scanFormAssignments } from '../lib/form-assignment-scanner'
@@ -126,7 +125,10 @@ async function scanFormSessionOverdue(): Promise<void> {
           .limit(1)
         submitterEmail = u?.email ?? null
       }
-      const flowRan = await runSessionOverdueFlows({
+      // Alerting is the monitored app's own session_overdue Flow — a Builder app
+      // is per-tenant + dynamic, so the worker doesn't hardcode a fallback
+      // audience. (Detection above — status flip + missed check-in — is generic.)
+      await runSessionOverdueFlows({
         tx,
         tenantId: s.tenantId,
         responseId: s.id,
@@ -134,7 +136,6 @@ async function scanFormSessionOverdue(): Promise<void> {
         data: (s.data ?? {}) as Record<string, unknown>,
         submitterEmail,
       })
-      if (!flowRan) await emitMonitoredSessionOverdue(s.tenantId, s.id)
     }
   })
 }

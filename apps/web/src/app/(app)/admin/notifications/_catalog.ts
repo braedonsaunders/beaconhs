@@ -16,6 +16,10 @@ export type NotificationCategory = {
 const DEFAULT_AUDIENCE = ['safety_manager', 'tenant_admin']
 const defaults = (): string[] => [...DEFAULT_AUDIENCE]
 
+// Only the NATIVE engines that emit alerts in code — incidents, corrective
+// actions, and the compliance engine. Builder apps (lone worker, any custom or
+// monitored app) and module-specific alerts route through Flows, where the
+// audience is per-app and dynamic, so they don't belong in this fixed list.
 export const NOTIFICATION_CATEGORIES: NotificationCategory[] = [
   {
     key: 'incident',
@@ -34,24 +38,6 @@ export const NOTIFICATION_CATEGORIES: NotificationCategory[] = [
     label: 'Compliance',
     description:
       'Obligations becoming due, overdue, or expiring — the single source of due/overdue alerts.',
-    defaultRoles: defaults(),
-  },
-  {
-    key: 'training',
-    label: 'Training',
-    description: 'Training alerts raised by flows and modules.',
-    defaultRoles: defaults(),
-  },
-  {
-    key: 'document',
-    label: 'Documents',
-    description: 'Document alerts raised by flows and modules.',
-    defaultRoles: defaults(),
-  },
-  {
-    key: 'lone_worker',
-    label: 'Lone worker',
-    description: 'Missed safety check-ins and escalations.',
     defaultRoles: defaults(),
   },
 ]
