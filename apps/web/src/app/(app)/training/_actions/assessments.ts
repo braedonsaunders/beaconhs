@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { and, asc, eq } from 'drizzle-orm'
 import {
+  people,
   trainingAssessmentResults,
   trainingAssessmentTypeQuestions,
   trainingAssessmentTypes,
@@ -11,10 +12,38 @@ import {
   trainingCourses,
   trainingRecords,
 } from '@beaconhs/db/schema'
+import { can, type RequestContext } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { gradeAnswer, type QuestionKind } from '../_lib/grading'
+
+/**
+ * Resolve the signed-in user's People record id, or null when no People row is
+ * linked to their login (e.g. an admin with no worker profile). Mirrors
+ * resolvePersonId() in learn/_actions.ts but returns null instead of throwing,
+ * so proctors without a People row fall through to the permission check below.
+ */
+async function resolveMyPersonId(ctx: RequestContext): Promise<string | null> {
+  return ctx.db(async (tx) => {
+    const [p] = await tx
+      .select({ id: people.id })
+      .from(people)
+      .where(eq(people.userId, ctx.userId))
+      .limit(1)
+    return p?.id ?? null
+  })
+}
+
+/**
+ * A proctor/manager may start, answer, submit, or cancel an attempt on behalf of
+ * another candidate; ordinary candidates may only act on their own attempt.
+ * Either training-staff permission qualifies (recording training or running
+ * classes) — the admin roles grant them together.
+ */
+function canProctorAssessments(ctx: RequestContext): boolean {
+  return can(ctx, 'training.record.create') || can(ctx, 'training.class.manage')
+}
 
 /**
  * Begin a new assessment attempt. Creates the parent row + one
@@ -29,6 +58,14 @@ export async function startAssessmentAttempt(formData: FormData) {
   const typeId = String(formData.get('typeId') ?? '').trim()
   const personId = String(formData.get('personId') ?? '').trim()
   if (!typeId || !personId) throw new Error('Type and person are required')
+
+  // Starting an attempt for another person is a proctor/manager action (it can
+  // ultimately mint a training record for them). A learner may only start their
+  // own; anyone else needs an explicit training-write permission.
+  const myPersonId = await resolveMyPersonId(ctx)
+  if (personId !== myPersonId && !canProctorAssessments(ctx)) {
+    throw new Error('You can only start an assessment attempt for yourself')
+  }
 
   const created = await ctx.db(async (tx) => {
     const [type] = await tx
@@ -100,6 +137,7 @@ export async function submitAssessmentAttempt(attemptId: string, formData: FormD
   const ctx = await requireRequestContext()
   if (!ctx.tenantId) throw new Error('No active tenant')
   const tenantId: string = ctx.tenantId
+  const myPersonId = await resolveMyPersonId(ctx)
 
   const summary = await ctx.db(async (tx) => {
     const [attempt] = await tx
@@ -108,6 +146,13 @@ export async function submitAssessmentAttempt(attemptId: string, formData: FormD
       .where(eq(trainingAssessments.id, attemptId))
       .limit(1)
     if (!attempt) throw new Error('Attempt not found')
+    // Ownership: only the candidate (or a proctor/manager) may grade an attempt.
+    // A server action is a POST endpoint, so without this any tenant user could
+    // finalize someone else's in-progress attempt with arbitrary answers and
+    // mint a training record for that other person.
+    if (attempt.personId !== myPersonId && !canProctorAssessments(ctx)) {
+      throw new Error('That assessment attempt is not yours')
+    }
     if (attempt.status !== 'in_progress') throw new Error('Attempt is no longer editable')
 
     const results = await tx
@@ -198,8 +243,18 @@ export async function submitAssessmentAttempt(attemptId: string, formData: FormD
 export async function cancelAssessmentAttempt(attemptId: string) {
   const ctx = await requireRequestContext()
   if (!ctx.tenantId) throw new Error('No active tenant')
+  const myPersonId = await resolveMyPersonId(ctx)
 
   await ctx.db(async (tx) => {
+    const [attempt] = await tx
+      .select({ personId: trainingAssessments.personId })
+      .from(trainingAssessments)
+      .where(eq(trainingAssessments.id, attemptId))
+      .limit(1)
+    if (!attempt) throw new Error('Attempt not found')
+    if (attempt.personId !== myPersonId && !canProctorAssessments(ctx)) {
+      throw new Error('That assessment attempt is not yours')
+    }
     await tx
       .update(trainingAssessments)
       .set({ status: 'cancelled', completedAt: new Date() })
@@ -227,8 +282,20 @@ export async function setAssessmentAnswer(
 ) {
   const ctx = await requireRequestContext()
   if (!ctx.tenantId) throw new Error('No active tenant')
+  const myPersonId = await resolveMyPersonId(ctx)
 
   await ctx.db(async (tx) => {
+    const [attempt] = await tx
+      .select({ personId: trainingAssessments.personId, status: trainingAssessments.status })
+      .from(trainingAssessments)
+      .where(eq(trainingAssessments.id, attemptId))
+      .limit(1)
+    if (!attempt) throw new Error('Attempt not found')
+    if (attempt.personId !== myPersonId && !canProctorAssessments(ctx)) {
+      throw new Error('That assessment attempt is not yours')
+    }
+    if (attempt.status !== 'in_progress') throw new Error('Attempt is no longer editable')
+
     const [row] = await tx
       .select()
       .from(trainingAssessmentResults)
