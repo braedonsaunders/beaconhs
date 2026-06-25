@@ -6,7 +6,7 @@ import { Button, Input, Label, PageHeader, Select, Textarea } from '@beaconhs/ui
 import { db } from '@beaconhs/db'
 import { auditLog, tenants } from '@beaconhs/db/schema'
 import { seedLiftPlanTemplate } from '@beaconhs/db/seed/lift-plan-template'
-import { getCurrentUserId } from '@/lib/auth'
+import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
 
 export const metadata = { title: 'New tenant' }
@@ -24,8 +24,12 @@ function slugify(s: string): string {
 
 async function createTenant(formData: FormData): Promise<void> {
   'use server'
-  const userId = await getCurrentUserId()
-  if (!userId) redirect('/login')
+  // A server action is a POST endpoint — the /platform layout's super-admin
+  // redirect protects the page render, NOT this action. Re-check here, or any
+  // authenticated tenant member could create tenants (this bypasses RLS below).
+  const ctx = await requireRequestContext()
+  if (!ctx.isSuperAdmin) throw new Error('Only platform super-admins can create tenants.')
+  const userId = ctx.userId
 
   const name = String(formData.get('name') ?? '').trim()
   const customSlug = String(formData.get('slug') ?? '').trim() || null

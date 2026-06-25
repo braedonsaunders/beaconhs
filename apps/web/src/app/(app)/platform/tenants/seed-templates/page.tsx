@@ -32,7 +32,7 @@ import {
   LIFT_PLAN_TEMPLATE_NAME,
   seedLiftPlanTemplate,
 } from '@beaconhs/db/seed/lift-plan-template'
-import { getCurrentUserId } from '@/lib/auth'
+import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
 
 export const metadata = { title: 'Seed built-in templates' }
@@ -40,8 +40,10 @@ export const dynamic = 'force-dynamic'
 
 async function seedOne(formData: FormData): Promise<void> {
   'use server'
-  const userId = await getCurrentUserId()
-  if (!userId) redirect('/login')
+  // POST endpoint not covered by the /platform layout gate — re-check; this
+  // bypasses RLS to write into an arbitrary tenant.
+  const ctx = await requireRequestContext()
+  if (!ctx.isSuperAdmin) throw new Error('Only platform super-admins can seed templates.')
   const tenantId = String(formData.get('tenantId') ?? '').trim()
   if (!tenantId) return
 
@@ -54,8 +56,8 @@ async function seedOne(formData: FormData): Promise<void> {
 
 async function seedAll(): Promise<void> {
   'use server'
-  const userId = await getCurrentUserId()
-  if (!userId) redirect('/login')
+  const ctx = await requireRequestContext()
+  if (!ctx.isSuperAdmin) throw new Error('Only platform super-admins can seed templates.')
 
   await db.transaction(async (tx) => {
     await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
@@ -68,8 +70,8 @@ async function seedAll(): Promise<void> {
 }
 
 export default async function SeedTemplatesPage() {
-  const userId = await getCurrentUserId()
-  if (!userId) redirect('/login')
+  const ctx = await requireRequestContext()
+  if (!ctx.isSuperAdmin) redirect('/admin')
 
   // Pull each tenant + whether the lift-plan template is already present.
   // The LEFT JOIN keeps tenants that have zero templates in the list (so
