@@ -5,11 +5,7 @@
 
 import { useRef, useState, useTransition } from 'react'
 import { Input, Label, Textarea, cn } from '@beaconhs/ui'
-import {
-  setRecordHours,
-  setRecordNotes,
-  setRecordOccurredAt,
-} from '../_actions'
+import { setRecordHours, setRecordNotes, setRecordOccurredAt } from '../_actions'
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error'
 
@@ -84,7 +80,9 @@ export function RecordMeta({
         </div>
         <div className="sm:col-span-3">
           <div className="text-xs text-slate-500">Notes</div>
-          <div className="whitespace-pre-wrap text-slate-800 dark:text-slate-200">{notes || '—'}</div>
+          <div className="whitespace-pre-wrap text-slate-800 dark:text-slate-200">
+            {notes || '—'}
+          </div>
         </div>
       </div>
     )

@@ -336,7 +336,8 @@ export function CriterionCard({
       ) : null}
 
       {/* Photos */}
-      {photoPreviews.length > 0 || (!locked && (requiresPhoto || kind === 'photo' || answer === 'fail')) ? (
+      {photoPreviews.length > 0 ||
+      (!locked && (requiresPhoto || kind === 'photo' || answer === 'fail')) ? (
         <div className="mt-3 border-t border-slate-200 pt-3 dark:border-slate-800">
           {photoPreviews.length > 0 ? (
             <div className="mb-2 flex flex-wrap gap-2">

@@ -264,7 +264,11 @@ export function EquipmentInspectionTypeBuilder({
                     Build the checklist this inspection runs. Group questions into sections, drag to
                     reorder, and set each question&apos;s response type, severity, and flags.
                   </p>
-                  <Button variant="outline" className="w-full justify-start" onClick={handleAddGroup}>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start"
+                    onClick={handleAddGroup}
+                  >
                     <Plus size={14} /> Add section
                   </Button>
                   <Button
@@ -676,7 +680,11 @@ function CriterionEditorDrawer({
         </div>
         <div className="space-y-2 rounded-md border border-slate-200 p-3 dark:border-slate-800">
           <CheckboxRow label="Required answer" checked={isRequired} onChange={setIsRequired} />
-          <CheckboxRow label="Require a photo" checked={requiresPhoto} onChange={setRequiresPhoto} />
+          <CheckboxRow
+            label="Require a photo"
+            checked={requiresPhoto}
+            onChange={setRequiresPhoto}
+          />
           <CheckboxRow
             label="Require a comment"
             checked={requiresComment}

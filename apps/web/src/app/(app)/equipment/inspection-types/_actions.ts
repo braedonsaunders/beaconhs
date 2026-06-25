@@ -22,7 +22,9 @@ import { recordAudit } from '@/lib/audit'
 const KINDS = ['pass_fail', 'pass_fail_na', 'text', 'numeric', 'photo'] as const
 type Kind = (typeof KINDS)[number]
 function parseKind(v: unknown): Kind {
-  return typeof v === 'string' && (KINDS as readonly string[]).includes(v) ? (v as Kind) : 'pass_fail'
+  return typeof v === 'string' && (KINDS as readonly string[]).includes(v)
+    ? (v as Kind)
+    : 'pass_fail'
 }
 
 const SEVERITIES = ['low', 'medium', 'high', 'critical'] as const

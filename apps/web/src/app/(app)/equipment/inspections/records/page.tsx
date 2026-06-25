@@ -179,7 +179,10 @@ export default async function EquipmentInspectionsRecordsPage({
                 <TableRow>
                   <TableCell colSpan={7} className="py-10 text-center text-sm text-slate-500">
                     No inspections yet.{' '}
-                    <Link href="/equipment/inspections/new" className="text-teal-600 hover:underline">
+                    <Link
+                      href="/equipment/inspections/new"
+                      className="text-teal-600 hover:underline"
+                    >
                       Start one
                     </Link>
                     .
@@ -198,9 +201,7 @@ export default async function EquipmentInspectionsRecordsPage({
                     </TableCell>
                     <TableCell>
                       <div className="text-slate-900 dark:text-slate-100">{r.itemName ?? '—'}</div>
-                      {r.itemTag ? (
-                        <div className="text-xs text-slate-500">{r.itemTag}</div>
-                      ) : null}
+                      {r.itemTag ? <div className="text-xs text-slate-500">{r.itemTag}</div> : null}
                     </TableCell>
                     <TableCell className="text-slate-600 dark:text-slate-300">
                       {r.typeName ?? '—'}

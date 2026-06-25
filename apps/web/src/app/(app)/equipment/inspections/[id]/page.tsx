@@ -89,7 +89,8 @@ export default async function EquipmentInspectionRecordPage({
         .select({ id: attachments.id, key: attachments.r2Key, filename: attachments.filename })
         .from(attachments)
         .where(inArray(attachments.id, allPhotoIds))
-      for (const r of rows) photoMap.set(r.id, { id: r.id, url: publicUrl(r.key), filename: r.filename })
+      for (const r of rows)
+        photoMap.set(r.id, { id: r.id, url: publicUrl(r.key), filename: r.filename })
     }
     return { ...row, criteria, photoMap }
   })
@@ -147,7 +148,9 @@ export default async function EquipmentInspectionRecordPage({
                 {record.status.replace('_', ' ')}
               </Badge>
               {record.result ? (
-                <Badge variant={RESULT_VARIANT[record.result] ?? 'secondary'}>{record.result}</Badge>
+                <Badge variant={RESULT_VARIANT[record.result] ?? 'secondary'}>
+                  {record.result}
+                </Badge>
               ) : null}
               {locked ? (
                 <form action={reopenEquipmentInspection}>
@@ -185,7 +188,9 @@ export default async function EquipmentInspectionRecordPage({
 
         <RecordMeta
           recordId={record.id}
-          occurredAt={record.occurredAt ? new Date(record.occurredAt).toISOString().slice(0, 16) : ''}
+          occurredAt={
+            record.occurredAt ? new Date(record.occurredAt).toISOString().slice(0, 16) : ''
+          }
           hours={record.hours ?? ''}
           notes={record.notes ?? ''}
           locked={locked}
@@ -220,7 +225,9 @@ export default async function EquipmentInspectionRecordPage({
                     numericValue={c.numericValue}
                     photoPreviews={(c.photoAttachmentIds ?? [])
                       .map((pid) => photoMap.get(pid))
-                      .filter((p): p is { id: string; url: string; filename: string } => Boolean(p))}
+                      .filter((p): p is { id: string; url: string; filename: string } =>
+                        Boolean(p),
+                      )}
                     workOrderRef={c.workOrderId ? 'Work order' : null}
                     locked={locked}
                     actions={actions}
