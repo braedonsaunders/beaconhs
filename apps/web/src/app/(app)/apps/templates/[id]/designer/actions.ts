@@ -173,8 +173,11 @@ export async function updateAppOverview(args: {
 // jsonb `recordConfig` column; the record page reads it to choose the renderer
 // and gate lock/unlock. Mirrors updateAppOverview's assert + tx + audit pattern.
 //
-// MERGES into the existing recordConfig: only editingMode + locking are written
-// here, so the List-tab config (recordConfig.list) and any other keys survive.
+// MERGES into the existing recordConfig: only editingMode + locking + tabs are
+// written here, so the List-tab config (recordConfig.list) and any other keys
+// survive. `tabs` carries the per-app system-tab toggles (pending review,
+// comments, audit) the record page reads; only the keys present in the payload
+// are written, so unsaved toggles keep their stored value.
 export async function updateRecordBehavior(args: {
   templateId: string
   recordConfig: RecordConfig
@@ -188,6 +191,7 @@ export async function updateRecordBehavior(args: {
       .where(eq(formTemplates.id, args.templateId))
       .limit(1)
     const current = (row?.recordConfig ?? {}) as Record<string, unknown>
+    const currentTabs = (current.tabs ?? {}) as Record<string, unknown>
     await tx
       .update(formTemplates)
       .set({
@@ -195,6 +199,9 @@ export async function updateRecordBehavior(args: {
           ...current,
           editingMode: args.recordConfig.editingMode,
           locking: args.recordConfig.locking,
+          ...(args.recordConfig.tabs === undefined
+            ? {}
+            : { tabs: { ...currentTabs, ...args.recordConfig.tabs } }),
         } as Record<string, unknown>,
         updatedAt: new Date(),
       })

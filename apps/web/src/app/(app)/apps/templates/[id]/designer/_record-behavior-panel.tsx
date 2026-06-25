@@ -27,6 +27,13 @@ export type RecordConfig = {
     unlockRoles?: string[]
     autoLockOnFinalize?: boolean
   }
+  // Which system tabs the record page renders. Unset defaults live on the record
+  // page: review auto-on only when the app scores or signs off, comments + audit on.
+  tabs?: {
+    review?: boolean
+    comments?: boolean
+    audit?: boolean
+  }
 }
 
 type EditingMode = NonNullable<RecordConfig['editingMode']>
@@ -78,6 +85,9 @@ export function RecordBehaviorPanel({
   const [unlockRoles, setUnlockRoles] = useState<Set<string>>(
     new Set(initial?.locking?.unlockRoles ?? []),
   )
+  const [tabReview, setTabReview] = useState<boolean>(initial?.tabs?.review ?? false)
+  const [tabComments, setTabComments] = useState<boolean>(initial?.tabs?.comments ?? true)
+  const [tabAudit, setTabAudit] = useState<boolean>(initial?.tabs?.audit ?? true)
   const [pending, start] = useTransition()
 
   const toggleIn = (setter: typeof setLockRoles, key: string) =>
@@ -98,6 +108,11 @@ export function RecordBehaviorPanel({
           autoLockOnFinalize,
           lockRoles: Array.from(lockRoles),
           unlockRoles: Array.from(unlockRoles),
+        },
+        tabs: {
+          review: tabReview,
+          comments: tabComments,
+          audit: tabAudit,
         },
       }
       const res = await updateRecordBehavior({ templateId, recordConfig })
@@ -230,10 +245,64 @@ export function RecordBehaviorPanel({
         ) : null}
       </section>
 
+      <section className="space-y-3 rounded-md border border-slate-200 p-3 dark:border-slate-700">
+        <div className="space-y-0.5">
+          <Label className="text-xs">Record tabs</Label>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Which system tabs appear on a record. Unset defaults to a sensible choice per app.
+          </p>
+        </div>
+        <TabToggle
+          label="Pending review"
+          help="Compliance scoring + sign-off. Off for plain capture apps that don't need review."
+          checked={tabReview}
+          onChange={setTabReview}
+        />
+        <TabToggle
+          label="Comments tab"
+          help="Let reviewers leave comments on a record."
+          checked={tabComments}
+          onChange={setTabComments}
+        />
+        <TabToggle
+          label="Audit trail tab"
+          help="Show the change history tab."
+          checked={tabAudit}
+          onChange={setTabAudit}
+        />
+      </section>
+
       <Button onClick={save} disabled={pending} className="w-full">
         {pending ? 'Saving…' : 'Save record behaviour'}
       </Button>
     </div>
+  )
+}
+
+function TabToggle({
+  label,
+  help,
+  checked,
+  onChange,
+}: {
+  label: string
+  help: string
+  checked: boolean
+  onChange: (next: boolean) => void
+}) {
+  return (
+    <label className="flex items-start gap-2 text-sm">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="mt-0.5 h-4 w-4"
+      />
+      <span>
+        <span className="font-medium text-slate-800 dark:text-slate-200">{label}</span>
+        <span className="block text-xs text-slate-500 dark:text-slate-400">{help}</span>
+      </span>
+    </label>
   )
 }
 

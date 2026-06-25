@@ -809,10 +809,37 @@ export function FormRenderer({
     const saveArray = (id: string, arr: unknown) =>
       updateResponseField({ responseId: rid, fieldId: id, value: arr })
 
+    // Presentational content tabs (same model as the wizard/fill path). When
+    // the app authored 2+ tabs, render a tab bar and show only the active
+    // tab's sections. Sections with no `tabId` belong to the first tab —
+    // mirrors the wizard filter exactly.
+    const inlineTabbed = appTabs.length >= 2
+    const inlineSections = inlineTabbed
+      ? schema.sections.filter((s) => (s.tabId ?? appTabs[0]!.id) === activeTabId)
+      : schema.sections
+
     return (
       <FillReadOnlyContext.Provider value={readOnly}>
         <fieldset disabled={readOnly} className="m-0 min-w-0 space-y-5 border-0 p-0">
-          {schema.sections.map((sec) => {
+          {inlineTabbed ? (
+            <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200 pb-2 dark:border-slate-800">
+              {appTabs.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setActiveTabId(t.id)}
+                  className={`rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors ${
+                    t.id === activeTabId
+                      ? 'border-teal-600 bg-teal-600 text-white'
+                      : 'border-slate-200 bg-white text-slate-600 hover:border-teal-300 hover:text-teal-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300'
+                  }`}
+                >
+                  {t.title?.en ?? t.id}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {inlineSections.map((sec) => {
             if (sec.showIf && !evaluateLogicRule(sec.showIf, evalCtx)) return null
             return (
               <Section

@@ -329,6 +329,7 @@ export default async function FormResponsePage({
       unlockRoles?: string[]
       autoLockOnFinalize?: boolean
     }
+    tabs?: { review?: boolean; comments?: boolean; audit?: boolean }
   }
   const recordConfig = (template.recordConfig as RecordConfig | null) ?? null
   // Inline-record editing is the default for non-wizard, non-checklist apps;
@@ -339,6 +340,16 @@ export default async function FormResponsePage({
   const locked = !!response.locked
   const userRoleKeys = await getUserRoleKeys(ctx)
   const canFillApp = appVisibleTo(ctx, template.allowedRoles, userRoleKeys)
+
+  // Record-page tab/review config — pending-review (compliance + sign-off),
+  // Comments and Audit tabs are each toggleable per app. Sensible defaults keep
+  // existing apps unchanged: review auto-enables only when the app scores items
+  // or requires a signature, so a plain capture app (e.g. Lift Plan) shows no
+  // "pending review" cruft.
+  const hasSignatureStep = (version.schema.workflow?.steps ?? []).some((s) => s.signatureRequired)
+  const reviewEnabled = recordConfig?.tabs?.review ?? (scoreRows.length > 0 || hasSignatureStep)
+  const commentsEnabled = recordConfig?.tabs?.comments ?? true
+  const auditEnabled = recordConfig?.tabs?.audit ?? true
 
   // ---------- Configurable record-action buttons ----------
   // Each enabled flow may expose one manual-trigger button. Keep a button only
@@ -487,7 +498,9 @@ export default async function FormResponsePage({
               >
                 {response.status.replace('_', ' ')}
               </Badge>
-              <ComplianceBadge status={complianceStatus} score={complianceScore} />
+              {reviewEnabled ? (
+                <ComplianceBadge status={complianceStatus} score={complianceScore} />
+              ) : null}
             </div>
           }
           actions={
@@ -550,7 +563,7 @@ export default async function FormResponsePage({
         />
       }
       alerts={
-        complianceStatus === 'non_compliant' ? (
+        reviewEnabled && complianceStatus === 'non_compliant' ? (
           <Alert variant="destructive">
             <AlertTitle>Non-compliant response</AlertTitle>
             <AlertDescription>
@@ -559,7 +572,7 @@ export default async function FormResponsePage({
               failure.
             </AlertDescription>
           </Alert>
-        ) : flagsFollowup ? (
+        ) : reviewEnabled && flagsFollowup ? (
           <Alert variant="warning">
             <AlertTitle>Follow-up required</AlertTitle>
             <AlertDescription>
@@ -576,8 +589,10 @@ export default async function FormResponsePage({
           active={active}
           tabs={[
             { key: 'response', label: 'Response' },
-            { key: 'comments', label: 'Comments', count: comments.length },
-            { key: 'audit', label: 'Audit trail' },
+            ...(commentsEnabled
+              ? [{ key: 'comments', label: 'Comments', count: comments.length }]
+              : []),
+            ...(auditEnabled ? [{ key: 'audit', label: 'Audit trail' }] : []),
           ]}
         />
       }
@@ -604,7 +619,7 @@ export default async function FormResponsePage({
                 }))}
               />
             ) : null}
-            {failedFieldKeys.length > 0 ? (
+            {reviewEnabled && failedFieldKeys.length > 0 ? (
               <Section
                 title={`Failed checks (${failedFieldKeys.length})`}
                 subtitle="Each can be turned into its own corrective action."
@@ -703,7 +718,7 @@ export default async function FormResponsePage({
               </Section>
             ) : null}
 
-            {scoreRows.length > 0 ? (
+            {reviewEnabled && scoreRows.length > 0 ? (
               <Section title="Compliance scoring">
                 <div className="flex flex-wrap items-center gap-3 text-sm">
                   <Badge variant="success">{passCount} pass</Badge>
@@ -802,33 +817,35 @@ export default async function FormResponsePage({
 
             {pendingFlowGates.length > 0 ? <FlowApprovals gates={pendingFlowGates} /> : null}
 
-            <Section
-              title={`Workflow steps (${workflowStepProps.length})`}
-              defaultOpen={workflowStepProps.length > 0}
-            >
-              {workflowStepProps.length === 0 ? (
-                <p className="text-sm text-slate-500">
-                  No workflow steps configured on this template.
-                </p>
-              ) : (
-                <WorkflowPanel
-                  responseId={id}
-                  steps={workflowStepProps}
-                  currentStepKey={response.currentStep ?? null}
-                  responseStatus={response.status}
-                  // canAct = a user is signed in to this tenant. The panel itself
-                  // disables interaction when the response is in a terminal
-                  // (closed/rejected) state. Super-admin viewing-as has
-                  // membership=null but ctx-level permissions; we still allow
-                  // them to interact for cross-tenant debugging.
-                  canAct={true}
-                />
-              )}
-            </Section>
+            {reviewEnabled ? (
+              <Section
+                title={`Workflow steps (${workflowStepProps.length})`}
+                defaultOpen={workflowStepProps.length > 0}
+              >
+                {workflowStepProps.length === 0 ? (
+                  <p className="text-sm text-slate-500">
+                    No workflow steps configured on this template.
+                  </p>
+                ) : (
+                  <WorkflowPanel
+                    responseId={id}
+                    steps={workflowStepProps}
+                    currentStepKey={response.currentStep ?? null}
+                    responseStatus={response.status}
+                    // canAct = a user is signed in to this tenant. The panel itself
+                    // disables interaction when the response is in a terminal
+                    // (closed/rejected) state. Super-admin viewing-as has
+                    // membership=null but ctx-level permissions; we still allow
+                    // them to interact for cross-tenant debugging.
+                    canAct={true}
+                  />
+                )}
+              </Section>
+            ) : null}
           </>
         ) : null}
 
-        {active === 'comments' ? (
+        {active === 'comments' && commentsEnabled ? (
           <div className="space-y-4">
             <Card>
               <CardHeader>
@@ -877,7 +894,7 @@ export default async function FormResponsePage({
           </div>
         ) : null}
 
-        {active === 'audit' ? (
+        {active === 'audit' && auditEnabled ? (
           <Card>
             <CardHeader>
               <CardTitle>Audit trail</CardTitle>
