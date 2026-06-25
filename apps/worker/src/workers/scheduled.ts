@@ -26,6 +26,7 @@ import { scanFormAssignments } from '../lib/form-assignment-scanner'
 import { scanCompliance } from '../lib/compliance-scanner'
 import { scanEscalations } from '../lib/escalation-scanner'
 import { scanDigests } from '../lib/digest-scanner'
+import { scanScheduledFlows } from '../lib/scheduled-flow-runner'
 import { runPluginCron } from '../lib/plugin-cron'
 import { runSyncConnection, scanSyncConnections } from '../lib/sync-scanner'
 import { runSessionOverdueFlows } from '../lib/session-overdue-flows'
@@ -55,6 +56,12 @@ export async function processScheduledTick(job: Job<ScheduledTick>): Promise<voi
     case 'digest_scan': {
       const r = await scanDigests()
       console.log(`[scheduled] digest_scan: ${r.emails} digest emails across ${r.tenants} tenants`)
+      return
+    }
+    case 'scheduled_flow_scan': {
+      const r = await scanScheduledFlows()
+      if (r.flows > 0)
+        console.log(`[scheduled] scheduled_flow_scan: ${r.flows} flows fired / ${r.ran} actions`)
       return
     }
     case 'report_schedule_scan':

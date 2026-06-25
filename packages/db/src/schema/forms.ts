@@ -492,6 +492,9 @@ export const formAutomations = pgTable(
     name: text('name').default('Flow').notNull(),
     enabled: boolean('enabled').default(true).notNull(),
     graph: jsonb('graph').$type<AutomationGraph>().notNull(),
+    // Last time the worker fired this flow's `scheduled` trigger — dedups the
+    // every-minute scan so a cron only runs once per matching minute (Phase 4).
+    lastScheduledRunAt: timestamp('last_scheduled_run_at', { withTimezone: true }),
     ...timestamps,
   },
   (t) => ({

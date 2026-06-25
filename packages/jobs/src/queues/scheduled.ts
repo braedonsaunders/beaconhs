@@ -15,6 +15,7 @@ export type ScheduledTick =
   | { kind: 'compliance_scan' }
   | { kind: 'escalation_scan' }
   | { kind: 'digest_scan' }
+  | { kind: 'scheduled_flow_scan' }
   | { kind: 'plugin_cron'; cadence: 'hourly' | 'daily' | 'weekly' }
   | { kind: 'sync_scan' }
   | { kind: 'sync_run'; tenantId: string; connectionId: string; trigger: 'scheduled' | 'manual' }
@@ -77,6 +78,11 @@ export async function registerSchedules() {
   await scheduledQueue.add('tick:digest', { kind: 'digest_scan' } as ScheduledTick, {
     repeat: { pattern: '5 * * * *' },
     jobId: 'tick:digest',
+  })
+  // Every minute: run flows whose `scheduled` cron matches this minute (Phase 4).
+  await scheduledQueue.add('tick:scheduled_flow', { kind: 'scheduled_flow_scan' } as ScheduledTick, {
+    repeat: { pattern: '* * * * *' },
+    jobId: 'tick:scheduled_flow',
   })
   await scheduledQueue.add(
     'tick:plugin_hourly',

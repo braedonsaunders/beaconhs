@@ -13,14 +13,15 @@ import { planAutomation, type EmailTarget } from '@beaconhs/forms-core'
 import { formAutomations, roleAssignments, roles, tenantUsers, users } from '@beaconhs/db/schema'
 import { enqueueEmail, enqueueNotification } from '@beaconhs/jobs'
 
-function interpolate(tpl: string, values: Record<string, unknown>): string {
+export function interpolate(tpl: string, values: Record<string, unknown>): string {
   return tpl.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_m, k: string) => {
     const v = values[k]
     return v == null ? '' : String(v)
   })
 }
 
-async function roleUserIds(tx: any, tenantId: string, roleKey: string) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function roleUserIds(tx: any, tenantId: string, roleKey: string) {
   if (!roleKey) return [] as { userId: string; email: string | null }[]
   return tx
     .select({ userId: tenantUsers.userId, email: users.email })
@@ -37,7 +38,8 @@ async function roleUserIds(tx: any, tenantId: string, roleKey: string) {
     )
 }
 
-async function resolveEmails(
+export async function resolveEmails(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   tx: any,
   tenantId: string,
   targets: EmailTarget[],
