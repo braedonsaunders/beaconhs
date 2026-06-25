@@ -15,9 +15,9 @@ import { orgUnits } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 
-export const metadata = { title: 'New customer' }
+export const metadata = { title: 'New location' }
 
-async function createCustomer(formData: FormData) {
+async function createLocation(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
   const name = String(formData.get('name') ?? '').trim()
@@ -45,7 +45,7 @@ async function createCustomer(formData: FormData) {
       entityType: 'org_unit',
       entityId: row.id,
       action: 'create',
-      summary: `Added customer "${name}"`,
+      summary: `Added location "${name}"`,
       after: { name, code, level: 'customer', address },
     })
   }
@@ -55,21 +55,21 @@ async function createCustomer(formData: FormData) {
   redirect('/locations')
 }
 
-export default function NewCustomerPage() {
+export default function NewLocationPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-6 p-6">
       <DetailHeader
         back={{ href: '/locations', label: 'Back to locations' }}
-        title="Add customer"
+        title="Add location"
       />
       <Card>
         <CardContent className="pt-6">
-          <form action={createCustomer} className="space-y-4">
+          <form action={createLocation} className="space-y-4">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label="Customer name" required className="sm:col-span-2">
+              <Field label="Location name" required className="sm:col-span-2">
                 <Input name="name" required autoComplete="organization" />
               </Field>
-              <Field label="Customer code">
+              <Field label="Location code">
                 <Input name="code" placeholder="e.g. ACME-01" />
               </Field>
             </div>
@@ -101,13 +101,13 @@ export default function NewCustomerPage() {
             <Alert variant="info">
               <AlertTitle>Hierarchy</AlertTitle>
               <AlertDescription>
-                Customers live at the top of the location tree. Add projects and sites underneath
-                from the customer detail page.
+                Locations sit at the top of the org tree. Add projects and sites underneath from the
+                location's detail page.
               </AlertDescription>
             </Alert>
 
             <div className="flex items-center justify-end gap-2">
-              <Button type="submit">Create customer</Button>
+              <Button type="submit">Create location</Button>
             </div>
           </form>
         </CardContent>

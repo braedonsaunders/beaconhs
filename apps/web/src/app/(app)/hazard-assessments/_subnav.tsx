@@ -11,6 +11,7 @@ function activeFor(pathname: string): string {
   if (/^\/hazard-assessments\/hazards/.test(pathname)) return 'hazards'
   if (/^\/hazard-assessments\/tasks/.test(pathname)) return 'tasks'
   if (/^\/hazard-assessments\/types/.test(pathname)) return 'assessment-types'
+  if (/^\/hazard-assessments\/risk-matrix/.test(pathname)) return 'risk-matrix'
   return 'assessments'
 }
 

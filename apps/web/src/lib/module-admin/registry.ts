@@ -218,6 +218,13 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
         desc: 'Templates that define each kind of hazard assessment.',
       },
       {
+        key: 'risk-matrix',
+        label: 'Risk matrix',
+        href: '/hazard-assessments/risk-matrix',
+        iconKey: 'grid',
+        desc: 'The severity × likelihood scale, risk bands and colours used to score every assessment.',
+      },
+      {
         key: 'flows',
         label: 'Automations',
         href: '/hazard-assessments/flows',

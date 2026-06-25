@@ -1,9 +1,7 @@
+import Link from 'next/link'
 import { revalidatePath } from 'next/cache'
 import { eq, sql } from 'drizzle-orm'
 import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
   Button,
   Card,
   CardContent,
@@ -19,6 +17,7 @@ import { db } from '@beaconhs/db'
 import { tenants } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { levelLabel } from '@/lib/org-hierarchy'
 import { PageContainer } from '@/components/page-layout'
 
 export const metadata = { title: 'Tenant settings' }
@@ -104,7 +103,7 @@ export default async function AdminSettingsPage() {
         <DetailHeader
           back={{ href: '/admin', label: 'Back to admin' }}
           title="Tenant settings"
-          subtitle="Branding, languages, hierarchy depth, risk matrix"
+          subtitle="Branding, languages, and hierarchy depth"
         />
 
         <form action={saveSettings} className="space-y-4">
@@ -215,7 +214,7 @@ export default async function AdminSettingsPage() {
                   className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm dark:border-slate-800"
                 >
                   <input type="checkbox" name={`lvl_${lvl}`} defaultChecked={hierarchy[lvl]} />
-                  {lvl}
+                  {levelLabel(lvl)}
                 </label>
               ))}
             </CardContent>
@@ -224,19 +223,20 @@ export default async function AdminSettingsPage() {
           <Card>
             <CardHeader>
               <CardTitle>Risk matrix</CardTitle>
-              <CardDescription>Currently configured matrix. (Editor pending.)</CardDescription>
+              <CardDescription>Configured per module.</CardDescription>
             </CardHeader>
             <CardContent>
-              {tenant.riskMatrix ? (
-                <RiskMatrixPreview matrix={tenant.riskMatrix} />
-              ) : (
-                <Alert variant="info">
-                  <AlertTitle>No matrix configured</AlertTitle>
-                  <AlertDescription>
-                    JSHAs that reference a matrix won't render scores.
-                  </AlertDescription>
-                </Alert>
-              )}
+              <p className="text-sm text-slate-600 dark:text-slate-400">
+                The severity × likelihood scale, risk bands and colours used to score hazard
+                assessments are edited in{' '}
+                <Link
+                  href="/hazard-assessments/risk-matrix"
+                  className="font-medium text-teal-700 hover:underline dark:text-teal-300"
+                >
+                  Hazard Assessments → Manage → Risk matrix
+                </Link>
+                .
+              </p>
             </CardContent>
           </Card>
 
@@ -262,56 +262,6 @@ function Field({
     <div className={`space-y-1.5 ${className ?? ''}`}>
       <Label>{label}</Label>
       {children}
-    </div>
-  )
-}
-
-function RiskMatrixPreview({
-  matrix,
-}: {
-  matrix: NonNullable<typeof tenants.$inferSelect.riskMatrix>
-}) {
-  const sev = matrix.axes.severity.values
-  const lik = matrix.axes.likelihood.values
-  return (
-    <div className="overflow-x-auto">
-      <table className="text-xs">
-        <thead>
-          <tr>
-            <th className="border-b border-slate-200 p-2 dark:border-slate-800" />
-            {lik.map((l) => (
-              <th
-                key={l}
-                className="border-b border-slate-200 p-2 text-left text-slate-500 dark:border-slate-800 dark:text-slate-400"
-              >
-                {l}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {sev.map((s, sIdx) => (
-            <tr key={s}>
-              <th className="border-r border-slate-200 p-2 text-left text-slate-500 dark:border-slate-800 dark:text-slate-400">
-                {s}
-              </th>
-              {lik.map((_, lIdx) => {
-                const cell = matrix.cells[`${sIdx}:${lIdx}`]
-                return (
-                  <td
-                    key={lIdx}
-                    className="p-2 text-center text-white"
-                    style={{ background: cell?.color ?? '#cbd5e1' }}
-                    title={cell?.label}
-                  >
-                    {cell?.score ?? ''}
-                  </td>
-                )
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </div>
   )
 }

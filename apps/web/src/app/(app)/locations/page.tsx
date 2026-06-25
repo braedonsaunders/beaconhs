@@ -28,6 +28,7 @@ import {
 } from '@beaconhs/ui'
 import { customerContacts, orgUnits } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { getTenantHierarchy } from '@/lib/org-hierarchy'
 import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
 import { FilterChips } from '@/components/filter-bar'
@@ -48,6 +49,7 @@ export default async function LocationsPage({
   const params = parseListParams(sp, { sort: 'name', dir: 'asc', perPage: 25, allowedSorts: SORTS })
   const statusFilter = pickString(sp.status) ?? 'active'
   const ctx = await requireRequestContext()
+  const hierarchy = await getTenantHierarchy(ctx.tenantId)
 
   const { rows, total, activeCount, archivedCount } = await ctx.db(async (tx) => {
     const baseFilters: SQL<unknown>[] = [eq(orgUnits.level, 'customer')]
@@ -164,14 +166,14 @@ export default async function LocationsPage({
         <>
           <PageHeader
             title="Locations"
-            description="Customers, projects and sites. Add customer contacts (non-employee site managers, client reps) here."
+            description="Your locations, plus the projects and sites beneath them. Add on-site contacts (non-employee site managers, client reps) here."
             actions={
               <div className="flex items-center gap-2">
                 <Link href={buildExportHref('/locations/export.csv', sp)}>
                   <Button variant="outline">Export CSV</Button>
                 </Link>
                 <Link href="/locations/new">
-                  <Button>Add customer</Button>
+                  <Button>Add location</Button>
                 </Link>
               </div>
             }
@@ -198,20 +200,20 @@ export default async function LocationsPage({
           icon={<MapPin size={32} />}
           title={
             params.q
-              ? `No customers match "${params.q}"`
+              ? `No locations match "${params.q}"`
               : statusFilter === 'archived'
-                ? 'No archived customers'
-                : 'No customers'
+                ? 'No archived locations'
+                : 'No locations'
           }
           description={
             statusFilter === 'archived'
-              ? 'Archived customers appear here once you archive them from a customer page.'
-              : 'Add a customer to track projects, sites, and on-site contacts.'
+              ? 'Archived locations appear here once you archive them from a location page.'
+              : 'Add a location to track projects, sites, and on-site contacts.'
           }
           action={
             statusFilter === 'archived' ? null : (
               <Link href="/locations/new">
-                <Button>Add customer</Button>
+                <Button>Add location</Button>
               </Link>
             )
           }
@@ -222,14 +224,14 @@ export default async function LocationsPage({
             <TableHeader>
               <TableRow>
                 <SortableTh {...sortProps} column="name" active={params.sort === 'name'}>
-                  Customer
+                  Location
                 </SortableTh>
                 <SortableTh {...sortProps} column="code" active={params.sort === 'code'}>
                   Code
                 </SortableTh>
                 <TableHead>Address</TableHead>
-                <TableHead className="text-right">Projects</TableHead>
-                <TableHead className="text-right">Sites</TableHead>
+                {hierarchy.project ? <TableHead className="text-right">Projects</TableHead> : null}
+                {hierarchy.site ? <TableHead className="text-right">Sites</TableHead> : null}
                 <TableHead className="text-right">Contacts</TableHead>
               </TableRow>
             </TableHeader>
@@ -253,8 +255,12 @@ export default async function LocationsPage({
                   <TableCell className="text-slate-600 dark:text-slate-400">
                     {formatAddressLine(unit.address) ?? '—'}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">{projects}</TableCell>
-                  <TableCell className="text-right tabular-nums">{sites}</TableCell>
+                  {hierarchy.project ? (
+                    <TableCell className="text-right tabular-nums">{projects}</TableCell>
+                  ) : null}
+                  {hierarchy.site ? (
+                    <TableCell className="text-right tabular-nums">{sites}</TableCell>
+                  ) : null}
                   <TableCell className="text-right tabular-nums">{contacts}</TableCell>
                 </TableRow>
               ))}

@@ -42,6 +42,7 @@ import {
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
+import { getTenantHierarchy, levelLabel, type TenantHierarchy } from '@/lib/org-hierarchy'
 import { ActivityFeed } from '@/components/activity-feed'
 import { DetailPageLayout } from '@/components/page-layout'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
@@ -183,6 +184,7 @@ export default async function LocationDetailPage({
   const sp = await searchParams
   const drawer = typeof sp.drawer === 'string' ? sp.drawer : null
   const ctx = await requireRequestContext()
+  const hierarchy = await getTenantHierarchy(ctx.tenantId)
 
   const data = await ctx.db(async (tx) => {
     const [unit] = await tx.select().from(orgUnits).where(eq(orgUnits.id, id)).limit(1)
@@ -205,10 +207,10 @@ export default async function LocationDetailPage({
   const { unit, parent, children } = data
 
   if (unit.level === 'customer') {
-    return renderCustomer({ unit, children, sp, drawer, id, ctx })
+    return renderCustomer({ unit, children, sp, drawer, id, ctx, hierarchy })
   }
   if (unit.level === 'project') {
-    return renderProject({ unit, parent, children, sp, drawer, id, ctx })
+    return renderProject({ unit, parent, children, sp, drawer, id, ctx, hierarchy })
   }
   return renderSite({ unit, parent, sp, drawer, id, ctx })
 }
@@ -222,6 +224,7 @@ async function renderCustomer({
   drawer,
   id,
   ctx,
+  hierarchy,
 }: {
   unit: typeof orgUnits.$inferSelect
   children: (typeof orgUnits.$inferSelect)[]
@@ -229,8 +232,14 @@ async function renderCustomer({
   drawer: string | null
   id: string
   ctx: Awaited<ReturnType<typeof requireRequestContext>>
+  hierarchy: TenantHierarchy
 }) {
-  const active: CustomerTab = pickActiveTab(sp, CUSTOMER_TABS, 'overview')
+  // Drop levels this tenant has switched off so a disabled depth can't be
+  // reached even via a hand-edited ?tab= URL.
+  const visibleTabs = CUSTOMER_TABS.filter(
+    (t) => (t !== 'projects' || hierarchy.project) && (t !== 'sites' || hierarchy.site),
+  )
+  const active: CustomerTab = pickActiveTab(sp, visibleTabs, 'overview')
   const basePath = `/locations/${id}`
 
   const projects = children.filter((c) => c.level === 'project')
@@ -278,10 +287,10 @@ async function renderCustomer({
         <DetailHeader
           back={{ href: '/locations', label: 'Back to locations' }}
           title={unit.name}
-          subtitle={unit.code ? `Customer · ${unit.code}` : 'Customer'}
+          subtitle={unit.code ? `${levelLabel('customer')} · ${unit.code}` : levelLabel('customer')}
           badge={
             <>
-              <Badge variant="secondary">customer</Badge>
+              <Badge variant="secondary">{levelLabel('customer')}</Badge>
               {unit.deletedAt ? <Badge variant="warning">Archived</Badge> : null}
             </>
           }
@@ -311,8 +320,13 @@ async function renderCustomer({
           active={active}
           tabs={[
             { key: 'overview', label: 'Overview' },
-            { key: 'projects', label: 'Projects', count: projects.length },
-            { key: 'sites', label: 'Sites', count: allSites.length },
+            {
+              key: 'projects',
+              label: 'Projects',
+              count: projects.length,
+              hidden: !hierarchy.project,
+            },
+            { key: 'sites', label: 'Sites', count: allSites.length, hidden: !hierarchy.site },
             { key: 'contacts', label: 'Contacts', count: contacts.length },
             { key: 'incidents', label: 'Incidents', count: allIncidents.length },
             { key: 'equipment', label: 'Equipment', count: allEquipment.length },
@@ -348,6 +362,7 @@ async function renderProject({
   drawer,
   id,
   ctx,
+  hierarchy,
 }: {
   unit: typeof orgUnits.$inferSelect
   parent: typeof orgUnits.$inferSelect | null
@@ -356,8 +371,10 @@ async function renderProject({
   drawer: string | null
   id: string
   ctx: Awaited<ReturnType<typeof requireRequestContext>>
+  hierarchy: TenantHierarchy
 }) {
-  const active: ProjectTab = pickActiveTab(sp, PROJECT_TABS, 'overview')
+  const visibleTabs = PROJECT_TABS.filter((t) => t !== 'sites' || hierarchy.site)
+  const active: ProjectTab = pickActiveTab(sp, visibleTabs, 'overview')
   const basePath = `/locations/${id}`
   const sites = children.filter((c) => c.level === 'site')
 
@@ -387,8 +404,10 @@ async function renderProject({
         <DetailHeader
           back={{ href: backHref, label: backLabel }}
           title={unit.name}
-          subtitle={parent ? `Project under ${parent.name}` : 'Project'}
-          badge={<Badge variant="secondary">project</Badge>}
+          subtitle={
+            parent ? `${levelLabel('project')} under ${parent.name}` : levelLabel('project')
+          }
+          badge={<Badge variant="secondary">{levelLabel('project')}</Badge>}
         />
       }
       subtabs={
@@ -398,7 +417,7 @@ async function renderProject({
           active={active}
           tabs={[
             { key: 'overview', label: 'Overview' },
-            { key: 'sites', label: 'Sites', count: sites.length },
+            { key: 'sites', label: 'Sites', count: sites.length, hidden: !hierarchy.site },
             { key: 'contacts', label: 'Contacts', count: contacts.length },
             { key: 'incidents', label: 'Incidents', count: allIncidents.length },
             { key: 'equipment', label: 'Equipment', count: allEquipment.length },
@@ -468,8 +487,10 @@ async function renderSite({
         <DetailHeader
           back={{ href: backHref, label: backLabel }}
           title={unit.name}
-          subtitle={parent ? `${unit.level} under ${parent.name}` : unit.level}
-          badge={<Badge variant="secondary">{unit.level}</Badge>}
+          subtitle={
+            parent ? `${levelLabel(unit.level)} under ${parent.name}` : levelLabel(unit.level)
+          }
+          badge={<Badge variant="secondary">{levelLabel(unit.level)}</Badge>}
         />
       }
       subtabs={
@@ -674,7 +695,7 @@ function ProjectsTab({
         <EmptyState
           icon={<Folder size={32} />}
           title="No projects"
-          description="Create a project to group sites for this customer."
+          description="Create a project to group sites for this location."
         />
       ) : (
         <Table>
@@ -733,7 +754,7 @@ function SitesTab({
       <EmptyState
         icon={<MapPin size={32} />}
         title="No sites"
-        description="Sites sit under a project or directly under a customer."
+        description="Sites sit under a project or directly under a location."
       />
     )
   }
@@ -798,7 +819,7 @@ function ContactsTab({
         <EmptyState
           icon={<Users size={32} />}
           title="No contacts"
-          description="Add a customer contact — site managers, client reps, emergency-only contacts."
+          description="Add a contact — site managers, client reps, emergency-only contacts."
         />
       ) : (
         <Table>

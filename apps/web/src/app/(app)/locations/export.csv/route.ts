@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
   await recordAudit(ctx, {
     entityType: 'org_unit',
     action: 'export',
-    summary: `Exported ${rows.length} customers to CSV`,
+    summary: `Exported ${rows.length} locations to CSV`,
     metadata: {
       format: 'csv',
       filters: { q: params.q ?? null, level: 'customer', status: statusFilter },

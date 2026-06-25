@@ -24,6 +24,9 @@ type Tx = Database
 export type ComplianceTransition = {
   subjectKey: string
   personId: string | null
+  // Direct login user to self-target (record-owned subjects like CAs), preferred
+  // over the personId→people.userId bridge in the dispatcher.
+  userId: string | null
   label: string
   from: EvalStatus | null
   to: EvalStatus
@@ -74,6 +77,7 @@ export async function materializeObligation(
       transitions.push({
         subjectKey: r.key,
         personId: r.personId,
+        userId: r.userId ?? null,
         label: r.label,
         from,
         to: r.status,
@@ -141,6 +145,33 @@ export async function materializeObligation(
 }
 
 /**
+ * Provision the built-in obligations that aren't user-authored — currently the
+ * corrective-action "closed by due date" rule. These are SYSTEM obligations (no
+ * audience, per_record): the unified engine owns CA-overdue detection instead of
+ * a per-module scan. Idempotent via the (legacyTable, legacyId) unique index, so
+ * it's safe to call on every scan. Keyed by tenantId → exactly one per tenant.
+ */
+export async function ensureSystemObligations(tx: Tx, tenantId: string): Promise<void> {
+  await tx
+    .insert(complianceObligations)
+    .values({
+      tenantId,
+      sourceModule: 'corrective_action' as never,
+      subjectKind: 'per_record' as never,
+      title: 'Corrective actions closed by due date',
+      status: 'active',
+      targetRef: {},
+      recurrence: { kind: 'event' } as never,
+      recurrenceKind: 'event' as never,
+      legacyTable: 'system:corrective_action',
+      legacyId: tenantId,
+    })
+    .onConflictDoNothing({
+      target: [complianceObligations.legacyTable, complianceObligations.legacyId],
+    })
+}
+
+/**
  * Materialise every active obligation for a tenant. Returns per-obligation
  * evaluation results (for reminder dispatch). Caller supplies a tenant-scoped
  * or super-admin tx.
@@ -149,7 +180,10 @@ export async function materializeTenant(
   tx: Tx,
   tenantId: string,
   today?: string,
-): Promise<{ obligation: ComplianceObligation; result: EvalResult; transitions: ComplianceTransition[] }[]> {
+): Promise<
+  { obligation: ComplianceObligation; result: EvalResult; transitions: ComplianceTransition[] }[]
+> {
+  await ensureSystemObligations(tx, tenantId)
   const obligations = await tx
     .select()
     .from(complianceObligations)

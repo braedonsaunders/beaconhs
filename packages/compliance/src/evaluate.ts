@@ -7,10 +7,11 @@
 // `tx`, so the web wraps it in `ctx.db(...)` and the worker in
 // `withTenant(...)` / `withSuperAdmin(...)`.
 
-import { and, eq, gte, inArray, isNull, sql } from 'drizzle-orm'
+import { and, eq, gte, inArray, isNotNull, isNull, sql } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
 import {
   complianceObligations,
+  correctiveActions,
   documentAcknowledgments,
   equipmentItems,
   formResponseParticipants,
@@ -38,6 +39,10 @@ export type EvalSubjectRow = {
   key: string
   label: string
   personId: string | null
+  // Direct login user to self-target, when the subject is owned by a tenantUser
+  // rather than a `people` row (e.g. a corrective action's owner). Preferred over
+  // the personId→people.userId bridge when set.
+  userId?: string | null
   subjectRef: Record<string, string> | null
   status: EvalStatus
   dueOn: string | null
@@ -128,6 +133,8 @@ export async function evaluateObligation(
       return evalEquipment(tx, tenantId, ob, today)
     case 'ppe_inspection':
       return evalPpe(tx, tenantId, ob, today)
+    case 'corrective_action':
+      return evalCorrectiveAction(tx, tenantId, ob, today)
     case 'job_title_signoff':
       return evalJobTitle(tx, tenantId, ob)
     default:
@@ -573,6 +580,75 @@ async function evalPpe(tx: Tx, tid: string, ob: Ob, today: string): Promise<Eval
         expiryStatus(due, today, remind),
         due,
       )
+    }),
+  )
+}
+
+/**
+ * Corrective-action overdue — the built-in detector that replaced the legacy
+ * `ca_overdue_scan`. Every still-open CA must be closed by its `dueOn`; a CA
+ * whose due date has passed is `overdue`. We set `personId` to the CA OWNER
+ * (the assignee) so emitComplianceTransitions self-targets *them* — the few
+ * applicable people — while the obligation's rollup still informs the
+ * compliance-category audience configured in /admin/notifications. No audience
+ * rows needed (per_record): we read the CA table directly, like equipment/PPE.
+ */
+async function evalCorrectiveAction(
+  tx: Tx,
+  tid: string,
+  _ob: Ob,
+  today: string,
+): Promise<EvalResult> {
+  const rows = await tx
+    .select({
+      id: correctiveActions.id,
+      reference: correctiveActions.reference,
+      title: correctiveActions.title,
+      dueOn: correctiveActions.dueOn,
+      ownerTenantUserId: correctiveActions.ownerTenantUserId,
+    })
+    .from(correctiveActions)
+    .where(
+      and(
+        eq(correctiveActions.tenantId, tid),
+        inArray(correctiveActions.status, ['open', 'in_progress', 'pending_verification']),
+        isNotNull(correctiveActions.dueOn),
+        isNull(correctiveActions.deletedAt),
+      ),
+    )
+    .limit(2000)
+  if (rows.length === 0) return empty()
+
+  // Resolve each CA owner (tenantUser) → login userId directly. A CA is owned by
+  // a tenantUser, which frequently has NO linked `people` row, so we must NOT
+  // route through the person bridge (it would silently target nobody) — we set
+  // `userId` and let emitComplianceTransitions self-target the assignee directly.
+  const ownerTuIds = [
+    ...new Set(rows.map((r) => r.ownerTenantUserId).filter((u): u is string => Boolean(u))),
+  ]
+  const userByTu = new Map<string, string>()
+  if (ownerTuIds.length > 0) {
+    const tus = await tx
+      .select({ id: tenantUsers.id, userId: tenantUsers.userId })
+      .from(tenantUsers)
+      .where(and(eq(tenantUsers.tenantId, tid), inArray(tenantUsers.id, ownerTuIds)))
+    for (const t of tus) if (t.userId) userByTu.set(t.id, t.userId)
+  }
+
+  return tally(
+    rows.map((r) => {
+      const status: EvalStatus = r.dueOn && r.dueOn < today ? 'overdue' : 'pending'
+      const userId = r.ownerTenantUserId ? (userByTu.get(r.ownerTenantUserId) ?? null) : null
+      return {
+        key: `record:${r.id}`,
+        label: `${r.reference} — ${r.title}`,
+        personId: null,
+        userId,
+        subjectRef: { recordId: r.id, caId: r.id },
+        status,
+        dueOn: r.dueOn,
+        completedOn: null,
+      }
     }),
   )
 }

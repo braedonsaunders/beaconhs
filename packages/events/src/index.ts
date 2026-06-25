@@ -13,11 +13,7 @@
 
 import { and, eq, inArray } from 'drizzle-orm'
 import { db as defaultDb, withSuperAdmin, withTenant, type Database } from '@beaconhs/db'
-import {
-  caAssignedEmail,
-  caCompletedEmail,
-  incidentReportedEmail,
-} from '@beaconhs/emails'
+import { caAssignedEmail, caCompletedEmail, incidentReportedEmail } from '@beaconhs/emails'
 import { enqueueEmail, enqueueNotification } from '@beaconhs/jobs'
 import {
   complianceObligations,
@@ -531,6 +527,9 @@ export async function emitCorrectiveActionCompleted(
 export type ComplianceTransitionEvent = {
   subjectKey: string
   personId: string | null
+  // Direct login user to self-target when the subject is owned by a tenantUser
+  // (e.g. a corrective action), bypassing the personId→people.userId bridge.
+  userId?: string | null
   label: string
   to: 'completed' | 'overdue' | 'pending' | 'in_progress' | 'expiring'
   dueOn: string | null
@@ -578,9 +577,11 @@ export async function emitComplianceTransitions(
       for (const r of rows) if (r.userId) personUser.set(r.id, r.userId)
     }
 
-    // 1. Self-targeted alert to each affected person.
+    // 1. Self-targeted alert to each affected person. Prefer an explicit login
+    // user (record-owned subjects like CAs key on the owner's userId directly);
+    // fall back to the person→user bridge for per_person obligations.
     for (const t of actionable) {
-      const userId = t.personId ? personUser.get(t.personId) : null
+      const userId = t.userId ?? (t.personId ? personUser.get(t.personId) : null)
       if (!userId) continue
       const verb = t.to === 'overdue' ? 'is overdue' : 'is due soon'
       await enqueueNotification({

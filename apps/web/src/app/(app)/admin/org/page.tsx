@@ -17,6 +17,7 @@ import {
 import { crews, departments, orgUnits, trades } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { levelLabel } from '@/lib/org-hierarchy'
 import { PageContainer } from '@/components/page-layout'
 
 export const metadata = { title: 'Org hierarchy' }
@@ -121,7 +122,7 @@ export default async function AdminOrgPage() {
         <DetailHeader
           back={{ href: '/admin', label: 'Back to admin' }}
           title="Org hierarchy"
-          subtitle="Customers, projects, sites, areas + crews / departments / trades"
+          subtitle="Locations, projects, sites, areas + crews / departments / trades"
         />
 
         <div className="grid gap-4 lg:grid-cols-3">
@@ -140,7 +141,7 @@ export default async function AdminOrgPage() {
                   <Select name="level" defaultValue="site">
                     {LEVELS.map((l) => (
                       <option key={l} value={l}>
-                        {l}
+                        {levelLabel(l)}
                       </option>
                     ))}
                   </Select>
@@ -150,7 +151,7 @@ export default async function AdminOrgPage() {
                     <option value="">— top-level —</option>
                     {allUnits.map((u) => (
                       <option key={u.id} value={u.id}>
-                        {u.level}: {u.name}
+                        {levelLabel(u.level)}: {u.name}
                       </option>
                     ))}
                   </Select>
@@ -216,7 +217,7 @@ function OrgTree({
           <li key={u.id} className="py-1">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <Badge variant="secondary">{u.level}</Badge>
+                <Badge variant="secondary">{levelLabel(u.level)}</Badge>
                 <span className="text-sm font-medium">{u.name}</span>
                 {u.code ? <span className="text-xs text-slate-400">{u.code}</span> : null}
               </div>

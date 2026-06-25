@@ -142,8 +142,17 @@ export const KIND_META: Record<ObligationKind, KindMeta> = {
   },
 }
 
+// Source modules that aren't user-authorable in the unified form (system/built-in
+// or ETL-only obligations) but still need a clean label when shown read-only.
+const SYSTEM_KIND_LABELS: Record<string, string> = {
+  corrective_action: 'Corrective actions',
+  permit: 'Permits',
+  lone_worker: 'Lone worker',
+  custom: 'Custom',
+}
+
 export function kindLabel(kind: string): string {
-  return (KIND_META as Record<string, KindMeta>)[kind]?.label ?? kind
+  return (KIND_META as Record<string, KindMeta>)[kind]?.label ?? SYSTEM_KIND_LABELS[kind] ?? kind
 }
 
 /** ObligationKind → compliance recurrence.kind for the stored row. */

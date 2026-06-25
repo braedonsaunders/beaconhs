@@ -42,7 +42,7 @@ export function ContactCreateDrawer({
       open={open}
       closeHref={closeHref}
       title="New contact"
-      description="Add a customer contact — site managers, client reps, emergency-only contacts."
+      description="Add a contact — site managers, client reps, emergency-only contacts."
       size="md"
     >
       <ContactForm

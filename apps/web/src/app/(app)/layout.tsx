@@ -9,6 +9,7 @@ import { can } from '@beaconhs/tenant'
 import { getRequestContext, listAccessibleTenants } from '@/lib/auth'
 import { AppShell } from '@/components/app-shell'
 import { NavigationProvider } from '@/components/navigation-provider'
+import { RiskMatrixProvider } from '@/components/risk-matrix'
 import { ThemeProvider } from '@/components/theme-provider'
 import { resolveNavGroups } from '@/lib/nav/resolve'
 
@@ -28,7 +29,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     db.transaction(async (tx) => {
       await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
       const [t] = await tx
-        .select({ id: tenants.id, name: tenants.name })
+        .select({ id: tenants.id, name: tenants.name, riskMatrix: tenants.riskMatrix })
         .from(tenants)
         .where(eq(tenants.id, ctx.tenantId))
         .limit(1)
@@ -83,7 +84,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               would keep showing the previous tenant's values. Keying here resets
               that whole class of state in one place; the shell/sidebar stay
               mounted and update via fresh props as before. */}
-          <Fragment key={`${ctx.tenantId}:${ctx.userId}`}>{children}</Fragment>
+          <RiskMatrixProvider matrix={tenant.riskMatrix}>
+            <Fragment key={`${ctx.tenantId}:${ctx.userId}`}>{children}</Fragment>
+          </RiskMatrixProvider>
           <Toaster richColors position="top-right" />
         </AppShell>
       </NavigationProvider>

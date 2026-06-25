@@ -82,7 +82,7 @@ const STATIC_GROUPS: Group[] = [
         href: '/admin/org',
         icon: <Building2 size={18} />,
         title: 'Org hierarchy',
-        desc: 'Customers, projects, sites, areas, crews',
+        desc: 'Locations, projects, sites, areas, crews',
       },
     ],
   },

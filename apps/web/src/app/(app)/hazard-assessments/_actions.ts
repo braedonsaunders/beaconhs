@@ -1083,8 +1083,9 @@ export async function updateHazard(formData: FormData) {
   revalidateAssessment(assessmentId)
 }
 
-// Coerces an incoming risk-rating form value to a clamped 1-5 int, or null
-// when the field is empty / not a number.
+// Coerces an incoming risk-rating form value to a clamped int, or null when the
+// field is empty / not a number. The ceiling matches the risk-matrix editor's
+// MAX_AXIS so a resized (e.g. 6×6) matrix can store its top index.
 function riskRating(v: FormDataEntryValue | null): number | null {
   if (v === null) return null
   const s = String(v).trim()
@@ -1092,7 +1093,7 @@ function riskRating(v: FormDataEntryValue | null): number | null {
   const n = Number(s)
   if (!Number.isFinite(n)) return null
   const i = Math.round(n)
-  if (i < 1 || i > 5) return null
+  if (i < 1 || i > 6) return null
   return i
 }
 
