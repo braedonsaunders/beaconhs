@@ -40,6 +40,8 @@ export const notifications = pgTable(
     data: jsonb('data').$type<Record<string, unknown>>().default({}).notNull(),
     isCritical: boolean('is_critical').default(false).notNull(),
     readAt: timestamp('read_at', { withTimezone: true }),
+    // Snoozed alerts drop out of the inbox until this time (Phase 3). null = visible.
+    snoozedUntil: timestamp('snoozed_until', { withTimezone: true }),
     occurredAt: timestamp('occurred_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => ({

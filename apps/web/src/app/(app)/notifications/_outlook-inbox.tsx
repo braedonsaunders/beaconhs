@@ -14,15 +14,20 @@ import {
   Bell,
   CheckCheck,
   ChevronLeft,
+  Clock,
+  FileText,
   Flag,
   Inbox,
+  ListChecks,
   Loader2,
   Mail,
   MailOpen,
   Menu,
   Search,
   Settings,
+  ShieldCheck,
   Trash2,
+  Wrench,
   X,
 } from 'lucide-react'
 import { Badge, Button, Drawer, cn } from '@beaconhs/ui'
@@ -31,12 +36,15 @@ import {
   deleteNotification,
   fetchInboxFolders,
   fetchInboxPage,
+  fetchInboxTodos,
   markAllNotificationsRead,
   markNotificationRead,
   markNotificationUnread,
+  snoozeNotification,
   type InboxFilter,
   type InboxFolders,
   type InboxItem,
+  type TodoItem,
 } from './actions'
 
 /* ------------------------------------------------------------------ helpers */
@@ -108,7 +116,7 @@ function applyDelta(
       if (categories[ci]!.total <= 0) categories = categories.filter((_, i) => i !== ci)
     }
   }
-  return { total, unread, criticalTotal, criticalUnread, categories }
+  return { total, unread, criticalTotal, criticalUnread, todos: folders.todos, categories }
 }
 
 /* -------------------------------------------------------------- folder rail */
@@ -210,6 +218,13 @@ function FolderRail({
           count={folders.criticalUnread}
           active={active === 'critical'}
           onClick={() => onSelect({ kind: 'critical' })}
+        />
+        <FolderButton
+          icon={<ListChecks size={16} />}
+          label="To-dos"
+          count={folders.todos}
+          active={active === 'todos'}
+          onClick={() => onSelect({ kind: 'todos' })}
         />
       </div>
 
@@ -394,17 +409,93 @@ function MessageRow({
   )
 }
 
+/* ---------------------------------------------------------------- to-dos */
+
+const TODO_META: Record<TodoItem['kind'], { label: string; Icon: typeof Inbox; bg: string; fg: string }> = {
+  compliance: {
+    label: 'Compliance',
+    Icon: ShieldCheck,
+    bg: 'bg-teal-100 dark:bg-teal-950/40',
+    fg: 'text-teal-600 dark:text-teal-300',
+  },
+  capa: {
+    label: 'Corrective action',
+    Icon: Wrench,
+    bg: 'bg-amber-100 dark:bg-amber-950/40',
+    fg: 'text-amber-600 dark:text-amber-300',
+  },
+  document: {
+    label: 'Document',
+    Icon: FileText,
+    bg: 'bg-sky-100 dark:bg-sky-950/40',
+    fg: 'text-sky-600 dark:text-sky-300',
+  },
+}
+
+function TodoRow({ todo, onOpen }: { todo: TodoItem; onOpen: () => void }) {
+  const meta = TODO_META[todo.kind]
+  const Icon = meta.Icon
+  const overdue = todo.status === 'overdue'
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="group flex w-full cursor-pointer items-center gap-3 border-b border-slate-100 px-3 py-2.5 text-left transition-colors hover:bg-slate-50 sm:px-4 dark:border-slate-800/70 dark:hover:bg-slate-800/40"
+    >
+      <span
+        className={cn(
+          'flex h-9 w-9 shrink-0 items-center justify-center rounded-full',
+          meta.bg,
+        )}
+      >
+        <Icon size={16} className={meta.fg} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="min-w-0 truncate text-xs text-slate-500 dark:text-slate-400">
+            {meta.label}
+          </span>
+          {todo.dueOn ? (
+            <span
+              className={cn(
+                'ml-auto shrink-0 text-[11px] whitespace-nowrap',
+                overdue ? 'font-medium text-rose-600 dark:text-rose-400' : 'text-slate-400',
+              )}
+            >
+              due {todo.dueOn}
+            </span>
+          ) : null}
+        </div>
+        <p className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">
+          {todo.title}
+        </p>
+        {todo.subtitle ? (
+          <p className="truncate text-xs text-slate-400 capitalize dark:text-slate-500">
+            {todo.subtitle}
+          </p>
+        ) : null}
+      </div>
+      <ArrowUpRight
+        size={15}
+        className="shrink-0 text-slate-300 opacity-0 transition-opacity group-hover:opacity-100 dark:text-slate-600"
+      />
+    </button>
+  )
+}
+
 /* ------------------------------------------------------------- reading pane */
 
 function ReadingPane({
   item,
   onToggleRead,
   onDelete,
+  onSnooze,
   onClose,
 }: {
   item: InboxItem | null
   onToggleRead: (item: InboxItem) => void
   onDelete: (item: InboxItem) => void
+  onSnooze: (item: InboxItem) => void
   onClose?: () => void // present only in the mobile flyout
 }) {
   const router = useRouter()
@@ -443,6 +534,9 @@ function ReadingPane({
       <Button variant="outline" size="sm" onClick={() => onToggleRead(item)}>
         {item.read ? <Mail size={14} /> : <MailOpen size={14} />}
         {item.read ? 'Mark unread' : 'Mark read'}
+      </Button>
+      <Button variant="outline" size="sm" onClick={() => onSnooze(item)} title="Snooze for 1 day">
+        <Clock size={14} /> Snooze
       </Button>
       <Button
         variant="outline"
@@ -541,15 +635,19 @@ export function OutlookInbox({
   initialFolders: InboxFolders
 }) {
   const isDesktop = useIsDesktop()
+  const router = useRouter()
   const [folders, setFolders] = useState(initialFolders)
   const [filter, setFilter] = useState<InboxFilter>({ kind: 'all' })
   const [search, setSearch] = useState('')
   const [items, setItems] = useState(initialItems)
+  const [todos, setTodos] = useState<TodoItem[]>([])
   const [hasMore, setHasMore] = useState(initialHasMore)
   const [loading, setLoading] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [foldersOpen, setFoldersOpen] = useState(false)
   const [, startTransition] = useTransition()
+
+  const mode = filter.kind === 'todos' ? 'todos' : 'alerts'
 
   const selected = useMemo(
     () => items.find((i) => i.id === selectedId) ?? null,
@@ -564,10 +662,18 @@ export function OutlookInbox({
     const my = ++reqRef.current
     setLoading(true)
     try {
-      const page = await fetchInboxPage({ filter: f })
-      if (my !== reqRef.current) return
-      setItems(page.items)
-      setHasMore(page.hasMore)
+      if (f.kind === 'todos') {
+        const t = await fetchInboxTodos()
+        if (my !== reqRef.current) return
+        setTodos(t)
+        setItems([])
+        setHasMore(false)
+      } else {
+        const page = await fetchInboxPage({ filter: f })
+        if (my !== reqRef.current) return
+        setItems(page.items)
+        setHasMore(page.hasMore)
+      }
     } finally {
       if (my === reqRef.current) setLoading(false)
     }
@@ -642,6 +748,16 @@ export function OutlookInbox({
     })
   }
 
+  const snooze = (item: InboxItem) => {
+    // Snoozed alerts drop out of the inbox like a delete until they resurface.
+    setSelectedId((sel) => (sel === item.id ? null : sel))
+    setFolders((f) => applyDelta(f, item, 'delete'))
+    setItems((prev) => prev.filter((i) => i.id !== item.id))
+    startTransition(() => {
+      void snoozeNotification(item.id, 24)
+    })
+  }
+
   const open = (item: InboxItem) => {
     setSelectedId(item.id)
     if (!item.read) setRead(item, true)
@@ -668,14 +784,37 @@ export function OutlookInbox({
       const meta = categoryMeta(filter.category)
       return { label: meta.label, total: c?.total ?? 0, unread: c?.unread ?? 0 }
     }
+    if (filter.kind === 'todos')
+      return { label: 'To-dos', total: todos.length || folders.todos, unread: 0 }
     if (filter.kind === 'unread')
       return { label: 'Unread', total: folders.unread, unread: folders.unread }
     if (filter.kind === 'critical')
       return { label: 'Critical', total: folders.criticalTotal, unread: folders.criticalUnread }
     return { label: 'All', total: folders.total, unread: folders.unread }
-  }, [filter, folders])
+  }, [filter, folders, todos])
 
-  const listBody =
+  const todosBody =
+    todos.length === 0 ? (
+      <div className="flex flex-col items-center justify-center px-6 py-20 text-center">
+        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
+          <ListChecks size={26} className="text-slate-400" />
+        </div>
+        <p className="mt-3 text-sm font-medium text-slate-600 dark:text-slate-300">
+          Nothing to do
+        </p>
+        <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+          No tasks are assigned to you right now.
+        </p>
+      </div>
+    ) : (
+      <>
+        {todos.map((t) => (
+          <TodoRow key={t.id} todo={t} onOpen={() => router.push(t.linkPath as never)} />
+        ))}
+      </>
+    )
+
+  const alertsBody =
     items.length === 0 ? (
       <div className="flex flex-col items-center justify-center px-6 py-20 text-center">
         <div className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
@@ -763,7 +902,7 @@ export function OutlookInbox({
               <Settings size={18} />
             </Link>
           </div>
-          <div className="px-3 pb-2.5 sm:px-4">
+          <div className={cn('px-3 pb-2.5 sm:px-4', mode === 'todos' && 'hidden')}>
             <div className="relative">
               <Search
                 size={15}
@@ -796,7 +935,7 @@ export function OutlookInbox({
               <Loader2 size={16} className="animate-spin text-slate-400" />
             </div>
           ) : null}
-          {listBody}
+          {mode === 'todos' ? todosBody : alertsBody}
         </div>
       </section>
 
@@ -807,6 +946,7 @@ export function OutlookInbox({
             item={selected}
             onToggleRead={(i) => setRead(i, !i.read)}
             onDelete={remove}
+            onSnooze={snooze}
           />
         </div>
       </section>
@@ -835,6 +975,10 @@ export function OutlookInbox({
               onToggleRead={(i) => setRead(i, !i.read)}
               onDelete={(i) => {
                 remove(i)
+                setSelectedId(null)
+              }}
+              onSnooze={(i) => {
+                snooze(i)
                 setSelectedId(null)
               }}
               onClose={() => setSelectedId(null)}
