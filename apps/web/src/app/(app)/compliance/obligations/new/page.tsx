@@ -23,6 +23,16 @@ export default async function NewObligationPage({
     ? (rawKind as ObligationKind)
     : 'inspection'
 
+  // Pre-select the target when arriving from a module's "make this a compliance
+  // obligation" link (e.g. a Builder app passes ?kind=form&formTemplateId=…).
+  const prefillTargetRef = {
+    formTemplateId: pickString(sp.formTemplateId),
+    inspectionTypeId: pickString(sp.inspectionTypeId),
+    documentId: pickString(sp.documentId),
+    courseId: pickString(sp.courseId),
+    skillTypeId: pickString(sp.skillTypeId),
+  }
+
   const { targets, audienceOptions } = await loadObligationFormOptions(ctx)
 
   return (
@@ -37,6 +47,7 @@ export default async function NewObligationPage({
           initialKind={initialKind}
           targets={targets}
           audienceOptions={audienceOptions}
+          prefillTargetRef={prefillTargetRef}
         />
       </div>
     </PageContainer>

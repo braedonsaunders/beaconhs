@@ -41,32 +41,54 @@ export async function repopulateParticipants(
     schema: FormSchemaV1
     data: Record<string, unknown>
     submittedAt: Date
+    /** The person who submitted — recorded as a participant so a plain app (no
+     *  person-picker field) is still first-class compliance evidence of "this
+     *  person completed the app". Null when the submitter has no people record. */
+    submitterPersonId?: string | null
   },
 ): Promise<number> {
   await tx
     .delete(formResponseParticipants)
     .where(eq(formResponseParticipants.responseId, args.responseId))
 
-  const extracted = extractParticipants(args.schema, args.data)
-  if (extracted.length === 0) return 0
-
   const occurredOn = resolvePrimaryDate(args.schema, args.data, args.submittedAt)
-  await tx.insert(formResponseParticipants).values(
-    extracted.map((p) => ({
+  const extracted = extractParticipants(args.schema, args.data)
+  const rows = extracted.map((p) => ({
+    tenantId: args.tenantId,
+    responseId: args.responseId,
+    templateId: args.templateId,
+    category: args.category,
+    personId: p.personId,
+    signed: p.signed,
+    signedAt: p.signed ? args.submittedAt : null,
+    occurredOn,
+    fieldId: p.fieldId,
+    sectionId: p.sectionId || null,
+    role: p.role,
+  }))
+
+  // The submitter counts as a participant (unless a person field already
+  // captured them) — this is what makes a Builder app a trackable compliance
+  // obligation: completing the app is recorded against the submitter.
+  if (args.submitterPersonId && !extracted.some((p) => p.personId === args.submitterPersonId)) {
+    rows.push({
       tenantId: args.tenantId,
       responseId: args.responseId,
       templateId: args.templateId,
       category: args.category,
-      personId: p.personId,
-      signed: p.signed,
-      signedAt: p.signed ? args.submittedAt : null,
+      personId: args.submitterPersonId,
+      signed: false,
+      signedAt: null,
       occurredOn,
-      fieldId: p.fieldId,
-      sectionId: p.sectionId || null,
-      role: p.role,
-    })),
-  )
-  return extracted.length
+      fieldId: '$submitter',
+      sectionId: null,
+      role: 'submitter',
+    })
+  }
+
+  if (rows.length === 0) return 0
+  await tx.insert(formResponseParticipants).values(rows)
+  return rows.length
 }
 
 export type TranscriptRow = {

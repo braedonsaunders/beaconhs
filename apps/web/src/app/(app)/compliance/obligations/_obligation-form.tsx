@@ -69,12 +69,17 @@ export function ObligationForm({
   targets,
   audienceOptions,
   initial,
+  prefillTargetRef,
   onClose,
 }: {
   initialKind: ObligationKind
   targets: ObligationTargets
   audienceOptions: AudienceOptions
   initial?: ObligationFormInitial
+  // Pre-select the target for a NEW obligation (e.g. arriving from a Builder
+  // app's "make this a compliance obligation" link). Unlike `initial`, this does
+  // NOT put the form in edit mode.
+  prefillTargetRef?: ComplianceTargetRef
   // Supplied when the form is hosted in a drawer (edit flyout): on success or
   // cancel the form calls this instead of navigating to the detail page itself.
   onClose?: () => void
@@ -83,7 +88,7 @@ export function ObligationForm({
   const [pending, start] = useTransition()
   const editing = Boolean(initial)
   const embedded = Boolean(onClose)
-  const ref = initial?.targetRef ?? {}
+  const ref = initial?.targetRef ?? prefillTargetRef ?? {}
 
   const [kind, setKind] = useState<ObligationKind>(initialKind)
   const [title, setTitle] = useState(initial?.title ?? '')

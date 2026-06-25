@@ -10,6 +10,7 @@ import {
   formTemplateVersions,
   formTemplates,
   orgUnits,
+  people,
 } from '@beaconhs/db/schema'
 import { extractScores, validateResponse } from '@beaconhs/forms-core'
 import { formResponseScores } from '@beaconhs/db/schema'
@@ -146,8 +147,15 @@ export async function submitFormResponse(args: {
           })),
         )
       }
-      // Rebuild the participant index (attendees / person pickers) so it powers
-      // transcripts, the form compliance kind, and reports.
+      // Rebuild the participant index (attendees / person pickers + the
+      // submitter) so it powers transcripts, the form compliance kind, and
+      // reports. Resolving the submitter's person record makes a plain app a
+      // trackable compliance obligation ("this person completed the app").
+      const [submitterPerson] = await tx
+        .select({ id: people.id })
+        .from(people)
+        .where(and(eq(people.tenantId, ctx.tenantId), eq(people.userId, ctx.userId)))
+        .limit(1)
       await repopulateParticipants(tx, {
         tenantId: ctx.tenantId,
         responseId: resp.id,
@@ -156,6 +164,7 @@ export async function submitFormResponse(args: {
         schema: version.schema,
         data: args.data,
         submittedAt: new Date(),
+        submitterPersonId: submitterPerson?.id ?? null,
       })
 
       // Monitored sessions are normally started by an on-submit Flow's
