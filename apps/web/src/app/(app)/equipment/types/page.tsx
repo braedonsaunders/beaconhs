@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { revalidatePath } from 'next/cache'
 import { Boxes, Plus, Trash2 } from 'lucide-react'
-import { asc, count, eq } from 'drizzle-orm'
+import { asc, count, eq, or } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -14,12 +14,18 @@ import {
   TableHeader,
   TableRow,
 } from '@beaconhs/ui'
-import { equipmentCategories, equipmentItems, equipmentTypes } from '@beaconhs/db/schema'
+import {
+  equipmentCategories,
+  equipmentItems,
+  equipmentTypes,
+  formTemplates,
+} from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { requireModuleManage, assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
-import { mergeHref, pickString } from '@/lib/list-params'
+import { clamp, mergeHref, pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
+import { Pagination } from '@/components/pagination'
 import { EquipmentSubNav } from '@/components/equipment-sub-nav'
 import { EquipmentTypeDrawer, type TypeEditing } from './_drawers'
 
@@ -99,14 +105,19 @@ export default async function EquipmentTypesPage({
 }) {
   const sp = await searchParams
   const drawerParam = pickString(sp.drawer)
+  const page = clamp(Number(pickString(sp.page) ?? '1'), 1, 10_000)
+  const perPage = 25
   const ctx = await requireModuleManage('equipment')
 
-  const { types, categories, counts } = await ctx.db(async (tx) => {
+  const { types, total, categories, counts, editingRow, templates } = await ctx.db(async (tx) => {
+    const [tot] = await tx.select({ c: count() }).from(equipmentTypes)
     const t = await tx
       .select({ type: equipmentTypes, cat: equipmentCategories })
       .from(equipmentTypes)
       .leftJoin(equipmentCategories, eq(equipmentCategories.id, equipmentTypes.categoryId))
       .orderBy(asc(equipmentTypes.name))
+      .limit(perPage)
+      .offset((page - 1) * perPage)
     const c = await tx
       .select()
       .from(equipmentCategories)
@@ -115,24 +126,48 @@ export default async function EquipmentTypesPage({
       .select({ typeId: equipmentItems.typeId, c: count() })
       .from(equipmentItems)
       .groupBy(equipmentItems.typeId)
+    // Edit row fetched by id so the drawer opens regardless of which page it's on.
+    const ed =
+      drawerParam && drawerParam !== 'new'
+        ? ((
+            await tx
+              .select()
+              .from(equipmentTypes)
+              .where(eq(equipmentTypes.id, drawerParam))
+              .limit(1)
+          )[0] ?? null)
+        : null
+    // Form templates usable as a pre-use inspection — the dropdown source.
+    const tmpls = await tx
+      .select({ key: formTemplates.key, name: formTemplates.name })
+      .from(formTemplates)
+      .where(
+        or(
+          eq(formTemplates.moduleBinding, 'equipment_inspection'),
+          eq(formTemplates.category, 'inspection'),
+        ),
+      )
+      .orderBy(asc(formTemplates.name))
+      .limit(200)
     return {
       types: t,
+      total: Number(tot?.c ?? 0),
       categories: c,
       counts: Object.fromEntries(tally.map((x) => [x.typeId, Number(x.c)])),
+      editingRow: ed,
+      templates: tmpls,
     }
   })
 
-  const editingRow =
-    drawerParam && drawerParam !== 'new' ? types.find((r) => r.type.id === drawerParam) : undefined
   const editing: TypeEditing | null = editingRow
     ? {
-        id: editingRow.type.id,
-        name: editingRow.type.name,
-        description: editingRow.type.description,
-        categoryId: editingRow.type.categoryId,
-        everyDays: editingRow.type.inspectionSchedule?.everyDays ?? null,
-        oilMonths: editingRow.type.defaultOilChangeIntervalMonths ?? null,
-        templateKey: editingRow.type.requiresPreUseInspection?.templateKey ?? null,
+        id: editingRow.id,
+        name: editingRow.name,
+        description: editingRow.description,
+        categoryId: editingRow.categoryId,
+        everyDays: editingRow.inspectionSchedule?.everyDays ?? null,
+        oilMonths: editingRow.defaultOilChangeIntervalMonths ?? null,
+        templateKey: editingRow.requiresPreUseInspection?.templateKey ?? null,
       }
     : null
   const mode: 'new' | 'edit' | null = drawerParam === 'new' ? 'new' : editing ? 'edit' : null
@@ -248,11 +283,22 @@ export default async function EquipmentTypesPage({
         </div>
       )}
 
+      {total > perPage ? (
+        <Pagination
+          basePath={BASE}
+          currentParams={sp}
+          total={total}
+          page={page}
+          perPage={perPage}
+        />
+      ) : null}
+
       <EquipmentTypeDrawer
         mode={mode}
         editing={editing}
         closeHref={closeHref}
         categories={categories.map((c) => ({ id: c.id, name: c.name }))}
+        templates={templates}
         saveAction={saveType}
       />
     </ListPageLayout>

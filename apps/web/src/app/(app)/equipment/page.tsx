@@ -138,14 +138,8 @@ export default async function EquipmentPage({
             description="Asset registry. QR scan + inspections + work orders."
             actions={
               <div className="flex items-center gap-2">
-                <Link href="/reports">
-                  <Button variant="outline">Reports</Button>
-                </Link>
                 <Link href={buildExportHref('/equipment/export.csv', { ...sp, status: statusRaw })}>
                   <Button variant="outline">Export CSV</Button>
-                </Link>
-                <Link href="/equipment/qr/bulk">
-                  <Button variant="outline">Bulk QR</Button>
                 </Link>
                 <Link href="/equipment/new">
                   <Button>Add equipment</Button>

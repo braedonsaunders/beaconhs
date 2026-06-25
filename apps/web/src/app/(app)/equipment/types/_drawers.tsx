@@ -33,12 +33,14 @@ export function EquipmentTypeDrawer({
   editing,
   closeHref,
   categories,
+  templates,
   saveAction,
 }: {
   mode: 'new' | 'edit' | null
   editing: TypeEditing | null
   closeHref: string
   categories: { id: string; name: string }[]
+  templates: { key: string; name: string }[]
   saveAction: SaveAction
 }) {
   const router = useRouter()
@@ -58,6 +60,7 @@ export function EquipmentTypeDrawer({
         key={editing?.id ?? 'new'}
         editing={editing}
         categories={categories}
+        templates={templates}
         saveAction={saveAction}
         onDone={close}
       />
@@ -68,11 +71,13 @@ export function EquipmentTypeDrawer({
 function TypeForm({
   editing,
   categories,
+  templates,
   saveAction,
   onDone,
 }: {
   editing: TypeEditing | null
   categories: { id: string; name: string }[]
+  templates: { key: string; name: string }[]
   saveAction: SaveAction
   onDone: () => void
 }) {
@@ -170,13 +175,22 @@ function TypeForm({
         </div>
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="et-template">Pre-use template key</Label>
-        <Input
+        <Label htmlFor="et-template">Pre-use inspection template</Label>
+        <Select
           id="et-template"
           value={templateKey}
           onChange={(e) => setTemplateKey(e.currentTarget.value)}
-          placeholder="e.g. vehicle_pre_use"
-        />
+        >
+          <option value="">— None (no pre-use inspection) —</option>
+          {templates.map((t) => (
+            <option key={t.key} value={t.key}>
+              {t.name}
+            </option>
+          ))}
+          {templateKey && !templates.some((t) => t.key === templateKey) ? (
+            <option value={templateKey}>{templateKey} (current)</option>
+          ) : null}
+        </Select>
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="et-description">Description</Label>

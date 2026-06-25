@@ -18,8 +18,9 @@ import { equipmentCategories, equipmentTypes } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { requireModuleManage, assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
-import { mergeHref, pickString } from '@/lib/list-params'
+import { clamp, mergeHref, pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
+import { Pagination } from '@/components/pagination'
 import { EquipmentSubNav } from '@/components/equipment-sub-nav'
 import { EquipmentCategoryDrawer, type CategoryEditing } from './_drawers'
 
@@ -106,29 +107,44 @@ export default async function EquipmentCategoriesPage({
 }) {
   const sp = await searchParams
   const drawerParam = pickString(sp.drawer)
+  const page = clamp(Number(pickString(sp.page) ?? '1'), 1, 10_000)
+  const perPage = 25
   const ctx = await requireModuleManage('equipment')
 
-  const { categories, typeCounts } = await ctx.db(async (tx) => {
+  const { categories, total, typeCounts, editingRow } = await ctx.db(async (tx) => {
+    const [tot] = await tx.select({ c: count() }).from(equipmentCategories)
     const c = await tx
       .select()
       .from(equipmentCategories)
       .orderBy(asc(equipmentCategories.sortOrder), asc(equipmentCategories.name))
+      .limit(perPage)
+      .offset((page - 1) * perPage)
     const tally = await tx
       .select({ categoryId: equipmentTypes.categoryId, c: count() })
       .from(equipmentTypes)
       .groupBy(equipmentTypes.categoryId)
+    // Edit row fetched by id so the drawer opens regardless of which page it's on.
+    const ed =
+      drawerParam && drawerParam !== 'new'
+        ? ((
+            await tx
+              .select()
+              .from(equipmentCategories)
+              .where(eq(equipmentCategories.id, drawerParam))
+              .limit(1)
+          )[0] ?? null)
+        : null
     return {
       categories: c,
+      total: Number(tot?.c ?? 0),
       typeCounts: Object.fromEntries(
         tally
           .filter((x) => x.categoryId !== null)
           .map((x) => [x.categoryId as string, Number(x.c)]),
       ),
+      editingRow: ed,
     }
   })
-
-  const editingRow =
-    drawerParam && drawerParam !== 'new' ? categories.find((c) => c.id === drawerParam) : undefined
   const editing: CategoryEditing | null = editingRow
     ? {
         id: editingRow.id,
@@ -245,6 +261,16 @@ export default async function EquipmentCategoriesPage({
           </Table>
         </div>
       )}
+
+      {total > perPage ? (
+        <Pagination
+          basePath={BASE}
+          currentParams={sp}
+          total={total}
+          page={page}
+          perPage={perPage}
+        />
+      ) : null}
 
       <EquipmentCategoryDrawer
         mode={mode}
