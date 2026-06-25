@@ -128,9 +128,7 @@ export default async function EquipmentCategoriesPage({
   })
 
   const editingRow =
-    drawerParam && drawerParam !== 'new'
-      ? categories.find((c) => c.id === drawerParam)
-      : undefined
+    drawerParam && drawerParam !== 'new' ? categories.find((c) => c.id === drawerParam) : undefined
   const editing: CategoryEditing | null = editingRow
     ? {
         id: editingRow.id,

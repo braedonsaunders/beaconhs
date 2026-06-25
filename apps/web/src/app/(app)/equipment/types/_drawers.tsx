@@ -78,8 +78,12 @@ function TypeForm({
 }) {
   const [name, setName] = useState(editing?.name ?? '')
   const [categoryId, setCategoryId] = useState(editing?.categoryId ?? '')
-  const [everyDays, setEveryDays] = useState(editing?.everyDays != null ? String(editing.everyDays) : '')
-  const [oilMonths, setOilMonths] = useState(editing?.oilMonths != null ? String(editing.oilMonths) : '')
+  const [everyDays, setEveryDays] = useState(
+    editing?.everyDays != null ? String(editing.everyDays) : '',
+  )
+  const [oilMonths, setOilMonths] = useState(
+    editing?.oilMonths != null ? String(editing.oilMonths) : '',
+  )
   const [templateKey, setTemplateKey] = useState(editing?.templateKey ?? '')
   const [description, setDescription] = useState(editing?.description ?? '')
   const [error, setError] = useState<string | null>(null)
