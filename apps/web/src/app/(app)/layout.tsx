@@ -5,6 +5,7 @@ import { and, count, eq, isNull, sql } from 'drizzle-orm'
 import { Toaster } from 'sonner'
 import { db } from '@beaconhs/db'
 import { notifications, tenants } from '@beaconhs/db/schema'
+import { can } from '@beaconhs/tenant'
 import { getRequestContext, listAccessibleTenants } from '@/lib/auth'
 import { AppShell } from '@/components/app-shell'
 import { NavigationProvider } from '@/components/navigation-provider'
@@ -72,6 +73,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           unreadCount={unread}
           defaultCollapsed={defaultCollapsed}
           impersonation={impersonation}
+          canUseAssistant={can(ctx, 'assistant.use')}
         >
           {/* Remount the page subtree when the active tenant — or effective
               user, while impersonating — changes. router.refresh() (fired by the

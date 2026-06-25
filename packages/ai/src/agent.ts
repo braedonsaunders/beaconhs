@@ -39,7 +39,10 @@ const DEFAULT_MAX_STEPS = 12
  * Run one agentic turn and return a streaming Response (UI-message SSE protocol).
  * Throws AIDisabledError when the tenant has no model configured.
  */
-export function runAgentTurn(config: AiConfig | null | undefined, args: RunAgentTurnArgs): Response {
+export function runAgentTurn(
+  config: AiConfig | null | undefined,
+  args: RunAgentTurnArgs,
+): Response {
   const model = getModel(config, args.tier ?? 'smart')
   if (!model) throw new AIDisabledError()
 
