@@ -3,7 +3,7 @@
 // Render a fresh HazID assessment PDF on demand and stream it back to the browser.
 
 import { requireRequestContext } from '@/lib/auth'
-import { renderOnDemandPdfResponse } from '@/lib/pdf-route'
+import { renderModulePdfResponse } from '@/lib/module-pdf'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,5 +17,9 @@ export async function GET(
     return Response.json({ error: 'No active tenant' }, { status: 400 })
   }
 
-  return renderOnDemandPdfResponse({ kind: 'hazid', tenantId: ctx.tenantId, assessmentId: id })
+  return renderModulePdfResponse(ctx, {
+    moduleKey: 'hazid',
+    recordId: id,
+    builtin: { kind: 'hazid', tenantId: ctx.tenantId, assessmentId: id },
+  })
 }

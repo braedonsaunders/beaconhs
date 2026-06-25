@@ -4,8 +4,17 @@
 // on a URL resolved on demand. Used by both the documents and books read-only
 // card grids. `resolve(id)` returns either a ready URL, a "still generating"
 // signal, or an error.
+//
+// Two kinds of URL come back from resolve():
+//   • A cross-origin presigned URL (uploaded-PDF documents) — handed straight to
+//     the <iframe>, which browsers render natively.
+//   • A same-origin on-demand render route (in-app HTML docs + books), e.g.
+//     `/documents/:id/pdf`. The route blocks while the worker renders the PDF and
+//     then streams it — OR returns a JSON error if the render fails/times out. We
+//     fetch it so we can show a real "generating" state and surface that error,
+//     instead of dropping a failing route into an <iframe> that just renders blank.
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Download, ExternalLink, Loader2, RefreshCw, X } from 'lucide-react'
 import { Button } from '@beaconhs/ui'
 
@@ -26,29 +35,75 @@ export function ReadOnlyPdfModal({
   onClose: () => void
 }) {
   const [status, setStatus] = useState<Status>('loading')
+  // What the <iframe> shows + the download / open-in-new-tab links point at: an
+  // object URL for fetched renders, or the presigned URL for uploaded PDFs.
   const [url, setUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const blobUrlRef = useRef<string | null>(null)
+
+  const revokeBlob = useCallback(() => {
+    if (blobUrlRef.current) {
+      URL.revokeObjectURL(blobUrlRef.current)
+      blobUrlRef.current = null
+    }
+  }, [])
 
   const load = useCallback(async () => {
     setStatus('loading')
     setError(null)
+    revokeBlob()
+    setUrl(null)
+
     const r = await resolve(id)
     if (!r.ok) {
       setStatus('error')
       setError(r.error)
       return
     }
-    if (r.url) {
+    if (!r.url) {
+      setStatus('generating')
+      return
+    }
+
+    // Cross-origin presigned URL (uploaded PDF) → render straight in the iframe.
+    if (!r.url.startsWith('/')) {
       setUrl(r.url)
       setStatus('ready')
-    } else {
-      setStatus('generating')
+      return
     }
-  }, [id, resolve])
+
+    // Same-origin on-demand render route → fetch so we surface render failures
+    // and show real progress rather than a silently-blank iframe.
+    setStatus('generating')
+    try {
+      const res = await fetch(r.url, { credentials: 'same-origin' })
+      if (!res.ok) {
+        let message = `The PDF could not be generated (HTTP ${res.status}).`
+        try {
+          const body = (await res.json()) as { error?: string }
+          if (body?.error) message = body.error
+        } catch {
+          // non-JSON error body — keep the status-code message
+        }
+        setStatus('error')
+        setError(message)
+        return
+      }
+      const blob = await res.blob()
+      const objectUrl = URL.createObjectURL(blob)
+      blobUrlRef.current = objectUrl
+      setUrl(objectUrl)
+      setStatus('ready')
+    } catch (e) {
+      setStatus('error')
+      setError(e instanceof Error ? e.message : 'The PDF could not be loaded.')
+    }
+  }, [id, resolve, revokeBlob])
 
   useEffect(() => {
     void load()
-  }, [load])
+    return revokeBlob
+  }, [load, revokeBlob])
 
   const linkCls =
     'inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/60'
@@ -67,7 +122,7 @@ export function ReadOnlyPdfModal({
             {title}
           </span>
           <div className="flex shrink-0 items-center gap-1.5">
-            {url ? (
+            {status === 'ready' && url ? (
               <>
                 <a href={url} download className={linkCls}>
                   <Download size={13} /> Download
@@ -94,11 +149,8 @@ export function ReadOnlyPdfModal({
             <Centered>
               <Loader2 size={20} className="animate-spin text-teal-600" />
               <p className="text-sm text-slate-600 dark:text-slate-300">
-                Generating the PDF — this takes a few seconds.
+                Generating the PDF — this can take a few seconds.
               </p>
-              <Button variant="outline" onClick={load}>
-                <RefreshCw size={14} /> Check again
-              </Button>
             </Centered>
           ) : status === 'error' ? (
             <Centered>

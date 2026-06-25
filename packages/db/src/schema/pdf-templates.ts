@@ -16,7 +16,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core'
-import { relations } from 'drizzle-orm'
+import { relations, sql } from 'drizzle-orm'
 import { id, timestamps, softDelete } from './_helpers'
 import { tenants, tenantUsers } from './core'
 
@@ -58,6 +58,11 @@ export const pdfTemplates = pgTable(
     sourceHtml: text('source_html'),
     mergeFields: jsonb('merge_fields').$type<PdfMergeField[]>().notNull().default([]),
     isActive: boolean('is_active').notNull().default(true),
+    // When true, this template is the tenant's default for its module's built-in
+    // print/PDF button (so the formatted record PDF uses the tenant's layout
+    // instead of the hard-coded one). Only meaningful for recordSubjectType='module'.
+    // At most one per (tenant, module) — enforced by moduleDefaultUx below.
+    isModuleDefault: boolean('is_module_default').notNull().default(false),
     createdByTenantUserId: uuid('created_by_tenant_user_id').references(() => tenantUsers.id),
     ...timestamps,
     ...softDelete,
@@ -70,6 +75,12 @@ export const pdfTemplates = pgTable(
       t.recordSubjectType,
       t.recordSubjectKey,
     ),
+    // At most one default print template per (tenant, module).
+    moduleDefaultUx: uniqueIndex('pdf_templates_module_default_ux')
+      .on(t.tenantId, t.recordSubjectKey)
+      .where(
+        sql`${t.isModuleDefault} and ${t.recordSubjectType} = 'module' and ${t.deletedAt} is null`,
+      ),
   }),
 )
 

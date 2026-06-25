@@ -1,6 +1,7 @@
-// GET /incidents/:id/pdf
+// GET /journals/:id/pdf
 //
-// Render a fresh incident PDF on demand and stream it back to the browser.
+// Render a journal entry PDF on demand. Uses the tenant's configured template
+// for the journals module when one is set, else the generic record summary.
 
 import { requireRequestContext } from '@/lib/auth'
 import { renderModulePdfResponse } from '@/lib/module-pdf'
@@ -17,9 +18,5 @@ export async function GET(
     return Response.json({ error: 'No active tenant' }, { status: 400 })
   }
 
-  return renderModulePdfResponse(ctx, {
-    moduleKey: 'incidents',
-    recordId: id,
-    builtin: { kind: 'incident', tenantId: ctx.tenantId, incidentId: id },
-  })
+  return renderModulePdfResponse(ctx, { moduleKey: 'journals', recordId: id })
 }

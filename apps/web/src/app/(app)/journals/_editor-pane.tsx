@@ -9,6 +9,7 @@ import { useEffect, useRef, useState, useTransition } from 'react'
 import {
   Check,
   CloudUpload,
+  FileText,
   Loader2,
   Mail,
   MoreHorizontal,
@@ -221,7 +222,16 @@ export function EditorPane({
                   onClick={() => setMenuOpen(false)}
                   className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700/60"
                 >
-                  <Printer size={14} /> Print / PDF
+                  <Printer size={14} /> Print
+                </a>
+                <a
+                  href={`/journals/${entry.id}/pdf`}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={() => setMenuOpen(false)}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700/60"
+                >
+                  <FileText size={14} /> PDF
                 </a>
                 <button
                   type="button"

@@ -5,13 +5,14 @@
 // sanitize (shared with email templates). All mutations recordAudit.
 
 import { revalidatePath } from 'next/cache'
-import { eq, isNull } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import { can } from '@beaconhs/tenant'
 import { pdfTemplates } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { compileBuilderHtml, slugifyTemplateKey } from '@/lib/email-templates'
 import { loadSubjectFields } from '@/lib/flows/subject-fields'
+import { isModulePdfTarget } from '@/lib/module-pdf'
 import { loadTenantPdfTemplate } from '@/lib/pdf-templates'
 import { buildFlowAdapter } from '@/lib/flows/registry'
 import { findSampleSubjectId } from '@/lib/flows/sample-record'
@@ -168,6 +169,55 @@ export async function loadPdfPreviewData(
   } catch {
     return { values: null, sampleRef: null }
   }
+}
+
+// Assign (or clear) the default print/PDF template for a native module. Clearing
+// reverts that module's print button to its built-in renderer. At most one
+// template is the default per (tenant, module) — the partial unique index backs
+// this; we also clear the prior default first so re-assigning is idempotent.
+export async function setModuleDefaultTemplate(input: {
+  moduleKey: string
+  templateId: string | null
+}): Promise<{ ok: boolean; error?: string }> {
+  const ctx = await requireManage()
+  if (!isModulePdfTarget(input.moduleKey)) return { ok: false, error: 'Unknown module' }
+
+  await ctx.db(async (tx) => {
+    await tx
+      .update(pdfTemplates)
+      .set({ isModuleDefault: false })
+      .where(
+        and(
+          eq(pdfTemplates.recordSubjectType, 'module'),
+          eq(pdfTemplates.recordSubjectKey, input.moduleKey),
+          eq(pdfTemplates.isModuleDefault, true),
+        ),
+      )
+    if (input.templateId) {
+      await tx
+        .update(pdfTemplates)
+        .set({ isModuleDefault: true })
+        .where(
+          and(
+            eq(pdfTemplates.id, input.templateId),
+            eq(pdfTemplates.recordSubjectType, 'module'),
+            eq(pdfTemplates.recordSubjectKey, input.moduleKey),
+            isNull(pdfTemplates.deletedAt),
+          ),
+        )
+    }
+  })
+
+  await recordAudit(ctx, {
+    entityType: 'pdf_template',
+    entityId: input.templateId ?? input.moduleKey,
+    action: 'update',
+    summary: input.templateId
+      ? `Set default print template for ${input.moduleKey}`
+      : `Reverted ${input.moduleKey} print button to the built-in template`,
+  })
+  revalidatePath('/admin/pdf-templates')
+  return { ok: true }
 }
 
 export async function deletePdfTemplate(formData: FormData): Promise<void> {

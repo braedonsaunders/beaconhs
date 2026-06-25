@@ -7,6 +7,7 @@ import {
   Camera,
   CheckCircle2,
   ClipboardCheck,
+  FileText,
   History,
   ListChecks,
   Lock,
@@ -726,6 +727,14 @@ export default async function InspectionRecordDetailPage({
           }
           actions={
             <div className="flex items-center gap-2">
+              <Link
+                href={`/inspections/records/${id}/pdf`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-4 text-sm font-medium text-slate-900 shadow-sm transition-colors hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800/60"
+              >
+                <FileText size={14} /> PDF
+              </Link>
               <form action={toggleLock}>
                 <input type="hidden" name="id" value={id} />
                 <input type="hidden" name="lock" value={record.locked ? 'false' : 'true'} />

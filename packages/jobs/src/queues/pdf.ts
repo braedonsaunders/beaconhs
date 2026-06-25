@@ -82,6 +82,9 @@ export type OnDemandPdfJobData =
   | Extract<PdfJobData, { kind: 'hazid' }>
   | Extract<PdfJobData, { kind: 'ca' }>
   | Extract<PdfJobData, { kind: 'record_summary' }>
+  // A tenant PDF template merged with a record's values (the configurable
+  // per-module default print template); the HTML is merged before enqueue.
+  | Extract<PdfJobData, { kind: 'template_pdf' }>
   | Extract<PdfJobData, { kind: 'document' }>
   | Extract<PdfJobData, { kind: 'document_book' }>
   | Extract<PdfJobData, { kind: 'equipment_workorder' }>
