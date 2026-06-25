@@ -20,6 +20,7 @@ import {
   tenantUsers,
   user,
 } from '@beaconhs/db/schema'
+import { htmlToSnippet } from '@beaconhs/forms-core'
 import { requireRequestContext } from '@/lib/auth'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
@@ -82,7 +83,9 @@ export default async function WorkOrdersPage({
     perPage: 25,
     allowedSorts: SORTS,
   })
-  const statusFilter = pickString(sp.status)
+  // Default to open work orders; the "All statuses" chip (status=all) clears it.
+  const statusRaw = pickString(sp.status) ?? 'open'
+  const statusFilter = statusRaw === 'all' ? undefined : statusRaw
   const priorityFilter = pickString(sp.priority)
   const assigneeFilter = pickString(sp.assignee)
   const typeFilter = pickString(sp.type)
@@ -288,6 +291,8 @@ export default async function WorkOrdersPage({
               currentParams={sp}
               paramKey="status"
               label="Status"
+              allLabel="All statuses"
+              defaultValue="open"
               options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
             />
             <FilterChips
@@ -413,7 +418,7 @@ export default async function WorkOrdersPage({
                         href={`/equipment/work-orders/${wo.id}` as any}
                         className="font-medium text-slate-900 hover:underline"
                       >
-                        {wo.summary}
+                        {htmlToSnippet(wo.summary)}
                       </Link>
                     </TableCell>
                     <TableCell className="text-slate-600">

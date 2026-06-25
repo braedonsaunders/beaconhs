@@ -19,7 +19,7 @@ import { pickString } from '@/lib/list-params'
 import { PageContainer } from '@/components/page-layout'
 import { PersonSelectField } from '@/components/person-select-field'
 
-export const metadata = { title: 'New truck log entry' }
+export const metadata = { title: 'New vehicle log entry' }
 export const dynamic = 'force-dynamic'
 
 function safeInt(raw: FormDataEntryValue | null): number | null {
@@ -79,7 +79,7 @@ async function createEntry(formData: FormData) {
     return inserted
   })
 
-  if (!row) redirect('/equipment/truck-log')
+  if (!row) redirect('/equipment/vehicle-log')
   await recordAudit(ctx, {
     entityType: 'truck_log_entry',
     entityId: row.id,
@@ -88,9 +88,9 @@ async function createEntry(formData: FormData) {
     after: { equipmentItemId, entryDate, kmDriven, manpowerCount, hoursOnSite: hoursRaw },
   })
   const monthParam = entryDate.slice(0, 7)
-  revalidatePath('/equipment/truck-log')
+  revalidatePath('/equipment/vehicle-log')
   revalidatePath(`/equipment/${equipmentItemId}`)
-  redirect(`/equipment/truck-log?month=${monthParam}`)
+  redirect(`/equipment/vehicle-log?month=${monthParam}`)
 }
 
 export default async function NewTruckLogEntryPage({
@@ -148,17 +148,17 @@ export default async function NewTruckLogEntryPage({
     <PageContainer>
       <div className="mx-auto max-w-2xl space-y-6">
         <DetailHeader
-          back={{ href: '/equipment/truck-log', label: 'Back to truck log' }}
-          title="New truck log entry"
-          subtitle="One row per truck per day. Odometer in/out captures kilometres driven."
+          back={{ href: '/equipment/vehicle-log', label: 'Back to vehicle log' }}
+          title="New vehicle log entry"
+          subtitle="One row per vehicle per day. Odometer in/out captures kilometres driven."
         />
         <Card>
           <CardContent className="pt-6">
             <form action={createEntry} className="space-y-4">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Field label="Truck" required>
+                <Field label="Vehicle" required>
                   <Select name="equipmentItemId" defaultValue={presetTruckId} required>
-                    <option value="">— Select truck —</option>
+                    <option value="">— Select vehicle —</option>
                     {trucks.map((t) => (
                       <option key={t.id} value={t.id}>
                         {t.assetTag} · {t.name}
@@ -220,7 +220,7 @@ export default async function NewTruckLogEntryPage({
                 />
               </Field>
               <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-4">
-                <Link href="/equipment/truck-log">
+                <Link href="/equipment/vehicle-log">
                   <Button type="button" variant="outline">
                     Cancel
                   </Button>

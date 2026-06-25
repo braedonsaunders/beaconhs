@@ -86,8 +86,8 @@ async function updateEntry(formData: FormData) {
     summary: `Updated entry for ${entryDate}`,
     after: { equipmentItemId, entryDate, kmDriven, manpowerCount, hoursOnSite: hoursRaw },
   })
-  revalidatePath('/equipment/truck-log')
-  revalidatePath(`/equipment/truck-log/${id}`)
+  revalidatePath('/equipment/vehicle-log')
+  revalidatePath(`/equipment/vehicle-log/${id}`)
   revalidatePath(`/equipment/${equipmentItemId}`)
 }
 
@@ -109,7 +109,7 @@ async function deleteEntry(formData: FormData) {
     await tx.delete(truckLogEntries).where(eq(truckLogEntries.id, id))
     return existing
   })
-  if (!removed) redirect('/equipment/truck-log')
+  if (!removed) redirect('/equipment/vehicle-log')
   await recordAudit(ctx, {
     entityType: 'truck_log_entry',
     entityId: id,
@@ -117,14 +117,14 @@ async function deleteEntry(formData: FormData) {
     summary: `Deleted entry for ${removed.entryDate}`,
     before: { entryDate: removed.entryDate, equipmentItemId: removed.equipmentItemId },
   })
-  revalidatePath('/equipment/truck-log')
+  revalidatePath('/equipment/vehicle-log')
   revalidatePath(`/equipment/${removed.equipmentItemId}`)
-  redirect(`/equipment/truck-log?month=${removed.entryDate.slice(0, 7)}`)
+  redirect(`/equipment/vehicle-log?month=${removed.entryDate.slice(0, 7)}`)
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  return { title: `Truck log · ${id.slice(0, 8)}` }
+  return { title: `Vehicle log · ${id.slice(0, 8)}` }
 }
 
 export default async function TruckLogDetailPage({
@@ -189,15 +189,15 @@ export default async function TruckLogDetailPage({
   const { entry, truck, driver, site, trucks, sites, drivers } = data
   const activity =
     active === 'activity' ? await recentActivityForEntity(ctx, 'truck_log_entry', id, 50) : []
-  const basePath = `/equipment/truck-log/${id}`
+  const basePath = `/equipment/vehicle-log/${id}`
 
   return (
     <DetailPageLayout
       header={
         <DetailHeader
           back={{
-            href: `/equipment/truck-log?month=${entry.entryDate.slice(0, 7)}`,
-            label: 'Back to truck log',
+            href: `/equipment/vehicle-log?month=${entry.entryDate.slice(0, 7)}`,
+            label: 'Back to vehicle log',
           }}
           title={`${truck?.assetTag ?? '—'} · ${entry.entryDate}`}
           subtitle={truck ? truck.name : 'Equipment removed'}

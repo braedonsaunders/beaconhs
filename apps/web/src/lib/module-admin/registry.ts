@@ -242,11 +242,10 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
     permission: 'equipment.manage',
     tabs: [
       { key: 'equipment', label: 'Equipment', href: '/equipment' },
-      { key: 'work-orders', label: 'Work orders', href: '/equipment/work-orders' },
-      { key: 'truck-log', label: 'Truck log', href: '/equipment/truck-log' },
-      { key: 'inspections', label: 'Inspections', href: '/equipment/inspections' },
       { key: 'check-out', label: 'Check in / out', href: '/equipment/check-out' },
-      { key: 'log', label: 'Log', href: '/equipment/log' },
+      { key: 'work-orders', label: 'Work orders', href: '/equipment/work-orders' },
+      { key: 'vehicle-log', label: 'Vehicle log', href: '/equipment/vehicle-log' },
+      { key: 'inspections', label: 'Inspections', href: '/equipment/inspections' },
     ],
     sections: [
       {

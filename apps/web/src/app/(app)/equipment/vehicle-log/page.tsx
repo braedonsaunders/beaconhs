@@ -18,7 +18,7 @@ import { pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
 import { EquipmentSubNav } from '@/components/equipment-sub-nav'
 
-export const metadata = { title: 'Truck log' }
+export const metadata = { title: 'Vehicle log' }
 export const dynamic = 'force-dynamic'
 
 function parseMonth(raw: string | undefined): { year: number; month: number } {
@@ -122,16 +122,16 @@ export default async function TruckLogPage({
     <ListPageLayout
       header={
         <>
-          <EquipmentSubNav active="truck-log" />
+          <EquipmentSubNav active="vehicle-log" />
           <PageHeader
-            title="Truck log"
-            description="Per-day per-truck odometer, kilometres, manpower, and hours on site."
+            title="Vehicle log"
+            description="Per-day per-vehicle odometer, kilometres, manpower, and hours on site."
             actions={
               <div className="flex items-center gap-2">
-                <Link href={'/equipment/truck-log/summary' as any}>
+                <Link href={'/equipment/vehicle-log/summary' as any}>
                   <Button variant="outline">Monthly summary</Button>
                 </Link>
-                <Link href={`/equipment/truck-log/new?month=${year}-${pad2(month)}` as any}>
+                <Link href={`/equipment/vehicle-log/new?month=${year}-${pad2(month)}` as any}>
                   <Button>New entry</Button>
                 </Link>
               </div>
@@ -139,7 +139,7 @@ export default async function TruckLogPage({
           />
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <Link href={`/equipment/truck-log?month=${monthParamPrev}` as any}>
+              <Link href={`/equipment/vehicle-log?month=${monthParamPrev}` as any}>
                 <Button variant="outline" size="sm">
                   ← Previous
                 </Button>
@@ -147,14 +147,14 @@ export default async function TruckLogPage({
               <div className="text-sm font-medium text-slate-700 dark:text-slate-300">
                 {fmtMonthLabel(year, month)}
               </div>
-              <Link href={`/equipment/truck-log?month=${monthParamNext}` as any}>
+              <Link href={`/equipment/vehicle-log?month=${monthParamNext}` as any}>
                 <Button variant="outline" size="sm">
                   Next →
                 </Button>
               </Link>
             </div>
             <div className="text-xs text-slate-500 dark:text-slate-400">
-              {entries.length} entries · {displayTrucks.length} trucks
+              {entries.length} entries · {displayTrucks.length} vehicles
             </div>
           </div>
         </>
@@ -164,7 +164,7 @@ export default async function TruckLogPage({
         <EmptyState
           icon={<Truck size={32} />}
           title="No equipment to log"
-          description="Add equipment first, then capture daily truck-log entries here."
+          description="Add equipment first, then capture daily vehicle-log entries here."
           action={
             <Link href="/equipment/new">
               <Button>Add equipment</Button>
@@ -177,7 +177,7 @@ export default async function TruckLogPage({
             <TableHeader>
               <TableRow>
                 <TableHead className="sticky left-0 z-10 bg-white dark:bg-slate-900">
-                  Truck
+                  Vehicle
                 </TableHead>
                 {Array.from({ length: totalDays }, (_, i) => i + 1).map((d) => (
                   <TableHead
@@ -213,7 +213,9 @@ export default async function TruckLogPage({
                         return (
                           <TableCell key={d} className="px-1 text-center align-middle">
                             <Link
-                              href={`/equipment/truck-log/new?truckId=${t.id}&date=${date}` as any}
+                              href={
+                                `/equipment/vehicle-log/new?truckId=${t.id}&date=${date}` as any
+                              }
                               className="block py-1 text-[11px] text-slate-300 hover:text-teal-700"
                             >
                               ·
@@ -224,7 +226,7 @@ export default async function TruckLogPage({
                       return (
                         <TableCell key={d} className="px-1 text-center align-middle">
                           <Link
-                            href={`/equipment/truck-log/${cell.id}` as any}
+                            href={`/equipment/vehicle-log/${cell.id}` as any}
                             className="block rounded bg-teal-50 px-1.5 py-1 text-[11px] font-medium text-teal-800 hover:bg-teal-100 dark:bg-teal-500/10 dark:text-teal-200"
                           >
                             {cell.km ?? '·'}

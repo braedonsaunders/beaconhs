@@ -458,7 +458,7 @@ async function createTruckLogEntryAction(input: {
     notes,
   } = input
   if (!equipmentItemId || !entryDate.trim())
-    return { ok: false, error: 'Truck and date are required.' }
+    return { ok: false, error: 'Vehicle and date are required.' }
 
   const kmDriven =
     typeof startOdometer === 'number' &&
@@ -496,7 +496,7 @@ async function createTruckLogEntryAction(input: {
     summary: `Logged ${kmDriven ?? '—'} km on ${entryDate}`,
     after: { equipmentItemId, entryDate, kmDriven, manpowerCount, hoursOnSite },
   })
-  revalidatePath('/equipment/truck-log')
+  revalidatePath('/equipment/vehicle-log')
   revalidatePath(`/equipment/${equipmentItemId}`)
   return { ok: true }
 }

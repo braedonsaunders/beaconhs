@@ -115,12 +115,12 @@ export async function GET(req: NextRequest) {
   await recordAudit(ctx, {
     entityType: 'truck_log_entry',
     action: 'export',
-    summary: `Exported ${year} truck log summary (${trucks.length} trucks)`,
+    summary: `Exported ${year} vehicle log summary (${trucks.length} vehicles)`,
     metadata: { format: 'csv', year },
   })
 
   return csvResponse({
-    filename: csvFilename(`truck-log-summary-${year}`),
+    filename: csvFilename(`vehicle-log-summary-${year}`),
     headers,
     rows: csvRows,
   })

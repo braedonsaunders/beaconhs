@@ -18,7 +18,7 @@ import { buildHref, pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
 import { EquipmentSubNav } from '@/components/equipment-sub-nav'
 
-export const metadata = { title: 'Truck log summary' }
+export const metadata = { title: 'Vehicle log summary' }
 export const dynamic = 'force-dynamic'
 
 function parseYear(raw: string | undefined): number {
@@ -150,23 +150,23 @@ export default async function TruckLogSummaryPage({
     <ListPageLayout
       header={
         <>
-          <EquipmentSubNav active="truck-log" />
+          <EquipmentSubNav active="vehicle-log" />
           <PageHeader
-            title="Truck log summary"
+            title="Vehicle log summary"
             description={`Annual roll-up of km driven, hours on site, and manpower for ${year}.`}
             actions={
               <div className="flex items-center gap-2">
-                <Link href={`/equipment/truck-log/summary?year=${year - 1}` as any}>
+                <Link href={`/equipment/vehicle-log/summary?year=${year - 1}` as any}>
                   <Button variant="outline" size="sm">
                     ← {year - 1}
                   </Button>
                 </Link>
-                <Link href={`/equipment/truck-log/summary?year=${year + 1}` as any}>
+                <Link href={`/equipment/vehicle-log/summary?year=${year + 1}` as any}>
                   <Button variant="outline" size="sm">
                     {year + 1} →
                   </Button>
                 </Link>
-                <Link href={buildHref('/equipment/truck-log/export.csv', { year }) as any}>
+                <Link href={buildHref('/equipment/vehicle-log/export.csv', { year }) as any}>
                   <Button>Export CSV</Button>
                 </Link>
               </div>
@@ -174,7 +174,7 @@ export default async function TruckLogSummaryPage({
           />
           <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
             <span>Year</span>
-            <form className="flex items-center gap-2" action="/equipment/truck-log/summary">
+            <form className="flex items-center gap-2" action="/equipment/vehicle-log/summary">
               <input
                 name="year"
                 type="number"
@@ -243,7 +243,7 @@ export default async function TruckLogSummaryPage({
                       return (
                         <TableCell key={i} className="text-center align-top">
                           <Link
-                            href={`/equipment/truck-log?month=${year}-${pad2(i + 1)}` as any}
+                            href={`/equipment/vehicle-log?month=${year}-${pad2(i + 1)}` as any}
                             className="block rounded bg-slate-50 px-1.5 py-1 text-[11px] hover:bg-teal-50 dark:bg-slate-800"
                           >
                             <div className="font-medium text-slate-900 dark:text-slate-100">

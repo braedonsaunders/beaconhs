@@ -1,8 +1,8 @@
 'use client'
 
-// "New truck log entry" drawer for the equipment item detail page. Opens
+// "New vehicle log entry" drawer for the equipment item detail page. Opens
 // via `?drawer=new-truck-log-entry`. Mirrors the legacy
-// /equipment/truck-log/new route but slides in instead of navigating
+// /equipment/vehicle-log/new route but slides in instead of navigating
 // away — the truck is locked to this detail page.
 
 import { useState, useTransition } from 'react'
@@ -96,7 +96,7 @@ export function NewTruckLogEntryDrawer({
     <UrlDrawer
       open={open}
       closeHref={closeHref}
-      title="New truck log entry"
+      title="New vehicle log entry"
       description="One row per truck per day. Odometer in/out drives kilometres for billing."
       size="md"
       footer={
