@@ -5,12 +5,7 @@ import { eq } from 'drizzle-orm'
 import { tenantNotificationPolicy, tenantNotificationSettings } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
-import {
-  DEFAULT_SCAN_CRON,
-  DEFAULT_SCAN_TZ,
-  isValidCron,
-  isValidTimezone,
-} from './_schedule'
+import { DEFAULT_SCAN_CRON, DEFAULT_SCAN_TZ, isValidCron, isValidTimezone } from './_schedule'
 
 export type EscalationStep = { afterDays: number; roleKeys: string[] }
 

@@ -299,14 +299,18 @@ export function NotificationSettingsForm({
   // to a cron and patches the policy (the canonical value the worker reads).
   const [sched, setSched] = useState(() => decompileCron(policy.scanCron))
   const tzList = useMemo<string[]>(() => {
+    let z: string[] = []
     try {
-      const z = (
-        Intl as unknown as { supportedValuesOf?: (k: string) => string[] }
-      ).supportedValuesOf?.('timeZone')
-      return z && z.length ? z : ['UTC']
+      z =
+        (Intl as unknown as { supportedValuesOf?: (k: string) => string[] }).supportedValuesOf?.(
+          'timeZone',
+        ) ?? []
     } catch {
-      return ['UTC']
+      z = []
     }
+    // `supportedValuesOf('timeZone')` omits the bare 'UTC' alias in some engines —
+    // the stored default — so always surface it (first, since it's the default).
+    return ['UTC', ...z.filter((t) => t !== 'UTC')]
   }, [])
   const updateSched = (next: Partial<ReturnType<typeof decompileCron>>) => {
     const merged = { ...sched, ...next }

@@ -76,7 +76,13 @@ function cronDueNow(cron: string, tz: string, now: Date): boolean {
 }
 
 export async function scanCompliance(): Promise<ComplianceScanResult> {
-  const result: ComplianceScanResult = { tenants: 0, due: 0, obligations: 0, reminders: 0, errors: 0 }
+  const result: ComplianceScanResult = {
+    tenants: 0,
+    due: 0,
+    obligations: 0,
+    reminders: 0,
+    errors: 0,
+  }
   const now = new Date()
 
   // One cross-tenant read of each tenant's detection schedule (left join: tenants
@@ -94,7 +100,11 @@ export async function scanCompliance(): Promise<ComplianceScanResult> {
         .from(tenants)
         .leftJoin(tenantNotificationPolicy, eq(tenantNotificationPolicy.tenantId, tenants.id)),
     )
-    schedules = rows.map((r) => ({ id: r.id, cron: r.cron ?? DEFAULT_CRON, tz: r.tz ?? DEFAULT_TZ }))
+    schedules = rows.map((r) => ({
+      id: r.id,
+      cron: r.cron ?? DEFAULT_CRON,
+      tz: r.tz ?? DEFAULT_TZ,
+    }))
   } catch {
     const rows = await withSuperAdmin(db, (tx) => tx.select({ id: tenants.id }).from(tenants))
     schedules = rows.map((r) => ({ id: r.id, cron: DEFAULT_CRON, tz: DEFAULT_TZ }))

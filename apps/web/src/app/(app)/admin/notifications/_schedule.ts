@@ -72,7 +72,8 @@ export function decompileCron(cron: string): {
     const b = Number(m[2])
     if ((a + 12) % 24 === b % 24) return { ...base, preset: 'twice_daily', hour: a }
   }
-  if ((m = /^0 (\d{1,2}) \* \* \*$/.exec(c))) return { ...base, preset: 'daily', hour: Number(m[1]) }
+  if ((m = /^0 (\d{1,2}) \* \* \*$/.exec(c)))
+    return { ...base, preset: 'daily', hour: Number(m[1]) }
   if ((m = /^0 (\d{1,2}) \* \* ([0-6])$/.exec(c)))
     return { ...base, preset: 'weekly', hour: Number(m[1]), weekday: Number(m[2]) }
   return { ...base, preset: 'custom' }
