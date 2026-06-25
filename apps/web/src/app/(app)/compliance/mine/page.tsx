@@ -1,4 +1,6 @@
+import Link from 'next/link'
 import { and, eq, isNull } from 'drizzle-orm'
+import { ChevronRight } from 'lucide-react'
 import {
   Badge,
   PageHeader,
@@ -10,19 +12,24 @@ import {
   TableRow,
 } from '@beaconhs/ui'
 import { people } from '@beaconhs/db/schema'
+import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { ListPageLayout } from '@/components/page-layout'
 import { kindLabel, personCompliance } from '../_hub'
-import { SIGNAL_MODULE_LABELS, listDueSignals } from '../_signals'
+import { complianceActionLabel, resolveComplianceLink } from '../_resolve-link'
 import { StatusBadge, SummaryStrip } from '../_shared'
 import { ComplianceSubNav } from '../_sub-nav'
 
 export const metadata = { title: 'Compliance · Mine' }
 export const dynamic = 'force-dynamic'
 
-// Self-scoped: any authenticated user sees what THEY owe (no compliance.read gate).
+// Self-scoped: any authenticated user sees what THEY owe (no compliance.read
+// gate). Cross-module due/expiring lives on its own "Due & expiring" tab — Mine
+// shows only the obligations assigned to this person, each linking straight to
+// where it is completed or reviewed.
 export default async function MyCompliancePage() {
   const ctx = await requireRequestContext()
+  const canReadAll = can(ctx, 'compliance.read')
 
   const [person] = await ctx.db((tx) =>
     tx
@@ -33,7 +40,6 @@ export default async function MyCompliancePage() {
   )
 
   const rows = person ? await personCompliance(ctx, person.id) : []
-  const signals = person ? await listDueSignals(ctx, { personId: person.id }) : []
 
   const isOverdue = (s: string) => s === 'overdue' || s === 'expiring'
   const totals = {
@@ -50,9 +56,9 @@ export default async function MyCompliancePage() {
         <>
           <PageHeader
             title="My compliance"
-            description="Obligations assigned to you, plus due and expiring items."
+            description="Obligations assigned to you. Open a row to complete or review it."
           />
-          <ComplianceSubNav active="mine" />
+          <ComplianceSubNav active="mine" canReadAll={canReadAll} />
         </>
       }
     >
@@ -61,98 +67,75 @@ export default async function MyCompliancePage() {
           <div className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
             Your account is not linked to a person record, so there is nothing to show.
           </div>
-        ) : rows.length === 0 && signals.length === 0 ? (
+        ) : rows.length === 0 ? (
           <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 p-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-800/40 dark:text-slate-400">
-            Nothing assigned, due, or expiring.
+            Nothing assigned to you — you’re all caught up.
           </div>
         ) : (
-          <>
-            {rows.length > 0 ? (
-              <div className="space-y-3">
-                <SummaryStrip percent={percent} totals={totals} title="My obligations" />
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Kind</TableHead>
-                      <TableHead>Obligation</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Due</TableHead>
-                      <TableHead>Completed</TableHead>
+          <div className="space-y-3">
+            <SummaryStrip percent={percent} totals={totals} title="My obligations" />
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Kind</TableHead>
+                  <TableHead>Obligation</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Due</TableHead>
+                  <TableHead>Completed</TableHead>
+                  <TableHead className="text-right">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map((r, i) => {
+                  const link = resolveComplianceLink(r.kind, r.targetRef, { personId: person.id })
+                  const done = r.status === 'completed'
+                  return (
+                    <TableRow key={`${r.obligationId}:${i}`}>
+                      <TableCell>
+                        <Badge variant="secondary">{kindLabel(r.kind)}</Badge>
+                      </TableCell>
+                      <TableCell className="text-slate-900 dark:text-slate-100">
+                        {link ? (
+                          <Link
+                            href={link.href as never}
+                            prefetch={link.prefetch}
+                            className="font-medium hover:underline"
+                          >
+                            {r.title}
+                          </Link>
+                        ) : (
+                          r.title
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge status={r.status} />
+                      </TableCell>
+                      <TableCell className="text-slate-700 dark:text-slate-300">
+                        {r.dueOn ?? '—'}
+                      </TableCell>
+                      <TableCell className="text-slate-700 dark:text-slate-300">
+                        {r.completedOn ?? '—'}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {link ? (
+                          <Link
+                            href={link.href as never}
+                            prefetch={link.prefetch}
+                            className="inline-flex items-center gap-1 text-sm font-medium text-teal-700 hover:underline dark:text-teal-300"
+                          >
+                            {done ? 'Review' : complianceActionLabel(r.kind)}
+                            <ChevronRight size={14} />
+                          </Link>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {rows.map((r, i) => (
-                      <TableRow key={`${r.obligationId}:${i}`}>
-                        <TableCell>
-                          <Badge variant="secondary">{kindLabel(r.kind)}</Badge>
-                        </TableCell>
-                        <TableCell className="text-slate-900 dark:text-slate-100">
-                          {r.title}
-                        </TableCell>
-                        <TableCell>
-                          <StatusBadge status={r.status} />
-                        </TableCell>
-                        <TableCell className="text-slate-700 dark:text-slate-300">
-                          {r.dueOn ?? '—'}
-                        </TableCell>
-                        <TableCell className="text-slate-700 dark:text-slate-300">
-                          {r.completedOn ?? '—'}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            ) : null}
-
-            {signals.length > 0 ? (
-              <section className="space-y-3">
-                <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  Due &amp; expiring
-                </h2>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Module</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Item</TableHead>
-                      <TableHead>Due</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {signals.map((sig, i) => (
-                      <TableRow key={`${sig.module}:${i}`}>
-                        <TableCell>
-                          <Badge variant="secondary">{SIGNAL_MODULE_LABELS[sig.module]}</Badge>
-                        </TableCell>
-                        <TableCell className="text-xs text-slate-600 dark:text-slate-400">
-                          {sig.family}
-                        </TableCell>
-                        <TableCell className="text-slate-900 dark:text-slate-100">
-                          {sig.subject}
-                        </TableCell>
-                        <TableCell className="text-slate-700 dark:text-slate-300">
-                          {sig.dueOn ?? '—'}
-                        </TableCell>
-                        <TableCell>
-                          {sig.status === 'overdue' || sig.status === 'expired' ? (
-                            <Badge variant="destructive">
-                              {sig.status === 'expired' ? 'Expired' : 'Overdue'}
-                            </Badge>
-                          ) : sig.status === 'due_soon' ? (
-                            <Badge variant="warning">Due soon</Badge>
-                          ) : (
-                            <Badge variant="secondary">Open</Badge>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </section>
-            ) : null}
-          </>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </div>
         )}
       </div>
     </ListPageLayout>

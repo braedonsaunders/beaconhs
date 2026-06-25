@@ -51,6 +51,12 @@ export const tenantNotificationPolicy = pgTable(
     // Suppress non-critical sends during these UTC hours (e.g. 22→6 overnight).
     // null = no quiet hours. Critical alerts always go through.
     quietHours: jsonb('quiet_hours').$type<{ start: number; end: number } | null>().default(null),
+    // Per-tenant compliance DETECTION schedule. The worker runs a frequent global
+    // tick and self-gates each tenant against this 5-field cron, evaluated in
+    // `scanTimezone` (IANA). Mirrors the digest self-gating pattern. Defaults
+    // reproduce the legacy daily 06:00 UTC scan, so untouched tenants are unchanged.
+    scanCron: text('scan_cron').default('0 6 * * *').notNull(),
+    scanTimezone: text('scan_timezone').default('UTC').notNull(),
     ...timestamps,
   },
   (t) => ({

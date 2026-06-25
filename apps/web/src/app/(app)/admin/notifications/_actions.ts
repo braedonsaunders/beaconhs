@@ -5,6 +5,12 @@ import { eq } from 'drizzle-orm'
 import { tenantNotificationPolicy, tenantNotificationSettings } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import {
+  DEFAULT_SCAN_CRON,
+  DEFAULT_SCAN_TZ,
+  isValidCron,
+  isValidTimezone,
+} from './_schedule'
 
 export type EscalationStep = { afterDays: number; roleKeys: string[] }
 
@@ -21,6 +27,9 @@ export type PolicyInput = {
   digestMode: 'off' | 'daily' | 'weekly'
   digestHourUtc: number
   quietHours: { start: number; end: number } | null
+  // Compliance detection schedule (5-field cron, evaluated in scanTimezone).
+  scanCron: string
+  scanTimezone: string
 }
 
 const VALID_CHANNELS = ['in_app', 'email', 'push', 'sms']
@@ -98,6 +107,10 @@ export async function saveNotificationPolicy(input: PolicyInput) {
           end: Math.min(23, Math.max(0, Math.round(input.quietHours.end))),
         }
       : null
+  // Reject a malformed cron / timezone rather than silently scheduling something
+  // the worker can't parse — fall back to the safe legacy default.
+  const scanCron = isValidCron(input.scanCron) ? input.scanCron.trim() : DEFAULT_SCAN_CRON
+  const scanTimezone = isValidTimezone(input.scanTimezone) ? input.scanTimezone : DEFAULT_SCAN_TZ
 
   await ctx.db(async (tx) => {
     const [existing] = await tx
@@ -112,6 +125,8 @@ export async function saveNotificationPolicy(input: PolicyInput) {
           digestMode,
           digestHourUtc,
           quietHours,
+          scanCron,
+          scanTimezone,
           updatedAt: new Date(),
         })
         .where(eq(tenantNotificationPolicy.id, existing.id))
@@ -121,6 +136,8 @@ export async function saveNotificationPolicy(input: PolicyInput) {
         digestMode,
         digestHourUtc,
         quietHours,
+        scanCron,
+        scanTimezone,
       })
     }
   })

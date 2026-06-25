@@ -4,7 +4,11 @@
 // per-module legacy breakdowns entirely.
 
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
-import { complianceObligations, complianceStatus } from '@beaconhs/db/schema'
+import {
+  type ComplianceTargetRef,
+  complianceObligations,
+  complianceStatus,
+} from '@beaconhs/db/schema'
 import type { requireRequestContext } from '@/lib/auth'
 import { type ObligationKind, kindLabel } from './obligations/_meta'
 
@@ -67,6 +71,8 @@ export type PersonStatusRow = {
   status: string
   dueOn: string | null
   completedOn: string | null
+  /** Module target (documentId / courseId / formTemplateId / …) for deep-linking. */
+  targetRef: ComplianceTargetRef | null
 }
 
 /** Everything one person owes, across every obligation kind. */
@@ -80,6 +86,7 @@ export async function personCompliance(ctx: Ctx, personId: string): Promise<Pers
         status: complianceStatus.status,
         dueOn: complianceStatus.dueOn,
         completedOn: complianceStatus.completedOn,
+        targetRef: complianceObligations.targetRef,
       })
       .from(complianceStatus)
       .innerJoin(complianceObligations, eq(complianceObligations.id, complianceStatus.obligationId))
@@ -102,6 +109,7 @@ export async function personCompliance(ctx: Ctx, personId: string): Promise<Pers
       status: r.status,
       dueOn: r.dueOn,
       completedOn: r.completedOn,
+      targetRef: r.targetRef,
     }))
     .sort((a, b) => rank(a.status) - rank(b.status) || a.title.localeCompare(b.title))
 }

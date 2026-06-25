@@ -45,10 +45,12 @@ export async function registerSchedules() {
     repeat: { pattern: '*/5 * * * *' },
     jobId: 'tick:reports',
   })
-  // Daily 06:00: re-materialise every obligation's compliance_status + reminders.
-  // (Create/update materialise instantly on the write path; this is the refresh.)
+  // Every minute: compliance detection. The scan self-gates each tenant against
+  // its configured schedule (tenant_notification_policy.scan_cron, in scan_timezone),
+  // so the per-tenant cadence is data-driven — the tick just provides the heartbeat.
+  // Untouched tenants keep the legacy daily-06:00-UTC cadence via the default cron.
   await scheduledQueue.add('tick:compliance_scan', { kind: 'compliance_scan' } as ScheduledTick, {
-    repeat: { pattern: '0 6 * * *' },
+    repeat: { pattern: '* * * * *' },
     jobId: 'tick:compliance_scan',
   })
   // Daily 06:30: escalation ladder — re-alert higher roles for items that have

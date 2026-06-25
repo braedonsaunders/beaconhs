@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import {
   Badge,
   Button,
@@ -10,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from '@beaconhs/ui'
-import { assertCan, can } from '@beaconhs/tenant'
+import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { parseListParams } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
@@ -33,7 +34,9 @@ export default async function ComplianceOverviewPage({
 }) {
   const sp = await searchParams
   const ctx = await requireRequestContext()
-  assertCan(ctx, 'compliance.read')
+  // Everyone reaches /compliance from the sidebar; those without the org-wide
+  // read permission see only their own obligations.
+  if (!can(ctx, 'compliance.read')) redirect('/compliance/mine')
   const canAssign = can(ctx, 'compliance.assign')
   const params = parseListParams(sp, { sort: 'overdue', allowedSorts: ['overdue'] as const })
   const rollup = await obligationRollup(ctx)

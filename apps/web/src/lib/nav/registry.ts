@@ -129,15 +129,16 @@ export const NAV_MODULES: NavModule[] = [
   },
   { key: 'ppe', href: '/ppe', label: 'PPE', iconKey: 'hard-hat', group: 'Assets & people' },
 
-  // Compliance — the unified obligations hub (viewing + management). Its own group
-  // and its own gate: it owns writes now, so it must not inherit the read-only
-  // reports.read audience.
+  // Compliance — the unified obligations hub (viewing + management). Visible to
+  // EVERYONE: a person without `compliance.read` still has their own obligations,
+  // so `/compliance` lands them on "Mine" (the overview redirects there) while
+  // holders of `compliance.read` get the org-wide hub. Org tabs + write actions
+  // stay gated on the pages themselves.
   {
     key: 'compliance',
     href: '/compliance',
     label: 'Compliance',
     iconKey: 'check',
-    requiredPermission: 'compliance.read',
     group: 'Assurance',
   },
 

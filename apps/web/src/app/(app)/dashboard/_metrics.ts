@@ -27,6 +27,7 @@ import {
   trainingCourses,
   trainingRecords,
 } from '@beaconhs/db/schema'
+import { resolveComplianceLink } from '../compliance/_resolve-link'
 
 /**
  * One 12-element series of monthly values, oldest -> newest. Used to draw the
@@ -168,6 +169,9 @@ export type DashboardMetrics = {
       title: string
       status: string
       dueOn: string | null
+      /** Deep-link straight to where this obligation is completed/reviewed. */
+      href: string
+      prefetch: boolean
     }>
   }
 
@@ -736,6 +740,7 @@ export async function loadDashboardMetrics(
             title: complianceObligations.title,
             status: complianceStatus.status,
             dueOn: complianceStatus.dueOn,
+            targetRef: complianceObligations.targetRef,
           })
           .from(complianceStatus)
           .innerJoin(
@@ -769,13 +774,18 @@ export async function loadDashboardMetrics(
           (a.dueOn ?? '9999-12-31').localeCompare(b.dueOn ?? '9999-12-31'),
       )
       .slice(0, 5)
-      .map((r) => ({
-        obligationId: r.obligationId,
-        kind: r.kind as string,
-        title: r.title,
-        status: r.status,
-        dueOn: r.dueOn ? String(r.dueOn) : null,
-      }))
+      .map((r) => {
+        const link = resolveComplianceLink(r.kind, r.targetRef, { personId: myPersonId })
+        return {
+          obligationId: r.obligationId,
+          kind: r.kind as string,
+          title: r.title,
+          status: r.status,
+          dueOn: r.dueOn ? String(r.dueOn) : null,
+          href: link?.href ?? '/compliance/mine',
+          prefetch: link?.prefetch ?? true,
+        }
+      })
     const myCompliance = {
       linked: myPersonId !== null,
       total: cTotal,

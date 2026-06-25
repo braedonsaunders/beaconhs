@@ -17,6 +17,14 @@ import {
   type EscalationStep,
   type PolicyInput,
 } from './_actions'
+import {
+  compileCron,
+  decompileCron,
+  isValidCron,
+  SCHEDULE_PRESETS,
+  WEEKDAYS,
+  type SchedulePreset,
+} from './_schedule'
 
 type RoleOpt = { key: string; name: string }
 type MemberOpt = { value: string; label: string }
@@ -287,6 +295,25 @@ export function NotificationSettingsForm({
     setConfig((prev) => ({ ...prev, [key]: { ...prev[key]!, ...next } }))
   const patchPol = (next: Partial<PolicyInput>) => setPol((p) => ({ ...p, ...next }))
 
+  // Detection-schedule UI state, derived from the stored cron. Any change recompiles
+  // to a cron and patches the policy (the canonical value the worker reads).
+  const [sched, setSched] = useState(() => decompileCron(policy.scanCron))
+  const tzList = useMemo<string[]>(() => {
+    try {
+      const z = (
+        Intl as unknown as { supportedValuesOf?: (k: string) => string[] }
+      ).supportedValuesOf?.('timeZone')
+      return z && z.length ? z : ['UTC']
+    } catch {
+      return ['UTC']
+    }
+  }, [])
+  const updateSched = (next: Partial<ReturnType<typeof decompileCron>>) => {
+    const merged = { ...sched, ...next }
+    setSched(merged)
+    patchPol({ scanCron: compileCron(merged.preset, merged.hour, merged.weekday, merged.custom) })
+  }
+
   const save = () => {
     const items: CategorySettingInput[] = categories.map((c) => ({
       category: c.key,
@@ -399,6 +426,88 @@ export function NotificationSettingsForm({
                 </p>
               )}
             </div>
+          </div>
+
+          {/* Per-tenant compliance detection schedule (evaluated in its timezone). */}
+          <div className="space-y-1.5 border-t border-slate-100 pt-4 dark:border-slate-800">
+            <Label>Compliance detection schedule</Label>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              How often overdue and expiring items are re-checked and alerted. Untouched tenants run
+              once a day at 06:00 UTC.
+            </p>
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <Select
+                value={sched.preset}
+                onChange={(e) => updateSched({ preset: e.target.value as SchedulePreset })}
+                className="w-40"
+              >
+                {SCHEDULE_PRESETS.map((p) => (
+                  <option key={p.value} value={p.value}>
+                    {p.label}
+                  </option>
+                ))}
+              </Select>
+
+              {sched.preset === 'daily' ||
+              sched.preset === 'twice_daily' ||
+              sched.preset === 'weekly' ? (
+                <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                  <span>at</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={23}
+                    value={sched.hour}
+                    onChange={(e) => updateSched({ hour: Number(e.target.value) || 0 })}
+                    className={numInput}
+                  />
+                  <span>:00</span>
+                </div>
+              ) : null}
+
+              {sched.preset === 'weekly' ? (
+                <Select
+                  value={String(sched.weekday)}
+                  onChange={(e) => updateSched({ weekday: Number(e.target.value) })}
+                  className="w-36"
+                >
+                  {WEEKDAYS.map((d) => (
+                    <option key={d.value} value={d.value}>
+                      {d.label}
+                    </option>
+                  ))}
+                </Select>
+              ) : null}
+
+              {sched.preset === 'custom' ? (
+                <input
+                  type="text"
+                  spellCheck={false}
+                  value={sched.custom}
+                  onChange={(e) => updateSched({ custom: e.target.value })}
+                  placeholder="m h dom mon dow"
+                  className="h-7 w-40 rounded-md border border-slate-200 bg-white px-2 font-mono text-sm text-slate-900 outline-none focus:border-teal-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                />
+              ) : null}
+
+              <span className="text-xs text-slate-400 dark:text-slate-500">in</span>
+              <Select
+                value={pol.scanTimezone}
+                onChange={(e) => patchPol({ scanTimezone: e.target.value })}
+                className="w-56"
+              >
+                {tzList.map((tz) => (
+                  <option key={tz} value={tz}>
+                    {tz}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            {sched.preset === 'custom' && !isValidCron(sched.custom) ? (
+              <p className="text-xs text-red-600 dark:text-red-400">
+                Enter a valid 5-field cron (e.g. <code>0 6 * * *</code>).
+              </p>
+            ) : null}
           </div>
         </div>
       </div>

@@ -14,6 +14,16 @@ const TABS = [
 
 export type ComplianceTab = 'overview' | 'obligations' | 'by-person' | 'aging' | 'expiring' | 'mine'
 
-export function ComplianceSubNav({ active }: { active: ComplianceTab }) {
-  return <ModuleSubNav tabs={TABS} active={active} />
+// `canReadAll` = the viewer holds `compliance.read` (the org-wide hub). Without
+// it, a person only ever sees their own obligations, so we hide the org tabs and
+// leave just "Mine" — the only page they can open.
+export function ComplianceSubNav({
+  active,
+  canReadAll = true,
+}: {
+  active: ComplianceTab
+  canReadAll?: boolean
+}) {
+  const tabs = canReadAll ? TABS : TABS.filter((t) => t.key === 'mine')
+  return <ModuleSubNav tabs={tabs} active={active} />
 }

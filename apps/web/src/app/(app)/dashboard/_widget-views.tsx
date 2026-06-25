@@ -1412,7 +1412,8 @@ function MyComplianceCard({ data }: { data: DashboardMetrics['myCompliance'] }) 
                   transition={{ delay: 0.06 + idx * 0.04, duration: 0.3 }}
                 >
                   <Link
-                    href="/compliance/mine"
+                    href={o.href as never}
+                    prefetch={o.prefetch}
                     className="group flex items-center justify-between gap-3 rounded-lg px-3 py-1.5 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60"
                   >
                     <div className="min-w-0 flex-1">
