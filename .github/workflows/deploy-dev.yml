@@ -58,6 +58,9 @@ jobs:
 
       - name: Migrate (schema + RLS + views)
         env:
+          # Migrations + DDL connect DIRECT to Postgres (not the PgBouncer
+          # pooler) as the table owner. migrate.ts prefers DIRECT_DATABASE_URL.
+          DIRECT_DATABASE_URL: ${{ secrets.DEV_DIRECT_DATABASE_URL }}
           DATABASE_URL: ${{ secrets.DEV_DATABASE_URL }}
         run: pnpm --filter @beaconhs/db exec tsx src/migrate.ts
 
@@ -111,6 +114,8 @@ jobs:
           COMPOSE_ID: ${{ secrets.DOKPLOY_COMPOSE_ID }}
           REGISTRY_ID: ${{ secrets.DOKPLOY_REGISTRY_ID }}
           DEV_DATABASE_URL: ${{ secrets.DEV_DATABASE_URL }}
+          DEV_SUPERADMIN_DATABASE_URL: ${{ secrets.DEV_SUPERADMIN_DATABASE_URL }}
+          DEV_DIRECT_DATABASE_URL: ${{ secrets.DEV_DIRECT_DATABASE_URL }}
           REDIS_URL: ${{ secrets.DEV_REDIS_URL }}
           APP_URL: ${{ secrets.DEV_APP_URL }}
           BETTER_AUTH_SECRET: ${{ secrets.DEV_BETTER_AUTH_SECRET }}
@@ -129,6 +134,8 @@ jobs:
           COMPOSE_FILE="$(cat deploy/dokploy-dev.compose.yaml)"
           ENV_BLOCK="IMAGE=${IMAGE}
           DATABASE_URL=${DEV_DATABASE_URL}
+          SUPERADMIN_DATABASE_URL=${DEV_SUPERADMIN_DATABASE_URL}
+          DIRECT_DATABASE_URL=${DEV_DIRECT_DATABASE_URL}
           REDIS_URL=${REDIS_URL}
           APP_URL=${APP_URL}
           BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}

@@ -13,6 +13,8 @@ services:
       HOSTNAME: 0.0.0.0
       PORT: '3000'
       DATABASE_URL: ${DATABASE_URL}
+      # Dedicated BYPASSRLS pool for super-admin / cross-tenant access.
+      SUPERADMIN_DATABASE_URL: ${SUPERADMIN_DATABASE_URL}
       REDIS_URL: ${REDIS_URL}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       BETTER_AUTH_URL: ${APP_URL}
@@ -43,6 +45,9 @@ services:
       APP_ROLE: worker
       NODE_ENV: production
       DATABASE_URL: ${DATABASE_URL}
+      # Super-admin / cross-tenant pool; DIRECT (un-pooled) for DDL maintenance jobs.
+      SUPERADMIN_DATABASE_URL: ${SUPERADMIN_DATABASE_URL}
+      DIRECT_DATABASE_URL: ${DIRECT_DATABASE_URL}
       REDIS_URL: ${REDIS_URL}
       R2_ENDPOINT: ${R2_ENDPOINT}
       R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID}
