@@ -5,43 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1781231163196,
+      "when": 1782427425950,
       "tag": "0000_init",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1781277549271,
-      "tag": "0001_aberrant_molten_man",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1781487865487,
-      "tag": "0002_clear_lila_cheney",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1781490972548,
-      "tag": "0003_tough_rafael_vega",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1781490972549,
-      "tag": "0004_drop_atmospheric_sensors",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1781490972550,
-      "tag": "0005_drop_equipment_financials",
       "breakpoints": true
     }
   ]
