@@ -15,7 +15,7 @@ import { cn } from './utils'
 //   modal/dialog : z-60
 //   toast        : z-70
 
-export type DrawerSize = 'sm' | 'md' | 'lg' | 'xl' | 'full'
+export type DrawerSize = 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'full'
 export type DrawerSide = 'left' | 'right'
 
 const SIZE_CLASS: Record<DrawerSize, string> = {
@@ -23,6 +23,7 @@ const SIZE_CLASS: Record<DrawerSize, string> = {
   md: 'w-full sm:max-w-xl',
   lg: 'w-full sm:max-w-2xl',
   xl: 'w-full sm:max-w-4xl',
+  '2xl': 'w-full sm:max-w-6xl',
   full: 'w-full',
 }
 
@@ -40,6 +41,7 @@ export function Drawer({
   side = 'right',
   children,
   footer,
+  bodyClassName,
 }: {
   open: boolean
   onClose: () => void
@@ -49,6 +51,9 @@ export function Drawer({
   side?: DrawerSide
   children: React.ReactNode
   footer?: React.ReactNode
+  /** Override the body wrapper's classes (default: scroll + px-6 py-5 padding).
+   *  Pass e.g. "overflow-hidden" for a child that manages its own layout/scroll. */
+  bodyClassName?: string
 }) {
   const [mounted, setMounted] = React.useState(false)
   React.useEffect(() => setMounted(true), [])
@@ -135,7 +140,12 @@ export function Drawer({
                 </button>
               </header>
             ) : null}
-            <div className="app-scroll min-h-0 flex-1 overflow-y-auto px-6 py-5 text-slate-900 dark:text-slate-100">
+            <div
+              className={cn(
+                'app-scroll min-h-0 flex-1 text-slate-900 dark:text-slate-100',
+                bodyClassName ?? 'overflow-y-auto px-6 py-5',
+              )}
+            >
               {children}
             </div>
             {footer ? (

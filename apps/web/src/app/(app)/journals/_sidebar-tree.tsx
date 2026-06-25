@@ -47,6 +47,7 @@ export function SidebarTree({
   filters,
   selectedId,
   loading,
+  authorMode = false,
   onGroupByChange,
   onFiltersChange,
   onSelect,
@@ -58,6 +59,8 @@ export function SidebarTree({
   filters: JournalFilters
   selectedId: string | null
   loading?: boolean
+  /** Records "Open full entry" flyout: browsing another author — hide create. */
+  authorMode?: boolean
   onGroupByChange: (g: GroupBy) => void
   onFiltersChange: (f: Partial<JournalFilters>) => void
   onSelect: (entryId: string) => void
@@ -108,13 +111,15 @@ export function SidebarTree({
     <div className="flex h-full min-h-0 w-full min-w-0 flex-col bg-white dark:bg-slate-900">
       {/* Header */}
       <div className="space-y-2.5 border-b border-slate-200 px-3 pt-3 pb-3 dark:border-slate-800">
-        <button
-          type="button"
-          onClick={onNewEntry}
-          className="flex w-full items-center justify-center gap-2 rounded-lg bg-teal-700 px-3 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-teal-800"
-        >
-          <Plus size={16} /> New entry
-        </button>
+        {authorMode ? null : (
+          <button
+            type="button"
+            onClick={onNewEntry}
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-teal-700 px-3 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-teal-800"
+          >
+            <Plus size={16} /> New entry
+          </button>
+        )}
 
         <div className="relative">
           <Search
@@ -214,9 +219,15 @@ export function SidebarTree({
           </div>
         ) : data.tree.length === 0 ? (
           <div className="px-3 py-10 text-center text-xs text-slate-400 dark:text-slate-500">
-            No entries. Use{' '}
-            <span className="font-medium text-slate-600 dark:text-slate-300">New entry</span> to
-            start today’s journal.
+            {authorMode ? (
+              'No journals for this person.'
+            ) : (
+              <>
+                No entries. Use{' '}
+                <span className="font-medium text-slate-600 dark:text-slate-300">New entry</span> to
+                start today’s journal.
+              </>
+            )}
           </div>
         ) : (
           <div className="space-y-px">

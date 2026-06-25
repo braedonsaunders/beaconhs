@@ -22,7 +22,13 @@ import { getTenantAiConfig, getTenantAutoJournalAi } from '@/lib/ai-config'
 import { recordAudit } from '@/lib/audit'
 import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { emitJournalEntrySubmitted } from '@beaconhs/integrations'
-import { getAuthorPersonId, htmlToText, journalCanReadAll, journalScopeWhere } from './_lib'
+import {
+  getAuthorPersonId,
+  htmlToText,
+  journalCanBrowseAll,
+  journalCanReadAll,
+  journalScopeWhere,
+} from './_lib'
 import {
   buildTree,
   getEntry,
@@ -32,6 +38,7 @@ import {
 } from './_data'
 import { sendJournalEntryEmail } from './_send-email'
 import type {
+  AuthorRef,
   EntryMetaResult,
   EntryPatch,
   GroupBy,
@@ -418,6 +425,54 @@ export async function fetchEntries(input: {
 export async function fetchEntry(id: string): Promise<JournalEntryDetail | null> {
   const ctx = await requireRequestContext()
   return getEntry(ctx, id)
+}
+
+// ---- author workspace (records "Open full entry" flyout) --------------------
+// These power the larger, editable workspace flyout an admin opens from the
+// records list. They are gated to managers (journalCanBrowseAll); the data layer
+// AND-bounds every query by the viewer's own read tier, so the author scope can
+// never widen what the viewer is allowed to see.
+
+/** Initial payload for the author workspace flyout: the entry + that author's
+ *  tree/sidebar (grouped by date). Returns null if the entry isn't visible. */
+export async function fetchAuthorWorkspace(entryId: string): Promise<{
+  data: WorkspaceData
+  entry: JournalEntryDetail
+  author: AuthorRef
+} | null> {
+  const ctx = await requireRequestContext()
+  if (!journalCanBrowseAll(ctx)) return null
+  const entry = await getEntry(ctx, entryId)
+  if (!entry) return null
+  const author: AuthorRef = {
+    personId: entry.personId,
+    tenantUserId: entry.createdByTenantUserId,
+    name: entry.authorName,
+  }
+  const data = await getWorkspaceData(ctx, 'date', {}, author)
+  return { data, entry, author }
+}
+
+/** Refetch the author workspace sidebar (filters/group change). */
+export async function fetchAuthorWorkspaceData(input: {
+  author: AuthorRef
+  groupBy: GroupBy
+  filters: JournalFilters
+}): Promise<WorkspaceData | null> {
+  const ctx = await requireRequestContext()
+  if (!journalCanBrowseAll(ctx)) return null
+  return getWorkspaceData(ctx, input.groupBy, input.filters, input.author)
+}
+
+/** Refetch only the author workspace tree (group-by change). */
+export async function fetchAuthorTree(input: {
+  author: AuthorRef
+  groupBy: GroupBy
+  filters: JournalFilters
+}): Promise<TreeNode[]> {
+  const ctx = await requireRequestContext()
+  if (!journalCanBrowseAll(ctx)) return []
+  return buildTree(ctx, input.groupBy, input.filters, false, input.author)
 }
 
 export async function emailEntry(id: string): Promise<ActionOk<{ sent: number }> | ActionErr> {

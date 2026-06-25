@@ -74,6 +74,7 @@ function toPlain(node: ReactNode): ReactNode {
 /** One record as a premium, tappable card. Slots mirror a typical list row. */
 export function ListCard({
   href,
+  onClick,
   leading,
   person,
   avatarName,
@@ -85,6 +86,9 @@ export function ListCard({
 }: {
   /** Tapping the card body opens this route. */
   href?: string
+  /** Tapping the card body runs this handler instead of navigating (client lists
+   *  that open a flyout rather than a route). Ignored when `href` is set. */
+  onClick?: () => void
   /** Control kept OUTSIDE the link (e.g. a bulk-select checkbox). */
   leading?: ReactNode
   /** The human this record belongs to — renders an avatar + a name line. */
@@ -152,6 +156,14 @@ export function ListCard({
           <Link href={href as any} className="flex min-w-0 flex-1 gap-3 active:opacity-70">
             {content}
           </Link>
+        ) : onClick ? (
+          <button
+            type="button"
+            onClick={onClick}
+            className="flex min-w-0 flex-1 gap-3 text-left active:opacity-70"
+          >
+            {content}
+          </button>
         ) : (
           content
         )}
@@ -168,6 +180,14 @@ export function ListCard({
         >
           {content}
         </Link>
+      ) : onClick ? (
+        <button
+          type="button"
+          onClick={onClick}
+          className={cn(shell, 'w-full text-left active:bg-slate-50 dark:active:bg-slate-800')}
+        >
+          {content}
+        </button>
       ) : (
         <div className={shell}>{content}</div>
       )}

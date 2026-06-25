@@ -62,6 +62,7 @@ export type JournalEntryDetail = {
   siteOrgUnitId: string | null
   supervisorPersonId: string | null
   personId: string | null
+  createdByTenantUserId: string | null
   tags: string[]
   photos: JournalPhoto[]
   authorName: string | null
@@ -82,6 +83,26 @@ export type OnThisDayItem = {
 }
 
 export type JournalOption = { id: string; name: string; hint?: string }
+
+/** Sort columns for the records list (URL `sort` param). */
+export type JournalSort = 'date' | 'author' | 'site' | 'status' | 'reference'
+
+/** Identifies a journal's author for the author-scoped workspace flyout. */
+export type AuthorRef = {
+  personId: string | null
+  tenantUserId: string | null
+  name?: string | null
+}
+
+/** A filter facet (site / author) with the count of entries in the caller's scope. */
+export type JournalFacetOption = { id: string; name: string; count: number }
+
+/** Scoped facet options + status counts for the records list filter chips. */
+export type JournalRecordsFacets = {
+  statusCounts: Record<string, number>
+  sites: JournalFacetOption[]
+  people: JournalFacetOption[]
+}
 
 /** A tag offered in the entry picker — name + optional palette colour. */
 export type TagSuggestion = { name: string; color: string | null }

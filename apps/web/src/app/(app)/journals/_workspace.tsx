@@ -13,20 +13,33 @@ import { EditorPane } from './_editor-pane'
 import {
   createEntryForDate,
   createTodayEntry,
+  fetchAuthorTree,
+  fetchAuthorWorkspaceData,
   fetchEntry,
   fetchTree,
   fetchWorkspace,
 } from './_actions'
-import type { GroupBy, JournalEntryDetail, JournalFilters, WorkspaceData } from './_types'
+import type {
+  AuthorRef,
+  GroupBy,
+  JournalEntryDetail,
+  JournalFilters,
+  WorkspaceData,
+} from './_types'
 
 export function JournalWorkspace({
   initialData,
   initialEntry,
   initialGroupBy,
+  author = null,
 }: {
   initialData: WorkspaceData
   initialEntry: JournalEntryDetail | null
   initialGroupBy: GroupBy
+  /** When set, this is the records "Open full entry" flyout: the tree is scoped
+   *  to this author's journals, the address bar is left alone, and create
+   *  affordances are hidden. Omitted for the personal /journals workspace. */
+  author?: AuthorRef | null
 }) {
   const [data, setData] = useState(initialData)
   const [entry, setEntry] = useState(initialEntry)
@@ -37,14 +50,24 @@ export function JournalWorkspace({
   const [, startNav] = useTransition()
   const filtersKey = JSON.stringify(filters)
 
-  const setUrl = useCallback((id: string | null) => {
-    if (typeof window === 'undefined') return
-    window.history.replaceState(null, '', id ? `/journals/${id}` : '/journals')
-  }, [])
+  const setUrl = useCallback(
+    (id: string | null) => {
+      // The author flyout lives over /journals/records — don't hijack the URL.
+      if (author) return
+      if (typeof window === 'undefined') return
+      window.history.replaceState(null, '', id ? `/journals/${id}` : '/journals')
+    },
+    [author],
+  )
 
   const reloadSidebar = useCallback(async () => {
+    if (author) {
+      const d = await fetchAuthorWorkspaceData({ author, groupBy, filters })
+      if (d) setData(d)
+      return
+    }
     setData(await fetchWorkspace({ groupBy, filters }))
-  }, [groupBy, filters])
+  }, [author, groupBy, filters])
 
   // Refetch the tree/sidebar whenever filters change (skip the first render).
   const firstRun = useRef(true)
@@ -83,7 +106,9 @@ export function JournalWorkspace({
     setGroupBy(g)
     setTreeLoading(true)
     try {
-      const tree = await fetchTree({ groupBy: g, filters })
+      const tree = author
+        ? await fetchAuthorTree({ author, groupBy: g, filters })
+        : await fetchTree({ groupBy: g, filters })
       setData((d) => ({ ...d, tree }))
     } finally {
       setTreeLoading(false)
@@ -95,6 +120,7 @@ export function JournalWorkspace({
   }
 
   function newEntry() {
+    if (author) return // author flyout is review/edit only — no create-as-other
     startNav(async () => {
       const r = await createTodayEntry()
       if (!r.ok) {
@@ -106,6 +132,7 @@ export function JournalWorkspace({
   }
 
   function pickDate(dateISO: string) {
+    if (author) return
     startNav(async () => {
       const r = await createEntryForDate(dateISO)
       if (!r.ok) {
@@ -147,6 +174,7 @@ export function JournalWorkspace({
       filters={filters}
       selectedId={entry?.id ?? null}
       loading={treeLoading}
+      authorMode={!!author}
       onGroupByChange={changeGroupBy}
       onFiltersChange={changeFilters}
       onSelect={selectEntry}

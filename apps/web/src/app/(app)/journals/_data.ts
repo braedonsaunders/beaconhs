@@ -20,6 +20,7 @@ import {
   getAuthorPersonId,
   htmlToText,
   isUuid,
+  journalAuthorScopeWhere,
   journalCanBrowseAll,
   journalCanReadAll,
   journalScopeWhere,
@@ -29,12 +30,15 @@ import {
   todayISO,
 } from './_lib'
 import type {
+  AuthorRef,
   GroupBy,
   HeatmapCell,
   JournalEntryDetail,
   JournalFilters,
   JournalListItem,
   JournalOption,
+  JournalRecordsFacets,
+  JournalSort,
   OnThisDayItem,
   TagSuggestion,
   TreeNode,
@@ -86,17 +90,22 @@ function treeSnippet(body: string | null | undefined): string {
  * Combine scope + filters into the WHERE clause for journal_entries.
  * `selfOnly` forces the caller's own entries regardless of read.all/site — used
  * by the personal compose workspace; the Records browser leaves it false.
+ * `targetAuthor` (records "Open full entry" workspace) scopes to ONE author's
+ * entries, viewer-bounded — it takes precedence over `selfOnly`.
  */
 function entryWhere(
   ctx: RequestContext,
   filters: JournalFilters,
   authorPersonId: string | null,
   selfOnly = false,
+  targetAuthor?: AuthorRef | null,
 ): SQL | undefined {
   const conds: SQL[] = []
-  const scope = selfOnly
-    ? journalSelfScopeWhere(ctx, authorPersonId)
-    : journalScopeWhere(ctx, authorPersonId)
+  const scope = targetAuthor
+    ? journalAuthorScopeWhere(ctx, authorPersonId, targetAuthor)
+    : selfOnly
+      ? journalSelfScopeWhere(ctx, authorPersonId)
+      : journalScopeWhere(ctx, authorPersonId)
   if (scope) conds.push(scope)
 
   if (filters.q) {
@@ -198,12 +207,23 @@ export async function listTagSuggestions(
 export async function listEntries(
   ctx: RequestContext,
   filters: JournalFilters,
-  paging: { limit?: number; offset?: number } = {},
+  paging: { limit?: number; offset?: number; sort?: JournalSort; dir?: 'asc' | 'desc' } = {},
   selfOnly = false,
 ): Promise<JournalListItem[]> {
   const authorPersonId = await getAuthorPersonId(ctx)
   const limit = Math.min(paging.limit ?? 50, 5000)
   const offset = paging.offset ?? 0
+  const dir = paging.dir === 'asc' ? asc : desc
+  const orderBy =
+    paging.sort === 'author'
+      ? [dir(authorPerson.lastName), dir(authorPerson.firstName)]
+      : paging.sort === 'site'
+        ? [dir(orgUnits.name)]
+        : paging.sort === 'status'
+          ? [dir(journalEntries.status)]
+          : paging.sort === 'reference'
+            ? [dir(journalEntries.reference)]
+            : [dir(journalEntries.entryDate), desc(journalEntries.updatedAt)]
 
   return ctx.db(async (tx) => {
     const where = entryWhere(ctx, filters, authorPersonId, selfOnly)
@@ -218,7 +238,7 @@ export async function listEntries(
       .leftJoin(orgUnits, eq(orgUnits.id, journalEntries.siteOrgUnitId))
       .leftJoin(authorPerson, eq(authorPerson.id, journalEntries.personId))
       .where(where)
-      .orderBy(desc(journalEntries.entryDate), desc(journalEntries.updatedAt))
+      .orderBy(...orderBy)
       .limit(limit)
       .offset(offset)
 
@@ -256,6 +276,59 @@ export async function countEntries(ctx: RequestContext, filters: JournalFilters)
       .from(journalEntries)
       .where(where)
     return Number(row?.n ?? 0)
+  })
+}
+
+/**
+ * Scoped filter facets for the records list: status counts plus the most-used
+ * sites and authors within the caller's visibility scope (so the chips never
+ * leak names the caller can't see). Reflects scope only, not the active
+ * filters, so selecting one facet doesn't make the others vanish.
+ */
+export async function listRecordsFacets(ctx: RequestContext): Promise<JournalRecordsFacets> {
+  const authorPersonId = await getAuthorPersonId(ctx)
+  const scope = journalScopeWhere(ctx, authorPersonId)
+  return ctx.db(async (tx) => {
+    const statusRows = await tx
+      .select({ status: journalEntries.status, n: sql<number>`count(*)::int` })
+      .from(journalEntries)
+      .where(scope)
+      .groupBy(journalEntries.status)
+    const statusCounts: Record<string, number> = {}
+    for (const r of statusRows) statusCounts[r.status] = Number(r.n)
+
+    const siteRows = await tx
+      .select({ id: orgUnits.id, name: orgUnits.name, n: sql<number>`count(*)::int` })
+      .from(journalEntries)
+      .innerJoin(orgUnits, eq(orgUnits.id, journalEntries.siteOrgUnitId))
+      .where(scope)
+      .groupBy(orgUnits.id, orgUnits.name)
+      .orderBy(desc(sql`count(*)`), asc(orgUnits.name))
+      .limit(15)
+
+    const peopleRows = await tx
+      .select({
+        id: authorPerson.id,
+        firstName: authorPerson.firstName,
+        lastName: authorPerson.lastName,
+        n: sql<number>`count(*)::int`,
+      })
+      .from(journalEntries)
+      .innerJoin(authorPerson, eq(authorPerson.id, journalEntries.personId))
+      .where(scope)
+      .groupBy(authorPerson.id, authorPerson.firstName, authorPerson.lastName)
+      .orderBy(desc(sql`count(*)`), asc(authorPerson.lastName))
+      .limit(15)
+
+    return {
+      statusCounts,
+      sites: siteRows.map((s) => ({ id: s.id, name: s.name, count: Number(s.n) })),
+      people: peopleRows.map((p) => ({
+        id: p.id,
+        name: `${p.firstName ?? ''} ${p.lastName ?? ''}`.trim() || '—',
+        count: Number(p.n),
+      })),
+    }
   })
 }
 
@@ -345,6 +418,7 @@ export async function getEntry(
       siteOrgUnitId: row.e.siteOrgUnitId,
       supervisorPersonId: row.e.supervisorPersonId,
       personId: row.e.personId,
+      createdByTenantUserId: row.e.createdByTenantUserId,
       tags: tagRows.map((t) => t.tag),
       photos: photoRows.map((p) => ({
         id: p.id,
@@ -375,9 +449,10 @@ export async function buildTree(
   groupBy: GroupBy,
   filters: JournalFilters,
   selfOnly = false,
+  targetAuthor?: AuthorRef | null,
 ): Promise<TreeNode[]> {
   const authorPersonId = await getAuthorPersonId(ctx)
-  const where = entryWhere(ctx, filters, authorPersonId, selfOnly)
+  const where = entryWhere(ctx, filters, authorPersonId, selfOnly, targetAuthor)
 
   const rows: TreeRow[] = await ctx.db(async (tx) => {
     const base = await tx
@@ -565,20 +640,27 @@ async function onThisDay(ctx: RequestContext, where: SQL | undefined): Promise<O
   })
 }
 
-/** Everything the sidebar needs in one payload. */
+/**
+ * Everything the sidebar needs in one payload. Self-scoped by default (the
+ * personal compose workspace). When `targetAuthor` is set (records "Open full
+ * entry"), the tree/heatmap/counts scope to THAT author's journals instead,
+ * viewer-bounded — so an admin browses a worker's log in the same UI.
+ */
 export async function getWorkspaceData(
   ctx: RequestContext,
   groupBy: GroupBy,
   filters: JournalFilters,
+  targetAuthor?: AuthorRef | null,
 ): Promise<WorkspaceData> {
-  // The compose workspace is ALWAYS personal — only the caller's own journals,
-  // regardless of read.all/site. Cross-user browsing lives in /journals/records.
   const authorPersonId = await getAuthorPersonId(ctx)
-  const where = entryWhere(ctx, filters, authorPersonId, true)
-  const scopeOnly = journalSelfScopeWhere(ctx, authorPersonId)
+  const selfOnly = !targetAuthor
+  const where = entryWhere(ctx, filters, authorPersonId, selfOnly, targetAuthor)
+  const scopeOnly = targetAuthor
+    ? journalAuthorScopeWhere(ctx, authorPersonId, targetAuthor)
+    : journalSelfScopeWhere(ctx, authorPersonId)
 
   const [tree, hm, otd, options, tagSuggestions, counts] = await Promise.all([
-    buildTree(ctx, groupBy, filters, true),
+    buildTree(ctx, groupBy, filters, selfOnly, targetAuthor),
     heatmap(ctx, scopeOnly),
     onThisDay(ctx, scopeOnly),
     listMetaOptions(ctx),

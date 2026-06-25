@@ -18,10 +18,15 @@ export function journalCanBrowseAll(ctx: RequestContext): boolean {
 }
 
 /**
- * Visibility predicate for journal_entries based on the caller's scope:
+ * Visibility predicate for journal_entries based on the caller's read tier:
  *   read.all  → no extra filter (RLS already bounds to tenant)
- *   read.site → entries at the caller's scoped sites
- *   read.self → entries authored by, or created by, the caller
+ *   read.site → entries at the caller's scoped sites, UNION their own
+ *   read.self → only entries authored by, or created by, the caller (default)
+ *
+ * The caller's OWN entries are visible at every tier — a site-scoped reviewer
+ * still sees a journal they wrote at another site or with no site set. This
+ * mirrors the generalised `moduleScopeWhere` (see record-visibility model) so
+ * journals behave like every other record module.
  */
 export function journalScopeWhere(
   ctx: RequestContext,
@@ -29,16 +34,50 @@ export function journalScopeWhere(
 ): SQL | undefined {
   if (journalCanReadAll(ctx)) return undefined
 
+  const own: SQL[] = []
+  if (authorPersonId) own.push(eq(journalEntries.personId, authorPersonId))
+  const tenantUserId = authorTenantUserId(ctx)
+  if (tenantUserId) own.push(eq(journalEntries.createdByTenantUserId, tenantUserId))
+  const ownWhere = own.length === 0 ? null : own.length === 1 ? own[0]! : or(...own)!
+
   if (can(ctx, 'journals.read.site')) {
     const siteIds = ctx.scopes.flatMap((s) => (s.type === 'sites' ? s.siteIds : []))
-    if (siteIds.length > 0) return inArray(journalEntries.siteOrgUnitId, siteIds)
+    if (siteIds.length > 0) {
+      const siteWhere = inArray(journalEntries.siteOrgUnitId, siteIds)
+      return ownWhere ? or(siteWhere, ownWhere)! : siteWhere
+    }
   }
 
+  return ownWhere ?? sql`false`
+}
+
+/** A specific author's entries (by subject person and/or the tenant_user who
+ *  created them). `false` when neither is known. */
+export function journalByAuthorWhere(
+  personId: string | null,
+  tenantUserId: string | null,
+): SQL {
   const conds: SQL[] = []
-  if (authorPersonId) conds.push(eq(journalEntries.personId, authorPersonId))
-  if (ctx.membership?.id) conds.push(eq(journalEntries.createdByTenantUserId, ctx.membership.id))
+  if (personId) conds.push(eq(journalEntries.personId, personId))
+  if (tenantUserId) conds.push(eq(journalEntries.createdByTenantUserId, tenantUserId))
   if (conds.length === 0) return sql`false`
-  return conds.length === 1 ? conds[0] : or(...conds)
+  return conds.length === 1 ? conds[0]! : or(...conds)!
+}
+
+/**
+ * Visibility for browsing a SPECIFIC author's journals (the records "Open full
+ * entry" workspace): the target author's entries, AND-bounded by the viewer's
+ * own read tier so an admin never sees beyond their scope (read.all → all of the
+ * author's; read.site → the author's at the viewer's sites).
+ */
+export function journalAuthorScopeWhere(
+  ctx: RequestContext,
+  viewerPersonId: string | null,
+  target: { personId: string | null; tenantUserId: string | null },
+): SQL {
+  const byAuthor = journalByAuthorWhere(target.personId, target.tenantUserId)
+  const viewer = journalScopeWhere(ctx, viewerPersonId)
+  return viewer ? and(byAuthor, viewer)! : byAuthor
 }
 
 /**
