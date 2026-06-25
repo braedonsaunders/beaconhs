@@ -88,6 +88,7 @@
     "remark-gfm": "^4.0.1",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.6.0",
+    "unpdf": "^1.6.2",
     "web-push": "^3.6.7",
     "zod": "^4.4.3"
   },

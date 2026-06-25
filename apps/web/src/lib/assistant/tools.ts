@@ -10,8 +10,6 @@ import { z } from 'zod'
 import { and, count, desc, eq, gte, ilike, inArray, isNull, lt, or, type SQL } from 'drizzle-orm'
 import {
   correctiveActions,
-  documentDrafts,
-  documentVersions,
   documents,
   incidents,
   people,
@@ -21,6 +19,7 @@ import {
 import { can } from '@beaconhs/tenant'
 import { recordVisibilityWhere } from '@/lib/visibility'
 import { documentReadFilter } from './doc-access'
+import { getDocumentText } from './document-content'
 import { truncateText, type AssistantToolDef, type ToolResult } from './types'
 
 // ---- helpers ---------------------------------------------------------------
@@ -30,21 +29,6 @@ function escLike(q: string): string {
 }
 function like(q: string): string {
   return `%${escLike(q.slice(0, 100))}%`
-}
-function htmlToText(html: string | null | undefined): string {
-  if (!html) return ''
-  return html
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<\/(p|div|li|h[1-6]|tr|br)>/gi, '\n')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/[ \t]+/g, ' ')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
 }
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10)
@@ -387,52 +371,138 @@ const findDocuments: AssistantToolDef = {
   },
 }
 
+const READ_DOC_WINDOW = 14_000
+
 const readDocument: AssistantToolDef = {
   name: 'read_document',
   description:
-    'Read a controlled document’s current content by id, as plain text. Prefers the latest published version, falling back to the working draft. Read-only.',
+    'Read a controlled document’s full content as plain text — including large uploaded PDFs, whose text is extracted on demand. Returns a window of the text: pass `offset` to page through a long document (the result reports totalChars, hasMore and nextOffset). To jump to the relevant part of a big document, call search_document first, then read_document at the returned offset. Read-only.',
   category: 'read',
   gate: { mode: 'anyOf', perms: ['documents.read', 'documents.manage'] },
-  inputSchema: z.object({ id: z.string().uuid() }),
+  inputSchema: z.object({
+    id: z.string().uuid(),
+    offset: z.number().int().min(0).optional(),
+    maxChars: z.number().int().min(500).max(20_000).optional(),
+  }),
   execute: async (raw, ctx): Promise<ToolResult> => {
-    const a = raw as { id: string }
-    return ctx.db(async (tx) => {
-      const docConds: SQL[] = [eq(documents.id, a.id), isNull(documents.deletedAt)]
-      const pubOnly = documentReadFilter(ctx)
-      if (pubOnly) docConds.push(pubOnly)
-      const [doc] = await tx
-        .select({
-          id: documents.id,
-          key: documents.key,
-          title: documents.title,
-          status: documents.status,
-        })
-        .from(documents)
-        .where(and(...docConds))
-        .limit(1)
-      if (!doc) return { ok: false, error: 'not_found' }
-      const [pub] = await tx
-        .select({ html: documentVersions.contentMarkdown })
-        .from(documentVersions)
-        .where(eq(documentVersions.documentId, a.id))
-        .orderBy(desc(documentVersions.version))
-        .limit(1)
-      let html = pub?.html ?? null
-      if (!html) {
-        const [draft] = await tx
-          .select({ html: documentDrafts.contentHtml })
-          .from(documentDrafts)
-          .where(eq(documentDrafts.documentId, a.id))
-          .limit(1)
-        html = draft?.html ?? null
-      }
-      const text = truncateText(htmlToText(html), 12_000)
+    const a = raw as { id: string; offset?: number; maxChars?: number }
+    const res = await getDocumentText(ctx, a.id)
+    if (!res.ok) return { ok: false, error: res.error }
+    const doc = res.doc
+    const total = doc.text.length
+    const offset = Math.min(a.offset ?? 0, total)
+    const window = Math.min(a.maxChars ?? READ_DOC_WINDOW, 20_000)
+    const chunk = doc.text.slice(offset, offset + window)
+    const end = offset + chunk.length
+    const hasMore = end < total
+    return {
+      ok: true,
+      data: {
+        id: doc.id,
+        key: doc.key,
+        title: doc.title,
+        status: doc.status,
+        source: doc.source,
+        pages: doc.pages,
+        totalChars: total,
+        offset,
+        returnedChars: chunk.length,
+        hasMore,
+        nextOffset: hasMore ? end : null,
+        text: chunk,
+      },
+      note: doc.scanned
+        ? 'This appears to be a scanned/image-only PDF — little or no text could be extracted. Tell the user to open it in the reader to view the pages.'
+        : total === 0
+          ? 'This document has no readable text content yet.'
+          : undefined,
+    }
+  },
+}
+
+/** Locate the PDF page a character offset falls on, using the `[Page N]` markers
+ *  getDocumentText inserts. Returns null for non-PDF text. */
+function pageForOffset(text: string, offset: number): number | null {
+  const re = /\[Page (\d+)\]/g
+  let page: number | null = null
+  let m: RegExpExecArray | null
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > offset) break
+    page = Number(m[1])
+  }
+  return page
+}
+
+const searchDocument: AssistantToolDef = {
+  name: 'search_document',
+  description:
+    'Search WITHIN a single controlled document (including large multi-page PDFs) for a word or phrase, returning the matching passages with their character offset and page number. Use this to find the relevant section of a long document before reading it, then call read_document at the returned offset. Read-only.',
+  category: 'read',
+  gate: { mode: 'anyOf', perms: ['documents.read', 'documents.manage'] },
+  inputSchema: z.object({
+    id: z.string().uuid(),
+    query: z.string().min(2).max(200),
+    maxResults: z.number().int().min(1).max(20).optional(),
+  }),
+  execute: async (raw, ctx): Promise<ToolResult> => {
+    const a = raw as { id: string; query: string; maxResults?: number }
+    const res = await getDocumentText(ctx, a.id)
+    if (!res.ok) return { ok: false, error: res.error }
+    const doc = res.doc
+    const limit = Math.min(a.maxResults ?? 8, 20)
+    if (!doc.text) {
       return {
         ok: true,
-        data: { id: doc.id, key: doc.key, title: doc.title, status: doc.status, text },
-        note: text ? undefined : 'This document has no readable content yet.',
+        data: { id: doc.id, key: doc.key, title: doc.title, totalMatches: 0, matches: [] },
+        note: doc.scanned
+          ? 'This appears to be a scanned/image-only PDF — its text could not be searched. Tell the user to open it in the reader.'
+          : 'This document has no readable text content to search.',
       }
-    })
+    }
+    const hay = doc.text.toLowerCase()
+    const needle = a.query.toLowerCase()
+    const CONTEXT = 160
+    const matches: { offset: number; page: number | null; snippet: string }[] = []
+    let total = 0
+    let from = 0
+    for (;;) {
+      const pos = hay.indexOf(needle, from)
+      if (pos === -1) break
+      total += 1
+      if (matches.length < limit) {
+        const start = Math.max(0, pos - CONTEXT)
+        const snippet = doc.text
+          .slice(start, pos + needle.length + CONTEXT)
+          .replace(/\s+/g, ' ')
+          .trim()
+        matches.push({
+          offset: pos,
+          page: pageForOffset(doc.text, pos),
+          snippet: `${start > 0 ? '…' : ''}${snippet}…`,
+        })
+      }
+      from = pos + needle.length
+      // Cap the scan so a pathological query can't spin forever.
+      if (total > 5000) break
+    }
+    return {
+      ok: true,
+      data: {
+        id: doc.id,
+        key: doc.key,
+        title: doc.title,
+        source: doc.source,
+        pages: doc.pages,
+        totalChars: doc.text.length,
+        totalMatches: total,
+        returned: matches.length,
+        matches,
+      },
+      note:
+        total === 0
+          ? `No matches for “${a.query}”. Try a shorter or different term, or read_document to skim it.`
+          : undefined,
+    }
   },
 }
 
@@ -641,6 +711,7 @@ export const READ_TOOLS: AssistantToolDef[] = [
   findCorrectiveActions,
   getCorrectiveAction,
   findDocuments,
+  searchDocument,
   readDocument,
   findPeople,
   findTrainingRecords,

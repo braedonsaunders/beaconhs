@@ -30,6 +30,7 @@ const META: Record<string, { label: string; icon: LucideIcon }> = {
   find_corrective_actions: { label: 'Searched corrective actions', icon: Search },
   get_corrective_action: { label: 'Read corrective action', icon: FileText },
   find_documents: { label: 'Searched documents', icon: Search },
+  search_document: { label: 'Searched within document', icon: Search },
   read_document: { label: 'Read document', icon: FileText },
   find_people: { label: 'Looked up people', icon: Users },
   find_training_records: { label: 'Searched training records', icon: Search },
