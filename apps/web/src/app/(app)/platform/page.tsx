@@ -1,5 +1,14 @@
 import Link from 'next/link'
-import { Boxes, Mail, MessageSquare, Plus, ScrollText, Sparkles, Users } from 'lucide-react'
+import {
+  Boxes,
+  Database,
+  Mail,
+  MessageSquare,
+  Plus,
+  ScrollText,
+  Sparkles,
+  Users,
+} from 'lucide-react'
 import { PageContainer } from '@/components/page-layout'
 
 export const metadata = { title: 'Platform' }
@@ -55,6 +64,12 @@ const TILES: Tile[] = [
     title: 'SMS log',
     desc: 'Every text dispatched, across all tenants',
     icon: <ScrollText size={18} />,
+  },
+  {
+    href: '/platform/database',
+    title: 'Database maintenance',
+    desc: 'Retention windows + planner upkeep for high-volume tables',
+    icon: <Database size={18} />,
   },
 ]
 

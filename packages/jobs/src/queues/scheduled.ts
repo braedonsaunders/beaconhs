@@ -16,6 +16,7 @@ export type ScheduledTick =
   | { kind: 'plugin_cron'; cadence: 'hourly' | 'daily' | 'weekly' }
   | { kind: 'sync_scan' }
   | { kind: 'sync_run'; tenantId: string; connectionId: string; trigger: 'scheduled' | 'manual' }
+  | { kind: 'db_maintenance'; trigger?: 'scheduled' | 'manual' }
 
 export const scheduledQueue = new Queue<ScheduledTick>('scheduled', {
   connection,
@@ -93,4 +94,11 @@ export async function registerSchedules() {
     repeat: { pattern: '*/15 * * * *' },
     jobId: 'tick:sync_scan',
   })
+  // Daily 03:30 UTC: database maintenance — prune unbounded tables past their
+  // configured retention window + refresh planner statistics (see /platform/database).
+  await scheduledQueue.add(
+    'tick:db_maintenance',
+    { kind: 'db_maintenance', trigger: 'scheduled' } as ScheduledTick,
+    { repeat: { pattern: '30 3 * * *' }, jobId: 'tick:db_maintenance' },
+  )
 }

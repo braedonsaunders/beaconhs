@@ -12,6 +12,7 @@ import { scanScheduledFlows } from '../lib/scheduled-flow-runner'
 import { runPluginCron } from '../lib/plugin-cron'
 import { runSyncConnection, scanSyncConnections } from '../lib/sync-scanner'
 import { runSessionOverdueFlows } from '../lib/session-overdue-flows'
+import { runDatabaseMaintenance } from '../lib/db-maintenance'
 
 export async function processScheduledTick(job: Job<ScheduledTick>): Promise<void> {
   switch (job.data.kind) {
@@ -77,6 +78,10 @@ export async function processScheduledTick(job: Job<ScheduledTick>): Promise<voi
       console.log(
         `[scheduled] sync_run ${job.data.connectionId.slice(0, 8)} → ${r.status} (run=${r.runId ?? 'none'})`,
       )
+      return
+    }
+    case 'db_maintenance': {
+      await runDatabaseMaintenance(job.data.trigger ?? 'scheduled')
       return
     }
   }
