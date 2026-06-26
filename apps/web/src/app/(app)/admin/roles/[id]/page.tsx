@@ -1,7 +1,6 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { asc, eq } from 'drizzle-orm'
-import { Gauge } from 'lucide-react'
 import {
   Badge,
   Button,
@@ -12,6 +11,7 @@ import {
   DetailHeader,
   Input,
   Label,
+  TabContent,
   Textarea,
 } from '@beaconhs/ui'
 import {
@@ -20,16 +20,39 @@ import {
   roles,
   tenantUsers,
   user,
+  type DashboardLayoutData,
 } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
-import { PageContainer } from '@/components/page-layout'
+import { DetailPageLayout } from '@/components/page-layout'
+import { ModuleSubNav } from '@/components/module-admin/module-sub-nav'
+import { pickActiveTab } from '@/components/tab-nav'
+import { mergeHref } from '@/lib/list-params'
+import { DashboardGrid } from '@/app/(app)/dashboard/_dashboard-grid'
+import { loadDashboardEditCanvas } from '@/app/(app)/dashboard/_edit-canvas'
+import { DEFAULT_LAYOUTS } from '@/app/(app)/dashboard/_role-defaults'
+import { inferRoleTier, ROLE_TIER_LABELS } from '@/app/(app)/dashboard/_role-tier'
+import { WIDGETS } from '@/app/(app)/dashboard/_widget-registry'
+import {
+  canPermissionSetPublishInsights,
+  canPermissionSetSeeWidget,
+  canPermissionSetViewInsights,
+} from '@/app/(app)/dashboard/_widget-access'
 import { ConfirmButton } from '../../users/_components/confirm-button'
 import { PermissionMatrix } from '../_components/permission-matrix'
-import { deleteRole, duplicateRole, updateRole } from '../_actions'
+import {
+  deleteRole,
+  duplicateRole,
+  resetRoleDashboardLayout,
+  saveRoleDashboardLayout,
+  updateRoleDetails,
+  updateRolePermissions,
+} from '../_actions'
 
 export const metadata = { title: 'Role' }
 export const dynamic = 'force-dynamic'
+
+const ROLE_TABS = ['details', 'permissions', 'members', 'dashboard'] as const
 
 export default async function AdminRoleEditPage({
   params,
@@ -42,7 +65,9 @@ export default async function AdminRoleEditPage({
   if (!can(ctx, 'admin.roles.manage')) redirect('/admin')
   const { id } = await params
   const sp = await searchParams
+  const active = pickActiveTab(sp, ROLE_TABS, 'details')
   const error = typeof sp.error === 'string' ? sp.error : undefined
+  const basePath = `/admin/roles/${id}`
 
   const data = await ctx.db(async (tx) => {
     const [role] = await tx.select().from(roles).where(eq(roles.id, id)).limit(1)
@@ -59,7 +84,7 @@ export default async function AdminRoleEditPage({
       .where(eq(roleAssignments.roleId, id))
       .orderBy(asc(user.name))
     const [dashboard] = await tx
-      .select({ id: roleDashboardLayouts.id, updatedAt: roleDashboardLayouts.updatedAt })
+      .select({ layout: roleDashboardLayouts.layout, updatedAt: roleDashboardLayouts.updatedAt })
       .from(roleDashboardLayouts)
       .where(eq(roleDashboardLayouts.roleId, id))
       .limit(1)
@@ -68,14 +93,54 @@ export default async function AdminRoleEditPage({
   if (!data) notFound()
   const { role, members, dashboard } = data
 
+  const roleTier = inferRoleTier(role)
+  const dashboardLayout = dashboard?.layout ?? DEFAULT_LAYOUTS[roleTier] ?? DEFAULT_LAYOUTS.worker
+  const roleCanViewInsights = canPermissionSetViewInsights(role.permissions)
+  const roleCanSeeAllPublishedInsights = canPermissionSetPublishInsights(role.permissions)
+  const allowedWidgetIds = Object.keys(WIDGETS).filter((widgetId) =>
+    canPermissionSetSeeWidget(role.permissions, widgetId),
+  )
+
+  const dashboardCanvas =
+    active === 'dashboard'
+      ? await loadDashboardEditCanvas(ctx, dashboardLayout, {
+          includeLibraryCards: roleCanViewInsights,
+          filterLibraryCard: (card) =>
+            card.status === 'published' &&
+            (roleCanSeeAllPublishedInsights ||
+              !card.allowedRoles ||
+              card.allowedRoles.length === 0 ||
+              card.allowedRoles.includes(role.key)),
+        })
+      : null
+
+  async function saveLayout(input: { widgets: DashboardLayoutData['widgets'] }) {
+    'use server'
+    return saveRoleDashboardLayout({ roleId: id, widgets: input.widgets })
+  }
+
+  async function resetLayout() {
+    'use server'
+    return resetRoleDashboardLayout({ roleId: id })
+  }
+
   return (
-    <PageContainer>
-      <div className="space-y-5">
+    <DetailPageLayout
+      header={
         <DetailHeader
           back={{ href: '/admin/roles', label: 'Back to roles' }}
           title={role.name}
-          subtitle={role.isBuiltIn ? 'Built-in role' : 'Custom role'}
-          badge={role.isBuiltIn ? <Badge variant="secondary">Built-in</Badge> : null}
+          subtitle={`${role.isBuiltIn ? 'Built-in role' : 'Custom role'} · ${ROLE_TIER_LABELS[roleTier]} dashboard tier`}
+          badge={
+            <div className="flex items-center gap-2">
+              {role.isBuiltIn ? <Badge variant="secondary">Built-in</Badge> : null}
+              {dashboard ? (
+                <Badge variant="secondary">Dashboard configured</Badge>
+              ) : (
+                <Badge variant="outline">Shipped dashboard</Badge>
+              )}
+            </div>
+          }
           actions={
             <div className="flex items-center gap-2">
               <form action={duplicateRole}>
@@ -99,118 +164,143 @@ export default async function AdminRoleEditPage({
             </div>
           }
         />
-
-        {error ? (
+      }
+      alerts={
+        error ? (
           <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
             {error}
           </div>
+        ) : null
+      }
+      subtabs={
+        <ModuleSubNav
+          active={active}
+          tabs={[
+            { key: 'details', label: 'Details', href: mergeHref(basePath, sp, { tab: 'details' }) },
+            {
+              key: 'permissions',
+              label: 'Permissions',
+              href: mergeHref(basePath, sp, { tab: 'permissions' }),
+            },
+            {
+              key: 'members',
+              label: `Members (${members.length})`,
+              href: mergeHref(basePath, sp, { tab: 'members' }),
+            },
+            {
+              key: 'dashboard',
+              label: 'Dashboard',
+              href: mergeHref(basePath, sp, { tab: 'dashboard' }),
+            },
+          ]}
+        />
+      }
+      className={active === 'dashboard' ? 'max-w-none' : undefined}
+    >
+      <TabContent tabKey={active}>
+        {active === 'details' ? (
+          <form action={updateRoleDetails} className="space-y-5">
+            <input type="hidden" name="id" value={id} />
+            <Card>
+              <CardHeader>
+                <CardTitle>Details</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="name">
+                      Name<span className="text-red-600"> *</span>
+                    </Label>
+                    <Input id="name" name="name" required defaultValue={role.name} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="key">Key</Label>
+                    <Input id="key" value={role.key} disabled />
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Identifier used in code — can&apos;t be changed.
+                    </p>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="description">Description</Label>
+                  <Textarea
+                    id="description"
+                    name="description"
+                    rows={2}
+                    defaultValue={role.description ?? ''}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+            <div className="flex justify-end">
+              <Button type="submit">Save details</Button>
+            </div>
+          </form>
         ) : null}
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Default dashboard</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-wrap items-center justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                {dashboard ? (
-                  <Badge variant="secondary">Configured</Badge>
-                ) : (
-                  <Badge variant="outline">Shipped default</Badge>
-                )}
-                {dashboard ? (
-                  <span className="text-xs text-slate-500 dark:text-slate-400">
-                    Updated {dashboard.updatedAt.toLocaleDateString()}
-                  </span>
-                ) : null}
-              </div>
-              <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-                Used as the main dashboard for members of this role until they save a personal
-                layout.
-              </p>
+        {active === 'permissions' ? (
+          <form action={updateRolePermissions} className="space-y-5">
+            <input type="hidden" name="id" value={id} />
+            <Card>
+              <CardHeader>
+                <CardTitle>Permissions</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <PermissionMatrix defaultSelected={role.permissions} />
+              </CardContent>
+            </Card>
+            <div className="flex justify-end">
+              <Button type="submit">Save permissions</Button>
             </div>
-            <Link href={`/admin/roles/${id}/dashboard` as any}>
-              <Button variant="outline">
-                <Gauge size={14} className="mr-1.5" />
-                Edit default
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
+          </form>
+        ) : null}
 
-        <form action={updateRole} className="space-y-5">
-          <input type="hidden" name="id" value={id} />
+        {active === 'members' ? (
           <Card>
             <CardHeader>
-              <CardTitle>Details</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor="name">
-                    Name<span className="text-red-600"> *</span>
-                  </Label>
-                  <Input id="name" name="name" required defaultValue={role.name} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="key">Key</Label>
-                  <Input id="key" value={role.key} disabled />
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Identifier used in code — can&apos;t be changed.
-                  </p>
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="description">Description</Label>
-                <Textarea
-                  id="description"
-                  name="description"
-                  rows={2}
-                  defaultValue={role.description ?? ''}
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Permissions</CardTitle>
+              <CardTitle>Members with this role ({members.length})</CardTitle>
             </CardHeader>
             <CardContent>
-              <PermissionMatrix defaultSelected={role.permissions} />
+              {members.length === 0 ? (
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  No members hold this role yet.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  {members.map((m) => (
+                    <Link
+                      key={m.membershipId}
+                      href={`/admin/users/${m.membershipId}` as any}
+                      className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800/60"
+                    >
+                      {m.displayName ?? m.name}
+                    </Link>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
+        ) : null}
 
-          <div className="flex justify-end">
-            <Button type="submit">Save role</Button>
-          </div>
-        </form>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Members with this role ({members.length})</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {members.length === 0 ? (
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                No members hold this role yet.
-              </p>
-            ) : (
-              <div className="flex flex-wrap gap-1.5">
-                {members.map((m) => (
-                  <Link
-                    key={m.membershipId}
-                    href={`/admin/users/${m.membershipId}` as any}
-                    className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800/60"
-                  >
-                    {m.displayName ?? m.name}
-                  </Link>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-    </PageContainer>
+        {active === 'dashboard' && dashboardCanvas ? (
+          <DashboardGrid
+            key={`${role.id}:${JSON.stringify(dashboardLayout.widgets)}`}
+            initialLayout={dashboardLayout}
+            nodes={dashboardCanvas.nodes}
+            role={roleTier}
+            mode="edit"
+            libraryCards={dashboardCanvas.libraryCards}
+            allowedWidgetIds={allowedWidgetIds}
+            saveLayoutAction={saveLayout}
+            resetLayoutAction={resetLayout}
+            saveRedirectHref={`${basePath}?tab=dashboard`}
+            toolbarLabel={`Editing ${role.name} default`}
+            resetConfirmMessage={`Reset ${role.name}'s default dashboard to the shipped ${ROLE_TIER_LABELS[roleTier]} layout?`}
+            saveSuccessMessage="Role default dashboard saved"
+            resetSuccessMessage="Role default dashboard reset"
+          />
+        ) : null}
+      </TabContent>
+    </DetailPageLayout>
   )
 }

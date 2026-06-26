@@ -166,6 +166,38 @@ async function loadRoleForDashboardAction(
   })
 }
 
+async function loadRoleDashboardLayout(
+  ctx: Ctx,
+  roleId: string,
+): Promise<DashboardLayoutData | null> {
+  return ctx.db(async (tx) => {
+    const [row] = await tx
+      .select({ layout: roleDashboardLayouts.layout })
+      .from(roleDashboardLayouts)
+      .where(eq(roleDashboardLayouts.roleId, roleId))
+      .limit(1)
+    return row?.layout ?? null
+  })
+}
+
+async function sanitiseSavedDashboardForRole(ctx: Ctx, role: RoleForDashboard): Promise<void> {
+  const existing = await loadRoleDashboardLayout(ctx, role.id)
+  if (!existing) return
+  const sanitised = await sanitiseRoleDashboardLayout(ctx, role, existing.widgets)
+  if (sanitised.widgets.length === 0) {
+    await ctx.db((tx) =>
+      tx.delete(roleDashboardLayouts).where(eq(roleDashboardLayouts.roleId, role.id)),
+    )
+    return
+  }
+  await ctx.db((tx) =>
+    tx
+      .update(roleDashboardLayouts)
+      .set({ layout: sanitised, updatedAt: new Date() })
+      .where(eq(roleDashboardLayouts.roleId, role.id)),
+  )
+}
+
 export async function createRole(formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'admin.roles.manage')
@@ -195,14 +227,13 @@ export async function createRole(formData: FormData): Promise<void> {
   if (row) redirect(`/admin/roles/${row.id}`)
 }
 
-export async function updateRole(formData: FormData): Promise<void> {
+export async function updateRoleDetails(formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'admin.roles.manage')
   const id = String(formData.get('id') ?? '')
   if (!id) return
   const name = String(formData.get('name') ?? '').trim()
   const description = String(formData.get('description') ?? '').trim() || null
-  const permissions = readPermissions(formData)
   if (!name) {
     redirect(`/admin/roles/${id}?error=${encodeURIComponent('Give the role a name.')}`)
   }
@@ -211,51 +242,49 @@ export async function updateRole(formData: FormData): Promise<void> {
     return r ?? null
   })
   if (!before) return
-  await ctx.db((tx) =>
-    tx.update(roles).set({ name, description, permissions }).where(eq(roles.id, id)),
-  )
-  const existingDashboard = await ctx.db(async (tx) => {
-    const [row] = await tx
-      .select({ layout: roleDashboardLayouts.layout })
-      .from(roleDashboardLayouts)
-      .where(eq(roleDashboardLayouts.roleId, id))
-      .limit(1)
-    return row?.layout ?? null
-  })
-  if (existingDashboard) {
-    const sanitised = await sanitiseRoleDashboardLayout(
-      ctx,
-      {
-        id,
-        key: before.key,
-        name,
-        permissions,
-      },
-      existingDashboard.widgets,
-    )
-    if (sanitised.widgets.length === 0) {
-      await ctx.db((tx) =>
-        tx.delete(roleDashboardLayouts).where(eq(roleDashboardLayouts.roleId, id)),
-      )
-    } else {
-      await ctx.db((tx) =>
-        tx
-          .update(roleDashboardLayouts)
-          .set({ layout: sanitised, updatedAt: new Date() })
-          .where(eq(roleDashboardLayouts.roleId, id)),
-      )
-    }
-  }
+  await ctx.db((tx) => tx.update(roles).set({ name, description }).where(eq(roles.id, id)))
   await recordAudit(ctx, {
     entityType: 'role',
     entityId: id,
     action: 'update',
-    summary: `Updated role "${name}"`,
-    before: before as unknown as Record<string, unknown>,
-    after: { name, description, permissions },
+    summary: `Updated role details for "${name}"`,
+    before: { name: before.name, description: before.description },
+    after: { name, description },
   })
   revalidatePath(`/admin/roles/${id}`)
-  revalidatePath(`/admin/roles/${id}/dashboard`)
+  revalidatePath('/admin/roles')
+  revalidatePath('/admin/users')
+}
+
+export async function updateRolePermissions(formData: FormData): Promise<void> {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'admin.roles.manage')
+  const id = String(formData.get('id') ?? '')
+  if (!id) return
+  const permissions = readPermissions(formData)
+  const before = await ctx.db(async (tx) => {
+    const [r] = await tx.select().from(roles).where(eq(roles.id, id)).limit(1)
+    return r ?? null
+  })
+  if (!before) return
+
+  await ctx.db((tx) => tx.update(roles).set({ permissions }).where(eq(roles.id, id)))
+  await sanitiseSavedDashboardForRole(ctx, {
+    id,
+    key: before.key,
+    name: before.name,
+    permissions,
+  })
+
+  await recordAudit(ctx, {
+    entityType: 'role',
+    entityId: id,
+    action: 'update',
+    summary: `Updated permissions for role "${before.name}"`,
+    before: { permissions: before.permissions },
+    after: { permissions },
+  })
+  revalidatePath(`/admin/roles/${id}`)
   revalidatePath('/admin/roles')
   revalidatePath('/admin/users')
   revalidatePath('/dashboard')
@@ -274,6 +303,11 @@ export async function duplicateRole(formData: FormData): Promise<void> {
   const name = `${source.name} (copy)`
   const key = await uniqueKey(ctx, name)
   const [row] = await ctx.db(async (tx) => {
+    const [sourceDashboard] = await tx
+      .select({ layout: roleDashboardLayouts.layout })
+      .from(roleDashboardLayouts)
+      .where(eq(roleDashboardLayouts.roleId, id))
+      .limit(1)
     const [created] = await tx
       .insert(roles)
       .values({
@@ -286,11 +320,6 @@ export async function duplicateRole(formData: FormData): Promise<void> {
       })
       .returning()
     if (!created) return []
-    const [sourceDashboard] = await tx
-      .select({ layout: roleDashboardLayouts.layout })
-      .from(roleDashboardLayouts)
-      .where(eq(roleDashboardLayouts.roleId, id))
-      .limit(1)
     if (sourceDashboard) {
       await tx.insert(roleDashboardLayouts).values({
         tenantId: ctx.tenantId,
@@ -366,14 +395,7 @@ export async function saveRoleDashboardLayout(input: unknown) {
     return { ok: false as const, error: 'Add at least one widget before saving.' }
   }
 
-  const before = await ctx.db(async (tx) => {
-    const [row] = await tx
-      .select({ layout: roleDashboardLayouts.layout })
-      .from(roleDashboardLayouts)
-      .where(eq(roleDashboardLayouts.roleId, role.id))
-      .limit(1)
-    return row?.layout ?? null
-  })
+  const before = await loadRoleDashboardLayout(ctx, role.id)
 
   await ctx.db((tx) =>
     tx
@@ -399,7 +421,6 @@ export async function saveRoleDashboardLayout(input: unknown) {
   })
 
   revalidatePath(`/admin/roles/${role.id}`)
-  revalidatePath(`/admin/roles/${role.id}/dashboard`)
   revalidatePath('/admin/roles')
   revalidatePath('/dashboard')
   return { ok: true as const }
@@ -416,14 +437,7 @@ export async function resetRoleDashboardLayout(input: unknown) {
   const role = await loadRoleForDashboardAction(ctx, parsed.data.roleId)
   if (!role) return { ok: false as const, error: 'Role not found.' }
 
-  const before = await ctx.db(async (tx) => {
-    const [row] = await tx
-      .select({ layout: roleDashboardLayouts.layout })
-      .from(roleDashboardLayouts)
-      .where(eq(roleDashboardLayouts.roleId, role.id))
-      .limit(1)
-    return row?.layout ?? null
-  })
+  const before = await loadRoleDashboardLayout(ctx, role.id)
   if (!before) return { ok: true as const }
 
   await ctx.db((tx) =>
@@ -440,7 +454,6 @@ export async function resetRoleDashboardLayout(input: unknown) {
   })
 
   revalidatePath(`/admin/roles/${role.id}`)
-  revalidatePath(`/admin/roles/${role.id}/dashboard`)
   revalidatePath('/admin/roles')
   revalidatePath('/dashboard')
   return { ok: true as const }
