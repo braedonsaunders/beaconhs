@@ -239,11 +239,10 @@ export function credentialOutputPdfFormat(output: CredentialOutput): 'cert' | 'w
   return output.format === 'wallet' ? 'wallet' : 'cert'
 }
 
-export function resolveCredentialOutput(
-  settings: unknown,
-  request: CredentialOutputRequest = {},
+function pickFromOutputs(
+  outputs: CredentialOutput[],
+  request: CredentialOutputRequest,
 ): CredentialOutput {
-  const outputs = enabledCredentialOutputs(settings)
   if (request.outputId) {
     const output = outputs.find((candidate) => candidate.id === request.outputId)
     if (output) return output
@@ -260,4 +259,43 @@ export function resolveCredentialOutput(
   }
 
   return outputs[0] ?? DEFAULT_CREDENTIAL_OUTPUT
+}
+
+export function resolveCredentialOutput(
+  settings: unknown,
+  request: CredentialOutputRequest = {},
+): CredentialOutput {
+  return pickFromOutputs(enabledCredentialOutputs(settings), request)
+}
+
+// --- Per-course credential design selection ---------------------------------
+// A training course can pin which Card Studio designs it issues (stored on the
+// course's `metadata.credentialOutputIds`). When set, only those still-enabled
+// designs apply to that course; when empty, the tenant defaults apply.
+
+export const COURSE_CREDENTIAL_OUTPUTS_KEY = 'credentialOutputIds'
+
+export function courseCredentialOutputIds(metadata: unknown): string[] {
+  const raw =
+    metadata && typeof metadata === 'object'
+      ? (metadata as Record<string, unknown>)[COURSE_CREDENTIAL_OUTPUTS_KEY]
+      : null
+  return Array.isArray(raw) ? raw.filter((value): value is string => typeof value === 'string') : []
+}
+
+/** Designs available for a course: its pinned selection (still enabled), else tenant defaults. */
+export function courseCredentialOutputs(metadata: unknown, settings: unknown): CredentialOutput[] {
+  const enabled = enabledCredentialOutputs(settings)
+  const ids = courseCredentialOutputIds(metadata)
+  if (!ids.length) return enabled
+  const picked = enabled.filter((output) => ids.includes(output.id))
+  return picked.length ? picked : enabled
+}
+
+export function resolveCourseCredentialOutput(
+  metadata: unknown,
+  settings: unknown,
+  request: CredentialOutputRequest = {},
+): CredentialOutput {
+  return pickFromOutputs(courseCredentialOutputs(metadata, settings), request)
 }

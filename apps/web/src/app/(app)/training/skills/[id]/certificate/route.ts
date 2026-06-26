@@ -7,7 +7,7 @@
 
 import { randomBytes } from 'node:crypto'
 import { NextResponse, type NextRequest } from 'next/server'
-import { desc, eq } from 'drizzle-orm'
+import { and, desc, eq, isNull } from 'drizzle-orm'
 import { trainingSkillAssignments, trainingSkillCertificates } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import {
@@ -45,7 +45,12 @@ export async function GET(
       const [assignment] = await tx
         .select({ id: trainingSkillAssignments.id })
         .from(trainingSkillAssignments)
-        .where(eq(trainingSkillAssignments.id, assignmentId))
+        .where(
+          and(
+            eq(trainingSkillAssignments.id, assignmentId),
+            isNull(trainingSkillAssignments.deletedAt),
+          ),
+        )
         .limit(1)
       if (!assignment) return { error: 'Skill assignment not found.', status: 404 } as const
       const [created] = await tx

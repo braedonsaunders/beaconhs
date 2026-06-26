@@ -10,7 +10,7 @@
 
 import { relations } from 'drizzle-orm'
 import { date, index, integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
-import { id, timestamps } from './_helpers'
+import { id, softDelete, timestamps } from './_helpers'
 import { attachments } from './attachments'
 import { tenants, tenantUsers, users } from './core'
 import { people } from './org'
@@ -63,18 +63,22 @@ export const trainingSkillAssignments = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    personId: uuid('person_id')
-      .notNull()
-      .references(() => people.id, { onDelete: 'cascade' }),
-    skillTypeId: uuid('skill_type_id')
-      .notNull()
-      .references(() => trainingSkillTypes.id, { onDelete: 'cascade' }),
+    // Nullable so "New skill" can land on a genuinely blank draft (no defaulted
+    // person/skill type that looks pre-existing). Lists filter out drafts where
+    // either is still null. Mirrors the hazid draft model.
+    personId: uuid('person_id').references(() => people.id, { onDelete: 'cascade' }),
+    skillTypeId: uuid('skill_type_id').references(() => trainingSkillTypes.id, {
+      onDelete: 'cascade',
+    }),
     grantedOn: date('granted_on').notNull(),
     expiresOn: date('expires_on'),
     grantedByTenantUserId: uuid('granted_by_tenant_user_id').references(() => tenantUsers.id),
     evidenceAttachmentId: uuid('evidence_attachment_id').references(() => attachments.id),
     notes: text('notes'),
     ...timestamps,
+    // Soft-delete so a skill is revoked (not hard-deleted) — same audit-safe
+    // lifecycle as training_records certificates.
+    ...softDelete,
   },
   (t) => ({
     tenantIdx: index('training_skill_assignments_tenant_idx').on(t.tenantId),

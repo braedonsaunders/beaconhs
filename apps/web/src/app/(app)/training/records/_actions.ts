@@ -24,80 +24,124 @@ import { recordAudit } from '@/lib/audit'
 import { csvRow } from '@/lib/csv'
 
 const RECORD_SOURCES = ['class', 'self_paced', 'evaluator', 'external_upload', 'migrated'] as const
-type RecordSource = (typeof RECORD_SOURCES)[number]
 
-/**
- * Create a single training record (certificate) from the New certificate form.
- * Person + course + completion date are required; expiry auto-computes from the
- * course's validForMonths when not supplied. Redirects to the new record so the
- * rest of the fields can be edited inline.
- */
-export async function createTrainingRecord(formData: FormData): Promise<void> {
+// "New certificate" — creates a BLANK draft (no person/course) and redirects
+// straight to its unified record page, where every field is filled in inline.
+// No intermediate form, and nothing is pre-selected so a fresh draft never looks
+// like a pre-existing record. Mirrors how hazard assessments start. Lists/reports
+// hide drafts until both person + course are set.
+export async function startTrainingRecord(): Promise<void> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'training.record.create')
-  const personId = String(formData.get('personId') ?? '').trim()
-  const courseId = String(formData.get('courseId') ?? '').trim()
-  const completedOn = String(formData.get('completedOn') ?? '').trim()
-  const expiresOnRaw = String(formData.get('expiresOn') ?? '').trim() || null
-  const sourceRaw = String(formData.get('source') ?? 'external_upload').trim()
-  const instructor = String(formData.get('instructor') ?? '').trim() || null
-  const gradeRaw = String(formData.get('grade') ?? '').trim()
-  const details = String(formData.get('details') ?? '').trim() || null
-  const notes = String(formData.get('notes') ?? '').trim() || null
-  if (!personId || !courseId || !completedOn) return
 
-  const source: RecordSource = (RECORD_SOURCES as readonly string[]).includes(sourceRaw)
-    ? (sourceRaw as RecordSource)
-    : 'external_upload'
-  let grade: number | null = gradeRaw === '' ? null : Number(gradeRaw)
-  if (grade != null && !Number.isFinite(grade)) grade = null
-  if (grade != null) grade = Math.max(0, Math.min(100, Math.round(grade)))
-
-  // Auto-compute expiry from the course when not supplied (mirrors renewRecord).
-  const course = await ctx.db(async (tx) => {
-    const [c] = await tx
-      .select({ id: trainingCourses.id, validForMonths: trainingCourses.validForMonths })
-      .from(trainingCourses)
-      .where(eq(trainingCourses.id, courseId))
-      .limit(1)
-    return c ?? null
-  })
-  if (!course) return
-  let expiresOn: string | null = expiresOnRaw
-  if (!expiresOn && course.validForMonths) expiresOn = addMonthsIso(completedOn, course.validForMonths)
-
-  let newId: string | undefined
-  await ctx.db(async (tx) => {
+  const newId = await ctx.db(async (tx) => {
     const [row] = await tx
       .insert(trainingRecords)
       .values({
         tenantId: ctx.tenantId,
-        personId,
-        courseId,
-        source,
-        completedOn,
-        expiresOn,
-        grade,
-        instructor,
-        details,
-        notes,
+        source: 'external_upload',
+        completedOn: isoToday(),
         issuedByTenantUserId: safeTenantUserId(ctx),
       })
       .returning({ id: trainingRecords.id })
-    newId = row?.id
+    return row?.id ?? null
   })
-  if (newId) {
-    await recordAudit(ctx, {
-      entityType: 'training_record',
-      entityId: newId,
-      action: 'create',
-      summary: 'Created training record',
-      after: { personId, courseId, source, completedOn, expiresOn },
-    })
-  }
+  if (!newId) throw new Error('Could not create the certificate.')
+
+  await recordAudit(ctx, {
+    entityType: 'training_record',
+    entityId: newId,
+    action: 'create',
+    summary: 'Created certificate draft',
+  })
   revalidatePath('/training/records')
-  revalidatePath('/training')
-  if (newId) redirect(`/training/records/${newId}`)
+  redirect(`/training/records/${newId}`)
+}
+
+const RECORD_REQUIRED_IDS = new Set(['personId', 'courseId'])
+const RECORD_DATE_NOTNULL = new Set(['completedOn'])
+const RECORD_DATE_NULL = new Set(['expiresOn'])
+const RECORD_INT_NULL = new Set(['grade'])
+const RECORD_TEXT_NULL = new Set(['instructor', 'details', 'notes'])
+
+// Per-field auto-save for the shared Live* field set — the unified create/edit/
+// view surface (mirrors the class / incident / hazard-assessment detail pages).
+// Identity (person/course) and lifecycle fields are editable; revoked records
+// are locked.
+export async function updateTrainingRecordField(formData: FormData): Promise<void> {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'training.record.create')
+  const id = String(formData.get('id') ?? '')
+  const field = String(formData.get('field') ?? '')
+  const raw = formData.get('value')
+  const value = typeof raw === 'string' ? raw : ''
+  if (!id || !field) throw new Error('Missing id/field')
+
+  const allowed =
+    RECORD_REQUIRED_IDS.has(field) ||
+    RECORD_DATE_NOTNULL.has(field) ||
+    RECORD_DATE_NULL.has(field) ||
+    RECORD_INT_NULL.has(field) ||
+    RECORD_TEXT_NULL.has(field) ||
+    field === 'source'
+  if (!allowed) throw new Error('Field not allowed')
+
+  const before = await ctx.db(async (tx) => {
+    const [row] = await tx
+      .select({ deletedAt: trainingRecords.deletedAt })
+      .from(trainingRecords)
+      .where(eq(trainingRecords.id, id))
+      .limit(1)
+    return row ?? null
+  })
+  if (!before) throw new Error('Record not found')
+  if (before.deletedAt) throw new Error('Record is revoked')
+
+  let val: unknown
+  if (RECORD_REQUIRED_IDS.has(field)) {
+    // Draft-friendly: a blank person/course is a valid in-progress state, so an
+    // empty save is a silent no-op rather than a "required" error.
+    if (!value) return
+    val = value
+  } else if (field === 'source') {
+    if (!(RECORD_SOURCES as readonly string[]).includes(value)) throw new Error('Invalid source')
+    val = value
+  } else if (RECORD_DATE_NOTNULL.has(field)) {
+    if (!value) return // draft-friendly: keep the existing date rather than erroring
+    if (Number.isNaN(new Date(value).getTime())) throw new Error('A valid date is required')
+    val = value
+  } else if (RECORD_DATE_NULL.has(field)) {
+    if (value.trim() === '') val = null
+    else {
+      if (Number.isNaN(new Date(value).getTime())) throw new Error('Invalid date')
+      val = value
+    }
+  } else if (RECORD_INT_NULL.has(field)) {
+    if (value.trim() === '') val = null
+    else {
+      const n = Number.parseInt(value, 10)
+      if (Number.isNaN(n)) throw new Error('Invalid number')
+      val = Math.max(0, Math.min(100, n))
+    }
+  } else {
+    val = value.trim() === '' ? null : value.trim()
+  }
+
+  await ctx.db((tx) =>
+    tx
+      .update(trainingRecords)
+      .set({ [field]: val } as any)
+      .where(eq(trainingRecords.id, id)),
+  )
+  await recordAudit(ctx, {
+    entityType: 'training_record',
+    entityId: id,
+    action: 'update',
+    summary: `Updated ${field}`,
+    after: { [field]: val },
+  })
+  revalidatePath(`/training/records/${id}`)
+  revalidatePath('/training/records')
 }
 
 export type BulkActionResult =

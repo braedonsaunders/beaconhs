@@ -34,6 +34,7 @@ import { parseListParams, pickString } from '@/lib/list-params'
 import { enabledCredentialOutputs } from '@/lib/credential-designs'
 import { CredentialDownloadButton } from '@/components/credential-download-button'
 import { SearchInput } from '@/components/search-input'
+import { SearchFilter } from '@/components/search-filter'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
@@ -41,6 +42,7 @@ import { TableToolbar } from '@/components/table-toolbar'
 import { SortableTh } from '@/components/sortable-th'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@beaconhs/ui'
 import { TrainingSubNav } from '../_components/training-sub-nav'
+import { startSkillAssignment } from './_actions'
 
 export const metadata = { title: 'Skills' }
 export const dynamic = 'force-dynamic'
@@ -67,6 +69,8 @@ export default async function SkillsPage({
   })
   const statusFilter = pickString(sp.status)
   const authorityFilter = pickString(sp.authority)
+  const personFilter = pickString(sp.person)
+  const skillFilter = pickString(sp.skill)
   const ctx = await requireRequestContext()
   const canManage = canManageModule(ctx, 'training')
   const now = new Date()
@@ -74,121 +78,154 @@ export default async function SkillsPage({
   const today = now.toISOString().slice(0, 10)
   const in90 = new Date(nowMs + 90 * 86_400_000).toISOString().slice(0, 10)
 
-  const { rows, total, authorities, tenantSettings } = await ctx.db(async (tx) => {
-    const filters: SQL<unknown>[] = []
-    if (params.q) {
-      const term = `%${params.q}%`
-      const cond = or(
-        ilike(people.firstName, term),
-        ilike(people.lastName, term),
-        ilike(people.employeeNo, term),
-        ilike(trainingSkillTypes.name, term),
-        ilike(trainingSkillTypes.code, term),
-        ilike(trainingSkillAuthorities.name, term),
-      )
-      if (cond) filters.push(cond)
-    }
-    if (authorityFilter) filters.push(eq(trainingSkillAuthorities.id, authorityFilter))
-    // Defaults to "valid" when no status param is present; the "All" chip
-    // navigates to an explicit `all` sentinel to show every skill.
-    const effectiveStatus = statusFilter ?? 'valid'
-    if (effectiveStatus === 'expired') {
-      filters.push(isNotNull(trainingSkillAssignments.expiresOn))
-      filters.push(lte(trainingSkillAssignments.expiresOn, today))
-    } else if (effectiveStatus === 'expiring') {
-      filters.push(isNotNull(trainingSkillAssignments.expiresOn))
-      filters.push(gt(trainingSkillAssignments.expiresOn, today))
-      filters.push(lte(trainingSkillAssignments.expiresOn, in90))
-    } else if (effectiveStatus === 'valid') {
-      const c = or(
-        isNull(trainingSkillAssignments.expiresOn),
-        gt(trainingSkillAssignments.expiresOn, today),
-      )
-      if (c) filters.push(c)
-    }
-    const whereClause = filters.length ? and(...filters) : undefined
+  const { rows, total, authorities, tenantSettings, peopleList, skillTypesList } = await ctx.db(
+    async (tx) => {
+      const filters: SQL<unknown>[] = [isNull(trainingSkillAssignments.deletedAt)]
+      if (params.q) {
+        const term = `%${params.q}%`
+        const cond = or(
+          ilike(people.firstName, term),
+          ilike(people.lastName, term),
+          ilike(people.employeeNo, term),
+          ilike(trainingSkillTypes.name, term),
+          ilike(trainingSkillTypes.code, term),
+          ilike(trainingSkillAuthorities.name, term),
+        )
+        if (cond) filters.push(cond)
+      }
+      if (authorityFilter) filters.push(eq(trainingSkillAuthorities.id, authorityFilter))
+      if (personFilter) filters.push(eq(trainingSkillAssignments.personId, personFilter))
+      if (skillFilter) filters.push(eq(trainingSkillTypes.id, skillFilter))
+      // Defaults to "valid" when no status param is present; the "All" chip
+      // navigates to an explicit `all` sentinel to show every skill.
+      const effectiveStatus = statusFilter ?? 'valid'
+      if (effectiveStatus === 'expired') {
+        filters.push(isNotNull(trainingSkillAssignments.expiresOn))
+        filters.push(lte(trainingSkillAssignments.expiresOn, today))
+      } else if (effectiveStatus === 'expiring') {
+        filters.push(isNotNull(trainingSkillAssignments.expiresOn))
+        filters.push(gt(trainingSkillAssignments.expiresOn, today))
+        filters.push(lte(trainingSkillAssignments.expiresOn, in90))
+      } else if (effectiveStatus === 'valid') {
+        const c = or(
+          isNull(trainingSkillAssignments.expiresOn),
+          gt(trainingSkillAssignments.expiresOn, today),
+        )
+        if (c) filters.push(c)
+      }
+      const whereClause = filters.length ? and(...filters) : undefined
 
-    const orderBy =
-      params.sort === 'person'
-        ? params.dir === 'asc'
-          ? [asc(people.lastName), asc(people.firstName)]
-          : [desc(people.lastName), desc(people.firstName)]
-        : params.sort === 'skill'
-          ? [params.dir === 'asc' ? asc(trainingSkillTypes.name) : desc(trainingSkillTypes.name)]
-          : params.sort === 'authority'
-            ? [
-                params.dir === 'asc'
-                  ? asc(trainingSkillAuthorities.name)
-                  : desc(trainingSkillAuthorities.name),
-              ]
-            : params.sort === 'granted_on'
+      const orderBy =
+        params.sort === 'person'
+          ? params.dir === 'asc'
+            ? [asc(people.lastName), asc(people.firstName)]
+            : [desc(people.lastName), desc(people.firstName)]
+          : params.sort === 'skill'
+            ? [params.dir === 'asc' ? asc(trainingSkillTypes.name) : desc(trainingSkillTypes.name)]
+            : params.sort === 'authority'
               ? [
                   params.dir === 'asc'
-                    ? asc(trainingSkillAssignments.grantedOn)
-                    : desc(trainingSkillAssignments.grantedOn),
+                    ? asc(trainingSkillAuthorities.name)
+                    : desc(trainingSkillAuthorities.name),
                 ]
-              : [
-                  params.dir === 'asc'
-                    ? asc(trainingSkillAssignments.expiresOn)
-                    : desc(trainingSkillAssignments.expiresOn),
-                ]
+              : params.sort === 'granted_on'
+                ? [
+                    params.dir === 'asc'
+                      ? asc(trainingSkillAssignments.grantedOn)
+                      : desc(trainingSkillAssignments.grantedOn),
+                  ]
+                : [
+                    params.dir === 'asc'
+                      ? asc(trainingSkillAssignments.expiresOn)
+                      : desc(trainingSkillAssignments.expiresOn),
+                  ]
 
-    const base = tx
-      .select({
-        assignment: trainingSkillAssignments,
-        type: trainingSkillTypes,
-        authority: trainingSkillAuthorities,
-        person: people,
-      })
-      .from(trainingSkillAssignments)
-      .innerJoin(
-        trainingSkillTypes,
-        eq(trainingSkillTypes.id, trainingSkillAssignments.skillTypeId),
-      )
-      .innerJoin(
-        trainingSkillAuthorities,
-        eq(trainingSkillAuthorities.id, trainingSkillTypes.authorityId),
-      )
-      .innerJoin(people, eq(people.id, trainingSkillAssignments.personId))
+      const base = tx
+        .select({
+          assignment: trainingSkillAssignments,
+          type: trainingSkillTypes,
+          authority: trainingSkillAuthorities,
+          person: people,
+        })
+        .from(trainingSkillAssignments)
+        .innerJoin(
+          trainingSkillTypes,
+          eq(trainingSkillTypes.id, trainingSkillAssignments.skillTypeId),
+        )
+        .innerJoin(
+          trainingSkillAuthorities,
+          eq(trainingSkillAuthorities.id, trainingSkillTypes.authorityId),
+        )
+        .innerJoin(people, eq(people.id, trainingSkillAssignments.personId))
 
-    const [tot] = await tx
-      .select({ c: count() })
-      .from(trainingSkillAssignments)
-      .innerJoin(
-        trainingSkillTypes,
-        eq(trainingSkillTypes.id, trainingSkillAssignments.skillTypeId),
-      )
-      .innerJoin(
-        trainingSkillAuthorities,
-        eq(trainingSkillAuthorities.id, trainingSkillTypes.authorityId),
-      )
-      .innerJoin(people, eq(people.id, trainingSkillAssignments.personId))
-      .where(whereClause)
+      const [tot] = await tx
+        .select({ c: count() })
+        .from(trainingSkillAssignments)
+        .innerJoin(
+          trainingSkillTypes,
+          eq(trainingSkillTypes.id, trainingSkillAssignments.skillTypeId),
+        )
+        .innerJoin(
+          trainingSkillAuthorities,
+          eq(trainingSkillAuthorities.id, trainingSkillTypes.authorityId),
+        )
+        .innerJoin(people, eq(people.id, trainingSkillAssignments.personId))
+        .where(whereClause)
 
-    const data = await base
-      .where(whereClause)
-      .orderBy(...orderBy)
-      .limit(params.perPage)
-      .offset((params.page - 1) * params.perPage)
+      const data = await base
+        .where(whereClause)
+        .orderBy(...orderBy)
+        .limit(params.perPage)
+        .offset((params.page - 1) * params.perPage)
 
-    const auths = await tx
-      .select({ id: trainingSkillAuthorities.id, name: trainingSkillAuthorities.name })
-      .from(trainingSkillAuthorities)
-      .orderBy(asc(trainingSkillAuthorities.name))
+      const auths = await tx
+        .select({ id: trainingSkillAuthorities.id, name: trainingSkillAuthorities.name })
+        .from(trainingSkillAuthorities)
+        .orderBy(asc(trainingSkillAuthorities.name))
 
-    const [tenant] = await tx
-      .select({ settings: tenants.settings })
-      .from(tenants)
-      .where(eq(tenants.id, ctx.tenantId))
-      .limit(1)
+      const [tenant] = await tx
+        .select({ settings: tenants.settings })
+        .from(tenants)
+        .where(eq(tenants.id, ctx.tenantId))
+        .limit(1)
 
-    return {
-      rows: data,
-      total: Number(tot?.c ?? 0),
-      authorities: auths,
-      tenantSettings: tenant?.settings ?? {},
-    }
-  })
+      // Filter option lists: only people/skill types that actually hold an
+      // assignment (so the dropdowns aren't padded with never-credentialed rows).
+      const peopleList = await tx
+        .selectDistinct({
+          id: people.id,
+          firstName: people.firstName,
+          lastName: people.lastName,
+          employeeNo: people.employeeNo,
+        })
+        .from(trainingSkillAssignments)
+        .innerJoin(people, eq(people.id, trainingSkillAssignments.personId))
+        .where(isNull(trainingSkillAssignments.deletedAt))
+        .orderBy(asc(people.lastName), asc(people.firstName))
+      const skillTypesList = await tx
+        .selectDistinct({
+          id: trainingSkillTypes.id,
+          name: trainingSkillTypes.name,
+          code: trainingSkillTypes.code,
+        })
+        .from(trainingSkillAssignments)
+        .innerJoin(
+          trainingSkillTypes,
+          eq(trainingSkillTypes.id, trainingSkillAssignments.skillTypeId),
+        )
+        .where(isNull(trainingSkillAssignments.deletedAt))
+        .orderBy(asc(trainingSkillTypes.name))
+
+      return {
+        rows: data,
+        total: Number(tot?.c ?? 0),
+        authorities: auths,
+        tenantSettings: tenant?.settings ?? {},
+        peopleList,
+        skillTypesList,
+      }
+    },
+  )
   const credentialOutputs = enabledCredentialOutputs(tenantSettings)
 
   return (
@@ -200,15 +237,42 @@ export default async function SkillsPage({
             description="Skills and certifications across the workforce, with expiry tracking."
             actions={
               canManage ? (
-                <Link href="/training/skills/new">
-                  <Button>New skill</Button>
-                </Link>
+                <form action={startSkillAssignment}>
+                  <Button type="submit">New skill</Button>
+                </form>
               ) : undefined
             }
           />
           <TrainingSubNav active="skills" />
           <TableToolbar>
             <SearchInput placeholder="Search person, skill, code, authority…" />
+            {peopleList.length > 0 ? (
+              <SearchFilter
+                basePath="/training/skills"
+                currentParams={sp}
+                paramKey="person"
+                placeholder="All people"
+                searchPlaceholder="Search people…"
+                options={peopleList.map((p) => ({
+                  value: p.id,
+                  label: `${p.lastName}, ${p.firstName}`,
+                  hint: p.employeeNo ?? undefined,
+                }))}
+              />
+            ) : null}
+            {skillTypesList.length > 0 ? (
+              <SearchFilter
+                basePath="/training/skills"
+                currentParams={sp}
+                paramKey="skill"
+                placeholder="All skills"
+                searchPlaceholder="Search skills…"
+                options={skillTypesList.map((t) => ({
+                  value: t.id,
+                  label: t.code ? `${t.code} · ${t.name}` : t.name,
+                }))}
+              />
+            ) : null}
             <FilterChips
               basePath="/training/skills"
               currentParams={sp}
@@ -232,16 +296,16 @@ export default async function SkillsPage({
         <EmptyState
           icon={<Star size={32} />}
           title={
-            params.q || statusFilter || authorityFilter
+            params.q || statusFilter || authorityFilter || personFilter || skillFilter
               ? 'No skills match these filters'
               : 'No skills recorded'
           }
           description="Add a skill with New skill, or manage the catalogue under Manage → Skill types."
           action={
             canManage ? (
-              <Link href="/training/skills/new">
-                <Button>New skill</Button>
-              </Link>
+              <form action={startSkillAssignment}>
+                <Button type="submit">New skill</Button>
+              </form>
             ) : undefined
           }
         />

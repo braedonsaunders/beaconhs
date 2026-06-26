@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { and, asc, desc, eq, inArray } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm'
 import {
   Award,
   BadgeCheck,
@@ -154,7 +154,7 @@ export default async function PersonDetailPage({
         .select({ record: trainingRecords, course: trainingCourses })
         .from(trainingRecords)
         .innerJoin(trainingCourses, eq(trainingCourses.id, trainingRecords.courseId))
-        .where(eq(trainingRecords.personId, id))
+        .where(and(eq(trainingRecords.personId, id), isNull(trainingRecords.deletedAt)))
         .orderBy(desc(trainingRecords.completedOn)),
       tx
         .select({
@@ -171,7 +171,12 @@ export default async function PersonDetailPage({
           trainingSkillAuthorities,
           eq(trainingSkillAuthorities.id, trainingSkillTypes.authorityId),
         )
-        .where(eq(trainingSkillAssignments.personId, id))
+        .where(
+          and(
+            eq(trainingSkillAssignments.personId, id),
+            isNull(trainingSkillAssignments.deletedAt),
+          ),
+        )
         .orderBy(desc(trainingSkillAssignments.grantedOn)),
       tx
         .select({ link: incidentPeople, incident: incidents })

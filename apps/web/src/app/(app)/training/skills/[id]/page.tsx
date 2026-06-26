@@ -17,10 +17,14 @@ import {
   Settings,
   ShieldAlert,
   ShieldCheck,
+  ShieldOff,
   ShieldX,
   Trash2,
 } from 'lucide-react'
 import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
   Badge,
   Button,
   Card,
@@ -44,7 +48,7 @@ import { publicUrl } from '@beaconhs/storage'
 import { requireRequestContext } from '@/lib/auth'
 import { canManageModule } from '@/lib/module-admin/guard'
 import { recentActivityForEntity } from '@/lib/audit'
-import { pickString } from '@/lib/list-params'
+import { isUuid, pickString } from '@/lib/list-params'
 import { ActivityFeed } from '@/components/activity-feed'
 import { CredentialDownloadButton } from '@/components/credential-download-button'
 import { StatTile, type StatTone } from '@/components/stat-tile'
@@ -59,13 +63,14 @@ import { canDesignTrainingCredentials } from '@/lib/training-credential-access'
 import { ExtraFieldsSection } from '../../_components/extra-fields-section'
 import { addExtraField, deleteExtraField } from '../../_lib/extra-fields-actions'
 import {
-  deleteSkillAssignment,
   deleteSkillAssignmentFile,
   renewSkillAssignment,
-  saveSkillAssignment,
+  revokeSkillAssignment,
+  updateSkillAssignmentField,
 } from '../_actions'
-import { SkillOverview } from './_overview'
+import { SkillDetailFields } from './_fields'
 import { SkillFilesDrawer } from './_files-drawer'
+import { ConfirmButton } from '@/components/confirm-button'
 
 export const dynamic = 'force-dynamic'
 
@@ -85,6 +90,9 @@ export default async function SkillAssignmentPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { id } = await params
+  // Guard non-UUID segments (e.g. a stale /new path) — querying a uuid PK with
+  // them throws instead of 404ing.
+  if (!isUuid(id)) notFound()
   const sp = await searchParams
   const active: Tab = pickActiveTab(sp, TABS, 'overview')
   const ctx = await requireRequestContext()
@@ -98,15 +106,13 @@ export default async function SkillAssignmentPage({
         person: people,
       })
       .from(trainingSkillAssignments)
-      .innerJoin(
-        trainingSkillTypes,
-        eq(trainingSkillTypes.id, trainingSkillAssignments.skillTypeId),
-      )
-      .innerJoin(
+      // leftJoin: a brand-new draft has no person/skill type yet (both nullable).
+      .leftJoin(trainingSkillTypes, eq(trainingSkillTypes.id, trainingSkillAssignments.skillTypeId))
+      .leftJoin(
         trainingSkillAuthorities,
         eq(trainingSkillAuthorities.id, trainingSkillTypes.authorityId),
       )
-      .innerJoin(people, eq(people.id, trainingSkillAssignments.personId))
+      .leftJoin(people, eq(people.id, trainingSkillAssignments.personId))
       .where(eq(trainingSkillAssignments.id, id))
       .limit(1)
     if (!row) return null
@@ -117,26 +123,30 @@ export default async function SkillAssignmentPage({
         .from(trainingExtraFields)
         .where(and(eq(trainingExtraFields.ownerType, 'skill'), eq(trainingExtraFields.ownerId, id)))
         .orderBy(asc(trainingExtraFields.sortOrder), asc(trainingExtraFields.createdAt)),
-      tx
-        .select()
-        .from(trainingExtraFields)
-        .where(
-          and(
-            eq(trainingExtraFields.ownerType, 'skill_type'),
-            eq(trainingExtraFields.ownerId, row.type.id),
-          ),
-        )
-        .orderBy(asc(trainingExtraFields.sortOrder), asc(trainingExtraFields.createdAt)),
-      tx
-        .select()
-        .from(trainingExtraFields)
-        .where(
-          and(
-            eq(trainingExtraFields.ownerType, 'authority'),
-            eq(trainingExtraFields.ownerId, row.authority.id),
-          ),
-        )
-        .orderBy(asc(trainingExtraFields.sortOrder), asc(trainingExtraFields.createdAt)),
+      row.type
+        ? tx
+            .select()
+            .from(trainingExtraFields)
+            .where(
+              and(
+                eq(trainingExtraFields.ownerType, 'skill_type'),
+                eq(trainingExtraFields.ownerId, row.type.id),
+              ),
+            )
+            .orderBy(asc(trainingExtraFields.sortOrder), asc(trainingExtraFields.createdAt))
+        : Promise.resolve([] as (typeof trainingExtraFields.$inferSelect)[]),
+      row.authority
+        ? tx
+            .select()
+            .from(trainingExtraFields)
+            .where(
+              and(
+                eq(trainingExtraFields.ownerType, 'authority'),
+                eq(trainingExtraFields.ownerId, row.authority.id),
+              ),
+            )
+            .orderBy(asc(trainingExtraFields.sortOrder), asc(trainingExtraFields.createdAt))
+        : Promise.resolve([] as (typeof trainingExtraFields.$inferSelect)[]),
       tx
         .select({ file: trainingSkillAssignmentFiles, attachment: attachments })
         .from(trainingSkillAssignmentFiles)
@@ -151,6 +161,33 @@ export default async function SkillAssignmentPage({
         .then(([t]) => t),
     ])
 
+    // Option lists for the editable person/skill selects.
+    const [peopleList, skillTypesList] = await Promise.all([
+      tx
+        .select({
+          id: people.id,
+          firstName: people.firstName,
+          lastName: people.lastName,
+          employeeNo: people.employeeNo,
+        })
+        .from(people)
+        .where(eq(people.status, 'active'))
+        .orderBy(asc(people.lastName), asc(people.firstName)),
+      tx
+        .select({
+          id: trainingSkillTypes.id,
+          name: trainingSkillTypes.name,
+          code: trainingSkillTypes.code,
+          authorityName: trainingSkillAuthorities.name,
+        })
+        .from(trainingSkillTypes)
+        .innerJoin(
+          trainingSkillAuthorities,
+          eq(trainingSkillAuthorities.id, trainingSkillTypes.authorityId),
+        )
+        .orderBy(asc(trainingSkillAuthorities.name), asc(trainingSkillTypes.name)),
+    ])
+
     return {
       ...row,
       skillExtras,
@@ -158,14 +195,54 @@ export default async function SkillAssignmentPage({
       authorityExtras,
       files,
       tenantSettings: tenant?.settings ?? {},
+      peopleList,
+      skillTypesList,
     }
   })
 
   if (!data) notFound()
-  const { assignment, type, authority, person, skillExtras, typeExtras, authorityExtras, files } =
-    data
+  const {
+    assignment,
+    type,
+    authority,
+    person,
+    skillExtras,
+    typeExtras,
+    authorityExtras,
+    files,
+    peopleList,
+    skillTypesList,
+  } = data
+  // Ensure the current holder + skill type are selectable even if no longer
+  // active (the option lists only carry active rows). A blank draft has neither
+  // yet, so there's nothing to inject.
+  const peopleOptions =
+    person && !peopleList.some((p) => p.id === person.id)
+      ? [
+          {
+            id: person.id,
+            firstName: person.firstName,
+            lastName: person.lastName,
+            employeeNo: person.employeeNo,
+          },
+          ...peopleList,
+        ]
+      : peopleList
+  const skillTypeOptions =
+    type && !skillTypesList.some((t) => t.id === type.id)
+      ? [
+          {
+            id: type.id,
+            name: type.name,
+            code: type.code,
+            authorityName: authority?.name ?? '—',
+          },
+          ...skillTypesList,
+        ]
+      : skillTypesList
 
   const canManage = canManageModule(ctx, 'training')
+  const isRevoked = assignment.deletedAt != null
   const canDesignCredentials = canDesignTrainingCredentials(ctx)
   const credentialOutputs = enabledCredentialOutputs(data.tenantSettings)
   const certOutput = credentialOutputs.find((o) => o.format !== 'wallet') ?? credentialOutputs[0]
@@ -189,32 +266,73 @@ export default async function SkillAssignmentPage({
       header={
         <DetailHeader
           back={{ href: '/training/skills', label: 'Back to skills' }}
-          title={type.name}
-          subtitle={`${person.firstName} ${person.lastName} · ${authority.name}`}
+          title={type?.name ?? 'New skill'}
+          subtitle={
+            person
+              ? `${person.firstName} ${person.lastName}${authority ? ` · ${authority.name}` : ''}`
+              : 'Draft — choose a person and skill below'
+          }
           badge={
-            <Badge variant={statusMeta.badge}>
-              {status === 'expired'
-                ? `Expired ${Math.abs(daysLeft!)}d ago`
-                : status === 'expiring'
-                  ? `${daysLeft}d left`
-                  : status === 'ok'
-                    ? 'Valid'
-                    : 'No expiry'}
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Badge variant={statusMeta.badge}>
+                {status === 'expired'
+                  ? `Expired ${Math.abs(daysLeft!)}d ago`
+                  : status === 'expiring'
+                    ? `${daysLeft}d left`
+                    : status === 'ok'
+                      ? 'Valid'
+                      : 'No expiry'}
+              </Badge>
+              {isRevoked ? <Badge variant="destructive">Revoked</Badge> : null}
+            </div>
           }
           actions={
-            certOutput ? (
-              <CredentialDownloadButton
-                endpoint={`${basePath}/certificate`}
-                outputId={certOutput.id}
-                size="sm"
-                title={`Open ${certOutput.name}`}
-              >
-                <FileText size={14} /> Open certificate
-              </CredentialDownloadButton>
+            certOutput || canManage ? (
+              <div className="flex items-center gap-2">
+                {certOutput && !isRevoked ? (
+                  <CredentialDownloadButton
+                    endpoint={`${basePath}/certificate`}
+                    outputId={certOutput.id}
+                    variant="outline"
+                    size="sm"
+                    title={`Open ${certOutput.name}`}
+                  >
+                    <FileText size={14} /> Open certificate
+                  </CredentialDownloadButton>
+                ) : null}
+                {canManage ? (
+                  <form action={renewSkillAssignment}>
+                    <input type="hidden" name="id" value={id} />
+                    <Button type="submit" variant="outline" size="sm">
+                      <RotateCcw size={14} /> Renew
+                    </Button>
+                  </form>
+                ) : null}
+                {canManage && !isRevoked ? (
+                  <form action={revokeSkillAssignment}>
+                    <input type="hidden" name="id" value={id} />
+                    <ConfirmButton
+                      message="Revoke this skill? It will stop counting toward training and verification pages will show it as revoked."
+                      className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40"
+                    >
+                      <ShieldOff size={14} /> Revoke
+                    </ConfirmButton>
+                  </form>
+                ) : null}
+              </div>
             ) : undefined
           }
         />
+      }
+      alerts={
+        isRevoked ? (
+          <Alert variant="destructive">
+            <AlertTitle>This skill has been revoked</AlertTitle>
+            <AlertDescription>
+              It no longer counts toward training; verification pages return a "revoked" status.
+            </AlertDescription>
+          </Alert>
+        ) : null
       }
       subtabs={
         <TabNav
@@ -263,28 +381,23 @@ export default async function SkillAssignmentPage({
             </div>
 
             {/* Unified display + edit surface */}
-            <SkillOverview
-              assignmentId={id}
-              canManage={canManage}
-              person={{
-                id: person.id,
-                firstName: person.firstName,
-                lastName: person.lastName,
-                employeeNo: person.employeeNo,
-              }}
-              type={{ id: type.id, name: type.name, code: type.code }}
-              authority={{ id: authority.id, name: authority.name }}
-              validForMonths={type.validForMonths}
+            <SkillDetailFields
+              id={id}
+              disabled={!canManage || isRevoked}
+              personHref={person ? `/people/${person.id}?tab=skills` : null}
+              options={{ people: peopleOptions, skillTypes: skillTypeOptions }}
               initial={{
+                personId: assignment.personId ?? '',
+                skillTypeId: assignment.skillTypeId ?? '',
                 grantedOn: assignment.grantedOn,
                 expiresOn: assignment.expiresOn ?? '',
                 notes: assignment.notes ?? '',
               }}
-              saveAction={saveSkillAssignment}
+              updateAction={updateSkillAssignmentField}
             />
 
             {/* Catalogue fields inherited from the skill type + its authority */}
-            {typeExtras.length > 0 ? (
+            {type && typeExtras.length > 0 ? (
               <ReadOnlyFields
                 title={`Skill type fields (${typeExtras.length})`}
                 subtitle={`From the ${type.name} catalogue entry.`}
@@ -292,7 +405,7 @@ export default async function SkillAssignmentPage({
                 manageHref={canManage ? `/training/skills/types/${type.id}?tab=extras` : null}
               />
             ) : null}
-            {authorityExtras.length > 0 ? (
+            {authority && authorityExtras.length > 0 ? (
               <ReadOnlyFields
                 title={`Authority fields (${authorityExtras.length})`}
                 subtitle={`From ${authority.name}.`}
@@ -322,39 +435,6 @@ export default async function SkillAssignmentPage({
                 title={`Additional fields (${skillExtras.length})`}
                 rows={skillExtras}
               />
-            ) : null}
-
-            {/* Lifecycle actions — managers only */}
-            {canManage ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Manage</CardTitle>
-                </CardHeader>
-                <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <form action={renewSkillAssignment}>
-                      <input type="hidden" name="id" value={id} />
-                      <Button type="submit" variant="outline" size="sm">
-                        <RotateCcw size={14} /> Renew
-                      </Button>
-                    </form>
-                    <span className="text-xs text-slate-500 dark:text-slate-400">
-                      Issues a fresh assignment for the same person &amp; skill, then opens it.
-                    </span>
-                  </div>
-                  <form action={deleteSkillAssignment} className="shrink-0">
-                    <input type="hidden" name="id" value={id} />
-                    <Button
-                      type="submit"
-                      variant="ghost"
-                      size="sm"
-                      className="text-red-600 hover:text-red-700"
-                    >
-                      <Trash2 size={14} /> Delete
-                    </Button>
-                  </form>
-                </CardContent>
-              </Card>
             ) : null}
           </>
         ) : null}

@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { and, desc, eq, isNull, like } from 'drizzle-orm'
+import { and, asc, desc, eq, isNull, like } from 'drizzle-orm'
 import {
   CreditCard,
   FileText,
@@ -26,15 +26,12 @@ import {
   CardTitle,
   DetailHeader,
   EmptyState,
-  Input,
-  Label,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
-  Textarea,
 } from '@beaconhs/ui'
 import {
   attachments,
@@ -51,17 +48,19 @@ import { canSeeRecord } from '@/lib/visibility'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { ActivityFeed } from '@/components/activity-feed'
 import { CredentialDownloadButton } from '@/components/credential-download-button'
+import { ConfirmButton } from '@/components/confirm-button'
 import { StatTile, type StatTone } from '@/components/stat-tile'
-import { Section } from '@/components/section'
 import { DetailPageLayout } from '@/components/page-layout'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
+import { isUuid } from '@/lib/list-params'
 import {
-  enabledCredentialOutputs,
+  courseCredentialOutputs,
   type CredentialFormat,
   type CredentialOutput,
 } from '@/lib/credential-designs'
 import { canDesignTrainingCredentials } from '@/lib/training-credential-access'
-import { RecordOverview } from './_overview'
+import { RecordDetailFields } from './_fields'
+import { updateTrainingRecordField } from '../_actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -75,6 +74,9 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
 // ---------- Server actions ----------
 
+// Renew — mint a fresh record for the same person + course (completed today,
+// expiry auto-computed from the course) and open it for inline edits. A header
+// button: it copies the identity and lands you on the new record to adjust.
 async function renewRecord(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
@@ -82,12 +84,7 @@ async function renewRecord(formData: FormData) {
   // protect it. Recording (renewing) training requires training.record.create.
   assertCan(ctx, 'training.record.create')
   const id = String(formData.get('id') ?? '')
-  const completedOnRaw = String(formData.get('completedOn') ?? '').trim()
-  const expiresOnRaw = String(formData.get('expiresOn') ?? '').trim() || null
-  const grade = formData.get('grade') ? Number(formData.get('grade')) : null
-  const instructor = String(formData.get('instructor') ?? '').trim() || null
-  const notes = String(formData.get('notes') ?? '').trim() || null
-  if (!id || !completedOnRaw) return
+  if (!id) return
 
   const existing = await ctx.db(async (tx) => {
     const [r] = await tx.select().from(trainingRecords).where(eq(trainingRecords.id, id)).limit(1)
@@ -95,19 +92,20 @@ async function renewRecord(formData: FormData) {
   })
   if (!existing) return
 
-  // Auto-compute expiry from the course if not supplied.
-  let expiresOn: string | null = expiresOnRaw
-  if (!expiresOn) {
+  const completedOn = new Date().toISOString().slice(0, 10)
+  let expiresOn: string | null = null
+  if (existing.courseId) {
+    const courseId = existing.courseId
     const course = await ctx.db(async (tx) => {
       const [c] = await tx
         .select({ validForMonths: trainingCourses.validForMonths })
         .from(trainingCourses)
-        .where(eq(trainingCourses.id, existing.courseId))
+        .where(eq(trainingCourses.id, courseId))
         .limit(1)
       return c
     })
     if (course?.validForMonths) {
-      const d = new Date(completedOnRaw)
+      const d = new Date(completedOn)
       d.setMonth(d.getMonth() + course.validForMonths)
       expiresOn = d.toISOString().slice(0, 10)
     }
@@ -122,11 +120,9 @@ async function renewRecord(formData: FormData) {
         personId: existing.personId,
         courseId: existing.courseId,
         source: 'external_upload',
-        completedOn: completedOnRaw,
+        completedOn,
         expiresOn,
-        grade,
-        instructor,
-        notes,
+        instructor: existing.instructor,
         issuedByTenantUserId: ctx.membership?.id,
       })
       .returning({ id: trainingRecords.id })
@@ -138,7 +134,7 @@ async function renewRecord(formData: FormData) {
       entityId: newId,
       action: 'create',
       summary: 'Record renewed (created replacement)',
-      after: { previousRecordId: id, completedOn: completedOnRaw, expiresOn },
+      after: { previousRecordId: id, completedOn, expiresOn },
     })
   }
   revalidatePath(`/training/records/${id}`)
@@ -177,83 +173,6 @@ async function revokeRecord(formData: FormData) {
   revalidatePath('/training')
 }
 
-// Inline edit — the unified display + edit overview autosaves through this.
-// Identity (person / course / source) is immutable; only the human-managed
-// fields are writable. Gated on training.record.create like renew/revoke.
-async function updateTrainingRecord(input: {
-  recordId: string
-  completedOn: string
-  expiresOn: string | null
-  instructor: string | null
-  grade: number | null
-  details: string | null
-  notes: string | null
-}): Promise<{ ok: boolean; error?: string }> {
-  'use server'
-  const ctx = await requireRequestContext()
-  if (!can(ctx, 'training.record.create')) {
-    return { ok: false, error: 'You do not have permission to edit this record.' }
-  }
-  const completedOn = input.completedOn.trim()
-  const expiresOn = input.expiresOn?.trim() || null
-  const instructor = input.instructor?.trim() || null
-  const details = input.details?.trim() || null
-  const notes = input.notes?.trim() || null
-  const grade =
-    input.grade != null && Number.isFinite(input.grade)
-      ? Math.max(0, Math.min(100, Math.round(input.grade)))
-      : null
-  if (!input.recordId) return { ok: false, error: 'Missing record' }
-  if (!completedOn) return { ok: false, error: 'Completed date is required' }
-
-  const before = await ctx.db(async (tx) => {
-    const [r] = await tx
-      .select()
-      .from(trainingRecords)
-      .where(eq(trainingRecords.id, input.recordId))
-      .limit(1)
-    return r ?? null
-  })
-  if (!before) return { ok: false, error: 'Record not found' }
-
-  // No-op guard: skip the write + audit row when nothing actually changed.
-  if (
-    before.completedOn === completedOn &&
-    before.expiresOn === expiresOn &&
-    before.instructor === instructor &&
-    before.grade === grade &&
-    before.details === details &&
-    before.notes === notes
-  ) {
-    return { ok: true }
-  }
-
-  await ctx.db((tx) =>
-    tx
-      .update(trainingRecords)
-      .set({ completedOn, expiresOn, instructor, grade, details, notes })
-      .where(eq(trainingRecords.id, input.recordId)),
-  )
-  await recordAudit(ctx, {
-    entityType: 'training_record',
-    entityId: input.recordId,
-    action: 'update',
-    summary: 'Updated training record',
-    before: {
-      completedOn: before.completedOn,
-      expiresOn: before.expiresOn,
-      instructor: before.instructor,
-      grade: before.grade,
-      details: before.details,
-      notes: before.notes,
-    },
-    after: { completedOn, expiresOn, instructor, grade, details, notes },
-  })
-  revalidatePath(`/training/records/${input.recordId}`)
-  revalidatePath('/training/records')
-  return { ok: true }
-}
-
 // ---------- Page ----------
 
 export default async function TrainingRecordPage({
@@ -264,6 +183,9 @@ export default async function TrainingRecordPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { id } = await params
+  // Guard non-UUID segments (e.g. a stale /new path) — querying a uuid PK with
+  // them throws instead of 404ing.
+  if (!isUuid(id)) notFound()
   const sp = await searchParams
   const active: Tab = pickActiveTab(sp, TABS, 'overview')
   const ctx = await requireRequestContext()
@@ -275,12 +197,13 @@ export default async function TrainingRecordPage({
         course: trainingCourses,
       })
       .from(trainingRecords)
-      .innerJoin(people, eq(people.id, trainingRecords.personId))
-      .innerJoin(trainingCourses, eq(trainingCourses.id, trainingRecords.courseId))
+      // leftJoin: a brand-new draft has no person/course yet (both nullable).
+      .leftJoin(people, eq(people.id, trainingRecords.personId))
+      .leftJoin(trainingCourses, eq(trainingCourses.id, trainingRecords.courseId))
       .where(eq(trainingRecords.id, id))
       .limit(1)
     if (!row) return null
-    const [certAttachments, tenant] = await Promise.all([
+    const [certAttachments, tenant, peopleList, coursesList] = await Promise.all([
       // Pull any uploaded scan attachments tagged with this record (by r2Key
       // prefix or exif metadata). The cert-route also lists them via r2 prefix.
       tx
@@ -299,8 +222,31 @@ export default async function TrainingRecordPage({
         .where(eq(tenants.id, ctx.tenantId))
         .limit(1)
         .then(([tenant]) => tenant),
+      // Option lists for the editable person/course selects. The current
+      // holder is added below in case they're no longer "active".
+      tx
+        .select({
+          id: people.id,
+          firstName: people.firstName,
+          lastName: people.lastName,
+          employeeNo: people.employeeNo,
+        })
+        .from(people)
+        .where(eq(people.status, 'active'))
+        .orderBy(asc(people.lastName), asc(people.firstName)),
+      tx
+        .select({ id: trainingCourses.id, name: trainingCourses.name, code: trainingCourses.code })
+        .from(trainingCourses)
+        .where(isNull(trainingCourses.deletedAt))
+        .orderBy(asc(trainingCourses.name)),
     ])
-    return { ...row, certAttachments, tenantSettings: tenant?.settings ?? {} }
+    return {
+      ...row,
+      certAttachments,
+      tenantSettings: tenant?.settings ?? {},
+      peopleList,
+      coursesList,
+    }
   })
 
   if (!data) notFound()
@@ -316,9 +262,29 @@ export default async function TrainingRecordPage({
     ))
   )
     notFound()
-  const { record, person, course, certAttachments, tenantSettings } = data
+  const { record, person, course, certAttachments, tenantSettings, peopleList, coursesList } = data
   const isRevoked = record.deletedAt != null
-  const credentialOutputs = enabledCredentialOutputs(tenantSettings)
+  // Ensure the current holder + course are selectable even if no longer active /
+  // soft-deleted (the option lists only carry active rows). A blank draft has
+  // neither yet, so there's nothing to inject.
+  const peopleOptions =
+    person && !peopleList.some((p) => p.id === person.id)
+      ? [
+          {
+            id: person.id,
+            firstName: person.firstName,
+            lastName: person.lastName,
+            employeeNo: person.employeeNo,
+          },
+          ...peopleList,
+        ]
+      : peopleList
+  const courseOptions =
+    course && !coursesList.some((c) => c.id === course.id)
+      ? [{ id: course.id, name: course.name, code: course.code }, ...coursesList]
+      : coursesList
+  const credentialOutputs = courseCredentialOutputs(course?.metadata, tenantSettings)
+  const certOutput = credentialOutputs.find((o) => o.format !== 'wallet') ?? credentialOutputs[0]
   const canDesignCredentials = canDesignTrainingCredentials(ctx)
   // Recording training (renew/revoke) is gated separately from viewing: a
   // read-only viewer (e.g. foreman with training.read.all) sees the record but
@@ -340,8 +306,12 @@ export default async function TrainingRecordPage({
       header={
         <DetailHeader
           back={{ href: '/training', label: 'Back to training' }}
-          title={course.name}
-          subtitle={`${person.firstName} ${person.lastName} · completed ${record.completedOn}`}
+          title={course?.name ?? 'New certificate'}
+          subtitle={
+            person
+              ? `${person.firstName} ${person.lastName} · completed ${record.completedOn}`
+              : 'Draft — choose a person and course below'
+          }
           badge={
             <div className="flex items-center gap-2">
               {status === 'expired' ? (
@@ -355,6 +325,42 @@ export default async function TrainingRecordPage({
               )}
               {isRevoked ? <Badge variant="destructive">Revoked</Badge> : null}
             </div>
+          }
+          actions={
+            certOutput || canRecord ? (
+              <div className="flex items-center gap-2">
+                {certOutput && !isRevoked ? (
+                  <CredentialDownloadButton
+                    endpoint={`${basePath}/certificate`}
+                    outputId={certOutput.id}
+                    variant="outline"
+                    size="sm"
+                    title={`Open ${certOutput.name}`}
+                  >
+                    <FileText size={14} /> Open certificate
+                  </CredentialDownloadButton>
+                ) : null}
+                {canRecord ? (
+                  <form action={renewRecord}>
+                    <input type="hidden" name="id" value={id} />
+                    <Button type="submit" variant="outline" size="sm">
+                      <RotateCcw size={14} /> Renew
+                    </Button>
+                  </form>
+                ) : null}
+                {canRecord && !isRevoked ? (
+                  <form action={revokeRecord}>
+                    <input type="hidden" name="id" value={id} />
+                    <ConfirmButton
+                      message="Revoke this certificate? It will stop counting toward training and verification pages will show it as revoked."
+                      className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40"
+                    >
+                      <ShieldOff size={14} /> Revoke
+                    </ConfirmButton>
+                  </form>
+                ) : null}
+              </div>
+            ) : undefined
           }
         />
       }
@@ -414,16 +420,16 @@ export default async function TrainingRecordPage({
               />
             </div>
 
-            <RecordOverview
-              recordId={id}
-              canManage={canRecord && !isRevoked}
-              person={{ id: person.id, firstName: person.firstName, lastName: person.lastName }}
-              course={{ id: course.id, name: course.name, code: course.code }}
-              source={record.source}
-              score={record.score}
-              certificateType={record.certificateType}
-              validForMonths={course.validForMonths}
+            <RecordDetailFields
+              id={id}
+              disabled={!canRecord || isRevoked}
+              personHref={person ? `/people/${person.id}?tab=training` : null}
+              courseHref={course ? `/training/courses/${course.id}` : null}
+              options={{ people: peopleOptions, courses: courseOptions }}
               initial={{
+                personId: record.personId ?? '',
+                courseId: record.courseId ?? '',
+                source: record.source,
                 completedOn: record.completedOn,
                 expiresOn: record.expiresOn ?? '',
                 instructor: record.instructor ?? '',
@@ -431,75 +437,8 @@ export default async function TrainingRecordPage({
                 details: record.details ?? '',
                 notes: record.notes ?? '',
               }}
-              saveAction={updateTrainingRecord}
+              updateAction={updateTrainingRecordField}
             />
-
-            {canRecord ? (
-              <>
-                <Section title="Renew this training">
-                  <p className="mb-3 text-sm text-slate-600 dark:text-slate-400">
-                    Creates a new training record for the same person and course with a fresh
-                    expiry. Useful for refresher courses or external recertification.
-                  </p>
-                  <form action={renewRecord} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <input type="hidden" name="id" value={id} />
-                    <Field label="Completed on" required>
-                      <Input
-                        name="completedOn"
-                        type="date"
-                        required
-                        defaultValue={new Date().toISOString().slice(0, 10)}
-                      />
-                    </Field>
-                    <Field label="Expires on">
-                      <Input
-                        name="expiresOn"
-                        type="date"
-                        placeholder={
-                          course.validForMonths
-                            ? `Defaults to +${course.validForMonths} months`
-                            : ''
-                        }
-                      />
-                    </Field>
-                    <Field label="Instructor">
-                      <Input name="instructor" defaultValue={record.instructor ?? ''} />
-                    </Field>
-                    <Field label="Grade %">
-                      <Input name="grade" type="number" min="0" max="100" placeholder="Optional" />
-                    </Field>
-                    <Field label="Notes" className="sm:col-span-2">
-                      <Textarea name="notes" rows={2} placeholder="Notes about this renewal" />
-                    </Field>
-                    <div className="flex justify-end sm:col-span-2">
-                      <Button type="submit">
-                        <RotateCcw size={14} /> Renew
-                      </Button>
-                    </div>
-                  </form>
-                </Section>
-
-                {!isRevoked ? (
-                  <Section title="Revoke this record">
-                    <p className="mb-3 text-sm text-slate-600 dark:text-slate-400">
-                      Marks the record and any active certificates as revoked. Verification pages
-                      will return a revoked status. This action is recorded in the audit log.
-                    </p>
-                    <form action={revokeRecord} className="space-y-3 text-sm">
-                      <input type="hidden" name="id" value={id} />
-                      <Field label="Reason">
-                        <Input name="reason" placeholder="Reason for revocation" />
-                      </Field>
-                      <div className="flex justify-end">
-                        <Button type="submit" variant="destructive">
-                          <ShieldOff size={14} /> Revoke
-                        </Button>
-                      </div>
-                    </form>
-                  </Section>
-                ) : null}
-              </>
-            ) : null}
           </>
         ) : null}
 
@@ -683,28 +622,6 @@ const STATUS_META: Record<
     badge: 'secondary',
     value: () => 'No expiry',
   },
-}
-
-function Field({
-  label,
-  required,
-  className,
-  children,
-}: {
-  label: string
-  required?: boolean
-  className?: string
-  children: React.ReactNode
-}) {
-  return (
-    <div className={`space-y-1.5 ${className ?? ''}`}>
-      <Label>
-        {label}
-        {required ? <span className="text-red-600 dark:text-red-400"> *</span> : null}
-      </Label>
-      {children}
-    </div>
-  )
 }
 
 function OutputIcon({ output, size = 14 }: { output: CredentialOutput; size?: number }) {

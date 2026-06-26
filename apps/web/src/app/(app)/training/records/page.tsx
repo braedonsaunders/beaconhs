@@ -9,7 +9,6 @@
 //   - Filter chip "Expired" toggle
 //   - Sort by completedOn / expiresOn / source / employee / course
 
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { Award } from 'lucide-react'
 import {
@@ -34,11 +33,13 @@ import { moduleScopeWhere } from '@/lib/visibility'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { enabledCredentialOutputs } from '@/lib/credential-designs'
 import { SearchInput } from '@/components/search-input'
+import { SearchFilter } from '@/components/search-filter'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
 import { TableToolbar } from '@/components/table-toolbar'
 import { TrainingSubNav } from '../_components/training-sub-nav'
+import { startTrainingRecord } from './_actions'
 import { TrainingRecordsTable, type TrainingRecordsTableRow } from './_records-table'
 
 export const metadata = { title: 'Certificates' }
@@ -73,6 +74,8 @@ export default async function TrainingRecordsPage({
   })
   const sourceFilter = pickString(sp.source)
   const expiryFilter = pickString(sp.expiry)
+  const personFilter = pickString(sp.person)
+  const courseFilter = pickString(sp.course)
   const ctx = await requireRequestContext()
   // Access control: viewing certificates requires a training-read permission.
   // read.all (or super-admin) sees the whole tenant; read.self is scoped to the
@@ -89,122 +92,151 @@ export default async function TrainingRecordsPage({
   const today = new Date().toISOString().slice(0, 10)
   const todayMs = new Date(today).getTime()
 
-  const { rows, total, sourceCounts, expiryCounts, tenantSettings } = await ctx.db(async (tx) => {
-    // read.self → only the viewer's own records; read.all → the whole tenant.
-    const vis = await moduleScopeWhere(ctx, tx, {
-      prefix: 'training',
-      personCol: trainingRecords.personId,
-    })
-    const filters: SQL<unknown>[] = [isNull(trainingRecords.deletedAt)]
-    if (vis) filters.push(vis)
-    if (params.q) {
-      const term = `%${params.q}%`
-      const cond = or(
-        ilike(people.firstName, term),
-        ilike(people.lastName, term),
-        ilike(people.employeeNo, term),
-        ilike(trainingCourses.code, term),
-        ilike(trainingCourses.name, term),
-      )
-      if (cond) filters.push(cond)
-    }
-    if (sourceFilter) filters.push(eq(trainingRecords.source, sourceFilter as any))
-    // Defaults to "current" when no expiry param is present; the "All" chip
-    // navigates to an explicit `all` sentinel to show every record.
-    const effectiveExpiry = expiryFilter ?? 'current'
-    if (effectiveExpiry === 'expired') {
-      filters.push(isNotNull(trainingRecords.expiresOn))
-      filters.push(lte(trainingRecords.expiresOn, today))
-    } else if (effectiveExpiry === 'current') {
-      // "Current" = either no expiry at all, or expiry > today.
-      const c = or(isNull(trainingRecords.expiresOn), gt(trainingRecords.expiresOn, today))
-      if (c) filters.push(c)
-    }
-
-    const whereClause = and(...filters)
-
-    const orderBy =
-      params.sort === 'expires_on'
-        ? [params.dir === 'asc' ? asc(trainingRecords.expiresOn) : desc(trainingRecords.expiresOn)]
-        : params.sort === 'source'
-          ? [params.dir === 'asc' ? asc(trainingRecords.source) : desc(trainingRecords.source)]
-          : params.sort === 'employee'
-            ? params.dir === 'asc'
-              ? [asc(people.lastName), asc(people.firstName)]
-              : [desc(people.lastName), desc(people.firstName)]
-            : params.sort === 'course'
-              ? [params.dir === 'asc' ? asc(trainingCourses.code) : desc(trainingCourses.code)]
-              : [
-                  params.dir === 'asc'
-                    ? asc(trainingRecords.completedOn)
-                    : desc(trainingRecords.completedOn),
-                ]
-
-    const [tot] = await tx
-      .select({ c: count() })
-      .from(trainingRecords)
-      .innerJoin(people, eq(people.id, trainingRecords.personId))
-      .innerJoin(trainingCourses, eq(trainingCourses.id, trainingRecords.courseId))
-      .where(whereClause)
-    const data = await tx
-      .select({
-        record: trainingRecords,
-        person: people,
-        course: trainingCourses,
+  const { rows, total, sourceCounts, expiryCounts, tenantSettings, peopleList, coursesList } =
+    await ctx.db(async (tx) => {
+      // read.self → only the viewer's own records; read.all → the whole tenant.
+      const vis = await moduleScopeWhere(ctx, tx, {
+        prefix: 'training',
+        personCol: trainingRecords.personId,
       })
-      .from(trainingRecords)
-      .innerJoin(people, eq(people.id, trainingRecords.personId))
-      .innerJoin(trainingCourses, eq(trainingCourses.id, trainingRecords.courseId))
-      .where(whereClause)
-      .orderBy(...orderBy)
-      .limit(params.perPage)
-      .offset((params.page - 1) * params.perPage)
+      const filters: SQL<unknown>[] = [isNull(trainingRecords.deletedAt)]
+      if (vis) filters.push(vis)
+      if (params.q) {
+        const term = `%${params.q}%`
+        const cond = or(
+          ilike(people.firstName, term),
+          ilike(people.lastName, term),
+          ilike(people.employeeNo, term),
+          ilike(trainingCourses.code, term),
+          ilike(trainingCourses.name, term),
+        )
+        if (cond) filters.push(cond)
+      }
+      if (sourceFilter) filters.push(eq(trainingRecords.source, sourceFilter as any))
+      if (personFilter) filters.push(eq(trainingRecords.personId, personFilter))
+      if (courseFilter) filters.push(eq(trainingRecords.courseId, courseFilter))
+      // Defaults to "current" when no expiry param is present; the "All" chip
+      // navigates to an explicit `all` sentinel to show every record.
+      const effectiveExpiry = expiryFilter ?? 'current'
+      if (effectiveExpiry === 'expired') {
+        filters.push(isNotNull(trainingRecords.expiresOn))
+        filters.push(lte(trainingRecords.expiresOn, today))
+      } else if (effectiveExpiry === 'current') {
+        // "Current" = either no expiry at all, or expiry > today.
+        const c = or(isNull(trainingRecords.expiresOn), gt(trainingRecords.expiresOn, today))
+        if (c) filters.push(c)
+      }
 
-    const sources = await tx
-      .select({ s: trainingRecords.source, c: count() })
-      .from(trainingRecords)
-      .where(and(isNull(trainingRecords.deletedAt), vis))
-      .groupBy(trainingRecords.source)
+      const whereClause = and(...filters)
 
-    const [expiredCount] = await tx
-      .select({ c: count() })
-      .from(trainingRecords)
-      .where(
-        and(
-          isNull(trainingRecords.deletedAt),
-          isNotNull(trainingRecords.expiresOn),
-          lte(trainingRecords.expiresOn, today),
-          vis,
-        ),
-      )
-    const [currentCount] = await tx
-      .select({ c: count() })
-      .from(trainingRecords)
-      .where(
-        and(
-          isNull(trainingRecords.deletedAt),
-          or(isNull(trainingRecords.expiresOn), gt(trainingRecords.expiresOn, today)),
-          vis,
-        ),
-      )
+      const orderBy =
+        params.sort === 'expires_on'
+          ? [
+              params.dir === 'asc'
+                ? asc(trainingRecords.expiresOn)
+                : desc(trainingRecords.expiresOn),
+            ]
+          : params.sort === 'source'
+            ? [params.dir === 'asc' ? asc(trainingRecords.source) : desc(trainingRecords.source)]
+            : params.sort === 'employee'
+              ? params.dir === 'asc'
+                ? [asc(people.lastName), asc(people.firstName)]
+                : [desc(people.lastName), desc(people.firstName)]
+              : params.sort === 'course'
+                ? [params.dir === 'asc' ? asc(trainingCourses.code) : desc(trainingCourses.code)]
+                : [
+                    params.dir === 'asc'
+                      ? asc(trainingRecords.completedOn)
+                      : desc(trainingRecords.completedOn),
+                  ]
 
-    const [tenant] = await tx
-      .select({ settings: tenants.settings })
-      .from(tenants)
-      .where(eq(tenants.id, ctx.tenantId))
-      .limit(1)
+      const [tot] = await tx
+        .select({ c: count() })
+        .from(trainingRecords)
+        .innerJoin(people, eq(people.id, trainingRecords.personId))
+        .innerJoin(trainingCourses, eq(trainingCourses.id, trainingRecords.courseId))
+        .where(whereClause)
+      const data = await tx
+        .select({
+          record: trainingRecords,
+          person: people,
+          course: trainingCourses,
+        })
+        .from(trainingRecords)
+        .innerJoin(people, eq(people.id, trainingRecords.personId))
+        .innerJoin(trainingCourses, eq(trainingCourses.id, trainingRecords.courseId))
+        .where(whereClause)
+        .orderBy(...orderBy)
+        .limit(params.perPage)
+        .offset((params.page - 1) * params.perPage)
 
-    return {
-      rows: data,
-      total: Number(tot?.c ?? 0),
-      sourceCounts: Object.fromEntries(sources.map((s) => [s.s, Number(s.c)])),
-      expiryCounts: {
-        expired: Number(expiredCount?.c ?? 0),
-        current: Number(currentCount?.c ?? 0),
-      } as Record<string, number>,
-      tenantSettings: tenant?.settings ?? {},
-    }
-  })
+      const sources = await tx
+        .select({ s: trainingRecords.source, c: count() })
+        .from(trainingRecords)
+        .where(and(isNull(trainingRecords.deletedAt), vis))
+        .groupBy(trainingRecords.source)
+
+      const [expiredCount] = await tx
+        .select({ c: count() })
+        .from(trainingRecords)
+        .where(
+          and(
+            isNull(trainingRecords.deletedAt),
+            isNotNull(trainingRecords.expiresOn),
+            lte(trainingRecords.expiresOn, today),
+            vis,
+          ),
+        )
+      const [currentCount] = await tx
+        .select({ c: count() })
+        .from(trainingRecords)
+        .where(
+          and(
+            isNull(trainingRecords.deletedAt),
+            or(isNull(trainingRecords.expiresOn), gt(trainingRecords.expiresOn, today)),
+            vis,
+          ),
+        )
+
+      const [tenant] = await tx
+        .select({ settings: tenants.settings })
+        .from(tenants)
+        .where(eq(tenants.id, ctx.tenantId))
+        .limit(1)
+
+      // Filter option lists. People scoped to the records the viewer can see
+      // (vis) so a self-only viewer doesn't get the whole directory; courses are
+      // tenant-wide catalogue entries.
+      const peopleList = await tx
+        .selectDistinct({
+          id: people.id,
+          firstName: people.firstName,
+          lastName: people.lastName,
+          employeeNo: people.employeeNo,
+        })
+        .from(trainingRecords)
+        .innerJoin(people, eq(people.id, trainingRecords.personId))
+        .where(and(isNull(trainingRecords.deletedAt), vis))
+        .orderBy(asc(people.lastName), asc(people.firstName))
+      const coursesList = await tx
+        .select({ id: trainingCourses.id, name: trainingCourses.name, code: trainingCourses.code })
+        .from(trainingCourses)
+        .where(isNull(trainingCourses.deletedAt))
+        .orderBy(asc(trainingCourses.name))
+
+      return {
+        rows: data,
+        total: Number(tot?.c ?? 0),
+        sourceCounts: Object.fromEntries(sources.map((s) => [s.s, Number(s.c)])),
+        expiryCounts: {
+          expired: Number(expiredCount?.c ?? 0),
+          current: Number(currentCount?.c ?? 0),
+        } as Record<string, number>,
+        tenantSettings: tenant?.settings ?? {},
+        peopleList,
+        coursesList,
+      }
+    })
   const credentialOutputs = enabledCredentialOutputs(tenantSettings)
 
   const tableRows: TrainingRecordsTableRow[] = rows.map(({ record, person, course }) => {
@@ -238,15 +270,42 @@ export default async function TrainingRecordsPage({
             description="Training records with completion dates and expiry tracking."
             actions={
               canManage ? (
-                <Link href="/training/records/new">
-                  <Button>New certificate</Button>
-                </Link>
+                <form action={startTrainingRecord}>
+                  <Button type="submit">New certificate</Button>
+                </form>
               ) : undefined
             }
           />
           <TrainingSubNav active="records" />
           <TableToolbar>
             <SearchInput placeholder="Search employee, employee #, course…" />
+            {peopleList.length > 0 ? (
+              <SearchFilter
+                basePath="/training/records"
+                currentParams={sp}
+                paramKey="person"
+                placeholder="All people"
+                searchPlaceholder="Search people…"
+                options={peopleList.map((p) => ({
+                  value: p.id,
+                  label: `${p.lastName}, ${p.firstName}`,
+                  hint: p.employeeNo ?? undefined,
+                }))}
+              />
+            ) : null}
+            {coursesList.length > 0 ? (
+              <SearchFilter
+                basePath="/training/records"
+                currentParams={sp}
+                paramKey="course"
+                placeholder="All courses"
+                searchPlaceholder="Search courses…"
+                options={coursesList.map((c) => ({
+                  value: c.id,
+                  label: c.code ? `${c.code} · ${c.name}` : c.name,
+                }))}
+              />
+            ) : null}
             <FilterChips
               basePath="/training/records"
               currentParams={sp}
@@ -276,14 +335,16 @@ export default async function TrainingRecordsPage({
         <EmptyState
           icon={<Award size={32} />}
           title={
-            params.q || sourceFilter || expiryFilter ? 'No matching records' : 'No training records'
+            params.q || sourceFilter || expiryFilter || personFilter || courseFilter
+              ? 'No matching records'
+              : 'No training records'
           }
           description="Issue a certificate, complete a class, or upload an external record."
           action={
             canManage ? (
-              <Link href="/training/records/new">
-                <Button>New certificate</Button>
-              </Link>
+              <form action={startTrainingRecord}>
+                <Button type="submit">New certificate</Button>
+              </form>
             ) : undefined
           }
         />

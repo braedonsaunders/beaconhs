@@ -15,6 +15,17 @@ export type ListParams<S extends string = string> = {
 
 type Search = Record<string, string | string[] | undefined>
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * True when `value` is a UUID. Use to guard `[id]` route params before querying
+ * a uuid PK — a non-UUID segment (e.g. a stale `/new` path) otherwise throws a
+ * Postgres "invalid input syntax for type uuid" error instead of a clean 404.
+ */
+export function isUuid(value: string): boolean {
+  return UUID_RE.test(value)
+}
+
 export function parseListParams<S extends string>(
   searchParams: Search,
   config: { sort: S; dir?: 'asc' | 'desc'; perPage?: number; allowedSorts: readonly S[] },

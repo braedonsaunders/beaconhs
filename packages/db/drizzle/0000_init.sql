@@ -865,8 +865,8 @@ CREATE TABLE "training_courses" (
 CREATE TABLE "training_records" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
-	"person_id" uuid NOT NULL,
-	"course_id" uuid NOT NULL,
+	"person_id" uuid,
+	"course_id" uuid,
 	"source" "training_record_source" NOT NULL,
 	"class_id" uuid,
 	"score" integer,
@@ -1845,15 +1845,16 @@ CREATE TABLE "training_skill_assignment_files" (
 CREATE TABLE "training_skill_assignments" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
-	"person_id" uuid NOT NULL,
-	"skill_type_id" uuid NOT NULL,
+	"person_id" uuid,
+	"skill_type_id" uuid,
 	"granted_on" date NOT NULL,
 	"expires_on" date,
 	"granted_by_tenant_user_id" uuid,
 	"evidence_attachment_id" uuid,
 	"notes" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"deleted_at" timestamp with time zone
 );
 --> statement-breakpoint
 CREATE TABLE "training_skill_authorities" (

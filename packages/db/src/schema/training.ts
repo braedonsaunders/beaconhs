@@ -157,12 +157,11 @@ export const trainingRecords = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    personId: uuid('person_id')
-      .notNull()
-      .references(() => people.id, { onDelete: 'cascade' }),
-    courseId: uuid('course_id')
-      .notNull()
-      .references(() => trainingCourses.id),
+    // Nullable so "New certificate" can land on a genuinely blank draft record
+    // (no defaulted person/course that looks pre-existing). Lists/reports filter
+    // out drafts where either is still null. Mirrors the hazid draft model.
+    personId: uuid('person_id').references(() => people.id, { onDelete: 'cascade' }),
+    courseId: uuid('course_id').references(() => trainingCourses.id),
     source: trainingRecordSource('source').notNull(),
     classId: uuid('class_id').references(() => trainingClasses.id),
     score: integer('score'),

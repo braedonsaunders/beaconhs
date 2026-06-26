@@ -17,7 +17,7 @@ import {
   trainingSkillTypes,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
-import { assertCanManageModule, canManageModule } from '@/lib/module-admin/guard'
+import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 
 const ALLOWED_FILE_KINDS = new Set(['certificate', 'evidence', 'photo', 'other'])
@@ -42,115 +42,110 @@ function addMonthsIso(iso: string, months: number): string {
 }
 
 // ---------------------------------------------------------------------------
-// Inline edit (unified display + edit surface autosaves through this)
+// "New skill" — creates the row immediately and redirects straight to its
+// unified record page, where every field (incl. person/skill type) is edited
+// inline. No intermediate form (mirrors how hazard assessments start). Person +
+// skill type default to the first available rows (required FKs).
 // ---------------------------------------------------------------------------
 
-export async function saveSkillAssignment(input: {
-  assignmentId: string
-  grantedOn: string
-  expiresOn: string | null
-  notes: string | null
-}): Promise<{ ok: boolean; error?: string }> {
+export async function startSkillAssignment(): Promise<void> {
   const ctx = await requireRequestContext()
-  if (!canManageModule(ctx, 'training')) {
-    return { ok: false, error: 'You do not have permission to edit skills.' }
-  }
-  const { assignmentId } = input
-  const grantedOn = input.grantedOn.trim()
-  const expiresOn = input.expiresOn?.trim() || null
-  const notes = input.notes?.trim() || null
-  if (!assignmentId) return { ok: false, error: 'Missing assignment' }
-  if (!grantedOn) return { ok: false, error: 'Granted date is required' }
+  assertCanManageModule(ctx, 'training')
+
+  const newId = await ctx.db(async (tx) => {
+    const [row] = await tx
+      .insert(trainingSkillAssignments)
+      .values({
+        tenantId: ctx.tenantId,
+        grantedOn: isoToday(),
+        grantedByTenantUserId: safeTenantUserId(ctx),
+      })
+      .returning({ id: trainingSkillAssignments.id })
+    return row?.id ?? null
+  })
+  if (!newId) throw new Error('Could not create the skill.')
+
+  await recordAudit(ctx, {
+    entityType: 'training_skill',
+    entityId: newId,
+    action: 'create',
+    summary: 'Created skill draft',
+  })
+  revalidatePath('/training/skills')
+  redirect(`/training/skills/${newId}`)
+}
+
+// ---------------------------------------------------------------------------
+// Per-field auto-save for the shared Live* field set — the unified create/edit/
+// view surface (mirrors the class / incident detail pages).
+// ---------------------------------------------------------------------------
+
+const SKILL_REQUIRED_IDS = new Set(['personId', 'skillTypeId'])
+const SKILL_DATE_NOTNULL = new Set(['grantedOn'])
+const SKILL_DATE_NULL = new Set(['expiresOn'])
+const SKILL_TEXT_NULL = new Set(['notes'])
+
+export async function updateSkillAssignmentField(formData: FormData): Promise<void> {
+  const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'training')
+  const id = String(formData.get('id') ?? '')
+  const field = String(formData.get('field') ?? '')
+  const raw = formData.get('value')
+  const value = typeof raw === 'string' ? raw : ''
+  if (!id || !field) throw new Error('Missing id/field')
+
+  const allowed =
+    SKILL_REQUIRED_IDS.has(field) ||
+    SKILL_DATE_NOTNULL.has(field) ||
+    SKILL_DATE_NULL.has(field) ||
+    SKILL_TEXT_NULL.has(field)
+  if (!allowed) throw new Error('Field not allowed')
 
   const before = await ctx.db(async (tx) => {
     const [r] = await tx
-      .select()
+      .select({ id: trainingSkillAssignments.id })
       .from(trainingSkillAssignments)
-      .where(eq(trainingSkillAssignments.id, assignmentId))
+      .where(eq(trainingSkillAssignments.id, id))
       .limit(1)
     return r ?? null
   })
-  if (!before) return { ok: false, error: 'Skill assignment not found' }
+  if (!before) throw new Error('Skill assignment not found')
 
-  // No-op guard: don't write an audit row when nothing actually changed.
-  if (before.grantedOn === grantedOn && before.expiresOn === expiresOn && before.notes === notes) {
-    return { ok: true }
+  let val: unknown
+  if (SKILL_REQUIRED_IDS.has(field)) {
+    // Draft-friendly: a blank person/skill type is a valid in-progress state, so
+    // an empty save is a silent no-op rather than a "required" error.
+    if (!value) return
+    val = value
+  } else if (SKILL_DATE_NOTNULL.has(field)) {
+    if (!value) return // draft-friendly: keep the existing date rather than erroring
+    if (Number.isNaN(new Date(value).getTime())) throw new Error('A valid date is required')
+    val = value
+  } else if (SKILL_DATE_NULL.has(field)) {
+    if (value.trim() === '') val = null
+    else {
+      if (Number.isNaN(new Date(value).getTime())) throw new Error('Invalid date')
+      val = value
+    }
+  } else {
+    val = value.trim() === '' ? null : value.trim()
   }
 
   await ctx.db((tx) =>
     tx
       .update(trainingSkillAssignments)
-      .set({ grantedOn, expiresOn, notes })
-      .where(eq(trainingSkillAssignments.id, assignmentId)),
+      .set({ [field]: val } as any)
+      .where(eq(trainingSkillAssignments.id, id)),
   )
   await recordAudit(ctx, {
     entityType: 'training_skill',
-    entityId: assignmentId,
+    entityId: id,
     action: 'update',
-    summary: 'Updated skill assignment',
-    before: { grantedOn: before.grantedOn, expiresOn: before.expiresOn, notes: before.notes },
-    after: { grantedOn, expiresOn, notes },
+    summary: `Updated ${field}`,
+    after: { [field]: val },
   })
-  revalidatePath(`/training/skills/${assignmentId}`)
+  revalidatePath(`/training/skills/${id}`)
   revalidatePath('/training/skills')
-  return { ok: true }
-}
-
-// ---------------------------------------------------------------------------
-// Create — issue a skill assignment from the New skill form. Person + skill type
-// are required; expiry auto-computes from the type's validForMonths when not
-// supplied. Redirects to the new record so the rest can be edited inline.
-// ---------------------------------------------------------------------------
-
-export async function createSkillAssignment(formData: FormData): Promise<void> {
-  const ctx = await requireRequestContext()
-  assertCanManageModule(ctx, 'training')
-  const personId = String(formData.get('personId') ?? '').trim()
-  const skillTypeId = String(formData.get('skillTypeId') ?? '').trim()
-  const grantedOn = String(formData.get('grantedOn') ?? '').trim() || isoToday()
-  const expiresOnRaw = String(formData.get('expiresOn') ?? '').trim() || null
-  const notes = String(formData.get('notes') ?? '').trim() || null
-  if (!personId || !skillTypeId) return
-
-  const type = await ctx.db(async (tx) => {
-    const [t] = await tx
-      .select({ id: trainingSkillTypes.id, validForMonths: trainingSkillTypes.validForMonths })
-      .from(trainingSkillTypes)
-      .where(eq(trainingSkillTypes.id, skillTypeId))
-      .limit(1)
-    return t ?? null
-  })
-  if (!type) return
-  let expiresOn: string | null = expiresOnRaw
-  if (!expiresOn && type.validForMonths) expiresOn = addMonthsIso(grantedOn, type.validForMonths)
-
-  let newId: string | undefined
-  await ctx.db(async (tx) => {
-    const [row] = await tx
-      .insert(trainingSkillAssignments)
-      .values({
-        tenantId: ctx.tenantId,
-        personId,
-        skillTypeId,
-        grantedOn,
-        expiresOn,
-        grantedByTenantUserId: safeTenantUserId(ctx),
-        notes,
-      })
-      .returning({ id: trainingSkillAssignments.id })
-    newId = row?.id
-  })
-  if (newId) {
-    await recordAudit(ctx, {
-      entityType: 'training_skill',
-      entityId: newId,
-      action: 'create',
-      summary: 'Created skill assignment',
-      after: { personId, skillTypeId, grantedOn, expiresOn },
-    })
-  }
-  revalidatePath('/training/skills')
-  if (newId) redirect(`/training/skills/${newId}`)
 }
 
 // ---------------------------------------------------------------------------
@@ -221,39 +216,34 @@ export async function renewSkillAssignment(formData: FormData): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Delete — hard delete. Cascades to the credential row + uploaded files via FK.
-// (Skill assignments have no soft-delete column; a wrongly-entered assignment
-// should be removable outright.)
+// Revoke — soft-delete (set deletedAt). Same audit-safe lifecycle as a revoked
+// training_records certificate: the row leaves the lists/matrix/compliance but
+// is retained for the audit trail. Stays on the record page showing a revoked
+// banner.
 // ---------------------------------------------------------------------------
 
-export async function deleteSkillAssignment(formData: FormData): Promise<void> {
+export async function revokeSkillAssignment(formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'training')
   const id = String(formData.get('id') ?? '')
+  const reason = String(formData.get('reason') ?? '').trim() || null
   if (!id) return
 
-  const before = await ctx.db(async (tx) => {
-    const [r] = await tx
-      .select()
-      .from(trainingSkillAssignments)
-      .where(eq(trainingSkillAssignments.id, id))
-      .limit(1)
-    return r ?? null
-  })
-  if (!before) return
-
   await ctx.db((tx) =>
-    tx.delete(trainingSkillAssignments).where(eq(trainingSkillAssignments.id, id)),
+    tx
+      .update(trainingSkillAssignments)
+      .set({ deletedAt: new Date() })
+      .where(eq(trainingSkillAssignments.id, id)),
   )
   await recordAudit(ctx, {
     entityType: 'training_skill',
     entityId: id,
     action: 'delete',
-    summary: 'Deleted skill assignment',
-    before: before as unknown as Record<string, unknown>,
+    summary: 'Revoked skill assignment',
+    after: { reason },
   })
+  revalidatePath(`/training/skills/${id}`)
   revalidatePath('/training/skills')
-  redirect('/training/skills')
 }
 
 // ---------------------------------------------------------------------------

@@ -212,7 +212,9 @@ async function evalTraining(
       )
     for (const r of rows) {
       const valid = !r.expiresOn || r.expiresOn >= today
-      if (valid) done.set(r.personId, r.completedOn)
+      // personId is nullable (blank drafts); the inArray filter already excludes
+      // nulls, so this guard only narrows the type.
+      if (valid && r.personId) done.set(r.personId, r.completedOn)
     }
   } else if (ref.skillTypeId) {
     // cert_requirement satisfied by holding a valid (non-expired) skill grant of this type
@@ -228,11 +230,12 @@ async function evalTraining(
           eq(trainingSkillAssignments.tenantId, tid),
           eq(trainingSkillAssignments.skillTypeId, ref.skillTypeId),
           inArray(trainingSkillAssignments.personId, ids),
+          isNull(trainingSkillAssignments.deletedAt),
         ),
       )
     for (const r of rows) {
       const valid = !r.expiresOn || r.expiresOn >= today
-      if (valid) done.set(r.personId, r.grantedOn)
+      if (valid && r.personId) done.set(r.personId, r.grantedOn)
     }
   }
 

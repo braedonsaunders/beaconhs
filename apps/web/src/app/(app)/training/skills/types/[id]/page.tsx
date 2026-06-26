@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { and, asc, eq } from 'drizzle-orm'
+import { and, asc, eq, isNull } from 'drizzle-orm'
 import { Users } from 'lucide-react'
 import {
   Badge,
@@ -69,7 +69,12 @@ export default async function SkillTypeDetailPage({
       .select({ assignment: trainingSkillAssignments, person: people })
       .from(trainingSkillAssignments)
       .innerJoin(people, eq(people.id, trainingSkillAssignments.personId))
-      .where(eq(trainingSkillAssignments.skillTypeId, id))
+      .where(
+        and(
+          eq(trainingSkillAssignments.skillTypeId, id),
+          isNull(trainingSkillAssignments.deletedAt),
+        ),
+      )
       .orderBy(asc(trainingSkillAssignments.expiresOn))
     const extras = await tx
       .select()
