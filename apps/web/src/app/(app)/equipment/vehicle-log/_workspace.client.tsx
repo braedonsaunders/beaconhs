@@ -269,9 +269,9 @@ export function VehicleLogWorkspaceClient({
                   selectedImportSource.matchedDayCount,
                   'matched day',
                 )} ready.`
-            : workspace.importSources.monthRowCount > 0
-              ? 'No source rows match this driver/month.'
-              : 'No import source is ready.'
+              : workspace.importSources.monthRowCount > 0
+                ? 'No source rows match this driver/month.'
+                : 'No import source is ready.'
   const sourceBadge = hasActiveSource
     ? `${plural(workspace.importSources.activeSourceCount, 'source')}`
     : 'No source'
@@ -406,7 +406,13 @@ export function VehicleLogWorkspaceClient({
                           </span>
                         </span>
                         <Badge
-                          variant={source.onDemand ? 'secondary' : source.matchedDayCount ? 'secondary' : 'outline'}
+                          variant={
+                            source.onDemand
+                              ? 'secondary'
+                              : source.matchedDayCount
+                                ? 'secondary'
+                                : 'outline'
+                          }
                         >
                           {source.onDemand ? 'Live' : source.matchedDayCount}
                         </Badge>

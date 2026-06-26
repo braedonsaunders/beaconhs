@@ -121,11 +121,7 @@ export const csvConnector: Connector = {
       return []
     }
     const aliases =
-      entity === 'people'
-        ? PEOPLE_ALIASES
-        : entity === 'org_unit'
-          ? ORG_ALIASES
-          : EQUIP_ALIASES
+      entity === 'people' ? PEOPLE_ALIASES : entity === 'org_unit' ? ORG_ALIASES : EQUIP_ALIASES
     const map = resolveHeaders(headers, aliases, cfg.mapping)
     ctx.log(
       'info',

@@ -91,10 +91,7 @@ export default async function VehicleLogPage({
     <ListPageLayout
       header={
         <>
-          <PageHeader
-            title="Vehicle log"
-            description="Driver and vehicle monthly log entry."
-          />
+          <PageHeader title="Vehicle log" description="Driver and vehicle monthly log entry." />
           <EquipmentSubNav active="vehicle-log" />
         </>
       }

@@ -66,7 +66,7 @@ export function DeleteIntegrationButton({
         className={cn(
           iconOnly
             ? 'rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-400'
-            : 'inline-flex h-8 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-red-600 shadow-sm transition hover:border-red-200 hover:bg-red-50 hover:text-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 dark:border-slate-800 dark:bg-slate-900 dark:text-red-400 dark:hover:border-red-900 dark:hover:bg-red-950/40 dark:hover:text-red-300',
+            : 'inline-flex h-8 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-red-600 shadow-sm transition hover:border-red-200 hover:bg-red-50 hover:text-red-700 focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 focus-visible:outline-none dark:border-slate-800 dark:bg-slate-900 dark:text-red-400 dark:hover:border-red-900 dark:hover:bg-red-950/40 dark:hover:text-red-300',
           className,
         )}
         title={label ?? `Remove ${kind}`}

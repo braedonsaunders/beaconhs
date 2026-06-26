@@ -248,9 +248,7 @@ function vehicleLogImportConfig(connection: SyncConnectionRow): VehicleLogImport
   }
 }
 
-function buildImportSources(
-  connections: SyncConnectionRow[],
-): VehicleLogImportSource[] {
+function buildImportSources(connections: SyncConnectionRow[]): VehicleLogImportSource[] {
   return connections.flatMap((connection) => {
     const config = vehicleLogImportConfig(connection)
     if (!config) return []
@@ -346,50 +344,49 @@ export async function loadVehicleLogWorkspace(
   const mode: VehicleLogMode = opts.mode === 'odometer' ? 'odometer' : 'destination'
 
   const result = await ctx.db(async (tx) => {
-    const [driversRaw, vehiclesRaw, sitesRaw, connectionRows] =
-      await Promise.all([
-        tx
-          .select({
-            id: people.id,
-            firstName: people.firstName,
-            lastName: people.lastName,
-            employeeNo: people.employeeNo,
-            externalEmployeeId: people.externalEmployeeId,
-          })
-          .from(people)
-          .where(eq(people.status, 'active'))
-          .orderBy(asc(people.lastName), asc(people.firstName))
-          .limit(1000),
-        tx
-          .select({
-            id: equipmentItems.id,
-            assetTag: equipmentItems.assetTag,
-            name: equipmentItems.name,
-            category: equipmentTypes.category,
-            typeName: equipmentTypes.name,
-          })
-          .from(equipmentItems)
-          .leftJoin(equipmentTypes, eq(equipmentTypes.id, equipmentItems.typeId))
-          .orderBy(asc(equipmentItems.assetTag))
-          .limit(1000),
-        tx
-          .select({ id: orgUnits.id, name: orgUnits.name, code: orgUnits.code })
-          .from(orgUnits)
-          .where(inArray(orgUnits.level, ['customer', 'project', 'site']))
-          .orderBy(asc(orgUnits.name))
-          .limit(5000),
-        tx
-          .select({
-            id: syncConnections.id,
-            connectorKey: syncConnections.connectorKey,
-            name: syncConnections.name,
-            status: syncConnections.status,
-            config: syncConnections.config,
-            secrets: syncConnections.secrets,
-          })
-          .from(syncConnections)
-          .where(isNull(syncConnections.deletedAt)),
-      ])
+    const [driversRaw, vehiclesRaw, sitesRaw, connectionRows] = await Promise.all([
+      tx
+        .select({
+          id: people.id,
+          firstName: people.firstName,
+          lastName: people.lastName,
+          employeeNo: people.employeeNo,
+          externalEmployeeId: people.externalEmployeeId,
+        })
+        .from(people)
+        .where(eq(people.status, 'active'))
+        .orderBy(asc(people.lastName), asc(people.firstName))
+        .limit(1000),
+      tx
+        .select({
+          id: equipmentItems.id,
+          assetTag: equipmentItems.assetTag,
+          name: equipmentItems.name,
+          category: equipmentTypes.category,
+          typeName: equipmentTypes.name,
+        })
+        .from(equipmentItems)
+        .leftJoin(equipmentTypes, eq(equipmentTypes.id, equipmentItems.typeId))
+        .orderBy(asc(equipmentItems.assetTag))
+        .limit(1000),
+      tx
+        .select({ id: orgUnits.id, name: orgUnits.name, code: orgUnits.code })
+        .from(orgUnits)
+        .where(inArray(orgUnits.level, ['customer', 'project', 'site']))
+        .orderBy(asc(orgUnits.name))
+        .limit(5000),
+      tx
+        .select({
+          id: syncConnections.id,
+          connectorKey: syncConnections.connectorKey,
+          name: syncConnections.name,
+          status: syncConnections.status,
+          config: syncConnections.config,
+          secrets: syncConnections.secrets,
+        })
+        .from(syncConnections)
+        .where(isNull(syncConnections.deletedAt)),
+    ])
 
     const drivers = driversRaw.map((p) => ({
       id: p.id,
@@ -980,7 +977,12 @@ export async function applyVehicleLogImportToVehicleLog(
     const byDate = new Map<string, ResolvedImportEntry>()
     let skipped = 0
     for (const entry of imported.entries) {
-      if (!entry.date || !ISO_DATE.test(entry.date) || entry.date < start || entry.date >= endExclusive) {
+      if (
+        !entry.date ||
+        !ISO_DATE.test(entry.date) ||
+        entry.date < start ||
+        entry.date >= endExclusive
+      ) {
         skipped += 1
         continue
       }
