@@ -23,6 +23,94 @@ export type CompletionResult = {
   certificateId: string | null
 }
 
+// Write the training_records row (expiry from course.validForMonths), mint the
+// certificate (+ verify token), and flip the enrollment to completed. Shared by
+// the lesson-based completion path and the self-directed online path.
+async function issueCourseRecordAndComplete(
+  tx: Database,
+  args: {
+    tenantId: string
+    enrollmentId: string
+    courseId: string
+    personId: string
+    instructor: string
+    details: string
+    currentLessonId?: string
+  },
+): Promise<{ recordId: string | null; certificateId: string | null }> {
+  const { tenantId, enrollmentId, courseId, personId, instructor, details, currentLessonId } = args
+  const now = new Date()
+  const [course] = await tx
+    .select()
+    .from(trainingCourses)
+    .where(eq(trainingCourses.id, courseId))
+    .limit(1)
+  const completedOn = now.toISOString().slice(0, 10)
+  const expiresOn = course?.validForMonths
+    ? new Date(Date.now() + course.validForMonths * 30 * 86_400_000).toISOString().slice(0, 10)
+    : null
+  const [rec] = await tx
+    .insert(trainingRecords)
+    .values({
+      tenantId,
+      personId,
+      courseId,
+      source: 'self_paced',
+      completedOn,
+      expiresOn,
+      instructor,
+      details,
+      certificateType: 'auto',
+    })
+    .returning()
+  let certificateId: string | null = null
+  if (rec) {
+    const [cert] = await tx
+      .insert(trainingCertificates)
+      .values({ tenantId, recordId: rec.id, verifyToken: randomBytes(20).toString('hex') })
+      .returning()
+    certificateId = cert?.id ?? null
+  }
+  await tx
+    .update(trainingEnrollments)
+    .set({
+      status: 'completed',
+      completedAt: now,
+      progressPercent: 100,
+      ...(currentLessonId ? { currentLessonId } : {}),
+      recordId: rec?.id ?? null,
+    })
+    .where(eq(trainingEnrollments.id, enrollmentId))
+  return { recordId: rec?.id ?? null, certificateId }
+}
+
+// Self-directed completion for `online` courses: there are no lessons to track,
+// so the learner self-attests after finishing the externally linked course. The
+// enrollment-ownership check lives in the calling server action.
+export async function completeOnlineEnrollment(
+  tx: Database,
+  args: { tenantId: string; enrollmentId: string; courseId: string; personId: string },
+): Promise<CompletionResult> {
+  const [enr] = await tx
+    .select()
+    .from(trainingEnrollments)
+    .where(eq(trainingEnrollments.id, args.enrollmentId))
+    .limit(1)
+  if (!enr) throw new Error('Enrollment not found')
+  if (enr.status === 'completed') {
+    return { completed: true, percent: 100, recordId: enr.recordId ?? null, certificateId: null }
+  }
+  const { recordId, certificateId } = await issueCourseRecordAndComplete(tx, {
+    tenantId: args.tenantId,
+    enrollmentId: args.enrollmentId,
+    courseId: args.courseId,
+    personId: args.personId,
+    instructor: 'Online course',
+    details: `Completed online course (enrollment ${args.enrollmentId})`,
+  })
+  return { completed: true, percent: 100, recordId, certificateId }
+}
+
 export async function recomputeEnrollmentCompletion(
   tx: Database,
   args: {
@@ -59,51 +147,18 @@ export async function recomputeEnrollmentCompletion(
   const percent = Math.round((completedCount / total) * 100)
   const required = lessons.filter((l) => l.isRequired)
   const allRequiredDone = required.length > 0 && required.every((l) => completedIds.has(l.id))
-  const now = new Date()
 
   if (allRequiredDone && enr.status !== 'completed') {
-    const [course] = await tx
-      .select()
-      .from(trainingCourses)
-      .where(eq(trainingCourses.id, courseId))
-      .limit(1)
-    const completedOn = new Date().toISOString().slice(0, 10)
-    const expiresOn = course?.validForMonths
-      ? new Date(Date.now() + course.validForMonths * 30 * 86_400_000).toISOString().slice(0, 10)
-      : null
-    const [rec] = await tx
-      .insert(trainingRecords)
-      .values({
-        tenantId,
-        personId,
-        courseId,
-        source: 'self_paced',
-        completedOn,
-        expiresOn,
-        instructor: 'Self-paced course',
-        details: `Completed via the learning player (enrollment ${enrollmentId})`,
-        certificateType: 'auto',
-      })
-      .returning()
-    let certificateId: string | null = null
-    if (rec) {
-      const [cert] = await tx
-        .insert(trainingCertificates)
-        .values({ tenantId, recordId: rec.id, verifyToken: randomBytes(20).toString('hex') })
-        .returning()
-      certificateId = cert?.id ?? null
-    }
-    await tx
-      .update(trainingEnrollments)
-      .set({
-        status: 'completed',
-        completedAt: now,
-        progressPercent: 100,
-        ...(currentLessonId ? { currentLessonId } : {}),
-        recordId: rec?.id ?? null,
-      })
-      .where(eq(trainingEnrollments.id, enrollmentId))
-    return { completed: true, percent: 100, recordId: rec?.id ?? null, certificateId }
+    const { recordId, certificateId } = await issueCourseRecordAndComplete(tx, {
+      tenantId,
+      enrollmentId,
+      courseId,
+      personId,
+      instructor: 'Self-paced course',
+      details: `Completed via the learning player (enrollment ${enrollmentId})`,
+      currentLessonId,
+    })
+    return { completed: true, percent: 100, recordId, certificateId }
   }
 
   await tx

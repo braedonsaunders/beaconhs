@@ -30,6 +30,7 @@ const SORTS = ['name', 'code', 'delivery_type', 'valid_for_months'] as const
 const DELIVERY_OPTIONS = [
   { value: 'classroom', label: 'Classroom' },
   { value: 'self_paced', label: 'Self-paced' },
+  { value: 'online', label: 'Online' },
   { value: 'on_the_job', label: 'On-the-job' },
   { value: 'external_certificate', label: 'External cert' },
 ]

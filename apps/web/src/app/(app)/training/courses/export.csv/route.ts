@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { and, asc, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
 import { trainingCourses } from '@beaconhs/db/schema'
+import { htmlToSnippet } from '@beaconhs/forms-core'
 import { requireExportContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { csvFilename, csvResponse } from '@/lib/csv'
@@ -82,7 +83,7 @@ export async function GET(req: NextRequest) {
       c.durationMinutes ?? '',
       c.validForMonths ?? '',
       c.requiresEvaluator ? 'yes' : 'no',
-      c.description ?? '',
+      htmlToSnippet(c.description, 2000),
     ]),
   })
 }

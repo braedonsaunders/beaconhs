@@ -12,6 +12,7 @@ import {
   Check,
   ClipboardCheck,
   Clock,
+  ExternalLink,
   GraduationCap,
   Loader2,
   PlayCircle,
@@ -22,7 +23,12 @@ import { Badge, Button, Card, CardContent } from '@beaconhs/ui'
 import type { LessonBlock, PracticalCriterion, Slide } from '@beaconhs/db/schema'
 import { LessonBlocksView } from '../../_lib/blocks'
 import { SlidePlayer } from '../../_components/slide-player'
-import { enrollInCourse, markLessonComplete, startLessonQuiz } from '../_actions'
+import {
+  completeOnlineCourse,
+  enrollInCourse,
+  markLessonComplete,
+  startLessonQuiz,
+} from '../_actions'
 import { toast } from '@/lib/toast'
 
 export type PlayerEvaluation = {
@@ -411,6 +417,100 @@ export function CoursePlayer({
         )}
       </main>
     </div>
+  )
+}
+
+// Self-directed runtime for `online` courses: there are no lessons. The learner
+// opens the externally linked course, follows the instructions, then self-attests
+// completion — which issues the training record + certificate.
+export function OnlineCoursePlayer({
+  enrollmentId,
+  instructionsHtml,
+  onlineUrl,
+  completed,
+  certificateRecordId,
+}: {
+  enrollmentId: string
+  instructionsHtml: string | null
+  onlineUrl: string | null
+  completed: boolean
+  certificateRecordId: string | null
+}) {
+  const router = useRouter()
+  const [pending, startTransition] = useTransition()
+
+  function finish() {
+    startTransition(async () => {
+      try {
+        await completeOnlineCourse(enrollmentId)
+        router.refresh()
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : 'Could not complete the course')
+      }
+    })
+  }
+
+  if (completed) {
+    return (
+      <Card>
+        <CardContent className="flex flex-col items-center gap-3 py-8 text-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100">
+            <Award size={24} className="text-emerald-600" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">Course complete 🎉</h2>
+            <p className="text-sm text-slate-500">
+              Your training record has been logged
+              {certificateRecordId ? ' and a certificate issued' : ''}.
+            </p>
+          </div>
+          {certificateRecordId ? (
+            <Link href={`/training/records/${certificateRecordId}/certificate`}>
+              <Button>
+                <Award size={14} /> Download certificate
+              </Button>
+            </Link>
+          ) : null}
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <Card>
+      <CardContent className="space-y-5 py-6">
+        {onlineUrl ? (
+          <div className="flex flex-col items-start gap-3 rounded-lg border border-teal-200 bg-teal-50/60 p-4 sm:flex-row sm:items-center sm:justify-between dark:border-teal-900/50 dark:bg-teal-900/20">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                Open the course
+              </p>
+              <p className="truncate text-xs text-slate-500 dark:text-slate-400">{onlineUrl}</p>
+            </div>
+            <a href={onlineUrl} target="_blank" rel="noopener noreferrer" className="shrink-0">
+              <Button type="button">
+                <ExternalLink size={14} /> Open course
+              </Button>
+            </a>
+          </div>
+        ) : (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+            No course link has been configured yet. Ask your training administrator to add one.
+          </div>
+        )}
+
+        {instructionsHtml ? (
+          <div className="lesson-prose" dangerouslySetInnerHTML={{ __html: instructionsHtml }} />
+        ) : null}
+
+        <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">
+          <Button type="button" onClick={finish} disabled={pending}>
+            {pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
+            I&apos;ve completed this course
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 

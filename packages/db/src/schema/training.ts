@@ -25,6 +25,7 @@ export const trainingDeliveryType = pgEnum('training_delivery_type', [
   'self_paced',
   'on_the_job',
   'external_certificate',
+  'online',
 ])
 
 export const trainingCourses = pgTable(
@@ -40,6 +41,11 @@ export const trainingCourses = pgTable(
     deliveryType: trainingDeliveryType('delivery_type').notNull(),
     durationMinutes: integer('duration_minutes'),
     validForMonths: integer('valid_for_months'), // null = doesn't expire
+    // For `online` delivery: the external course URL learners self-launch into,
+    // plus rich-text instructions shown alongside it. Learners self-start and
+    // self-attest completion, mirroring self_paced.
+    onlineUrl: text('online_url'),
+    instructions: text('instructions'), // sanitized HTML
     requiresEvaluator: boolean('requires_evaluator').default(false).notNull(),
     // Course assets (slides, video, doc references)
     materialAttachmentIds: jsonb('material_attachment_ids').$type<string[]>().default([]).notNull(),

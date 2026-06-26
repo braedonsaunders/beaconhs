@@ -20,6 +20,7 @@ export const metadata = { title: 'New training course' }
 const DELIVERY_OPTIONS = [
   { value: 'classroom', label: 'Classroom' },
   { value: 'self_paced', label: 'Self-paced' },
+  { value: 'online', label: 'Online' },
   { value: 'on_the_job', label: 'On-the-job' },
   { value: 'external_certificate', label: 'External certificate' },
 ] as const
@@ -37,6 +38,7 @@ async function createCourse(formData: FormData) {
     | 'self_paced'
     | 'on_the_job'
     | 'external_certificate'
+    | 'online'
   const description = String(formData.get('description') ?? '').trim() || null
   const durationRaw = String(formData.get('durationMinutes') ?? '').trim()
   const durationMinutes = durationRaw ? Number(durationRaw) : null

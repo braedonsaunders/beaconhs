@@ -269,6 +269,8 @@ export default async function CoursePage({ params }: { params: Promise<{ id: str
         code: course.code,
         description: course.description,
         deliveryType: course.deliveryType,
+        onlineUrl: course.onlineUrl,
+        instructions: course.instructions,
         durationMinutes: course.durationMinutes,
         validForMonths: course.validForMonths,
       }}

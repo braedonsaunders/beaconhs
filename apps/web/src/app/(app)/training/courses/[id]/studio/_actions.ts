@@ -411,12 +411,29 @@ export async function importLessonPptx(lessonId: string, courseId: string, attac
   revalidatePath(studioPath(courseId))
 }
 
+const DELIVERY_TYPES = [
+  'classroom',
+  'self_paced',
+  'on_the_job',
+  'external_certificate',
+  'online',
+] as const
+type DeliveryType = (typeof DELIVERY_TYPES)[number]
+
 export async function updateCourseSettings(courseId: string, formData: FormData) {
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'training')
   const name = String(formData.get('name') ?? '').trim()
   const code = String(formData.get('code') ?? '').trim()
-  const description = String(formData.get('description') ?? '').trim() || null
+  const descriptionRaw = String(formData.get('description') ?? '').trim()
+  const description = descriptionRaw ? sanitizeDocumentHtml(descriptionRaw) : null
+  const deliveryRaw = String(formData.get('deliveryType') ?? '').trim()
+  const deliveryType: DeliveryType | null = DELIVERY_TYPES.includes(deliveryRaw as DeliveryType)
+    ? (deliveryRaw as DeliveryType)
+    : null
+  const onlineUrl = String(formData.get('onlineUrl') ?? '').trim() || null
+  const instructionsRaw = String(formData.get('instructions') ?? '').trim()
+  const instructions = instructionsRaw ? sanitizeDocumentHtml(instructionsRaw) : null
   const durationRaw = String(formData.get('durationMinutes') ?? '').trim()
   const validRaw = String(formData.get('validForMonths') ?? '').trim()
   await ctx.db(async (tx) => {
@@ -425,7 +442,10 @@ export async function updateCourseSettings(courseId: string, formData: FormData)
       .set({
         ...(name ? { name } : {}),
         ...(code ? { code } : {}),
+        ...(deliveryType ? { deliveryType } : {}),
         description,
+        onlineUrl,
+        instructions,
         durationMinutes: durationRaw ? Math.max(0, Number(durationRaw) || 0) : null,
         validForMonths: validRaw ? Math.max(0, Number(validRaw) || 0) : null,
       })

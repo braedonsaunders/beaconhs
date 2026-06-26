@@ -43,11 +43,12 @@ import { WorkspaceNoIdentity } from '../_no-identity'
 
 // Delivery types a learner can self-launch from the catalog; instructor-led
 // and on-the-job courses are attended/evaluated, not "started".
-const SELF_LAUNCH = new Set(['self_paced', 'external_certificate'])
+const SELF_LAUNCH = new Set(['self_paced', 'external_certificate', 'online'])
 
 const DELIVERY_LABELS: Record<string, string> = {
   classroom: 'Classroom',
   self_paced: 'Self-paced',
+  online: 'Online',
   on_the_job: 'On the job',
   external_certificate: 'External',
 }
@@ -92,14 +93,22 @@ export default async function MyTrainingPage({
       .limit(1)
     const personId = person?.id ?? null
 
-    // Available courses = those with a published curriculum (>= 1 module).
+    // Available courses = those with a published curriculum (>= 1 module), plus
+    // online courses (no modules — they self-launch into an external link).
     const modCourses = await tx
       .select({ courseId: trainingCourseModules.courseId })
       .from(trainingCourseModules)
       .where(isNull(trainingCourseModules.deletedAt))
       .groupBy(trainingCourseModules.courseId)
-    const contentCourseIds = new Set(modCourses.map((m) => m.courseId))
-    const coursesCount = contentCourseIds.size
+    const onlineCourses = await tx
+      .select({ id: trainingCourses.id })
+      .from(trainingCourses)
+      .where(and(eq(trainingCourses.deliveryType, 'online'), isNull(trainingCourses.deletedAt)))
+    const availableCourseIds = new Set([
+      ...modCourses.map((m) => m.courseId),
+      ...onlineCourses.map((c) => c.id),
+    ])
+    const coursesCount = availableCourseIds.size
 
     const base = {
       personId,
@@ -166,7 +175,7 @@ export default async function MyTrainingPage({
         .where(eq(trainingEnrollments.personId, personId))
       const enrollBy = new Map(enrollments.map((e) => [e.courseId, e]))
       const courses: CourseCard[] = all
-        .filter((c) => contentCourseIds.has(c.id))
+        .filter((c) => availableCourseIds.has(c.id))
         .map((c) => {
           const e = enrollBy.get(c.id)
           return {

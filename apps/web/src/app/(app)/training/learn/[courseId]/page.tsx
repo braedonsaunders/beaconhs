@@ -14,10 +14,11 @@ import {
   trainingLessons,
 } from '@beaconhs/db/schema'
 import { publicUrl } from '@beaconhs/storage'
+import { htmlToSnippet } from '@beaconhs/forms-core'
 import { requireRequestContext } from '@/lib/auth'
 import { DetailPageLayout } from '@/components/page-layout'
 import { lessonProseCss } from '../../_editor/prose'
-import { CoursePlayer, EnrollGate, type PlayerModule } from './_player'
+import { CoursePlayer, EnrollGate, OnlineCoursePlayer, type PlayerModule } from './_player'
 
 export const dynamic = 'force-dynamic'
 
@@ -216,7 +217,19 @@ export default async function PlayerPage({ params }: { params: Promise<{ courseI
           </CardContent>
         </Card>
       ) : !enrollment ? (
-        <EnrollGate courseId={courseId} courseName={course.name} summary={course.description} />
+        <EnrollGate
+          courseId={courseId}
+          courseName={course.name}
+          summary={htmlToSnippet(course.description, 240) || null}
+        />
+      ) : course.deliveryType === 'online' ? (
+        <OnlineCoursePlayer
+          enrollmentId={enrollment.id}
+          instructionsHtml={course.instructions}
+          onlineUrl={course.onlineUrl}
+          completed={enrollment.status === 'completed'}
+          certificateRecordId={enrollment.recordId ?? null}
+        />
       ) : (
         <CoursePlayer
           courseName={course.name}

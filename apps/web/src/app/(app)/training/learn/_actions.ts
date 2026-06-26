@@ -18,13 +18,14 @@ import {
   trainingAssessmentTypeQuestions,
   trainingAssessmentTypes,
   trainingAssessments,
+  trainingCourses,
   trainingEnrollments,
   trainingLessonProgress,
   trainingLessons,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
-import { recomputeEnrollmentCompletion } from './_lib/completion'
+import { completeOnlineEnrollment, recomputeEnrollmentCompletion } from './_lib/completion'
 
 // Resolve the signed-in user's People record id, or null when no People row is
 // linked to their login (e.g. an admin with no worker profile). Workers without
@@ -115,6 +116,56 @@ export async function enrollInCourse(courseId: string, personIdArg?: string) {
   })
   revalidatePath(`/training/learn/${courseId}`)
   revalidatePath('/training/learn')
+}
+
+// Self-attested completion for `online` courses — no lessons to track, so the
+// learner confirms they finished the externally linked course. Writes the
+// training record + certificate and flips the enrollment to completed.
+export async function completeOnlineCourse(enrollmentId: string) {
+  const ctx = await requireRequestContext()
+  if (!ctx.tenantId) throw new Error('No active tenant')
+  const tenantId = ctx.tenantId
+  const personId = await resolvePersonId(ctx)
+
+  const result = await ctx.db(async (tx) => {
+    const [enr] = await tx
+      .select()
+      .from(trainingEnrollments)
+      .where(eq(trainingEnrollments.id, enrollmentId))
+      .limit(1)
+    if (!enr) throw new Error('Enrollment not found')
+    if (enr.personId !== personId) throw new Error('That enrollment is not yours')
+
+    const [course] = await tx
+      .select({ deliveryType: trainingCourses.deliveryType })
+      .from(trainingCourses)
+      .where(eq(trainingCourses.id, enr.courseId))
+      .limit(1)
+    if (!course || course.deliveryType !== 'online') {
+      throw new Error('This course is not an online course.')
+    }
+
+    const summary = await completeOnlineEnrollment(tx, {
+      tenantId,
+      enrollmentId,
+      courseId: enr.courseId,
+      personId,
+    })
+    return { courseId: enr.courseId, ...summary }
+  })
+
+  if (result.completed && result.recordId) {
+    await recordAudit(ctx, {
+      entityType: 'training_enrollment',
+      entityId: enrollmentId,
+      action: 'sign',
+      summary: `Completed online course — issued record ${result.recordId}`,
+      after: { recordId: result.recordId, certificateId: result.certificateId },
+    })
+  }
+  revalidatePath(`/training/learn/${result.courseId}`)
+  revalidatePath('/training/learn')
+  revalidatePath('/my/training')
 }
 
 export async function markLessonComplete(enrollmentId: string, lessonId: string) {

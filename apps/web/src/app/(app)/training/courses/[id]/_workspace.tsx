@@ -35,7 +35,15 @@ import {
   UserCheck,
   Video,
 } from 'lucide-react'
-import { Badge, Button, FileUploader, Input, Label, Textarea } from '@beaconhs/ui'
+import {
+  Badge,
+  Button,
+  FileUploader,
+  Input,
+  Label,
+  RichTextEditor,
+  Select,
+} from '@beaconhs/ui'
 import type { LessonBlock, PracticalCriterion, Slide } from '@beaconhs/db/schema'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
 import { toast } from '@/lib/toast'
@@ -102,6 +110,8 @@ export type CourseLite = {
   code: string
   description: string | null
   deliveryType: string
+  onlineUrl: string | null
+  instructions: string | null
   durationMinutes: number | null
   validForMonths: number | null
 }
@@ -542,9 +552,18 @@ function BuildPalette({ onAdd }: { onAdd: (kind: LessonKind) => void }) {
   )
 }
 
+const DELIVERY_OPTIONS: { value: string; label: string }[] = [
+  { value: 'classroom', label: 'Classroom' },
+  { value: 'self_paced', label: 'Self-paced' },
+  { value: 'online', label: 'Online' },
+  { value: 'on_the_job', label: 'On-the-job' },
+  { value: 'external_certificate', label: 'External certificate' },
+]
+
 function OverviewPanel({ course }: { course: CourseLite }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
+  const [delivery, setDelivery] = useState(course.deliveryType)
   return (
     <form
       action={(fd) =>
@@ -565,14 +584,65 @@ function OverviewPanel({ course }: { course: CourseLite }) {
         <Input id="ov-code" name="code" defaultValue={course.code} />
       </div>
       <div className="space-y-1.5">
+        <Label htmlFor="ov-delivery">Delivery type</Label>
+        <Select
+          id="ov-delivery"
+          name="deliveryType"
+          value={delivery}
+          onChange={(e) => setDelivery(e.target.value)}
+        >
+          {DELIVERY_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </Select>
+        {delivery === 'online' ? (
+          <p className="text-[11px] text-slate-400">
+            Learners self-start, complete the linked course, then mark it done.
+          </p>
+        ) : null}
+      </div>
+      <div className="space-y-1.5">
         <Label htmlFor="ov-desc">Description</Label>
-        <Textarea
-          id="ov-desc"
+        <RichTextEditor
           name="description"
-          rows={3}
           defaultValue={course.description ?? ''}
+          placeholder="What does this course cover?"
+          minHeight="120px"
         />
       </div>
+      {delivery === 'online' ? (
+        <>
+          <div className="space-y-1.5">
+            <Label htmlFor="ov-url">Course URL</Label>
+            <Input
+              id="ov-url"
+              name="onlineUrl"
+              type="url"
+              inputMode="url"
+              placeholder="https://…"
+              defaultValue={course.onlineUrl ?? ''}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="ov-instructions">Instructions</Label>
+            <RichTextEditor
+              name="instructions"
+              defaultValue={course.instructions ?? ''}
+              placeholder="How to access and complete the course…"
+              minHeight="120px"
+            />
+          </div>
+        </>
+      ) : (
+        // Keep the values persisted while the type is something other than
+        // online, so switching back doesn't silently wipe them.
+        <>
+          <input type="hidden" name="onlineUrl" value={course.onlineUrl ?? ''} />
+          <input type="hidden" name="instructions" value={course.instructions ?? ''} />
+        </>
+      )}
       <div className="grid grid-cols-2 gap-2">
         <div className="space-y-1.5">
           <Label htmlFor="ov-dur">Duration (min)</Label>
