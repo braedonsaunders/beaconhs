@@ -118,8 +118,10 @@ export function BlockEditor({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 p-2">
-        <span className="px-1 text-xs font-medium text-slate-500">Add block:</span>
+      <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 p-2 dark:border-slate-800 dark:bg-slate-900">
+        <span className="px-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+          Add block:
+        </span>
         {ADD_MENU.map((m) => (
           <Button
             key={m.type}
@@ -135,15 +137,18 @@ export function BlockEditor({
       </div>
 
       {blocks.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-slate-300 px-4 py-10 text-center text-sm text-slate-400">
+        <div className="rounded-lg border border-dashed border-slate-300 px-4 py-10 text-center text-sm text-slate-400 dark:border-slate-700 dark:text-slate-500">
           No content. Add a block to build this lesson.
         </div>
       ) : (
         <div className="space-y-3">
           {blocks.map((b, i) => (
-            <div key={b.id} className="rounded-lg border border-slate-200 bg-white">
-              <div className="flex items-center justify-between border-b border-slate-100 px-3 py-1.5">
-                <span className="text-xs font-semibold tracking-wide text-slate-400 uppercase">
+            <div
+              key={b.id}
+              className="rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"
+            >
+              <div className="flex items-center justify-between border-b border-slate-100 px-3 py-1.5 dark:border-slate-800">
+                <span className="text-xs font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500">
                   {b.type}
                 </span>
                 <div className="flex items-center gap-0.5">
@@ -187,8 +192,10 @@ export function BlockEditor({
       )}
 
       {inline ? null : (
-        <div className="sticky bottom-0 flex items-center justify-end gap-3 border-t border-slate-200 bg-white/90 py-3 backdrop-blur">
-          {dirty ? <span className="text-xs text-amber-600">Unsaved changes</span> : null}
+        <div className="sticky bottom-0 flex items-center justify-end gap-3 border-t border-slate-200 bg-white/90 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-950/90">
+          {dirty ? (
+            <span className="text-xs text-amber-600 dark:text-amber-300">Unsaved changes</span>
+          ) : null}
           <Button type="button" onClick={save} disabled={pending || !dirty}>
             {pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
             Save content
@@ -254,7 +261,7 @@ function BlockBody({
       return (
         <div className="space-y-2">
           {block.attachmentId ? (
-            <p className="text-xs text-emerald-700">
+            <p className="text-xs text-emerald-700 dark:text-emerald-300">
               Image uploaded ✓ (replace by uploading again)
             </p>
           ) : null}
@@ -288,7 +295,7 @@ function BlockBody({
             }
             placeholder="YouTube / Vimeo / MP4 URL"
           />
-          <p className="text-center text-xs text-slate-400">— or upload —</p>
+          <p className="text-center text-xs text-slate-400 dark:text-slate-500">— or upload —</p>
           <FileUploader
             requestUploadAction={requestUpload}
             finalizeUploadAction={finalizeUpload}
@@ -307,7 +314,9 @@ function BlockBody({
     case 'file':
       return (
         <div className="space-y-2">
-          {block.attachmentId ? <p className="text-xs text-emerald-700">File uploaded ✓</p> : null}
+          {block.attachmentId ? (
+            <p className="text-xs text-emerald-700 dark:text-emerald-300">File uploaded ✓</p>
+          ) : null}
           <FileUploader
             requestUploadAction={requestUpload}
             finalizeUploadAction={finalizeUpload}
@@ -334,7 +343,9 @@ function BlockBody({
         />
       )
     case 'divider':
-      return <p className="text-center text-xs text-slate-400">Horizontal divider</p>
+      return (
+        <p className="text-center text-xs text-slate-400 dark:text-slate-500">Horizontal divider</p>
+      )
   }
 }
 
@@ -399,14 +410,14 @@ function MarkdownField({ value, onChange }: { value: string; onChange: (v: strin
         <button
           type="button"
           onClick={() => setPreview((p) => !p)}
-          className="ml-auto text-xs font-medium text-slate-500 hover:text-slate-800"
+          className="ml-auto text-xs font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100"
         >
           {preview ? 'Edit' : 'Preview'}
         </button>
       </div>
       {preview ? (
         <div
-          className="min-h-[4rem] space-y-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
+          className="min-h-[4rem] space-y-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300"
           dangerouslySetInnerHTML={{ __html: renderMd(value) }}
         />
       ) : (

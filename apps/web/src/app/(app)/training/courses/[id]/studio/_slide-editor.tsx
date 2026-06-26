@@ -62,7 +62,7 @@ export function SlideEditor({
 
   return (
     <div className="space-y-2">
-      <div className="overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
+      <div className="overflow-hidden rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-950">
         <SlideDeckEditor
           deck={deck}
           onDeckChange={(next) => {
@@ -80,7 +80,9 @@ export function SlideEditor({
         />
       </div>
       <div className="flex items-center justify-end gap-2">
-        {dirty ? <span className="text-xs text-amber-600">Unsaved changes</span> : null}
+        {dirty ? (
+          <span className="text-xs text-amber-600 dark:text-amber-300">Unsaved changes</span>
+        ) : null}
         <Button type="button" size="sm" onClick={save} disabled={pending || !dirty}>
           {pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
           Save slides

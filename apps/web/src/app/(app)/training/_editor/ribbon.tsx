@@ -235,7 +235,7 @@ function Btn({
         active
           ? 'bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-200'
           : 'hover:bg-slate-100 dark:hover:bg-slate-800',
-        disabled && 'cursor-not-allowed opacity-40 hover:bg-transparent',
+        disabled && 'cursor-not-allowed opacity-40 hover:bg-transparent dark:hover:bg-transparent',
       )}
     >
       {children}

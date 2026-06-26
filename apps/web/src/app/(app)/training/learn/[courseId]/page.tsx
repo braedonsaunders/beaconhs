@@ -211,7 +211,7 @@ export default async function PlayerPage({ params }: { params: Promise<{ courseI
       <style dangerouslySetInnerHTML={{ __html: lessonProseCss('.lesson-prose') }} />
       {!person ? (
         <Card>
-          <CardContent className="py-10 text-center text-sm text-slate-500">
+          <CardContent className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">
             Your account is not linked to a worker profile, so progress is not tracked. Ask an
             administrator to link your People record.
           </CardContent>
