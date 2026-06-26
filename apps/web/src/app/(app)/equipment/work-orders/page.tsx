@@ -263,25 +263,25 @@ export default async function WorkOrdersPage({
           <TableToolbar>
             <SearchInput placeholder="Search reference, summary, asset tag…" />
             <form className="flex items-center gap-1 text-xs">
-              <label className="flex items-center gap-1 text-slate-500">
+              <label className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
                 Opened
                 <input
                   type="date"
                   name="openedFrom"
                   defaultValue={openedFromRaw ?? ''}
-                  className="h-8 rounded-md border border-slate-300 px-2 text-xs"
+                  className="h-8 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:[color-scheme:dark]"
                 />
               </label>
-              <span className="text-slate-400">to</span>
+              <span className="text-slate-400 dark:text-slate-500">to</span>
               <input
                 type="date"
                 name="openedTo"
                 defaultValue={openedToRaw ?? ''}
-                className="h-8 rounded-md border border-slate-300 px-2 text-xs"
+                className="h-8 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:[color-scheme:dark]"
               />
               <button
                 type="submit"
-                className="h-8 rounded-md border border-slate-200 px-2 text-xs hover:bg-slate-50"
+                className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
               >
                 Apply
               </button>
@@ -416,12 +416,12 @@ export default async function WorkOrdersPage({
                     <TableCell>
                       <Link
                         href={`/equipment/work-orders/${wo.id}` as any}
-                        className="font-medium text-slate-900 hover:underline"
+                        className="font-medium text-slate-900 hover:underline dark:text-slate-100"
                       >
                         {htmlToSnippet(wo.summary)}
                       </Link>
                     </TableCell>
-                    <TableCell className="text-slate-600">
+                    <TableCell className="text-slate-600 dark:text-slate-300">
                       {item ? (
                         <Link href={`/equipment/${item.id}`} className="hover:underline">
                           <span className="font-mono text-xs">{item.assetTag}</span>{' '}
@@ -431,7 +431,9 @@ export default async function WorkOrdersPage({
                         '—'
                       )}
                     </TableCell>
-                    <TableCell className="text-xs text-slate-600">{type?.name ?? '—'}</TableCell>
+                    <TableCell className="text-xs text-slate-600 dark:text-slate-300">
+                      {type?.name ?? '—'}
+                    </TableCell>
                     <TableCell>
                       <Badge variant={priorityBadgeVariant(wo.priority)}>{wo.priority}</Badge>
                     </TableCell>
@@ -440,23 +442,23 @@ export default async function WorkOrdersPage({
                         {wo.status === 'closed' ? 'completed' : wo.status.replace('_', ' ')}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-slate-600">
+                    <TableCell className="text-slate-600 dark:text-slate-300">
                       {assigneeUser?.name ?? assignee?.displayName ?? '—'}
                     </TableCell>
-                    <TableCell className="text-xs text-slate-600 tabular-nums">
+                    <TableCell className="text-xs text-slate-600 tabular-nums dark:text-slate-300">
                       {new Date(wo.openedAt).toLocaleDateString()}
                     </TableCell>
-                    <TableCell className="text-xs text-slate-600 tabular-nums">
+                    <TableCell className="text-xs text-slate-600 tabular-nums dark:text-slate-300">
                       {wo.closedAt ? (
                         new Date(wo.closedAt).toLocaleDateString()
                       ) : (
-                        <span className="text-slate-400">—</span>
+                        <span className="text-slate-400 dark:text-slate-500">—</span>
                       )}
                     </TableCell>
                     <TableCell className="tabular-nums">
                       <Badge variant={ageVariant}>{ageDays}d</Badge>
                     </TableCell>
-                    <TableCell className="text-xs text-slate-600 tabular-nums">
+                    <TableCell className="text-xs text-slate-600 tabular-nums dark:text-slate-300">
                       {wo.cost ? `$${Number(wo.cost).toLocaleString()}` : '—'}
                     </TableCell>
                   </TableRow>
