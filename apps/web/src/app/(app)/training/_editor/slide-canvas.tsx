@@ -767,7 +767,7 @@ export const SlideCanvasEditor = forwardRef<
           e.currentTarget.focus({ preventScroll: true })
         }
       }}
-      className="relative w-full overflow-hidden rounded-lg border border-slate-200 shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-teal-500"
+      className="relative w-full overflow-hidden rounded-lg border border-slate-200 shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:border-slate-800"
       style={{ aspectRatio: '16 / 9' }}
     >
       <canvas ref={canvasElRef} />

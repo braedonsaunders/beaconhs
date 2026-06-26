@@ -54,7 +54,7 @@ export function LessonRibbon({ editor, extra }: { editor: Editor | null; extra?:
   const e = editor && !editor.isDestroyed ? editor : null
   const can = !!e
   return (
-    <div className="flex flex-wrap items-center gap-0.5 border-b border-slate-200 bg-white px-2 py-1">
+    <div className="flex flex-wrap items-center gap-0.5 border-b border-slate-200 bg-white px-2 py-1 dark:border-slate-800 dark:bg-slate-900">
       <Btn
         label="Undo"
         disabled={!can || !e!.can().undo()}
@@ -231,8 +231,10 @@ function Btn({
       onMouseDown={(ev) => ev.preventDefault()} // keep editor selection
       onClick={onClick}
       className={cn(
-        'grid h-7 w-7 place-items-center rounded text-slate-600 transition-colors',
-        active ? 'bg-teal-100 text-teal-800' : 'hover:bg-slate-100',
+        'grid h-7 w-7 place-items-center rounded text-slate-600 transition-colors dark:text-slate-300',
+        active
+          ? 'bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-200'
+          : 'hover:bg-slate-100 dark:hover:bg-slate-800',
         disabled && 'cursor-not-allowed opacity-40 hover:bg-transparent',
       )}
     >
@@ -242,7 +244,7 @@ function Btn({
 }
 
 function Sep() {
-  return <span className="mx-1 h-5 w-px bg-slate-200" />
+  return <span className="mx-1 h-5 w-px bg-slate-200 dark:bg-slate-800" />
 }
 
 function StyleSelect({ editor }: { editor: Editor | null }) {
@@ -272,7 +274,7 @@ function StyleSelect({ editor }: { editor: Editor | null }) {
             .setHeading({ level: Number(v[1]) as 1 | 2 | 3 })
             .run()
       }}
-      className="h-7 px-1.5 text-xs font-medium text-slate-700 disabled:opacity-40"
+      className="h-7 px-1.5 text-xs font-medium text-slate-700 disabled:opacity-40 dark:text-slate-200"
     >
       <option value="p">Normal</option>
       <option value="h1">Heading 1</option>
@@ -297,7 +299,7 @@ function ColorMenu({ editor, mode }: { editor: Editor | null; mode: 'text' | 'hi
         <ChevronDown size={8} className="-ml-0.5" />
       </Btn>
       {open && editor ? (
-        <span className="absolute top-8 left-0 z-40 flex gap-1 rounded-md border border-slate-200 bg-white p-1.5 shadow-lg">
+        <span className="absolute top-8 left-0 z-40 flex gap-1 rounded-md border border-slate-200 bg-white p-1.5 shadow-lg dark:border-slate-700 dark:bg-slate-900">
           {colors.map((c) => (
             <button
               key={c}
@@ -308,7 +310,7 @@ function ColorMenu({ editor, mode }: { editor: Editor | null; mode: 'text' | 'hi
                 else editor.chain().focus().setHighlight({ color: c }).run()
                 setOpen(false)
               }}
-              className="h-5 w-5 rounded border border-slate-200"
+              className="h-5 w-5 rounded border border-slate-200 dark:border-slate-700"
               style={{ background: c }}
             />
           ))}
@@ -320,7 +322,7 @@ function ColorMenu({ editor, mode }: { editor: Editor | null; mode: 'text' | 'hi
               else editor.chain().focus().unsetHighlight().run()
               setOpen(false)
             }}
-            className="grid h-5 w-5 place-items-center rounded border border-slate-200 text-[9px] text-slate-500"
+            className="grid h-5 w-5 place-items-center rounded border border-slate-200 text-[9px] text-slate-500 dark:border-slate-700 dark:text-slate-400"
             title="None"
           >
             ✕

@@ -214,19 +214,19 @@ export function LessonSurface({
     <div
       className={
         fullscreen
-          ? 'fixed inset-0 z-50 flex flex-col bg-slate-100'
-          : 'flex h-full min-h-0 flex-col bg-slate-100'
+          ? 'fixed inset-0 z-50 flex flex-col bg-slate-100 dark:bg-slate-950'
+          : 'flex h-full min-h-0 flex-col bg-slate-100 dark:bg-slate-950'
       }
     >
       <style dangerouslySetInnerHTML={{ __html: lessonProseCss('.lesson-prose') }} />
 
       {/* top bar */}
-      <div className="flex h-12 shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3">
+      <div className="flex h-12 shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 dark:border-slate-800 dark:bg-slate-900">
         <button
           type="button"
           onClick={done}
           title="Back to course content"
-          className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-slate-500 hover:bg-slate-100"
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
         >
           <ArrowLeft size={16} />
         </button>
@@ -237,7 +237,7 @@ export function LessonSurface({
             touchMeta()
           }}
           placeholder="Lesson title"
-          className="h-8 max-w-md flex-1 border-transparent font-semibold hover:border-slate-200"
+          className="h-8 max-w-md flex-1 border-transparent font-semibold hover:border-slate-200 dark:hover:border-slate-700"
         />
         <SaveBadge state={saveState} />
         <div className="ml-auto flex items-center gap-1.5">
@@ -284,7 +284,7 @@ export function LessonSurface({
 
       {/* settings strip */}
       {settingsOpen ? (
-        <div className="shrink-0 border-b border-slate-200 bg-white px-4 py-3">
+        <div className="shrink-0 border-b border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
             <div className="space-y-1">
               <Label className="text-[11px]">Type</Label>
@@ -309,7 +309,7 @@ export function LessonSurface({
             <div className="space-y-1">
               <Label className="text-[11px]">Completion</Label>
               {kind === 'practical' ? (
-                <div className="flex h-9 items-center rounded-md border border-slate-200 bg-slate-50 px-2.5 text-xs text-slate-500">
+                <div className="flex h-9 items-center rounded-md border border-slate-200 bg-slate-50 px-2.5 text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
                   Evaluator sign-off
                 </div>
               ) : (
@@ -342,7 +342,7 @@ export function LessonSurface({
                 placeholder="optional"
               />
             </div>
-            <label className="flex items-center gap-2 pt-5 text-sm text-slate-700">
+            <label className="flex items-center gap-2 pt-5 text-sm text-slate-700 dark:text-slate-300">
               <input
                 type="checkbox"
                 checked={required}
@@ -350,7 +350,7 @@ export function LessonSurface({
                   setRequired(e.currentTarget.checked)
                   touchMeta()
                 }}
-                className="h-4 w-4 rounded border-slate-300"
+                className="h-4 w-4 rounded border-slate-300 dark:border-slate-700"
               />
               Required
             </label>
@@ -392,9 +392,12 @@ export function LessonSurface({
       >
         {contentItemId && reusable ? (
           <CenterCard>
-            <p className="text-sm text-slate-600">
+            <p className="text-sm text-slate-600 dark:text-slate-300">
               This lesson shows a library item — edit it in the{' '}
-              <Link href={`/training/library/${contentItemId}`} className="text-teal-700 underline">
+              <Link
+                href={`/training/library/${contentItemId}`}
+                className="text-teal-700 underline dark:text-teal-300"
+              >
                 Content Library
               </Link>
               .
@@ -402,7 +405,7 @@ export function LessonSurface({
           </CenterCard>
         ) : kind === 'rich' ? (
           <div className="px-6 py-6">
-            <div className="lesson-prose min-h-[60vh] w-full rounded-lg border border-slate-200 bg-white px-12 py-10 shadow-sm">
+            <div className="lesson-prose min-h-[60vh] w-full rounded-lg border border-slate-200 bg-white px-12 py-10 shadow-sm dark:border-slate-800 dark:bg-slate-900">
               <RichEditor
                 initialJson={lesson.contentJson ?? undefined}
                 initialHtml={lesson.contentHtml ?? blocksToHtml(lesson.contentBlocks)}
@@ -427,12 +430,12 @@ export function LessonSurface({
           />
         ) : kind === 'practical' ? (
           <div className="space-y-4 px-6 py-6">
-            <div className="w-full rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="w-full rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
               <Label className="mb-2 block">Sign-off criteria</Label>
               <div className="space-y-1.5">
                 {criteria.map((c, i) => (
                   <div key={c.id} className="flex items-center gap-1.5">
-                    <span className="w-5 text-right text-xs text-slate-400 tabular-nums">
+                    <span className="w-5 text-right text-xs text-slate-400 tabular-nums dark:text-slate-500">
                       {i + 1}.
                     </span>
                     <Input
@@ -471,18 +474,18 @@ export function LessonSurface({
               >
                 <Plus size={13} /> Add criterion
               </Button>
-              <p className="mt-2 text-[11px] text-slate-500">
+              <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
                 Sign-offs happen under{' '}
                 <Link
                   href={`/training/courses/${courseId}/evaluations`}
-                  className="text-teal-700 underline"
+                  className="text-teal-700 underline dark:text-teal-300"
                 >
                   Evaluations
                 </Link>
                 .
               </p>
             </div>
-            <div className="lesson-prose min-h-[40vh] w-full rounded-lg border border-slate-200 bg-white px-12 py-10 shadow-sm">
+            <div className="lesson-prose min-h-[40vh] w-full rounded-lg border border-slate-200 bg-white px-12 py-10 shadow-sm dark:border-slate-800 dark:bg-slate-900">
               <RichEditor
                 initialJson={lesson.contentJson ?? undefined}
                 initialHtml={lesson.contentHtml ?? blocksToHtml(lesson.contentBlocks)}
@@ -511,7 +514,7 @@ export function LessonSurface({
                     </option>
                   ))}
                 </Select>
-                <p className="text-[11px] text-slate-500">
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
                   Manage question sets under Training → Assessment types.
                 </p>
               </div>
@@ -556,7 +559,9 @@ export function LessonSurface({
                   }}
                   placeholder="https://…"
                 />
-                <p className="text-center text-xs text-slate-400">— or upload —</p>
+                <p className="text-center text-xs text-slate-400 dark:text-slate-500">
+                  — or upload —
+                </p>
                 <FileUploader
                   requestUploadAction={requestUpload}
                   finalizeUploadAction={finalizeUpload}
@@ -571,7 +576,9 @@ export function LessonSurface({
                   label="Drop a video or click to choose"
                 />
                 {attachmentId ? (
-                  <p className="text-xs text-emerald-700">Uploaded video attached ✓</p>
+                  <p className="text-xs text-emerald-700 dark:text-emerald-300">
+                    Uploaded video attached ✓
+                  </p>
                 ) : null}
               </div>
             ) : kind === 'file' ? (
@@ -589,7 +596,9 @@ export function LessonSurface({
                   }}
                   label="Drop a PDF / handout or click to choose"
                 />
-                {attachmentId ? <p className="text-xs text-emerald-700">File attached ✓</p> : null}
+                {attachmentId ? (
+                  <p className="text-xs text-emerald-700 dark:text-emerald-300">File attached ✓</p>
+                ) : null}
               </div>
             ) : null}
           </CenterCard>
@@ -602,7 +611,7 @@ export function LessonSurface({
 function CenterCard({ children }: { children: React.ReactNode }) {
   return (
     <div className="px-6 py-8">
-      <div className="w-full rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="w-full rounded-lg border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         {children}
       </div>
     </div>
@@ -614,9 +623,10 @@ function SaveBadge({ state }: { state: SaveState }) {
     <span
       className={cn(
         'inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium',
-        state === 'saved' && 'bg-emerald-50 text-emerald-700',
-        state === 'saving' && 'bg-sky-50 text-sky-700',
-        state === 'dirty' && 'bg-amber-50 text-amber-700',
+        state === 'saved' &&
+          'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
+        state === 'saving' && 'bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300',
+        state === 'dirty' && 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
       )}
     >
       {state === 'saving' ? <Loader2 size={10} className="animate-spin" /> : null}

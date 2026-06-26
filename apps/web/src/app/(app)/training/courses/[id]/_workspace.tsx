@@ -285,16 +285,21 @@ export function CourseWorkspace({
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* ---- top header ---- */}
-      <header className="flex h-14 shrink-0 items-center gap-3 border-b border-slate-200 bg-white px-4">
-        <Link href="/training/courses" className="shrink-0 text-sm text-teal-700 hover:underline">
+      <header className="flex h-14 shrink-0 items-center gap-3 border-b border-slate-200 bg-white px-4 dark:border-slate-800 dark:bg-slate-900">
+        <Link
+          href="/training/courses"
+          className="shrink-0 text-sm text-teal-700 hover:underline dark:text-teal-300"
+        >
           ← Courses
         </Link>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="truncate text-sm font-semibold text-slate-900">{course.name}</span>
+            <span className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+              {course.name}
+            </span>
             <Badge variant="secondary">{course.deliveryType.replace('_', ' ')}</Badge>
           </div>
-          <div className="text-xs text-slate-500">
+          <div className="text-xs text-slate-500 dark:text-slate-400">
             {course.code} · {tree.length} module{tree.length === 1 ? '' : 's'} · {lessonCount}{' '}
             lesson{lessonCount === 1 ? '' : 's'} · {recordsTotal} record
             {recordsTotal === 1 ? '' : 's'}
@@ -331,8 +336,8 @@ export function CourseWorkspace({
       {/* ---- 1/3 | 2/3 ---- */}
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* left rail */}
-        <aside className="flex w-80 shrink-0 flex-col border-r border-slate-200 bg-white">
-          <div className="flex shrink-0 items-center gap-0.5 border-b border-slate-200 px-2 py-1.5">
+        <aside className="flex w-80 shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex shrink-0 items-center gap-0.5 border-b border-slate-200 px-2 py-1.5 dark:border-slate-800">
             <RailTabBtn
               active={railTab === 'overview'}
               onClick={() => setRailTab('overview')}
@@ -394,12 +399,12 @@ export function CourseWorkspace({
             />
           </div>
         ) : (
-          <div className="flex min-w-0 flex-1 flex-col bg-slate-50">
-            <div className="flex shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-4 py-1.5">
-              <span className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
+          <div className="flex min-w-0 flex-1 flex-col bg-slate-50 dark:bg-slate-950">
+            <div className="flex shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-4 py-1.5 dark:border-slate-800 dark:bg-slate-900">
+              <span className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
                 Course content
               </span>
-              <span className="text-xs text-slate-400">
+              <span className="text-xs text-slate-400 dark:text-slate-500">
                 drag elements from the Build tab into a module
               </span>
               <div className="ml-auto">
@@ -441,16 +446,16 @@ export function CourseWorkspace({
                     }}
                     className={`grid place-items-center rounded-xl border-2 border-dashed px-6 py-20 text-center transition-colors ${
                       dropHover === '__empty__'
-                        ? 'border-teal-400 bg-teal-50'
-                        : 'border-slate-300 bg-white'
+                        ? 'border-teal-400 bg-teal-50 dark:bg-teal-950/30'
+                        : 'border-slate-300 bg-white dark:border-slate-700 dark:bg-slate-900'
                     }`}
                   >
                     <div>
-                      <Layers size={28} className="mx-auto text-slate-300" />
-                      <p className="mt-2 text-sm font-medium text-slate-600">
+                      <Layers size={28} className="mx-auto text-slate-300 dark:text-slate-600" />
+                      <p className="mt-2 text-sm font-medium text-slate-600 dark:text-slate-300">
                         Drag an element here
                       </p>
-                      <p className="text-xs text-slate-400">
+                      <p className="text-xs text-slate-400 dark:text-slate-500">
                         Select a content type from the Build tab on the left — a module is created
                         automatically.
                       </p>
@@ -504,7 +509,9 @@ function RailTabBtn({
       onClick={onClick}
       title={label}
       className={`flex flex-1 flex-col items-center gap-0.5 rounded-md px-1 py-1.5 text-[10px] font-medium transition-colors ${
-        active ? 'bg-teal-50 text-teal-800' : 'text-slate-500 hover:bg-slate-50'
+        active
+          ? 'bg-teal-50 text-teal-800 dark:bg-teal-950/50 dark:text-teal-200'
+          : 'text-slate-500 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800'
       }`}
     >
       {icon}
@@ -518,7 +525,7 @@ function RailTabBtn({
 function BuildPalette({ onAdd }: { onAdd: (kind: LessonKind) => void }) {
   return (
     <div className="space-y-2">
-      <p className="px-1 text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
+      <p className="px-1 text-[10px] font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
         Elements
       </p>
       {ELEMENTS.map((el) => (
@@ -532,18 +539,22 @@ function BuildPalette({ onAdd }: { onAdd: (kind: LessonKind) => void }) {
           }}
           onClick={() => onAdd(el.kind)}
           title="Drag into a module — or click to add to the last module"
-          className="flex w-full cursor-grab items-start gap-2.5 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-left transition-colors hover:border-teal-400 hover:bg-teal-50/50 active:cursor-grabbing"
+          className="flex w-full cursor-grab items-start gap-2.5 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-left transition-colors hover:border-teal-400 hover:bg-teal-50/50 active:cursor-grabbing dark:border-slate-800 dark:bg-slate-950 dark:hover:border-teal-700 dark:hover:bg-teal-950/30"
         >
-          <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-600">
+          <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
             {el.icon}
           </span>
           <span className="min-w-0">
-            <span className="block text-sm font-medium text-slate-800">{el.label}</span>
-            <span className="block text-[11px] leading-snug text-slate-500">{el.desc}</span>
+            <span className="block text-sm font-medium text-slate-800 dark:text-slate-100">
+              {el.label}
+            </span>
+            <span className="block text-[11px] leading-snug text-slate-500 dark:text-slate-400">
+              {el.desc}
+            </span>
           </span>
         </button>
       ))}
-      <p className="px-1 pt-1 text-[11px] text-slate-400">
+      <p className="px-1 pt-1 text-[11px] text-slate-400 dark:text-slate-500">
         Drag an element into a module on the right — or click to drop it into the last module.
       </p>
     </div>
@@ -604,7 +615,7 @@ function OverviewPanel({
           ))}
         </Select>
         {delivery === 'online' ? (
-          <p className="text-[11px] text-slate-400">
+          <p className="text-[11px] text-slate-400 dark:text-slate-500">
             Learners self-start, complete the linked course, then mark it done.
           </p>
         ) : null}
@@ -728,18 +739,18 @@ function RecordsPanel({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between px-1">
-        <p className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
+        <p className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
           Records ({total})
         </p>
         <Link
           href={`/training/records?q=${encodeURIComponent(course.code)}`}
-          className="text-[11px] text-teal-700 hover:underline"
+          className="text-[11px] text-teal-700 hover:underline dark:text-teal-300"
         >
           View all →
         </Link>
       </div>
       {records.length === 0 ? (
-        <p className="px-1 text-xs text-slate-400">No completions recorded.</p>
+        <p className="px-1 text-xs text-slate-400 dark:text-slate-500">No completions recorded.</p>
       ) : (
         records.map((r) => {
           const expired = r.expiresOn && r.expiresOn < today
@@ -747,13 +758,15 @@ function RecordsPanel({
             <Link
               key={r.id}
               href={`/training/records/${r.id}`}
-              className="block rounded-md border border-slate-200 px-2.5 py-1.5 hover:border-teal-300"
+              className="block rounded-md border border-slate-200 px-2.5 py-1.5 hover:border-teal-300 dark:border-slate-800 dark:hover:border-teal-700"
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="truncate text-xs font-medium text-slate-800">{r.personName}</span>
+                <span className="truncate text-xs font-medium text-slate-800 dark:text-slate-100">
+                  {r.personName}
+                </span>
                 {expired ? <Badge variant="destructive">Expired</Badge> : null}
               </div>
-              <div className="text-[10px] text-slate-500">
+              <div className="text-[10px] text-slate-500 dark:text-slate-400">
                 {r.completedOn ?? '—'} → {r.expiresOn ?? 'no expiry'}
               </div>
             </Link>
@@ -768,24 +781,31 @@ function ClassesPanel({ classes }: { classes: ClassLite[] }) {
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between px-1">
-        <p className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
+        <p className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
           Scheduled classes
         </p>
-        <Link href="/training/classes/new" className="text-[11px] text-teal-700 hover:underline">
+        <Link
+          href="/training/classes/new"
+          className="text-[11px] text-teal-700 hover:underline dark:text-teal-300"
+        >
           Schedule →
         </Link>
       </div>
       {classes.length === 0 ? (
-        <p className="px-1 text-xs text-slate-400">No classes scheduled for this course.</p>
+        <p className="px-1 text-xs text-slate-400 dark:text-slate-500">
+          No classes scheduled for this course.
+        </p>
       ) : (
         classes.map((c) => (
           <Link
             key={c.id}
             href={`/training/classes/${c.id}`}
-            className="block rounded-md border border-slate-200 px-2.5 py-1.5 hover:border-teal-300"
+            className="block rounded-md border border-slate-200 px-2.5 py-1.5 hover:border-teal-300 dark:border-slate-800 dark:hover:border-teal-700"
           >
-            <div className="truncate text-xs font-medium text-slate-800">{c.title}</div>
-            <div className="text-[10px] text-slate-500">
+            <div className="truncate text-xs font-medium text-slate-800 dark:text-slate-100">
+              {c.title}
+            </div>
+            <div className="text-[10px] text-slate-500 dark:text-slate-400">
               {new Date(c.startsAt).toLocaleString()}
             </div>
           </Link>
@@ -800,7 +820,7 @@ function FilesPanel({ courseId, files }: { courseId: string; files: FileLite[] }
   const [, startTransition] = useTransition()
   return (
     <div className="space-y-2">
-      <p className="px-1 text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
+      <p className="px-1 text-[10px] font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
         Course files
       </p>
       <FileUploader
@@ -822,20 +842,20 @@ function FilesPanel({ courseId, files }: { courseId: string; files: FileLite[] }
       {files.map((f) => (
         <div
           key={f.id}
-          className="flex items-center gap-2 rounded-md border border-slate-200 px-2.5 py-1.5"
+          className="flex items-center gap-2 rounded-md border border-slate-200 px-2.5 py-1.5 dark:border-slate-800"
         >
-          <FileText size={13} className="shrink-0 text-slate-400" />
+          <FileText size={13} className="shrink-0 text-slate-400 dark:text-slate-500" />
           {f.url ? (
             <a
               href={f.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="min-w-0 flex-1 truncate text-xs font-medium text-slate-800 hover:text-teal-700"
+              className="min-w-0 flex-1 truncate text-xs font-medium text-slate-800 hover:text-teal-700 dark:text-slate-100 dark:hover:text-teal-300"
             >
               {f.label ?? f.filename ?? 'File'}
             </a>
           ) : (
-            <span className="min-w-0 flex-1 truncate text-xs text-slate-500">
+            <span className="min-w-0 flex-1 truncate text-xs text-slate-500 dark:text-slate-400">
               {f.label ?? f.filename ?? 'File'}
             </span>
           )}
@@ -848,7 +868,7 @@ function FilesPanel({ courseId, files }: { courseId: string; files: FileLite[] }
                 router.refresh()
               })
             }
-            className="text-slate-300 hover:text-rose-500"
+            className="text-slate-300 hover:text-rose-500 dark:text-slate-600 dark:hover:text-rose-400"
           >
             <Trash2 size={13} />
           </button>
@@ -899,16 +919,18 @@ function ModuleCard({
           const kind = e.dataTransfer.getData(DRAG_MIME) as LessonKind
           if (kind) onDropElement(kind)
         }}
-        className={`rounded-xl border bg-white shadow-sm transition-colors ${
-          dropHover ? 'border-teal-400 ring-2 ring-teal-200' : 'border-slate-200'
+        className={`rounded-xl border bg-white shadow-sm transition-colors dark:bg-slate-900 ${
+          dropHover
+            ? 'border-teal-400 ring-2 ring-teal-200 dark:ring-teal-900/60'
+            : 'border-slate-200 dark:border-slate-800'
         }`}
       >
-        <div className="flex items-center gap-1.5 border-b border-slate-100 px-3 py-2">
+        <div className="flex items-center gap-1.5 border-b border-slate-100 px-3 py-2 dark:border-slate-800">
           <button
             type="button"
             aria-label="Drag module"
             onPointerDown={(e) => controls.start(e)}
-            className="cursor-grab touch-none rounded p-0.5 text-slate-300 hover:text-slate-500 active:cursor-grabbing"
+            className="cursor-grab touch-none rounded p-0.5 text-slate-300 hover:text-slate-500 active:cursor-grabbing dark:text-slate-600 dark:hover:text-slate-400"
           >
             <GripVertical size={14} />
           </button>
@@ -936,10 +958,15 @@ function ModuleCard({
                 onClick={() => setRenaming(true)}
                 className="group flex min-w-0 flex-1 items-center gap-1.5 text-left"
               >
-                <span className="truncate text-sm font-bold text-slate-800">{mod.title}</span>
-                <Pencil size={11} className="shrink-0 text-slate-300 group-hover:text-slate-500" />
+                <span className="truncate text-sm font-bold text-slate-800 dark:text-slate-100">
+                  {mod.title}
+                </span>
+                <Pencil
+                  size={11}
+                  className="shrink-0 text-slate-300 group-hover:text-slate-500 dark:text-slate-600 dark:group-hover:text-slate-400"
+                />
               </button>
-              <span className="text-[10px] text-slate-400">
+              <span className="text-[10px] text-slate-400 dark:text-slate-500">
                 {mod.lessons.length} item{mod.lessons.length === 1 ? '' : 's'}
               </span>
               <button
@@ -952,7 +979,7 @@ function ModuleCard({
                     router.refresh()
                   })
                 }
-                className="rounded p-1 text-slate-300 hover:text-rose-500"
+                className="rounded p-1 text-slate-300 hover:text-rose-500 dark:text-slate-600 dark:hover:text-rose-400"
               >
                 <Trash2 size={13} />
               </button>
@@ -962,7 +989,7 @@ function ModuleCard({
 
         <div className="space-y-1 p-2">
           {mod.lessons.length === 0 ? (
-            <p className="rounded-md border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-400">
+            <p className="rounded-md border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-400 dark:border-slate-700 dark:text-slate-500">
               Drop an element here
             </p>
           ) : (
@@ -1001,21 +1028,23 @@ function LessonCard({ lesson, onOpen }: { lesson: LessonLite; onOpen: () => void
           : null
   return (
     <Reorder.Item value={lesson} dragListener={false} dragControls={controls} as="div">
-      <div className="group flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-2 transition-colors hover:border-teal-300">
+      <div className="group flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-2 transition-colors hover:border-teal-300 dark:border-slate-800 dark:bg-slate-950 dark:hover:border-teal-700">
         <button
           type="button"
           aria-label="Drag lesson"
           onPointerDown={(e) => controls.start(e)}
-          className="cursor-grab touch-none rounded p-0.5 text-slate-300 hover:text-slate-500 active:cursor-grabbing"
+          className="cursor-grab touch-none rounded p-0.5 text-slate-300 hover:text-slate-500 active:cursor-grabbing dark:text-slate-600 dark:hover:text-slate-400"
         >
           <GripVertical size={13} />
         </button>
-        <span className="grid h-6 w-6 shrink-0 place-items-center rounded bg-slate-100 text-slate-500">
+        <span className="grid h-6 w-6 shrink-0 place-items-center rounded bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300">
           {meta.icon}
         </span>
         <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left">
-          <span className="block truncate text-sm font-medium text-slate-800">{lesson.title}</span>
-          <span className="block text-[10px] text-slate-400">
+          <span className="block truncate text-sm font-medium text-slate-800 dark:text-slate-100">
+            {lesson.title}
+          </span>
+          <span className="block text-[10px] text-slate-400 dark:text-slate-500">
             {meta.label}
             {summary ? ` · ${summary}` : ''}
             {!lesson.isRequired ? ' · optional' : ''}

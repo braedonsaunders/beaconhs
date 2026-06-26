@@ -212,7 +212,7 @@ export function SlideDeckEditor({
             if (v) addSlide(v)
             e.currentTarget.value = ''
           }}
-          className="h-7 w-32 px-1.5 text-xs font-medium text-slate-700"
+          className="h-7 w-32 px-1.5 text-xs font-medium text-slate-700 dark:text-slate-200"
         >
           <option value="">+ Add slide…</option>
           {SLIDE_TEMPLATES.map((t) => (
@@ -254,14 +254,16 @@ export function SlideDeckEditor({
         >
           <Play size={13} /> Present
         </Button>
-        {imageBusy ? <Loader2 size={13} className="animate-spin text-slate-400" /> : null}
+        {imageBusy ? (
+          <Loader2 size={13} className="animate-spin text-slate-400 dark:text-slate-500" />
+        ) : null}
         {importing ? (
-          <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-700">
+          <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-700 dark:bg-sky-950/40 dark:text-sky-300">
             <Loader2 size={11} className="animate-spin" /> importing…
           </span>
         ) : importStatus === 'failed' ? (
           <span
-            className="inline-flex max-w-[14rem] items-center truncate rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-700"
+            className="inline-flex max-w-[14rem] items-center truncate rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-700 dark:bg-rose-950/40 dark:text-rose-300"
             title={importError ?? undefined}
           >
             import failed
@@ -294,11 +296,11 @@ export function SlideDeckEditor({
                       'block w-full rounded-md p-0.5 text-left',
                       s.id === selected?.id
                         ? 'ring-2 ring-teal-500'
-                        : 'hover:ring-2 hover:ring-slate-300',
+                        : 'hover:ring-2 hover:ring-slate-300 dark:hover:ring-slate-700',
                     )}
                   >
                     <SlideThumb slide={s} attachmentUrls={urls} />
-                    <span className="mt-0.5 block px-1 text-[10px] text-slate-400 tabular-nums">
+                    <span className="mt-0.5 block px-1 text-[10px] text-slate-400 tabular-nums dark:text-slate-500">
                       {i + 1}
                     </span>
                   </button>
@@ -306,7 +308,7 @@ export function SlideDeckEditor({
               ))}
             </Reorder.Group>
             {deck.length === 0 ? (
-              <p className="rounded-md border border-dashed border-slate-300 p-3 text-center text-xs text-slate-400">
+              <p className="rounded-md border border-dashed border-slate-300 p-3 text-center text-xs text-slate-400 dark:border-slate-700 dark:text-slate-500">
                 Add a slide or import a PowerPoint (ribbon ↑).
               </p>
             ) : null}
@@ -315,7 +317,7 @@ export function SlideDeckEditor({
           {/* stage */}
           <div className="min-w-0 flex-1 space-y-3">
             {showImport ? (
-              <div className="rounded-lg border border-slate-200 bg-white p-3">
+              <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
                 <FileUploader
                   requestUploadAction={requestUpload}
                   finalizeUploadAction={finalizeUpload}
@@ -348,11 +350,11 @@ export function SlideDeckEditor({
                   value={selected.notes ?? ''}
                   onChange={(e) => patchSlide(selected.id, { notes: e.currentTarget.value })}
                   placeholder="Speaker / learner notes for this slide"
-                  className="bg-white"
+                  className="bg-white dark:bg-slate-900"
                 />
               </>
             ) : (
-              <div className="grid aspect-[16/9] place-items-center rounded-lg border-2 border-dashed border-slate-300 bg-white text-sm text-slate-400">
+              <div className="grid aspect-[16/9] place-items-center rounded-lg border-2 border-dashed border-slate-300 bg-white text-sm text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-500">
                 Add a slide from the ribbon.
               </div>
             )}

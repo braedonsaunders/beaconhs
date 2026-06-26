@@ -34,6 +34,15 @@ ${s} a { color: #0f766e; text-decoration: underline; text-underline-offset: 2px;
 ${s} .ProseMirror:focus { outline: none; }
 ${s} p.is-editor-empty:first-child::before { content: attr(data-placeholder); color: #94a3b8; float: left; height: 0; pointer-events: none; }
 
+:where(.dark) ${s} { color: #e2e8f0; }
+:where(.dark) ${s} blockquote { border-left-color: #2dd4bf; background: rgb(19 78 74 / 0.35); color: #ccfbf1; }
+:where(.dark) ${s} hr { border-top-color: #334155; }
+:where(.dark) ${s} code { background: #1e293b; color: #e2e8f0; }
+:where(.dark) ${s} th, :where(.dark) ${s} td { border-color: #334155; }
+:where(.dark) ${s} th { background: #0f172a; }
+:where(.dark) ${s} a { color: #5eead4; }
+:where(.dark) ${s} p.is-editor-empty:first-child::before { color: #64748b; }
+
 /* Slide regions: scale typography relative to the slide, inherit slide colors. */
 .slide-rich { color: inherit; font-size: clamp(0.7rem, 1.8cqw, 1.05rem); line-height: 1.55; }
 .slide-rich > * + * { margin-top: 0.5em; }

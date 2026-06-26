@@ -64,7 +64,7 @@ export function toEmbedUrl(url: string): string {
 }
 
 const UNAVAILABLE =
-  'rounded-lg border border-dashed border-slate-300 px-4 py-6 text-center text-xs text-slate-400'
+  'rounded-lg border border-dashed border-slate-300 px-4 py-6 text-center text-xs text-slate-400 dark:border-slate-700 dark:text-slate-500'
 
 /** Server-safe (no hooks) renderer for a lesson's bespoke content blocks. */
 export function LessonBlocksView({
@@ -75,7 +75,7 @@ export function LessonBlocksView({
   attachmentUrls?: Record<string, string | null | undefined>
 }) {
   if (!blocks || blocks.length === 0) {
-    return <p className="text-sm text-slate-400">No content.</p>
+    return <p className="text-sm text-slate-400 dark:text-slate-500">No content.</p>
   }
   return (
     <div className="space-y-4">
@@ -84,10 +84,10 @@ export function LessonBlocksView({
           case 'heading': {
             const cls =
               b.level === 1
-                ? 'text-2xl font-bold text-slate-900'
+                ? 'text-2xl font-bold text-slate-900 dark:text-slate-100'
                 : b.level === 2
-                  ? 'text-xl font-semibold text-slate-900'
-                  : 'text-lg font-semibold text-slate-800'
+                  ? 'text-xl font-semibold text-slate-900 dark:text-slate-100'
+                  : 'text-lg font-semibold text-slate-800 dark:text-slate-200'
             return (
               <p key={b.id} className={cls}>
                 {b.text}
@@ -98,19 +98,19 @@ export function LessonBlocksView({
             return (
               <div
                 key={b.id}
-                className="space-y-2 text-sm leading-relaxed text-slate-700"
+                className="space-y-2 text-sm leading-relaxed text-slate-700 dark:text-slate-300"
                 dangerouslySetInnerHTML={{ __html: renderMd(b.md) }}
               />
             )
           case 'callout': {
             const tone =
               b.tone === 'warning'
-                ? 'border-amber-200 bg-amber-50 text-amber-900'
+                ? 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-200'
                 : b.tone === 'success'
-                  ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900/70 dark:bg-emerald-950/30 dark:text-emerald-200'
                   : b.tone === 'danger'
-                    ? 'border-rose-200 bg-rose-50 text-rose-900'
-                    : 'border-sky-200 bg-sky-50 text-sky-900'
+                    ? 'border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-900/70 dark:bg-rose-950/30 dark:text-rose-200'
+                    : 'border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-900/70 dark:bg-sky-950/30 dark:text-sky-200'
             return (
               <div
                 key={b.id}
@@ -127,10 +127,12 @@ export function LessonBlocksView({
                 <img
                   src={url}
                   alt={b.alt ?? ''}
-                  className="max-w-full rounded-lg border border-slate-200"
+                  className="max-w-full rounded-lg border border-slate-200 dark:border-slate-800"
                 />
                 {b.caption ? (
-                  <figcaption className="text-xs text-slate-500">{b.caption}</figcaption>
+                  <figcaption className="text-xs text-slate-500 dark:text-slate-400">
+                    {b.caption}
+                  </figcaption>
                 ) : null}
               </figure>
             ) : (
@@ -151,7 +153,7 @@ export function LessonBlocksView({
             return isHosted ? (
               <div
                 key={b.id}
-                className="aspect-video overflow-hidden rounded-lg border border-slate-200"
+                className="aspect-video overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800"
               >
                 <iframe
                   src={toEmbedUrl(url)}
@@ -165,7 +167,7 @@ export function LessonBlocksView({
                 key={b.id}
                 src={url}
                 controls
-                className="w-full rounded-lg border border-slate-200"
+                className="w-full rounded-lg border border-slate-200 dark:border-slate-800"
               />
             )
           }
@@ -177,7 +179,7 @@ export function LessonBlocksView({
                 href={url ?? '#'}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-3 text-sm font-medium text-slate-800 hover:border-teal-300 hover:text-teal-700"
+                className="flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-3 text-sm font-medium text-slate-800 hover:border-teal-300 hover:text-teal-700 dark:border-slate-800 dark:text-slate-200 dark:hover:border-teal-700 dark:hover:text-teal-300"
               >
                 <span aria-hidden>📎</span>
                 {b.label ?? 'Download file'}
@@ -188,7 +190,7 @@ export function LessonBlocksView({
             return (
               <div
                 key={b.id}
-                className="aspect-video overflow-hidden rounded-lg border border-slate-200"
+                className="aspect-video overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800"
               >
                 <iframe
                   src={toEmbedUrl(b.url)}
@@ -199,7 +201,7 @@ export function LessonBlocksView({
               </div>
             )
           case 'divider':
-            return <hr key={b.id} className="border-slate-200" />
+            return <hr key={b.id} className="border-slate-200 dark:border-slate-800" />
           default:
             return null
         }

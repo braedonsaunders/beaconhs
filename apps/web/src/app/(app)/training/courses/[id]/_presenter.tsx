@@ -271,9 +271,9 @@ function Stage({
   if (eff.kind === 'rich' || eff.kind === 'practical') {
     const html = eff.contentHtml ?? blocksToHtml(eff.blocks)
     return (
-      <div className="app-scroll max-h-full w-full max-w-4xl overflow-y-auto rounded-lg bg-white px-12 py-10 shadow-2xl">
+      <div className="app-scroll max-h-full w-full max-w-4xl overflow-y-auto rounded-lg bg-white px-12 py-10 text-slate-900 shadow-2xl dark:bg-slate-900 dark:text-slate-100">
         {eff.kind === 'practical' ? (
-          <div className="mb-5 flex items-center gap-2 rounded-md bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900">
+          <div className="mb-5 flex items-center gap-2 rounded-md bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
             <UserCheck size={15} /> Practical test — signed off by an evaluator
           </div>
         ) : null}
@@ -282,14 +282,14 @@ function Stage({
         ) : eff.blocks.length > 0 ? (
           <LessonBlocksView blocks={eff.blocks} attachmentUrls={attachmentUrls} />
         ) : (
-          <p className="text-sm text-slate-400">No content.</p>
+          <p className="text-sm text-slate-400 dark:text-slate-500">No content.</p>
         )}
         {eff.kind === 'practical' && eff.lesson.practicalCriteria.length > 0 ? (
-          <div className="mt-6 border-t border-slate-200 pt-4">
-            <p className="mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase">
+          <div className="mt-6 border-t border-slate-200 pt-4 dark:border-slate-800">
+            <p className="mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
               Sign-off criteria
             </p>
-            <ol className="list-decimal space-y-1 pl-5 text-sm text-slate-700">
+            <ol className="list-decimal space-y-1 pl-5 text-sm text-slate-700 dark:text-slate-300">
               {eff.lesson.practicalCriteria.map((c) => (
                 <li key={c.id}>{c.text}</li>
               ))}
@@ -334,7 +334,7 @@ function Stage({
       return (
         <iframe
           src={meta.url}
-          className="h-full w-full max-w-5xl rounded-lg bg-white shadow-2xl"
+          className="h-full w-full max-w-5xl rounded-lg bg-white shadow-2xl dark:bg-slate-900"
           title={eff.lesson.title}
         />
       )
@@ -354,9 +354,9 @@ function Stage({
         href={meta.url}
         target="_blank"
         rel="noopener noreferrer"
-        className="flex items-center gap-3 rounded-lg bg-white px-6 py-5 text-slate-800 shadow-2xl hover:bg-slate-50"
+        className="flex items-center gap-3 rounded-lg bg-white px-6 py-5 text-slate-800 shadow-2xl hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
       >
-        <Download size={18} className="text-teal-700" />
+        <Download size={18} className="text-teal-700 dark:text-teal-300" />
         <span className="font-medium">{meta.filename ?? eff.lesson.title}</span>
       </a>
     )
@@ -368,7 +368,7 @@ function Stage({
     return (
       <iframe
         src={toEmbedUrl(eff.embedUrl)}
-        className="h-full w-full max-w-[160vh] rounded-lg bg-white shadow-2xl"
+        className="h-full w-full max-w-[160vh] rounded-lg bg-white shadow-2xl dark:bg-slate-900"
         title={eff.lesson.title}
       />
     )
@@ -378,27 +378,36 @@ function Stage({
   if (eff.kind === 'quiz') {
     const qs = eff.lesson.assessmentTypeId ? (quizQuestions[eff.lesson.assessmentTypeId] ?? []) : []
     return (
-      <div className="app-scroll max-h-full w-full max-w-3xl overflow-y-auto rounded-lg bg-white px-10 py-8 shadow-2xl">
-        <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-800">
-          <ClipboardCheck size={16} className="text-teal-700" /> {eff.lesson.title}
-          <span className="ml-auto rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500">
+      <div className="app-scroll max-h-full w-full max-w-3xl overflow-y-auto rounded-lg bg-white px-10 py-8 shadow-2xl dark:bg-slate-900">
+        <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100">
+          <ClipboardCheck size={16} className="text-teal-700 dark:text-teal-300" />{' '}
+          {eff.lesson.title}
+          <span className="ml-auto rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
             {qs.length} question{qs.length === 1 ? '' : 's'} · learners take this interactively
           </span>
         </div>
         {qs.length === 0 ? (
-          <p className="text-sm text-slate-400">No assessment configured for this quiz.</p>
+          <p className="text-sm text-slate-400 dark:text-slate-500">
+            No assessment configured for this quiz.
+          </p>
         ) : (
           <ol className="space-y-4">
             {qs.map((q, i) => (
-              <li key={q.id} className="rounded-lg border border-slate-200 p-4">
-                <p className="text-sm font-medium text-slate-900">
+              <li
+                key={q.id}
+                className="rounded-lg border border-slate-200 p-4 dark:border-slate-800"
+              >
+                <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                   {i + 1}. {q.prompt}
                 </p>
                 {q.options && q.options.length > 0 ? (
                   <ul className="mt-2 space-y-1">
                     {q.options.map((o, oi) => (
-                      <li key={o.value} className="flex items-center gap-2 text-sm text-slate-600">
-                        <span className="grid h-5 w-5 place-items-center rounded-full border border-slate-300 text-[10px] font-semibold">
+                      <li
+                        key={o.value}
+                        className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300"
+                      >
+                        <span className="grid h-5 w-5 place-items-center rounded-full border border-slate-300 text-[10px] font-semibold dark:border-slate-700">
                           {String.fromCharCode(65 + oi)}
                         </span>
                         {o.label}
@@ -406,7 +415,7 @@ function Stage({
                     ))}
                   </ul>
                 ) : (
-                  <p className="mt-1 text-xs text-slate-400">
+                  <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
                     {q.kind === 'true_false' ? 'True / False' : 'Free answer'}
                   </p>
                 )}
@@ -421,10 +430,10 @@ function Stage({
   // In-person session.
   if (eff.kind === 'session') {
     return (
-      <div className="rounded-lg bg-white px-10 py-8 text-center shadow-2xl">
-        <GraduationCap size={28} className="mx-auto text-teal-700" />
-        <p className="mt-2 font-semibold text-slate-900">{eff.lesson.title}</p>
-        <p className="text-sm text-slate-500">
+      <div className="rounded-lg bg-white px-10 py-8 text-center shadow-2xl dark:bg-slate-900">
+        <GraduationCap size={28} className="mx-auto text-teal-700 dark:text-teal-300" />
+        <p className="mt-2 font-semibold text-slate-900 dark:text-slate-100">{eff.lesson.title}</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">
           In-person session — completed by attending the scheduled class.
         </p>
       </div>

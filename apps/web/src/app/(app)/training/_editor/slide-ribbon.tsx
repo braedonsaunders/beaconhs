@@ -78,7 +78,7 @@ export function SlideRibbon({
   const any = selection.length > 0
 
   return (
-    <div className="flex flex-wrap items-center gap-0.5 border-b border-slate-200 bg-white px-2 py-1">
+    <div className="flex flex-wrap items-center gap-0.5 border-b border-slate-200 bg-white px-2 py-1 dark:border-slate-800 dark:bg-slate-900">
       <Btn
         label="Text box"
         disabled={disabled}
@@ -121,7 +121,7 @@ export function SlideRibbon({
             fontFamily: e.currentTarget.value as 'sans' | 'serif' | 'mono',
           })
         }
-        className="h-7 px-1 text-xs font-medium text-slate-700 disabled:opacity-40"
+        className="h-7 px-1 text-xs font-medium text-slate-700 disabled:opacity-40 dark:text-slate-200"
       >
         <option value="sans">Sans</option>
         <option value="serif">Serif</option>
@@ -236,7 +236,7 @@ export function SlideRibbon({
             title="Image fit (player)"
             value={image.fit ?? 'stretch'}
             onChange={(e) => onImageFit(e.currentTarget.value as 'stretch' | 'cover' | 'contain')}
-            className="h-7 px-1 text-xs font-medium text-slate-700"
+            className="h-7 px-1 text-xs font-medium text-slate-700 dark:text-slate-200"
           >
             <option value="stretch">Stretch</option>
             <option value="cover">Fill (crop)</option>
@@ -301,8 +301,10 @@ function Btn({
       onMouseDown={(ev) => ev.preventDefault()} // keep canvas selection
       onClick={onClick}
       className={cn(
-        'grid h-7 w-7 place-items-center rounded text-slate-600 transition-colors',
-        active ? 'bg-teal-100 text-teal-800' : 'hover:bg-slate-100',
+        'grid h-7 w-7 place-items-center rounded text-slate-600 transition-colors dark:text-slate-300',
+        active
+          ? 'bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-200'
+          : 'hover:bg-slate-100 dark:hover:bg-slate-800',
         disabled && 'cursor-not-allowed opacity-40 hover:bg-transparent',
       )}
     >
@@ -312,7 +314,7 @@ function Btn({
 }
 
 function Sep() {
-  return <span className="mx-1 h-5 w-px bg-slate-200" />
+  return <span className="mx-1 h-5 w-px bg-slate-200 dark:bg-slate-800" />
 }
 
 function FontSizeInput({
@@ -340,7 +342,7 @@ function FontSizeInput({
       onKeyDown={(e) => {
         if (e.key === 'Enter') e.currentTarget.blur()
       }}
-      className="h-7 w-14 rounded border border-transparent bg-transparent px-1 text-xs font-medium text-slate-700 hover:border-slate-200 focus:border-slate-300 focus:outline-none disabled:opacity-40"
+      className="h-7 w-14 rounded border border-transparent bg-transparent px-1 text-xs font-medium text-slate-700 hover:border-slate-200 focus:border-slate-300 focus:outline-none disabled:opacity-40 dark:text-slate-200 dark:hover:border-slate-700 dark:focus:border-slate-600"
     />
   )
 }
@@ -380,7 +382,7 @@ export function ColorPicker({
         onMouseDown={(ev) => ev.preventDefault()}
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          'grid h-7 w-8 place-items-center rounded text-slate-600 transition-colors hover:bg-slate-100',
+          'grid h-7 w-8 place-items-center rounded text-slate-600 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
           disabled && 'cursor-not-allowed opacity-40 hover:bg-transparent',
         )}
       >
@@ -391,7 +393,7 @@ export function ColorPicker({
         <ChevronDown size={8} className="-ml-1 hidden" />
       </button>
       {open && !disabled ? (
-        <span className="absolute top-8 left-0 z-40 flex items-center gap-1 rounded-md border border-slate-200 bg-white p-1.5 shadow-lg">
+        <span className="absolute top-8 left-0 z-40 flex items-center gap-1 rounded-md border border-slate-200 bg-white p-1.5 shadow-lg dark:border-slate-700 dark:bg-slate-900">
           {colors.map((c) => (
             <button
               key={c}
@@ -403,8 +405,8 @@ export function ColorPicker({
                 setOpen(false)
               }}
               className={cn(
-                'h-5 w-5 rounded border border-slate-200',
-                value === c && 'ring-2 ring-teal-500 ring-offset-1',
+                'h-5 w-5 rounded border border-slate-200 dark:border-slate-700',
+                value === c && 'ring-2 ring-teal-500 ring-offset-1 dark:ring-offset-slate-900',
               )}
               style={{ background: c }}
             />
@@ -414,7 +416,7 @@ export function ColorPicker({
             title="Custom colour"
             value={/^#[0-9a-fA-F]{6}$/.test(value) ? value : '#0f172a'}
             onChange={(e) => onChange(e.currentTarget.value)}
-            className="h-6 w-7 cursor-pointer rounded border border-slate-200 bg-white p-0.5"
+            className="h-6 w-7 cursor-pointer rounded border border-slate-200 bg-white p-0.5 dark:border-slate-700 dark:bg-slate-800"
           />
         </span>
       ) : null}
