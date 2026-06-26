@@ -15,9 +15,10 @@
   "dependencies": {
     "@beaconhs/design-studio": "workspace:*",
     "@beaconhs/forms-core": "workspace:*",
-    "puppeteer-core": "^25.1.0"
+    "puppeteer-core": "^25.2.1"
   },
   "devDependencies": {
+    "@types/node": "^22.20.0",
     "typescript": "^6.0.3"
   }
 }

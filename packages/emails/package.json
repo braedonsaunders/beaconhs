@@ -14,13 +14,13 @@
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
-    "nodemailer": "^7.0.3"
+    "nodemailer": "^9.0.1"
   },
   "devDependencies": {
-    "@types/node": "^25.9.2",
-    "@types/nodemailer": "^7.0.4",
+    "@types/node": "^22.20.0",
+    "@types/nodemailer": "^8.0.1",
     "typescript": "^6.0.3",
-    "vite": "^8.0.16",
-    "vitest": "^4.1.8"
+    "vite": "^8.1.0",
+    "vitest": "^4.1.9"
   }
 }

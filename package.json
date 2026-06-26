@@ -24,26 +24,10 @@
     "clean": "turbo run clean && rm -rf node_modules"
   },
   "devDependencies": {
-    "@types/node": "^25.9.2",
-    "prettier": "^3.8.3",
+    "@types/node": "^22.20.0",
+    "prettier": "^3.8.4",
     "prettier-plugin-tailwindcss": "^0.8.0",
     "turbo": "^2.9.16",
     "typescript": "^6.0.3"
-  },
-  "pnpm": {
-    "overrides": {
-      "kysely": "0.28.17",
-      "ioredis": "5.11.1"
-    },
-    "peerDependencyRules": {
-      "ignoreMissing": [
-        "react",
-        "react-dom"
-      ]
-    },
-    "patchedDependencies": {
-      "pagedjs@0.4.3": "patches/pagedjs@0.4.3.patch"
-    },
-    "allowUnusedPatches": true
   }
 }

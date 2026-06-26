@@ -10,6 +10,7 @@
     "./email": "./src/queues/email.ts",
     "./pdf": "./src/queues/pdf.ts",
     "./notify": "./src/queues/notify.ts",
+    "./rate-limit": "./src/rate-limit.ts",
     "./scheduled": "./src/queues/scheduled.ts"
   },
   "scripts": {
@@ -17,10 +18,11 @@
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
-    "bullmq": "^5.78.0",
+    "bullmq": "^5.79.1",
     "ioredis": "^5.11.1"
   },
   "devDependencies": {
+    "@types/node": "^22.20.0",
     "typescript": "^6.0.3"
   }
 }
