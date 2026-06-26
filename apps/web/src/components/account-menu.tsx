@@ -7,7 +7,7 @@
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Bell, ChevronDown, LogOut, ShieldCheck, UserRound } from 'lucide-react'
+import { Bell, ChevronDown, LogOut, Settings, ShieldCheck, UserRound } from 'lucide-react'
 import { Popover } from '@beaconhs/ui'
 import { signOut } from '@beaconhs/auth/client'
 import { ThemeToggle } from './theme-toggle'
@@ -90,6 +90,10 @@ export function AccountMenu({
       ) : null}
 
       <nav className="py-1" role="menu">
+        <Link href="/account" role="menuitem" onClick={() => setOpen(false)} className={itemClass}>
+          <Settings size={15} className="text-slate-500 dark:text-slate-400" />
+          Account settings
+        </Link>
         <Link href="/my" role="menuitem" onClick={() => setOpen(false)} className={itemClass}>
           <UserRound size={15} className="text-slate-500 dark:text-slate-400" />
           My work
