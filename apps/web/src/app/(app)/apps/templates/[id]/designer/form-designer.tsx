@@ -705,9 +705,9 @@ export function FormDesigner({
               <Sparkles size={14} /> AI
             </Button>
           ) : null}
-          <Link href={`/apps/templates/${templateId}/fill`}>
+          <Link href={`/apps/templates/${templateId}/records`}>
             <Button variant="outline" size="sm">
-              <ClipboardCheck size={14} /> Fill
+              <ClipboardCheck size={14} /> Entries
             </Button>
           </Link>
           <Button

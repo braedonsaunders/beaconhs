@@ -55,6 +55,7 @@ export default async function FillTemplatePage({
     let responseRow: {
       id: string
       status: string
+      locked: boolean
       data: Record<string, unknown>
       draftData: FormResponseDraftData | null
       draftStepIndex: number | null
@@ -64,6 +65,7 @@ export default async function FillTemplatePage({
         .select({
           id: formResponses.id,
           status: formResponses.status,
+          locked: formResponses.locked,
           data: formResponses.data,
           draftData: formResponses.draftData,
           draftStepIndex: formResponses.draftStepIndex,
@@ -76,6 +78,7 @@ export default async function FillTemplatePage({
         responseRow = {
           id: row.id,
           status: row.status,
+          locked: row.locked,
           data: row.data ?? {},
           draftData: row.draftData,
           draftStepIndex: row.draftStepIndex,
@@ -119,12 +122,17 @@ export default async function FillTemplatePage({
 
   if (!data) notFound()
 
+  const response = data.responseRow
+  if (response && !returnTo) {
+    redirect(`/apps/responses/${response.id}`)
+  }
+
   // Access gating. Filling the app (creating / editing) requires the app's
   // roles. Viewing an existing entry read-only is also allowed for reviewers
   // with `forms.response.read.all`.
   const userRoleKeys = await getUserRoleKeys(ctx)
-  const canFillApp = appVisibleTo(ctx, data.tmpl.allowedRoles, userRoleKeys)
-  const response = data.responseRow
+  const canFillApp =
+    can(ctx, 'forms.response.create') && appVisibleTo(ctx, data.tmpl.allowedRoles, userRoleKeys)
   const canView = canFillApp || can(ctx, 'forms.response.read.all')
   if (response) {
     if (!canView) notFound()
@@ -133,33 +141,12 @@ export default async function FillTemplatePage({
     notFound()
   }
 
-  // The unified record page (/apps/responses/[id]) is the single surface for
-  // inline-record apps and for any already-submitted entry — redirect there so
-  // we never show the old fill→review split. Guided-fill DRAFTS keep using the
-  // wizard here; embeds (returnTo) keep their in-overlay filler.
-  const recordCfg = data.tmpl.recordConfig as {
-    editingMode?: 'guided_fill' | 'inline_record' | 'both'
-  } | null
-  const editingMode =
-    recordCfg?.editingMode ??
-    (data.tmpl.kind !== 'wizard' && data.tmpl.kind !== 'checklist'
-      ? 'inline_record'
-      : 'guided_fill')
-  const inlineApp = editingMode !== 'guided_fill'
-  if (
-    !returnTo &&
-    response &&
-    (inlineApp || (response.status !== 'draft' && response.status !== 'in_progress'))
-  ) {
-    redirect(`/apps/responses/${response.id}`)
-  }
-
   // A response is editable only while in a pre-submit state AND the user can
   // fill the app. Submitted/closed entries (or view-only users) render
   // read-only — the same record surface, just locked.
   const isDraftState =
     response !== null && (response.status === 'draft' || response.status === 'in_progress')
-  const editable = canFillApp && (response === null || isDraftState)
+  const editable = canFillApp && !response?.locked && (response === null || isDraftState)
   const readOnly = !editable
   // Reviewers/admins get a link to the richer review surface (CAPA/comments/
   // audit/sign-off) for an existing response.

@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { ClipboardCheck, PencilRuler, Plus } from 'lucide-react'
 import { and, count, desc, eq, ilike, isNull, max, type SQL } from 'drizzle-orm'
 import { Badge, Button, EmptyState } from '@beaconhs/ui'
@@ -12,6 +13,7 @@ import { pickString } from '@/lib/list-params'
 import { FormsKindNav } from './_nav'
 import { AiGenerateButton } from './_ai-generate-button'
 import { appVisibleTo, getUserRoleKeys } from './_lib/access'
+import { createDraftResponse } from './templates/[id]/fill/actions'
 
 export const metadata = { title: 'Builder' }
 
@@ -35,6 +37,7 @@ export default async function FormsPage({
   const ctx = await requireRequestContext()
   const canCreate = can(ctx, 'forms.template.create')
   const canGenerate = can(ctx, 'forms.ai.generate')
+  const canSubmitResponses = can(ctx, 'forms.response.create')
 
   const userRoleKeys = await getUserRoleKeys(ctx)
   const {
@@ -85,6 +88,14 @@ export default async function FormsPage({
 
   // App-level role gating — hide apps this viewer's roles can't access.
   const templates = allTemplates.filter((t) => appVisibleTo(ctx, t.allowedRoles, userRoleKeys))
+
+  async function createEntry(formData: FormData) {
+    'use server'
+    const templateId = String(formData.get('templateId') ?? '')
+    if (!templateId) return
+    const res = await createDraftResponse({ templateId })
+    if (res.ok) redirect(`/apps/responses/${res.responseId}`)
+  }
 
   return (
     <ListPageLayout
@@ -201,9 +212,14 @@ export default async function FormsPage({
                 </div>
 
                 <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
-                  <Link href={`/apps/templates/${t.id}/fill`}>
-                    <Button size="sm">Fill</Button>
-                  </Link>
+                  {canSubmitResponses ? (
+                    <form action={createEntry}>
+                      <input type="hidden" name="templateId" value={t.id} />
+                      <Button size="sm" type="submit">
+                        New entry
+                      </Button>
+                    </form>
+                  ) : null}
                   {canCreate ? (
                     <Link href={`/apps/templates/${t.id}/designer`}>
                       <Button size="sm" variant="outline">

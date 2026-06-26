@@ -4,7 +4,13 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { and, asc, desc, eq, isNull } from 'drizzle-orm'
 import { z } from 'zod'
-import { formResponses, formTemplates, formTemplateVersions, orgUnits } from '@beaconhs/db/schema'
+import {
+  formResponses,
+  formTemplates,
+  formTemplateVersions,
+  orgUnits,
+  type FormResponseDraftData,
+} from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import type { SafetyVisionAnalysis } from '@beaconhs/ai'
 import { requireRequestContext } from '@/lib/auth'
@@ -19,6 +25,7 @@ import { appVisibleTo, getUserRoleKeys } from '@/app/(app)/apps/_lib/access'
 type Ctx = Awaited<ReturnType<typeof requireRequestContext>>
 
 async function canFillTemplate(ctx: Ctx, templateId: string): Promise<boolean> {
+  if (!can(ctx, 'forms.response.create')) return false
   const [tmpl] = await ctx.db((tx) =>
     tx
       .select({ allowedRoles: formTemplates.allowedRoles })
@@ -53,6 +60,35 @@ async function canFillResponse(ctx: Ctx, responseId: string): Promise<boolean> {
   )
   if (!row) return false
   return appVisibleTo(ctx, row.allowedRoles, await getUserRoleKeys(ctx))
+}
+
+function canEditResponsePayload(
+  ctx: Ctx,
+  row: { status: string; submittedBy: string | null },
+): boolean {
+  const callerMembershipId = ctx.membership?.id ?? null
+  const isOwner = row.submittedBy !== null && row.submittedBy === callerMembershipId
+  const canWorkDraft =
+    (row.status === 'draft' || row.status === 'in_progress') && can(ctx, 'forms.response.create')
+  return (
+    ctx.isSuperAdmin ||
+    ctx.permissions.has('*') ||
+    can(ctx, 'forms.response.read.all') ||
+    (isOwner && (can(ctx, 'forms.response.update.own') || canWorkDraft)) ||
+    (row.submittedBy === null && canWorkDraft)
+  )
+}
+
+function responsePayload(
+  data: Record<string, unknown> | null,
+  draftData: FormResponseDraftData | null,
+): Record<string, unknown> {
+  if (!draftData) return data ?? {}
+  return {
+    ...(draftData.values ?? {}),
+    ...(draftData.rows ?? {}),
+    ...(data ?? {}),
+  }
 }
 
 export async function submitFormResponse(args: {
@@ -205,6 +241,7 @@ export async function persistDraft(
         .select({
           id: formResponses.id,
           status: formResponses.status,
+          locked: formResponses.locked,
           submittedBy: formResponses.submittedBy,
           draftUpdatedAt: formResponses.draftUpdatedAt,
         })
@@ -227,19 +264,14 @@ export async function persistDraft(
           error: 'This response has already been submitted',
         }
       }
+      if (row.locked) {
+        return {
+          ok: false as const,
+          error: 'This record is locked',
+        }
+      }
 
-      // Ownership check. The submitter is the canonical owner; anyone with
-      // the wildcard / write-any permission may also save (e.g. an admin
-      // helping a worker recover a form).
-      const submitterId = row.submittedBy
-      const callerMembershipId = ctx.membership?.id ?? null
-      const isOwner = submitterId !== null && submitterId === callerMembershipId
-      const hasOverride =
-        ctx.isSuperAdmin || ctx.permissions.has('*') || can(ctx, 'forms.response.read.all')
-      // First save of the lifetime of this response (no submittedBy yet) →
-      // the current user takes ownership.
-      const isAdopting = submitterId === null
-      if (!isOwner && !hasOverride && !isAdopting) {
+      if (!canEditResponsePayload(ctx, row)) {
         return {
           ok: false as const,
           error: 'You do not have permission to edit this response',
@@ -256,7 +288,9 @@ export async function persistDraft(
           draftStepIndex: input.stepIndex,
           // Adopt ownership on first save if it was unset (typical for
           // brand-new drafts created by createDraftResponse below).
-          ...(isAdopting && callerMembershipId ? { submittedBy: callerMembershipId } : {}),
+          ...(row.submittedBy === null && ctx.membership?.id
+            ? { submittedBy: ctx.membership.id }
+            : {}),
           // Bump status to in_progress on the first content save so list
           // views can distinguish "empty shell" from "actively being filled".
           ...(row.status === 'draft' ? { status: 'in_progress' as const } : {}),
@@ -370,6 +404,7 @@ export async function updateResponseField(input: {
           locked: formResponses.locked,
           submittedBy: formResponses.submittedBy,
           data: formResponses.data,
+          draftData: formResponses.draftData,
           schema: formTemplateVersions.schema,
         })
         .from(formResponses)
@@ -385,14 +420,7 @@ export async function updateResponseField(input: {
       if (!row) return { ok: false as const, error: 'Response not found' }
       if (row.locked) return { ok: false as const, error: 'This record is locked' }
 
-      // Ownership — same logic as persistDraft.
-      const submitterId = row.submittedBy
-      const callerMembershipId = ctx.membership?.id ?? null
-      const isOwner = submitterId !== null && submitterId === callerMembershipId
-      const hasOverride =
-        ctx.isSuperAdmin || ctx.permissions.has('*') || can(ctx, 'forms.response.read.all')
-      const isAdopting = submitterId === null
-      if (!isOwner && !hasOverride && !isAdopting) {
+      if (!canEditResponsePayload(ctx, row)) {
         return { ok: false as const, error: 'You do not have permission to edit this record' }
       }
 
@@ -408,7 +436,10 @@ export async function updateResponseField(input: {
       }
 
       // Read-modify-write the single key into the canonical payload.
-      const existing = (row.data ?? {}) as Record<string, unknown>
+      const existing = responsePayload(
+        row.data ?? {},
+        row.draftData as FormResponseDraftData | null,
+      )
       const newData = { ...existing, [input.fieldId]: input.value }
 
       // Recompute compliance from the merged payload. Hoist repeating-section
@@ -425,13 +456,17 @@ export async function updateResponseField(input: {
         .update(formResponses)
         .set({
           data: newData,
+          draftData: null,
+          draftUpdatedAt: null,
           complianceScore: String(verdict.score),
           complianceStatus: verdict.status,
           // First edit on a fresh draft promotes it to in_progress so list
           // views distinguish an empty shell from one being filled.
           ...(row.status === 'draft' ? { status: 'in_progress' as const } : {}),
           // Adopt ownership on the first edit if it was unset.
-          ...(isAdopting && callerMembershipId ? { submittedBy: callerMembershipId } : {}),
+          ...(row.submittedBy === null && ctx.membership?.id
+            ? { submittedBy: ctx.membership.id }
+            : {}),
         })
         .where(eq(formResponses.id, input.responseId))
 

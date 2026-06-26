@@ -1,6 +1,7 @@
 // The App detail route is unified into the editor now. Editors land in the
 // single-page App editor (Overview / Build / Assignments / Permissions + the
-// build surface ⟷ Flows); everyone else goes straight to filling it out.
+// build surface <-> Flows); everyone else lands on the native-style records
+// list where New entry opens the unified create/edit/view page.
 
 import { redirect } from 'next/navigation'
 import { can } from '@beaconhs/tenant'
@@ -14,6 +15,6 @@ export default async function FormTemplatePage({ params }: { params: Promise<{ i
   redirect(
     can(ctx, 'forms.template.create')
       ? `/apps/templates/${id}/designer`
-      : `/apps/templates/${id}/fill`,
+      : `/apps/templates/${id}/records`,
   )
 }

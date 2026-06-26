@@ -10,7 +10,13 @@
 
 import { revalidatePath } from 'next/cache'
 import { and, eq } from 'drizzle-orm'
-import { formResponses, formTemplateVersions, formTemplates, people } from '@beaconhs/db/schema'
+import {
+  formResponses,
+  formTemplateVersions,
+  formTemplates,
+  people,
+  type FormResponseDraftData,
+} from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
@@ -49,6 +55,18 @@ function hasAnyRole(roleKeys: ReadonlySet<string>, allowed: string[] | null | un
 
 type LockGateRec = { submittedBy: string | null; recordConfig: unknown }
 
+function responsePayload(
+  data: Record<string, unknown> | null,
+  draftData: FormResponseDraftData | null,
+): Record<string, unknown> {
+  if (!draftData) return data ?? {}
+  return {
+    ...(draftData.values ?? {}),
+    ...(draftData.rows ?? {}),
+    ...(data ?? {}),
+  }
+}
+
 // Lock is restricted to the app's configured `lockRoles` when any are set
 // (super-admins always pass); otherwise it falls back to the coarse manage tier.
 function canLockRecord(ctx: Ctx, rec: LockGateRec, roleKeys: ReadonlySet<string>): boolean {
@@ -78,6 +96,7 @@ async function loadRecord(ctx: Ctx, responseId: string) {
         submittedBy: formResponses.submittedBy,
         submittedAt: formResponses.submittedAt,
         data: formResponses.data,
+        draftData: formResponses.draftData,
         templateId: formResponses.templateId,
         category: formTemplates.category,
         recordConfig: formTemplates.recordConfig,
@@ -149,7 +168,7 @@ export async function finalizeResponse(formData: FormData) {
   const rec = await loadRecord(ctx, responseId)
   if (!rec || rec.locked || !canManageRecord(ctx, rec.submittedBy)) return
 
-  const data = (rec.data as Record<string, unknown>) ?? {}
+  const data = responsePayload(rec.data ?? {}, rec.draftData as FormResponseDraftData | null)
   const rows: Record<string, Array<Record<string, unknown>>> = {}
   for (const sec of rec.schema.sections) {
     if (!sec.repeating) continue
@@ -178,6 +197,9 @@ export async function finalizeResponse(formData: FormData) {
         status: finalStatus,
         submittedBy: rec.submittedBy ?? ctx.membership?.id ?? null,
         submittedAt: rec.submittedAt ?? new Date(),
+        data,
+        draftData: null,
+        draftUpdatedAt: null,
         complianceScore: String(verdict.score),
         complianceStatus: verdict.status,
         ...(autoLock

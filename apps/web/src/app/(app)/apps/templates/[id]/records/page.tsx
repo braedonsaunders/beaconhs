@@ -3,7 +3,7 @@
 // for THIS template, each row opening the entry's record page
 // (/apps/responses/[id]). Columns, default sort and the default status filter
 // are app-configurable via recordConfig.list (designer → List tab). New entries
-// are created via the filler (guided) or a draft + record page (inline). Uses
+// create a draft and open the same unified create/edit/view record page. Uses
 // the shared native list chrome (ListPageLayout / PageHeader / Table / etc.).
 
 import Link from 'next/link'
@@ -135,6 +135,7 @@ export default async function AppRecordsPage({
   const sp = await searchParams
   const ctx = await requireRequestContext()
   const canConfigure = can(ctx, 'forms.template.create')
+  const canSubmitResponses = can(ctx, 'forms.response.create')
 
   // App-level list config (recordConfig.list) seeds columns, default sort, and
   // the default status filter — loaded before parseListParams so the configured
@@ -168,8 +169,6 @@ export default async function AppRecordsPage({
         id: formTemplates.id,
         name: formTemplates.name,
         description: formTemplates.description,
-        kind: formTemplates.kind,
-        recordConfig: formTemplates.recordConfig,
       })
       .from(formTemplates)
       .where(eq(formTemplates.id, id))
@@ -248,39 +247,23 @@ export default async function AppRecordsPage({
   if (!result) notFound()
   const { tmpl, schema, rows, total, statusCounts } = result
   const basePath = `/apps/templates/${id}/records`
-  const newHref = `/apps/templates/${id}/fill`
   const sortProps = { basePath, currentParams: sp, dir: listParams.dir }
 
-  const recordConfig = tmpl.recordConfig as {
-    editingMode?: 'guided_fill' | 'inline_record' | 'both'
-  } | null
-  const editingMode =
-    recordConfig?.editingMode ??
-    (tmpl.kind !== 'wizard' && tmpl.kind !== 'checklist' ? 'inline_record' : 'guided_fill')
-  const inlineApp = editingMode !== 'guided_fill'
-
-  // Inline apps have no wizard: "New entry" creates a draft and opens the unified
-  // record page directly. A server action (not a Link) so a prefetch can never
-  // create stray drafts. Guided-fill apps still start in the wizard.
+  // "New entry" creates a draft and opens the unified record page directly. A
+  // server action (not a Link) so a prefetch can never create stray drafts.
   async function createEntry() {
     'use server'
     const res = await createDraftResponse({ templateId: id })
     if (res.ok) redirect(`/apps/responses/${res.responseId}`)
   }
 
-  const newEntryButton = inlineApp ? (
+  const newEntryButton = canSubmitResponses ? (
     <form action={createEntry}>
       <Button type="submit">
         <Plus size={14} /> New entry
       </Button>
     </form>
-  ) : (
-    <Link href={newHref}>
-      <Button>
-        <Plus size={14} /> New entry
-      </Button>
-    </Link>
-  )
+  ) : null
 
   // Resolve display columns from config; index app fields by id for headers + cells.
   const columns =
