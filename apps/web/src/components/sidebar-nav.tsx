@@ -44,6 +44,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@beaconhs/ui'
+import { findActiveNavHref } from './sidebar-nav-active'
 
 // Map string keys → icon components. RSCs can't serialise function references,
 // so the parent server component passes us a key and we resolve client-side.
@@ -121,6 +122,7 @@ export function SidebarNav({
   collapsed?: boolean
 }) {
   const pathname = usePathname() ?? ''
+  const activeHref = findActiveNavHref(pathname, groups)
   return (
     <nav className={cn('app-scroll flex-1 overflow-y-auto py-3', collapsed ? 'px-2' : 'px-2')}>
       {groups.map((group) => (
@@ -136,7 +138,7 @@ export function SidebarNav({
             </div>
           )}
           {group.items.map((item) => {
-            const active = item.exact ? pathname === item.href : isActive(pathname, item.href)
+            const active = activeHref === item.href
             const Icon = ICONS[item.iconKey] ?? Gauge
             return (
               <Link
@@ -173,12 +175,6 @@ export function SidebarNav({
       ))}
     </nav>
   )
-}
-
-function isActive(pathname: string, href: string): boolean {
-  if (pathname === href) return true
-  if (href === '/') return false
-  return pathname.startsWith(href + '/')
 }
 
 // --- Shared icon helpers (consumed by the /admin/navigation editor) -------
