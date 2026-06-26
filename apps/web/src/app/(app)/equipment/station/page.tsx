@@ -85,10 +85,7 @@ export default async function StationPage({
       .leftJoin(people, eq(people.id, equipmentItems.currentHolderPersonId))
       .leftJoin(orgUnits, eq(orgUnits.id, equipmentItems.currentSiteOrgUnitId))
       .where(
-        and(
-          eq(equipmentItems.isAvailableForCheckout, false),
-          isNull(equipmentItems.deletedAt),
-        ),
+        and(eq(equipmentItems.isAvailableForCheckout, false), isNull(equipmentItems.deletedAt)),
       )
       .orderBy(desc(equipmentItems.lastSeenAt))
       .limit(300)
