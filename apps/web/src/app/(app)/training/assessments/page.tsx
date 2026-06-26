@@ -336,7 +336,7 @@ export default async function AssessmentsPage({
                     </TableCell>
                     <TableCell>
                       <Link
-                        href={`/training/transcripts/${person.id}`}
+                        href={`/people/${person.id}?tab=training`}
                         className="font-medium text-slate-900 hover:underline dark:text-slate-100"
                       >
                         {person.lastName}, {person.firstName}

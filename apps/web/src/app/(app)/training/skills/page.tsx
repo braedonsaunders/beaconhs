@@ -20,7 +20,7 @@ import {
   or,
   type SQL,
 } from 'drizzle-orm'
-import { Badge, EmptyState, PageHeader } from '@beaconhs/ui'
+import { Badge, Button, EmptyState, PageHeader } from '@beaconhs/ui'
 import {
   people,
   tenants,
@@ -29,6 +29,7 @@ import {
   trainingSkillTypes,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { canManageModule } from '@/lib/module-admin/guard'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { enabledCredentialOutputs } from '@/lib/credential-designs'
 import { CredentialDownloadButton } from '@/components/credential-download-button'
@@ -67,6 +68,7 @@ export default async function SkillsPage({
   const statusFilter = pickString(sp.status)
   const authorityFilter = pickString(sp.authority)
   const ctx = await requireRequestContext()
+  const canManage = canManageModule(ctx, 'training')
   const now = new Date()
   const nowMs = now.getTime()
   const today = now.toISOString().slice(0, 10)
@@ -87,14 +89,17 @@ export default async function SkillsPage({
       if (cond) filters.push(cond)
     }
     if (authorityFilter) filters.push(eq(trainingSkillAuthorities.id, authorityFilter))
-    if (statusFilter === 'expired') {
+    // Defaults to "valid" when no status param is present; the "All" chip
+    // navigates to an explicit `all` sentinel to show every skill.
+    const effectiveStatus = statusFilter ?? 'valid'
+    if (effectiveStatus === 'expired') {
       filters.push(isNotNull(trainingSkillAssignments.expiresOn))
       filters.push(lte(trainingSkillAssignments.expiresOn, today))
-    } else if (statusFilter === 'expiring') {
+    } else if (effectiveStatus === 'expiring') {
       filters.push(isNotNull(trainingSkillAssignments.expiresOn))
       filters.push(gt(trainingSkillAssignments.expiresOn, today))
       filters.push(lte(trainingSkillAssignments.expiresOn, in90))
-    } else if (statusFilter === 'valid') {
+    } else if (effectiveStatus === 'valid') {
       const c = or(
         isNull(trainingSkillAssignments.expiresOn),
         gt(trainingSkillAssignments.expiresOn, today),
@@ -193,6 +198,13 @@ export default async function SkillsPage({
           <PageHeader
             title="Skills"
             description="Skills and certifications across the workforce, with expiry tracking."
+            actions={
+              canManage ? (
+                <Link href="/training/skills/new">
+                  <Button>New skill</Button>
+                </Link>
+              ) : undefined
+            }
           />
           <TrainingSubNav active="skills" />
           <TableToolbar>
@@ -209,6 +221,7 @@ export default async function SkillsPage({
               currentParams={sp}
               paramKey="status"
               label="Status"
+              defaultValue="valid"
               options={STATUS_OPTIONS}
             />
           </TableToolbar>
@@ -223,7 +236,14 @@ export default async function SkillsPage({
               ? 'No skills match these filters'
               : 'No skills recorded'
           }
-          description="Grant skills from a person's transcript, or manage the catalogue under Manage → Skill types."
+          description="Add a skill with New skill, or manage the catalogue under Manage → Skill types."
+          action={
+            canManage ? (
+              <Link href="/training/skills/new">
+                <Button>New skill</Button>
+              </Link>
+            ) : undefined
+          }
         />
       ) : (
         <>
@@ -290,7 +310,7 @@ export default async function SkillsPage({
                     <TableRow key={assignment.id}>
                       <TableCell>
                         <Link
-                          href={`/training/transcripts/${person.id}`}
+                          href={`/people/${person.id}?tab=skills`}
                           className="font-medium text-slate-900 hover:underline dark:text-slate-100"
                         >
                           {person.lastName}, {person.firstName}

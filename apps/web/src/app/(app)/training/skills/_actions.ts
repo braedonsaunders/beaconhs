@@ -97,6 +97,63 @@ export async function saveSkillAssignment(input: {
 }
 
 // ---------------------------------------------------------------------------
+// Create — issue a skill assignment from the New skill form. Person + skill type
+// are required; expiry auto-computes from the type's validForMonths when not
+// supplied. Redirects to the new record so the rest can be edited inline.
+// ---------------------------------------------------------------------------
+
+export async function createSkillAssignment(formData: FormData): Promise<void> {
+  const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'training')
+  const personId = String(formData.get('personId') ?? '').trim()
+  const skillTypeId = String(formData.get('skillTypeId') ?? '').trim()
+  const grantedOn = String(formData.get('grantedOn') ?? '').trim() || isoToday()
+  const expiresOnRaw = String(formData.get('expiresOn') ?? '').trim() || null
+  const notes = String(formData.get('notes') ?? '').trim() || null
+  if (!personId || !skillTypeId) return
+
+  const type = await ctx.db(async (tx) => {
+    const [t] = await tx
+      .select({ id: trainingSkillTypes.id, validForMonths: trainingSkillTypes.validForMonths })
+      .from(trainingSkillTypes)
+      .where(eq(trainingSkillTypes.id, skillTypeId))
+      .limit(1)
+    return t ?? null
+  })
+  if (!type) return
+  let expiresOn: string | null = expiresOnRaw
+  if (!expiresOn && type.validForMonths) expiresOn = addMonthsIso(grantedOn, type.validForMonths)
+
+  let newId: string | undefined
+  await ctx.db(async (tx) => {
+    const [row] = await tx
+      .insert(trainingSkillAssignments)
+      .values({
+        tenantId: ctx.tenantId,
+        personId,
+        skillTypeId,
+        grantedOn,
+        expiresOn,
+        grantedByTenantUserId: safeTenantUserId(ctx),
+        notes,
+      })
+      .returning({ id: trainingSkillAssignments.id })
+    newId = row?.id
+  })
+  if (newId) {
+    await recordAudit(ctx, {
+      entityType: 'training_skill',
+      entityId: newId,
+      action: 'create',
+      summary: 'Created skill assignment',
+      after: { personId, skillTypeId, grantedOn, expiresOn },
+    })
+  }
+  revalidatePath('/training/skills')
+  if (newId) redirect(`/training/skills/${newId}`)
+}
+
+// ---------------------------------------------------------------------------
 // Renew — mint a NEW assignment for the same person + skill type with a fresh
 // expiry. Mirrors the training-record renewal flow.
 // ---------------------------------------------------------------------------

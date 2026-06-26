@@ -239,7 +239,7 @@ export default async function SkillAssignmentPage({
                 icon={statusMeta.icon}
                 tone={statusMeta.tone}
                 label="Status"
-                compact
+                dense
                 value={statusMeta.value(daysLeft)}
                 hint={assignment.expiresOn ? `Expires ${assignment.expiresOn}` : undefined}
                 hintVariant={statusMeta.badge}
@@ -248,6 +248,7 @@ export default async function SkillAssignmentPage({
                 icon={CreditCard}
                 tone="violet"
                 label="Cards & certificates"
+                dense
                 value={credentialOutputs.length}
                 href={`${basePath}?tab=outputs`}
               />
@@ -255,6 +256,7 @@ export default async function SkillAssignmentPage({
                 icon={Paperclip}
                 tone="sky"
                 label="Files"
+                dense
                 value={files.length}
                 href={`${basePath}?tab=files`}
               />

@@ -51,6 +51,7 @@ export function StatTile({
   hintVariant = 'secondary',
   href,
   compact = false,
+  dense = false,
   className,
 }: {
   icon: LucideIcon
@@ -62,10 +63,38 @@ export function StatTile({
   href?: string
   /** Smaller value text — use for dates / words rather than big counts. */
   compact?: boolean
+  /**
+   * Half-height layout: chip + value + label on one horizontal line, no ghost
+   * icon. Use for compact KPI rows on detail pages.
+   */
+  dense?: boolean
   className?: string
 }) {
   const t = TONES[tone]
-  const body = (
+  const body = dense ? (
+    <div className="flex items-center gap-3">
+      <span
+        className={cn('inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', t.chip)}
+      >
+        <Icon size={18} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="truncate text-base font-semibold tracking-tight text-slate-900 tabular-nums dark:text-slate-100">
+            {value}
+          </span>
+          {hint != null ? (
+            <Badge variant={hintVariant} className="shrink-0 font-normal">
+              {hint}
+            </Badge>
+          ) : null}
+        </div>
+        <div className="truncate text-[11px] font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
+          {label}
+        </div>
+      </div>
+    </div>
+  ) : (
     <>
       <Icon
         aria-hidden
@@ -100,16 +129,17 @@ export function StatTile({
   )
 
   const base =
-    'group relative block overflow-hidden rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm transition-all sm:p-4 dark:border-slate-800 dark:bg-slate-900'
+    'group relative block overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-all dark:border-slate-800 dark:bg-slate-900'
+  const pad = dense ? 'p-3' : 'p-3.5 sm:p-4'
 
   return href ? (
     <Link
       href={href as never}
-      className={cn(base, 'hover:-translate-y-0.5 hover:shadow-md', className)}
+      className={cn(base, pad, 'hover:-translate-y-0.5 hover:shadow-md', className)}
     >
       {body}
     </Link>
   ) : (
-    <div className={cn(base, className)}>{body}</div>
+    <div className={cn(base, pad, className)}>{body}</div>
   )
 }

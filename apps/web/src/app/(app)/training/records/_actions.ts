@@ -14,6 +14,7 @@
 //                                  with action='delete'.
 //   - bulkExportTrainingRecordsCsv  download just the checked rows
 
+import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
 import { people, trainingCourses, trainingRecords } from '@beaconhs/db/schema'
@@ -21,6 +22,83 @@ import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { csvRow } from '@/lib/csv'
+
+const RECORD_SOURCES = ['class', 'self_paced', 'evaluator', 'external_upload', 'migrated'] as const
+type RecordSource = (typeof RECORD_SOURCES)[number]
+
+/**
+ * Create a single training record (certificate) from the New certificate form.
+ * Person + course + completion date are required; expiry auto-computes from the
+ * course's validForMonths when not supplied. Redirects to the new record so the
+ * rest of the fields can be edited inline.
+ */
+export async function createTrainingRecord(formData: FormData): Promise<void> {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'training.record.create')
+  const personId = String(formData.get('personId') ?? '').trim()
+  const courseId = String(formData.get('courseId') ?? '').trim()
+  const completedOn = String(formData.get('completedOn') ?? '').trim()
+  const expiresOnRaw = String(formData.get('expiresOn') ?? '').trim() || null
+  const sourceRaw = String(formData.get('source') ?? 'external_upload').trim()
+  const instructor = String(formData.get('instructor') ?? '').trim() || null
+  const gradeRaw = String(formData.get('grade') ?? '').trim()
+  const details = String(formData.get('details') ?? '').trim() || null
+  const notes = String(formData.get('notes') ?? '').trim() || null
+  if (!personId || !courseId || !completedOn) return
+
+  const source: RecordSource = (RECORD_SOURCES as readonly string[]).includes(sourceRaw)
+    ? (sourceRaw as RecordSource)
+    : 'external_upload'
+  let grade: number | null = gradeRaw === '' ? null : Number(gradeRaw)
+  if (grade != null && !Number.isFinite(grade)) grade = null
+  if (grade != null) grade = Math.max(0, Math.min(100, Math.round(grade)))
+
+  // Auto-compute expiry from the course when not supplied (mirrors renewRecord).
+  const course = await ctx.db(async (tx) => {
+    const [c] = await tx
+      .select({ id: trainingCourses.id, validForMonths: trainingCourses.validForMonths })
+      .from(trainingCourses)
+      .where(eq(trainingCourses.id, courseId))
+      .limit(1)
+    return c ?? null
+  })
+  if (!course) return
+  let expiresOn: string | null = expiresOnRaw
+  if (!expiresOn && course.validForMonths) expiresOn = addMonthsIso(completedOn, course.validForMonths)
+
+  let newId: string | undefined
+  await ctx.db(async (tx) => {
+    const [row] = await tx
+      .insert(trainingRecords)
+      .values({
+        tenantId: ctx.tenantId,
+        personId,
+        courseId,
+        source,
+        completedOn,
+        expiresOn,
+        grade,
+        instructor,
+        details,
+        notes,
+        issuedByTenantUserId: safeTenantUserId(ctx),
+      })
+      .returning({ id: trainingRecords.id })
+    newId = row?.id
+  })
+  if (newId) {
+    await recordAudit(ctx, {
+      entityType: 'training_record',
+      entityId: newId,
+      action: 'create',
+      summary: 'Created training record',
+      after: { personId, courseId, source, completedOn, expiresOn },
+    })
+  }
+  revalidatePath('/training/records')
+  revalidatePath('/training')
+  if (newId) redirect(`/training/records/${newId}`)
+}
 
 export type BulkActionResult =
   | { ok: true; updated: number; skipped: number }

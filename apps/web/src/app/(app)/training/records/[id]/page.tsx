@@ -9,7 +9,10 @@ import {
   Printer,
   RotateCcw,
   Settings,
+  ShieldAlert,
+  ShieldCheck,
   ShieldOff,
+  ShieldX,
 } from 'lucide-react'
 import {
   Alert,
@@ -48,7 +51,7 @@ import { canSeeRecord } from '@/lib/visibility'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { ActivityFeed } from '@/components/activity-feed'
 import { CredentialDownloadButton } from '@/components/credential-download-button'
-import { DetailGrid } from '@/components/detail-grid'
+import { StatTile, type StatTone } from '@/components/stat-tile'
 import { Section } from '@/components/section'
 import { DetailPageLayout } from '@/components/page-layout'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
@@ -58,6 +61,7 @@ import {
   type CredentialOutput,
 } from '@/lib/credential-designs'
 import { canDesignTrainingCredentials } from '@/lib/training-credential-access'
+import { RecordOverview } from './_overview'
 
 export const dynamic = 'force-dynamic'
 
@@ -171,6 +175,83 @@ async function revokeRecord(formData: FormData) {
   })
   revalidatePath(`/training/records/${id}`)
   revalidatePath('/training')
+}
+
+// Inline edit — the unified display + edit overview autosaves through this.
+// Identity (person / course / source) is immutable; only the human-managed
+// fields are writable. Gated on training.record.create like renew/revoke.
+async function updateTrainingRecord(input: {
+  recordId: string
+  completedOn: string
+  expiresOn: string | null
+  instructor: string | null
+  grade: number | null
+  details: string | null
+  notes: string | null
+}): Promise<{ ok: boolean; error?: string }> {
+  'use server'
+  const ctx = await requireRequestContext()
+  if (!can(ctx, 'training.record.create')) {
+    return { ok: false, error: 'You do not have permission to edit this record.' }
+  }
+  const completedOn = input.completedOn.trim()
+  const expiresOn = input.expiresOn?.trim() || null
+  const instructor = input.instructor?.trim() || null
+  const details = input.details?.trim() || null
+  const notes = input.notes?.trim() || null
+  const grade =
+    input.grade != null && Number.isFinite(input.grade)
+      ? Math.max(0, Math.min(100, Math.round(input.grade)))
+      : null
+  if (!input.recordId) return { ok: false, error: 'Missing record' }
+  if (!completedOn) return { ok: false, error: 'Completed date is required' }
+
+  const before = await ctx.db(async (tx) => {
+    const [r] = await tx
+      .select()
+      .from(trainingRecords)
+      .where(eq(trainingRecords.id, input.recordId))
+      .limit(1)
+    return r ?? null
+  })
+  if (!before) return { ok: false, error: 'Record not found' }
+
+  // No-op guard: skip the write + audit row when nothing actually changed.
+  if (
+    before.completedOn === completedOn &&
+    before.expiresOn === expiresOn &&
+    before.instructor === instructor &&
+    before.grade === grade &&
+    before.details === details &&
+    before.notes === notes
+  ) {
+    return { ok: true }
+  }
+
+  await ctx.db((tx) =>
+    tx
+      .update(trainingRecords)
+      .set({ completedOn, expiresOn, instructor, grade, details, notes })
+      .where(eq(trainingRecords.id, input.recordId)),
+  )
+  await recordAudit(ctx, {
+    entityType: 'training_record',
+    entityId: input.recordId,
+    action: 'update',
+    summary: 'Updated training record',
+    before: {
+      completedOn: before.completedOn,
+      expiresOn: before.expiresOn,
+      instructor: before.instructor,
+      grade: before.grade,
+      details: before.details,
+      notes: before.notes,
+    },
+    after: { completedOn, expiresOn, instructor, grade, details, notes },
+  })
+  revalidatePath(`/training/records/${input.recordId}`)
+  revalidatePath('/training/records')
+  return { ok: true }
 }
 
 // ---------- Page ----------
@@ -304,62 +385,54 @@ export default async function TrainingRecordPage({
       <div className="space-y-5">
         {active === 'overview' ? (
           <>
-            <DetailGrid
-              rows={[
-                {
-                  label: 'Person',
-                  value: (
-                    <Link
-                      href={`/people/${person.id}`}
-                      className="text-teal-700 hover:underline dark:text-teal-400"
-                    >
-                      {person.firstName} {person.lastName}
-                    </Link>
-                  ),
-                },
-                {
-                  label: 'Course',
-                  value: (
-                    <Link
-                      href={`/training/courses/${course.id}`}
-                      className="text-teal-700 hover:underline dark:text-teal-400"
-                    >
-                      {course.code} · {course.name}
-                    </Link>
-                  ),
-                },
-                { label: 'Source', value: record.source.replace('_', ' ') },
-                { label: 'Completed on', value: record.completedOn },
-                { label: 'Expires on', value: record.expiresOn ?? '—' },
-                { label: 'Instructor', value: record.instructor ?? '—' },
-                { label: 'Grade', value: record.grade != null ? `${record.grade}%` : '—' },
-                { label: 'Credential type', value: record.certificateType ?? '—' },
-              ]}
+            {/* At-a-glance summary */}
+            <div className="grid grid-cols-3 gap-3">
+              <StatTile
+                icon={STATUS_META[status].icon}
+                tone={STATUS_META[status].tone}
+                label="Status"
+                dense
+                value={STATUS_META[status].value(daysLeft)}
+                hint={record.expiresOn ? `Expires ${record.expiresOn}` : undefined}
+                hintVariant={STATUS_META[status].badge}
+              />
+              <StatTile
+                icon={CreditCard}
+                tone="violet"
+                label="Cards & certificates"
+                dense
+                value={credentialOutputs.length}
+                href={`${basePath}?tab=outputs`}
+              />
+              <StatTile
+                icon={Paperclip}
+                tone="sky"
+                label="Attachments"
+                dense
+                value={certAttachments.length}
+                href={`${basePath}?tab=attachments`}
+              />
+            </div>
+
+            <RecordOverview
+              recordId={id}
+              canManage={canRecord && !isRevoked}
+              person={{ id: person.id, firstName: person.firstName, lastName: person.lastName }}
+              course={{ id: course.id, name: course.name, code: course.code }}
+              source={record.source}
+              score={record.score}
+              certificateType={record.certificateType}
+              validForMonths={course.validForMonths}
+              initial={{
+                completedOn: record.completedOn,
+                expiresOn: record.expiresOn ?? '',
+                instructor: record.instructor ?? '',
+                grade: record.grade != null ? String(record.grade) : '',
+                details: record.details ?? '',
+                notes: record.notes ?? '',
+              }}
+              saveAction={updateTrainingRecord}
             />
-            {record.details ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Details</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm whitespace-pre-wrap text-slate-700 dark:text-slate-300">
-                    {record.details}
-                  </p>
-                </CardContent>
-              </Card>
-            ) : null}
-            {record.notes ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Notes</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm whitespace-pre-wrap text-slate-700 dark:text-slate-300">
-                    {record.notes}
-                  </p>
-                </CardContent>
-              </Card>
-            ) : null}
 
             {canRecord ? (
               <>
@@ -575,6 +648,41 @@ export default async function TrainingRecordPage({
       </div>
     </DetailPageLayout>
   )
+}
+
+const STATUS_META: Record<
+  'ok' | 'expiring' | 'expired' | 'no_expiry',
+  {
+    tone: StatTone
+    icon: typeof ShieldCheck
+    badge: 'success' | 'warning' | 'destructive' | 'secondary'
+    value: (daysLeft: number | null) => string
+  }
+> = {
+  ok: {
+    tone: 'emerald',
+    icon: ShieldCheck,
+    badge: 'success',
+    value: (d) => (d != null ? `${d}d left` : 'Valid'),
+  },
+  expiring: {
+    tone: 'amber',
+    icon: ShieldAlert,
+    badge: 'warning',
+    value: (d) => `${d}d left`,
+  },
+  expired: {
+    tone: 'rose',
+    icon: ShieldX,
+    badge: 'destructive',
+    value: (d) => (d != null ? `${Math.abs(d)}d ago` : 'Expired'),
+  },
+  no_expiry: {
+    tone: 'slate',
+    icon: ShieldCheck,
+    badge: 'secondary',
+    value: () => 'No expiry',
+  },
 }
 
 function Field({

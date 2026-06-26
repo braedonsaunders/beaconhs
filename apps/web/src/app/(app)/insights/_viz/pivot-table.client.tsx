@@ -3,7 +3,8 @@
 // Pivot / matrix renderer. Consumes the engine's PivotResult (already reshaped —
 // this does layout + conditional formatting only). Sticky row header + column
 // header, RAG/heatmap cell coloring, dark-mode aware (mandate). The styling
-// language is lifted from the hand-built /training/matrix page.
+// language is lifted from the former hand-built training coverage matrix (now
+// the seeded "Training — Certificate Matrix" Insights card).
 
 import { useMemo } from 'react'
 import { cn } from '@beaconhs/ui'

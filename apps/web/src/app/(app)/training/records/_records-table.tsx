@@ -175,7 +175,7 @@ export function TrainingRecordsTable({
                   ) : null}
                   <td className="px-3 py-2">
                     <Link
-                      href={`/training/transcripts/${r.personId}` as any}
+                      href={`/people/${r.personId}?tab=training` as any}
                       className="font-medium text-slate-900 hover:underline dark:text-slate-100"
                     >
                       {r.personLastName}, {r.personFirstName}

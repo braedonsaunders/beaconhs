@@ -359,8 +359,10 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
       { key: 'classes', label: 'Classes', href: '/training/classes' },
       { key: 'assessments', label: 'Assessments', href: '/training/assessments' },
       // No Reports tab — training reporting lives in the global /reports
-      // builder (incl. the seeded "CWB welder roster" custom definition).
-      // Library, Card studio, Matrix and Transcripts live under Manage below.
+      // builder (incl. the seeded "CWB welder roster" custom definition). The
+      // coverage matrix lives in Insights (seeded "Training — Certificate
+      // Matrix" card). Library and Card studio live under Manage below.
+      // Per-person training history lives on each person's page (/people/[id]).
     ],
     sections: [
       {
@@ -376,20 +378,6 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
         href: '/training/credential-designs',
         iconKey: 'award',
         desc: 'Design the certificate and wallet-card layouts issued from training.',
-      },
-      {
-        key: 'matrix',
-        label: 'Matrix',
-        href: '/training/matrix',
-        iconKey: 'grid',
-        desc: 'Workforce coverage grid — who holds which course, and what is expiring.',
-      },
-      {
-        key: 'transcripts',
-        label: 'Transcripts',
-        href: '/training/transcripts',
-        iconKey: 'file',
-        desc: 'Per-person training history — records, assessments and skills.',
       },
       {
         key: 'skill-types',

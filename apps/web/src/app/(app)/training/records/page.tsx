@@ -109,10 +109,13 @@ export default async function TrainingRecordsPage({
       if (cond) filters.push(cond)
     }
     if (sourceFilter) filters.push(eq(trainingRecords.source, sourceFilter as any))
-    if (expiryFilter === 'expired') {
+    // Defaults to "current" when no expiry param is present; the "All" chip
+    // navigates to an explicit `all` sentinel to show every record.
+    const effectiveExpiry = expiryFilter ?? 'current'
+    if (effectiveExpiry === 'expired') {
       filters.push(isNotNull(trainingRecords.expiresOn))
       filters.push(lte(trainingRecords.expiresOn, today))
-    } else if (expiryFilter === 'current') {
+    } else if (effectiveExpiry === 'current') {
       // "Current" = either no expiry at all, or expiry > today.
       const c = or(isNull(trainingRecords.expiresOn), gt(trainingRecords.expiresOn, today))
       if (c) filters.push(c)
@@ -234,14 +237,11 @@ export default async function TrainingRecordsPage({
             title="Certificates"
             description="Training records with completion dates and expiry tracking."
             actions={
-              <div className="flex items-center gap-2">
-                <Link href="/training/courses/new">
-                  <Button variant="outline">New course</Button>
-                </Link>
+              canManage ? (
                 <Link href="/training/records/new">
-                  <Button>Log a record</Button>
+                  <Button>New certificate</Button>
                 </Link>
-              </div>
+              ) : undefined
             }
           />
           <TrainingSubNav active="records" />
@@ -262,6 +262,7 @@ export default async function TrainingRecordsPage({
               currentParams={sp}
               paramKey="expiry"
               label="Expiry"
+              defaultValue="current"
               options={EXPIRY_OPTIONS.map((o) => ({
                 ...o,
                 count: expiryCounts[o.value],
@@ -279,9 +280,11 @@ export default async function TrainingRecordsPage({
           }
           description="Issue a certificate, complete a class, or upload an external record."
           action={
-            <Link href="/training/records/new">
-              <Button>Log a record</Button>
-            </Link>
+            canManage ? (
+              <Link href="/training/records/new">
+                <Button>New certificate</Button>
+              </Link>
+            ) : undefined
           }
         />
       ) : (
