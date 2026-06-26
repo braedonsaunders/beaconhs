@@ -13,7 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from '@beaconhs/ui'
-import { db } from '@beaconhs/db'
+import { db, withSuperAdmin } from '@beaconhs/db'
 import { incidents, people, tenantUsers, tenants } from '@beaconhs/db/schema'
 import { getCurrentUserId } from '@/lib/auth'
 import { setActiveTenant } from '@/lib/actions'
@@ -33,8 +33,7 @@ export default async function AdminTenantsPage() {
   const userId = await getCurrentUserId()
   if (!userId) redirect('/login')
 
-  const rows = await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
+  const rows = await withSuperAdmin(db, async (tx) => {
     return tx
       .select({
         tenant: tenants,

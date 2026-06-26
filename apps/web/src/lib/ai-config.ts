@@ -7,8 +7,8 @@
 // everywhere without touching the call sites. There is no environment fallback —
 // nothing AI-related lives in the environment.
 
-import { eq, sql } from 'drizzle-orm'
-import { db } from '@beaconhs/db'
+import { eq } from 'drizzle-orm'
+import { db, withSuperAdmin } from '@beaconhs/db'
 import { platformSettings, PLATFORM_SETTINGS_ID, tenants } from '@beaconhs/db/schema'
 import { isAiProvider, type AiConfig, type AiPolicyMode, type AiProvider } from '@beaconhs/ai'
 import type { RequestContext } from '@beaconhs/tenant'
@@ -113,8 +113,7 @@ function mergeRaw<T extends RawAi>(prev: T, input: AiSettingsInput, extra: Parti
 // ---------------------------------------------------------------------------
 
 async function readAi(tenantId: string): Promise<{ ai: RawAi; orgName: string | null }> {
-  return db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
+  return withSuperAdmin(db, async (tx) => {
     const [t] = await tx
       .select({ settings: tenants.settings, name: tenants.name })
       .from(tenants)
@@ -172,8 +171,7 @@ export async function saveTenantAiSettings(
   ctx: RequestContext,
   input: AiSettingsInput & { autoJournalAi: boolean },
 ): Promise<void> {
-  await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
+  await withSuperAdmin(db, async (tx) => {
     const [t] = await tx
       .select({ settings: tenants.settings })
       .from(tenants)
@@ -191,8 +189,7 @@ export async function saveTenantAiSettings(
 
 /** Clear the stored API key (and disable) for this tenant. */
 export async function clearTenantAiKey(ctx: RequestContext): Promise<void> {
-  await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
+  await withSuperAdmin(db, async (tx) => {
     const [t] = await tx
       .select({ settings: tenants.settings })
       .from(tenants)
@@ -214,8 +211,7 @@ export async function clearTenantAiKey(ctx: RequestContext): Promise<void> {
 // ---------------------------------------------------------------------------
 
 async function readPlatformAi(): Promise<PlatformRawAi> {
-  return db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
+  return withSuperAdmin(db, async (tx) => {
     const [row] = await tx
       .select({ ai: platformSettings.ai })
       .from(platformSettings)
@@ -246,8 +242,7 @@ export async function savePlatformAiSettings(
 ): Promise<void> {
   const prev = await readPlatformAi()
   const next = mergeRaw(prev, input, { mode: input.mode })
-  await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
+  await withSuperAdmin(db, async (tx) => {
     await tx
       .insert(platformSettings)
       .values({ id: PLATFORM_SETTINGS_ID, ai: next })
@@ -259,8 +254,7 @@ export async function savePlatformAiSettings(
 export async function clearPlatformAiKey(): Promise<void> {
   const prev = await readPlatformAi()
   const next: PlatformRawAi = { ...prev, keyCiphertext: undefined, keyNonce: undefined }
-  await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
+  await withSuperAdmin(db, async (tx) => {
     await tx
       .insert(platformSettings)
       .values({ id: PLATFORM_SETTINGS_ID, ai: next })

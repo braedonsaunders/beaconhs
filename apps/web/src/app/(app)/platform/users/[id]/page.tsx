@@ -1,5 +1,5 @@
 import { notFound, redirect } from 'next/navigation'
-import { asc, eq, sql } from 'drizzle-orm'
+import { asc, eq } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -12,7 +12,7 @@ import {
   Label,
   Select,
 } from '@beaconhs/ui'
-import { db } from '@beaconhs/db'
+import { db, withSuperAdmin } from '@beaconhs/db'
 import { roleAssignments, roles, tenantUsers, tenants, users } from '@beaconhs/db/schema'
 import { getCurrentUserId } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
@@ -50,8 +50,7 @@ export default async function PlatformUserDetailPage({
   const error = typeof sp.error === 'string' ? sp.error : undefined
   const notice = typeof sp.notice === 'string' ? sp.notice : undefined
 
-  const data = await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
+  const data = await withSuperAdmin(db, async (tx) => {
     const [account] = await tx.select().from(users).where(eq(users.id, id)).limit(1)
     if (!account) return null
     const memberRows = await tx

@@ -2,9 +2,9 @@
 // A token belongs to either a course certificate (training_certificates) or
 // a skill certificate (training_skill_certificates) — try both.
 
-import { eq, sql } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { Card, CardContent } from '@beaconhs/ui'
-import { db } from '@beaconhs/db'
+import { db, withSuperAdmin } from '@beaconhs/db'
 import {
   people,
   tenants,
@@ -32,9 +32,10 @@ type Resolved = {
 }
 
 async function resolveToken(token: string): Promise<Resolved | null> {
-  return db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
-
+  // Public, unauthenticated lookup: a verify token can belong to ANY tenant, so
+  // this runs on the BYPASSRLS super pool — the training_* + people tables it
+  // joins all enforce FORCE ROW LEVEL SECURITY and would otherwise return nothing.
+  return withSuperAdmin(db, async (tx) => {
     const [course] = await tx
       .select({
         cert: trainingCertificates,

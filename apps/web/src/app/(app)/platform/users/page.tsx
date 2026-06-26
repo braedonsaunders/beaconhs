@@ -1,8 +1,8 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { asc, eq, sql } from 'drizzle-orm'
+import { asc, eq } from 'drizzle-orm'
 import { Badge, DetailHeader, EmptyState, cn } from '@beaconhs/ui'
-import { db } from '@beaconhs/db'
+import { db, withSuperAdmin } from '@beaconhs/db'
 import { tenantUsers, tenants, users } from '@beaconhs/db/schema'
 import { getCurrentUserId } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
@@ -63,8 +63,7 @@ export default async function PlatformUsersPage({
   const view = pickString(sp.view) ?? 'all'
   const query = (q ?? '').trim().toLowerCase()
 
-  const { accounts, memberships } = await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
+  const { accounts, memberships } = await withSuperAdmin(db, async (tx) => {
     const accountRows = await tx
       .select({
         id: users.id,

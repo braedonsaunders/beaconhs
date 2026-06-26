@@ -1,9 +1,8 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { sql } from 'drizzle-orm'
 import { Button, Input, Label, PageHeader, Select, Textarea } from '@beaconhs/ui'
-import { db } from '@beaconhs/db'
+import { db, withSuperAdmin } from '@beaconhs/db'
 import { auditLog, tenants } from '@beaconhs/db/schema'
 import { seedLiftPlanTemplate } from '@beaconhs/db/seed/lift-plan-template'
 import { requireRequestContext } from '@/lib/auth'
@@ -44,8 +43,7 @@ async function createTenant(formData: FormData): Promise<void> {
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean)
 
-  await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
+  await withSuperAdmin(db, async (tx) => {
     const [created] = await tx
       .insert(tenants)
       .values({

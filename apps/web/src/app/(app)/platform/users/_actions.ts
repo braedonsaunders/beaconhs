@@ -8,10 +8,11 @@
 //   1. Authorization is platform-level: `gate()` requires `isSuperAdmin`. There
 //      is no per-tenant permission to lean on because the target tenant may be
 //      one the actor isn't a member of.
-//   2. Writes bypass RLS (`app.bypass_rls`) like the rest of /platform, because
-//      the membership being created/edited belongs to an arbitrary tenant. Audit
-//      rows are therefore inserted directly and attributed to the AFFECTED
-//      tenant (entityType 'tenant_user'), mirroring the per-tenant invite flow.
+//   2. Writes run on the BYPASSRLS super pool (withSuperAdmin) like the rest of
+//      /platform, because the membership being created/edited belongs to an
+//      arbitrary tenant. Audit rows are therefore inserted directly and
+//      attributed to the AFFECTED tenant (entityType 'tenant_user'), mirroring
+//      the per-tenant invite flow.
 //
 // Deep role/scope/permission editing intentionally stays in /admin/users —
 // `openMembershipInTenant` view-as-bridges there rather than duplicating the
@@ -21,18 +22,14 @@
 import { redirect } from 'next/navigation'
 import { headers } from 'next/headers'
 import { revalidatePath } from 'next/cache'
-import { and, eq, sql } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { auth } from '@beaconhs/auth'
-import { db } from '@beaconhs/db'
+import { db, withSuperAdmin, type Database } from '@beaconhs/db'
 import { auditLog, roleAssignments, roles, tenantUsers, tenants, users } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { setActiveTenant } from '@/lib/actions'
 
 type Ctx = Awaited<ReturnType<typeof requireRequestContext>>
-// The exact transaction handle drizzle hands our callback. A tx isn't assignable
-// to the top-level `Database` type (auth.ts casts for the same reason), so we
-// derive it here to keep the small query helpers below fully typed.
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 /** Platform actions are reserved for super-admins — no tenant permission applies. */
 async function gate(): Promise<Ctx> {
@@ -54,12 +51,8 @@ function backToUser(userId: string, msg: { error?: string; notice?: string } = {
   redirect(qs ? `${userPath(userId)}?${qs}` : userPath(userId))
 }
 
-async function bypass(tx: Tx): Promise<void> {
-  await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
-}
-
 /** A membership joined to its account + tenant, or null. */
-async function loadMembership(tx: Tx, membershipId: string) {
+async function loadMembership(tx: Database, membershipId: string) {
   const [row] = await tx
     .select({ membership: tenantUsers, account: users, tenant: tenants })
     .from(tenantUsers)
@@ -81,8 +74,7 @@ export async function updateIdentity(formData: FormData): Promise<void> {
   if (!userId) return
   if (!name) backToUser(userId, { error: 'Name is required.' })
 
-  await db.transaction(async (tx) => {
-    await bypass(tx)
+  await withSuperAdmin(db, async (tx) => {
     await tx
       .update(users)
       .set({ name, locale, timezone, updatedAt: new Date() })
@@ -102,8 +94,7 @@ export async function setSuperAdmin(formData: FormData): Promise<void> {
   if (userId === ctx.userId && !value) {
     backToUser(userId, { error: "You can't revoke your own super-admin access." })
   }
-  await db.transaction(async (tx) => {
-    await bypass(tx)
+  await withSuperAdmin(db, async (tx) => {
     await tx
       .update(users)
       .set({ isSuperAdmin: value, updatedAt: new Date() })
@@ -130,8 +121,7 @@ export async function addMembership(formData: FormData): Promise<void> {
   if (!userId) return
   if (!tenantId) backToUser(userId, { error: 'Choose a tenant to add this user to.' })
 
-  const result: AddResult = await db.transaction(async (tx) => {
-    await bypass(tx)
+  const result: AddResult = await withSuperAdmin(db, async (tx) => {
     const [u] = await tx.select().from(users).where(eq(users.id, userId)).limit(1)
     if (!u) return { ok: false, error: 'User not found.' }
     const [t] = await tx
@@ -229,8 +219,7 @@ export async function setMembershipStatus(formData: FormData): Promise<void> {
   if (!userId || !membershipId) return
   if (status !== 'active' && status !== 'suspended') return
 
-  const result: MembershipResult = await db.transaction(async (tx) => {
-    await bypass(tx)
+  const result: MembershipResult = await withSuperAdmin(db, async (tx) => {
     const row = await loadMembership(tx, membershipId)
     if (!row) return { ok: false, error: 'Membership not found.' }
     if (row.membership.userId === ctx.userId) {
@@ -266,8 +255,7 @@ export async function removeMembership(formData: FormData): Promise<void> {
   const membershipId = String(formData.get('membershipId') ?? '')
   if (!userId || !membershipId) return
 
-  const result: MembershipResult = await db.transaction(async (tx) => {
-    await bypass(tx)
+  const result: MembershipResult = await withSuperAdmin(db, async (tx) => {
     const row = await loadMembership(tx, membershipId)
     if (!row) return { ok: false, error: 'Membership not found.' }
     if (row.membership.userId === ctx.userId) {
@@ -299,8 +287,7 @@ export async function resendInvite(formData: FormData): Promise<void> {
   const membershipId = String(formData.get('membershipId') ?? '')
   if (!userId || !membershipId) return
 
-  const email = await db.transaction(async (tx) => {
-    await bypass(tx)
+  const email = await withSuperAdmin(db, async (tx) => {
     const row = await loadMembership(tx, membershipId)
     if (!row) return null
     await tx.insert(auditLog).values({

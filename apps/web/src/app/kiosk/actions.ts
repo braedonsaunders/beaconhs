@@ -21,11 +21,10 @@ export async function recordKioskScan(
   if (input.kind !== 'in' && input.kind !== 'out') return { ok: false, error: 'Bad kind' }
   if (!input.pin) return { ok: false, error: 'PIN required' }
 
-  // Verify the PIN against the tenant. We bypass RLS here because the kiosk
-  // page is unauthenticated (no user session); access is gated by tenant slug
-  // + PIN check below.
+  // Verify the PIN against the tenant. The tenants table is global (not
+  // tenant-scoped), so this read needs no special scope; the kiosk device is
+  // unauthenticated and gated by the tenant slug + the PIN check below.
   const tenant = await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
     const rows = await tx.execute(
       sql`SELECT id, kiosk_pin FROM tenants WHERE id = ${input.tenantId} LIMIT 1`,
     )
@@ -38,7 +37,6 @@ export async function recordKioskScan(
 
   const scanId = await db.transaction(async (tx) => {
     await tx.execute(sql`SELECT set_config('app.tenant_id', ${input.tenantId}, true)`)
-    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'off', true)`)
     const [row] = await tx
       .insert(kioskScans)
       .values({

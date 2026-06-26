@@ -3,9 +3,9 @@
 // hands it to the client editor. Saving flows back to every assessment via the
 // <RiskMatrixProvider> in the app shell.
 
-import { eq, sql } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { PageHeader } from '@beaconhs/ui'
-import { db } from '@beaconhs/db'
+import { db, withSuperAdmin } from '@beaconhs/db'
 import { tenants } from '@beaconhs/db/schema'
 import { requireModuleManage } from '@/lib/module-admin/guard'
 import { PageContainer } from '@/components/page-layout'
@@ -19,8 +19,7 @@ export const dynamic = 'force-dynamic'
 export default async function RiskMatrixPage() {
   const ctx = await requireModuleManage('hazid')
 
-  const saved = await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
+  const saved = await withSuperAdmin(db, async (tx) => {
     const [t] = await tx
       .select({ riskMatrix: tenants.riskMatrix })
       .from(tenants)

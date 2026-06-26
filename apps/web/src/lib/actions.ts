@@ -2,9 +2,9 @@
 
 import { cookies } from 'next/headers'
 import { revalidatePath } from 'next/cache'
-import { db } from '@beaconhs/db'
+import { db, withSuperAdmin } from '@beaconhs/db'
 import { tenants, tenantUsers, users } from '@beaconhs/db/schema'
-import { and, eq, sql } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { getCurrentUserId, ACTIVE_TENANT_COOKIE } from './auth'
 
 /**
@@ -26,8 +26,9 @@ export async function setActiveTenant(
     return { ok: true }
   }
 
-  const allowed = await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
+  // Cross-tenant membership check before switching scope — runs on the BYPASSRLS
+  // super pool because tenant_users enforces FORCE ROW LEVEL SECURITY.
+  const allowed = await withSuperAdmin(db, async (tx) => {
     const [u] = await tx.select().from(users).where(eq(users.id, userId)).limit(1)
     if (!u) return false
     if (u.isSuperAdmin) {

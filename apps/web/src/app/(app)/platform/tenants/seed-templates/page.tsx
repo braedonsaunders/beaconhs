@@ -10,7 +10,7 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import Link from 'next/link'
-import { and, asc, eq, sql } from 'drizzle-orm'
+import { and, asc, eq } from 'drizzle-orm'
 import {
   Alert,
   AlertDescription,
@@ -25,7 +25,7 @@ import {
   TableHeader,
   TableRow,
 } from '@beaconhs/ui'
-import { db } from '@beaconhs/db'
+import { db, withSuperAdmin } from '@beaconhs/db'
 import { formTemplates, tenants } from '@beaconhs/db/schema'
 import {
   LIFT_PLAN_TEMPLATE_KEY,
@@ -47,8 +47,7 @@ async function seedOne(formData: FormData): Promise<void> {
   const tenantId = String(formData.get('tenantId') ?? '').trim()
   if (!tenantId) return
 
-  await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
+  await withSuperAdmin(db, async (tx) => {
     await seedLiftPlanTemplate(tx as any, tenantId)
   })
   revalidatePath('/platform/tenants/seed-templates')
@@ -59,8 +58,7 @@ async function seedAll(): Promise<void> {
   const ctx = await requireRequestContext()
   if (!ctx.isSuperAdmin) throw new Error('Only platform super-admins can seed templates.')
 
-  await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
+  await withSuperAdmin(db, async (tx) => {
     const all = await tx.select({ id: tenants.id }).from(tenants)
     for (const t of all) {
       await seedLiftPlanTemplate(tx as any, t.id)
@@ -76,8 +74,7 @@ export default async function SeedTemplatesPage() {
   // Pull each tenant + whether the lift-plan template is already present.
   // The LEFT JOIN keeps tenants that have zero templates in the list (so
   // they're surfaced for backfill rather than silently dropped).
-  const rows = await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
+  const rows = await withSuperAdmin(db, async (tx) => {
     return tx
       .select({
         tenant: tenants,

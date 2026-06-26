@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { eq, sql } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import {
   Button,
   Card,
@@ -14,7 +14,7 @@ import {
   Label,
   Select,
 } from '@beaconhs/ui'
-import { db } from '@beaconhs/db'
+import { db, withSuperAdmin } from '@beaconhs/db'
 import { tenants } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
@@ -63,14 +63,12 @@ async function saveSettings(formData: FormData) {
     pdfLetterhead: String(formData.get('pdfLetterhead') ?? '').trim() || undefined,
   }
 
-  const before = await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
+  const before = await withSuperAdmin(db, async (tx) => {
     const [t] = await tx.select().from(tenants).where(eq(tenants.id, ctx.tenantId)).limit(1)
     return t
   })
 
-  await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
+  await withSuperAdmin(db, async (tx) => {
     await tx
       .update(tenants)
       .set({
@@ -98,8 +96,7 @@ async function saveSettings(formData: FormData) {
 
 export default async function AdminSettingsPage() {
   const ctx = await requireSettingsAdmin()
-  const tenant = await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
+  const tenant = await withSuperAdmin(db, async (tx) => {
     const [t] = await tx.select().from(tenants).where(eq(tenants.id, ctx.tenantId)).limit(1)
     return t
   })

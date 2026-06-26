@@ -1,7 +1,7 @@
 import 'server-only'
 import { cache } from 'react'
-import { eq, sql } from 'drizzle-orm'
-import { db } from '@beaconhs/db'
+import { eq } from 'drizzle-orm'
+import { db, withSuperAdmin } from '@beaconhs/db'
 import { tenants } from '@beaconhs/db/schema'
 
 /**
@@ -37,14 +37,13 @@ export function levelLabel(level: OrgLevel, opts?: { plural?: boolean }): string
 }
 
 /**
- * This tenant's enabled hierarchy depths. Reads the tenant row with RLS bypassed
- * (the same pattern the app layout and admin settings use — the tenants table
- * isn't tenant-scoped for normal reads). Memoised per request so multiple
+ * This tenant's enabled hierarchy depths. Reads the global tenants row on the
+ * super pool (the same pattern the app layout and admin settings use — the
+ * tenants table isn't tenant-scoped). Memoised per request so multiple
  * consumers in one render share a single query.
  */
 export const getTenantHierarchy = cache(async (tenantId: string): Promise<TenantHierarchy> => {
-  const row = await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
+  const row = await withSuperAdmin(db, async (tx) => {
     const [t] = await tx
       .select({ hierarchy: tenants.hierarchy })
       .from(tenants)

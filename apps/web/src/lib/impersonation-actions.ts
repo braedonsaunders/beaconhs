@@ -7,9 +7,9 @@
 import { redirect } from 'next/navigation'
 import { headers } from 'next/headers'
 import { revalidatePath } from 'next/cache'
-import { and, eq, sql } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { auth } from '@beaconhs/auth'
-import { db } from '@beaconhs/db'
+import { db, withSuperAdmin } from '@beaconhs/db'
 import { auditLog, sessions, tenantUsers } from '@beaconhs/db/schema'
 
 /**
@@ -26,10 +26,10 @@ export async function stopImpersonation(): Promise<void> {
   const actorUserId = authSession?.user?.id
   if (!token || !actorUserId) redirect('/dashboard')
 
-  // Session/tenant_users/audit_log are all reachable under the bypass GUC; the
-  // audit insert passes RLS WITH CHECK because bypass_rls = 'on'.
-  const result = await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
+  // Runs on the BYPASSRLS super pool: tenant_users + audit_log enforce FORCE ROW
+  // LEVEL SECURITY, so the cross-tenant read and the audit insert (which would
+  // otherwise fail the tenant_isolation WITH CHECK) both need the bypass role.
+  const result = await withSuperAdmin(db, async (tx) => {
     const [row] = await tx
       .select({
         targetUserId: sessions.impersonatingUserId,

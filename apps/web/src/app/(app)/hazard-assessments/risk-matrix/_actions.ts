@@ -8,8 +8,8 @@
 // assessment screen.
 
 import { revalidatePath } from 'next/cache'
-import { eq, sql } from 'drizzle-orm'
-import { db } from '@beaconhs/db'
+import { eq } from 'drizzle-orm'
+import { db, withSuperAdmin } from '@beaconhs/db'
 import { tenants } from '@beaconhs/db/schema'
 import type { RiskMatrixConfig } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
@@ -70,8 +70,7 @@ export async function saveRiskMatrix(config: RiskMatrixConfig): Promise<SaveResu
   const parsed = validate(config)
   if (!parsed.ok) return parsed
 
-  const before = await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
+  const before = await withSuperAdmin(db, async (tx) => {
     const [t] = await tx
       .select({ riskMatrix: tenants.riskMatrix })
       .from(tenants)
@@ -80,8 +79,7 @@ export async function saveRiskMatrix(config: RiskMatrixConfig): Promise<SaveResu
     return t?.riskMatrix ?? null
   })
 
-  await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
+  await withSuperAdmin(db, async (tx) => {
     await tx.update(tenants).set({ riskMatrix: parsed.value }).where(eq(tenants.id, tenantId))
   })
 

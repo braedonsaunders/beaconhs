@@ -10,8 +10,8 @@
 // image, not a square/maskable icon set).
 
 import { NextResponse } from 'next/server'
-import { eq, sql } from 'drizzle-orm'
-import { db } from '@beaconhs/db'
+import { eq } from 'drizzle-orm'
+import { db, withSuperAdmin } from '@beaconhs/db'
 import { tenants } from '@beaconhs/db/schema'
 import { getRequestContext } from '@/lib/auth'
 
@@ -30,8 +30,7 @@ export async function GET() {
   try {
     const ctx = await getRequestContext()
     if (ctx) {
-      const [tenant] = await db.transaction(async (tx) => {
-        await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
+      const [tenant] = await withSuperAdmin(db, async (tx) => {
         return tx
           .select({ name: tenants.name, branding: tenants.branding })
           .from(tenants)

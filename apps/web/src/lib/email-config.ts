@@ -5,8 +5,8 @@
 // (see ./crypto). The worker reads these back and resolves the effective
 // transport (see @beaconhs/worker resolve-email-transport).
 
-import { eq, sql } from 'drizzle-orm'
-import { db } from '@beaconhs/db'
+import { eq } from 'drizzle-orm'
+import { db, withSuperAdmin } from '@beaconhs/db'
 import { platformSettings, PLATFORM_SETTINGS_ID, tenants } from '@beaconhs/db/schema'
 import {
   isEmailProvider,
@@ -110,8 +110,7 @@ function mergeRaw(prev: RawEmailConfig, input: EmailSettingsInput): RawEmailConf
 // ---------------------------------------------------------------------------
 
 async function readTenantEmail(tenantId: string): Promise<RawEmailConfig> {
-  return db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
+  return withSuperAdmin(db, async (tx) => {
     const [t] = await tx
       .select({ settings: tenants.settings })
       .from(tenants)
@@ -136,8 +135,7 @@ export async function saveTenantEmailSettings(
   ctx: RequestContext,
   input: EmailSettingsInput,
 ): Promise<void> {
-  await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
+  await withSuperAdmin(db, async (tx) => {
     const [t] = await tx
       .select({ settings: tenants.settings })
       .from(tenants)
@@ -156,8 +154,7 @@ export async function saveTenantEmailSettings(
 
 /** Clear the stored secret for this tenant. */
 export async function clearTenantEmailKey(ctx: RequestContext): Promise<void> {
-  await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
+  await withSuperAdmin(db, async (tx) => {
     const [t] = await tx
       .select({ settings: tenants.settings })
       .from(tenants)
@@ -184,8 +181,7 @@ export async function clearTenantEmailKey(ctx: RequestContext): Promise<void> {
 // ---------------------------------------------------------------------------
 
 async function readPlatformEmail(): Promise<PlatformEmailConfig> {
-  return db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
+  return withSuperAdmin(db, async (tx) => {
     const [row] = await tx
       .select({ email: platformSettings.email })
       .from(platformSettings)
@@ -215,8 +211,7 @@ export async function savePlatformEmailSettings(
 ): Promise<void> {
   const prev = await readPlatformEmail()
   const next: PlatformEmailConfig = { ...mergeRaw(prev, input), mode: input.mode }
-  await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
+  await withSuperAdmin(db, async (tx) => {
     await tx
       .insert(platformSettings)
       .values({ id: PLATFORM_SETTINGS_ID, email: next })

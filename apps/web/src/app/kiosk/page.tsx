@@ -39,17 +39,16 @@ export default async function KioskPage({
     )
   }
 
-  // Bypass RLS — the kiosk is unauthenticated; we trust the tenant slug
-  // (which is enumerable but harmless) + the PIN check inside the action.
+  // The kiosk is unauthenticated; we trust the tenant slug (enumerable but
+  // harmless) + the PIN check inside the action. Resolve the tenant from the
+  // global tenants table, then scope every read to it via app.tenant_id.
   const data = await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
     const tenantRows = await tx.execute(
       sql`SELECT id, name, slug FROM tenants WHERE slug = ${slug} LIMIT 1`,
     )
     const tenant = (tenantRows as unknown as { id: string; name: string; slug: string }[])[0]
     if (!tenant) return null
     await tx.execute(sql`SELECT set_config('app.tenant_id', ${tenant.id}, true)`)
-    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'off', true)`)
     const [peopleRows, siteRows, crewRows] = await Promise.all([
       tx
         .select({
