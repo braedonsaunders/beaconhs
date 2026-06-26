@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { and, eq, sql } from 'drizzle-orm'
-import { createClient } from './client'
+import { createSuperClient } from './client'
 import {
   BUILTIN_ROLES,
   correctiveActions,
@@ -90,13 +90,12 @@ import { seedLiftPlanTemplate } from './seed/lift-plan-template'
 import { seedToolboxTemplate } from './seed/toolbox-template'
 
 async function main() {
-  const { db, sql: pg } = createClient()
+  const { db, sql: pg } = createSuperClient()
   console.log('▶ Seeding…')
 
   // --- Report definitions (cross-tenant catalogue) ---------------------
   // Run every seed invocation so new definitions land even on re-seed.
   await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
     await tx
       .insert(reportDefinitions)
       .values([
@@ -656,8 +655,6 @@ async function main() {
   })
 
   await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
-
     // --- Super-admin ----------------------------------------------------
     const adminId = randomUUID()
     const inserted = await tx
@@ -1915,7 +1912,6 @@ async function main() {
   // Documentation lookups — types + hierarchical categories + reference
   // types + reference categories. Idempotent and scoped to the first tenant.
   await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
     const [first] = await tx
       .select({ id: tenants.id })
       .from(tenants)
@@ -2100,10 +2096,10 @@ export async function seedDocumentTypesAndCategories(tx: any, tenantId: string):
  * "Start from template" gallery at /apps/templates/new (the gallery clones
  * each template into the user's own tenant on click).
  */
-async function seedCanonicalTemplates(db: ReturnType<typeof createClient>['db']): Promise<void> {
+async function seedCanonicalTemplates(
+  db: ReturnType<typeof createSuperClient>['db'],
+): Promise<void> {
   await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
-
     // Pick the first tenant (by createdAt). If there is none, skip — this is
     // a fresh DB with no tenants.
     const [first] = await tx

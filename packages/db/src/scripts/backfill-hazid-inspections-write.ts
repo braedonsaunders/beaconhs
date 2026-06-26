@@ -18,15 +18,13 @@
 // Idempotent: a re-run finds the write keys already present and grants nothing.
 // Never downgrades / removes anything.
 //
-// MUST run on the BYPASSRLS super pool — the role-table RLS is now a single
-// `tenant_id` equality with no `app.bypass_rls` escape hatch, so connect as
-// beaconhs_super to see/update every tenant's roles:
-//   DATABASE_URL="$SUPERADMIN_DATABASE_URL" pnpm --filter @beaconhs/db exec \
-//     tsx src/scripts/backfill-hazid-inspections-write.ts
+// Connects via the BYPASSRLS super pool (SUPERADMIN_DATABASE_URL / beaconhs_super) —
+// the role-table RLS is a single `tenant_id` equality with no `app.bypass_rls`
+// escape hatch, so it must run as beaconhs_super to see/update every tenant's roles:
+//   pnpm --filter @beaconhs/db exec tsx src/scripts/backfill-hazid-inspections-write.ts
 
-import { drizzle } from 'drizzle-orm/postgres-js'
-import postgres from 'postgres'
 import { eq } from 'drizzle-orm'
+import { createSuperClient } from '../client'
 import * as s from '../schema'
 
 // Modules that gained write permissions, with the read tiers that mark a role
@@ -42,10 +40,7 @@ function readsModule(perms: Set<string>, prefix: string): boolean {
 }
 
 async function main() {
-  const url = process.env.DATABASE_URL
-  if (!url) throw new Error('DATABASE_URL required')
-  const pg = postgres(url, { max: 1 })
-  const db = drizzle(pg, { schema: s })
+  const { db, sql: pg } = createSuperClient({ max: 1 })
 
   const summary = await db.transaction(async (tx) => {
     const roles = await tx

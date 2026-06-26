@@ -7,11 +7,10 @@
 //
 // Run with:
 //   pnpm --filter @beaconhs/db exec tsx --env-file=../../apps/web/.env.local src/scripts/reseed-lift-plan.ts
-// (or point --env-file at whichever .env holds DATABASE_URL).
+// (or point --env-file at whichever .env holds SUPERADMIN_DATABASE_URL).
 
 import { and, desc, eq } from 'drizzle-orm'
-import { drizzle } from 'drizzle-orm/postgres-js'
-import postgres from 'postgres'
+import { createSuperClient } from '../client'
 import * as s from '../schema'
 import {
   LIFT_PLAN_TEMPLATE_CATEGORY,
@@ -23,13 +22,9 @@ import {
 } from '../seed/lift-plan-template'
 
 async function main() {
-  const url = process.env.DATABASE_URL
-  if (!url) throw new Error('DATABASE_URL required')
-  const sql = postgres(url, { max: 1 })
-  const db = drizzle(sql, { schema: s })
+  const { db, sql } = createSuperClient({ max: 1 })
   const target = JSON.stringify(LIFT_PLAN_TEMPLATE_SCHEMA)
   try {
-    await sql`select set_config('app.bypass_rls', 'on', false)`
     const tenants = await db.select({ id: s.tenants.id }).from(s.tenants)
     const out: unknown[] = []
     for (const t of tenants) {

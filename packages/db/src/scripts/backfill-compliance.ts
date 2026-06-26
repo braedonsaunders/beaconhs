@@ -3,16 +3,15 @@
 // Maps the legacy 5 (inspection / document / training / form / journal)
 // assignment rows → compliance_obligations + compliance_audience. Idempotent:
 // keyed on (legacy_table, legacy_id) via the unique index + onConflictDoNothing,
-// so re-running is safe. Run with a writable database URL:
-//   DATABASE_URL='postgresql://beaconhs:beaconhs@localhost:5433/beaconhs' \
-//     npx tsx src/scripts/backfill-compliance.ts
+// so re-running is safe. Run with the BYPASSRLS super pool (SUPERADMIN_DATABASE_URL):
+//   pnpm --filter @beaconhs/db exec tsx src/scripts/backfill-compliance.ts
 //
-// beaconhs_app owns the tables and RLS is ENABLE (not FORCE), so the owner
-// bypasses RLS and sees every tenant; we filter tenantId explicitly anyway.
+// Connects via the super pool (role beaconhs_super): tenant tables are FORCE ROW
+// LEVEL SECURITY, so the app role cannot read/write across tenants; we filter
+// tenantId explicitly anyway.
 
-import { drizzle } from 'drizzle-orm/postgres-js'
-import postgres from 'postgres'
-import { and, eq, inArray, isNull } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
+import { createSuperClient } from '../client'
 import * as s from '../schema'
 
 type Aud = { kind: string; entityKey: string }
@@ -34,10 +33,7 @@ function audFromArrays(opts: {
 }
 
 async function main() {
-  const url = process.env.DATABASE_URL
-  if (!url) throw new Error('DATABASE_URL required')
-  const sql = postgres(url, { max: 1 })
-  const db = drizzle(sql, { schema: s })
+  const { db, sql } = createSuperClient({ max: 1 })
 
   const tenants = await db.select({ id: s.tenants.id }).from(s.tenants)
   let created = 0

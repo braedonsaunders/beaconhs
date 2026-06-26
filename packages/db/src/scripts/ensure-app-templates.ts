@@ -3,18 +3,13 @@
 // Run with:
 //   pnpm --filter @beaconhs/db exec tsx --env-file=../../apps/web/.env.local src/scripts/ensure-app-templates.ts
 
-import { drizzle } from 'drizzle-orm/postgres-js'
-import postgres from 'postgres'
+import { createSuperClient } from '../client'
 import * as s from '../schema'
 import { seedHazardAssessmentAppTemplates } from '../seed/hazard-assessment-app-templates'
 
 async function main() {
-  const url = process.env.DATABASE_URL
-  if (!url) throw new Error('DATABASE_URL required')
-  const sql = postgres(url, { max: 1 })
-  const db = drizzle(sql, { schema: s })
+  const { db, sql } = createSuperClient({ max: 1 })
   try {
-    await sql`select set_config('app.bypass_rls', 'on', false)`
     const tenants = await db.select({ id: s.tenants.id }).from(s.tenants)
     const out: unknown[] = []
     for (const t of tenants) {

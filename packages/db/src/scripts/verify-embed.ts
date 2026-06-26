@@ -6,22 +6,17 @@
 // full-screen FormRenderer sheet. Idempotent. Run with:
 //   pnpm --filter @beaconhs/db exec tsx --env-file=../../.env src/scripts/verify-embed.ts
 //
-// beaconhs_app owns the tables (RLS ENABLE, not FORCE) so the owner bypasses RLS.
+// Connects via the BYPASSRLS super pool (SUPERADMIN_DATABASE_URL / beaconhs_super):
+// tenant tables are FORCE ROW LEVEL SECURITY, so the app role cannot read across
+// tenants and the old `app.bypass_rls` GUC is dead.
 
-import { drizzle } from 'drizzle-orm/postgres-js'
-import postgres from 'postgres'
 import { and, desc, eq, isNull } from 'drizzle-orm'
+import { createSuperClient } from '../client'
 import * as s from '../schema'
 
 async function main() {
-  const url = process.env.DATABASE_URL
-  if (!url) throw new Error('DATABASE_URL required')
-  const sql = postgres(url, { max: 1 })
-  const db = drizzle(sql, { schema: s })
+  const { db, sql } = createSuperClient({ max: 1 })
   try {
-    // Tenant-scoped tables are FORCE RLS — bypass for this cross-tenant helper
-    // (session-level on the single pooled connection).
-    await sql`select set_config('app.bypass_rls', 'on', false)`
     const [asm] = await db
       .select({
         id: s.hazidAssessments.id,

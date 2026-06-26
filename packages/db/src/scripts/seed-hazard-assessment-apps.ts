@@ -1,5 +1,5 @@
-import { and, count, eq, max, sql as drizzleSql } from 'drizzle-orm'
-import { createClient } from '../client'
+import { and, count, eq, max } from 'drizzle-orm'
+import { createSuperClient } from '../client'
 import {
   hazidAssessmentTypeApps,
   hazidAssessmentTypePPE,
@@ -187,12 +187,11 @@ async function ensureTypeApp(
 }
 
 async function main() {
-  const { db, sql } = createClient({ max: 1 })
+  const { db, sql } = createSuperClient({ max: 1 })
   try {
     const tenantRows = await db.select({ id: tenants.id, name: tenants.name }).from(tenants)
     for (const tenant of tenantRows) {
       await db.transaction(async (tx) => {
-        await tx.execute(drizzleSql`SELECT set_config('app.bypass_rls', 'on', true)`)
         const templates = await seedHazardAssessmentAppTemplates(tx, tenant.id)
         const confinedTypeId = await ensureType(tx, tenant.id, {
           name: 'Confined Space JSHA',

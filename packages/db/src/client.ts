@@ -61,3 +61,16 @@ export function createClient(opts?: { max?: number; url?: string }) {
   })
   return { db: drizzle(sql, { schema }), sql }
 }
+
+// Client for seed + one-off maintenance scripts that read/write ACROSS tenants.
+// Connects as the dedicated BYPASSRLS role (beaconhs_super) — the tenant RLS
+// policy is a single `tenant_id = current_setting('app.tenant_id')` equality
+// under FORCE ROW LEVEL SECURITY with no bypass-GUC branch (see rls.ts), so
+// `set_config('app.bypass_rls','on')` does nothing; only the beaconhs_super role
+// bypasses RLS. Prefer SUPERADMIN_DATABASE_URL; fall back to the direct URL for
+// local dev, where the default role is a superuser (which bypasses RLS anyway).
+// If SUPERADMIN_DATABASE_URL is unset against a real DB, cross-tenant writes fail
+// the WITH CHECK loudly rather than corrupting data — point it at beaconhs_super.
+export function createSuperClient(opts?: { max?: number }) {
+  return createClient({ url: process.env.SUPERADMIN_DATABASE_URL ?? directUrl(), max: opts?.max })
+}

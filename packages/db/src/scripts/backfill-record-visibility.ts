@@ -11,14 +11,14 @@
 // tier already resolves to `self` via resolveVisibilityTier) and NEVER downgrade.
 // Idempotent: a re-run finds the tiers already present and grants nothing.
 //
-//   DATABASE_URL='postgresql://…' npx tsx src/scripts/backfill-record-visibility.ts
+//   pnpm --filter @beaconhs/db exec tsx src/scripts/backfill-record-visibility.ts
 //
-// Roles are tenant-RLS'd; we read+write inside one bypass transaction (the same
-// GUC getRequestContext / stopImpersonation use), so the owner sees every tenant.
+// Roles are tenant-RLS'd; this connects via the BYPASSRLS super pool
+// (SUPERADMIN_DATABASE_URL / role beaconhs_super), so it reads + updates every
+// tenant's roles without the dead `app.bypass_rls` GUC.
 
-import { drizzle } from 'drizzle-orm/postgres-js'
-import postgres from 'postgres'
-import { eq, sql } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
+import { createSuperClient } from '../client'
 import * as s from '../schema'
 
 // The five record modules now enforcing per-user visibility.
@@ -52,13 +52,9 @@ function computeTier(perms: Set<string>): Tier {
 }
 
 async function main() {
-  const url = process.env.DATABASE_URL
-  if (!url) throw new Error('DATABASE_URL required')
-  const pg = postgres(url, { max: 1 })
-  const db = drizzle(pg, { schema: s })
+  const { db, sql: pg } = createSuperClient({ max: 1 })
 
   const summary = await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
     const roles = await tx
       .select({ id: s.roles.id, key: s.roles.key, permissions: s.roles.permissions })
       .from(s.roles)
