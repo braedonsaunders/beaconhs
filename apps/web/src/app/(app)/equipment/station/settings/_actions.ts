@@ -49,12 +49,12 @@ export async function saveStationSettings(
       })
 
     // Re-sync which org-units count as "at base / checked in".
-    await tx.update(orgUnits).set({ isEquipmentBase: false }).where(eq(orgUnits.isEquipmentBase, true))
+    await tx
+      .update(orgUnits)
+      .set({ isEquipmentBase: false })
+      .where(eq(orgUnits.isEquipmentBase, true))
     if (baseIds.length > 0) {
-      await tx
-        .update(orgUnits)
-        .set({ isEquipmentBase: true })
-        .where(inArray(orgUnits.id, baseIds))
+      await tx.update(orgUnits).set({ isEquipmentBase: true }).where(inArray(orgUnits.id, baseIds))
     }
   })
 

@@ -38,13 +38,13 @@ export default async function StationPage({
       .limit(1)
 
     const homeName = settings?.defaultCheckInOrgUnitId
-      ? (
+      ? ((
           await tx
             .select({ name: orgUnits.name })
             .from(orgUnits)
             .where(eq(orgUnits.id, settings.defaultCheckInOrgUnitId))
             .limit(1)
-        )[0]?.name ?? null
+        )[0]?.name ?? null)
       : null
 
     const peopleRows = await tx

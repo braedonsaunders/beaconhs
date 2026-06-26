@@ -92,8 +92,7 @@ export function EquipmentKioskClient(props: {
     )
   }
 
-  const deviceLabel =
-    typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 80) : null
+  const deviceLabel = typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 80) : null
 
   return (
     <StationClient

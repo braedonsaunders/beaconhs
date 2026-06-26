@@ -154,7 +154,10 @@ export async function searchStationCore(
   }
 }
 
-async function personName(tx: Database, personId: string | null | undefined): Promise<string | null> {
+async function personName(
+  tx: Database,
+  personId: string | null | undefined,
+): Promise<string | null> {
   if (!personId) return null
   const [p] = await tx
     .select({ first: people.firstName, last: people.lastName })
@@ -164,7 +167,10 @@ async function personName(tx: Database, personId: string | null | undefined): Pr
   return p ? `${p.first} ${p.last}`.trim() : null
 }
 
-async function locationName(tx: Database, orgUnitId: string | null | undefined): Promise<string | null> {
+async function locationName(
+  tx: Database,
+  orgUnitId: string | null | undefined,
+): Promise<string | null> {
   if (!orgUnitId) return null
   const [o] = await tx
     .select({ name: orgUnits.name })

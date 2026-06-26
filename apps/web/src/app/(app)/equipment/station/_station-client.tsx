@@ -89,7 +89,8 @@ function useBeeper(enabled: boolean) {
       if (!enabled) return
       try {
         const AC =
-          window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+          window.AudioContext ??
+          (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
         if (!AC) return
         const ctx = ctxRef.current ?? new AC()
         ctxRef.current = ctx
@@ -155,7 +156,7 @@ export function StationClient(props: StationClientProps) {
   const [outCount, setOutCount] = useState(initialOpen.length)
   const [availCount, setAvailCount] = useState(availableCount)
   const [results, setResults] = useState<StationSearchResults | null>(null)
-  const [isFull, setIsFull] = useState(false)
+  const [overlay, setOverlay] = useState(false)
   const [camOpen, setCamOpen] = useState(false)
 
   const rootRef = useRef<HTMLDivElement>(null)
@@ -172,7 +173,11 @@ export function StationClient(props: StationClientProps) {
     // Don't steal focus from the camera overlay or a dropdown search box.
     if (camOpen) return
     const el = scanRef.current
-    if (el && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+    if (
+      el &&
+      document.activeElement?.tagName !== 'INPUT' &&
+      document.activeElement?.tagName !== 'TEXTAREA'
+    ) {
       el.focus()
     }
   }, [camOpen])
@@ -196,7 +201,9 @@ export function StationClient(props: StationClientProps) {
       try {
         const dir =
           opts?.directionOverride ??
-          (scanMode === 'explicit' && direction !== 'toggle' ? (direction as 'in' | 'out') : undefined)
+          (scanMode === 'explicit' && direction !== 'toggle'
+            ? (direction as 'in' | 'out')
+            : undefined)
         const result = await onScan({
           code,
           activePersonId: activePerson?.id ?? null,
@@ -224,7 +231,12 @@ export function StationClient(props: StationClientProps) {
         if (result.action === 'active_person') {
           const person =
             people.find((p) => p.id === result.personId) ??
-            ({ id: result.personId, name: result.personName, employeeNo: null, jobTitle: result.jobTitle } as Person)
+            ({
+              id: result.personId,
+              name: result.personName,
+              employeeNo: null,
+              jobTitle: result.jobTitle,
+            } as Person)
           setActivePerson(person)
           beep('person')
           showFlash({ tone: 'person', title: result.personName, sub: 'Active holder set' })
@@ -338,14 +350,24 @@ export function StationClient(props: StationClientProps) {
     })
   }
 
-  function toggleFullscreen() {
-    const el = rootRef.current
-    if (!el) return
-    if (!document.fullscreenElement) void el.requestFullscreen?.().catch(() => {})
-    else void document.exitFullscreen?.().catch(() => {})
+  // The in-app station lives under PageContainer's transformed FadeInBody, which
+  // constrains a native-fullscreened descendant. So "kiosk" mode renders the
+  // station as a fixed full-viewport overlay portaled to <body> (always fills
+  // the screen + scales up), and best-effort also requests true browser
+  // fullscreen on the document root.
+  function toggleKiosk() {
+    if (!overlay) {
+      setOverlay(true)
+      void document.documentElement.requestFullscreen?.().catch(() => {})
+    } else {
+      if (document.fullscreenElement) void document.exitFullscreen?.().catch(() => {})
+      setOverlay(false)
+    }
   }
   useEffect(() => {
-    const onChange = () => setIsFull(Boolean(document.fullscreenElement))
+    const onChange = () => {
+      if (!document.fullscreenElement) setOverlay(false)
+    }
     document.addEventListener('fullscreenchange', onChange)
     return () => document.removeEventListener('fullscreenchange', onChange)
   }, [])
@@ -364,14 +386,16 @@ export function StationClient(props: StationClientProps) {
     [locations],
   )
 
-  const dark = kiosk || isFull
+  const dark = kiosk || overlay
   // Kiosk / full-screen scales everything up so it reads across a room.
   const big = dark
-  const shell = dark
-    ? 'min-h-screen bg-slate-950 text-slate-100'
-    : 'rounded-2xl border border-slate-200 bg-white text-slate-900 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100'
+  const shell = overlay
+    ? 'fixed inset-0 z-40 overflow-y-auto bg-slate-950 text-slate-100'
+    : kiosk
+      ? 'min-h-screen bg-slate-950 text-slate-100'
+      : 'rounded-2xl border border-slate-200 bg-white text-slate-900 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100'
 
-  return (
+  const tree = (
     <div ref={rootRef} className={shell}>
       <div
         className={
@@ -386,7 +410,9 @@ export function StationClient(props: StationClientProps) {
           <div className="flex items-center gap-3">
             <div
               className={`grid h-11 w-11 place-items-center rounded-xl ${
-                dark ? 'bg-amber-500/15 text-amber-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'
+                dark
+                  ? 'bg-amber-500/15 text-amber-300'
+                  : 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'
               }`}
             >
               <ScanLine size={22} />
@@ -395,7 +421,11 @@ export function StationClient(props: StationClientProps) {
               <div className={`font-semibold ${big ? 'text-2xl' : 'text-lg'}`}>
                 Check-in / out station
               </div>
-              <div className={dark ? 'text-sm text-slate-400' : 'text-xs text-slate-500 dark:text-slate-400'}>
+              <div
+                className={
+                  dark ? 'text-sm text-slate-400' : 'text-xs text-slate-500 dark:text-slate-400'
+                }
+              >
                 {tenantName}
                 {homeLocationName ? ` · home: ${homeLocationName}` : ''}
               </div>
@@ -407,7 +437,9 @@ export function StationClient(props: StationClientProps) {
               onClick={() => setSoundOn((s) => !s)}
               title={soundOn ? 'Mute' : 'Unmute'}
               className={`grid h-9 w-9 place-items-center rounded-lg ${
-                dark ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'
+                dark
+                  ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'
               }`}
             >
               {soundOn ? <Volume2 size={16} /> : <VolumeX size={16} />}
@@ -418,7 +450,9 @@ export function StationClient(props: StationClientProps) {
                 onClick={() => setCamOpen(true)}
                 title="Scan with camera"
                 className={`grid h-9 w-9 place-items-center rounded-lg ${
-                  dark ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'
+                  dark
+                    ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'
                 }`}
               >
                 <Camera size={16} />
@@ -427,14 +461,16 @@ export function StationClient(props: StationClientProps) {
             {surface === 'app' ? (
               <button
                 type="button"
-                onClick={toggleFullscreen}
-                title={isFull ? 'Exit full screen' : 'Full screen (kiosk)'}
+                onClick={toggleKiosk}
+                title={overlay ? 'Exit full screen' : 'Full screen (kiosk)'}
                 className={`inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-medium ${
-                  dark ? 'bg-slate-800 text-slate-200 hover:bg-slate-700' : 'bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900'
+                  dark
+                    ? 'bg-slate-800 text-slate-200 hover:bg-slate-700'
+                    : 'bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900'
                 }`}
               >
-                {isFull ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
-                {isFull ? 'Exit' : 'Kiosk'}
+                {overlay ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+                {overlay ? 'Exit' : 'Kiosk'}
               </button>
             ) : null}
             {kiosk && onExit ? (
@@ -456,7 +492,9 @@ export function StationClient(props: StationClientProps) {
             {activePerson ? (
               <div
                 className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 ${
-                  dark ? 'border-slate-700 bg-slate-900' : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900'
+                  dark
+                    ? 'border-slate-700 bg-slate-900'
+                    : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900'
                 }`}
               >
                 <span className="flex items-center gap-2 truncate text-sm font-medium">
@@ -560,7 +598,7 @@ export function StationClient(props: StationClientProps) {
             autoCapitalize="off"
             spellCheck={false}
             placeholder="Scan a tag or badge — or type to search"
-            className={`w-full rounded-xl border-2 font-medium outline-none transition disabled:opacity-60 ${
+            className={`w-full rounded-xl border-2 font-medium transition outline-none disabled:opacity-60 ${
               big ? 'py-6 pr-5 pl-16 text-3xl' : 'py-4 pr-4 pl-12 text-lg'
             } ${
               dark
@@ -596,7 +634,9 @@ export function StationClient(props: StationClientProps) {
                         <span className="block truncate text-sm font-medium">{p.name}</span>
                         <span
                           className={
-                            dark ? 'block truncate text-xs text-slate-400' : 'block truncate text-xs text-slate-500'
+                            dark
+                              ? 'block truncate text-xs text-slate-400'
+                              : 'block truncate text-xs text-slate-500'
                           }
                         >
                           {[p.jobTitle, p.employeeNo].filter(Boolean).join(' · ') || 'Employee'}
@@ -608,7 +648,9 @@ export function StationClient(props: StationClientProps) {
               ) : null}
               {results.equipment.length > 0 ? (
                 <div className="p-1">
-                  <DropHeader dark={dark}>Equipment — tap to {scanActionWord(direction)}</DropHeader>
+                  <DropHeader dark={dark}>
+                    Equipment — tap to {scanActionWord(direction)}
+                  </DropHeader>
                   {results.equipment.map((it) => (
                     <button
                       key={it.id}
@@ -625,18 +667,23 @@ export function StationClient(props: StationClientProps) {
                       />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-medium">
-                          <span className="font-mono text-xs opacity-70">{it.assetTag}</span> · {it.name}
+                          <span className="font-mono text-xs opacity-70">{it.assetTag}</span> ·{' '}
+                          {it.name}
                         </span>
                         <span
                           className={
-                            dark ? 'block truncate text-xs text-slate-400' : 'block truncate text-xs text-slate-500'
+                            dark
+                              ? 'block truncate text-xs text-slate-400'
+                              : 'block truncate text-xs text-slate-500'
                           }
                         >
                           {it.typeName ?? 'Equipment'}
                           {it.isOut && it.holderName ? ` · with ${it.holderName}` : ''}
                         </span>
                       </span>
-                      <Badge variant={it.isOut ? 'warning' : 'success'}>{it.isOut ? 'out' : 'in'}</Badge>
+                      <Badge variant={it.isOut ? 'warning' : 'success'}>
+                        {it.isOut ? 'out' : 'in'}
+                      </Badge>
                     </button>
                   ))}
                 </div>
@@ -651,7 +698,13 @@ export function StationClient(props: StationClientProps) {
             <FlashPanel flash={flash} pending={pending} dark={dark} big={big} />
           </div>
           <div className="lg:col-span-3">
-            <div className={dark ? 'text-xs font-medium text-slate-400' : 'text-xs font-medium text-slate-500 dark:text-slate-400'}>
+            <div
+              className={
+                dark
+                  ? 'text-xs font-medium text-slate-400'
+                  : 'text-xs font-medium text-slate-500 dark:text-slate-400'
+              }
+            >
               This session
             </div>
             <ul className="mt-2 space-y-1.5">
@@ -664,7 +717,9 @@ export function StationClient(props: StationClientProps) {
                   <li
                     key={e.key}
                     className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm ${
-                      dark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900'
+                      dark
+                        ? 'border-slate-800 bg-slate-900'
+                        : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900'
                     } ${e.undone ? 'opacity-50' : ''}`}
                   >
                     <span className="flex min-w-0 items-center gap-2">
@@ -678,7 +733,13 @@ export function StationClient(props: StationClientProps) {
                       <span className="min-w-0">
                         <span className="block truncate font-medium">{e.title}</span>
                         {e.sub ? (
-                          <span className={dark ? 'block truncate text-xs text-slate-400' : 'block truncate text-xs text-slate-500'}>
+                          <span
+                            className={
+                              dark
+                                ? 'block truncate text-xs text-slate-400'
+                                : 'block truncate text-xs text-slate-500'
+                            }
+                          >
                             {e.sub}
                           </span>
                         ) : null}
@@ -689,7 +750,9 @@ export function StationClient(props: StationClientProps) {
                         type="button"
                         onClick={() => undo(e)}
                         className={`shrink-0 rounded px-2 py-1 text-xs font-medium ${
-                          dark ? 'text-slate-300 hover:bg-slate-800' : 'text-teal-700 hover:bg-teal-50 dark:text-teal-400'
+                          dark
+                            ? 'text-slate-300 hover:bg-slate-800'
+                            : 'text-teal-700 hover:bg-teal-50 dark:text-teal-400'
                         }`}
                       >
                         Undo
@@ -717,7 +780,9 @@ export function StationClient(props: StationClientProps) {
           >
             <div
               className={`px-3 py-2 text-xs font-semibold ${
-                dark ? 'bg-slate-900 text-slate-300' : 'bg-slate-50 text-slate-600 dark:bg-slate-900 dark:text-slate-300'
+                dark
+                  ? 'bg-slate-900 text-slate-300'
+                  : 'bg-slate-50 text-slate-600 dark:bg-slate-900 dark:text-slate-300'
               }`}
             >
               Currently out
@@ -732,9 +797,16 @@ export function StationClient(props: StationClientProps) {
                 >
                   <span className="min-w-0">
                     <span className="block truncate font-medium">
-                      <span className="font-mono text-xs opacity-70">{c.assetTag}</span> · {c.itemName}
+                      <span className="font-mono text-xs opacity-70">{c.assetTag}</span> ·{' '}
+                      {c.itemName}
                     </span>
-                    <span className={dark ? 'block truncate text-xs text-slate-400' : 'block truncate text-xs text-slate-500'}>
+                    <span
+                      className={
+                        dark
+                          ? 'block truncate text-xs text-slate-400'
+                          : 'block truncate text-xs text-slate-500'
+                      }
+                    >
                       {c.holderName ?? 'no holder'}
                       {c.locationName ? ` @ ${c.locationName}` : ''}
                     </span>
@@ -742,8 +814,10 @@ export function StationClient(props: StationClientProps) {
                   <button
                     type="button"
                     onClick={() => void handleCode(c.assetTag, { directionOverride: 'in' })}
-                    className={`shrink-0 inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold ${
-                      dark ? 'bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25' : 'bg-emerald-500 text-white hover:bg-emerald-400'
+                    className={`inline-flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold ${
+                      dark
+                        ? 'bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25'
+                        : 'bg-emerald-500 text-white hover:bg-emerald-400'
                     }`}
                   >
                     <ArrowDownToLine size={13} /> Check in
@@ -755,9 +829,14 @@ export function StationClient(props: StationClientProps) {
         ) : null}
       </div>
 
-      {camOpen ? <CameraScanner onCode={(c) => handleCode(c)} onClose={() => setCamOpen(false)} /> : null}
+      {camOpen ? (
+        <CameraScanner onCode={(c) => handleCode(c)} onClose={() => setCamOpen(false)} />
+      ) : null}
     </div>
   )
+
+  // Kiosk overlay escapes the transformed app shell by rendering at <body>.
+  return overlay ? createPortal(tree, document.body) : tree
 }
 
 function Label({ children, dark }: { children: React.ReactNode; dark: boolean }) {
@@ -804,7 +883,9 @@ function FlashPanel({
     return (
       <div
         className={`grid h-full ${minH} place-items-center rounded-xl border-2 border-dashed px-4 py-6 text-center ${
-          dark ? 'border-slate-800 text-slate-500' : 'border-slate-200 text-slate-400 dark:border-slate-800'
+          dark
+            ? 'border-slate-800 text-slate-500'
+            : 'border-slate-200 text-slate-400 dark:border-slate-800'
         }`}
       >
         <div>
@@ -826,7 +907,9 @@ function FlashPanel({
           ? { bg: 'bg-teal-500', icon: <UserRound size={iconSize} /> }
           : { bg: 'bg-red-500', icon: <XCircle size={iconSize} /> }
   return (
-    <div className={`flex h-full ${minH} items-center gap-4 rounded-xl px-5 py-6 text-white ${tone.bg}`}>
+    <div
+      className={`flex h-full ${minH} items-center gap-4 rounded-xl px-5 py-6 text-white ${tone.bg}`}
+    >
       <div
         className={`grid shrink-0 place-items-center rounded-full bg-white/20 ${
           big ? 'h-20 w-20' : 'h-14 w-14'
@@ -835,7 +918,9 @@ function FlashPanel({
         {tone.icon}
       </div>
       <div className="min-w-0">
-        <div className={`font-bold tracking-tight ${big ? 'text-4xl' : 'text-2xl'}`}>{flash.title}</div>
+        <div className={`font-bold tracking-tight ${big ? 'text-4xl' : 'text-2xl'}`}>
+          {flash.title}
+        </div>
         {flash.sub ? (
           <div className={`truncate text-white/85 ${big ? 'text-lg' : 'text-sm'}`}>{flash.sub}</div>
         ) : null}
@@ -846,7 +931,13 @@ function FlashPanel({
 
 // Lightweight camera scanner using the platform BarcodeDetector (Android Chrome,
 // recent iOS). Gracefully unused where the API is missing (button is hidden).
-function CameraScanner({ onCode, onClose }: { onCode: (code: string) => void; onClose: () => void }) {
+function CameraScanner({
+  onCode,
+  onClose,
+}: {
+  onCode: (code: string) => void
+  onClose: () => void
+}) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [error, setError] = useState<string | null>(null)
   const [mounted, setMounted] = useState(false)
@@ -861,7 +952,13 @@ function CameraScanner({ onCode, onClose }: { onCode: (code: string) => void; on
 
     async function start() {
       try {
-        const Detector = (window as unknown as { BarcodeDetector: new (o?: unknown) => { detect: (s: CanvasImageSource) => Promise<{ rawValue: string }[]> } }).BarcodeDetector
+        const Detector = (
+          window as unknown as {
+            BarcodeDetector: new (o?: unknown) => {
+              detect: (s: CanvasImageSource) => Promise<{ rawValue: string }[]>
+            }
+          }
+        ).BarcodeDetector
         const detector = new Detector({
           formats: ['qr_code', 'code_128', 'code_39', 'ean_13', 'data_matrix'],
         })

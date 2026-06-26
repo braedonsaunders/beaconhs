@@ -5,12 +5,7 @@
 
 import { and, count, desc, eq, isNull, sql } from 'drizzle-orm'
 import { db } from '@beaconhs/db'
-import {
-  equipmentItems,
-  equipmentStationSettings,
-  orgUnits,
-  people,
-} from '@beaconhs/db/schema'
+import { equipmentItems, equipmentStationSettings, orgUnits, people } from '@beaconhs/db/schema'
 import { EquipmentKioskClient } from './kiosk-client'
 
 export const dynamic = 'force-dynamic'
@@ -62,13 +57,13 @@ export default async function EquipmentKioskPage({
       .limit(1)
 
     const homeName = settings?.defaultCheckInOrgUnitId
-      ? (
+      ? ((
           await tx
             .select({ name: orgUnits.name })
             .from(orgUnits)
             .where(eq(orgUnits.id, settings.defaultCheckInOrgUnitId))
             .limit(1)
-        )[0]?.name ?? null
+        )[0]?.name ?? null)
       : null
 
     const peopleRows = await tx

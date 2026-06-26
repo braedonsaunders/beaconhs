@@ -216,7 +216,9 @@ export function StationSettingsForm({
         {msg ? (
           <span
             className={`text-sm ${
-              msg.tone === 'ok' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
+              msg.tone === 'ok'
+                ? 'text-emerald-600 dark:text-emerald-400'
+                : 'text-red-600 dark:text-red-400'
             }`}
           >
             {msg.text}
@@ -247,7 +249,9 @@ function Toggle({
         className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
       />
       <span>
-        <span className="block text-sm font-medium text-slate-800 dark:text-slate-200">{label}</span>
+        <span className="block text-sm font-medium text-slate-800 dark:text-slate-200">
+          {label}
+        </span>
         <span className="block text-xs text-slate-500 dark:text-slate-400">{desc}</span>
       </span>
     </label>
