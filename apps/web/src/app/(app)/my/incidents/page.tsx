@@ -28,6 +28,7 @@ import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
 import { TableToolbar } from '@/components/table-toolbar'
+import { WorkspaceNoIdentity } from '../_no-identity'
 
 export const metadata = { title: 'My incidents' }
 export const dynamic = 'force-dynamic'
@@ -87,11 +88,7 @@ export default async function MyIncidentsPage({
           />
         }
       >
-        <EmptyState
-          icon={<AlertTriangle size={32} />}
-          title="No tenant membership"
-          description="This view requires you to be a member of a tenant. Switch tenants or sign in as a tenant user to see your reported incidents."
-        />
+        <WorkspaceNoIdentity reason="no-membership" noun="reported incidents" />
       </ListPageLayout>
     )
   }

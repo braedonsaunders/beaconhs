@@ -8,30 +8,30 @@
 import Link from 'next/link'
 import {
   AlertTriangle,
-  CheckCircle2,
   ClipboardList,
   GraduationCap,
   ListChecks,
   Radiation,
   ShieldCheck,
   User,
+  Wallet,
 } from 'lucide-react'
-import { and, count, eq, gte, isNull, lte, or, sql, type SQL } from 'drizzle-orm'
+import { and, count, eq, gte, isNull, lte, or, type SQL } from 'drizzle-orm'
 import { Badge, cn, PageHeader } from '@beaconhs/ui'
 import {
   correctiveActions,
-  documentAcknowledgments,
-  documents,
   hazidAssessments,
   incidents,
   inspectionRecords,
   people,
   trainingAudienceAssignmentRecords,
   trainingRecords,
+  trainingSkillAssignments,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
 import { personCompliance } from '../compliance/_hub'
+import { WorkspaceNoIdentity } from './_no-identity'
 
 export const metadata = { title: 'Workspace' }
 export const dynamic = 'force-dynamic'
@@ -216,28 +216,14 @@ export default async function MyLandingPage() {
           .then((r) => Number(r[0]?.c ?? 0))
       : Promise.resolve(0)
 
-    // ---- documents acknowledged / outstanding ----------------------------
-    // We surface "outstanding documents" rather than total — this is what
-    // someone actually needs to act on.
-    let docsOutstanding = 0
-    if (personId) {
-      // documents published, not yet acknowledged by this person at the
-      // latest version. We approximate with a left-anti style: count
-      // published docs minus those with an ack for this person.
-      const [totalRow] = await tx
-        .select({ c: count() })
-        .from(documents)
-        .where(and(eq(documents.status, 'published'), isNull(documents.deletedAt)))
-      const total = Number(totalRow?.c ?? 0)
-      const [ackedRow] = await tx
-        .select({
-          c: sql<number>`count(distinct ${documentAcknowledgments.documentId})`,
-        })
-        .from(documentAcknowledgments)
-        .where(eq(documentAcknowledgments.personId, personId))
-      const acked = Number(ackedRow?.c ?? 0)
-      docsOutstanding = Math.max(0, total - acked)
-    }
+    // ---- wallet credentials (training records + granted skills) ----------
+    const skillsPromise: Promise<number> = personId
+      ? tx
+          .select({ c: count() })
+          .from(trainingSkillAssignments)
+          .where(eq(trainingSkillAssignments.personId, personId))
+          .then((r) => Number(r[0]?.c ?? 0))
+      : Promise.resolve(0)
 
     return {
       personId,
@@ -249,9 +235,23 @@ export default async function MyLandingPage() {
       trainingExpiring: await trainingExpiringPromise,
       trainingAssigned: await trainingAssignedPromise,
       inspections: await inspectionsPromise,
-      docsOutstanding,
+      skills: await skillsPromise,
     }
   })
+
+  // A platform super-admin browsing a tenant has neither a membership nor a
+  // linked person record — the personal Workspace has nothing to scope to, so
+  // render one calm explanation instead of a wall of dead-end tiles.
+  if (!membershipId && !counts.personId) {
+    return (
+      <PageContainer>
+        <div className="space-y-5">
+          <PageHeader title="Workspace" description="Personal views for your account." />
+          <WorkspaceNoIdentity reason="no-membership" noun="records, training, and credentials" />
+        </div>
+      </PageContainer>
+    )
+  }
 
   // Outstanding compliance assigned to this person (obligations scoreboard).
   const complianceRows = counts.personId ? await personCompliance(ctx, counts.personId) : []
@@ -303,14 +303,19 @@ export default async function MyLandingPage() {
       hintVariant: counts.trainingExpiring > 0 ? 'warning' : 'secondary',
     },
     {
-      href: '/my/acknowledgments',
-      label: 'Acknowledgments',
-      description: 'Documents to read and sign.',
-      icon: CheckCircle2,
+      href: '/my/wallet',
+      label: 'Wallet',
+      description: 'Your certificates and credential cards.',
+      icon: Wallet,
       tone: 'emerald',
-      count: counts.docsOutstanding,
-      hint: counts.docsOutstanding > 0 ? 'to acknowledge' : 'all clear',
-      hintVariant: counts.docsOutstanding > 0 ? 'warning' : 'success',
+      count: counts.trainingRecords + counts.skills,
+      hint:
+        counts.trainingRecords + counts.skills > 0
+          ? `${counts.trainingRecords + counts.skills} card${
+              counts.trainingRecords + counts.skills === 1 ? '' : 's'
+            }`
+          : undefined,
+      hintVariant: 'secondary',
     },
     {
       href: '/my/incidents',

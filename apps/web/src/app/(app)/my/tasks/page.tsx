@@ -28,6 +28,7 @@ import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
 import { TableToolbar } from '@/components/table-toolbar'
+import { WorkspaceNoIdentity } from '../_no-identity'
 
 export const metadata = { title: 'My tasks' }
 export const dynamic = 'force-dynamic'
@@ -95,11 +96,7 @@ export default async function MyTasksPage({
           />
         }
       >
-        <EmptyState
-          icon={<ListChecks size={32} />}
-          title="No tenant membership"
-          description="This view requires you to be a member of a tenant. Switch tenants to see your tasks."
-        />
+        <WorkspaceNoIdentity reason="no-membership" noun="tasks" />
       </ListPageLayout>
     )
   }

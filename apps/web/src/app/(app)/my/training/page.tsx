@@ -33,11 +33,24 @@ import {
   trainingEnrollments,
   trainingRecords,
 } from '@beaconhs/db/schema'
+import { htmlToSnippet } from '@beaconhs/forms-core'
 import { requireRequestContext } from '@/lib/auth'
 import { parseListParams } from '@/lib/list-params'
 import { Pagination } from '@/components/pagination'
 import { ListPageLayout } from '@/components/page-layout'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
+import { WorkspaceNoIdentity } from '../_no-identity'
+
+// Delivery types a learner can self-launch from the catalog; instructor-led
+// and on-the-job courses are attended/evaluated, not "started".
+const SELF_LAUNCH = new Set(['self_paced', 'external_certificate'])
+
+const DELIVERY_LABELS: Record<string, string> = {
+  classroom: 'Classroom',
+  self_paced: 'Self-paced',
+  on_the_job: 'On the job',
+  external_certificate: 'External',
+}
 
 export const metadata = { title: 'My training' }
 export const dynamic = 'force-dynamic'
@@ -160,7 +173,7 @@ export default async function MyTrainingPage({
             id: c.id,
             code: c.code,
             name: c.name,
-            description: c.description,
+            description: htmlToSnippet(c.description, 140) || null,
             deliveryType: c.deliveryType,
             status: e?.status ?? null,
             percent: e?.progressPercent ?? 0,
@@ -251,10 +264,9 @@ export default async function MyTrainingPage({
           />
         }
       >
-        <EmptyState
-          icon={<GraduationCap size={32} />}
-          title="No person record linked"
-          description="Ask an administrator to link your account to a person record. Training appears once linked."
+        <WorkspaceNoIdentity
+          reason={ctx.membership ? 'no-person' : 'no-membership'}
+          noun="training"
         />
       </ListPageLayout>
     )
@@ -297,35 +309,44 @@ export default async function MyTrainingPage({
             description="Courses with published content appear here."
           />
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {data.courses.map((c) => {
+              const selfLaunch = SELF_LAUNCH.has(c.deliveryType)
               const label =
                 c.status === 'completed'
                   ? 'Review'
                   : c.status
                     ? `Continue · ${c.percent}%`
-                    : 'Start'
+                    : selfLaunch
+                      ? 'Start'
+                      : 'View course'
               return (
-                <Card key={c.id} className="flex flex-col">
+                <Card
+                  key={c.id}
+                  className="group flex h-full flex-col overflow-hidden transition-all hover:-translate-y-0.5 hover:shadow-md"
+                >
                   <CardContent className="flex flex-1 flex-col gap-3 py-5">
                     <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <h3 className="truncate font-semibold text-slate-900">{c.name}</h3>
-                        <p className="text-xs text-slate-500">{c.code}</p>
-                      </div>
+                      <Badge variant="outline" className="font-normal">
+                        {DELIVERY_LABELS[c.deliveryType] ?? c.deliveryType.replace(/_/g, ' ')}
+                      </Badge>
                       {c.status === 'completed' ? (
                         <Badge variant="success">Completed</Badge>
                       ) : c.status ? (
                         <Badge variant="secondary">In progress</Badge>
-                      ) : (
-                        <Badge variant="outline">{c.deliveryType.replace('_', ' ')}</Badge>
-                      )}
+                      ) : null}
                     </div>
-                    {c.description ? (
-                      <p className="line-clamp-2 text-sm text-slate-600">{c.description}</p>
-                    ) : null}
+                    <div className="min-w-0">
+                      <h3 className="line-clamp-2 font-semibold text-slate-900 dark:text-slate-100">
+                        {c.name}
+                      </h3>
+                      <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{c.code}</p>
+                    </div>
+                    <p className="line-clamp-2 min-h-[2.5rem] text-sm text-slate-600 dark:text-slate-400">
+                      {c.description ?? ''}
+                    </p>
                     {c.status ? (
-                      <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+                      <div className="h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
                         <div
                           className="h-full rounded-full bg-teal-500"
                           style={{ width: `${c.percent}%` }}
