@@ -68,6 +68,20 @@ function hashRec(o: unknown): string {
   return createHash('sha256').update(JSON.stringify(o)).digest('hex').slice(0, 16)
 }
 
+function datePart(v: string | null): string | null {
+  if (!v) return null
+  const m = v.match(/^(\d{4}-\d{2}-\d{2})/)
+  if (m) return m[1] ?? null
+  const t = Date.parse(v)
+  return Number.isNaN(t) ? null : new Date(t).toISOString().slice(0, 10)
+}
+
+function numPart(v: string | null): number | null {
+  if (!v) return null
+  const n = Number(v.replace(/,/g, '').trim())
+  return Number.isFinite(n) ? n : null
+}
+
 function mapNango(
   entity: SyncEntityKey,
   rec: Record<string, unknown>,
@@ -86,6 +100,12 @@ function mapNango(
           'employeeNumber',
           'employee_id',
           'number',
+        ]),
+        externalEmployeeId: fld(rec, map, 'externalEmployeeId', [
+          'external_employee_id',
+          'employee_id',
+          'worker_id',
+          'id',
         ]),
         email: fld(rec, map, 'email', ['email', 'work_email', 'workEmail']),
         phone: fld(rec, map, 'phone', ['phone', 'phone_number', 'mobile_phone']),
@@ -118,6 +138,50 @@ function mapNango(
       const externalId = pick(rec, ['id', '_nango_id']) || data.assetTag || hashRec(rec)
       return { entity: 'equipment', externalId, data }
     }
+    case 'work_activity': {
+      const activityDate = datePart(
+        fld(rec, map, 'activityDate', ['activity_date', 'work_date', 'date', 'shift_date']),
+      )
+      const externalEmployeeId = fld(rec, map, 'externalEmployeeId', [
+        'external_employee_id',
+        'employee_id',
+        'worker_id',
+      ])
+      const employeeNo = fld(rec, map, 'employeeNo', [
+        'employee_number',
+        'employeeNumber',
+        'number',
+      ])
+      const siteCode = fld(rec, map, 'siteCode', [
+        'site_code',
+        'job_code',
+        'project_code',
+        'location_code',
+      ])
+      const sourceCode = fld(rec, map, 'sourceCode', ['source_code', 'activity_code', 'cost_code'])
+      if (!activityDate || (!externalEmployeeId && !employeeNo)) return null
+      const data = {
+        activityDate,
+        externalEmployeeId,
+        employeeNo,
+        siteCode,
+        siteName: fld(rec, map, 'siteName', ['site_name', 'job_name', 'project_name']),
+        sourceCode,
+        sourceLabel: fld(rec, map, 'sourceLabel', ['source_label', 'activity', 'label']),
+        hours: numPart(fld(rec, map, 'hours', ['hours', 'hours_worked', 'total_hours'])),
+        businessKm: numPart(fld(rec, map, 'businessKm', ['business_km', 'work_km', 'km'])),
+        personalKm: numPart(fld(rec, map, 'personalKm', ['personal_km', 'commute_km'])),
+        description: fld(rec, map, 'description', ['description', 'notes', 'memo']),
+        status: fld(rec, map, 'status', ['status', 'state']),
+        raw: rec,
+      }
+      const externalId =
+        pick(rec, ['id', '_nango_id']) ||
+        [externalEmployeeId ?? employeeNo, activityDate, siteCode ?? sourceCode ?? hashRec(rec)]
+          .filter(Boolean)
+          .join(':')
+      return { entity: 'work_activity', externalId, data }
+    }
   }
 }
 
@@ -128,7 +192,7 @@ export const nangoConnector: Connector = {
     'Connect SaaS sources through Nango — NetSuite, QuickBooks, Xero, Workday and more. Customers authorise their own account; records sync through your Nango project.',
   kind: 'provider',
   iconKey: 'plug-zap',
-  entities: ['people', 'org_unit', 'equipment'],
+  entities: ['people', 'org_unit', 'equipment', 'work_activity'],
   supportsConnect: true,
   configFields: [
     {

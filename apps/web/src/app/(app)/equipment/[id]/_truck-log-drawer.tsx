@@ -13,7 +13,7 @@ import { Button, Input, Label, SearchSelect, Select, Textarea, UrlDrawer } from 
 type CreateTruckLogInput = {
   equipmentItemId: string
   entryDate: string
-  driverPersonId: string | null
+  driverPersonId: string
   startOdometer: number | null
   endOdometer: number | null
   siteOrgUnitId: string | null
@@ -71,11 +71,15 @@ export function NewTruckLogEntryDrawer({
       setError('Date is required.')
       return
     }
+    if (!driverPersonId) {
+      setError('Driver is required.')
+      return
+    }
     startTransition(async () => {
       const res = await action({
         equipmentItemId: itemId,
         entryDate: entryDate.trim(),
-        driverPersonId: driverPersonId || null,
+        driverPersonId,
         startOdometer: safeInt(startOdometer),
         endOdometer: safeInt(endOdometer),
         siteOrgUnitId: siteOrgUnitId || null,
@@ -134,7 +138,9 @@ export function NewTruckLogEntryDrawer({
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="tl-driver">Driver</Label>
+            <Label htmlFor="tl-driver">
+              Driver <span className="text-red-600">*</span>
+            </Label>
             <SearchSelect
               value={driverPersonId}
               onChange={setDriverPersonId}
@@ -146,8 +152,7 @@ export function NewTruckLogEntryDrawer({
               placeholder="Select a driver…"
               searchPlaceholder="Search people…"
               sheetTitle="Driver"
-              clearable
-              emptyLabel="— Not specified —"
+              clearable={false}
             />
           </div>
           <div className="space-y-1.5 sm:col-span-2">
@@ -200,7 +205,7 @@ export function NewTruckLogEntryDrawer({
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="tl-manpower">Manpower count</Label>
+            <Label htmlFor="tl-manpower">Crew count</Label>
             <Input
               id="tl-manpower"
               type="number"

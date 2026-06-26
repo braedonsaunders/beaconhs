@@ -58,7 +58,6 @@ import {
   orgUnits,
   people,
   tenantUsers,
-  truckLogEntries,
   user,
 } from '@beaconhs/db/schema'
 import { publicUrl } from '@beaconhs/storage'
@@ -72,6 +71,7 @@ import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { ActivityFeed } from '@/components/activity-feed'
 import { PageContainer } from '@/components/page-layout'
 import { PersonSelectField } from '@/components/person-select-field'
+import { upsertVehicleLogEntry } from '../vehicle-log/_service'
 import { EquipmentEditTab } from './equipment-edit-tab'
 
 export const dynamic = 'force-dynamic'
@@ -446,7 +446,7 @@ async function createWorkOrderAction(input: {
 async function createTruckLogEntryAction(input: {
   equipmentItemId: string
   entryDate: string
-  driverPersonId: string | null
+  driverPersonId: string
   startOdometer: number | null
   endOdometer: number | null
   siteOrgUnitId: string | null
@@ -470,45 +470,20 @@ async function createTruckLogEntryAction(input: {
   } = input
   if (!equipmentItemId || !entryDate.trim())
     return { ok: false, error: 'Vehicle and date are required.' }
+  if (!driverPersonId) return { ok: false, error: 'Driver is required.' }
 
-  const kmDriven =
-    typeof startOdometer === 'number' &&
-    typeof endOdometer === 'number' &&
-    endOdometer >= startOdometer
-      ? endOdometer - startOdometer
-      : null
-
-  const row = await ctx.db(async (tx) => {
-    const [inserted] = await tx
-      .insert(truckLogEntries)
-      .values({
-        tenantId: ctx.tenantId,
-        equipmentItemId,
-        entryDate,
-        driverPersonId,
-        startOdometer,
-        endOdometer,
-        kmDriven,
-        siteOrgUnitId,
-        hoursOnSite,
-        manpowerCount,
-        notes,
-        createdByTenantUserId: ctx.membership?.id,
-      } as any)
-      .returning()
-    return inserted
+  await upsertVehicleLogEntry(ctx, {
+    equipmentItemId,
+    entryDate,
+    driverPersonId,
+    entryMode: 'odometer',
+    startOdometer,
+    endOdometer,
+    siteOrgUnitId,
+    hoursOnSite,
+    manpowerCount,
+    notes,
   })
-  if (!row) return { ok: false, error: 'Failed to insert log entry.' }
-
-  await recordAudit(ctx, {
-    entityType: 'truck_log_entry',
-    entityId: row.id,
-    action: 'create',
-    summary: `Logged ${kmDriven ?? '—'} km on ${entryDate}`,
-    after: { equipmentItemId, entryDate, kmDriven, manpowerCount, hoursOnSite },
-  })
-  revalidatePath('/equipment/vehicle-log')
-  revalidatePath(`/equipment/${equipmentItemId}`)
   return { ok: true }
 }
 

@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { asc, eq, gte, lt, sql } from 'drizzle-orm'
+import { asc, eq, sql } from 'drizzle-orm'
 import {
   Button,
   EmptyState,
@@ -12,7 +12,8 @@ import {
   TableRow,
 } from '@beaconhs/ui'
 import { Truck } from 'lucide-react'
-import { equipmentItems, equipmentTypes, truckLogEntries } from '@beaconhs/db/schema'
+import { extractRows } from '@beaconhs/reports'
+import { equipmentItems, equipmentTypes } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { buildHref, pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
@@ -74,23 +75,25 @@ export default async function TruckLogSummaryPage({
       .leftJoin(equipmentTypes, eq(equipmentTypes.id, equipmentItems.typeId))
       .orderBy(asc(equipmentItems.assetTag))
       .limit(500)
-    const r = await tx
-      .select({
-        equipmentItemId: truckLogEntries.equipmentItemId,
-        month: sql<number>`extract(month from ${truckLogEntries.entryDate})::int`,
-        kmTotal: sql<number>`coalesce(sum(${truckLogEntries.kmDriven}), 0)::int`,
-        hoursTotal: sql<number>`coalesce(sum(${truckLogEntries.hoursOnSite}), 0)::float`,
-        manpowerTotal: sql<number>`coalesce(sum(${truckLogEntries.manpowerCount}), 0)::int`,
-        entryDays: sql<number>`count(*)::int`,
-      })
-      .from(truckLogEntries)
-      .where(
-        sql`${truckLogEntries.entryDate} >= ${firstDay}::date AND ${truckLogEntries.entryDate} < ${nextFirst}::date`,
-      )
-      .groupBy(
-        truckLogEntries.equipmentItemId,
-        sql`extract(month from ${truckLogEntries.entryDate})`,
-      )
+    const result = await tx.execute(sql`
+      SELECT
+        equipment_item_id,
+        extract(month from month)::int AS month,
+        total_km,
+        hours_on_site,
+        manpower_count,
+        logged_days
+      FROM report_vehicle_log_monthly
+      WHERE month >= ${firstDay}::date AND month < ${nextFirst}::date
+    `)
+    const r = extractRows(result).map((row) => ({
+      equipmentItemId: String(row.equipment_item_id ?? ''),
+      month: Number(row.month ?? 0),
+      kmTotal: Number(row.total_km ?? 0),
+      hoursTotal: Number(row.hours_on_site ?? 0),
+      manpowerTotal: Number(row.manpower_count ?? 0),
+      entryDays: Number(row.logged_days ?? 0),
+    }))
     return { trucks: t, rows: r }
   })
 
@@ -152,7 +155,7 @@ export default async function TruckLogSummaryPage({
         <>
           <PageHeader
             title="Vehicle log summary"
-            description={`Annual roll-up of km driven, hours on site, and manpower for ${year}.`}
+            description={`Annual roll-up of km driven, hours on site, and crew count for ${year}.`}
             actions={
               <div className="flex items-center gap-2">
                 <Link href={`/equipment/vehicle-log/summary?year=${year - 1}` as any}>
@@ -253,7 +256,7 @@ export default async function TruckLogSummaryPage({
                               {m.hours.toFixed(1)} h
                             </div>
                             <div className="text-slate-500 dark:text-slate-400">
-                              {m.manpower} men
+                              {m.manpower} crew
                             </div>
                           </Link>
                         </TableCell>
@@ -265,7 +268,7 @@ export default async function TruckLogSummaryPage({
                         {totals.hours.toFixed(1)} h
                       </div>
                       <div className="text-xs text-slate-500 dark:text-slate-400">
-                        {totals.manpower} men
+                        {totals.manpower} crew
                       </div>
                     </TableCell>
                   </TableRow>
@@ -287,7 +290,7 @@ export default async function TruckLogSummaryPage({
                       {m.hours.toFixed(1)} h
                     </div>
                     <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                      {m.manpower} men
+                      {m.manpower} crew
                     </div>
                   </TableCell>
                 ))}
@@ -297,7 +300,7 @@ export default async function TruckLogSummaryPage({
                     {grandTotals.hours.toFixed(1)} h
                   </div>
                   <div className="text-xs text-slate-500 dark:text-slate-400">
-                    {grandTotals.manpower} men
+                    {grandTotals.manpower} crew
                   </div>
                 </TableCell>
               </TableRow>

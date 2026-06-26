@@ -18,6 +18,12 @@ const PEOPLE_ALIASES: Record<string, string[]> = {
   firstName: ['firstname', 'first', 'givenname', 'fname'],
   lastName: ['lastname', 'last', 'surname', 'familyname', 'lname'],
   employeeNo: ['employeeno', 'employeenumber', 'empno', 'employeeid', 'payrollid', 'badge'],
+  externalEmployeeId: [
+    'externalemployeeid',
+    'externalempid',
+    'sourceemployeeid',
+    'employeeinternalid',
+  ],
   email: ['email', 'emailaddress', 'workemail'],
   phone: ['phone', 'mobile', 'telephone', 'cell'],
   jobTitle: ['jobtitle', 'title', 'position', 'role'],
@@ -38,6 +44,21 @@ const EQUIP_ALIASES: Record<string, string[]> = {
   assetTag: ['assettag', 'tag', 'assetid', 'asset', 'assetnumber', 'number', 'unit', 'unitnumber'],
   serialNumber: ['serial', 'serialnumber', 'sn'],
   typeName: ['type', 'category', 'equipmenttype', 'class'],
+}
+
+const WORK_ACTIVITY_ALIASES: Record<string, string[]> = {
+  activityDate: ['activitydate', 'date', 'workdate', 'shiftdate', 'entrydate', 'day'],
+  externalEmployeeId: ['externalemployeeid', 'externalempid', 'sourceemployeeid', 'employeeid'],
+  employeeNo: ['employeeno', 'employeenumber', 'empno', 'payrollid', 'badge'],
+  siteCode: ['sitecode', 'jobcode', 'projectcode', 'locationcode', 'customercode'],
+  siteName: ['sitename', 'jobname', 'projectname', 'locationname', 'customername'],
+  sourceCode: ['sourcecode', 'activitycode', 'shortcode', 'costcode', 'taskcode'],
+  sourceLabel: ['sourcelabel', 'activity', 'label', 'shortform', 'job', 'destination'],
+  hours: ['hours', 'hoursworked', 'regularhours', 'totalhours'],
+  businessKm: ['businesskm', 'workkm', 'kilometres', 'kilometers', 'km', 'distance'],
+  personalKm: ['personalkm', 'commutekm', 'nonbusinesskm'],
+  description: ['description', 'notes', 'memo', 'comment'],
+  status: ['status', 'state'],
 }
 
 function norm(s: string): string {
@@ -90,6 +111,12 @@ function normLevel(v: string | null): 'customer' | 'project' | 'site' | 'area' |
   return undefined
 }
 
+function normNumber(v: string | null): number | null {
+  if (!v) return null
+  const n = Number(v.replace(/,/g, '').trim())
+  return Number.isFinite(n) ? n : null
+}
+
 function hashRow(o: unknown): string {
   return createHash('sha256').update(JSON.stringify(o)).digest('hex').slice(0, 16)
 }
@@ -98,10 +125,10 @@ export const csvConnector: Connector = {
   key: 'csv',
   name: 'CSV / Spreadsheet',
   description:
-    'Paste or upload a CSV of people, locations or equipment. Columns are auto-matched to fields; re-importing updates existing records.',
+    'Paste or upload a CSV of people, locations, equipment or work activity. Columns are auto-matched to fields; re-importing updates existing records.',
   kind: 'native',
   iconKey: 'file-spreadsheet',
-  entities: ['people', 'org_unit', 'equipment'],
+  entities: ['people', 'org_unit', 'equipment', 'work_activity'],
   async pull(ctx: ConnectorRunContext): Promise<CanonicalRecord[]> {
     const cfg = ctx.config as CsvConfig
     const entity = cfg.entity
@@ -115,7 +142,13 @@ export const csvConnector: Connector = {
       return []
     }
     const aliases =
-      entity === 'people' ? PEOPLE_ALIASES : entity === 'org_unit' ? ORG_ALIASES : EQUIP_ALIASES
+      entity === 'people'
+        ? PEOPLE_ALIASES
+        : entity === 'org_unit'
+          ? ORG_ALIASES
+          : entity === 'equipment'
+            ? EQUIP_ALIASES
+            : WORK_ACTIVITY_ALIASES
     const map = resolveHeaders(headers, aliases, cfg.mapping)
     ctx.log(
       'info',
@@ -143,6 +176,7 @@ export const csvConnector: Connector = {
             firstName: get(row, 'firstName') ?? '',
             lastName: get(row, 'lastName') ?? '',
             employeeNo: get(row, 'employeeNo'),
+            externalEmployeeId: get(row, 'externalEmployeeId'),
             email: get(row, 'email'),
             phone: get(row, 'phone'),
             jobTitle: get(row, 'jobTitle'),
@@ -173,6 +207,43 @@ export const csvConnector: Connector = {
           out.push({
             entity: 'equipment',
             externalId: idRaw || data.assetTag || hashRow(row),
+            data,
+          })
+          break
+        }
+        case 'work_activity': {
+          const activityDate = normDate(get(row, 'activityDate'))
+          const externalEmployeeId = get(row, 'externalEmployeeId')
+          const employeeNo = get(row, 'employeeNo')
+          const siteCode = get(row, 'siteCode')
+          const sourceCode = get(row, 'sourceCode')
+          if (!activityDate || (!externalEmployeeId && !employeeNo)) break
+          const data = {
+            activityDate,
+            externalEmployeeId,
+            employeeNo,
+            siteCode,
+            siteName: get(row, 'siteName'),
+            sourceCode,
+            sourceLabel: get(row, 'sourceLabel'),
+            hours: normNumber(get(row, 'hours')),
+            businessKm: normNumber(get(row, 'businessKm')),
+            personalKm: normNumber(get(row, 'personalKm')),
+            description: get(row, 'description'),
+            status: get(row, 'status'),
+            raw: row,
+          }
+          out.push({
+            entity: 'work_activity',
+            externalId:
+              idRaw ||
+              [
+                externalEmployeeId ?? employeeNo,
+                activityDate,
+                siteCode ?? sourceCode ?? hashRow(row),
+              ]
+                .filter(Boolean)
+                .join(':'),
             data,
           })
           break

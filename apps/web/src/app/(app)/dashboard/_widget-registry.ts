@@ -230,6 +230,17 @@ export const WIDGETS: Record<string, WidgetMeta> = {
     defaultSize: { w: 3, h: 2 },
     minSize: { w: 2, h: 2 },
   },
+  'equipment-vehicle-log-status': {
+    id: 'equipment-vehicle-log-status',
+    category: 'equipment',
+    label: 'Vehicle log status',
+    description:
+      'Month-to-date vehicle-log entries, imported work activity and unresolved conflicts.',
+    defaultSize: { w: 4, h: 3 },
+    minSize: { w: 3, h: 2 },
+    maxSize: { w: 6, h: 4 },
+    rolesShown: ['super_admin', 'tenant_admin', 'safety_manager', 'foreman'],
+  },
 
   // ---- Personal -----------------------------------------------------------
   'personal-in-progress': {

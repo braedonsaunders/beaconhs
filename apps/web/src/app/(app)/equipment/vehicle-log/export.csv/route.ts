@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { asc, eq, sql } from 'drizzle-orm'
-import { equipmentItems, equipmentTypes, truckLogEntries } from '@beaconhs/db/schema'
+import { extractRows } from '@beaconhs/reports'
+import { equipmentItems, equipmentTypes } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { requireExportContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
@@ -40,23 +41,25 @@ export async function GET(req: NextRequest) {
       .leftJoin(equipmentTypes, eq(equipmentTypes.id, equipmentItems.typeId))
       .orderBy(asc(equipmentItems.assetTag))
       .limit(1000)
-    const r = await tx
-      .select({
-        equipmentItemId: truckLogEntries.equipmentItemId,
-        month: sql<number>`extract(month from ${truckLogEntries.entryDate})::int`,
-        kmTotal: sql<number>`coalesce(sum(${truckLogEntries.kmDriven}), 0)::int`,
-        hoursTotal: sql<number>`coalesce(sum(${truckLogEntries.hoursOnSite}), 0)::float`,
-        manpowerTotal: sql<number>`coalesce(sum(${truckLogEntries.manpowerCount}), 0)::int`,
-        entryDays: sql<number>`count(*)::int`,
-      })
-      .from(truckLogEntries)
-      .where(
-        sql`${truckLogEntries.entryDate} >= ${firstDay}::date AND ${truckLogEntries.entryDate} < ${nextFirst}::date`,
-      )
-      .groupBy(
-        truckLogEntries.equipmentItemId,
-        sql`extract(month from ${truckLogEntries.entryDate})`,
-      )
+    const result = await tx.execute(sql`
+      SELECT
+        equipment_item_id,
+        extract(month from month)::int AS month,
+        total_km,
+        hours_on_site,
+        manpower_count,
+        logged_days
+      FROM report_vehicle_log_monthly
+      WHERE month >= ${firstDay}::date AND month < ${nextFirst}::date
+    `)
+    const r = extractRows(result).map((row) => ({
+      equipmentItemId: String(row.equipment_item_id ?? ''),
+      month: Number(row.month ?? 0),
+      kmTotal: Number(row.total_km ?? 0),
+      hoursTotal: Number(row.hours_on_site ?? 0),
+      manpowerTotal: Number(row.manpower_count ?? 0),
+      entryDays: Number(row.logged_days ?? 0),
+    }))
     return { trucks: t, rows: r }
   })
 
@@ -90,10 +93,10 @@ export async function GET(req: NextRequest) {
   const headers = [
     'Asset tag',
     'Name',
-    ...MONTHS.flatMap((m) => [`${m} km`, `${m} hours`, `${m} manpower`]),
+    ...MONTHS.flatMap((m) => [`${m} km`, `${m} hours`, `${m} crew count`]),
     'Total km',
     'Total hours',
-    'Total manpower',
+    'Total crew count',
   ]
 
   const csvRows: (string | number | null)[][] = trucks.map((t) => {

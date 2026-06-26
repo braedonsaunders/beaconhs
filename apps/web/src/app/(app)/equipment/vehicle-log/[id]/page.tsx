@@ -51,6 +51,7 @@ async function updateEntry(formData: FormData) {
   const equipmentItemId = String(formData.get('equipmentItemId') ?? '').trim()
   if (!id || !entryDate || !equipmentItemId) return
   const driverPersonId = safeStr(formData.get('driverPersonId'))
+  if (!driverPersonId) throw new Error('Driver is required.')
   const startOdometer = safeInt(formData.get('startOdometer'))
   const endOdometer = safeInt(formData.get('endOdometer'))
   const siteOrgUnitId = safeStr(formData.get('siteOrgUnitId'))
@@ -250,7 +251,7 @@ export default async function TruckLogDetailPage({
                 { label: 'End odometer', value: entry.endOdometer ?? '—' },
                 { label: 'Km driven', value: entry.kmDriven ?? '—' },
                 { label: 'Hours on site', value: entry.hoursOnSite ?? '—' },
-                { label: 'Manpower', value: entry.manpowerCount ?? '—' },
+                { label: 'Crew count', value: entry.manpowerCount ?? '—' },
               ]}
             />
             {entry.notes ? (
@@ -289,18 +290,17 @@ export default async function TruckLogDetailPage({
                     <Field label="Date" required>
                       <Input name="entryDate" type="date" required defaultValue={entry.entryDate} />
                     </Field>
-                    <Field label="Driver">
+                    <Field label="Driver" required>
                       <PersonSelectField
                         name="driverPersonId"
-                        defaultValue={entry.driverPersonId ?? ''}
+                        defaultValue={entry.driverPersonId}
                         options={drivers.map((p) => ({
                           value: p.id,
                           label: `${p.lastName}, ${p.firstName}`,
                           hint: p.employeeNo ?? undefined,
                         }))}
                         placeholder="Select a driver…"
-                        clearable
-                        emptyLabel="— Not specified —"
+                        clearable={false}
                       />
                     </Field>
                     <Field label="Site">
@@ -340,7 +340,7 @@ export default async function TruckLogDetailPage({
                         defaultValue={entry.hoursOnSite ?? ''}
                       />
                     </Field>
-                    <Field label="Manpower count">
+                    <Field label="Crew count">
                       <Input
                         name="manpowerCount"
                         type="number"

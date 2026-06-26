@@ -17,11 +17,13 @@ import {
   people,
   syncCrosswalk,
   trades,
+  workActivityEntries,
 } from '@beaconhs/db/schema'
 import type {
   CanonicalEquipment,
   CanonicalOrgUnit,
   CanonicalPerson,
+  CanonicalWorkActivity,
   CanonicalRecord,
   SyncEntityKey,
   SyncLogger,
@@ -32,6 +34,8 @@ export interface Lookups {
   tradeByName: Map<string, string>
   equipTypeByName: Map<string, string>
   orgUnitIdByCode: Map<string, string>
+  personIdByEmployeeNo: Map<string, string>
+  personIdByExternalEmployeeId: Map<string, string>
 }
 
 export interface UpsertCtx {
@@ -50,7 +54,7 @@ export interface UpsertResult {
 
 export async function loadLookups(tx: Database, _tenantId: string): Promise<Lookups> {
   // RLS scopes all four reads to the current tenant.
-  const [depts, trds, etypes, ous] = await Promise.all([
+  const [depts, trds, etypes, ous, ppl] = await Promise.all([
     tx.select({ id: departments.id, name: departments.name }).from(departments),
     tx.select({ id: trades.id, name: trades.name }).from(trades),
     tx.select({ id: equipmentTypes.id, name: equipmentTypes.name }).from(equipmentTypes),
@@ -58,16 +62,34 @@ export async function loadLookups(tx: Database, _tenantId: string): Promise<Look
       .select({ id: orgUnits.id, code: orgUnits.code })
       .from(orgUnits)
       .where(isNull(orgUnits.deletedAt)),
+    tx
+      .select({
+        id: people.id,
+        employeeNo: people.employeeNo,
+        externalEmployeeId: people.externalEmployeeId,
+      })
+      .from(people)
+      .where(isNull(people.deletedAt)),
   ])
   const lower = (m: { id: string; name: string }[]) =>
     new Map(m.map((r) => [r.name.toLowerCase(), r.id] as const))
   const orgUnitIdByCode = new Map<string, string>()
   for (const o of ous) if (o.code) orgUnitIdByCode.set(o.code.toLowerCase(), o.id)
+  const personIdByEmployeeNo = new Map<string, string>()
+  const personIdByExternalEmployeeId = new Map<string, string>()
+  for (const p of ppl) {
+    if (p.employeeNo) personIdByEmployeeNo.set(p.employeeNo.toLowerCase(), p.id)
+    if (p.externalEmployeeId) {
+      personIdByExternalEmployeeId.set(p.externalEmployeeId.toLowerCase(), p.id)
+    }
+  }
   return {
     deptByName: lower(depts),
     tradeByName: lower(trds),
     equipTypeByName: lower(etypes),
     orgUnitIdByCode,
+    personIdByEmployeeNo,
+    personIdByExternalEmployeeId,
   }
 }
 
@@ -152,6 +174,8 @@ export async function upsertRecord(
       return upsertOrgUnit(tx, ctx, rec.externalId, rec.data)
     case 'equipment':
       return upsertEquipment(tx, ctx, rec.externalId, rec.data)
+    case 'work_activity':
+      return upsertWorkActivity(tx, ctx, rec.externalId, rec.data)
   }
 }
 
@@ -162,12 +186,22 @@ interface PersonFields {
   lastName: string
   employeeNo: string | null
   email: string | null
+  externalEmployeeId: string | null
   phone: string | null
   jobTitle: string | null
   hireDate: string | null
   status: 'active' | 'inactive' | 'terminated'
   departmentId: string | null
   tradeId: string | null
+}
+
+function rememberPersonLookup(ctx: UpsertCtx, id: string, fields: PersonFields) {
+  if (fields.employeeNo) {
+    ctx.lookups.personIdByEmployeeNo.set(fields.employeeNo.toLowerCase(), id)
+  }
+  if (fields.externalEmployeeId) {
+    ctx.lookups.personIdByExternalEmployeeId.set(fields.externalEmployeeId.toLowerCase(), id)
+  }
 }
 
 async function upsertPerson(
@@ -185,6 +219,7 @@ async function upsertPerson(
     firstName: data.firstName,
     lastName: data.lastName,
     employeeNo: data.employeeNo ?? null,
+    externalEmployeeId: data.externalEmployeeId ?? null,
     email: data.email ?? null,
     phone: data.phone ?? null,
     jobTitle: data.jobTitle ?? null,
@@ -202,6 +237,7 @@ async function upsertPerson(
   if (link) {
     if (link.rowHash === rowHash) {
       await touchCrosswalk(tx, link.id)
+      rememberPersonLookup(ctx, link.canonicalId, fields)
       return { action: 'unchanged', canonicalId: link.canonicalId }
     }
     const updated = await tx
@@ -217,9 +253,11 @@ async function upsertPerson(
           .returning({ id: people.id }),
       )
       await linkCrosswalk(tx, ctx, 'people', externalId, id, rowHash)
+      rememberPersonLookup(ctx, id, fields)
       return { action: 'created', canonicalId: id }
     }
     await touchCrosswalk(tx, link.id, rowHash)
+    rememberPersonLookup(ctx, link.canonicalId, fields)
     return { action: 'updated', canonicalId: link.canonicalId }
   }
 
@@ -238,6 +276,27 @@ async function upsertPerson(
     if (match) {
       await tx.update(people).set(fields).where(eq(people.id, match.id))
       await linkCrosswalk(tx, ctx, 'people', externalId, match.id, rowHash)
+      rememberPersonLookup(ctx, match.id, fields)
+      return { action: 'updated', canonicalId: match.id }
+    }
+  }
+
+  if (fields.externalEmployeeId) {
+    const [match] = await tx
+      .select({ id: people.id })
+      .from(people)
+      .where(
+        and(
+          eq(people.tenantId, ctx.tenantId),
+          eq(people.externalEmployeeId, fields.externalEmployeeId),
+          isNull(people.deletedAt),
+        ),
+      )
+      .limit(1)
+    if (match) {
+      await tx.update(people).set(fields).where(eq(people.id, match.id))
+      await linkCrosswalk(tx, ctx, 'people', externalId, match.id, rowHash)
+      rememberPersonLookup(ctx, match.id, fields)
       return { action: 'updated', canonicalId: match.id }
     }
   }
@@ -249,6 +308,7 @@ async function upsertPerson(
       .returning({ id: people.id }),
   )
   await linkCrosswalk(tx, ctx, 'people', externalId, id, rowHash)
+  rememberPersonLookup(ctx, id, fields)
   return { action: 'created', canonicalId: id }
 }
 
@@ -413,4 +473,118 @@ async function upsertEquipment(
   )
   await linkCrosswalk(tx, ctx, 'equipment', externalId, id, rowHash)
   return { action: 'created', canonicalId: id }
+}
+
+// --- work activity --------------------------------------------------------
+
+function intOrNull(value: number | null | undefined): number | null {
+  if (value == null) return null
+  const n = Number(value)
+  return Number.isFinite(n) ? Math.round(n) : null
+}
+
+function decimalOrNull(value: number | null | undefined): string | null {
+  if (value == null) return null
+  const n = Number(value)
+  return Number.isFinite(n) ? n.toFixed(2) : null
+}
+
+function dateOnly(value: string | null | undefined): string | null {
+  if (!value) return null
+  const s = String(value).trim()
+  const m = s.match(/^(\d{4}-\d{2}-\d{2})/)
+  if (m) return m[1] ?? null
+  const t = Date.parse(s)
+  return Number.isNaN(t) ? null : new Date(t).toISOString().slice(0, 10)
+}
+
+function resolvePersonId(ctx: UpsertCtx, data: CanonicalWorkActivity): string | null {
+  if (data.personId) return data.personId
+  if (data.externalEmployeeId) {
+    const id = ctx.lookups.personIdByExternalEmployeeId.get(data.externalEmployeeId.toLowerCase())
+    if (id) return id
+  }
+  if (data.employeeNo) {
+    const id = ctx.lookups.personIdByEmployeeNo.get(data.employeeNo.toLowerCase())
+    if (id) return id
+  }
+  return null
+}
+
+async function upsertWorkActivity(
+  tx: Database,
+  ctx: UpsertCtx,
+  externalId: string,
+  data: CanonicalWorkActivity,
+): Promise<UpsertResult> {
+  const activityDate = dateOnly(data.activityDate)
+  if (!activityDate) {
+    ctx.log('warn', `work activity "${externalId}" is missing a valid activity date — skipped`)
+    return { action: 'skipped' }
+  }
+
+  const rowHash = hashData(data)
+  const personId = resolvePersonId(ctx, data)
+  const siteCode = data.siteCode ?? null
+  const siteOrgUnitId = siteCode
+    ? (ctx.lookups.orgUnitIdByCode.get(siteCode.toLowerCase()) ?? null)
+    : null
+  const fields = {
+    sourceSystem: ctx.sourceSystem,
+    activityDate,
+    personId,
+    externalEmployeeId: data.externalEmployeeId ?? null,
+    employeeNo: data.employeeNo ?? null,
+    siteOrgUnitId,
+    siteCode,
+    siteName: data.siteName ?? null,
+    sourceCode: data.sourceCode ?? null,
+    sourceLabel: data.sourceLabel ?? null,
+    hours: decimalOrNull(data.hours),
+    businessKm: intOrNull(data.businessKm),
+    personalKm: intOrNull(data.personalKm),
+    description: data.description ?? null,
+    status: data.status ?? 'ready',
+    raw: data.raw ?? {},
+    importedAt: new Date(),
+  }
+
+  const link = await findCrosswalk(tx, ctx, 'work_activity', externalId)
+  if (link) {
+    if (link.rowHash === rowHash) {
+      await touchCrosswalk(tx, link.id)
+      return { action: 'unchanged', canonicalId: link.canonicalId }
+    }
+    const updated = await tx
+      .update(workActivityEntries)
+      .set(fields)
+      .where(eq(workActivityEntries.id, link.canonicalId))
+      .returning({ id: workActivityEntries.id })
+    if (updated.length > 0) {
+      await touchCrosswalk(tx, link.id, rowHash)
+      return { action: 'updated', canonicalId: link.canonicalId }
+    }
+  }
+
+  const id = firstId(
+    await tx
+      .insert(workActivityEntries)
+      .values({
+        tenantId: ctx.tenantId,
+        sourceConnectionId: ctx.connectionId,
+        sourceExternalId: externalId,
+        ...fields,
+      })
+      .onConflictDoUpdate({
+        target: [
+          workActivityEntries.tenantId,
+          workActivityEntries.sourceConnectionId,
+          workActivityEntries.sourceExternalId,
+        ],
+        set: fields,
+      })
+      .returning({ id: workActivityEntries.id }),
+  )
+  await linkCrosswalk(tx, ctx, 'work_activity', externalId, id, rowHash)
+  return { action: link ? 'updated' : 'created', canonicalId: id }
 }

@@ -1,6 +1,5 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { revalidatePath } from 'next/cache'
 import { asc, eq } from 'drizzle-orm'
 import {
   Button,
@@ -12,13 +11,13 @@ import {
   Select,
   Textarea,
 } from '@beaconhs/ui'
-import { equipmentItems, orgUnits, people, truckLogEntries } from '@beaconhs/db/schema'
+import { equipmentItems, orgUnits, people } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
-import { recordAudit } from '@/lib/audit'
 import { pickString } from '@/lib/list-params'
 import { PageContainer } from '@/components/page-layout'
 import { PersonSelectField } from '@/components/person-select-field'
+import { upsertVehicleLogEntry } from '../_service'
 
 export const metadata = { title: 'New vehicle log entry' }
 export const dynamic = 'force-dynamic'
@@ -46,6 +45,7 @@ async function createEntry(formData: FormData) {
   if (!equipmentItemId || !entryDate) throw new Error('Truck and date are required.')
 
   const driverPersonId = safeStr(formData.get('driverPersonId'))
+  if (!driverPersonId) throw new Error('Driver is required.')
   const startOdometer = safeInt(formData.get('startOdometer'))
   const endOdometer = safeInt(formData.get('endOdometer'))
   const siteOrgUnitId = safeStr(formData.get('siteOrgUnitId'))
@@ -53,45 +53,19 @@ async function createEntry(formData: FormData) {
   const manpowerCount = safeInt(formData.get('manpowerCount'))
   const notes = safeStr(formData.get('notes'))
 
-  const kmDriven =
-    typeof startOdometer === 'number' &&
-    typeof endOdometer === 'number' &&
-    endOdometer >= startOdometer
-      ? endOdometer - startOdometer
-      : null
-
-  const row = await ctx.db(async (tx) => {
-    const [inserted] = await tx
-      .insert(truckLogEntries)
-      .values({
-        tenantId: ctx.tenantId,
-        equipmentItemId,
-        entryDate,
-        driverPersonId,
-        startOdometer,
-        endOdometer,
-        kmDriven,
-        siteOrgUnitId,
-        hoursOnSite: hoursRaw,
-        manpowerCount,
-        notes,
-        createdByTenantUserId: ctx.membership?.id,
-      } as any)
-      .returning()
-    return inserted
-  })
-
-  if (!row) redirect('/equipment/vehicle-log')
-  await recordAudit(ctx, {
-    entityType: 'truck_log_entry',
-    entityId: row.id,
-    action: 'create',
-    summary: `Logged ${kmDriven ?? '—'} km on ${entryDate}`,
-    after: { equipmentItemId, entryDate, kmDriven, manpowerCount, hoursOnSite: hoursRaw },
+  await upsertVehicleLogEntry(ctx, {
+    equipmentItemId,
+    entryDate,
+    driverPersonId,
+    entryMode: 'odometer',
+    startOdometer,
+    endOdometer,
+    siteOrgUnitId,
+    hoursOnSite: hoursRaw,
+    manpowerCount,
+    notes,
   })
   const monthParam = entryDate.slice(0, 7)
-  revalidatePath('/equipment/vehicle-log')
-  revalidatePath(`/equipment/${equipmentItemId}`)
   redirect(`/equipment/vehicle-log?month=${monthParam}`)
 }
 
@@ -171,7 +145,7 @@ export default async function NewTruckLogEntryPage({
                 <Field label="Date" required>
                   <Input name="entryDate" type="date" required defaultValue={initialDate} />
                 </Field>
-                <Field label="Driver">
+                <Field label="Driver" required>
                   <PersonSelectField
                     name="driverPersonId"
                     defaultValue=""
@@ -181,8 +155,7 @@ export default async function NewTruckLogEntryPage({
                       hint: p.employeeNo ?? undefined,
                     }))}
                     placeholder="Select a driver…"
-                    clearable
-                    emptyLabel="— Not specified —"
+                    clearable={false}
                   />
                 </Field>
                 <Field label="Site">
@@ -210,7 +183,7 @@ export default async function NewTruckLogEntryPage({
                     placeholder="e.g. 8.5"
                   />
                 </Field>
-                <Field label="Manpower count">
+                <Field label="Crew count">
                   <Input name="manpowerCount" type="number" min="0" step="1" />
                 </Field>
               </div>

@@ -11,6 +11,9 @@ export const REPORT_VIEWS_SQL: string[] = [
   // view, so drop both up front every migrate (idempotent); the operational fleet view
   // is recreated further down.
   `DROP VIEW IF EXISTS report_equipment_charges;
+   DROP VIEW IF EXISTS report_vehicle_log_monthly;
+   DROP VIEW IF EXISTS report_vehicle_log_entries;
+   DROP VIEW IF EXISTS report_work_activity;
    DROP VIEW IF EXISTS report_equipment_fleet`,
 
   // Externally-issued skills & certifications per person (the shape the old
@@ -117,6 +120,131 @@ export const REPORT_VIEWS_SQL: string[] = [
    FROM months m
    LEFT JOIN inc ON inc.tenant_id = m.tenant_id AND inc.month = m.month
    LEFT JOIN hrs ON hrs.tenant_id = m.tenant_id AND hrs.month = m.month`,
+
+  // Generic imported work-activity facts. This is the reporting surface for
+  // tenant-specific time/dispatch/payroll feeds after they land through the
+  // source-neutral sync engine.
+  `CREATE OR REPLACE VIEW report_work_activity AS
+   SELECT
+     wa.id                                  AS id,
+     wa.tenant_id                           AS tenant_id,
+     wa.activity_date                       AS activity_date,
+     date_trunc('month', wa.activity_date)::date AS month,
+     wa.person_id                           AS person_id,
+     wa.employee_no                         AS employee_no,
+     wa.external_employee_id                AS external_employee_id,
+     CASE WHEN p.id IS NULL THEN NULL
+          ELSE p.first_name || ' ' || p.last_name END AS person_name,
+     wa.site_org_unit_id                    AS site_org_unit_id,
+     wa.site_code                           AS site_code,
+     COALESCE(site.name, wa.site_name)      AS site_name,
+     wa.source_code                         AS source_code,
+     wa.source_label                        AS source_label,
+     wa.source_system                       AS source_system,
+     sc.name                                AS source_name,
+     wa.hours                               AS hours,
+     wa.business_km                         AS business_km,
+     wa.personal_km                         AS personal_km,
+     CASE WHEN wa.business_km IS NOT NULL OR wa.personal_km IS NOT NULL
+          THEN COALESCE(wa.business_km, 0) + COALESCE(wa.personal_km, 0)
+          ELSE NULL END                     AS total_km,
+     wa.status                              AS status,
+     wa.imported_at                         AS imported_at
+   FROM work_activity_entries wa
+   LEFT JOIN people p ON p.id = wa.person_id AND p.tenant_id = wa.tenant_id
+   LEFT JOIN org_units site ON site.id = wa.site_org_unit_id AND site.tenant_id = wa.tenant_id
+   LEFT JOIN sync_connections sc ON sc.id = wa.source_connection_id AND sc.tenant_id = wa.tenant_id`,
+
+  // Daily vehicle-log detail with driver, vehicle, site and source metadata
+  // baked in for the native report engine. Totals use persisted km when
+  // present, otherwise derive from business/personal or odometer fields.
+  `CREATE OR REPLACE VIEW report_vehicle_log_entries AS
+   SELECT
+     tl.id                                  AS id,
+     tl.tenant_id                           AS tenant_id,
+     tl.entry_date                          AS entry_date,
+     date_trunc('month', tl.entry_date)::date AS month,
+     tl.equipment_item_id                   AS equipment_item_id,
+     e.asset_tag                            AS asset_tag,
+     e.name                                 AS vehicle_name,
+     tl.driver_person_id                    AS driver_person_id,
+     p.employee_no                          AS employee_no,
+     CASE WHEN p.id IS NULL THEN NULL
+          ELSE p.first_name || ' ' || p.last_name END AS driver_name,
+     tl.entry_mode                          AS entry_mode,
+     tl.start_odometer                      AS start_odometer,
+     tl.end_odometer                        AS end_odometer,
+     tl.business_km                         AS business_km,
+     tl.personal_km                         AS personal_km,
+     tl.km_driven                           AS km_driven,
+     CASE
+       WHEN tl.km_driven IS NOT NULL THEN tl.km_driven
+       WHEN tl.business_km IS NOT NULL OR tl.personal_km IS NOT NULL
+         THEN COALESCE(tl.business_km, 0) + COALESCE(tl.personal_km, 0)
+       WHEN tl.start_odometer IS NOT NULL AND tl.end_odometer IS NOT NULL
+         THEN GREATEST(tl.end_odometer - tl.start_odometer, 0)
+       ELSE NULL
+     END                                    AS total_km,
+     tl.hours_on_site                       AS hours_on_site,
+     tl.manpower_count                      AS manpower_count,
+     tl.site_org_unit_id                    AS site_org_unit_id,
+     COALESCE(site.code, wa.site_code)      AS site_code,
+     COALESCE(site.name, wa.site_name)      AS site_name,
+     COALESCE(site.name, wa.site_name, tl.other_destination) AS destination,
+     tl.other_destination                   AS other_destination,
+     tl.import_status                       AS import_status,
+     COALESCE(wa.source_system, sc.connector_key) AS source_system,
+     sc.name                                AS source_name,
+     wa.source_label                        AS source_label,
+     tl.source_external_id                  AS source_external_id,
+     tl.imported_at                         AS imported_at,
+     tl.created_at                          AS created_at,
+     tl.updated_at                          AS updated_at
+   FROM truck_log_entries tl
+   JOIN equipment_items e ON e.id = tl.equipment_item_id AND e.tenant_id = tl.tenant_id
+   LEFT JOIN people p ON p.id = tl.driver_person_id AND p.tenant_id = tl.tenant_id
+   LEFT JOIN org_units site ON site.id = tl.site_org_unit_id AND site.tenant_id = tl.tenant_id
+   LEFT JOIN sync_connections sc ON sc.id = tl.source_connection_id AND sc.tenant_id = tl.tenant_id
+   LEFT JOIN work_activity_entries wa ON wa.id = tl.source_work_activity_id AND wa.tenant_id = tl.tenant_id
+   WHERE e.deleted_at IS NULL`,
+
+  // Monthly driver × vehicle rollup for summaries, exports and dashboard
+  // diagnostics. This keeps the old annual/monthly truck-log summary shape
+  // available through the native report engine instead of bespoke SQL.
+  `CREATE OR REPLACE VIEW report_vehicle_log_monthly AS
+   SELECT
+     (tenant_id::text || ':' || equipment_item_id::text || ':' ||
+      COALESCE(driver_person_id::text, 'none') || ':' || month::text) AS id,
+     tenant_id,
+     month,
+     equipment_item_id,
+     asset_tag,
+     vehicle_name,
+     driver_person_id,
+     employee_no,
+     driver_name,
+     COUNT(DISTINCT entry_date)::int          AS logged_days,
+     COUNT(*) FILTER (WHERE total_km IS NOT NULL)::int AS km_days,
+     COALESCE(SUM(business_km), 0)::int       AS business_km,
+     COALESCE(SUM(personal_km), 0)::int       AS personal_km,
+     COALESCE(SUM(total_km), 0)::int          AS total_km,
+     COALESCE(SUM(hours_on_site), 0)::numeric AS hours_on_site,
+     COALESCE(SUM(manpower_count), 0)::int    AS manpower_count,
+     COUNT(*) FILTER (WHERE import_status = 'imported')::int AS imported_days,
+     COUNT(*) FILTER (WHERE import_status = 'manual')::int   AS manual_days,
+     MIN(start_odometer)                      AS first_odometer,
+     MAX(end_odometer)                        AS last_odometer,
+     COUNT(DISTINCT site_org_unit_id) FILTER (WHERE site_org_unit_id IS NOT NULL)::int AS site_count
+   FROM report_vehicle_log_entries
+   GROUP BY
+     tenant_id,
+     month,
+     equipment_item_id,
+     asset_tag,
+     vehicle_name,
+     driver_person_id,
+     employee_no,
+     driver_name`,
 
   // Fleet register — one row per (non-deleted) asset with type/site/holder names
   // baked in plus YTD + all-time usage (hours/km). OPERATIONAL ONLY: equipment

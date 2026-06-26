@@ -3,6 +3,7 @@
 
 import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lte, sql } from 'drizzle-orm'
 import { htmlToSnippet } from '@beaconhs/forms-core'
+import { extractRows } from '@beaconhs/reports'
 import type { RequestContext } from '@beaconhs/tenant'
 import {
   complianceObligations,
@@ -26,6 +27,7 @@ import {
   ppeTypes,
   trainingCourses,
   trainingRecords,
+  truckLogEntries,
 } from '@beaconhs/db/schema'
 import { resolveComplianceLink } from '../compliance/_resolve-link'
 
@@ -49,6 +51,15 @@ export type DashboardMetrics = {
   ppeInspectionsOverdue: number
   peopleCount: number
   inspectionsThisMonth: number
+  vehicleLogStatus: {
+    loggedDays: number
+    importedDays: number
+    conflictDays: number
+    pendingActivityDays: number
+    businessKm: number
+    personalKm: number
+    totalKm: number
+  }
 
   // Computed safety rates
   trir: {
@@ -203,6 +214,7 @@ export async function loadDashboardMetrics(
   const todayStart = new Date(today)
   todayStart.setHours(0, 0, 0, 0)
   const todayIso = today.toISOString().slice(0, 10)
+  const startOfMonthIso = startOfMonth.toISOString().slice(0, 10)
   const ninetyIso = ninetyDaysAhead.toISOString().slice(0, 10)
   const thirtyIso = thirtyDaysAhead.toISOString().slice(0, 10)
 
@@ -300,6 +312,68 @@ export async function loadDashboardMetrics(
     // hours — when a tenant hasn't recorded any, the rate is null (shown as "—"),
     // never a fabricated number. OSHA: rate = events × 200,000 ÷ hours.
     const headcount = Number(peopleCount?.c ?? 0)
+
+    // --- Vehicle log status ---------------------------------------------
+    const [vehicleLogRow] = await tx
+      .select({
+        loggedDays: count(),
+        importedDays: sql<number>`COUNT(*) FILTER (WHERE ${truckLogEntries.importStatus} = 'imported')::int`,
+        conflictDays: sql<number>`COUNT(*) FILTER (WHERE ${truckLogEntries.importStatus} = 'conflict')::int`,
+        businessKm: sql<number>`COALESCE(SUM(${truckLogEntries.businessKm}), 0)::int`,
+        personalKm: sql<number>`COALESCE(SUM(${truckLogEntries.personalKm}), 0)::int`,
+        totalKm: sql<number>`COALESCE(SUM(CASE
+          WHEN ${truckLogEntries.kmDriven} IS NOT NULL THEN ${truckLogEntries.kmDriven}
+          WHEN ${truckLogEntries.businessKm} IS NOT NULL OR ${truckLogEntries.personalKm} IS NOT NULL
+            THEN COALESCE(${truckLogEntries.businessKm}, 0) + COALESCE(${truckLogEntries.personalKm}, 0)
+          WHEN ${truckLogEntries.startOdometer} IS NOT NULL AND ${truckLogEntries.endOdometer} IS NOT NULL
+            THEN GREATEST(${truckLogEntries.endOdometer} - ${truckLogEntries.startOdometer}, 0)
+          ELSE 0
+        END), 0)::int`,
+      })
+      .from(truckLogEntries)
+      .where(
+        and(
+          gte(truckLogEntries.entryDate, startOfMonthIso),
+          lte(truckLogEntries.entryDate, todayIso),
+        ),
+      )
+    const pendingActivityRows = extractRows(
+      await tx.execute(sql`
+        SELECT COUNT(DISTINCT (
+          COALESCE(wa.person_id::text, wa.external_employee_id, wa.employee_no, wa.source_external_id)
+          || ':' || wa.activity_date::text
+        ))::int AS pending
+        FROM work_activity_entries wa
+        WHERE wa.activity_date >= ${startOfMonthIso}::date
+          AND wa.activity_date <= ${todayIso}::date
+          AND NOT EXISTS (
+            SELECT 1
+            FROM truck_log_entries tl
+            WHERE tl.tenant_id = wa.tenant_id
+              AND tl.entry_date = wa.activity_date
+              AND (
+                tl.source_work_activity_id = wa.id
+                OR (
+                  tl.source_connection_id = wa.source_connection_id
+                  AND tl.source_external_id = wa.source_external_id
+                )
+                OR (
+                  wa.person_id IS NOT NULL
+                  AND tl.driver_person_id = wa.person_id
+                )
+              )
+          )
+      `),
+    )
+    const vehicleLogStatus = {
+      loggedDays: Number(vehicleLogRow?.loggedDays ?? 0),
+      importedDays: Number(vehicleLogRow?.importedDays ?? 0),
+      conflictDays: Number(vehicleLogRow?.conflictDays ?? 0),
+      pendingActivityDays: Number(pendingActivityRows[0]?.pending ?? 0),
+      businessKm: Number(vehicleLogRow?.businessKm ?? 0),
+      personalKm: Number(vehicleLogRow?.personalKm ?? 0),
+      totalKm: Number(vehicleLogRow?.totalKm ?? 0),
+    }
 
     // 24-month lookback so we can compute current vs prior 12-month windows
     // and also bucket the last 12 months for the sparkline.
@@ -925,6 +999,7 @@ export async function loadDashboardMetrics(
       ppeInspectionsOverdue: Number(ppeOverdue?.c ?? 0),
       peopleCount: headcount,
       inspectionsThisMonth: Number(inspThisMonth?.c ?? 0),
+      vehicleLogStatus,
 
       trir: {
         value: trir,

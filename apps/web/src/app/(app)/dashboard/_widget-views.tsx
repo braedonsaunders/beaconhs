@@ -36,6 +36,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   TrendingDown,
+  Truck,
   Users,
   Wrench,
   type LucideIcon,
@@ -252,6 +253,8 @@ export function WidgetCard({ widgetId, data, todayIso, quickActions }: Props) {
           tone="normal"
         />
       )
+    case 'equipment-vehicle-log-status':
+      return <VehicleLogStatusCard status={data.vehicleLogStatus} />
 
     // Lists
     case 'list-recent-incidents':
@@ -506,6 +509,97 @@ function DaysSinceCard({ days, lastDate }: { days: number | null; lastDate: Date
           {lastDate ? `Last incident ${lastDate.toLocaleDateString()}` : 'No recordable on record'}
         </div>
       </div>
+    </div>
+  )
+}
+
+function VehicleLogStatusCard({ status }: { status: DashboardMetrics['vehicleLogStatus'] }) {
+  const attention = status.conflictDays > 0 || status.pendingActivityDays > 0
+  const importedPct =
+    status.loggedDays > 0 ? Math.round((status.importedDays / status.loggedDays) * 100) : 0
+  return (
+    <CardShell
+      title="Vehicle log"
+      caption="Month to date"
+      icon={Truck}
+      href="/equipment/vehicle-log"
+      hrefLabel="Open"
+      accent={attention ? 'amber' : 'teal'}
+    >
+      <div className="flex h-full min-h-0 flex-col px-4 py-3">
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <div className="text-[10px] font-semibold tracking-[0.14em] text-slate-500 uppercase dark:text-slate-400">
+              Logged
+            </div>
+            <div className="mt-1 text-3xl leading-none font-semibold text-slate-900 tabular-nums dark:text-slate-100">
+              <AnimatedNumber value={status.loggedDays} format={(v) => Math.round(v).toString()} />
+            </div>
+            <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">driver days</div>
+          </div>
+          <div className="text-right">
+            <div className="text-[10px] font-semibold tracking-[0.14em] text-slate-500 uppercase dark:text-slate-400">
+              Distance
+            </div>
+            <div className="mt-1 text-3xl leading-none font-semibold text-slate-900 tabular-nums dark:text-slate-100">
+              <AnimatedNumber value={status.totalKm} format={(v) => Math.round(v).toString()} />
+            </div>
+            <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">km</div>
+          </div>
+        </div>
+
+        <div className="mt-3 space-y-2">
+          <div className="flex items-center justify-between gap-2 text-[11px] text-slate-600 dark:text-slate-300">
+            <span>Imported coverage</span>
+            <span className="font-semibold tabular-nums">{importedPct}%</span>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${importedPct}%` }}
+              transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+              className="h-full rounded-full bg-teal-600"
+            />
+          </div>
+        </div>
+
+        <div className="mt-auto grid grid-cols-3 gap-2 pt-3">
+          <StatusPill label="Imported" value={status.importedDays} tone="good" />
+          <StatusPill
+            label="Pending"
+            value={status.pendingActivityDays}
+            tone={status.pendingActivityDays > 0 ? 'warn' : 'quiet'}
+          />
+          <StatusPill
+            label="Conflicts"
+            value={status.conflictDays}
+            tone={status.conflictDays > 0 ? 'warn' : 'quiet'}
+          />
+        </div>
+      </div>
+    </CardShell>
+  )
+}
+
+function StatusPill({
+  label,
+  value,
+  tone,
+}: {
+  label: string
+  value: number
+  tone: 'good' | 'warn' | 'quiet'
+}) {
+  const toneClass =
+    tone === 'good'
+      ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300'
+      : tone === 'warn'
+        ? 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300'
+        : 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400'
+  return (
+    <div className={`rounded-lg border px-2 py-1.5 ${toneClass}`}>
+      <div className="text-lg leading-none font-semibold tabular-nums">{value}</div>
+      <div className="mt-0.5 truncate text-[10px] font-medium">{label}</div>
     </div>
   )
 }

@@ -17,6 +17,7 @@ const INCIDENTS = ['incidents.read.all', 'incidents.read.site']
 const CA = ['ca.read.all', 'ca.read.site']
 const TRAINING = ['training.read.all']
 const PPE = ['ppe.read.all']
+const EQUIPMENT = ['equipment.read.all', 'equipment.read.site', 'equipment.manage']
 const FORMS = ['forms.response.read.all', 'forms.response.read.site']
 const INSPECT = ['inspections.read.all', 'inspections.read.site']
 const ANALYTICS = ['insights.read', 'reports.read', 'dashboards.read']
@@ -51,6 +52,7 @@ const WIDGET_PERMISSIONS: Record<string, readonly string[]> = {
   // PPE
   'kpi-ppe-open-issues': PPE,
   'kpi-ppe-overdue': PPE,
+  'equipment-vehicle-log-status': [...EQUIPMENT, ...ANALYTICS],
   // People headcount
   'kpi-people-active': ['admin.org.manage', ...ANALYTICS],
 }
@@ -75,6 +77,7 @@ export function canSeeOrgAggregates(ctx: RequestContext): boolean {
     ...CA,
     ...TRAINING,
     ...PPE,
+    ...EQUIPMENT,
     ...FORMS,
     ...INSPECT,
     'admin.org.manage',

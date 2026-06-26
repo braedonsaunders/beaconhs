@@ -46,6 +46,7 @@ const ENTITY_LABELS: Record<string, string> = {
   people: 'People',
   org_unit: 'Locations & Projects',
   equipment: 'Equipment',
+  work_activity: 'Work activity',
 }
 
 type Connected = {
@@ -186,8 +187,9 @@ export default async function IntegrationsPage() {
           </div>
           <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
             Connect your other systems. <strong>Sync in</strong> to pull People, Locations &amp;
-            Projects and Equipment from an external source, or <strong>push out</strong> to send
-            data elsewhere when something happens here — like posting training time to payroll.
+            Projects, Equipment and Work Activity from an external source, or{' '}
+            <strong>push out</strong> to send data elsewhere when something happens here — like
+            posting training time to payroll.
           </p>
         </header>
 

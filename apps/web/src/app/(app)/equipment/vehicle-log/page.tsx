@@ -1,122 +1,91 @@
 import Link from 'next/link'
-import { Truck } from 'lucide-react'
-import { and, asc, eq, gte, lt } from 'drizzle-orm'
-import {
-  Button,
-  EmptyState,
-  PageHeader,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@beaconhs/ui'
-import { equipmentItems, equipmentTypes, truckLogEntries } from '@beaconhs/db/schema'
+import { redirect } from 'next/navigation'
+import { BarChart3, FileText, Truck } from 'lucide-react'
+import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
+import { can, assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
 import { EquipmentSubNav } from '@/components/equipment-sub-nav'
+import {
+  applyWorkActivityToVehicleLog,
+  deleteVehicleLogMonth,
+  loadVehicleLogWorkspace,
+  upsertVehicleLogEntry,
+  type ApplyWorkActivityInput,
+  type SaveVehicleLogEntryInput,
+} from './_service'
+import { VehicleLogWorkspaceClient } from './_workspace.client'
 
 export const metadata = { title: 'Vehicle log' }
 export const dynamic = 'force-dynamic'
 
-function parseMonth(raw: string | undefined): { year: number; month: number } {
-  if (raw && /^\d{4}-\d{2}$/.test(raw)) {
-    const [y, m] = raw.split('-').map(Number)
-    if (y && m && m >= 1 && m <= 12) return { year: y, month: m }
+async function saveVehicleLogEntryAction(input: SaveVehicleLogEntryInput) {
+  'use server'
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.manage')
+  try {
+    const entry = await upsertVehicleLogEntry(ctx, input)
+    return { ok: true as const, entry }
+  } catch (error) {
+    return {
+      ok: false as const,
+      error: error instanceof Error ? error.message : 'Failed to save vehicle log entry.',
+    }
   }
-  const now = new Date()
-  return { year: now.getFullYear(), month: now.getMonth() + 1 }
 }
 
-function fmtMonthLabel(y: number, m: number) {
-  return new Date(y, m - 1, 1).toLocaleDateString(undefined, { year: 'numeric', month: 'long' })
+async function applyWorkActivityAction(input: ApplyWorkActivityInput) {
+  'use server'
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.manage')
+  try {
+    const result = await applyWorkActivityToVehicleLog(ctx, input)
+    return { ok: true as const, result }
+  } catch (error) {
+    return {
+      ok: false as const,
+      error: error instanceof Error ? error.message : 'Failed to import work activity.',
+    }
+  }
 }
 
-function shiftMonth(y: number, m: number, delta: number) {
-  const total = y * 12 + (m - 1) + delta
-  const ny = Math.floor(total / 12)
-  const nm = (total % 12) + 1
-  return { year: ny, month: nm }
+async function deleteMonthAction(input: ApplyWorkActivityInput) {
+  'use server'
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.manage')
+  try {
+    const deleted = await deleteVehicleLogMonth(ctx, input)
+    return { ok: true as const, deleted }
+  } catch (error) {
+    return {
+      ok: false as const,
+      error: error instanceof Error ? error.message : 'Failed to delete vehicle log entries.',
+    }
+  }
 }
 
-function pad2(n: number) {
-  return String(n).padStart(2, '0')
-}
-
-function ymd(y: number, m: number, d: number) {
-  return `${y}-${pad2(m)}-${pad2(d)}`
-}
-
-function daysInMonth(y: number, m: number) {
-  return new Date(y, m, 0).getDate()
-}
-
-export default async function TruckLogPage({
+export default async function VehicleLogPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const sp = await searchParams
-  const { year, month } = parseMonth(pickString(sp.month))
   const ctx = await requireRequestContext()
+  if (
+    !can(ctx, 'equipment.read.all') &&
+    !can(ctx, 'equipment.read.site') &&
+    !can(ctx, 'equipment.manage')
+  ) {
+    redirect('/dashboard')
+  }
 
-  const firstDay = ymd(year, month, 1)
-  const next = shiftMonth(year, month, 1)
-  const nextFirst = ymd(next.year, next.month, 1)
-  const prev = shiftMonth(year, month, -1)
-
-  const { trucks, entries } = await ctx.db(async (tx) => {
-    const t = await tx
-      .select({
-        id: equipmentItems.id,
-        assetTag: equipmentItems.assetTag,
-        name: equipmentItems.name,
-        category: equipmentTypes.category,
-        typeName: equipmentTypes.name,
-      })
-      .from(equipmentItems)
-      .leftJoin(equipmentTypes, eq(equipmentTypes.id, equipmentItems.typeId))
-      .orderBy(asc(equipmentItems.assetTag))
-      .limit(200)
-    const e = await tx
-      .select()
-      .from(truckLogEntries)
-      .where(
-        and(gte(truckLogEntries.entryDate, firstDay), lt(truckLogEntries.entryDate, nextFirst)),
-      )
-      .orderBy(asc(truckLogEntries.entryDate))
-    return { trucks: t, entries: e }
+  const workspace = await loadVehicleLogWorkspace(ctx, {
+    month: pickString(sp.month),
+    driverPersonId: pickString(sp.driver),
+    equipmentItemId: pickString(sp.vehicle),
+    mode: pickString(sp.mode),
   })
-
-  // Prefer vehicles (by type category), but fall back to all if none flagged.
-  const vehicleTrucks = trucks.filter(
-    (t) =>
-      (t.category ?? '').toLowerCase().includes('vehicle') ||
-      (t.typeName ?? '').toLowerCase().includes('truck'),
-  )
-  const displayTrucks = vehicleTrucks.length > 0 ? vehicleTrucks : trucks
-
-  const totalDays = daysInMonth(year, month)
-  const grid = new Map<string, Map<number, { id: string; km: number | null }>>()
-  for (const e of entries) {
-    const day = Number(e.entryDate.slice(8, 10))
-    const inner =
-      grid.get(e.equipmentItemId) ?? new Map<number, { id: string; km: number | null }>()
-    inner.set(day, { id: e.id, km: e.kmDriven ?? null })
-    grid.set(e.equipmentItemId, inner)
-  }
-
-  const totalsByTruck = new Map<string, number>()
-  for (const e of entries) {
-    if (typeof e.kmDriven === 'number') {
-      totalsByTruck.set(e.equipmentItemId, (totalsByTruck.get(e.equipmentItemId) ?? 0) + e.kmDriven)
-    }
-  }
-
-  const monthParamPrev = `${prev.year}-${pad2(prev.month)}`
-  const monthParamNext = `${next.year}-${pad2(next.month)}`
 
   return (
     <ListPageLayout
@@ -124,123 +93,46 @@ export default async function TruckLogPage({
         <>
           <PageHeader
             title="Vehicle log"
-            description="Per-day per-vehicle odometer, kilometres, manpower, and hours on site."
+            description="Driver and vehicle monthly log entry."
             actions={
-              <div className="flex items-center gap-2">
-                <Link href={'/equipment/vehicle-log/summary' as any}>
-                  <Button variant="outline">Monthly summary</Button>
+              <div className="flex flex-wrap items-center gap-2">
+                <Link href="/reports/definitions/new?entity=vehicle_log_monthly">
+                  <Button variant="outline">
+                    <BarChart3 size={14} />
+                    Report
+                  </Button>
                 </Link>
-                <Link href={`/equipment/vehicle-log/new?month=${year}-${pad2(month)}` as any}>
-                  <Button>New entry</Button>
+                <Link href="/equipment/vehicle-log/summary">
+                  <Button variant="outline">
+                    <FileText size={14} />
+                    Summary
+                  </Button>
                 </Link>
               </div>
             }
           />
           <EquipmentSubNav active="vehicle-log" />
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <Link href={`/equipment/vehicle-log?month=${monthParamPrev}` as any}>
-                <Button variant="outline" size="sm">
-                  ← Previous
-                </Button>
-              </Link>
-              <div className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                {fmtMonthLabel(year, month)}
-              </div>
-              <Link href={`/equipment/vehicle-log?month=${monthParamNext}` as any}>
-                <Button variant="outline" size="sm">
-                  Next →
-                </Button>
-              </Link>
-            </div>
-            <div className="text-xs text-slate-500 dark:text-slate-400">
-              {entries.length} entries · {displayTrucks.length} vehicles
-            </div>
-          </div>
         </>
       }
     >
-      {displayTrucks.length === 0 ? (
+      {workspace.drivers.length === 0 || workspace.vehicles.length === 0 ? (
         <EmptyState
           icon={<Truck size={32} />}
-          title="No equipment to log"
-          description="Add equipment first, then capture daily vehicle-log entries here."
+          title="Vehicle log is not ready"
+          description="Active drivers and equipment vehicles are required."
           action={
-            <Link href="/equipment/new">
-              <Button>Add equipment</Button>
+            <Link href="/equipment">
+              <Button>Open equipment</Button>
             </Link>
           }
         />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="sticky left-0 z-10 bg-white dark:bg-slate-900">
-                  Vehicle
-                </TableHead>
-                {Array.from({ length: totalDays }, (_, i) => i + 1).map((d) => (
-                  <TableHead
-                    key={d}
-                    className="px-1 text-center text-[11px] text-slate-500 dark:text-slate-400"
-                  >
-                    {d}
-                  </TableHead>
-                ))}
-                <TableHead className="text-right">Total km</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {displayTrucks.map((t) => {
-                const row = grid.get(t.id) ?? new Map<number, { id: string; km: number | null }>()
-                const total = totalsByTruck.get(t.id) ?? 0
-                return (
-                  <TableRow key={t.id}>
-                    <TableCell className="sticky left-0 z-10 bg-white whitespace-nowrap dark:bg-slate-900">
-                      <Link href={`/equipment/${t.id}`} className="hover:underline">
-                        <div className="font-mono text-xs text-slate-500 dark:text-slate-400">
-                          {t.assetTag}
-                        </div>
-                        <div className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                          {t.name}
-                        </div>
-                      </Link>
-                    </TableCell>
-                    {Array.from({ length: totalDays }, (_, i) => i + 1).map((d) => {
-                      const cell = row.get(d)
-                      if (!cell) {
-                        const date = ymd(year, month, d)
-                        return (
-                          <TableCell key={d} className="px-1 text-center align-middle">
-                            <Link
-                              href={
-                                `/equipment/vehicle-log/new?truckId=${t.id}&date=${date}` as any
-                              }
-                              className="block py-1 text-[11px] text-slate-300 hover:text-teal-700"
-                            >
-                              ·
-                            </Link>
-                          </TableCell>
-                        )
-                      }
-                      return (
-                        <TableCell key={d} className="px-1 text-center align-middle">
-                          <Link
-                            href={`/equipment/vehicle-log/${cell.id}` as any}
-                            className="block rounded bg-teal-50 px-1.5 py-1 text-[11px] font-medium text-teal-800 hover:bg-teal-100 dark:bg-teal-500/10 dark:text-teal-200"
-                          >
-                            {cell.km ?? '·'}
-                          </Link>
-                        </TableCell>
-                      )
-                    })}
-                    <TableCell className="text-right font-medium">{total || '—'}</TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
-        </div>
+        <VehicleLogWorkspaceClient
+          workspace={workspace}
+          saveAction={saveVehicleLogEntryAction}
+          applyAction={applyWorkActivityAction}
+          deleteMonthAction={deleteMonthAction}
+        />
       )}
     </ListPageLayout>
   )
