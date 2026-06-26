@@ -68,43 +68,57 @@ async function backfillTable(
 ): Promise<{ migrated: number; skipped: number }> {
   let migrated = 0
   let skipped = 0
+  let consecutiveErrors = 0
+  // Resilient to the cluster's intermittent VPN flap: a dropped/timed-out batch
+  // is retried (postgres.js reconnects on the next query) up to 5 times with
+  // backoff before giving up. The work is idempotent, so a retried batch is safe.
   for (;;) {
-    const rows = await sql.unsafe(
-      `SELECT id::text AS id, tenant_id::text AS tenant_id, ${col} AS val
-       FROM ${table} WHERE ${col} LIKE 'data:%' LIMIT ${BATCH}`,
-    )
-    if (rows.length === 0) break
+    try {
+      const rows = await sql.unsafe(
+        `SELECT id::text AS id, tenant_id::text AS tenant_id, ${col} AS val
+         FROM ${table} WHERE ${col} LIKE 'data:%' LIMIT ${BATCH}`,
+      )
+      if (rows.length === 0) break
 
-    const results = await mapLimit(
-      rows as { id: string; tenant_id: string; val: string }[],
-      UPLOAD_CONCURRENCY,
-      async (r) => {
-        if (!r.tenant_id) return { id: r.id, urlOrNull: null as string | null }
-        try {
-          return { id: r.id, urlOrNull: await uploadOne(r.tenant_id, r.val) }
-        } catch (e) {
-          console.warn(`  upload failed for ${table} ${r.id}: ${(e as Error).message}`)
-          return { id: r.id, urlOrNull: null as string | null }
-        }
-      },
-    )
+      const results = await mapLimit(
+        rows as unknown as { id: string; tenant_id: string; val: string }[],
+        UPLOAD_CONCURRENCY,
+        async (r) => {
+          if (!r.tenant_id) return { id: r.id, urlOrNull: null as string | null }
+          try {
+            return { id: r.id, urlOrNull: await uploadOne(r.tenant_id, r.val) }
+          } catch (e) {
+            console.warn(`  upload failed for ${table} ${r.id}: ${(e as Error).message}`)
+            return { id: r.id, urlOrNull: null as string | null }
+          }
+        },
+      )
 
-    await sql.begin(async (tx) => {
-      for (const res of results) {
-        if (res.urlOrNull) {
-          await tx.unsafe(`UPDATE ${table} SET ${col} = $1 WHERE id = $2::uuid`, [
-            res.urlOrNull,
-            res.id,
-          ])
-          migrated++
-        } else {
-          // undecodable / empty payload — null it out so the loop terminates.
-          await tx.unsafe(`UPDATE ${table} SET ${col} = NULL WHERE id = $1::uuid`, [res.id])
-          skipped++
+      await sql.begin(async (tx) => {
+        for (const res of results) {
+          if (res.urlOrNull) {
+            await tx.unsafe(`UPDATE ${table} SET ${col} = $1 WHERE id = $2::uuid`, [
+              res.urlOrNull,
+              res.id,
+            ])
+            migrated++
+          } else {
+            // undecodable / empty payload — null it out so the loop terminates.
+            await tx.unsafe(`UPDATE ${table} SET ${col} = NULL WHERE id = $1::uuid`, [res.id])
+            skipped++
+          }
         }
-      }
-    })
-    process.stdout.write(`\r  ${table}: ${migrated} migrated, ${skipped} skipped`)
+      })
+      consecutiveErrors = 0
+      process.stdout.write(`\r  ${table}: ${migrated} migrated, ${skipped} skipped`)
+    } catch (e) {
+      consecutiveErrors++
+      process.stdout.write(
+        `\n  ${table}: batch error ${consecutiveErrors}/5 (${(e as Error).message}) — retrying…\n`,
+      )
+      if (consecutiveErrors >= 5) throw e
+      await new Promise((resolve) => setTimeout(resolve, 2000 * consecutiveErrors))
+    }
   }
   if (migrated + skipped > 0) process.stdout.write('\n')
   return { migrated, skipped }
