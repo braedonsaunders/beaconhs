@@ -39,12 +39,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       # No version here — package.json's packageManager field pins pnpm; passing
-      # both errors "Multiple versions of pnpm specified". Node 22 to match the
-      # deploy image (require(esm) support needed by `pnpm build`).
+      # both errors "Multiple versions of pnpm specified". Node 24 matches the
+      # deploy image and package engines.
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24.18.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm format:check

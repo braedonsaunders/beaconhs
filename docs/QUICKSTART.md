@@ -18,7 +18,7 @@ using the remote PG cluster, while fresh local clones use Docker Postgres.
 
 ```bash
 # 1. Prereqs
-nvm use              # Node 22+ (see .nvmrc)
+nvm use              # Node 24 LTS (see .nvmrc)
 corepack enable       # pnpm via corepack
 
 # 2. Install dependencies

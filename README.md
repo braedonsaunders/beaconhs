@@ -213,7 +213,7 @@ See [`AGENTS.md`](AGENTS.md) for the full repo map and engineering conventions.
 
 ## Quick start
 
-You'll need **Node 22+**, **pnpm 10+**, and **Docker**.
+You'll need **Node 24 LTS**, **pnpm 10+**, and **Docker**.
 
 One-click launchers live in [`scripts/launchers`](scripts/launchers):
 

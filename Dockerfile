@@ -2,10 +2,9 @@
 # Multi-stage build for beaconhs Next.js app + worker.
 # Single image, two entrypoints, selected via $APP_ROLE (web | worker).
 
-# Node 22.12+ so `require()` of ESM-only transitive deps (jsdom →
-# html-encoding-sniffer → @exodus/bytes, pulled in by isomorphic-dompurify) is
-# supported during `next build`; Node 20 throws ERR_REQUIRE_ESM.
-ARG NODE_VERSION=22.12.0
+# Node 24 LTS matches local/CI runtime metadata and keeps the image on the
+# supported production line.
+ARG NODE_VERSION=24.18.0
 FROM node:${NODE_VERSION}-bookworm-slim AS base
 # Upgrade corepack first: bundled versions can ship stale pnpm signing keys and
 # fail `pnpm install` with "Cannot find matching keyid".

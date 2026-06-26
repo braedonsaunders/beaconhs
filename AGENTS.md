@@ -18,7 +18,7 @@ coherent than they found it.
 
 ## Quick Start
 
-- Runtime: Node 22 (`.nvmrc`), pnpm 10.30.3, Docker.
+- Runtime: Node 24 LTS (`.nvmrc`), pnpm 10.30.3, Docker.
 - Install: `corepack enable` then `pnpm install`.
 - Env: copy `.env.example` to `.env`.
 - Local infra: `docker compose --profile local-db up -d` starts Postgres on 5433, Redis on 6380, MinIO on 9000/9001, and Mailpit on 8025.
