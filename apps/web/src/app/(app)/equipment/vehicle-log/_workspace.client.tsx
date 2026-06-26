@@ -18,8 +18,8 @@ import {
 } from 'lucide-react'
 import { Badge, Button, Input, Popover, Select, Textarea, cn } from '@beaconhs/ui'
 import type {
-  ApplyWorkActivityInput,
-  ApplyWorkActivityResult,
+  ApplyVehicleLogImportInput,
+  ApplyVehicleLogImportResult,
   SaveVehicleLogEntryInput,
   VehicleLogEntryDraft,
   VehicleLogMode,
@@ -30,10 +30,10 @@ type SaveAction = (
   input: SaveVehicleLogEntryInput,
 ) => Promise<{ ok: true; entry: VehicleLogEntryDraft } | { ok: false; error: string }>
 type ApplyAction = (
-  input: ApplyWorkActivityInput,
-) => Promise<{ ok: true; result: ApplyWorkActivityResult } | { ok: false; error: string }>
+  input: ApplyVehicleLogImportInput,
+) => Promise<{ ok: true; result: ApplyVehicleLogImportResult } | { ok: false; error: string }>
 type DeleteMonthAction = (
-  input: ApplyWorkActivityInput,
+  input: ApplyVehicleLogImportInput,
 ) => Promise<{ ok: true; deleted: number } | { ok: false; error: string }>
 
 type RowState = 'idle' | 'saving' | 'saved' | 'error'
@@ -113,7 +113,7 @@ export function VehicleLogWorkspaceClient({
       const sources = workspace.importSources.sources
       if (sources.some((source) => source.id === current && source.active)) return current
       return (
-        sources.find((source) => source.active && source.matchedDayCount > 0)?.id ??
+        sources.find((source) => source.active && source.onDemand)?.id ??
         sources.find((source) => source.active)?.id ??
         sources[0]?.id ??
         ''
@@ -194,9 +194,9 @@ export function VehicleLogWorkspaceClient({
       selectedImportSourceId ||
       (importableSources.length === 1 ? importableSources[0]?.id : null)
     const source = workspace.importSources.sources.find((candidate) => candidate.id === sourceId)
-    if (!source || !source.active || source.matchedDayCount === 0) {
+    if (!source || !source.active || (!source.onDemand && source.matchedDayCount === 0)) {
       setImportPickerOpen(workspace.importSources.sources.length > 1)
-      setActionResult(source ? `${source.name} has no matching days.` : importHint)
+      setActionResult(source ? `${source.name} is not ready to import.` : importHint)
       return
     }
     setActionResult(null)
@@ -208,12 +208,12 @@ export function VehicleLogWorkspaceClient({
         sourceConnectionId: source.id,
       })
       if (res.ok) {
-        const { created, updated, conflicts, skipped } = res.result
+        const { created, updated, conflicts, skipped, pulled, resolved } = res.result
         const changed = created + updated + conflicts
         setActionResult(
           changed === 0
-            ? `${source.name}: no matching source activity was found.`
-            : `${source.name}: ${created} added · ${updated} refreshed · ${conflicts} conflicts${
+            ? `${source.name}: pulled ${pulled}, applied 0.`
+            : `${source.name}: pulled ${pulled} · resolved ${resolved} · ${created} added · ${updated} refreshed · ${conflicts} conflicts${
                 skipped ? ` · ${skipped} skipped` : ''
               }`,
         )
@@ -248,7 +248,7 @@ export function VehicleLogWorkspaceClient({
   const canEdit = Boolean(workspace.selectedDriverId && workspace.selectedEquipmentId)
   const importSources = workspace.importSources.sources
   const importableSources = importSources.filter(
-    (source) => source.active && source.matchedDayCount > 0,
+    (source) => source.active && (source.onDemand || source.matchedDayCount > 0),
   )
   const selectedImportSource =
     importSources.find((source) => source.id === selectedImportSourceId) ?? importableSources[0]
@@ -262,19 +262,21 @@ export function VehicleLogWorkspaceClient({
         ? 'No vehicle log import source is configured.'
         : importableSources.length > 1
           ? 'Choose an import source.'
-          : selectedImportSource && selectedImportSource.matchedDayCount > 0
-            ? `${selectedImportSource.name}: ${plural(
-                selectedImportSource.matchedDayCount,
-                'matched day',
-              )} ready.`
+          : selectedImportSource?.onDemand
+            ? `${selectedImportSource.name}: pulls ${workspace.month.label} on demand.`
+            : selectedImportSource && selectedImportSource.matchedDayCount > 0
+              ? `${selectedImportSource.name}: ${plural(
+                  selectedImportSource.matchedDayCount,
+                  'matched day',
+                )} ready.`
             : workspace.importSources.monthRowCount > 0
               ? 'No source rows match this driver/month.'
-              : 'No import source has run for this month.'
+              : 'No import source is ready.'
   const sourceBadge = hasActiveSource
     ? `${plural(workspace.importSources.activeSourceCount, 'source')}`
     : 'No source'
   const activityBadge = canEdit
-    ? `${plural(matchedImportDays, 'matched day')}`
+    ? `${plural(matchedImportDays, 'imported day')}`
     : `${plural(workspace.importSources.monthRowCount, 'source row')}`
   const canImport = canEdit && importableSources.length > 0 && !pending
   const hasSourcePicker = importSources.length > 1
@@ -367,12 +369,13 @@ export function VehicleLogWorkspaceClient({
                     Choose import source
                   </div>
                   <div className="text-xs text-slate-500 dark:text-slate-400">
-                    Source rows are matched to the selected driver and month.
+                    Sources pull the selected driver and month on demand.
                   </div>
                 </div>
                 <div className="max-h-72 overflow-y-auto py-1">
                   {importSources.map((source) => {
-                    const disabled = !source.active || source.matchedDayCount === 0
+                    const disabled =
+                      !source.active || (!source.onDemand && source.matchedDayCount === 0)
                     const selected = selectedImportSource?.id === source.id
                     return (
                       <button
@@ -394,12 +397,18 @@ export function VehicleLogWorkspaceClient({
                             {source.connectorLabel} · {source.status}
                           </span>
                           <span className="mt-0.5 block text-[11px] text-slate-400">
-                            {plural(source.monthRowCount, 'row')} this month ·{' '}
-                            {plural(source.matchedDayCount, 'matched day')}
+                            {source.onDemand
+                              ? source.description || `Pulls ${workspace.month.label} live`
+                              : `${plural(source.monthRowCount, 'row')} this month · ${plural(
+                                  source.matchedDayCount,
+                                  'matched day',
+                                )}`}
                           </span>
                         </span>
-                        <Badge variant={source.matchedDayCount ? 'secondary' : 'outline'}>
-                          {source.matchedDayCount}
+                        <Badge
+                          variant={source.onDemand ? 'secondary' : source.matchedDayCount ? 'secondary' : 'outline'}
+                        >
+                          {source.onDemand ? 'Live' : source.matchedDayCount}
                         </Badge>
                       </button>
                     )
@@ -416,7 +425,8 @@ export function VehicleLogWorkspaceClient({
                     disabled={
                       !selectedImportSource ||
                       !selectedImportSource.active ||
-                      selectedImportSource.matchedDayCount === 0 ||
+                      (!selectedImportSource.onDemand &&
+                        selectedImportSource.matchedDayCount === 0) ||
                       pending
                     }
                   >

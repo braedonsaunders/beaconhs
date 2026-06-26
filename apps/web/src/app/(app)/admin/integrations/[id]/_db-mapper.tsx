@@ -52,27 +52,12 @@ const ENTITY_FIELDS: Record<string, { key: string; label: string }[]> = {
     { key: 'serialNumber', label: 'Serial number' },
     { key: 'typeName', label: 'Type' },
   ],
-  work_activity: [
-    { key: 'activityDate', label: 'Activity date' },
-    { key: 'externalEmployeeId', label: 'External employee ID' },
-    { key: 'employeeNo', label: 'Employee no.' },
-    { key: 'siteCode', label: 'Site code' },
-    { key: 'siteName', label: 'Site name' },
-    { key: 'sourceCode', label: 'Source code' },
-    { key: 'sourceLabel', label: 'Source label' },
-    { key: 'hours', label: 'Hours' },
-    { key: 'businessKm', label: 'Business km' },
-    { key: 'personalKm', label: 'Personal km' },
-    { key: 'description', label: 'Description' },
-    { key: 'status', label: 'Status' },
-  ],
 }
 
 const ENTITY_LABELS: Record<string, string> = {
   people: 'People',
   org_unit: 'Locations & Projects',
   equipment: 'Equipment',
-  work_activity: 'Vehicle log source',
 }
 
 function tableKey(t: TableRef): string {

@@ -13,7 +13,6 @@ import {
   FileSpreadsheet,
   Plug,
   PlugZap,
-  Trash2,
   Upload,
   type LucideIcon,
 } from 'lucide-react'
@@ -30,6 +29,7 @@ import { deleteConnection } from './_actions'
 import { deleteOutbound } from './outbound/_actions'
 import { DirectionPill, StatusPill } from './_pills'
 import { IntegrationCatalog, type CatalogItem } from './_catalog.client'
+import { DeleteIntegrationButton } from './_delete-integration-button'
 
 export const metadata = { title: 'Integrations' }
 export const dynamic = 'force-dynamic'
@@ -46,7 +46,6 @@ const ENTITY_LABELS: Record<string, string> = {
   people: 'People',
   org_unit: 'Locations & Projects',
   equipment: 'Equipment',
-  work_activity: 'Vehicle log source',
 }
 
 type Connected = {
@@ -241,16 +240,12 @@ export default async function IntegrationsPage() {
                     </div>
                     <div className="relative z-10 flex items-center gap-1 self-center text-slate-300 transition group-hover:text-slate-400">
                       <ArrowUpRight size={15} className="hidden sm:block" />
-                      <form action={c.deleteAction}>
-                        <input type="hidden" name="id" value={c.id} />
-                        <button
-                          type="submit"
-                          className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-400"
-                          title="Remove integration"
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </form>
+                      <DeleteIntegrationButton
+                        id={c.id}
+                        name={c.title}
+                        kind={c.dir === 'out' ? 'automation' : 'connection'}
+                        deleteAction={c.deleteAction}
+                      />
                     </div>
                   </div>
                 )

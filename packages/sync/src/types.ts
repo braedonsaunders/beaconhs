@@ -49,28 +49,10 @@ export interface CanonicalEquipment {
   metadata?: Record<string, unknown>
 }
 
-export interface CanonicalWorkActivity {
-  activityDate: string // YYYY-MM-DD
-  externalEmployeeId?: string | null
-  employeeNo?: string | null
-  personId?: string | null
-  siteCode?: string | null
-  siteName?: string | null
-  sourceCode?: string | null
-  sourceLabel?: string | null
-  hours?: number | null
-  businessKm?: number | null
-  personalKm?: number | null
-  description?: string | null
-  status?: string | null
-  raw?: Record<string, unknown>
-}
-
 export type CanonicalRecord =
   | { entity: 'people'; externalId: string; data: CanonicalPerson }
   | { entity: 'org_unit'; externalId: string; data: CanonicalOrgUnit }
   | { entity: 'equipment'; externalId: string; data: CanonicalEquipment }
-  | { entity: 'work_activity'; externalId: string; data: CanonicalWorkActivity }
 
 // --- Runtime context handed to connector methods --------------------------
 

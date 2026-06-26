@@ -22,10 +22,7 @@ import { tenants } from './core'
 
 // The canonical entities a connector can sync into. NOTE: "org_unit" covers
 // both Locations and Projects (the same org_units table, different `level`).
-// "work_activity" is source-neutral operational activity (hours, site, km) that
-// downstream modules such as vehicle logs can import from without knowing which
-// upstream system produced it.
-export const SYNC_ENTITIES = ['people', 'org_unit', 'equipment', 'work_activity'] as const
+export const SYNC_ENTITIES = ['people', 'org_unit', 'equipment'] as const
 export type SyncEntityKey = (typeof SYNC_ENTITIES)[number]
 
 export type SyncConnectionStatus = 'draft' | 'connected' | 'error' | 'disabled'

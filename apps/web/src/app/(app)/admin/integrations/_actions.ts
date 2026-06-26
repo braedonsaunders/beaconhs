@@ -147,7 +147,10 @@ export async function deleteConnection(formData: FormData): Promise<void> {
   const id = String(formData.get('id') ?? '')
   if (!id) return
   await ctx.db((tx) =>
-    tx.update(syncConnections).set({ deletedAt: new Date() }).where(eq(syncConnections.id, id)),
+    tx
+      .update(syncConnections)
+      .set({ deletedAt: new Date(), enabled: false })
+      .where(eq(syncConnections.id, id)),
   )
   await recordAudit(ctx, {
     entityType: 'sync_connection',

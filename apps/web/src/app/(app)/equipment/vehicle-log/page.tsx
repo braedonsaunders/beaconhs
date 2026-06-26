@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { FileText, Truck } from 'lucide-react'
+import { Truck } from 'lucide-react'
 import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
 import { can, assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
@@ -8,11 +8,11 @@ import { pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
 import { EquipmentSubNav } from '@/components/equipment-sub-nav'
 import {
-  applyWorkActivityToVehicleLog,
+  applyVehicleLogImportToVehicleLog,
   deleteVehicleLogMonth,
   loadVehicleLogWorkspace,
   upsertVehicleLogEntry,
-  type ApplyWorkActivityInput,
+  type ApplyVehicleLogImportInput,
   type SaveVehicleLogEntryInput,
 } from './_service'
 import { VehicleLogWorkspaceClient } from './_workspace.client'
@@ -35,22 +35,22 @@ async function saveVehicleLogEntryAction(input: SaveVehicleLogEntryInput) {
   }
 }
 
-async function applyWorkActivityAction(input: ApplyWorkActivityInput) {
+async function applyVehicleLogImportAction(input: ApplyVehicleLogImportInput) {
   'use server'
   const ctx = await requireRequestContext()
   assertCan(ctx, 'equipment.manage')
   try {
-    const result = await applyWorkActivityToVehicleLog(ctx, input)
+    const result = await applyVehicleLogImportToVehicleLog(ctx, input)
     return { ok: true as const, result }
   } catch (error) {
     return {
       ok: false as const,
-      error: error instanceof Error ? error.message : 'Failed to import source activity.',
+      error: error instanceof Error ? error.message : 'Failed to import vehicle log source.',
     }
   }
 }
 
-async function deleteMonthAction(input: ApplyWorkActivityInput) {
+async function deleteMonthAction(input: ApplyVehicleLogImportInput) {
   'use server'
   const ctx = await requireRequestContext()
   assertCan(ctx, 'equipment.manage')
@@ -94,16 +94,6 @@ export default async function VehicleLogPage({
           <PageHeader
             title="Vehicle log"
             description="Driver and vehicle monthly log entry."
-            actions={
-              <div className="flex flex-wrap items-center gap-2">
-                <Link href="/equipment/vehicle-log/summary">
-                  <Button variant="outline">
-                    <FileText size={14} />
-                    Summary
-                  </Button>
-                </Link>
-              </div>
-            }
           />
           <EquipmentSubNav active="vehicle-log" />
         </>
@@ -124,7 +114,7 @@ export default async function VehicleLogPage({
         <VehicleLogWorkspaceClient
           workspace={workspace}
           saveAction={saveVehicleLogEntryAction}
-          applyAction={applyWorkActivityAction}
+          applyAction={applyVehicleLogImportAction}
           deleteMonthAction={deleteMonthAction}
         />
       )}

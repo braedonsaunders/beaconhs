@@ -142,7 +142,7 @@ export async function runSync(args: RunSyncArgs): Promise<RunSyncResult> {
   }
 
   const stats: Record<string, SyncEntityStat> = {}
-  const lookups = await withTenant(db, tenantId, (tx) => loadLookups(tx, tenantId))
+  const lookups = await withTenant(db, tenantId, (tx) => loadLookups(tx))
 
   for (const batch of chunk(records, BATCH)) {
     try {

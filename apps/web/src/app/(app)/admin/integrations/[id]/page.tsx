@@ -2,6 +2,7 @@
 // source→canonical mapping (live DB browser / CSV / Nango), schedule, and run
 // history.
 
+import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { and, desc, eq, isNull } from 'drizzle-orm'
 import { Clock, Play } from 'lucide-react'
@@ -33,7 +34,6 @@ const ENTITY_LABELS: Record<string, string> = {
   people: 'People',
   org_unit: 'Locations & Projects',
   equipment: 'Equipment',
-  work_activity: 'Vehicle log source',
 }
 
 const STATUS_PILL: Record<string, string> = {
@@ -108,9 +108,12 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
       <div className="space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <a href="/admin/integrations" className="text-xs text-slate-400 hover:text-slate-600">
+            <Link
+              href="/admin/integrations"
+              className="text-xs text-slate-400 hover:text-slate-600"
+            >
               ← Integrations
-            </a>
+            </Link>
             <form action={renameConnection} className="mt-1 flex items-center gap-2">
               <input type="hidden" name="id" value={conn.id} />
               <input
@@ -138,12 +141,14 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
             </form>
             <p className="text-sm text-slate-500">{summary?.name ?? conn.connectorKey}</p>
           </div>
-          <form action={runNow}>
-            <input type="hidden" name="id" value={conn.id} />
-            <Button type="submit" variant="outline">
-              <Play size={14} /> Run now
-            </Button>
-          </form>
+          {summary ? (
+            <form action={runNow}>
+              <input type="hidden" name="id" value={conn.id} />
+              <Button type="submit" variant="outline">
+                <Play size={14} /> Run now
+              </Button>
+            </form>
+          ) : null}
         </div>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">

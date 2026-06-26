@@ -235,7 +235,7 @@ export const WIDGETS: Record<string, WidgetMeta> = {
     category: 'equipment',
     label: 'Vehicle log status',
     description:
-      'Month-to-date vehicle-log entries, imported work activity and unresolved conflicts.',
+      'Month-to-date vehicle-log entries, imported days and unresolved conflicts.',
     defaultSize: { w: 4, h: 3 },
     minSize: { w: 3, h: 2 },
     maxSize: { w: 6, h: 4 },

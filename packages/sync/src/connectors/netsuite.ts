@@ -157,12 +157,6 @@ function datePart(v: string | null): string | null {
   return Number.isNaN(t) ? null : new Date(t).toISOString().slice(0, 10)
 }
 
-function numPart(v: string | null): number | null {
-  if (!v) return null
-  const n = Number(v.replace(/,/g, '').trim())
-  return Number.isFinite(n) ? n : null
-}
-
 export function mapNetsuiteRow(
   entity: SyncEntityKey,
   m: NsEntityMap,
@@ -206,28 +200,6 @@ export function mapNetsuiteRow(
       if (!data.assetTag) return null
       return { entity: 'equipment', externalId, data }
     }
-    case 'work_activity': {
-      const activityDate = datePart(g('activityDate'))
-      const externalEmployeeId = g('externalEmployeeId')
-      const employeeNo = g('employeeNo')
-      if (!activityDate || (!externalEmployeeId && !employeeNo)) return null
-      const data = {
-        activityDate,
-        externalEmployeeId,
-        employeeNo,
-        siteCode: g('siteCode'),
-        siteName: g('siteName'),
-        sourceCode: g('sourceCode'),
-        sourceLabel: g('sourceLabel'),
-        hours: numPart(g('hours')),
-        businessKm: numPart(g('businessKm')),
-        personalKm: numPart(g('personalKm')),
-        description: g('description'),
-        status: g('status'),
-        raw: row,
-      }
-      return { entity: 'work_activity', externalId, data }
-    }
   }
 }
 
@@ -239,7 +211,6 @@ function resolveEntities(cfg: NsConfig): [SyncEntityKey, NsEntityMap][] {
     out.push(['people', cfg.employeeWhere ? { ...people, where: cfg.employeeWhere } : people])
   if (org) out.push(['org_unit', cfg.locationWhere ? { ...org, where: cfg.locationWhere } : org])
   if (cfg.entities?.equipment) out.push(['equipment', cfg.entities.equipment])
-  if (cfg.entities?.work_activity) out.push(['work_activity', cfg.entities.work_activity])
   return out
 }
 

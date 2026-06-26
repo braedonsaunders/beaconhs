@@ -17,13 +17,11 @@ import {
   people,
   syncCrosswalk,
   trades,
-  workActivityEntries,
 } from '@beaconhs/db/schema'
 import type {
   CanonicalEquipment,
   CanonicalOrgUnit,
   CanonicalPerson,
-  CanonicalWorkActivity,
   CanonicalRecord,
   SyncEntityKey,
   SyncLogger,
@@ -52,8 +50,8 @@ export interface UpsertResult {
   canonicalId?: string
 }
 
-export async function loadLookups(tx: Database, _tenantId: string): Promise<Lookups> {
-  // RLS scopes all four reads to the current tenant.
+export async function loadLookups(tx: Database): Promise<Lookups> {
+  // RLS scopes all tenant reads to the current tenant.
   const [depts, trds, etypes, ous, ppl] = await Promise.all([
     tx.select({ id: departments.id, name: departments.name }).from(departments),
     tx.select({ id: trades.id, name: trades.name }).from(trades),
@@ -174,8 +172,6 @@ export async function upsertRecord(
       return upsertOrgUnit(tx, ctx, rec.externalId, rec.data)
     case 'equipment':
       return upsertEquipment(tx, ctx, rec.externalId, rec.data)
-    case 'work_activity':
-      return upsertWorkActivity(tx, ctx, rec.externalId, rec.data)
   }
 }
 
@@ -473,118 +469,4 @@ async function upsertEquipment(
   )
   await linkCrosswalk(tx, ctx, 'equipment', externalId, id, rowHash)
   return { action: 'created', canonicalId: id }
-}
-
-// --- work activity --------------------------------------------------------
-
-function intOrNull(value: number | null | undefined): number | null {
-  if (value == null) return null
-  const n = Number(value)
-  return Number.isFinite(n) ? Math.round(n) : null
-}
-
-function decimalOrNull(value: number | null | undefined): string | null {
-  if (value == null) return null
-  const n = Number(value)
-  return Number.isFinite(n) ? n.toFixed(2) : null
-}
-
-function dateOnly(value: string | null | undefined): string | null {
-  if (!value) return null
-  const s = String(value).trim()
-  const m = s.match(/^(\d{4}-\d{2}-\d{2})/)
-  if (m) return m[1] ?? null
-  const t = Date.parse(s)
-  return Number.isNaN(t) ? null : new Date(t).toISOString().slice(0, 10)
-}
-
-function resolvePersonId(ctx: UpsertCtx, data: CanonicalWorkActivity): string | null {
-  if (data.personId) return data.personId
-  if (data.externalEmployeeId) {
-    const id = ctx.lookups.personIdByExternalEmployeeId.get(data.externalEmployeeId.toLowerCase())
-    if (id) return id
-  }
-  if (data.employeeNo) {
-    const id = ctx.lookups.personIdByEmployeeNo.get(data.employeeNo.toLowerCase())
-    if (id) return id
-  }
-  return null
-}
-
-async function upsertWorkActivity(
-  tx: Database,
-  ctx: UpsertCtx,
-  externalId: string,
-  data: CanonicalWorkActivity,
-): Promise<UpsertResult> {
-  const activityDate = dateOnly(data.activityDate)
-  if (!activityDate) {
-    ctx.log('warn', `work activity "${externalId}" is missing a valid activity date — skipped`)
-    return { action: 'skipped' }
-  }
-
-  const rowHash = hashData(data)
-  const personId = resolvePersonId(ctx, data)
-  const siteCode = data.siteCode ?? null
-  const siteOrgUnitId = siteCode
-    ? (ctx.lookups.orgUnitIdByCode.get(siteCode.toLowerCase()) ?? null)
-    : null
-  const fields = {
-    sourceSystem: ctx.sourceSystem,
-    activityDate,
-    personId,
-    externalEmployeeId: data.externalEmployeeId ?? null,
-    employeeNo: data.employeeNo ?? null,
-    siteOrgUnitId,
-    siteCode,
-    siteName: data.siteName ?? null,
-    sourceCode: data.sourceCode ?? null,
-    sourceLabel: data.sourceLabel ?? null,
-    hours: decimalOrNull(data.hours),
-    businessKm: intOrNull(data.businessKm),
-    personalKm: intOrNull(data.personalKm),
-    description: data.description ?? null,
-    status: data.status ?? 'ready',
-    raw: data.raw ?? {},
-    importedAt: new Date(),
-  }
-
-  const link = await findCrosswalk(tx, ctx, 'work_activity', externalId)
-  if (link) {
-    if (link.rowHash === rowHash) {
-      await touchCrosswalk(tx, link.id)
-      return { action: 'unchanged', canonicalId: link.canonicalId }
-    }
-    const updated = await tx
-      .update(workActivityEntries)
-      .set(fields)
-      .where(eq(workActivityEntries.id, link.canonicalId))
-      .returning({ id: workActivityEntries.id })
-    if (updated.length > 0) {
-      await touchCrosswalk(tx, link.id, rowHash)
-      return { action: 'updated', canonicalId: link.canonicalId }
-    }
-  }
-
-  const id = firstId(
-    await tx
-      .insert(workActivityEntries)
-      .values({
-        tenantId: ctx.tenantId,
-        sourceConnectionId: ctx.connectionId,
-        sourceExternalId: externalId,
-        ...fields,
-      })
-      .onConflictDoUpdate({
-        target: [
-          workActivityEntries.tenantId,
-          workActivityEntries.sourceConnectionId,
-          workActivityEntries.sourceExternalId,
-        ],
-        set: fields,
-      })
-      .returning({ id: workActivityEntries.id }),
-  )
-  await linkCrosswalk(tx, ctx, 'work_activity', externalId, id, rowHash)
-  return { action: link ? 'updated' : 'created', canonicalId: id }
 }

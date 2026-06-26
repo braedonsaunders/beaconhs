@@ -5,14 +5,15 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { and, eq, isNull } from 'drizzle-orm'
-import { ArrowLeft, Trash2 } from 'lucide-react'
-import { Button, Card, CardContent, cn } from '@beaconhs/ui'
+import { ArrowLeft } from 'lucide-react'
+import { Card, CardContent, cn } from '@beaconhs/ui'
 import { can } from '@beaconhs/tenant'
 import { tenantIntegrations } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { getTrigger, listDestinations, listTriggers } from '@beaconhs/integrations'
 import { PageContainer } from '@/components/page-layout'
 import { deleteOutbound } from '../_actions'
+import { DeleteIntegrationButton } from '../../_delete-integration-button'
 import { IntegrationBuilder, type DestLite } from './_builder.client'
 
 export const metadata = { title: 'Outbound automation' }
@@ -117,17 +118,14 @@ export default async function OutboundIntegrationPage({
           </CardContent>
         </Card>
 
-        <form action={deleteOutbound}>
-          <input type="hidden" name="id" value={row.id} />
-          <Button
-            type="submit"
-            variant="outline"
-            size="sm"
-            className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40"
-          >
-            <Trash2 size={14} /> Remove automation
-          </Button>
-        </form>
+        <DeleteIntegrationButton
+          id={row.id}
+          name={row.name || trigger?.label || 'this automation'}
+          kind="automation"
+          iconOnly={false}
+          label="Remove automation"
+          deleteAction={deleteOutbound}
+        />
       </div>
     </PageContainer>
   )

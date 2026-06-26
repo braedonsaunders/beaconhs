@@ -13,7 +13,6 @@ export const REPORT_VIEWS_SQL: string[] = [
   `DROP VIEW IF EXISTS report_equipment_charges;
    DROP VIEW IF EXISTS report_vehicle_log_monthly;
    DROP VIEW IF EXISTS report_vehicle_log_entries;
-   DROP VIEW IF EXISTS report_work_activity;
    DROP VIEW IF EXISTS report_equipment_fleet`,
 
   // Externally-issued skills & certifications per person (the shape the old
@@ -121,40 +120,6 @@ export const REPORT_VIEWS_SQL: string[] = [
    LEFT JOIN inc ON inc.tenant_id = m.tenant_id AND inc.month = m.month
    LEFT JOIN hrs ON hrs.tenant_id = m.tenant_id AND hrs.month = m.month`,
 
-  // Generic imported work-activity facts. This is the reporting surface for
-  // tenant-specific time/dispatch/payroll feeds after they land through the
-  // source-neutral sync engine.
-  `CREATE OR REPLACE VIEW report_work_activity AS
-   SELECT
-     wa.id                                  AS id,
-     wa.tenant_id                           AS tenant_id,
-     wa.activity_date                       AS activity_date,
-     date_trunc('month', wa.activity_date)::date AS month,
-     wa.person_id                           AS person_id,
-     wa.employee_no                         AS employee_no,
-     wa.external_employee_id                AS external_employee_id,
-     CASE WHEN p.id IS NULL THEN NULL
-          ELSE p.first_name || ' ' || p.last_name END AS person_name,
-     wa.site_org_unit_id                    AS site_org_unit_id,
-     wa.site_code                           AS site_code,
-     COALESCE(site.name, wa.site_name)      AS site_name,
-     wa.source_code                         AS source_code,
-     wa.source_label                        AS source_label,
-     wa.source_system                       AS source_system,
-     sc.name                                AS source_name,
-     wa.hours                               AS hours,
-     wa.business_km                         AS business_km,
-     wa.personal_km                         AS personal_km,
-     CASE WHEN wa.business_km IS NOT NULL OR wa.personal_km IS NOT NULL
-          THEN COALESCE(wa.business_km, 0) + COALESCE(wa.personal_km, 0)
-          ELSE NULL END                     AS total_km,
-     wa.status                              AS status,
-     wa.imported_at                         AS imported_at
-   FROM work_activity_entries wa
-   LEFT JOIN people p ON p.id = wa.person_id AND p.tenant_id = wa.tenant_id
-   LEFT JOIN org_units site ON site.id = wa.site_org_unit_id AND site.tenant_id = wa.tenant_id
-   LEFT JOIN sync_connections sc ON sc.id = wa.source_connection_id AND sc.tenant_id = wa.tenant_id`,
-
   // Daily vehicle-log detail with driver, vehicle, site and source metadata
   // baked in for the native report engine. Totals use persisted km when
   // present, otherwise derive from business/personal or odometer fields.
@@ -188,14 +153,14 @@ export const REPORT_VIEWS_SQL: string[] = [
      tl.hours_on_site                       AS hours_on_site,
      tl.manpower_count                      AS manpower_count,
      tl.site_org_unit_id                    AS site_org_unit_id,
-     COALESCE(site.code, wa.site_code)      AS site_code,
-     COALESCE(site.name, wa.site_name)      AS site_name,
-     COALESCE(site.name, wa.site_name, tl.other_destination) AS destination,
+     site.code                              AS site_code,
+     site.name                              AS site_name,
+     COALESCE(site.name, tl.other_destination) AS destination,
      tl.other_destination                   AS other_destination,
      tl.import_status                       AS import_status,
-     COALESCE(wa.source_system, sc.connector_key) AS source_system,
+     sc.connector_key                       AS source_system,
      sc.name                                AS source_name,
-     wa.source_label                        AS source_label,
+     tl.import_meta->>'sourceLabel'         AS source_label,
      tl.source_external_id                  AS source_external_id,
      tl.imported_at                         AS imported_at,
      tl.created_at                          AS created_at,
@@ -205,7 +170,6 @@ export const REPORT_VIEWS_SQL: string[] = [
    LEFT JOIN people p ON p.id = tl.driver_person_id AND p.tenant_id = tl.tenant_id
    LEFT JOIN org_units site ON site.id = tl.site_org_unit_id AND site.tenant_id = tl.tenant_id
    LEFT JOIN sync_connections sc ON sc.id = tl.source_connection_id AND sc.tenant_id = tl.tenant_id
-   LEFT JOIN work_activity_entries wa ON wa.id = tl.source_work_activity_id AND wa.tenant_id = tl.tenant_id
    WHERE e.deleted_at IS NULL`,
 
   // Monthly driver × vehicle rollup for summaries, exports and dashboard

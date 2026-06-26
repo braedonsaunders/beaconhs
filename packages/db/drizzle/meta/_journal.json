@@ -27,7 +27,7 @@
       "idx": 3,
       "version": "7",
       "when": 1782444699563,
-      "tag": "0003_vehicle_log_work_activity",
+      "tag": "0003_vehicle_log_import_fields",
       "breakpoints": true
     },
     {

@@ -337,39 +337,11 @@ export async function loadDashboardMetrics(
           lte(truckLogEntries.entryDate, todayIso),
         ),
       )
-    const pendingActivityRows = extractRows(
-      await tx.execute(sql`
-        SELECT COUNT(DISTINCT (
-          COALESCE(wa.person_id::text, wa.external_employee_id, wa.employee_no, wa.source_external_id)
-          || ':' || wa.activity_date::text
-        ))::int AS pending
-        FROM work_activity_entries wa
-        WHERE wa.activity_date >= ${startOfMonthIso}::date
-          AND wa.activity_date <= ${todayIso}::date
-          AND NOT EXISTS (
-            SELECT 1
-            FROM truck_log_entries tl
-            WHERE tl.tenant_id = wa.tenant_id
-              AND tl.entry_date = wa.activity_date
-              AND (
-                tl.source_work_activity_id = wa.id
-                OR (
-                  tl.source_connection_id = wa.source_connection_id
-                  AND tl.source_external_id = wa.source_external_id
-                )
-                OR (
-                  wa.person_id IS NOT NULL
-                  AND tl.driver_person_id = wa.person_id
-                )
-              )
-          )
-      `),
-    )
     const vehicleLogStatus = {
       loggedDays: Number(vehicleLogRow?.loggedDays ?? 0),
       importedDays: Number(vehicleLogRow?.importedDays ?? 0),
       conflictDays: Number(vehicleLogRow?.conflictDays ?? 0),
-      pendingActivityDays: Number(pendingActivityRows[0]?.pending ?? 0),
+      pendingActivityDays: 0,
       businessKm: Number(vehicleLogRow?.businessKm ?? 0),
       personalKm: Number(vehicleLogRow?.personalKm ?? 0),
       totalKm: Number(vehicleLogRow?.totalKm ?? 0),

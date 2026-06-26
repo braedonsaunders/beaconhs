@@ -66,14 +66,6 @@ function val(row: Record<string, unknown>, col: string | undefined | null): stri
   return s === '' ? null : s
 }
 
-function numVal(row: Record<string, unknown>, col: string | undefined | null): number | null {
-  if (!col) return null
-  const v = row[col]
-  if (v == null || v === '') return null
-  const n = typeof v === 'number' ? v : Number(String(v).replace(/,/g, '').trim())
-  return Number.isFinite(n) ? n : null
-}
-
 function datePart(v: string | null): string | null {
   if (!v) return null
   const m = v.match(/^(\d{4}-\d{2}-\d{2})/)
@@ -130,35 +122,6 @@ function mapRow(
       if (!data.assetTag) return null
       return { entity: 'equipment', externalId: idRaw || data.assetTag || hashRow(row), data }
     }
-    case 'work_activity': {
-      const activityDate = datePart(g('activityDate'))
-      const externalEmployeeId = g('externalEmployeeId')
-      const employeeNo = g('employeeNo')
-      const siteCode = g('siteCode')
-      const sourceCode = g('sourceCode')
-      const data = {
-        activityDate: activityDate ?? '',
-        externalEmployeeId,
-        employeeNo,
-        siteCode,
-        siteName: g('siteName'),
-        sourceCode,
-        sourceLabel: g('sourceLabel'),
-        hours: numVal(row, cols.hours),
-        businessKm: numVal(row, cols.businessKm),
-        personalKm: numVal(row, cols.personalKm),
-        description: g('description'),
-        status: g('status'),
-        raw: row,
-      }
-      if (!activityDate || (!externalEmployeeId && !employeeNo)) return null
-      const externalId =
-        idRaw ||
-        [externalEmployeeId ?? employeeNo, activityDate, siteCode ?? sourceCode ?? hashRow(row)]
-          .filter(Boolean)
-          .join(':')
-      return { entity: 'work_activity', externalId, data }
-    }
   }
 }
 
@@ -166,10 +129,10 @@ export const databaseConnector: Connector = {
   key: 'database',
   name: 'Database (SQL)',
   description:
-    'Connect to any SQL database — PostgreSQL, MySQL/MariaDB or SQL Server. Browse tables, map columns to People, Locations, Equipment and Vehicle Log Sources, and sync on a schedule.',
+    'Connect to any SQL database — PostgreSQL, MySQL/MariaDB or SQL Server. Browse tables, map columns to People, Locations and Equipment, and sync on a schedule.',
   kind: 'native',
   iconKey: 'database',
-  entities: ['people', 'org_unit', 'equipment', 'work_activity'],
+  entities: ['people', 'org_unit', 'equipment'],
   supportsIntrospection: true,
   configFields: [
     {
