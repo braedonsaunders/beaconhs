@@ -14,6 +14,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
+import { AnimatePresence, motion } from 'framer-motion'
 import {
   ArrowDownToLine,
   ArrowLeftRight,
@@ -24,6 +25,7 @@ import {
   Minimize2,
   PackageCheck,
   ScanLine,
+  Search,
   UserRound,
   Volume2,
   VolumeX,
@@ -61,6 +63,17 @@ function getCameraAvailability() {
     'BarcodeDetector' in window &&
     Boolean(window.navigator.mediaDevices?.getUserMedia)
   )
+}
+
+function subscribeDesktopViewport(onStoreChange: () => void) {
+  if (typeof window === 'undefined') return () => {}
+  const mq = window.matchMedia('(min-width: 1024px)')
+  mq.addEventListener('change', onStoreChange)
+  return () => mq.removeEventListener('change', onStoreChange)
+}
+
+function getDesktopViewport() {
+  return typeof window === 'undefined' || window.matchMedia('(min-width: 1024px)').matches
 }
 
 export type StationClientProps = {
@@ -167,6 +180,7 @@ export function StationClient(props: StationClientProps) {
   const beep = useBeeper(soundOn)
 
   const hasCamera = useSyncExternalStore(subscribeStaticStore, getCameraAvailability, () => false)
+  const isDesktop = useSyncExternalStore(subscribeDesktopViewport, getDesktopViewport, () => true)
 
   const focusScan = useCallback(() => {
     // Don't steal focus from the camera overlay or a dropdown search box.
@@ -593,7 +607,8 @@ export function StationClient(props: StationClientProps) {
                 : 'border-slate-200 bg-white text-slate-900 placeholder-slate-400 focus:border-amber-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white'
             }`}
           />
-          {scanValue.trim().length > 0 &&
+          {isDesktop &&
+          scanValue.trim().length > 0 &&
           visibleResults &&
           (visibleResults.equipment.length > 0 || visibleResults.people.length > 0) ? (
             <div
@@ -678,6 +693,21 @@ export function StationClient(props: StationClientProps) {
                 </div>
               ) : null}
             </div>
+          ) : null}
+          {!isDesktop && visibleResults ? (
+            <MobileStationResultsSheet
+              query={scanValue}
+              results={visibleResults}
+              direction={direction}
+              onQueryChange={setScanValue}
+              onSubmitQuery={() => void handleCode(scanValue)}
+              onClose={() => {
+                setScanValue('')
+                setResults(null)
+              }}
+              onPickPerson={pickPerson}
+              onPickEquipment={(assetTag) => void handleCode(assetTag)}
+            />
           ) : null}
         </div>
 
@@ -859,6 +889,166 @@ function FlashPanel({
         ) : null}
       </div>
     </div>
+  )
+}
+
+function MobileStationResultsSheet({
+  query,
+  results,
+  direction,
+  onQueryChange,
+  onSubmitQuery,
+  onClose,
+  onPickPerson,
+  onPickEquipment,
+}: {
+  query: string
+  results: StationSearchResults
+  direction: 'toggle' | 'out' | 'in'
+  onQueryChange: (value: string) => void
+  onSubmitQuery: () => void
+  onClose: () => void
+  onPickPerson: (person: { id: string; name: string }) => void
+  onPickEquipment: (assetTag: string) => void
+}) {
+  if (typeof document === 'undefined') return null
+  const hasResults = results.people.length > 0 || results.equipment.length > 0
+  return createPortal(
+    <AnimatePresence>
+      <div className="fixed inset-0 z-[60]">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }}
+          className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]"
+          onClick={onClose}
+        />
+        <motion.div
+          initial={{ y: '100%' }}
+          animate={{ y: 0 }}
+          exit={{ y: '100%' }}
+          transition={{ type: 'spring', damping: 34, stiffness: 340, mass: 0.8 }}
+          className="absolute inset-x-0 bottom-0 flex max-h-[82vh] flex-col rounded-t-2xl border-t border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900"
+        >
+          <div className="flex items-center justify-center pt-2.5">
+            <span className="h-1.5 w-10 rounded-full bg-slate-300" />
+          </div>
+          <div className="flex items-center justify-between px-4 pt-2 pb-1">
+            <span className="text-base font-semibold text-slate-900 dark:text-slate-100">
+              Scan search
+            </span>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+            >
+              <X size={18} />
+            </button>
+          </div>
+          <div className="relative px-3 pt-3">
+            <Search
+              size={16}
+              className="absolute top-1/2 left-6 -translate-y-1/2 text-slate-400 dark:text-slate-500"
+            />
+            <input
+              autoFocus
+              value={query}
+              onChange={(event) => onQueryChange(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  onSubmitQuery()
+                }
+              }}
+              placeholder="Scan or type to search..."
+              className="h-11 w-full rounded-lg border border-slate-200 bg-slate-50 pr-3 pl-9 text-base transition outline-none focus:border-teal-500 focus:bg-white focus:ring-2 focus:ring-teal-500/20 dark:border-slate-800 dark:bg-slate-900 dark:focus:bg-slate-900"
+            />
+          </div>
+          <div className="mt-1 min-h-0 flex-1 overflow-y-auto pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+            {!hasResults ? (
+              <div className="px-3 py-8 text-center text-sm text-slate-400 dark:text-slate-500">
+                No matches
+              </div>
+            ) : null}
+            {results.people.length > 0 ? (
+              <div>
+                <div className="px-4 pt-2.5 pb-1 text-[11px] font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500">
+                  People - set active holder
+                </div>
+                <ul role="listbox" className="py-1">
+                  {results.people.map((person) => (
+                    <li key={person.id}>
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={false}
+                        onClick={() => onPickPerson(person)}
+                        className="flex h-12 w-full items-center gap-2.5 px-4 text-left text-[15px] text-slate-700 transition-colors active:bg-slate-100 dark:text-slate-200 dark:active:bg-slate-700"
+                      >
+                        <UserRound size={17} className="shrink-0 text-teal-600" />
+                        <span className="min-w-0 flex-1 truncate">
+                          {person.name}
+                          {[person.jobTitle, person.employeeNo].filter(Boolean).length > 0 ? (
+                            <span className="ml-1.5 text-xs text-slate-400 dark:text-slate-500">
+                              {[person.jobTitle, person.employeeNo].filter(Boolean).join(' - ')}
+                            </span>
+                          ) : null}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {results.equipment.length > 0 ? (
+              <div>
+                <div className="px-4 pt-2.5 pb-1 text-[11px] font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500">
+                  Equipment - tap to {scanActionWord(direction)}
+                </div>
+                <ul role="listbox" className="py-1">
+                  {results.equipment.map((item) => (
+                    <li key={item.id}>
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={false}
+                        onClick={() => onPickEquipment(item.assetTag)}
+                        className="flex h-12 w-full items-center gap-2.5 px-4 text-left text-[15px] text-slate-700 transition-colors active:bg-slate-100 dark:text-slate-200 dark:active:bg-slate-700"
+                      >
+                        <PackageCheck
+                          size={17}
+                          className={`shrink-0 ${item.isOut ? 'text-amber-500' : 'text-emerald-500'}`}
+                        />
+                        <span className="min-w-0 flex-1 truncate">
+                          <span className="font-mono text-xs text-slate-400 dark:text-slate-500">
+                            {item.assetTag}
+                          </span>{' '}
+                          {item.name}
+                          <span className="ml-1.5 text-xs text-slate-400 dark:text-slate-500">
+                            {item.typeName ?? 'Equipment'}
+                            {item.isOut && item.holderName ? ` - with ${item.holderName}` : ''}
+                          </span>
+                        </span>
+                        <span
+                          className={`shrink-0 text-xs font-medium ${
+                            item.isOut ? 'text-amber-600' : 'text-emerald-600'
+                          }`}
+                        >
+                          {item.isOut ? 'out' : 'in'}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </div>
+        </motion.div>
+      </div>
+    </AnimatePresence>,
+    document.body,
   )
 }
 
