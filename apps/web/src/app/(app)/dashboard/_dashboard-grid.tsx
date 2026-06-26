@@ -56,6 +56,11 @@ const UUID_RE = /^[0-9a-f-]{36}$/i
 
 type LayoutWidget = DashboardLayoutData['widgets'][number]
 type LibraryCard = { id: string; name: string; description: string }
+type DashboardGridActionResult = { ok: true } | { ok: false; error?: string }
+type SaveDashboardGridAction = (input: {
+  widgets: LayoutWidget[]
+}) => Promise<DashboardGridActionResult>
+type ResetDashboardGridAction = () => Promise<DashboardGridActionResult>
 
 export function DashboardGrid({
   initialLayout,
@@ -64,6 +69,13 @@ export function DashboardGrid({
   mode,
   libraryCards = [],
   allowedWidgetIds,
+  saveLayoutAction = saveDashboardLayout as SaveDashboardGridAction,
+  resetLayoutAction = resetDashboardLayout as ResetDashboardGridAction,
+  saveRedirectHref = '/dashboard',
+  toolbarLabel = 'Customising your dashboard',
+  resetConfirmMessage = 'Reset to the default layout for your role? Your customisations will be lost.',
+  saveSuccessMessage = 'Layout saved',
+  resetSuccessMessage = 'Layout reset to default',
 }: {
   initialLayout: DashboardLayoutData
   nodes: Record<string, ReactNode>
@@ -72,6 +84,13 @@ export function DashboardGrid({
   libraryCards?: LibraryCard[]
   /** Registry widget ids the viewer is permitted to add (omit = all). */
   allowedWidgetIds?: readonly string[]
+  saveLayoutAction?: SaveDashboardGridAction
+  resetLayoutAction?: ResetDashboardGridAction
+  saveRedirectHref?: string
+  toolbarLabel?: string
+  resetConfirmMessage?: string
+  saveSuccessMessage?: string
+  resetSuccessMessage?: string
 }) {
   const cardNameById = useMemo(
     () => new Map(libraryCards.map((c) => [c.id, c.name])),
@@ -84,8 +103,8 @@ export function DashboardGrid({
   const [saving, setSaving] = useState(false)
   const [resetting, setResetting] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
-  const baselineRef = useRef(JSON.stringify(initialLayout.widgets))
-  const dirty = useMemo(() => JSON.stringify(layout) !== baselineRef.current, [layout])
+  const [baseline, setBaseline] = useState(() => JSON.stringify(initialLayout.widgets))
+  const dirty = useMemo(() => JSON.stringify(layout) !== baseline, [baseline, layout])
 
   // Below lg the saved 12-col desktop geometry maps badly onto the drag
   // grid's smaller column counts (staircase layouts, dead zones, fixed row
@@ -126,15 +145,6 @@ export function DashboardGrid({
     ro.observe(el)
     roRef.current = ro
   }, [])
-
-  // Resync local state when the server-provided layout changes (e.g. after save).
-  useEffect(() => {
-    const next = JSON.stringify(initialLayout.widgets)
-    if (next !== baselineRef.current) {
-      baselineRef.current = next
-      setLayout(initialLayout.widgets)
-    }
-  }, [initialLayout])
 
   // Esc closes the widget palette — standard drawer ergonomics.
   useEffect(() => {
@@ -197,31 +207,34 @@ export function DashboardGrid({
   const handleSave = useCallback(async () => {
     setSaving(true)
     try {
-      const res = await saveDashboardLayout({ widgets: layout })
+      const res = await saveLayoutAction({ widgets: layout })
       if (res.ok) {
-        baselineRef.current = JSON.stringify(layout)
-        toast.success('Layout saved')
-        router.push('/dashboard')
+        setBaseline(JSON.stringify(layout))
+        toast.success(saveSuccessMessage)
+        router.push(saveRedirectHref)
       } else {
         toast.error(res.error ?? 'Save failed')
       }
     } finally {
       setSaving(false)
     }
-  }, [layout, router])
+  }, [layout, router, saveLayoutAction, saveRedirectHref, saveSuccessMessage])
 
   const handleReset = useCallback(async () => {
-    if (!confirm('Reset to the default layout for your role? Your customisations will be lost.'))
-      return
+    if (!confirm(resetConfirmMessage)) return
     setResetting(true)
     try {
-      await resetDashboardLayout()
-      toast.success('Layout reset to default')
-      router.refresh()
+      const res = await resetLayoutAction()
+      if (res.ok) {
+        toast.success(resetSuccessMessage)
+        router.refresh()
+      } else {
+        toast.error(res.error ?? 'Reset failed')
+      }
     } finally {
       setResetting(false)
     }
-  }, [router])
+  }, [resetConfirmMessage, resetLayoutAction, resetSuccessMessage, router])
 
   // Persist geometry only from real user gestures — wired to onDragStop /
   // onResizeStop, never a passive onLayoutChange. RGL re-emits positions on any
@@ -275,6 +288,7 @@ export function DashboardGrid({
           dirty={dirty}
           saving={saving}
           resetting={resetting}
+          label={toolbarLabel}
           onSave={handleSave}
           onReset={handleReset}
           onTogglePalette={() => setPaletteOpen((v) => !v)}
@@ -368,6 +382,7 @@ function EditToolbar({
   dirty,
   saving,
   resetting,
+  label,
   onSave,
   onReset,
   onTogglePalette,
@@ -376,6 +391,7 @@ function EditToolbar({
   dirty: boolean
   saving: boolean
   resetting: boolean
+  label: string
   onSave: () => void
   onReset: () => void
   onTogglePalette: () => void
@@ -390,9 +406,7 @@ function EditToolbar({
     >
       <div className="flex items-center gap-2 text-sm">
         <Settings size={14} className="text-teal-700 dark:text-teal-300" />
-        <span className="font-semibold text-teal-900 dark:text-teal-300">
-          Customising your dashboard
-        </span>
+        <span className="font-semibold text-teal-900 dark:text-teal-300">{label}</span>
         <span className="hidden text-xs text-teal-700/80 sm:inline dark:text-teal-300/80">
           Drag tiles to reorder, drag the bottom-right corner to resize, click ✕ to remove.
         </span>
@@ -449,7 +463,8 @@ function WidgetPalette({
   onClose: () => void
 }) {
   const allowed = allowedWidgetIds ? new Set(allowedWidgetIds) : null
-  const visible = widgetsForRole(role).filter((w) => !allowed || allowed.has(w.id))
+  const sourceWidgets = allowed ? Object.values(WIDGETS) : widgetsForRole(role)
+  const visible = sourceWidgets.filter((w) => !allowed || allowed.has(w.id))
   const byCategory = new Map<WidgetCategory, WidgetMeta[]>()
   for (const w of visible) {
     const arr = byCategory.get(w.category) ?? []

@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { asc, eq } from 'drizzle-orm'
+import { Gauge } from 'lucide-react'
 import {
   Badge,
   Button,
@@ -13,7 +14,13 @@ import {
   Label,
   Textarea,
 } from '@beaconhs/ui'
-import { roleAssignments, roles, tenantUsers, user } from '@beaconhs/db/schema'
+import {
+  roleAssignments,
+  roleDashboardLayouts,
+  roles,
+  tenantUsers,
+  user,
+} from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
@@ -51,10 +58,15 @@ export default async function AdminRoleEditPage({
       .innerJoin(user, eq(user.id, tenantUsers.userId))
       .where(eq(roleAssignments.roleId, id))
       .orderBy(asc(user.name))
-    return { role, members }
+    const [dashboard] = await tx
+      .select({ id: roleDashboardLayouts.id, updatedAt: roleDashboardLayouts.updatedAt })
+      .from(roleDashboardLayouts)
+      .where(eq(roleDashboardLayouts.roleId, id))
+      .limit(1)
+    return { role, members, dashboard: dashboard ?? null }
   })
   if (!data) notFound()
-  const { role, members } = data
+  const { role, members, dashboard } = data
 
   return (
     <PageContainer>
@@ -93,6 +105,38 @@ export default async function AdminRoleEditPage({
             {error}
           </div>
         ) : null}
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Default dashboard</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                {dashboard ? (
+                  <Badge variant="secondary">Configured</Badge>
+                ) : (
+                  <Badge variant="outline">Shipped default</Badge>
+                )}
+                {dashboard ? (
+                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                    Updated {dashboard.updatedAt.toLocaleDateString()}
+                  </span>
+                ) : null}
+              </div>
+              <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                Used as the main dashboard for members of this role until they save a personal
+                layout.
+              </p>
+            </div>
+            <Link href={`/admin/roles/${id}/dashboard` as any}>
+              <Button variant="outline">
+                <Gauge size={14} className="mr-1.5" />
+                Edit default
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
 
         <form action={updateRole} className="space-y-5">
           <input type="hidden" name="id" value={id} />

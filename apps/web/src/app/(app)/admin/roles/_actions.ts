@@ -10,15 +10,49 @@
 
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { count, eq } from 'drizzle-orm'
-import { PERMISSION_CATALOGUE, roleAssignments, roles } from '@beaconhs/db/schema'
+import { and, count, eq, inArray, isNull } from 'drizzle-orm'
+import {
+  insightCards,
+  PERMISSION_CATALOGUE,
+  roleAssignments,
+  roleDashboardLayouts,
+  roles,
+  type DashboardLayoutData,
+} from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import {
+  DashboardLayoutInputSchema,
+  filterPersistableDashboardWidgets,
+  UUID_RE,
+} from '../../dashboard/_layout-input'
+import { WIDGETS } from '../../dashboard/_widget-registry'
+import {
+  canPermissionSetPublishInsights,
+  canPermissionSetSeeWidget,
+  canPermissionSetViewInsights,
+} from '../../dashboard/_widget-access'
+import { z } from 'zod'
 
 const PERMISSIONS = new Set<string>(PERMISSION_CATALOGUE as unknown as string[])
 
 type Ctx = Awaited<ReturnType<typeof requireRequestContext>>
+
+type RoleForDashboard = {
+  id: string
+  key: string
+  name: string
+  permissions: string[]
+}
+
+const RoleDashboardLayoutInputSchema = DashboardLayoutInputSchema.extend({
+  roleId: z.string().uuid(),
+})
+
+const RoleDashboardResetInputSchema = z.object({
+  roleId: z.string().uuid(),
+})
 
 function readPermissions(formData: FormData): string[] {
   return formData
@@ -49,6 +83,86 @@ async function uniqueKey(ctx: Ctx, name: string): Promise<string> {
       if (!taken.has(candidate)) return candidate
     }
     return `${base}_${crypto.randomUUID().slice(0, 8)}`
+  })
+}
+
+function allowedWidgetIdsForRole(role: Pick<RoleForDashboard, 'permissions'>): Set<string> {
+  return new Set(
+    Object.keys(WIDGETS).filter((id) => canPermissionSetSeeWidget(role.permissions, id)),
+  )
+}
+
+async function allowedInsightCardIdsForRole(
+  ctx: Ctx,
+  role: Pick<RoleForDashboard, 'key' | 'permissions'>,
+  cardIds: string[],
+): Promise<Set<string>> {
+  const uniqueIds = [...new Set(cardIds)]
+  if (uniqueIds.length === 0 || !canPermissionSetViewInsights(role.permissions)) {
+    return new Set()
+  }
+
+  const rows = await ctx.db((tx) =>
+    tx
+      .select({
+        id: insightCards.id,
+        allowedRoles: insightCards.allowedRoles,
+      })
+      .from(insightCards)
+      .where(
+        and(
+          inArray(insightCards.id, uniqueIds),
+          eq(insightCards.status, 'published'),
+          isNull(insightCards.deletedAt),
+        ),
+      ),
+  )
+
+  const canSeeAllPublished = canPermissionSetPublishInsights(role.permissions)
+  return new Set(
+    rows
+      .filter(
+        (card) =>
+          canSeeAllPublished ||
+          !card.allowedRoles ||
+          card.allowedRoles.length === 0 ||
+          card.allowedRoles.includes(role.key),
+      )
+      .map((card) => card.id),
+  )
+}
+
+async function sanitiseRoleDashboardLayout(
+  ctx: Ctx,
+  role: RoleForDashboard,
+  widgets: DashboardLayoutData['widgets'],
+): Promise<DashboardLayoutData> {
+  const insightCardIds = widgets.filter((w) => UUID_RE.test(w.id)).map((w) => w.id)
+  const allowedInsightCardIds = await allowedInsightCardIdsForRole(ctx, role, insightCardIds)
+  return {
+    widgets: filterPersistableDashboardWidgets(widgets, {
+      allowedWidgetIds: allowedWidgetIdsForRole(role),
+      allowedInsightCardIds,
+    }),
+  }
+}
+
+async function loadRoleForDashboardAction(
+  ctx: Ctx,
+  roleId: string,
+): Promise<RoleForDashboard | null> {
+  return ctx.db(async (tx) => {
+    const [role] = await tx
+      .select({
+        id: roles.id,
+        key: roles.key,
+        name: roles.name,
+        permissions: roles.permissions,
+      })
+      .from(roles)
+      .where(eq(roles.id, roleId))
+      .limit(1)
+    return role ?? null
   })
 }
 
@@ -100,6 +214,38 @@ export async function updateRole(formData: FormData): Promise<void> {
   await ctx.db((tx) =>
     tx.update(roles).set({ name, description, permissions }).where(eq(roles.id, id)),
   )
+  const existingDashboard = await ctx.db(async (tx) => {
+    const [row] = await tx
+      .select({ layout: roleDashboardLayouts.layout })
+      .from(roleDashboardLayouts)
+      .where(eq(roleDashboardLayouts.roleId, id))
+      .limit(1)
+    return row?.layout ?? null
+  })
+  if (existingDashboard) {
+    const sanitised = await sanitiseRoleDashboardLayout(
+      ctx,
+      {
+        id,
+        key: before.key,
+        name,
+        permissions,
+      },
+      existingDashboard.widgets,
+    )
+    if (sanitised.widgets.length === 0) {
+      await ctx.db((tx) =>
+        tx.delete(roleDashboardLayouts).where(eq(roleDashboardLayouts.roleId, id)),
+      )
+    } else {
+      await ctx.db((tx) =>
+        tx
+          .update(roleDashboardLayouts)
+          .set({ layout: sanitised, updatedAt: new Date() })
+          .where(eq(roleDashboardLayouts.roleId, id)),
+      )
+    }
+  }
   await recordAudit(ctx, {
     entityType: 'role',
     entityId: id,
@@ -109,8 +255,10 @@ export async function updateRole(formData: FormData): Promise<void> {
     after: { name, description, permissions },
   })
   revalidatePath(`/admin/roles/${id}`)
+  revalidatePath(`/admin/roles/${id}/dashboard`)
   revalidatePath('/admin/roles')
   revalidatePath('/admin/users')
+  revalidatePath('/dashboard')
 }
 
 export async function duplicateRole(formData: FormData): Promise<void> {
@@ -125,8 +273,8 @@ export async function duplicateRole(formData: FormData): Promise<void> {
   if (!source) return
   const name = `${source.name} (copy)`
   const key = await uniqueKey(ctx, name)
-  const [row] = await ctx.db((tx) =>
-    tx
+  const [row] = await ctx.db(async (tx) => {
+    const [created] = await tx
       .insert(roles)
       .values({
         tenantId: ctx.tenantId,
@@ -136,8 +284,22 @@ export async function duplicateRole(formData: FormData): Promise<void> {
         isBuiltIn: false,
         permissions: source.permissions,
       })
-      .returning(),
-  )
+      .returning()
+    if (!created) return []
+    const [sourceDashboard] = await tx
+      .select({ layout: roleDashboardLayouts.layout })
+      .from(roleDashboardLayouts)
+      .where(eq(roleDashboardLayouts.roleId, id))
+      .limit(1)
+    if (sourceDashboard) {
+      await tx.insert(roleDashboardLayouts).values({
+        tenantId: ctx.tenantId,
+        roleId: created.id,
+        layout: sourceDashboard.layout,
+      })
+    }
+    return [created]
+  })
   if (row) {
     await recordAudit(ctx, {
       entityType: 'role',
@@ -186,4 +348,100 @@ export async function deleteRole(formData: FormData): Promise<void> {
   })
   revalidatePath('/admin/roles')
   redirect('/admin/roles')
+}
+
+export async function saveRoleDashboardLayout(input: unknown) {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'admin.roles.manage')
+  const parsed = RoleDashboardLayoutInputSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false as const, error: parsed.error.issues[0]?.message ?? 'Invalid layout' }
+  }
+
+  const role = await loadRoleForDashboardAction(ctx, parsed.data.roleId)
+  if (!role) return { ok: false as const, error: 'Role not found.' }
+
+  const layout = await sanitiseRoleDashboardLayout(ctx, role, parsed.data.widgets)
+  if (layout.widgets.length === 0) {
+    return { ok: false as const, error: 'Add at least one widget before saving.' }
+  }
+
+  const before = await ctx.db(async (tx) => {
+    const [row] = await tx
+      .select({ layout: roleDashboardLayouts.layout })
+      .from(roleDashboardLayouts)
+      .where(eq(roleDashboardLayouts.roleId, role.id))
+      .limit(1)
+    return row?.layout ?? null
+  })
+
+  await ctx.db((tx) =>
+    tx
+      .insert(roleDashboardLayouts)
+      .values({
+        tenantId: ctx.tenantId,
+        roleId: role.id,
+        layout,
+      })
+      .onConflictDoUpdate({
+        target: [roleDashboardLayouts.tenantId, roleDashboardLayouts.roleId],
+        set: { layout, updatedAt: new Date() },
+      }),
+  )
+
+  await recordAudit(ctx, {
+    entityType: 'role',
+    entityId: role.id,
+    action: 'update',
+    summary: `Updated default dashboard for role "${role.name}"`,
+    before: before ? { dashboardLayout: before } : null,
+    after: { dashboardLayout: layout },
+  })
+
+  revalidatePath(`/admin/roles/${role.id}`)
+  revalidatePath(`/admin/roles/${role.id}/dashboard`)
+  revalidatePath('/admin/roles')
+  revalidatePath('/dashboard')
+  return { ok: true as const }
+}
+
+export async function resetRoleDashboardLayout(input: unknown) {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'admin.roles.manage')
+  const parsed = RoleDashboardResetInputSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false as const, error: parsed.error.issues[0]?.message ?? 'Invalid role' }
+  }
+
+  const role = await loadRoleForDashboardAction(ctx, parsed.data.roleId)
+  if (!role) return { ok: false as const, error: 'Role not found.' }
+
+  const before = await ctx.db(async (tx) => {
+    const [row] = await tx
+      .select({ layout: roleDashboardLayouts.layout })
+      .from(roleDashboardLayouts)
+      .where(eq(roleDashboardLayouts.roleId, role.id))
+      .limit(1)
+    return row?.layout ?? null
+  })
+  if (!before) return { ok: true as const }
+
+  await ctx.db((tx) =>
+    tx.delete(roleDashboardLayouts).where(eq(roleDashboardLayouts.roleId, role.id)),
+  )
+
+  await recordAudit(ctx, {
+    entityType: 'role',
+    entityId: role.id,
+    action: 'update',
+    summary: `Reset default dashboard for role "${role.name}"`,
+    before: { dashboardLayout: before },
+    after: null,
+  })
+
+  revalidatePath(`/admin/roles/${role.id}`)
+  revalidatePath(`/admin/roles/${role.id}/dashboard`)
+  revalidatePath('/admin/roles')
+  revalidatePath('/dashboard')
+  return { ok: true as const }
 }

@@ -43,6 +43,13 @@
       "when": 1782500000000,
       "tag": "0005_sync_preview_record_changes",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1782503600000,
+      "tag": "0006_role_dashboard_layouts",
+      "breakpoints": true
     }
   ]
 }

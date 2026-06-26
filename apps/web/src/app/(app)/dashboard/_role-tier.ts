@@ -16,7 +16,7 @@ export const ROLE_TIERS: readonly RoleTier[] = [
   'worker',
 ] as const
 
-const TIER_RANK: Record<RoleTier, number> = {
+export const TIER_RANK: Record<RoleTier, number> = {
   super_admin: 0,
   tenant_admin: 1,
   safety_manager: 2,
@@ -30,6 +30,66 @@ export const ROLE_TIER_LABELS: Record<RoleTier, string> = {
   safety_manager: 'Safety Manager',
   foreman: 'Foreman',
   worker: 'Worker',
+}
+
+export function roleTierFromKey(key: string): RoleTier | null {
+  return key in TIER_RANK ? (key as RoleTier) : null
+}
+
+export function inferRoleTier(role: { key: string; permissions: readonly string[] }): RoleTier {
+  const keyed = roleTierFromKey(role.key)
+  if (keyed) return keyed
+
+  const permissions = new Set(role.permissions)
+  if (
+    [
+      'admin.users.manage',
+      'admin.roles.manage',
+      'admin.org.manage',
+      'admin.settings.manage',
+      'admin.audit.read',
+    ].some((p) => permissions.has(p))
+  ) {
+    return 'tenant_admin'
+  }
+
+  if (
+    [
+      'incidents.read.all',
+      'ca.read.all',
+      'training.read.all',
+      'ppe.read.all',
+      'equipment.read.all',
+      'insights.read',
+      'reports.read',
+      'dashboards.read',
+    ].some((p) => permissions.has(p))
+  ) {
+    return 'safety_manager'
+  }
+
+  if (
+    [
+      'incidents.read.site',
+      'ca.read.site',
+      'forms.response.read.site',
+      'inspections.read.site',
+      'equipment.read.site',
+      'journals.read.site',
+    ].some((p) => permissions.has(p))
+  ) {
+    return 'foreman'
+  }
+
+  return 'worker'
+}
+
+export function dashboardSourceKeyForTier(role: RoleTier): string {
+  return `tier:${role}`
+}
+
+export function dashboardSourceKeyForRole(roleId: string): string {
+  return `role:${roleId}`
 }
 
 /**

@@ -1,8 +1,8 @@
 // User-customisable dashboard layouts.
 //
 // Each user (per tenant) can save one personal layout. If they haven't
-// saved one, the page falls back to the role-default layout shipped in
-// `apps/web/src/app/(app)/dashboard/_role-defaults.ts`.
+// saved one, the page falls back to a tenant role default when configured,
+// then to the shipped layouts in `apps/web/src/app/(app)/dashboard/_role-defaults.ts`.
 //
 // Layout schema is a jsonb { widgets: [{ id, x, y, w, h }] } where each
 // widget id matches an entry in the central widget registry. The grid
@@ -20,6 +20,7 @@ import {
 } from 'drizzle-orm/pg-core'
 import { id, timestamps } from './_helpers'
 import { tenants, users } from './core'
+import { roles } from './iam'
 
 /**
  * A single user-defined "Quick action" tile. Stored alongside the layout so a
@@ -60,8 +61,8 @@ export const userDashboardLayouts = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     layout: jsonb('layout').$type<DashboardLayoutData>().notNull(),
-    // Tracks which role the user had when they first customised — so a
-    // promotion lets the new role's default win again.
+    // Tracks the default source the user customised from (`tier:worker`,
+    // `role:<uuid>`, etc.) so a role change lets the new default win again.
     sourceRole: text('source_role'),
     isCustomised: boolean('is_customised').default(true).notNull(),
     ...timestamps,
@@ -69,5 +70,25 @@ export const userDashboardLayouts = pgTable(
   (t) => ({
     userUx: uniqueIndex('user_dashboard_layouts_user_ux').on(t.tenantId, t.userId),
     tenantIdx: index('user_dashboard_layouts_tenant_idx').on(t.tenantId),
+  }),
+)
+
+export const roleDashboardLayouts = pgTable(
+  'role_dashboard_layouts',
+  {
+    id: id(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    roleId: uuid('role_id')
+      .notNull()
+      .references(() => roles.id, { onDelete: 'cascade' }),
+    layout: jsonb('layout').$type<DashboardLayoutData>().notNull(),
+    ...timestamps,
+  },
+  (t) => ({
+    roleUx: uniqueIndex('role_dashboard_layouts_role_ux').on(t.tenantId, t.roleId),
+    tenantIdx: index('role_dashboard_layouts_tenant_idx').on(t.tenantId),
+    roleIdx: index('role_dashboard_layouts_role_idx').on(t.roleId),
   }),
 )

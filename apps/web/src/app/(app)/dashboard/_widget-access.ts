@@ -57,6 +57,28 @@ const WIDGET_PERMISSIONS: Record<string, readonly string[]> = {
   'kpi-people-active': ['admin.org.manage', ...ANALYTICS],
 }
 
+function hasAnyPermission(permissions: ReadonlySet<string>, required: readonly string[]): boolean {
+  return required.some((p) => permissions.has(p))
+}
+
+export function canPermissionSetViewInsights(permissions: Iterable<string>): boolean {
+  const set = permissions instanceof Set ? permissions : new Set(permissions)
+  return hasAnyPermission(set, ['insights.read', 'reports.read', 'dashboards.read'])
+}
+
+export function canPermissionSetPublishInsights(permissions: Iterable<string>): boolean {
+  const set = permissions instanceof Set ? permissions : new Set(permissions)
+  return hasAnyPermission(set, ['insights.publish', 'reports.builder'])
+}
+
+export function canPermissionSetSeeWidget(permissions: Iterable<string>, id: string): boolean {
+  const set = permissions instanceof Set ? permissions : new Set(permissions)
+  const required = WIDGET_PERMISSIONS[id]
+  if (required) return hasAnyPermission(set, required)
+  if (id in WIDGETS) return true
+  return canPermissionSetViewInsights(set)
+}
+
 /**
  * Can the viewer see this dashboard widget? Personal → always; org → ANY-of its
  * required permissions; a library-card UUID (a placed Insights card that isn't a

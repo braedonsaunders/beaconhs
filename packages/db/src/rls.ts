@@ -260,6 +260,8 @@ export const TENANT_SCOPED_TABLES = [
   'sms_log',
   // Per-user dashboard layout customisations
   'user_dashboard_layouts',
+  // Per-role default dashboard layouts
+  'role_dashboard_layouts',
   // Per-tenant sidebar navigation customisation (editable in /admin/navigation)
   'tenant_nav_config',
   // Unified compliance engine — obligations + audience + dispatch ledger + status

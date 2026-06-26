@@ -9,33 +9,19 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { and, asc, desc, eq, isNull } from 'drizzle-orm'
-import { z } from 'zod'
 import { formTemplates, userDashboardLayouts, type DashboardLayoutData } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { NAV_MODULES } from '@/lib/nav/registry'
-import { WIDGETS } from './_widget-registry'
-import { DEFAULT_LAYOUTS } from './_role-defaults'
 import { getUserRoleTier } from './_role-tier'
 import {
   MAX_QUICK_ACTIONS,
   type QuickActionOption,
   type QuickActionOptions,
 } from './_quick-actions-shared'
-
-const UUID_RE = /^[0-9a-f-]{36}$/i
-
-const WidgetSchema = z.object({
-  id: z.string().min(1),
-  x: z.number().int().min(0).max(12),
-  y: z.number().int().min(0).max(200),
-  w: z.number().int().min(1).max(12),
-  h: z.number().int().min(1).max(20),
-})
-
-const LayoutSchema = z.object({
-  widgets: z.array(WidgetSchema).max(64),
-})
+import { DashboardLayoutInputSchema, filterPersistableDashboardWidgets } from './_layout-input'
+import { resolveDashboardDefault } from './_load-layout'
+import { z } from 'zod'
 
 // An href is safe to persist when it's an internal path or an http(s) URL —
 // never a `javascript:`/`data:` scheme.
@@ -73,7 +59,7 @@ export async function saveDashboardLayout(input: unknown) {
     }
   }
 
-  const parsed = LayoutSchema.safeParse(input)
+  const parsed = DashboardLayoutInputSchema.safeParse(input)
   if (!parsed.success) {
     return { ok: false as const, error: parsed.error.message }
   }
@@ -81,14 +67,21 @@ export async function saveDashboardLayout(input: unknown) {
   // Keep registered widget keys AND saved insight-card ids (uuids), so a real
   // Insights card can live on the homepage grid alongside the bespoke widgets.
   // An inaccessible card id simply renders an empty cell under RLS — never a leak.
-  const widgets = parsed.data.widgets.filter((w) => w.id in WIDGETS || UUID_RE.test(w.id))
+  const widgets = filterPersistableDashboardWidgets(parsed.data.widgets, {
+    allowAnyInsightCardUuid: true,
+  })
   const role = await getUserRoleTier(ctx)
+  const dashboardDefault = await resolveDashboardDefault(ctx, role)
+  const sourceRole = dashboardDefault.sourceKey
 
   await ctx.db(async (tx) => {
     // The grid only ever sends geometry — preserve the user's saved Quick-actions
     // tiles (stored in the same jsonb) so saving a layout never wipes them.
     const [existing] = await tx
-      .select({ layout: userDashboardLayouts.layout })
+      .select({
+        layout: userDashboardLayouts.layout,
+        sourceRole: userDashboardLayouts.sourceRole,
+      })
       .from(userDashboardLayouts)
       .where(
         and(
@@ -106,14 +99,14 @@ export async function saveDashboardLayout(input: unknown) {
         tenantId: ctx.tenantId,
         userId: ctx.userId,
         layout,
-        sourceRole: role,
+        sourceRole,
         isCustomised: true,
       })
       .onConflictDoUpdate({
         target: [userDashboardLayouts.tenantId, userDashboardLayouts.userId],
         set: {
           layout,
-          sourceRole: role,
+          sourceRole,
           isCustomised: true,
           updatedAt: new Date(),
         },
@@ -145,10 +138,15 @@ export async function saveQuickActions(input: unknown) {
   }
 
   const role = await getUserRoleTier(ctx)
+  const dashboardDefault = await resolveDashboardDefault(ctx, role)
+  const sourceRole = dashboardDefault.sourceKey
 
   await ctx.db(async (tx) => {
     const [existing] = await tx
-      .select({ layout: userDashboardLayouts.layout })
+      .select({
+        layout: userDashboardLayouts.layout,
+        sourceRole: userDashboardLayouts.sourceRole,
+      })
       .from(userDashboardLayouts)
       .where(
         and(
@@ -159,7 +157,9 @@ export async function saveQuickActions(input: unknown) {
       .limit(1)
 
     const baseWidgets =
-      existing?.layout.widgets ?? (DEFAULT_LAYOUTS[role] ?? DEFAULT_LAYOUTS.worker).widgets
+      existing?.sourceRole === sourceRole
+        ? existing.layout.widgets
+        : dashboardDefault.layout.widgets
     const layout: DashboardLayoutData = { widgets: baseWidgets, quickActions: parsed.data }
 
     await tx
@@ -168,12 +168,12 @@ export async function saveQuickActions(input: unknown) {
         tenantId: ctx.tenantId,
         userId: ctx.userId,
         layout,
-        sourceRole: role,
+        sourceRole,
         isCustomised: true,
       })
       .onConflictDoUpdate({
         target: [userDashboardLayouts.tenantId, userDashboardLayouts.userId],
-        set: { layout, sourceRole: role, isCustomised: true, updatedAt: new Date() },
+        set: { layout, sourceRole, isCustomised: true, updatedAt: new Date() },
       })
   })
 
