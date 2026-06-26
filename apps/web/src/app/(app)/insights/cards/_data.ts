@@ -10,6 +10,7 @@ import {
 import type { RequestContext } from '@beaconhs/tenant'
 import { discoverEntities, scopedFormAppEntity } from '@beaconhs/analytics/server'
 import type { AnalyticsEntity } from '@beaconhs/analytics'
+import { canSeePublishedInsight, getInsightRoleKeys } from '../_visibility'
 
 export type CardKind = 'question' | 'model' | 'metric' | 'ai'
 
@@ -53,7 +54,13 @@ export async function loadCard(ctx: RequestContext, id: string): Promise<CardRow
       .where(and(eq(insightCards.id, id), isNull(insightCards.deletedAt)))
       .limit(1),
   )
-  return row ? map(row) : null
+  if (!row) return null
+  if (row.createdBy === ctx.userId) return map(row)
+  const roleKeys = await getInsightRoleKeys(ctx)
+  if (row.status === 'published' && canSeePublishedInsight(ctx, row.allowedRoles, roleKeys)) {
+    return map(row)
+  }
+  return null
 }
 
 /** Reusable Metric cards (kind='metric') the user can reference in another card:
@@ -64,7 +71,14 @@ export async function loadMetricCards(
 ): Promise<{ id: string; name: string; source: string }[]> {
   const rows = await ctx.db((tx) =>
     tx
-      .select({ id: insightCards.id, name: insightCards.name, query: insightCards.query })
+      .select({
+        id: insightCards.id,
+        name: insightCards.name,
+        query: insightCards.query,
+        createdBy: insightCards.createdBy,
+        status: insightCards.status,
+        allowedRoles: insightCards.allowedRoles,
+      })
       .from(insightCards)
       .where(
         and(
@@ -75,7 +89,14 @@ export async function loadMetricCards(
       )
       .orderBy(desc(insightCards.updatedAt)),
   )
-  return rows.map((r) => ({ id: r.id, name: r.name, source: r.query?.stages?.[0]?.source ?? '' }))
+  const roleKeys = await getInsightRoleKeys(ctx)
+  return rows
+    .filter(
+      (r) =>
+        r.createdBy === ctx.userId ||
+        (r.status === 'published' && canSeePublishedInsight(ctx, r.allowedRoles, roleKeys)),
+    )
+    .map((r) => ({ id: r.id, name: r.name, source: r.query?.stages?.[0]?.source ?? '' }))
 }
 
 /** Cards available to drop on a dashboard: the user's own + any published. */
@@ -92,7 +113,14 @@ export async function loadCardsForPalette(ctx: RequestContext): Promise<CardRow[
       )
       .orderBy(desc(insightCards.updatedAt)),
   )
-  return rows.map(map)
+  const roleKeys = await getInsightRoleKeys(ctx)
+  return rows
+    .filter(
+      (r) =>
+        r.createdBy === ctx.userId ||
+        (r.status === 'published' && canSeePublishedInsight(ctx, r.allowedRoles, roleKeys)),
+    )
+    .map(map)
 }
 
 /** Entities for the card studio source picker: the schema-discovered entities PLUS

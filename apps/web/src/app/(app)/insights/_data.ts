@@ -18,6 +18,7 @@ import { getTenantAiConfig } from '@/lib/ai-config'
 import { loadDashboardMetrics } from '../dashboard/_metrics'
 import { getInsights } from '../journals/_insights'
 import { applyParams } from './_params'
+import { canSeePublishedInsight, getInsightRoleKeys } from './_visibility'
 import { DEFAULT_INSIGHT_LAYOUT } from './_widgets'
 import type { CardRow } from './cards/_data'
 
@@ -156,6 +157,7 @@ export async function loadDashboards(
         params: insightDashboards.params,
         paramMap: insightDashboards.paramMap,
         status: insightDashboards.status,
+        allowedRoles: insightDashboards.allowedRoles,
       })
       .from(insightDashboardPins)
       .innerJoin(insightDashboards, eq(insightDashboards.id, insightDashboardPins.dashboardId))
@@ -168,6 +170,7 @@ export async function loadDashboards(
       )
       .orderBy(asc(insightDashboardPins.sortOrder)),
   )
+  const roleKeys = await getInsightRoleKeys(ctx)
 
   if (owned.length === 0 && pinned.length === 0) {
     const [created] = await ctx.db((tx) =>
@@ -211,15 +214,17 @@ export async function loadDashboards(
       owned: true,
       status: r.status,
     })),
-    ...pinned.map((r) => ({
-      id: r.id,
-      name: r.name,
-      layout: remap(r.layout),
-      params: r.params,
-      paramMap: r.paramMap,
-      owned: false,
-      status: r.status,
-    })),
+    ...pinned
+      .filter((r) => canSeePublishedInsight(ctx, r.allowedRoles, roleKeys))
+      .map((r) => ({
+        id: r.id,
+        name: r.name,
+        layout: remap(r.layout),
+        params: r.params,
+        paramMap: r.paramMap,
+        owned: false,
+        status: r.status,
+      })),
   ]
 }
 

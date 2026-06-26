@@ -19,6 +19,7 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
   if (!canViewInsights(ctx)) redirect('/dashboard')
   const card = await loadCard(ctx, id)
   if (!card) notFound()
+  const canEdit = ctx.isSuperAdmin || card.createdBy === ctx.userId
 
   const isAi = card.kind === 'ai'
   const aiPrompt = card.config?.kind === 'ai' ? card.config.prompt : undefined
@@ -55,12 +56,20 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
                 <Download size={13} className="mr-1" /> CSV
               </Button>
             </Link>
-            <Link href={`/insights/cards/${card.id}/edit`}>
-              <Button type="button" variant="outline" className="h-9 text-xs">
-                <Pencil size={13} className="mr-1" /> Edit
-              </Button>
-            </Link>
-            <CardToolbar id={card.id} status={card.status} canPublish={canPublishInsights(ctx)} />
+            {canEdit ? (
+              <>
+                <Link href={`/insights/cards/${card.id}/edit`}>
+                  <Button type="button" variant="outline" className="h-9 text-xs">
+                    <Pencil size={13} className="mr-1" /> Edit
+                  </Button>
+                </Link>
+                <CardToolbar
+                  id={card.id}
+                  status={card.status}
+                  canPublish={canPublishInsights(ctx)}
+                />
+              </>
+            ) : null}
           </div>
         }
       />

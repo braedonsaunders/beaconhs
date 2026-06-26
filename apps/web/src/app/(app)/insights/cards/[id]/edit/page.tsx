@@ -13,6 +13,7 @@ export default async function EditCardPage({ params }: { params: Promise<{ id: s
   if (!canCreateInsights(ctx)) redirect('/insights')
   const card = await loadCard(ctx, id)
   if (!card) notFound()
+  if (!ctx.isSuperAdmin && card.createdBy !== ctx.userId) notFound()
   const [metrics, entities] = await Promise.all([loadMetricCards(ctx), loadStudioEntities(ctx)])
   return (
     <CardStudio

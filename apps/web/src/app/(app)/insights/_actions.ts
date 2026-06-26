@@ -12,6 +12,7 @@ import {
 import type { RequestContext } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { canPublishInsights, canViewInsights } from './_access'
+import { canSeePublishedInsight, getInsightRoleKeys } from './_visibility'
 import { INSIGHT_WIDGET_MAP } from './_widgets'
 
 type Ok<T = {}> = { ok: true } & T
@@ -208,6 +209,25 @@ export async function unpublishDashboard(id: string): Promise<Ok | Err> {
 export async function pinDashboard(dashboardId: string): Promise<Ok | Err> {
   const ctx = await requireRequestContext()
   if (!canViewInsights(ctx)) return { ok: false, error: 'No access.' }
+  const [dashboard] = await ctx.db((tx) =>
+    tx
+      .select({
+        id: insightDashboards.id,
+        status: insightDashboards.status,
+        allowedRoles: insightDashboards.allowedRoles,
+      })
+      .from(insightDashboards)
+      .where(eq(insightDashboards.id, dashboardId))
+      .limit(1),
+  )
+  const roleKeys = await getInsightRoleKeys(ctx)
+  if (
+    !dashboard ||
+    dashboard.status !== 'published' ||
+    !canSeePublishedInsight(ctx, dashboard.allowedRoles, roleKeys)
+  ) {
+    return { ok: false, error: 'Dashboard not found.' }
+  }
   await ctx.db((tx) =>
     tx
       .insert(insightDashboardPins)

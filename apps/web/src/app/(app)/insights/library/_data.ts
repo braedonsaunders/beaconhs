@@ -7,18 +7,7 @@ import 'server-only'
 import { and, desc, eq, isNull } from 'drizzle-orm'
 import type { RequestContext } from '@beaconhs/tenant'
 import { insightCards, insightDashboardPins, insightDashboards } from '@beaconhs/db/schema'
-import { getUserRoleKeys } from '@/app/(app)/apps/_lib/access'
-import { canPublishInsights } from '../_access'
-
-function visible(
-  ctx: RequestContext,
-  allowedRoles: string[] | null,
-  roleKeys: Set<string>,
-): boolean {
-  if (!allowedRoles || allowedRoles.length === 0) return true
-  if (ctx.isSuperAdmin || canPublishInsights(ctx)) return true
-  return allowedRoles.some((r) => roleKeys.has(r))
-}
+import { canSeePublishedInsight, getInsightRoleKeys } from '../_visibility'
 
 export type LibraryCard = { id: string; name: string; description: string | null; vizType: string }
 export type LibraryDashboard = { id: string; name: string; pinned: boolean }
@@ -26,7 +15,7 @@ export type LibraryDashboard = { id: string; name: string; pinned: boolean }
 export async function loadLibrary(
   ctx: RequestContext,
 ): Promise<{ cards: LibraryCard[]; dashboards: LibraryDashboard[] }> {
-  const roleKeys = await getUserRoleKeys(ctx)
+  const roleKeys = await getInsightRoleKeys(ctx)
 
   const cardRows = await ctx.db((tx) =>
     tx
@@ -64,10 +53,10 @@ export async function loadLibrary(
 
   return {
     cards: cardRows
-      .filter((c) => visible(ctx, c.allowedRoles, roleKeys))
+      .filter((c) => canSeePublishedInsight(ctx, c.allowedRoles, roleKeys))
       .map((c) => ({ id: c.id, name: c.name, description: c.description, vizType: c.vizType })),
     dashboards: dashRows
-      .filter((d) => visible(ctx, d.allowedRoles, roleKeys))
+      .filter((d) => canSeePublishedInsight(ctx, d.allowedRoles, roleKeys))
       .map((d) => ({ id: d.id, name: d.name, pinned: pinnedSet.has(d.id) })),
   }
 }
