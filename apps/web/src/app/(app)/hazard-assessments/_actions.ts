@@ -35,6 +35,7 @@ import {
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
+import { storeSignatureValue } from '@/lib/signature-storage'
 import { canSeeRecord } from '@/lib/visibility'
 import { recordAudit } from '@/lib/audit'
 import { runModuleFlows } from '@/lib/flows/run-module-flows'
@@ -1430,6 +1431,9 @@ export async function addSignature(formData: FormData) {
     throw new Error('External signer requires a name')
   await assertCanSeeAssessment(ctx, assessmentId)
 
+  // Move the captured signature bytes to object storage; store only the URL.
+  const storedSignature = await storeSignatureValue(ctx.tenantId, signatureDataUrl)
+
   const [row] = await ctx.db((tx) =>
     tx
       .insert(hazidAssessmentSignatures)
@@ -1439,11 +1443,11 @@ export async function addSignature(formData: FormData) {
         signatureType,
         personId,
         externalName,
-        signatureDataUrl,
+        signatureDataUrl: storedSignature,
         csEntrant,
         csAttendant,
         csRescue,
-        signedAt: signatureDataUrl ? new Date() : null,
+        signedAt: storedSignature ? new Date() : null,
       })
       .returning(),
   )
@@ -1454,7 +1458,7 @@ export async function addSignature(formData: FormData) {
     summary: `Added ${signatureType} signature`,
   })
   // Fire "on sign" Flows only when an actual signature was applied.
-  if (signatureDataUrl) {
+  if (storedSignature) {
     await runModuleFlows(ctx, { moduleKey: 'hazid', event: 'on_sign', subjectId: assessmentId })
   }
   revalidateAssessment(assessmentId)
@@ -1489,8 +1493,11 @@ export async function updateSignature(formData: FormData) {
   if (personId !== undefined) updates.personId = personId
   if (externalName !== undefined) updates.externalName = externalName
   if (signatureDataUrl !== undefined) {
-    updates.signatureDataUrl = signatureDataUrl
-    updates.signedAt = signatureDataUrl ? new Date() : null
+    // Only when a new value is provided: move the bytes to object storage and
+    // store the URL. null (clear) flows through unchanged.
+    const storedSignature = await storeSignatureValue(ctx.tenantId, signatureDataUrl)
+    updates.signatureDataUrl = storedSignature
+    updates.signedAt = storedSignature ? new Date() : null
   }
   if (csEntrant !== undefined) updates.csEntrant = csEntrant
   if (csAttendant !== undefined) updates.csAttendant = csAttendant

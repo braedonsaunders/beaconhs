@@ -11,6 +11,7 @@ import { trainingEnrollments, trainingLessonProgress, trainingLessons } from '@b
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
+import { storeSignatureValue } from '@/lib/signature-storage'
 import { recomputeEnrollmentCompletion } from '../../../learn/_lib/completion'
 
 export async function evaluatePractical(args: {
@@ -33,6 +34,13 @@ export async function evaluatePractical(args: {
     return { ok: false, error: 'Signature payload too large' }
   }
 
+  // Persist the captured signature to object storage; only the stable public URL
+  // is kept in evaluationSignatureDataUrl (idempotent on already-stored URLs).
+  const storedSignature = await storeSignatureValue(tenantId, args.signatureDataUrl)
+  if (args.pass && !storedSignature) {
+    return { ok: false, error: 'A signature is required to sign a learner off as competent.' }
+  }
+
   try {
     const result = await ctx.db(async (tx) => {
       const [enr] = await tx
@@ -53,7 +61,7 @@ export async function evaluatePractical(args: {
       const evaluatorFields = {
         evaluatedByTenantUserId: ctx.membership?.id ?? null,
         evaluationNotes: args.notes,
-        evaluationSignatureDataUrl: args.signatureDataUrl,
+        evaluationSignatureDataUrl: storedSignature,
         criteriaResults: args.criteriaResults,
       }
       const [existing] = await tx

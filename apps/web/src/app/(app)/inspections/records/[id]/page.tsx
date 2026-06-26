@@ -41,6 +41,7 @@ import { publicUrl } from '@beaconhs/storage'
 import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { canSeeRecord } from '@/lib/visibility'
+import { storeSignatureValue } from '@/lib/signature-storage'
 import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { FlowApprovals } from '@/components/flows/flow-approvals'
 import { getPendingFlowGatesForSubject } from '@/lib/flows/gate-store'
@@ -540,21 +541,24 @@ async function saveCustomerSignature(formData: FormData) {
   if (!recordId) return
   await assertCanSeeInspection(ctx, recordId)
   const dataUrl = signature === 'clear' || signature === '' ? null : signature
+  // Move the captured signature bytes to object storage; the column keeps a
+  // stable public URL instead of an inline base64 blob.
+  const storedSignature = dataUrl ? await storeSignatureValue(ctx.tenantId, dataUrl) : null
   await ctx.db((tx) =>
     tx
       .update(inspectionRecords)
       .set({
-        customerSignatureDataUrl: dataUrl,
+        customerSignatureDataUrl: storedSignature,
         customerSignerName: signerName,
-        customerSignedAt: dataUrl ? new Date() : null,
+        customerSignedAt: storedSignature ? new Date() : null,
       })
       .where(eq(inspectionRecords.id, recordId)),
   )
   await logRecordAudit(
     ctx,
     recordId,
-    dataUrl ? 'Captured customer signature' : 'Cleared customer signature',
-    dataUrl ? 'sign' : 'update',
+    storedSignature ? 'Captured customer signature' : 'Cleared customer signature',
+    storedSignature ? 'sign' : 'update',
   )
   revalidatePath(`/inspections/records/${recordId}`)
 }

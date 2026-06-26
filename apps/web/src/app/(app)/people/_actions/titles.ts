@@ -17,6 +17,7 @@ import {
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
+import { storeSignatureValue } from '@/lib/signature-storage'
 
 // ---------- title CRUD --------------------------------------------------
 
@@ -346,6 +347,7 @@ export async function acknowledgeTitleTask(formData: FormData): Promise<void> {
   const signatureDataUrl = String(formData.get('signatureDataUrl') ?? '').trim() || null
   const notes = String(formData.get('notes') ?? '').trim() || null
   if (!taskId || !personId) return
+  const storedSignature = await storeSignatureValue(ctx.tenantId, signatureDataUrl)
   const task = await ctx.db(async (tx) => {
     const [t] = await tx.select().from(jobTitleTasks).where(eq(jobTitleTasks.id, taskId)).limit(1)
     return t
@@ -357,14 +359,14 @@ export async function acknowledgeTitleTask(formData: FormData): Promise<void> {
         tenantId: ctx.tenantId,
         taskId,
         personId,
-        signatureDataUrl,
+        signatureDataUrl: storedSignature,
         notes,
       })
       .onConflictDoUpdate({
         target: [jobTitleTaskAcknowledgments.taskId, jobTitleTaskAcknowledgments.personId],
         set: {
           acknowledgedAt: new Date(),
-          signatureDataUrl,
+          signatureDataUrl: storedSignature,
           notes,
         },
       }),

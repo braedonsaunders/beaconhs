@@ -32,6 +32,7 @@ import {
 import { requireRequestContext } from '@/lib/auth'
 import { canSeeRecord } from '@/lib/visibility'
 import { recordAudit } from '@/lib/audit'
+import { storeSignatureValue } from '@/lib/signature-storage'
 import { runStatusChangeAutomations } from '@/app/(app)/apps/_lib/run-automations'
 
 // ---------------------------------------------------------------------------
@@ -256,9 +257,18 @@ export async function signWorkflowStep(args: {
     return { ok: false, error: 'Signature must be a PNG data URL' }
   }
   // Sanity bound on signature size — a 140px-tall canvas PNG is typically
-  // ~5-15 KB; cap at 1 MB to avoid DoS via base64 bloat.
+  // ~5-15 KB; cap at 1 MB to avoid DoS via base64 bloat. Validate the INCOMING
+  // base64 payload before we upload anything.
   if (args.signatureDataUrl.length > 1_500_000) {
     return { ok: false, error: 'Signature payload too large' }
+  }
+
+  // Move the captured base64 signature to object storage and keep only the
+  // stable public URL in the column. Idempotent — an already-stored https URL
+  // passes through unchanged.
+  const storedSignature = await storeSignatureValue(ctx.tenantId, args.signatureDataUrl)
+  if (!storedSignature) {
+    return { ok: false, error: 'Signature could not be stored' }
   }
 
   const { response, workflowSteps, stepsByKey } = await loadResponseWithWorkflow(ctx, responseId)
@@ -297,7 +307,7 @@ export async function signWorkflowStep(args: {
     patch: {
       status: 'signed',
       signedAt: new Date(),
-      signatureDataUrl: args.signatureDataUrl,
+      signatureDataUrl: storedSignature,
       signedByPersonId: args.personId ?? null,
       signedByTenantUserId: ctx.membership?.id ?? null,
       comment: args.comment ?? null,

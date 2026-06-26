@@ -25,6 +25,7 @@ import { emitCorrectiveActionClosed } from '@beaconhs/integrations'
 import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { storeSignatureValue } from '@/lib/signature-storage'
 import { canSeeRecord } from '@/lib/visibility'
 import { runModuleFlows } from '@/lib/flows/run-module-flows'
 
@@ -195,13 +196,18 @@ async function insertCompleteStep(
       .where(eq(caCompleteSteps.caId, args.caId)),
   )
 
+  // Persist captured signatures to object storage and keep only the public URL
+  // in the column. Idempotent: existing https URLs pass through untouched, so
+  // every caller (appendCompleteStep, verifyCorrectiveAction) is covered here.
+  const storedSignature = await storeSignatureValue(ctx.tenantId, args.signatureDataUrl)
+
   await ctx.db((tx) =>
     tx.insert(caCompleteSteps).values({
       tenantId: ctx.tenantId,
       caId: args.caId,
       kind: args.kind,
       description: args.description?.trim() || null,
-      signatureDataUrl: args.signatureDataUrl ?? null,
+      signatureDataUrl: storedSignature,
       completedByTenantUserId: safeTenantUserId(ctx),
       entityOrder: Number(nextOrder?.n ?? 1),
     }),
