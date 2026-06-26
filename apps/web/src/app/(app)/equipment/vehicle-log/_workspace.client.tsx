@@ -11,6 +11,7 @@ import {
   ChevronRight,
   Loader2,
   Save,
+  Settings2,
   Trash2,
   WandSparkles,
 } from 'lucide-react'
@@ -71,6 +72,10 @@ function statusBadge(status: VehicleLogEntryDraft['importStatus']) {
   if (status === 'suggested') return <Badge variant="secondary">Suggested</Badge>
   if (status === 'manual') return <Badge variant="outline">Manual</Badge>
   return null
+}
+
+function plural(value: number, singular: string, pluralLabel = `${singular}s`) {
+  return `${value} ${value === 1 ? singular : pluralLabel}`
 }
 
 export function VehicleLogWorkspaceClient({
@@ -166,7 +171,14 @@ export function VehicleLogWorkspaceClient({
   }
 
   function applyActivity() {
-    if (!workspace.selectedDriverId || !workspace.selectedEquipmentId) return
+    if (!workspace.selectedDriverId || !workspace.selectedEquipmentId) {
+      setActionResult('Choose a driver and vehicle first.')
+      return
+    }
+    if (workspace.totals.workActivityDays === 0) {
+      setActionResult(importHint)
+      return
+    }
     setActionResult(null)
     startTransition(async () => {
       const res = await applyAction({
@@ -175,8 +187,15 @@ export function VehicleLogWorkspaceClient({
         month: workspace.month.key,
       })
       if (res.ok) {
-        const { created, updated, conflicts } = res.result
-        setActionResult(`${created} added · ${updated} refreshed · ${conflicts} conflicts`)
+        const { created, updated, conflicts, skipped } = res.result
+        const changed = created + updated + conflicts
+        setActionResult(
+          changed === 0
+            ? 'No matching work activity was found.'
+            : `${created} added · ${updated} refreshed · ${conflicts} conflicts${
+                skipped ? ` · ${skipped} skipped` : ''
+              }`,
+        )
         router.refresh()
       } else {
         setActionResult(res.error)
@@ -205,6 +224,30 @@ export function VehicleLogWorkspaceClient({
   }
 
   const canEdit = Boolean(workspace.selectedDriverId && workspace.selectedEquipmentId)
+  const hasActiveSource = workspace.workActivity.activeSourceCount > 0
+  const importSourceDays = workspace.totals.workActivityDays
+  const importHint = !workspace.selectedDriverId
+    ? 'Choose a driver first.'
+    : !workspace.selectedEquipmentId
+      ? 'Choose a vehicle first.'
+      : importSourceDays > 0
+        ? `${plural(importSourceDays, 'source day')} ready.`
+        : hasActiveSource
+          ? 'No work activity for this driver/month.'
+          : workspace.workActivity.monthRowCount > 0
+            ? 'No matching work activity for this driver/month.'
+            : 'No work activity source has run for this month.'
+  const sourceBadge = hasActiveSource
+    ? `${plural(workspace.workActivity.activeSourceCount, 'source')}`
+    : 'No source'
+  const activityBadge = canEdit
+    ? `${plural(importSourceDays, 'source day')}`
+    : `${plural(workspace.workActivity.monthRowCount, 'source row')}`
+  const canImport = canEdit && importSourceDays > 0 && !pending
+  const emptyMessage =
+    workspace.drivers.length === 0 || workspace.vehicles.length === 0
+      ? 'Add an active driver and vehicle to start logging.'
+      : 'Choose a driver and vehicle to start logging.'
 
   return (
     <div className="space-y-4">
@@ -218,6 +261,7 @@ export function VehicleLogWorkspaceClient({
               value={workspace.selectedDriverId}
               onChange={(e) => navigate({ driver: e.currentTarget.value })}
             >
+              <option value="">Choose driver</option>
               {workspace.drivers.map((driver) => (
                 <option key={driver.id} value={driver.id}>
                   {driver.label}
@@ -234,6 +278,7 @@ export function VehicleLogWorkspaceClient({
               value={workspace.selectedEquipmentId}
               onChange={(e) => navigate({ vehicle: e.currentTarget.value })}
             >
+              <option value="">Choose vehicle</option>
               {workspace.vehicles.map((vehicle) => (
                 <option key={vehicle.id} value={vehicle.id}>
                   {vehicle.hint ? `${vehicle.hint} · ` : ''}
@@ -260,7 +305,8 @@ export function VehicleLogWorkspaceClient({
               variant="outline"
               size="sm"
               onClick={applyActivity}
-              disabled={!canEdit || pending}
+              disabled={!canImport}
+              title={importHint}
             >
               {pending ? (
                 <Loader2 size={14} className="animate-spin" />
@@ -269,6 +315,15 @@ export function VehicleLogWorkspaceClient({
               )}
               Import
             </Button>
+            {workspace.workActivity.canConfigureSources && !hasActiveSource ? (
+              <Link
+                href="/admin/integrations"
+                className="inline-flex h-8 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-600 dark:hover:bg-slate-800/60"
+              >
+                <Settings2 size={14} />
+                Configure
+              </Link>
+            ) : null}
             <Button
               type="button"
               variant="outline"
@@ -314,8 +369,12 @@ export function VehicleLogWorkspaceClient({
               {workspace.totals.conflictDays} conflicts
             </Badge>
             <Badge variant="outline">{workspace.totals.totalKm} km</Badge>
+            <Badge variant={hasActiveSource ? 'outline' : 'warning'}>{sourceBadge}</Badge>
+            <Badge variant={importSourceDays ? 'secondary' : 'outline'}>{activityBadge}</Badge>
             {actionResult ? (
               <span className="text-slate-500 dark:text-slate-400">{actionResult}</span>
+            ) : !canImport ? (
+              <span className="text-slate-500 dark:text-slate-400">{importHint}</span>
             ) : null}
           </div>
         </div>
@@ -323,7 +382,7 @@ export function VehicleLogWorkspaceClient({
 
       {workspace.rows.length === 0 ? (
         <div className="rounded-lg border border-dashed border-slate-200 bg-white px-5 py-10 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
-          Add an active driver and vehicle to start logging.
+          {emptyMessage}
         </div>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
