@@ -12,7 +12,7 @@
 // an instant colour flash + beep. Mobile gets a camera scanner when the browser
 // supports BarcodeDetector.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import {
   ArrowDownToLine,
@@ -50,6 +50,18 @@ type LogEntry = {
 }
 
 type Flash = { tone: 'in' | 'out' | 'person' | 'error'; title: string; sub: string | null } | null
+
+function subscribeStaticStore() {
+  return () => {}
+}
+
+function getCameraAvailability() {
+  return (
+    typeof window !== 'undefined' &&
+    'BarcodeDetector' in window &&
+    Boolean(window.navigator.mediaDevices?.getUserMedia)
+  )
+}
 
 export type StationClientProps = {
   surface: 'app' | 'kiosk'
@@ -154,10 +166,7 @@ export function StationClient(props: StationClientProps) {
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const beep = useBeeper(soundOn)
 
-  const [hasCamera, setHasCamera] = useState(false)
-  useEffect(() => {
-    setHasCamera('BarcodeDetector' in window && Boolean(navigator.mediaDevices?.getUserMedia))
-  }, [])
+  const hasCamera = useSyncExternalStore(subscribeStaticStore, getCameraAvailability, () => false)
 
   const focusScan = useCallback(() => {
     // Don't steal focus from the camera overlay or a dropdown search box.
@@ -287,10 +296,7 @@ export function StationClient(props: StationClientProps) {
   // gun fires Enter before this matters; this is for finger-typing a name/tag.
   useEffect(() => {
     const q = scanValue.trim()
-    if (q.length < 1) {
-      setResults(null)
-      return
-    }
+    if (q.length < 1) return
     let alive = true
     const t = setTimeout(async () => {
       const r = await onSearch(q)
@@ -312,6 +318,10 @@ export function StationClient(props: StationClientProps) {
     setScanValue('')
     setResults(null)
     setTimeout(focusScan, 0)
+  }
+
+  function selectActivePerson(id: string) {
+    setActivePerson(id ? (people.find((p) => p.id === id) ?? activePerson) : null)
   }
 
   function undo(entry: LogEntry) {
@@ -345,8 +355,25 @@ export function StationClient(props: StationClientProps) {
   }, [])
 
   const personOptions = useMemo(
-    () => people.map((p) => ({ value: p.id, label: p.name, hint: p.employeeNo ?? undefined })),
-    [people],
+    () => {
+      const options = people.map((p) => ({
+        value: p.id,
+        label: p.name,
+        hint: p.employeeNo ?? undefined,
+      }))
+      if (activePerson && !options.some((option) => option.value === activePerson.id)) {
+        return [
+          {
+            value: activePerson.id,
+            label: activePerson.name,
+            hint: activePerson.employeeNo ?? undefined,
+          },
+          ...options,
+        ]
+      }
+      return options
+    },
+    [activePerson, people],
   )
   const locationOptions = useMemo(
     () =>
@@ -359,13 +386,14 @@ export function StationClient(props: StationClientProps) {
   )
 
   const dark = kiosk || overlay
+  const visibleResults = scanValue.trim().length > 0 ? results : null
   // Kiosk / full-screen scales everything up so it reads across a room.
   const big = dark
   const shell = overlay
     ? 'fixed inset-0 z-40 overflow-y-auto bg-slate-950 text-slate-100'
     : kiosk
       ? 'min-h-screen bg-slate-950 text-slate-100'
-      : 'rounded-2xl border border-slate-200 bg-white text-slate-900 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100'
+      : 'mx-auto w-full max-w-full overflow-hidden rounded-none border-slate-200 bg-white text-slate-900 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100 sm:rounded-2xl sm:border'
 
   const tree = (
     <div ref={rootRef} className={shell}>
@@ -373,7 +401,7 @@ export function StationClient(props: StationClientProps) {
         className={
           big
             ? 'mx-auto flex min-h-screen w-full max-w-screen-2xl flex-col gap-6 p-6 sm:p-10'
-            : 'flex flex-col gap-5 p-4 sm:p-6'
+            : 'flex w-full max-w-full flex-col gap-4 px-3 py-4 sm:gap-5 sm:p-6'
         }
         onClick={focusScan}
       >
@@ -461,36 +489,19 @@ export function StationClient(props: StationClientProps) {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <div className="space-y-1">
             <Label dark={dark}>Active holder</Label>
-            {activePerson ? (
-              <div
-                className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 ${
-                  dark
-                    ? 'border-slate-700 bg-slate-900'
-                    : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900'
-                }`}
-              >
-                <span className="flex items-center gap-2 truncate text-sm font-medium">
-                  <UserRound size={15} className="shrink-0 text-teal-500" />
-                  <span className="truncate">{activePerson.name}</span>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setActivePerson(null)}
-                  className="shrink-0 text-slate-400 hover:text-red-500"
-                  title="Clear active holder"
-                >
-                  <X size={15} />
-                </button>
-              </div>
-            ) : (
-              <SearchSelect
-                value=""
-                onChange={(v) => setActivePerson(people.find((p) => p.id === v) ?? null)}
-                options={personOptions}
-                placeholder="Scan a badge or pick…"
-                ariaLabel="Active holder"
-              />
-            )}
+            <SearchSelect
+              value={activePerson?.id ?? ''}
+              onChange={selectActivePerson}
+              options={personOptions}
+              clearable
+              emptyLabel="No active holder"
+              placeholder="Scan a badge or pick..."
+              searchPlaceholder="Search people..."
+              sheetTitle="Active holder"
+              ariaLabel="Active holder"
+              searchable
+              triggerClassName="h-11 text-base sm:h-10 sm:text-sm"
+            />
           </div>
           <div className="space-y-1">
             <Label dark={dark}>Check-out destination</Label>
@@ -500,7 +511,10 @@ export function StationClient(props: StationClientProps) {
               options={locationOptions}
               placeholder="Pick a destination..."
               searchPlaceholder="Search locations..."
+              sheetTitle="Check-out destination"
               ariaLabel="Destination"
+              searchable
+              triggerClassName="h-11 text-base sm:h-10 sm:text-sm"
             />
           </div>
           <div className="space-y-1">
@@ -578,8 +592,8 @@ export function StationClient(props: StationClientProps) {
             }`}
           />
           {scanValue.trim().length > 0 &&
-          results &&
-          (results.equipment.length > 0 || results.people.length > 0) ? (
+          visibleResults &&
+          (visibleResults.equipment.length > 0 || visibleResults.people.length > 0) ? (
             <div
               className={`absolute z-20 mt-1.5 w-full overflow-y-auto rounded-xl border shadow-xl ${
                 big ? 'max-h-[32rem]' : 'max-h-96'
@@ -589,10 +603,10 @@ export function StationClient(props: StationClientProps) {
                   : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900'
               }`}
             >
-              {results.people.length > 0 ? (
+              {visibleResults.people.length > 0 ? (
                 <div className="p-1">
                   <DropHeader dark={dark}>People — set active holder</DropHeader>
-                  {results.people.map((p) => (
+                  {visibleResults.people.map((p) => (
                     <button
                       key={p.id}
                       type="button"
@@ -619,12 +633,12 @@ export function StationClient(props: StationClientProps) {
                   ))}
                 </div>
               ) : null}
-              {results.equipment.length > 0 ? (
+              {visibleResults.equipment.length > 0 ? (
                 <div className="p-1">
                   <DropHeader dark={dark}>
                     Equipment — tap to {scanActionWord(direction)}
                   </DropHeader>
-                  {results.equipment.map((it) => (
+                  {visibleResults.equipment.map((it) => (
                     <button
                       key={it.id}
                       type="button"
@@ -857,8 +871,6 @@ function CameraScanner({
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [error, setError] = useState<string | null>(null)
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => setMounted(true), [])
 
   useEffect(() => {
     let stream: MediaStream | null = null
@@ -913,7 +925,7 @@ function CameraScanner({
     }
   }, [onCode])
 
-  if (!mounted) return null
+  if (typeof document === 'undefined') return null
   return createPortal(
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/90 p-4">
       <div className="w-full max-w-md overflow-hidden rounded-2xl bg-slate-900">
