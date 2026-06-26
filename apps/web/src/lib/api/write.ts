@@ -24,6 +24,9 @@ import {
   incidentSeverity,
   incidentStatus,
   incidentType,
+  inspectionRecordStatus,
+  inspectionRecords,
+  inspectionTypes,
   orgUnits,
   people,
   ppeItemStatus,
@@ -39,6 +42,7 @@ import { emitCorrectiveActionCreated, emitIncidentCreated } from '@beaconhs/inte
 import type { RequestContext } from '@beaconhs/tenant'
 import { recordAudit } from '@/lib/audit'
 import { runModuleFlows } from '@/lib/flows/run-module-flows'
+import { findIncompleteCriteria, materialiseCriteriaForRecord } from '@/app/(app)/inspections/_lib'
 import { ApiError } from './errors'
 
 type Json = Record<string, unknown>
@@ -122,6 +126,20 @@ async function ensureSite(tx: TenantTx, id: string | null | undefined): Promise<
   if (site.level !== 'site') throw ApiError.invalid(`Org unit ${id} is not a site`)
 }
 
+async function ensureOrgUnit(
+  tx: TenantTx,
+  id: string | null | undefined,
+  label = 'org unit',
+): Promise<void> {
+  if (!id) return
+  const [unit] = await tx
+    .select({ id: orgUnits.id })
+    .from(orgUnits)
+    .where(and(eq(orgUnits.id, id), isNull(orgUnits.deletedAt)))
+    .limit(1)
+  if (!unit) throw ApiError.invalid(`No ${label} with id ${id} in this tenant`)
+}
+
 async function ensurePerson(
   tx: TenantTx,
   id: string | null | undefined,
@@ -134,6 +152,10 @@ async function ensurePerson(
     .where(and(eq(people.id, id), isNull(people.deletedAt)))
     .limit(1)
   if (!person) throw ApiError.invalid(`No ${label} with id ${id} in this tenant`)
+}
+
+async function ensurePeople(tx: TenantTx, ids: string[], label = 'person'): Promise<void> {
+  for (const id of ids) await ensurePerson(tx, id, label)
 }
 
 async function ensureTenantUser(
@@ -749,6 +771,313 @@ const CORRECTIVE_ACTION_PATCH_BODY: Json = {
     },
     rootCause: { type: 'string' },
     actionTaken: { type: 'string' },
+  },
+}
+
+// --- inspections -------------------------------------------------------------
+
+const inspectionCreate = z.object({
+  typeId: uuid,
+  occurredAt: z.coerce.date().optional(),
+  siteOrgUnitId: uuid.nullish(),
+  inspectorTenantUserId: uuid.nullish(),
+  supervisorTenantUserId: uuid.nullish(),
+  foremanPersonIds: z.array(uuid).default([]),
+  foremanText: z.string().max(500).nullish(),
+  customerOrgUnitId: uuid.nullish(),
+  customerContactPersonId: uuid.nullish(),
+  customerContactName: z.string().max(240).nullish(),
+  notes: z.string().max(5000).nullish(),
+  metadata,
+})
+
+const inspectionPatch = inspectionCreate.partial().extend({
+  metadata: z.record(z.string(), z.unknown()).optional(),
+  status: z.enum(inspectionRecordStatus.enumValues).optional(),
+})
+
+async function ensureInspectionType(tx: TenantTx, typeId: string): Promise<void> {
+  const [type] = await tx
+    .select({ id: inspectionTypes.id })
+    .from(inspectionTypes)
+    .where(
+      and(
+        eq(inspectionTypes.id, typeId),
+        eq(inspectionTypes.isPublished, true),
+        isNull(inspectionTypes.deletedAt),
+      ),
+    )
+    .limit(1)
+  if (!type) throw ApiError.invalid(`No published inspection type with id ${typeId}`)
+}
+
+async function nextInspectionReferenceInTx(tx: TenantTx, occurredAt: Date): Promise<string> {
+  const year = occurredAt.getFullYear()
+  const [{ c } = { c: 0 }] = await tx
+    .select({ c: count() })
+    .from(inspectionRecords)
+    .where(sql`extract(year from ${inspectionRecords.occurredAt}) = ${year}`)
+  return `INS-${year}-${String(Number(c ?? 0) + 1).padStart(4, '0')}`
+}
+
+async function createInspection(ctx: RequestContext, raw: unknown): Promise<WriteResult> {
+  const parsed = inspectionCreate.safeParse(raw)
+  if (!parsed.success) throw validationError(parsed.error)
+  const b = parsed.data
+  const occurredAt = b.occurredAt ?? new Date()
+
+  const row = await ctx.db(async (tx) => {
+    await ensureInspectionType(tx, b.typeId)
+    await ensureSite(tx, b.siteOrgUnitId)
+    await ensureTenantUser(tx, b.inspectorTenantUserId, 'inspector')
+    await ensureTenantUser(tx, b.supervisorTenantUserId, 'supervisor')
+    await ensurePeople(tx, b.foremanPersonIds, 'foreman')
+    await ensureOrgUnit(tx, b.customerOrgUnitId, 'customer org unit')
+    await ensurePerson(tx, b.customerContactPersonId, 'customer contact')
+
+    const reference = await nextInspectionReferenceInTx(tx, occurredAt)
+    const [created] = await tx
+      .insert(inspectionRecords)
+      .values({
+        tenantId: ctx.tenantId,
+        reference,
+        typeId: b.typeId,
+        status: 'draft',
+        occurredAt,
+        siteOrgUnitId: b.siteOrgUnitId ?? null,
+        inspectorTenantUserId: b.inspectorTenantUserId ?? safeTenantUserId(ctx),
+        supervisorTenantUserId: b.supervisorTenantUserId ?? null,
+        foremanPersonIds: b.foremanPersonIds,
+        foremanText: stripEmpty(b.foremanText),
+        customerOrgUnitId: b.customerOrgUnitId ?? null,
+        customerContactPersonId: b.customerContactPersonId ?? null,
+        customerContactName: stripEmpty(b.customerContactName),
+        notes: stripEmpty(b.notes),
+        metadata: b.metadata,
+      })
+      .returning()
+    return created
+  })
+
+  if (!row) throw new ApiError(500, 'internal', 'Failed to create inspection record')
+  const materialised = await materialiseCriteriaForRecord(ctx, row.id, row.typeId)
+  await recordAudit(ctx, {
+    entityType: 'inspection_record',
+    entityId: row.id,
+    action: 'create',
+    summary: `Started ${row.reference} — materialised ${materialised} criteria`,
+    after: {
+      reference: row.reference,
+      typeId: row.typeId,
+      occurredAt: row.occurredAt,
+      siteOrgUnitId: row.siteOrgUnitId,
+    },
+  })
+  await runModuleFlows(ctx, { moduleKey: 'inspections', event: 'on_create', subjectId: row.id })
+  revalidatePath('/inspections/records')
+  return inspectionResult(row)
+}
+
+function inspectionResult(row: typeof inspectionRecords.$inferSelect): WriteResult {
+  return {
+    id: row.id,
+    reference: row.reference,
+    type_id: row.typeId,
+    status: row.status,
+    occurred_at: row.occurredAt.toISOString(),
+    site_org_unit_id: row.siteOrgUnitId,
+    inspector_tenant_user_id: row.inspectorTenantUserId,
+    supervisor_tenant_user_id: row.supervisorTenantUserId,
+    foreman_person_ids: row.foremanPersonIds,
+    foreman_text: row.foremanText,
+    customer_org_unit_id: row.customerOrgUnitId,
+    customer_contact_person_id: row.customerContactPersonId,
+    customer_contact_name: row.customerContactName,
+    notes: row.notes,
+    submitted_at: row.submittedAt?.toISOString() ?? null,
+    closed_at: row.closedAt?.toISOString() ?? null,
+    locked: row.locked,
+  }
+}
+
+async function updateInspection(
+  ctx: RequestContext,
+  id: string,
+  raw: unknown,
+): Promise<WriteResult> {
+  const parsed = inspectionPatch.safeParse(raw)
+  if (!parsed.success) throw validationError(parsed.error)
+  const b = parsed.data
+
+  const result = await ctx.db(async (tx) => {
+    const [before] = await tx
+      .select()
+      .from(inspectionRecords)
+      .where(eq(inspectionRecords.id, id))
+      .limit(1)
+    if (!before || before.deletedAt) throw ApiError.notFound(`No inspections with id ${id}`)
+    if (before.locked) throw ApiError.invalid('Inspection is locked and cannot be updated')
+
+    if (b.typeId && b.typeId !== before.typeId) {
+      throw ApiError.invalid('Inspection type cannot be changed after record creation')
+    }
+    await ensureSite(tx, b.siteOrgUnitId)
+    await ensureTenantUser(tx, b.inspectorTenantUserId, 'inspector')
+    await ensureTenantUser(tx, b.supervisorTenantUserId, 'supervisor')
+    if (b.foremanPersonIds) await ensurePeople(tx, b.foremanPersonIds, 'foreman')
+    await ensureOrgUnit(tx, b.customerOrgUnitId, 'customer org unit')
+    await ensurePerson(tx, b.customerContactPersonId, 'customer contact')
+
+    const patch: Partial<typeof inspectionRecords.$inferInsert> = {}
+    if (hasOwn(b, 'occurredAt')) patch.occurredAt = b.occurredAt
+    if (hasOwn(b, 'siteOrgUnitId')) patch.siteOrgUnitId = b.siteOrgUnitId ?? null
+    if (hasOwn(b, 'inspectorTenantUserId')) {
+      patch.inspectorTenantUserId = b.inspectorTenantUserId ?? null
+    }
+    if (hasOwn(b, 'supervisorTenantUserId')) {
+      patch.supervisorTenantUserId = b.supervisorTenantUserId ?? null
+    }
+    if (hasOwn(b, 'foremanPersonIds')) patch.foremanPersonIds = b.foremanPersonIds ?? []
+    if (hasOwn(b, 'foremanText')) patch.foremanText = stripEmpty(b.foremanText)
+    if (hasOwn(b, 'customerOrgUnitId')) patch.customerOrgUnitId = b.customerOrgUnitId ?? null
+    if (hasOwn(b, 'customerContactPersonId')) {
+      patch.customerContactPersonId = b.customerContactPersonId ?? null
+    }
+    if (hasOwn(b, 'customerContactName')) {
+      patch.customerContactName = stripEmpty(b.customerContactName)
+    }
+    if (hasOwn(b, 'notes')) patch.notes = stripEmpty(b.notes)
+    if (hasOwn(b, 'metadata')) patch.metadata = b.metadata
+    if (hasOwn(b, 'status')) {
+      patch.status = b.status
+      if (b.status === 'submitted' || b.status === 'closed') {
+        const missing = await findIncompleteCriteria(ctx, id)
+        if (missing.length > 0) {
+          throw ApiError.invalid(
+            `Cannot submit: ${missing.length} inspection item${missing.length === 1 ? '' : 's'} incomplete`,
+            missing,
+          )
+        }
+        patch.submittedAt = new Date()
+        patch.submittedByTenantUserId = safeTenantUserId(ctx)
+      }
+      if (b.status === 'closed') {
+        patch.closedAt = new Date()
+        patch.closedByTenantUserId = safeTenantUserId(ctx)
+        patch.locked = true
+      }
+      if (b.status === 'draft' || b.status === 'in_progress') {
+        patch.submittedAt = null
+        patch.submittedByTenantUserId = null
+        patch.closedAt = null
+        patch.closedByTenantUserId = null
+      }
+    }
+    assertPatchNotEmpty(patch)
+
+    const [updated] = await tx
+      .update(inspectionRecords)
+      .set(patch)
+      .where(eq(inspectionRecords.id, id))
+      .returning()
+    return { before, updated }
+  })
+
+  if (!result.updated) throw new ApiError(500, 'internal', 'Failed to update inspection record')
+  await recordAudit(ctx, {
+    entityType: 'inspection_record',
+    entityId: id,
+    action: 'update',
+    summary: `Updated ${result.updated.reference}`,
+    before: {
+      status: result.before.status,
+      occurredAt: result.before.occurredAt,
+      siteOrgUnitId: result.before.siteOrgUnitId,
+    },
+    after: {
+      status: result.updated.status,
+      occurredAt: result.updated.occurredAt,
+      siteOrgUnitId: result.updated.siteOrgUnitId,
+    },
+  })
+  if (result.before.status !== result.updated.status) {
+    await runModuleFlows(ctx, {
+      moduleKey: 'inspections',
+      event: 'status_change',
+      subjectId: id,
+      toStatus: result.updated.status,
+    })
+    if (result.updated.status === 'submitted') {
+      await runModuleFlows(ctx, { moduleKey: 'inspections', event: 'on_submit', subjectId: id })
+    }
+  }
+  revalidatePath('/inspections/records')
+  revalidatePath(`/inspections/records/${id}`)
+  return inspectionResult(result.updated)
+}
+
+async function deleteInspection(ctx: RequestContext, id: string): Promise<WriteResult> {
+  const result = await ctx.db(async (tx) => {
+    const [before] = await tx
+      .select()
+      .from(inspectionRecords)
+      .where(eq(inspectionRecords.id, id))
+      .limit(1)
+    if (!before || before.deletedAt) throw ApiError.notFound(`No inspections with id ${id}`)
+    if (before.locked) throw ApiError.invalid('Inspection is locked and cannot be archived')
+    const deletedAt = new Date()
+    await tx.update(inspectionRecords).set({ deletedAt }).where(eq(inspectionRecords.id, id))
+    return { before, deletedAt }
+  })
+  await recordAudit(ctx, {
+    entityType: 'inspection_record',
+    entityId: id,
+    action: 'delete',
+    summary: `Archived ${result.before.reference}`,
+    before: {
+      reference: result.before.reference,
+      status: result.before.status,
+      occurredAt: result.before.occurredAt,
+    },
+    after: { deletedAt: result.deletedAt },
+  })
+  revalidatePath('/inspections/records')
+  revalidatePath(`/inspections/records/${id}`)
+  return { id, deleted: true, deletedAt: result.deletedAt.toISOString() }
+}
+
+const INSPECTION_BODY: Json = {
+  type: 'object',
+  required: ['typeId'],
+  properties: {
+    typeId: {
+      type: 'string',
+      format: 'uuid',
+      description: 'Published inspection type to materialize criteria from.',
+    },
+    occurredAt: { type: 'string', format: 'date-time' },
+    siteOrgUnitId: { type: 'string', format: 'uuid' },
+    inspectorTenantUserId: { type: 'string', format: 'uuid' },
+    supervisorTenantUserId: { type: 'string', format: 'uuid' },
+    foremanPersonIds: { type: 'array', items: { type: 'string', format: 'uuid' } },
+    foremanText: { type: 'string' },
+    customerOrgUnitId: { type: 'string', format: 'uuid' },
+    customerContactPersonId: { type: 'string', format: 'uuid' },
+    customerContactName: { type: 'string' },
+    notes: { type: 'string' },
+    metadata: { type: 'object', additionalProperties: true },
+  },
+}
+
+const INSPECTION_PATCH_BODY: Json = {
+  ...optionalObjectSchema(INSPECTION_BODY),
+  properties: {
+    ...(INSPECTION_BODY.properties as Json),
+    status: {
+      type: 'string',
+      enum: inspectionRecordStatus.enumValues,
+      description: 'Submitting or closing requires all materialized criteria to be complete.',
+    },
   },
 }
 
@@ -1572,6 +1901,20 @@ const WRITES: Record<string, WriteRegistration> = {
     delete: {
       permission: 'ca.update',
       handler: deleteCorrectiveAction,
+    },
+  },
+  inspections: {
+    permission: 'inspections.create',
+    handler: createInspection,
+    bodySchema: INSPECTION_BODY,
+    update: {
+      permission: 'inspections.update',
+      handler: updateInspection,
+      bodySchema: INSPECTION_PATCH_BODY,
+    },
+    delete: {
+      permission: 'inspections.manage',
+      handler: deleteInspection,
     },
   },
   equipment: {
