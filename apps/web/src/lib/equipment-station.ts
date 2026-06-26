@@ -92,7 +92,6 @@ export async function searchStationCore(
       id: equipmentItems.id,
       assetTag: equipmentItems.assetTag,
       name: equipmentItems.name,
-      status: equipmentItems.status,
       available: equipmentItems.isAvailableForCheckout,
       typeName: equipmentTypes.name,
       holderFirst: people.firstName,
@@ -139,7 +138,7 @@ export async function searchStationCore(
       assetTag: r.assetTag,
       name: r.name,
       typeName: r.typeName,
-      isOut: !r.available && r.status === 'in_service',
+      isOut: !r.available,
       holderName:
         r.holderFirst || r.holderLast
           ? `${r.holderFirst ?? ''} ${r.holderLast ?? ''}`.trim()
@@ -253,9 +252,10 @@ export async function stationScanCore(
     .orderBy(desc(equipmentCheckouts.checkedOutAt))
     .limit(1)
   // An asset is "out" if it has an open checkout OR the cached availability flag
-  // says it isn't available while still in service (covers items assigned/
-  // transferred directly, without a checkout row — matches the register filter).
-  const isOut = Boolean(open) || (!item.available && item.status === 'in_service')
+  // says it isn't available — the exact predicate the equipment register's
+  // "Currently checked out" filter uses (covers items assigned/transferred
+  // directly, without a checkout ledger row).
+  const isOut = Boolean(open) || !item.available
 
   // Resolve the action: toggle inverts current state; explicit forces it.
   const action: 'checked_out' | 'checked_in' =

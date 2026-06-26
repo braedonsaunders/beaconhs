@@ -72,9 +72,9 @@ export default async function StationPage({
       .orderBy(desc(orgUnits.isEquipmentBase), asc(orgUnits.name))
       .limit(2000)
 
-    // "Currently out" = items not available while still in service. This matches
-    // the equipment register's availability filter and covers items assigned or
-    // transferred directly (no checkout ledger row).
+    // "Currently out" = items flagged not-available — the exact predicate the
+    // equipment register's "Currently checked out" filter uses. Covers items
+    // assigned or transferred directly (no checkout ledger row).
     const openRows = await tx
       .select({
         item: equipmentItems,
@@ -87,7 +87,6 @@ export default async function StationPage({
       .where(
         and(
           eq(equipmentItems.isAvailableForCheckout, false),
-          eq(equipmentItems.status, 'in_service'),
           isNull(equipmentItems.deletedAt),
         ),
       )
