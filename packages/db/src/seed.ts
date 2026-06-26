@@ -548,6 +548,37 @@ async function main() {
       .insert(reportDefinitions)
       .values([
         {
+          slug: 'legacy_vehicle_log_monthly',
+          kind: 'built_in',
+          name: 'Vehicle Log - Monthly Summary',
+          description:
+            'Asset-by-month vehicle log summary with driver, km, hours, crew counts, import coverage, and site counts. Uses the native report engine over the vehicle-log monthly reporting view.',
+          category: 'equipment',
+          queryKind: 'custom_query',
+          customQuery: {
+            entity: 'vehicle_log_monthly',
+            mode: 'rows',
+            columns: [
+              'asset_tag',
+              'vehicle_name',
+              'driver_name',
+              'month',
+              'logged_days',
+              'business_km',
+              'personal_km',
+              'total_km',
+              'hours_on_site',
+              'manpower_count',
+              'imported_days',
+              'manual_days',
+              'site_count',
+            ],
+            groupBy: 'asset_tag',
+            sort: { column: 'month', direction: 'asc' },
+            limit: 10000,
+          },
+        },
+        {
           slug: 'legacy_equipment_fleet',
           kind: 'built_in',
           name: 'Equipment — Fleet',

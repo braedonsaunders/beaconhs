@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { BarChart3, FileText, Truck } from 'lucide-react'
+import { FileText, Truck } from 'lucide-react'
 import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
 import { can, assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
@@ -96,12 +96,6 @@ export default async function VehicleLogPage({
             description="Driver and vehicle monthly log entry."
             actions={
               <div className="flex flex-wrap items-center gap-2">
-                <Link href="/reports/definitions/new?entity=vehicle_log_monthly">
-                  <Button variant="outline">
-                    <BarChart3 size={14} />
-                    Report
-                  </Button>
-                </Link>
                 <Link href="/equipment/vehicle-log/summary">
                   <Button variant="outline">
                     <FileText size={14} />

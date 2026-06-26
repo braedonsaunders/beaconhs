@@ -29,6 +29,13 @@
       "when": 1782444699563,
       "tag": "0003_vehicle_log_work_activity",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1782448205300,
+      "tag": "0004_vehicle_log_report_definition",
+      "breakpoints": true
     }
   ]
 }

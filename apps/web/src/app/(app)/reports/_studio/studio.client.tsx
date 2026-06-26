@@ -14,7 +14,16 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { QueryBuilder, type Field, type RuleGroupType, type RuleType } from 'react-querybuilder'
 import { Button, Input, Label, Select, Textarea, cn } from '@beaconhs/ui'
-import { Eye, FileText, Loader2, Plus, Trash2 } from 'lucide-react'
+import {
+  CheckCircle2,
+  Eye,
+  FileText,
+  LayoutTemplate,
+  Loader2,
+  Plus,
+  Search,
+  Trash2,
+} from 'lucide-react'
 import type {
   ReportAggFn,
   ReportChartType,
@@ -43,6 +52,12 @@ import { previewCustomReport, type StudioPreviewResult } from './actions'
 type QueryMode = 'rows' | 'summarize'
 type BreakoutRow = { column: string; bin?: ReportTemporalBin }
 type MeasureRow = { fn: ReportAggFn; column?: string }
+type StudioTemplate = {
+  id: string
+  label: string
+  description: string
+  query: ReportCustomQuery
+}
 
 const CHART_CHOICES: { key: ReportChartType | 'none'; label: string }[] = [
   { key: 'none', label: 'No chart' },
@@ -73,6 +88,163 @@ const headCls =
   'mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400'
 // Layout only — <Select> supplies its own chrome (border, bg, chevron, focus ring).
 const selectCls = 'h-9 w-full text-sm'
+
+const DEFAULT_COLUMN_LIMIT = 7
+
+function isOperationalColumn(column: ReportEntityColumn) {
+  return (
+    column.kind !== 'uuid' &&
+    column.key !== 'id' &&
+    column.key !== 'tenant_id' &&
+    column.key !== 'deleted_at'
+  )
+}
+
+function defaultColumnsFor(entity: ReportEntity, limit = DEFAULT_COLUMN_LIMIT): string[] {
+  const preferred = entity.columns.filter(isOperationalColumn).slice(0, limit)
+  return (preferred.length ? preferred : entity.columns.slice(0, limit)).map((column) => column.key)
+}
+
+function hasColumn(entity: ReportEntity, key: string | null | undefined): key is string {
+  return Boolean(key && entity.columns.some((column) => column.key === key))
+}
+
+function pickExisting(entity: ReportEntity, keys: string[], fallbackLimit = DEFAULT_COLUMN_LIMIT) {
+  const picked = keys.filter((key) => hasColumn(entity, key))
+  return picked.length ? picked : defaultColumnsFor(entity, fallbackLimit)
+}
+
+function defaultRowsQuery(entity: ReportEntity): ReportCustomQuery {
+  return {
+    entity: entity.key,
+    mode: 'rows',
+    columns: defaultColumnsFor(entity),
+    breakouts: [],
+    measures: [],
+    filters: [],
+    filtersV2: null,
+    chart: null,
+    groupBy: null,
+    sort: entity.defaultSort ?? null,
+    limit: 1000,
+  }
+}
+
+function reportTemplatesFor(entity: ReportEntity): StudioTemplate[] {
+  const templates: StudioTemplate[] = []
+  const temporal =
+    entity.columns.find((column) => column.key === 'month') ??
+    entity.columns.find((column) => column.key.endsWith('_on')) ??
+    entity.columns.find((column) => column.key.endsWith('_at')) ??
+    entity.columns.find(isTemporalCol)
+  const category =
+    entity.columns.find((column) => column.key === 'status') ??
+    entity.columns.find((column) => column.kind === 'enum') ??
+    entity.columns.find((column) => column.kind === 'text' && !column.key.endsWith('_id'))
+  const numberColumn =
+    entity.columns.find((column) => column.key === 'total_km') ??
+    entity.columns.find((column) => column.key.endsWith('_count')) ??
+    entity.columns.find(isNumberCol)
+
+  if (entity.key === 'vehicle_log_monthly') {
+    templates.push({
+      id: 'vehicle-log-monthly',
+      label: 'Vehicle log monthly summary',
+      description: 'Asset/month rollup with driver, km, hours, crew and import coverage.',
+      query: {
+        entity: entity.key,
+        mode: 'rows',
+        columns: pickExisting(entity, [
+          'asset_tag',
+          'vehicle_name',
+          'driver_name',
+          'month',
+          'logged_days',
+          'business_km',
+          'personal_km',
+          'total_km',
+          'hours_on_site',
+          'manpower_count',
+          'imported_days',
+          'manual_days',
+          'site_count',
+        ]),
+        groupBy: hasColumn(entity, 'asset_tag') ? 'asset_tag' : null,
+        sort: hasColumn(entity, 'month') ? { column: 'month', direction: 'asc' } : null,
+        chart: null,
+        limit: 10000,
+      },
+    })
+  }
+
+  templates.push({
+    id: 'detail-register',
+    label: 'Detail register',
+    description: 'A clean row listing with practical default columns and sorting.',
+    query: defaultRowsQuery(entity),
+  })
+
+  if (category) {
+    templates.push({
+      id: 'grouped-register',
+      label: `Grouped by ${category.label}`,
+      description: 'Detail rows organized into report sections.',
+      query: {
+        ...defaultRowsQuery(entity),
+        groupBy: category.key,
+        chart: { type: 'donut', dimension: category.key, metric: 'count' },
+      },
+    })
+  }
+
+  if (temporal) {
+    templates.push({
+      id: 'monthly-activity',
+      label: `Monthly ${numberColumn ? 'totals' : 'activity'}`,
+      description: numberColumn
+        ? `Trend ${numberColumn.label.toLowerCase()} by month.`
+        : 'Count records by month.',
+      query: {
+        entity: entity.key,
+        mode: 'summarize',
+        columns: [],
+        breakouts: [{ column: temporal.key, bin: 'month' }],
+        measures: numberColumn
+          ? [{ fn: 'sum', column: numberColumn.key }, { fn: 'count' }]
+          : [{ fn: 'count' }],
+        filters: [],
+        filtersV2: null,
+        chart: { type: 'bar', dimension: temporal.key, metric: 'count' },
+        groupBy: null,
+        sort: null,
+        limit: 1000,
+      },
+    })
+  }
+
+  if (category && numberColumn) {
+    templates.push({
+      id: 'totals-by-category',
+      label: `${numberColumn.label} by ${category.label}`,
+      description: 'Rank categories by a numeric total.',
+      query: {
+        entity: entity.key,
+        mode: 'summarize',
+        columns: [],
+        breakouts: [{ column: category.key }],
+        measures: [{ fn: 'sum', column: numberColumn.key }, { fn: 'count' }],
+        filters: [],
+        filtersV2: null,
+        chart: { type: 'bar', dimension: category.key, metric: 'count' },
+        groupBy: null,
+        sort: null,
+        limit: 1000,
+      },
+    })
+  }
+
+  return templates
+}
 
 export function ReportStudio({
   entities,
@@ -135,12 +307,7 @@ export function ReportStudio({
     initialQuery?.mode === 'summarize' ? 'summarize' : 'rows',
   )
   const [columns, setColumns] = useState<Set<string>>(
-    () =>
-      new Set(
-        initialQuery?.columns?.length
-          ? initialQuery.columns
-          : entity.columns.slice(0, 5).map((c) => c.key),
-      ),
+    () => new Set(initialQuery?.columns?.length ? initialQuery.columns : defaultColumnsFor(entity)),
   )
   const [breakouts, setBreakouts] = useState<BreakoutRow[]>(() =>
     (initialQuery?.breakouts ?? []).map((b) => ({ column: b.column, bin: b.bin })),
@@ -161,24 +328,44 @@ export function ReportStudio({
     initialQuery?.chart?.type ?? 'none',
   )
   const [chartDimension, setChartDimension] = useState<string>(initialQuery?.chart?.dimension ?? '')
+  const [columnSearch, setColumnSearch] = useState('')
 
   // react-querybuilder assigns random ids, which never match between SSR and
   // hydration — render it client-only behind a mount gate.
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
 
+  function hydrateQuery(nextEntity: ReportEntity, query: ReportCustomQuery) {
+    const validColumns = query.columns?.filter((column) => hasColumn(nextEntity, column)) ?? []
+    const validBreakouts = (query.breakouts ?? []).filter((breakout) =>
+      hasColumn(nextEntity, breakout.column),
+    )
+    const validMeasures = (query.measures ?? []).filter(
+      (measure) => measure.fn === 'count' || hasColumn(nextEntity, measure.column),
+    )
+    const nextSort =
+      query.sort?.column && hasColumn(nextEntity, query.sort.column) ? query.sort : null
+    const nextChart =
+      query.chart?.dimension && hasColumn(nextEntity, query.chart.dimension) ? query.chart : null
+
+    setEntityKey(nextEntity.key)
+    setQueryMode(query.mode === 'summarize' ? 'summarize' : 'rows')
+    setColumns(new Set(validColumns.length ? validColumns : defaultColumnsFor(nextEntity)))
+    setBreakouts(validBreakouts.map((breakout) => ({ column: breakout.column, bin: breakout.bin })))
+    setMeasures(validMeasures.map((measure) => ({ fn: measure.fn, column: measure.column })))
+    setRqbQuery(fromEngineGroup(query))
+    setGroupBy(hasColumn(nextEntity, query.groupBy) ? (query.groupBy ?? '') : '')
+    setSortCol(nextSort?.column ?? nextEntity.defaultSort?.column ?? '')
+    setSortDir(nextSort?.direction ?? nextEntity.defaultSort?.direction ?? 'desc')
+    setLimit(query.limit ?? 1000)
+    setChartType(nextChart?.type ?? 'none')
+    setChartDimension(nextChart?.dimension ?? '')
+    setColumnSearch('')
+  }
+
   function changeEntity(newKey: string) {
     const newEnt = catalog.find((e) => e.key === newKey)!
-    setEntityKey(newKey)
-    setColumns(new Set(newEnt.columns.slice(0, 5).map((c) => c.key)))
-    setBreakouts([])
-    setMeasures([])
-    setRqbQuery({ combinator: 'and', rules: [] })
-    setGroupBy('')
-    setSortCol(newEnt.defaultSort?.column ?? '')
-    setSortDir(newEnt.defaultSort?.direction ?? 'desc')
-    setChartType('none')
-    setChartDimension('')
+    hydrateQuery(newEnt, defaultRowsQuery(newEnt))
   }
 
   function toggleColumn(key: string) {
@@ -276,6 +463,14 @@ export function ReportStudio({
     () => entity.columns.map((c) => ({ name: c.key, label: c.label })),
     [entity],
   )
+  const studioTemplates = useMemo(() => reportTemplatesFor(entity), [entity])
+  const visibleColumnOptions = useMemo(() => {
+    const q = columnSearch.trim().toLowerCase()
+    if (!q) return entity.columns
+    return entity.columns.filter((column) =>
+      `${column.label} ${column.key}`.toLowerCase().includes(q),
+    )
+  }, [entity, columnSearch])
   const getOperators = useMemo(() => {
     return (fieldName: string) => {
       const kind = entity.columns.find((c) => c.key === fieldName)?.kind ?? 'text'
@@ -385,16 +580,103 @@ export function ReportStudio({
                   </div>
                 </div>
 
+                <div className={sectionCls}>
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <h3 className={cn(headCls, 'mb-0')}>Templates</h3>
+                    <LayoutTemplate size={14} className="text-slate-400" />
+                  </div>
+                  <div className="space-y-1.5">
+                    {studioTemplates.map((template) => {
+                      const active =
+                        template.query.mode === queryMode &&
+                        template.query.entity === entityKey &&
+                        JSON.stringify(template.query.columns ?? []) ===
+                          JSON.stringify(Array.from(columns)) &&
+                        (template.query.groupBy ?? '') === groupBy
+                      return (
+                        <button
+                          key={template.id}
+                          type="button"
+                          onClick={() => hydrateQuery(entity, template.query)}
+                          className={cn(
+                            'flex w-full items-start gap-2 rounded-md border px-2.5 py-2 text-left transition-colors',
+                            active
+                              ? 'border-teal-300 bg-teal-50 text-teal-900 dark:border-teal-700/70 dark:bg-teal-500/10 dark:text-teal-100'
+                              : 'border-slate-200 bg-white text-slate-700 hover:border-teal-300 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-teal-700',
+                          )}
+                        >
+                          <CheckCircle2
+                            size={14}
+                            className={cn(
+                              'mt-0.5 shrink-0',
+                              active ? 'text-teal-600' : 'text-slate-300',
+                            )}
+                          />
+                          <span className="min-w-0">
+                            <span className="block text-xs font-medium">{template.label}</span>
+                            <span className="mt-0.5 block text-[11px] leading-snug text-slate-500 dark:text-slate-400">
+                              {template.description}
+                            </span>
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
                 {/* Rows mode: columns + sort + limit */}
                 {queryMode === 'rows' ? (
                   <>
                     <div className={sectionCls}>
-                      <h3 className={headCls}>Columns</h3>
-                      <div className="grid grid-cols-1 gap-1">
-                        {entity.columns.map((c) => (
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <h3 className={cn(headCls, 'mb-0')}>Columns</h3>
+                        <span className="text-[11px] text-slate-400">
+                          {columns.size}/{entity.columns.length}
+                        </span>
+                      </div>
+                      <div className="relative mb-2">
+                        <Search
+                          size={13}
+                          className="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-slate-400"
+                        />
+                        <Input
+                          value={columnSearch}
+                          onChange={(e) => setColumnSearch(e.target.value)}
+                          placeholder="Search fields"
+                          className="h-8 pl-7 text-xs"
+                        />
+                      </div>
+                      <div className="mb-2 flex flex-wrap gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setColumns(new Set(defaultColumnsFor(entity)))}
+                          className={tinyBtn}
+                        >
+                          Defaults
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setColumns(new Set(entity.columns.map((c) => c.key)))}
+                          className={tinyBtn}
+                        >
+                          All
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setColumns(new Set())}
+                          className={tinyBtn}
+                        >
+                          Clear
+                        </button>
+                      </div>
+                      <div className="grid max-h-72 grid-cols-1 gap-1 overflow-y-auto pr-1">
+                        {visibleColumnOptions.map((c) => (
                           <label
                             key={c.key}
-                            className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300"
+                            className={cn(
+                              'flex items-center gap-2 rounded-md px-1.5 py-1 text-xs text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/60',
+                              columns.has(c.key) && 'bg-teal-50/70 dark:bg-teal-500/10',
+                            )}
                           >
                             <input
                               type="checkbox"
@@ -403,9 +685,17 @@ export function ReportStudio({
                               className="h-3.5 w-3.5"
                             />
                             <span className="truncate">{c.label}</span>
+                            <span className="ml-auto shrink-0 text-[10px] text-slate-400">
+                              {c.kind}
+                            </span>
                           </label>
                         ))}
                       </div>
+                      {visibleColumnOptions.length === 0 ? (
+                        <p className="rounded-md border border-dashed border-slate-200 px-2 py-4 text-center text-[11px] text-slate-400 dark:border-slate-800">
+                          No matching fields.
+                        </p>
+                      ) : null}
                     </div>
 
                     <div className={sectionCls}>

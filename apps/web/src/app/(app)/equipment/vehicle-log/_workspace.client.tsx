@@ -787,14 +787,7 @@ export function VehicleLogWorkspaceClient({
                 <td className="px-2 py-2 text-right">{workspace.totals.hoursOnSite.toFixed(2)}</td>
                 <td className="px-2 py-2 text-right">{workspace.totals.crewCount}</td>
                 <td className="px-2 py-2 text-right">{workspace.totals.totalKm}</td>
-                <td className="px-3 py-2" colSpan={3}>
-                  <Link
-                    href="/reports/definitions/new?entity=vehicle_log_monthly"
-                    className="text-xs text-teal-700 hover:underline dark:text-teal-300"
-                  >
-                    Open in reports
-                  </Link>
-                </td>
+                <td className="px-3 py-2" colSpan={3} />
               </tr>
             </tfoot>
           </table>
