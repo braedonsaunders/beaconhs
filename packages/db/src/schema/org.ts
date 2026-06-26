@@ -3,6 +3,7 @@
 
 import { relations } from 'drizzle-orm'
 import {
+  boolean,
   date,
   doublePrecision,
   index,
@@ -34,6 +35,10 @@ export const orgUnits = pgTable(
     lat: doublePrecision('lat'),
     lng: doublePrecision('lng'),
     geofenceMeters: integer('geofence_meters'),
+    // Equipment check-in/out: when true, an asset sitting at this org-unit with
+    // no holder counts as "checked in" (at base / in stock). Tenants flag their
+    // shop/yard/crib here; everywhere else is treated as "deployed / out".
+    isEquipmentBase: boolean('is_equipment_base').default(false).notNull(),
     address: jsonb('address').$type<{
       line1?: string
       line2?: string

@@ -117,6 +117,7 @@ export const TENANT_SCOPED_TABLES = [
   'equipment_inspection_record_attachments',
   'equipment_inspection_record_criteria',
   'equipment_checkouts',
+  'equipment_station_settings',
   'ppe_types',
   'ppe_items',
   'ppe_issues',

@@ -1181,7 +1181,7 @@ function MyEquipmentCard({
           : `${items.length} items checked out to you`
       }
       icon={Boxes}
-      href="/equipment/check-out"
+      href="/equipment/station"
       hrefLabel="Check in / out"
       accent="sky"
     >

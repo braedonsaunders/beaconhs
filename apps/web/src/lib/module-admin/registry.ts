@@ -242,7 +242,7 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
     permission: 'equipment.manage',
     tabs: [
       { key: 'equipment', label: 'Equipment', href: '/equipment' },
-      { key: 'check-out', label: 'Check in / out', href: '/equipment/check-out' },
+      { key: 'station', label: 'Check in / out', href: '/equipment/station' },
       { key: 'work-orders', label: 'Work orders', href: '/equipment/work-orders' },
       { key: 'vehicle-log', label: 'Vehicle log', href: '/equipment/vehicle-log' },
       { key: 'inspections', label: 'Inspections', href: '/equipment/inspections' },
@@ -268,6 +268,13 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
         href: '/equipment/inspection-types',
         iconKey: 'clipboard',
         desc: 'Define the recurring inspections each asset class requires.',
+      },
+      {
+        key: 'station-settings',
+        label: 'Station settings',
+        href: '/equipment/station/settings',
+        iconKey: 'settings',
+        desc: 'Home location, what counts as checked in, scan behaviour and the mounted-tablet kiosk.',
       },
       {
         key: 'flows',

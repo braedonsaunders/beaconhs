@@ -184,7 +184,7 @@ export const DEFAULT_QUICK_ACTIONS: QuickAction[] = [
   {
     id: 'd-equip',
     label: 'Check out equipment',
-    href: '/equipment/check-out',
+    href: '/equipment/station',
     iconKey: 'clipboard-check',
     tone: 'violet',
   },

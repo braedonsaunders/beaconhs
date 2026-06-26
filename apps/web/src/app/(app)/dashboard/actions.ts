@@ -231,7 +231,7 @@ export async function listQuickActionOptions(): Promise<QuickActionOptions> {
     },
     {
       label: 'Check out equipment',
-      href: '/equipment/check-out',
+      href: '/equipment/station',
       iconKey: 'clipboard-check',
       tone: 'violet',
       hint: 'Action',

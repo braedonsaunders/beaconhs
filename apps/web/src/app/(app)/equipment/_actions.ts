@@ -361,7 +361,7 @@ export async function listPeopleForBulkHolder(): Promise<
 }
 
 // ---------- Check-in (sign in) ----------------------------------------------
-// Shared by the /equipment/check-out page and the dashboard "My equipment"
+// Shared by the /equipment/station page and the dashboard "My equipment"
 // widget's one-tap check-in. Returns the item to base: closes the open checkout,
 // clears the holder, and flips the item back to available. Condition defaults to
 // "good" when the caller doesn't supply one (the dashboard one-tap case).
@@ -423,7 +423,7 @@ export async function checkInEquipment(formData: FormData) {
     summary: 'Checked equipment in',
     after: { condition, returnedNotes },
   })
-  revalidatePath('/equipment/check-out')
+  revalidatePath('/equipment/station')
   revalidatePath('/dashboard')
   if (itemId) revalidatePath(`/equipment/${itemId}`)
 }

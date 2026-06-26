@@ -15,6 +15,13 @@
       "when": 1782430287984,
       "tag": "0001_drop_equipment_preuse_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1782439320542,
+      "tag": "0002_messy_lorna_dane",
+      "breakpoints": true
     }
   ]
 }
