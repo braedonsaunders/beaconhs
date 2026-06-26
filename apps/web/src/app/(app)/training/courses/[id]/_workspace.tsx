@@ -35,15 +35,7 @@ import {
   UserCheck,
   Video,
 } from 'lucide-react'
-import {
-  Badge,
-  Button,
-  FileUploader,
-  Input,
-  Label,
-  RichTextEditor,
-  Select,
-} from '@beaconhs/ui'
+import { Badge, Button, FileUploader, Input, Label, RichTextEditor, Select } from '@beaconhs/ui'
 import type { LessonBlock, PracticalCriterion, Slide } from '@beaconhs/db/schema'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
 import { toast } from '@/lib/toast'
@@ -114,7 +106,9 @@ export type CourseLite = {
   instructions: string | null
   durationMinutes: number | null
   validForMonths: number | null
+  credentialOutputIds: string[]
 }
+export type CredentialOutputLite = { id: string; name: string; format: string }
 export type RecordLite = {
   id: string
   personName: string
@@ -201,6 +195,7 @@ type RailTab = 'overview' | 'build' | 'records' | 'classes' | 'files'
 
 export function CourseWorkspace({
   course,
+  credentialOutputs,
   modules,
   assessmentTypes,
   classes,
@@ -214,6 +209,7 @@ export function CourseWorkspace({
   files,
 }: {
   course: CourseLite
+  credentialOutputs: CredentialOutputLite[]
   modules: ModuleLite[]
   assessmentTypes: { id: string; name: string }[]
   classes: ClassLite[]
@@ -369,7 +365,9 @@ export function CourseWorkspace({
             />
           </div>
           <div className="app-scroll min-h-0 flex-1 overflow-y-auto p-3">
-            {railTab === 'overview' ? <OverviewPanel course={course} /> : null}
+            {railTab === 'overview' ? (
+              <OverviewPanel course={course} credentialOutputs={credentialOutputs} />
+            ) : null}
             {railTab === 'build' ? (
               <BuildPalette onAdd={(kind) => addElement(kind, tree[tree.length - 1]?.id ?? null)} />
             ) : null}
@@ -560,10 +558,18 @@ const DELIVERY_OPTIONS: { value: string; label: string }[] = [
   { value: 'external_certificate', label: 'External certificate' },
 ]
 
-function OverviewPanel({ course }: { course: CourseLite }) {
+function OverviewPanel({
+  course,
+  credentialOutputs,
+}: {
+  course: CourseLite
+  credentialOutputs: CredentialOutputLite[]
+}) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [delivery, setDelivery] = useState(course.deliveryType)
+  const formatLabel = (format: string) =>
+    format === 'wallet' ? 'Wallet card' : format === 'letter-portrait' ? 'Portrait' : 'Full size'
   return (
     <form
       action={(fd) =>
@@ -665,6 +671,41 @@ function OverviewPanel({ course }: { course: CourseLite }) {
             placeholder="never"
           />
         </div>
+      </div>
+      <div className="space-y-1.5 border-t border-slate-200 pt-3 dark:border-slate-800">
+        <Label>Credential designs</Label>
+        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+          Pick which Card Studio designs this course issues — choose any number (e.g. a wallet card
+          and a full-size certificate). Leave all unchecked to use the tenant defaults.
+        </p>
+        {credentialOutputs.length === 0 ? (
+          <p className="rounded-md border border-dashed border-slate-300 p-2.5 text-xs text-slate-400 dark:border-slate-700 dark:text-slate-500">
+            No designs yet — create them in Card studio.
+          </p>
+        ) : (
+          <div className="space-y-1">
+            {credentialOutputs.map((output) => (
+              <label
+                key={output.id}
+                className="flex cursor-pointer items-center gap-2 rounded-md border border-slate-200 px-2.5 py-2 text-sm dark:border-slate-800"
+              >
+                <input
+                  type="checkbox"
+                  name="credentialOutputIds"
+                  value={output.id}
+                  defaultChecked={course.credentialOutputIds.includes(output.id)}
+                  className="h-4 w-4 accent-teal-700"
+                />
+                <span className="min-w-0 flex-1 truncate text-slate-700 dark:text-slate-200">
+                  {output.name}
+                </span>
+                <span className="shrink-0 text-[11px] text-slate-400 dark:text-slate-500">
+                  {formatLabel(output.format)}
+                </span>
+              </label>
+            ))}
+          </div>
+        )}
       </div>
       <Button type="submit" disabled={pending} className="w-full">
         {pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}

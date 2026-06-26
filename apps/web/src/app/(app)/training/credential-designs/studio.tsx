@@ -321,12 +321,13 @@ export function CredentialDesignStudio({
     const fallback =
       DEFAULT_CREDENTIAL_OUTPUTS.find((output) => output.format === format) ??
       DEFAULT_CREDENTIAL_OUTPUT
-    const label =
+    const baseLabel =
       format === 'wallet'
         ? 'Wallet card'
         : format === 'letter-portrait'
           ? 'Portrait certificate'
           : 'Full-size certificate'
+    const label = uniqueOutputName(baseLabel, outputs)
     const output = ensureDocument({
       ...fallback,
       id: uniqueOutputId(slugCredentialOutputId(label), outputs),
@@ -344,7 +345,7 @@ export function CredentialDesignStudio({
 
   function duplicateActive() {
     if (!activeOutput || !activeDocument) return
-    const name = `${activeOutput.name} copy`
+    const name = uniqueOutputName(`${activeOutput.name} copy`, outputs)
     const output = ensureDocument({
       ...activeOutput,
       id: uniqueOutputId(slugCredentialOutputId(name), outputs),
@@ -468,21 +469,23 @@ export function CredentialDesignStudio({
   return (
     <div
       className={cn(
-        'grid overflow-hidden border-slate-200 bg-white lg:grid-cols-[minmax(330px,33%)_1fr]',
+        'grid overflow-hidden border-slate-200 bg-white lg:grid-cols-[minmax(330px,33%)_1fr] dark:border-slate-800 dark:bg-slate-900',
         fullscreen
           ? 'fixed inset-0 z-50'
           : 'h-[calc(100dvh-236px)] min-h-[520px] rounded-lg border shadow-sm',
       )}
     >
-      <aside className="flex min-h-0 flex-col border-r border-slate-200 bg-white">
-        <div className="shrink-0 border-b border-slate-200 p-3">
+      <aside className="flex min-h-0 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+        <div className="shrink-0 border-b border-slate-200 p-3 dark:border-slate-800">
           {!activeOutput ? (
             <div className="flex items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-2">
-                <Layers3 size={16} className="shrink-0 text-teal-700" />
+                <Layers3 size={16} className="shrink-0 text-teal-700 dark:text-teal-300" />
                 <div className="min-w-0">
-                  <div className="truncate text-sm font-semibold text-slate-900">Card studio</div>
-                  <div className="text-xs text-slate-500">
+                  <div className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    Card studio
+                  </div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">
                     {outputs.filter((output) => output.enabled).length} active designs
                   </div>
                 </div>
@@ -497,15 +500,15 @@ export function CredentialDesignStudio({
                   onClick={() => setActiveId(null)}
                   title="All designs"
                   aria-label="Back to all designs"
-                  className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-slate-500 hover:bg-slate-100"
+                  className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
                 >
                   <ArrowLeft size={15} />
                 </button>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-semibold text-slate-900">
+                  <div className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
                     {activeOutput.name}
                   </div>
-                  <div className="truncate text-xs text-slate-500">
+                  <div className="truncate text-xs text-slate-500 dark:text-slate-400">
                     {formatLabel(activeOutput.format)}
                   </div>
                 </div>
@@ -600,35 +603,39 @@ export function CredentialDesignStudio({
           )}
         </div>
 
-        <div className="shrink-0 border-t border-slate-200 bg-white px-3 py-3">
+        <div className="shrink-0 border-t border-slate-200 bg-white px-3 py-3 dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-center gap-2">
             <Button type="button" className="flex-1" onClick={saveDraft} disabled={pending}>
               <Save size={14} />
               {pending ? 'Saving' : 'Save designs'}
             </Button>
-            {savedAt ? <span className="text-xs text-slate-500">Saved {savedAt}</span> : null}
+            {savedAt ? (
+              <span className="text-xs text-slate-500 dark:text-slate-400">Saved {savedAt}</span>
+            ) : null}
           </div>
         </div>
       </aside>
 
       {!activeOutput || !activeArtboard ? (
-        <section className="grid min-h-0 min-w-0 place-items-center bg-slate-100 p-8">
+        <section className="grid min-h-0 min-w-0 place-items-center bg-slate-100 p-8 dark:bg-slate-950">
           <div className="max-w-sm text-center">
-            <CreditCard size={28} className="mx-auto text-slate-300" />
-            <p className="mt-3 text-sm font-semibold text-slate-700">Choose a design</p>
-            <p className="mt-1 text-sm text-slate-500">
+            <CreditCard size={28} className="mx-auto text-slate-300 dark:text-slate-600" />
+            <p className="mt-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
+              Choose a design
+            </p>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
               Open a design from the list to edit it on the canvas, or create a new one.
             </p>
           </div>
         </section>
       ) : (
-        <section className="flex min-h-0 min-w-0 flex-col bg-slate-100">
-          <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4 py-2">
+        <section className="flex min-h-0 min-w-0 flex-col bg-slate-100 dark:bg-slate-950">
+          <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4 py-2 dark:border-slate-800 dark:bg-slate-900">
             <div className="min-w-0">
-              <div className="truncate text-sm font-semibold text-slate-900">
+              <div className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
                 {activeOutput.name}
               </div>
-              <div className="text-xs text-slate-500">
+              <div className="text-xs text-slate-500 dark:text-slate-400">
                 {activeArtboard.name} · {activeArtboard.width}" × {activeArtboard.height}"
               </div>
             </div>
@@ -644,14 +651,14 @@ export function CredentialDesignStudio({
                 {previewing ? <Loader2 size={14} className="animate-spin" /> : <Eye size={14} />}
                 Preview PDF
               </Button>
-              <span className="mx-1 h-5 w-px bg-slate-200" />
+              <span className="mx-1 h-5 w-px bg-slate-200 dark:bg-slate-700" />
               <Button type="button" variant="ghost" size="sm" onClick={() => setTab('insert')}>
                 <Sparkles size={14} /> Insert
               </Button>
               <Button type="button" variant="ghost" size="sm" onClick={() => setTab('print')}>
                 <Printer size={14} /> Print setup
               </Button>
-              <span className="mx-1 h-5 w-px bg-slate-200" />
+              <span className="mx-1 h-5 w-px bg-slate-200 dark:bg-slate-700" />
               <Button
                 type="button"
                 variant="ghost"
@@ -667,7 +674,7 @@ export function CredentialDesignStudio({
                 type="button"
                 onClick={() => zoomTo(1)}
                 title="Zoom to 100%"
-                className="w-12 rounded px-1 py-1 text-center text-xs font-medium text-slate-600 tabular-nums hover:bg-slate-100"
+                className="w-12 rounded px-1 py-1 text-center text-xs font-medium text-slate-600 tabular-nums hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
               >
                 {Math.round(zoom * 100)}%
               </button>
@@ -751,6 +758,30 @@ function ArtboardCanvas({
     zoomRef.current = zoom
   }, [zoom])
 
+  // URL-backed images (backgrounds, logos) render live on the canvas so the
+  // builder matches the PDF instead of showing blank placeholders. Bitmaps load
+  // async, so we cache the decoded <img> per URL and bump a tick to re-render
+  // once each finishes. Decoded elements are reused across zoom/select rebuilds.
+  const imageCacheRef = useRef<Map<string, HTMLImageElement>>(new Map())
+  const imageLoadingRef = useRef<Set<string>>(new Set())
+  const [imageTick, setImageTick] = useState(0)
+  const getImage = useCallback((src: string): HTMLImageElement | undefined => {
+    const cached = imageCacheRef.current.get(src)
+    if (cached) return cached
+    if (!imageLoadingRef.current.has(src)) {
+      imageLoadingRef.current.add(src)
+      const img = new Image()
+      img.onload = () => {
+        imageCacheRef.current.set(src, img)
+        imageLoadingRef.current.delete(src)
+        setImageTick((t) => t + 1)
+      }
+      img.onerror = () => imageLoadingRef.current.delete(src)
+      img.src = src
+    }
+    return undefined
+  }, [])
+
   useEffect(() => {
     let disposed = false
     loadFabric().then((fabric) => {
@@ -786,7 +817,7 @@ function ArtboardCanvas({
           text: object.text ?? '',
         } as Partial<DesignElement>)
       })
-      renderFabricArtboard(fabric, canvas, artboard, selectedElementId, zoomRef.current)
+      renderFabricArtboard(fabric, canvas, artboard, selectedElementId, zoomRef.current, getImage)
     })
     return () => {
       disposed = true
@@ -799,12 +830,12 @@ function ArtboardCanvas({
     const fabric = fabricRef.current
     const canvas = canvasInstanceRef.current
     if (!fabric || !canvas) return
-    renderFabricArtboard(fabric, canvas, artboard, selectedElementId, zoom)
-  }, [artboard, selectedElementId, zoom])
+    renderFabricArtboard(fabric, canvas, artboard, selectedElementId, zoom, getImage)
+  }, [artboard, selectedElementId, zoom, getImage, imageTick])
 
   return (
     <div
-      className="rounded-md bg-slate-300 p-8 shadow-inner"
+      className="rounded-md bg-slate-300 p-8 shadow-inner dark:bg-slate-800"
       style={{
         backgroundImage:
           'linear-gradient(45deg, rgba(148,163,184,.22) 25%, transparent 25%), linear-gradient(-45deg, rgba(148,163,184,.22) 25%, transparent 25%), linear-gradient(45deg, transparent 75%, rgba(148,163,184,.22) 75%), linear-gradient(-45deg, transparent 75%, rgba(148,163,184,.22) 75%)',
@@ -825,6 +856,7 @@ function renderFabricArtboard(
   artboard: DesignArtboard,
   selectedElementId: string | null,
   zoom: number,
+  getImage: (src: string) => HTMLImageElement | undefined,
 ) {
   // Zoom is baked into object coordinates (px-per-inch × zoom) rather than
   // Fabric's viewport transform — re-rendering ~30 simple objects per zoom
@@ -836,7 +868,7 @@ function renderFabricArtboard(
   canvas.backgroundColor = artboard.background
   artboard.elements.forEach((element) => {
     if (element.visible === false) return
-    const object = fabricObject(fabric, element, k)
+    const object = fabricObject(fabric, element, k, getImage)
     if (!object) return
     object.set('beaconElementId', element.id)
     object.set({
@@ -857,11 +889,18 @@ function renderFabricArtboard(
   canvas.requestRenderAll()
 }
 
+/** Resolve an image element to a concrete <img> src the canvas can draw. */
+function imageSrcForElement(element: Extract<DesignElement, { kind: 'image' }>): string | null {
+  if (element.source === 'url') return element.url?.trim() || null
+  return null
+}
+
 /** Build the Fabric object for an element at `k` device px per inch (PPI × zoom). */
 function fabricObject(
   fabric: Awaited<ReturnType<typeof loadFabric>>,
   element: DesignElement,
   k: number,
+  getImage: (src: string) => HTMLImageElement | undefined,
 ) {
   const base = {
     left: element.x * k,
@@ -926,6 +965,19 @@ function fabricObject(
     })
   }
   if (element.kind === 'image') {
+    const src = imageSrcForElement(element)
+    const loaded = src ? getImage(src) : undefined
+    if (loaded && loaded.naturalWidth > 0) {
+      // Stretch the bitmap to the element box so its bounding box stays exactly
+      // the element rect — keeps drag/resize mapping (objectPatch) correct.
+      // Backgrounds are authored at the artboard aspect, so no visible distortion.
+      const ImageCtor = (fabric as any).FabricImage ?? (fabric as any).Image
+      return new ImageCtor(loaded, {
+        ...base,
+        scaleX: width / loaded.naturalWidth,
+        scaleY: height / loaded.naturalHeight,
+      })
+    }
     return new fabric.Rect({
       ...base,
       width,
@@ -984,60 +1036,83 @@ function DesignListPanel({
   return (
     <div className="space-y-4">
       <section className="space-y-2">
-        <RailLabel label="Designs" icon={<Layers3 size={14} />} />
+        <div className="flex items-center justify-between">
+          <RailLabel label={`Designs · ${outputs.length}`} icon={<Layers3 size={14} />} />
+        </div>
         <div className="space-y-1.5">
-          {outputs.map((output) => (
-            <button
-              key={output.id}
-              type="button"
-              onClick={() => onOpen(output.id)}
-              className="flex w-full items-center gap-2.5 rounded-md border border-slate-200 bg-white p-2.5 text-left transition-colors hover:border-teal-600 hover:bg-teal-50/40"
-            >
-              <span
-                className="grid h-10 w-10 shrink-0 place-items-center rounded border"
-                style={{
-                  borderColor: output.accent,
-                  color: output.primary,
-                  backgroundColor: output.paper,
-                }}
+          {outputs.map((output) => {
+            const backdrop = firstBackdropUrl(output)
+            return (
+              <button
+                key={output.id}
+                type="button"
+                onClick={() => onOpen(output.id)}
+                className="flex w-full items-center gap-2.5 rounded-md border border-slate-200 bg-white p-2.5 text-left transition-colors hover:border-teal-600 hover:bg-teal-50/40 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-teal-500 dark:hover:bg-teal-950/30"
               >
-                {output.format === 'wallet' ? <CreditCard size={16} /> : <FileText size={16} />}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-semibold text-slate-900">
-                  {output.name}
+                <span
+                  className="relative grid h-10 w-14 shrink-0 place-items-center overflow-hidden rounded border"
+                  style={
+                    backdrop
+                      ? { borderColor: output.accent }
+                      : {
+                          borderColor: output.accent,
+                          color: output.primary,
+                          backgroundColor: output.paper,
+                        }
+                  }
+                >
+                  {backdrop ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={backdrop}
+                      alt=""
+                      className="absolute inset-0 h-full w-full object-cover"
+                    />
+                  ) : output.format === 'wallet' ? (
+                    <CreditCard size={16} />
+                  ) : (
+                    <FileText size={16} />
+                  )}
                 </span>
-                <span className="block truncate text-xs text-slate-500">
-                  {formatLabel(output.format)}
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    {output.name}
+                  </span>
+                  <span className="block truncate text-xs text-slate-500 dark:text-slate-400">
+                    {formatLabel(output.format)}
+                  </span>
                 </span>
-              </span>
-              <span
-                className={cn(
-                  'h-2.5 w-2.5 shrink-0 rounded-full',
-                  output.enabled ? 'bg-emerald-500' : 'bg-slate-300',
-                )}
-                title={output.enabled ? 'Available from records' : 'Hidden'}
-              />
-              <ChevronRight size={15} className="shrink-0 text-slate-400" />
-            </button>
-          ))}
+                <span
+                  className={cn(
+                    'h-2.5 w-2.5 shrink-0 rounded-full',
+                    output.enabled ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-800',
+                  )}
+                  title={output.enabled ? 'Available from records' : 'Hidden'}
+                />
+                <ChevronRight size={15} className="shrink-0 text-slate-400 dark:text-slate-500" />
+              </button>
+            )
+          })}
           {outputs.length === 0 ? (
-            <p className="rounded-md border border-dashed border-slate-300 p-3 text-center text-xs text-slate-400">
+            <p className="rounded-md border border-dashed border-slate-300 p-3 text-center text-xs text-slate-400 dark:border-slate-700 dark:text-slate-500">
               No designs yet — create one below.
             </p>
           ) : null}
         </div>
       </section>
 
-      <section className="space-y-2 border-t border-slate-200 pt-4">
-        <RailLabel label="New design" icon={<Sparkles size={14} />} />
+      <section className="space-y-2 border-t border-slate-200 pt-4 dark:border-slate-800">
+        <RailLabel label="Add a design" icon={<Sparkles size={14} />} />
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          Add as many as you need — pick a size to start a new one.
+        </p>
         <div className="grid grid-cols-3 gap-1.5">
           {FORMATS.map((format) => (
             <button
               key={format.value}
               type="button"
               onClick={() => onAddOutput(format.value)}
-              className="flex h-14 flex-col items-center justify-center gap-1 rounded-md border border-slate-200 bg-white text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50"
+              className="flex h-14 flex-col items-center justify-center gap-1 rounded-md border border-slate-200 bg-white text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
             >
               {format.icon}
               {format.label}
@@ -1119,8 +1194,8 @@ function DesignSettingsPanel({
               className={cn(
                 'rounded-md border px-2 py-2 text-left text-xs',
                 artboard.id === activeArtboard.id
-                  ? 'border-teal-700 bg-teal-50 text-teal-900'
-                  : 'border-slate-200 bg-white text-slate-600',
+                  ? 'border-teal-700 bg-teal-50 text-teal-900 dark:border-teal-500 dark:bg-teal-950/40 dark:text-teal-200'
+                  : 'border-slate-200 bg-white text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300',
               )}
             >
               <div className="font-semibold">{artboard.name}</div>
@@ -1143,8 +1218,8 @@ function DesignSettingsPanel({
               className={cn(
                 'flex h-14 flex-col items-center justify-center gap-1 rounded-md border text-xs font-medium',
                 activeOutput.format === format.value
-                  ? 'border-teal-700 bg-teal-50 text-teal-800'
-                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50',
+                  ? 'border-teal-700 bg-teal-50 text-teal-800 dark:border-teal-500 dark:bg-teal-950/40 dark:text-teal-300'
+                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800',
               )}
             >
               {format.icon}
@@ -1188,7 +1263,7 @@ function InsertPanel({ onAdd }: { onAdd: (kind: DesignElement['kind']) => void }
         onClick={() => onAdd('qr')}
       />
       <ElementButton label="Seal" icon={<BadgeCheck size={15} />} onClick={() => onAdd('seal')} />
-      <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs leading-5 text-slate-600">
+      <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs leading-5 text-slate-600 dark:border-slate-800 dark:bg-slate-800/50 dark:text-slate-300">
         Fields bind to live record data at render time. Moving or editing them here changes every
         future PDF without storing generated files.
       </div>
@@ -1270,13 +1345,15 @@ function LayersPanel({
             className={cn(
               'flex w-full items-center gap-2 rounded-md border px-2.5 py-2 text-left text-sm',
               element.id === selectedElementId
-                ? 'border-teal-700 bg-teal-50 text-teal-900'
-                : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
+                ? 'border-teal-700 bg-teal-50 text-teal-900 dark:border-teal-500 dark:bg-teal-950/40 dark:text-teal-200'
+                : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800',
             )}
           >
             {iconForElement(element)}
             <span className="min-w-0 flex-1 truncate">{element.name}</span>
-            {element.locked ? <Lock size={12} className="text-slate-400" /> : null}
+            {element.locked ? (
+              <Lock size={12} className="text-slate-400 dark:text-slate-500" />
+            ) : null}
           </button>
         ))}
       </div>
@@ -1324,7 +1401,7 @@ function InspectorPanel({
             onChange={(height) => onPatchArtboard({ height })}
           />
         </div>
-        <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+        <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-800/50 dark:text-slate-300">
           Select a layer or click an object on the artboard to edit its position, content, and
           styling.
         </div>
@@ -1336,9 +1413,9 @@ function InspectorPanel({
   return (
     <div className="space-y-4">
       {/* What is this element? */}
-      <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+      <div className="rounded-md border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-800/50">
         <div className="flex items-center justify-between gap-2">
-          <span className="flex min-w-0 items-center gap-1.5 text-sm font-semibold text-slate-900">
+          <span className="flex min-w-0 items-center gap-1.5 text-sm font-semibold text-slate-900 dark:text-slate-100">
             {iconForElement(selectedElement)}
             {meta.label}
           </span>
@@ -1352,7 +1429,7 @@ function InspectorPanel({
             <Trash2 size={14} className="text-rose-500" />
           </Button>
         </div>
-        <p className="mt-1 text-xs leading-5 text-slate-600">{meta.hint}</p>
+        <p className="mt-1 text-xs leading-5 text-slate-600 dark:text-slate-300">{meta.hint}</p>
       </div>
 
       <Field label="Layer name">
@@ -1392,7 +1469,7 @@ function InspectorPanel({
               ))}
             </Select>
           </Field>
-          <div className="rounded-md border border-teal-100 bg-teal-50/60 px-2.5 py-2 text-xs text-teal-900">
+          <div className="rounded-md border border-teal-100 bg-teal-50/60 px-2.5 py-2 text-xs text-teal-900 dark:border-teal-900 dark:bg-teal-950/40 dark:text-teal-200">
             <span className="font-semibold">Sample:</span>{' '}
             {`${selectedElement.prefix ?? ''}${
               selectedElement.transform === 'uppercase'
@@ -1658,8 +1735,8 @@ function PrintPanel({
             className={cn(
               'rounded-md border p-2 text-xs leading-5',
               provider.id === profile.provider
-                ? 'border-teal-700 bg-teal-50 text-teal-900'
-                : 'border-slate-200 bg-white text-slate-600',
+                ? 'border-teal-700 bg-teal-50 text-teal-900 dark:border-teal-500 dark:bg-teal-950/40 dark:text-teal-200'
+                : 'border-slate-200 bg-white text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300',
             )}
           >
             <div className="font-semibold">{provider.label}</div>
@@ -1693,8 +1770,8 @@ function RailTabButton({
       className={cn(
         'grid h-9 place-items-center rounded-md border text-xs',
         active
-          ? 'border-teal-700 bg-teal-50 text-teal-800'
-          : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50',
+          ? 'border-teal-700 bg-teal-50 text-teal-800 dark:border-teal-500 dark:bg-teal-950/40 dark:text-teal-300'
+          : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-800',
       )}
     >
       {icon}
@@ -1704,7 +1781,7 @@ function RailTabButton({
 
 function RailLabel({ icon, label }: { icon: ReactNode; label: string }) {
   return (
-    <div className="flex items-center gap-1.5 text-[11px] font-semibold tracking-wider text-slate-500 uppercase">
+    <div className="flex items-center gap-1.5 text-[11px] font-semibold tracking-wider text-slate-500 uppercase dark:text-slate-400">
       {icon}
       {label}
     </div>
@@ -1714,7 +1791,7 @@ function RailLabel({ icon, label }: { icon: ReactNode; label: string }) {
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="block space-y-1.5">
-      <span className="text-xs font-medium text-slate-600">{label}</span>
+      <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{label}</span>
       {children}
     </label>
   )
@@ -1733,7 +1810,7 @@ function ElementButton({
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-left text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+      className="flex w-full items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-left text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
     >
       {icon}
       {label}
@@ -1753,8 +1830,8 @@ function LayerToggle({
   icon?: ReactNode
 }) {
   return (
-    <label className="flex cursor-pointer items-center justify-between rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm">
-      <span className="flex min-w-0 items-center gap-2 text-slate-700">
+    <label className="flex cursor-pointer items-center justify-between rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm dark:border-slate-800 dark:bg-slate-900">
+      <span className="flex min-w-0 items-center gap-2 text-slate-700 dark:text-slate-200">
         {icon}
         <span className="truncate">{label}</span>
       </span>
@@ -1779,12 +1856,12 @@ function ColorField({
 }) {
   return (
     <label className="flex items-center gap-2">
-      <span className="w-20 text-xs font-medium text-slate-600">{label}</span>
+      <span className="w-20 text-xs font-medium text-slate-600 dark:text-slate-300">{label}</span>
       <input
         type="color"
         value={value}
         onChange={(e) => onChange(e.currentTarget.value)}
-        className="h-8 w-10 rounded border border-slate-200 bg-white p-0.5"
+        className="h-8 w-10 rounded border border-slate-200 bg-white p-0.5 dark:border-slate-800 dark:bg-slate-900"
       />
       <Input value={value} onChange={(e) => onChange(e.currentTarget.value)} className="h-8" />
     </label>
@@ -1908,6 +1985,35 @@ function uniqueOutputId(base: string, outputs: CredentialOutput[]) {
     i += 1
   }
   return id
+}
+
+function uniqueOutputName(base: string, outputs: CredentialOutput[]) {
+  const used = new Set(outputs.map((output) => output.name))
+  if (!used.has(base)) return base
+  let i = 2
+  while (used.has(`${base} ${i}`)) i += 1
+  return `${base} ${i}`
+}
+
+// Thumbnail source for the design list: the first full-bleed URL image on the
+// front artboard (the baked card artwork), if any.
+function firstBackdropUrl(output: CredentialOutput): string | null {
+  const artboard = output.document?.artboards?.[0]
+  if (!artboard) return null
+  for (const element of artboard.elements) {
+    if (
+      element.kind === 'image' &&
+      element.source === 'url' &&
+      element.url &&
+      element.x <= 0.06 &&
+      element.y <= 0.06 &&
+      element.width >= artboard.width * 0.9 &&
+      element.height >= artboard.height * 0.9
+    ) {
+      return element.url
+    }
+  }
+  return null
 }
 
 function uniqueElementId(base: string, elements: DesignElement[]) {

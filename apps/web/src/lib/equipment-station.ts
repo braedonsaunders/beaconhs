@@ -7,7 +7,7 @@
 // Every function takes a `Database` handle (a tenant-scoped transaction) so the
 // caller owns RLS scoping + auditing. Nothing here touches RequestContext.
 
-import { and, desc, eq, isNull, or } from 'drizzle-orm'
+import { and, desc, eq, ilike, isNull, or } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
 import {
   equipmentCheckouts,
@@ -21,22 +21,17 @@ import {
 export const RETURN_CONDITIONS = ['good', 'fair', 'damaged', 'unusable'] as const
 export type ReturnCondition = (typeof RETURN_CONDITIONS)[number]
 
-export type ResolvedScan =
-  | {
-      kind: 'equipment'
-      item: {
-        id: string
-        assetTag: string
-        name: string
-        typeName: string | null
-        status: string
-        isOut: boolean
-        holderName: string | null
-        locationName: string | null
-      }
-    }
-  | { kind: 'person'; person: { id: string; name: string; jobTitle: string | null } }
-  | { kind: 'none' }
+export type StationSearchResults = {
+  equipment: {
+    id: string
+    assetTag: string
+    name: string
+    typeName: string | null
+    isOut: boolean
+    holderName: string | null
+  }[]
+  people: { id: string; name: string; jobTitle: string | null; employeeNo: string | null }[]
+}
 
 export type StationScanResult =
   | {
@@ -77,88 +72,86 @@ function cleanCode(raw: string): string {
   return raw.trim()
 }
 
-/** Resolve a scanned/typed code to an equipment item or a person badge. */
-export async function resolveScanCore(tx: Database, rawCode: string): Promise<ResolvedScan> {
-  const code = cleanCode(rawCode)
-  if (!code) return { kind: 'none' }
+/**
+ * Typeahead for the station field: surface matching assets + people as the
+ * operator types (so they don't need an exact scan). Equipment is matched on
+ * asset tag / name; people on name / employee number. "out" uses the cached
+ * availability flag so it lines up with the equipment register's filter.
+ */
+export async function searchStationCore(
+  tx: Database,
+  rawQuery: string,
+  limit = 8,
+): Promise<StationSearchResults> {
+  const q = cleanCode(rawQuery)
+  if (q.length < 1) return { equipment: [], people: [] }
+  const like = `%${q}%`
 
-  const [row] = await tx
+  const equipmentRows = await tx
     .select({
       id: equipmentItems.id,
       assetTag: equipmentItems.assetTag,
       name: equipmentItems.name,
       status: equipmentItems.status,
+      available: equipmentItems.isAvailableForCheckout,
       typeName: equipmentTypes.name,
       holderFirst: people.firstName,
       holderLast: people.lastName,
-      locationName: orgUnits.name,
     })
     .from(equipmentItems)
     .leftJoin(equipmentTypes, eq(equipmentTypes.id, equipmentItems.typeId))
     .leftJoin(people, eq(people.id, equipmentItems.currentHolderPersonId))
-    .leftJoin(orgUnits, eq(orgUnits.id, equipmentItems.currentSiteOrgUnitId))
     .where(
       and(
         isNull(equipmentItems.deletedAt),
-        or(eq(equipmentItems.qrToken, code), eq(equipmentItems.assetTag, code)),
+        or(ilike(equipmentItems.assetTag, like), ilike(equipmentItems.name, like)),
       ),
     )
-    .limit(1)
+    .orderBy(equipmentItems.assetTag)
+    .limit(limit)
 
-  if (row) {
-    const [open] = await tx
-      .select({ id: equipmentCheckouts.id })
-      .from(equipmentCheckouts)
-      .where(
-        and(
-          eq(equipmentCheckouts.equipmentItemId, row.id),
-          isNull(equipmentCheckouts.returnedAt),
-        ),
-      )
-      .limit(1)
-    return {
-      kind: 'equipment',
-      item: {
-        id: row.id,
-        assetTag: row.assetTag,
-        name: row.name,
-        typeName: row.typeName,
-        status: row.status,
-        isOut: Boolean(open),
-        holderName:
-          row.holderFirst || row.holderLast
-            ? `${row.holderFirst ?? ''} ${row.holderLast ?? ''}`.trim()
-            : null,
-        locationName: row.locationName,
-      },
-    }
-  }
-
-  // Fall back to a person badge (employee number).
-  const [p] = await tx
+  const peopleRows = await tx
     .select({
       id: people.id,
       firstName: people.firstName,
       lastName: people.lastName,
       jobTitle: people.jobTitle,
+      employeeNo: people.employeeNo,
     })
     .from(people)
     .where(
       and(
         isNull(people.deletedAt),
         eq(people.status, 'active'),
-        eq(people.employeeNo, code),
+        or(
+          ilike(people.firstName, like),
+          ilike(people.lastName, like),
+          ilike(people.employeeNo, like),
+        ),
       ),
     )
-    .limit(1)
-  if (p) {
-    return {
-      kind: 'person',
-      person: { id: p.id, name: `${p.firstName} ${p.lastName}`.trim(), jobTitle: p.jobTitle },
-    }
-  }
+    .orderBy(people.lastName, people.firstName)
+    .limit(limit)
 
-  return { kind: 'none' }
+  return {
+    equipment: equipmentRows.map((r) => ({
+      id: r.id,
+      assetTag: r.assetTag,
+      name: r.name,
+      typeName: r.typeName,
+      isOut: !r.available && r.status === 'in_service',
+      holderName:
+        r.holderFirst || r.holderLast
+          ? `${r.holderFirst ?? ''} ${r.holderLast ?? ''}`.trim()
+          : null,
+    })),
+    people: peopleRows.map((p) => ({
+      id: p.id,
+      name: `${p.firstName} ${p.lastName}`.trim(),
+      jobTitle: p.jobTitle,
+      employeeNo: p.employeeNo,
+    })),
+  }
 }
 
 async function personName(tx: Database, personId: string | null | undefined): Promise<string | null> {
@@ -209,6 +202,7 @@ export async function stationScanCore(
       assetTag: equipmentItems.assetTag,
       name: equipmentItems.name,
       status: equipmentItems.status,
+      available: equipmentItems.isAvailableForCheckout,
     })
     .from(equipmentItems)
     .where(
@@ -252,7 +246,10 @@ export async function stationScanCore(
     )
     .orderBy(desc(equipmentCheckouts.checkedOutAt))
     .limit(1)
-  const isOut = Boolean(open)
+  // An asset is "out" if it has an open checkout OR the cached availability flag
+  // says it isn't available while still in service (covers items assigned/
+  // transferred directly, without a checkout row — matches the register filter).
+  const isOut = Boolean(open) || (!item.available && item.status === 'in_service')
 
   // Resolve the action: toggle inverts current state; explicit forces it.
   const action: 'checked_out' | 'checked_in' =

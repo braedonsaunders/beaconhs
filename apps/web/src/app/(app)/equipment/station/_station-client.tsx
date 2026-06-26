@@ -20,7 +20,6 @@ import {
   ArrowUpFromLine,
   Camera,
   CheckCircle2,
-  Clock,
   Maximize2,
   Minimize2,
   PackageCheck,
@@ -32,7 +31,11 @@ import {
   XCircle,
 } from 'lucide-react'
 import { Badge, SearchSelect } from '@beaconhs/ui'
-import type { ResolvedScan, StationScanInput, StationScanResult } from '@/lib/equipment-station'
+import type {
+  StationScanInput,
+  StationScanResult,
+  StationSearchResults,
+} from '@/lib/equipment-station'
 
 type Person = { id: string; name: string; employeeNo: string | null; jobTitle: string | null }
 type Location = { id: string; name: string; level: string; isBase: boolean }
@@ -70,20 +73,13 @@ export type StationClientProps = {
   openCheckouts: OpenCheckout[]
   availableCount: number
   initialScanCode?: string | null
-  onResolve: (code: string) => Promise<ResolvedScan>
+  onSearch: (query: string) => Promise<StationSearchResults>
   onScan: (input: StationScanInput) => Promise<StationScanResult>
   /** Called when the server rejects with a PIN error (kiosk re-locks). */
   onAuthError?: () => void
   /** Kiosk supplies a way back to the lock screen. */
   onExit?: () => void
 }
-
-const RETURN_CONDITIONS = [
-  { value: 'good', label: 'Good' },
-  { value: 'fair', label: 'Fair' },
-  { value: 'damaged', label: 'Damaged' },
-  { value: 'unusable', label: 'Unusable' },
-]
 
 // Short distinct WebAudio chirps so operators get eyes-free confirmation.
 function useBeeper(enabled: boolean) {
@@ -138,7 +134,7 @@ export function StationClient(props: StationClientProps) {
     openCheckouts: initialOpen,
     availableCount,
     initialScanCode,
-    onResolve,
+    onSearch,
     onScan,
     onAuthError,
     onExit,
@@ -158,7 +154,7 @@ export function StationClient(props: StationClientProps) {
   const [open, setOpen] = useState<OpenCheckout[]>(initialOpen)
   const [outCount, setOutCount] = useState(initialOpen.length)
   const [availCount, setAvailCount] = useState(availableCount)
-  const [preview, setPreview] = useState<ResolvedScan | null>(null)
+  const [results, setResults] = useState<StationSearchResults | null>(null)
   const [isFull, setIsFull] = useState(false)
   const [camOpen, setCamOpen] = useState(false)
 
@@ -303,23 +299,36 @@ export function StationClient(props: StationClientProps) {
     void handleCode(initialScanCode)
   }, [initialScanCode, handleCode])
 
-  // Preview the asset/holder under the scan field as the operator types.
+  // Typeahead: surface matching assets + people as the operator types. A scan
+  // gun fires Enter before this matters; this is for finger-typing a name/tag.
   useEffect(() => {
-    const code = scanValue.trim()
-    if (code.length < 2) {
-      setPreview(null)
+    const q = scanValue.trim()
+    if (q.length < 1) {
+      setResults(null)
       return
     }
     let alive = true
     const t = setTimeout(async () => {
-      const r = await onResolve(code)
-      if (alive) setPreview(r.kind === 'none' ? null : r)
-    }, 220)
+      const r = await onSearch(q)
+      if (alive) setResults(r)
+    }, 180)
     return () => {
       alive = false
       clearTimeout(t)
     }
-  }, [scanValue, onResolve])
+  }, [scanValue, onSearch])
+
+  function pickPerson(p: { id: string; name: string }) {
+    setActivePerson(
+      people.find((x) => x.id === p.id) ??
+        ({ id: p.id, name: p.name, employeeNo: null, jobTitle: null } as Person),
+    )
+    beep('person')
+    showFlash({ tone: 'person', title: p.name, sub: 'Active holder set' })
+    setScanValue('')
+    setResults(null)
+    setTimeout(focusScan, 0)
+  }
 
   function undo(entry: LogEntry) {
     if (entry.undone || !entry.assetTag) return
@@ -356,6 +365,8 @@ export function StationClient(props: StationClientProps) {
   )
 
   const dark = kiosk || isFull
+  // Kiosk / full-screen scales everything up so it reads across a room.
+  const big = dark
   const shell = dark
     ? 'min-h-screen bg-slate-950 text-slate-100'
     : 'rounded-2xl border border-slate-200 bg-white text-slate-900 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100'
@@ -364,8 +375,8 @@ export function StationClient(props: StationClientProps) {
     <div ref={rootRef} className={shell}>
       <div
         className={
-          dark
-            ? 'mx-auto flex min-h-screen max-w-6xl flex-col gap-5 p-5 sm:p-8'
+          big
+            ? 'mx-auto flex min-h-screen w-full max-w-screen-2xl flex-col gap-6 p-6 sm:p-10'
             : 'flex flex-col gap-5 p-4 sm:p-6'
         }
         onClick={focusScan}
@@ -381,8 +392,10 @@ export function StationClient(props: StationClientProps) {
               <ScanLine size={22} />
             </div>
             <div>
-              <div className="text-lg font-semibold">Check-in / out station</div>
-              <div className={dark ? 'text-xs text-slate-400' : 'text-xs text-slate-500 dark:text-slate-400'}>
+              <div className={`font-semibold ${big ? 'text-2xl' : 'text-lg'}`}>
+                Check-in / out station
+              </div>
+              <div className={dark ? 'text-sm text-slate-400' : 'text-xs text-slate-500 dark:text-slate-400'}>
                 {tenantName}
                 {homeLocationName ? ` · home: ${homeLocationName}` : ''}
               </div>
@@ -522,10 +535,10 @@ export function StationClient(props: StationClientProps) {
           </div>
         </div>
 
-        {/* ---- the scan field --------------------------------------------- */}
+        {/* ---- the scan field + typeahead --------------------------------- */}
         <div className="relative">
           <ScanLine
-            size={22}
+            size={big ? 28 : 22}
             className={`pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 ${
               dark ? 'text-amber-300' : 'text-amber-500'
             }`}
@@ -538,44 +551,96 @@ export function StationClient(props: StationClientProps) {
               if (e.key === 'Enter') {
                 e.preventDefault()
                 void handleCode(scanValue)
+              } else if (e.key === 'Escape') {
+                setResults(null)
               }
             }}
             disabled={pending}
             autoComplete="off"
             autoCapitalize="off"
             spellCheck={false}
-            placeholder="Scan a tag or badge — or type and press Enter"
-            className={`w-full rounded-xl border-2 py-4 pr-4 pl-12 text-lg font-medium outline-none transition disabled:opacity-60 ${
+            placeholder="Scan a tag or badge — or type to search"
+            className={`w-full rounded-xl border-2 font-medium outline-none transition disabled:opacity-60 ${
+              big ? 'py-6 pr-5 pl-16 text-3xl' : 'py-4 pr-4 pl-12 text-lg'
+            } ${
               dark
                 ? 'border-slate-700 bg-slate-900 text-white placeholder-slate-500 focus:border-amber-400'
                 : 'border-slate-200 bg-white text-slate-900 placeholder-slate-400 focus:border-amber-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white'
             }`}
           />
-          {preview && preview.kind !== 'none' ? (
+          {scanValue.trim().length > 0 &&
+          results &&
+          (results.equipment.length > 0 || results.people.length > 0) ? (
             <div
-              className={`mt-1.5 flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs ${
-                dark ? 'bg-slate-900 text-slate-300' : 'bg-slate-50 text-slate-600 dark:bg-slate-900 dark:text-slate-300'
+              className={`absolute z-20 mt-1.5 max-h-80 w-full overflow-y-auto rounded-xl border shadow-xl ${
+                dark
+                  ? 'border-slate-700 bg-slate-900'
+                  : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900'
               }`}
             >
-              {preview.kind === 'person' ? (
-                <>
-                  <UserRound size={13} className="text-teal-500" />
-                  <span>
-                    Badge: <b>{preview.person.name}</b>
-                    {preview.person.jobTitle ? ` · ${preview.person.jobTitle}` : ''}
-                  </span>
-                </>
-              ) : (
-                <>
-                  <PackageCheck size={13} className={preview.item.isOut ? 'text-amber-500' : 'text-emerald-500'} />
-                  <span>
-                    <b>{preview.item.assetTag}</b> · {preview.item.name} —{' '}
-                    {preview.item.isOut
-                      ? `out${preview.item.holderName ? ` with ${preview.item.holderName}` : ''}`
-                      : 'available'}
-                  </span>
-                </>
-              )}
+              {results.people.length > 0 ? (
+                <div className="p-1">
+                  <DropHeader dark={dark}>People — set active holder</DropHeader>
+                  {results.people.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => pickPerson(p)}
+                      className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left ${
+                        dark ? 'hover:bg-slate-800' : 'hover:bg-slate-50 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      <UserRound size={16} className="shrink-0 text-teal-500" />
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-medium">{p.name}</span>
+                        <span
+                          className={
+                            dark ? 'block truncate text-xs text-slate-400' : 'block truncate text-xs text-slate-500'
+                          }
+                        >
+                          {[p.jobTitle, p.employeeNo].filter(Boolean).join(' · ') || 'Employee'}
+                        </span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              {results.equipment.length > 0 ? (
+                <div className="p-1">
+                  <DropHeader dark={dark}>Equipment — tap to {scanActionWord(direction)}</DropHeader>
+                  {results.equipment.map((it) => (
+                    <button
+                      key={it.id}
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => void handleCode(it.assetTag)}
+                      className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left ${
+                        dark ? 'hover:bg-slate-800' : 'hover:bg-slate-50 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      <PackageCheck
+                        size={16}
+                        className={`shrink-0 ${it.isOut ? 'text-amber-500' : 'text-emerald-500'}`}
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium">
+                          <span className="font-mono text-xs opacity-70">{it.assetTag}</span> · {it.name}
+                        </span>
+                        <span
+                          className={
+                            dark ? 'block truncate text-xs text-slate-400' : 'block truncate text-xs text-slate-500'
+                          }
+                        >
+                          {it.typeName ?? 'Equipment'}
+                          {it.isOut && it.holderName ? ` · with ${it.holderName}` : ''}
+                        </span>
+                      </span>
+                      <Badge variant={it.isOut ? 'warning' : 'success'}>{it.isOut ? 'out' : 'in'}</Badge>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -583,7 +648,7 @@ export function StationClient(props: StationClientProps) {
         {/* ---- feedback + session log ------------------------------------- */}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
           <div className="lg:col-span-2">
-            <FlashPanel flash={flash} pending={pending} dark={dark} />
+            <FlashPanel flash={flash} pending={pending} dark={dark} big={big} />
           </div>
           <div className="lg:col-span-3">
             <div className={dark ? 'text-xs font-medium text-slate-400' : 'text-xs font-medium text-slate-500 dark:text-slate-400'}>
@@ -707,35 +772,73 @@ function Label({ children, dark }: { children: React.ReactNode; dark: boolean })
   )
 }
 
-function FlashPanel({ flash, pending, dark }: { flash: Flash; pending: boolean; dark: boolean }) {
+function DropHeader({ children, dark }: { children: React.ReactNode; dark: boolean }) {
+  return (
+    <div
+      className={`px-2 py-1 text-[11px] font-semibold tracking-wide uppercase ${
+        dark ? 'text-slate-500' : 'text-slate-400'
+      }`}
+    >
+      {children}
+    </div>
+  )
+}
+
+function scanActionWord(direction: 'toggle' | 'out' | 'in'): string {
+  return direction === 'out' ? 'check out' : direction === 'in' ? 'check in' : 'toggle'
+}
+
+function FlashPanel({
+  flash,
+  pending,
+  dark,
+  big,
+}: {
+  flash: Flash
+  pending: boolean
+  dark: boolean
+  big: boolean
+}) {
+  const minH = big ? 'min-h-44' : 'min-h-32'
   if (!flash) {
     return (
       <div
-        className={`grid h-full min-h-32 place-items-center rounded-xl border-2 border-dashed px-4 py-6 text-center ${
+        className={`grid h-full ${minH} place-items-center rounded-xl border-2 border-dashed px-4 py-6 text-center ${
           dark ? 'border-slate-800 text-slate-500' : 'border-slate-200 text-slate-400 dark:border-slate-800'
         }`}
       >
         <div>
-          <ScanLine size={26} className="mx-auto mb-1.5 opacity-60" />
-          <div className="text-sm font-medium">{pending ? 'Working…' : 'Ready to scan'}</div>
+          <ScanLine size={big ? 40 : 26} className="mx-auto mb-1.5 opacity-60" />
+          <div className={`font-medium ${big ? 'text-lg' : 'text-sm'}`}>
+            {pending ? 'Working…' : 'Ready to scan'}
+          </div>
         </div>
       </div>
     )
   }
+  const iconSize = big ? 44 : 30
   const tone =
     flash.tone === 'in'
-      ? { bg: 'bg-emerald-500', icon: <CheckCircle2 size={30} /> }
+      ? { bg: 'bg-emerald-500', icon: <CheckCircle2 size={iconSize} /> }
       : flash.tone === 'out'
-        ? { bg: 'bg-amber-500', icon: <ArrowUpFromLine size={30} /> }
+        ? { bg: 'bg-amber-500', icon: <ArrowUpFromLine size={iconSize} /> }
         : flash.tone === 'person'
-          ? { bg: 'bg-teal-500', icon: <UserRound size={30} /> }
-          : { bg: 'bg-red-500', icon: <XCircle size={30} /> }
+          ? { bg: 'bg-teal-500', icon: <UserRound size={iconSize} /> }
+          : { bg: 'bg-red-500', icon: <XCircle size={iconSize} /> }
   return (
-    <div className={`flex h-full min-h-32 items-center gap-4 rounded-xl px-5 py-6 text-white ${tone.bg}`}>
-      <div className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-white/20">{tone.icon}</div>
+    <div className={`flex h-full ${minH} items-center gap-4 rounded-xl px-5 py-6 text-white ${tone.bg}`}>
+      <div
+        className={`grid shrink-0 place-items-center rounded-full bg-white/20 ${
+          big ? 'h-20 w-20' : 'h-14 w-14'
+        }`}
+      >
+        {tone.icon}
+      </div>
       <div className="min-w-0">
-        <div className="text-2xl font-bold tracking-tight">{flash.title}</div>
-        {flash.sub ? <div className="truncate text-sm text-white/85">{flash.sub}</div> : null}
+        <div className={`font-bold tracking-tight ${big ? 'text-4xl' : 'text-2xl'}`}>{flash.title}</div>
+        {flash.sub ? (
+          <div className={`truncate text-white/85 ${big ? 'text-lg' : 'text-sm'}`}>{flash.sub}</div>
+        ) : null}
       </div>
     </div>
   )

@@ -12,9 +12,11 @@ import {
   trainingCourses,
   trainingLessons,
   trainingRecords,
+  tenants,
 } from '@beaconhs/db/schema'
 import { publicUrl } from '@beaconhs/storage'
 import { requireModuleManage } from '@/lib/module-admin/guard'
+import { courseCredentialOutputIds, enabledCredentialOutputs } from '@/lib/credential-designs'
 import { CourseWorkspace, type ModuleLite } from './_workspace'
 
 export const dynamic = 'force-dynamic'
@@ -156,6 +158,17 @@ export default async function CoursePage({ params }: { params: Promise<{ id: str
           .where(inArray(attachments.id, [...attIds]))
       : []
 
+    const [tenant] = await tx
+      .select({ settings: tenants.settings })
+      .from(tenants)
+      .where(eq(tenants.id, ctx.tenantId!))
+      .limit(1)
+    const credentialOutputs = enabledCredentialOutputs(tenant?.settings).map((output) => ({
+      id: output.id,
+      name: output.name,
+      format: output.format,
+    }))
+
     return {
       course,
       mods,
@@ -168,6 +181,7 @@ export default async function CoursePage({ params }: { params: Promise<{ id: str
       recTotal,
       courseFiles,
       atts,
+      credentialOutputs,
     }
   })
 
@@ -184,6 +198,7 @@ export default async function CoursePage({ params }: { params: Promise<{ id: str
     recTotal,
     courseFiles,
     atts,
+    credentialOutputs,
   } = data
 
   const attachmentMeta = Object.fromEntries(
@@ -273,7 +288,9 @@ export default async function CoursePage({ params }: { params: Promise<{ id: str
         instructions: course.instructions,
         durationMinutes: course.durationMinutes,
         validForMonths: course.validForMonths,
+        credentialOutputIds: courseCredentialOutputIds(course.metadata),
       }}
+      credentialOutputs={credentialOutputs}
       modules={modules}
       assessmentTypes={aTypes}
       classes={cls.map((c) => ({ id: c.id, title: c.title, startsAt: c.startsAt.toISOString() }))}

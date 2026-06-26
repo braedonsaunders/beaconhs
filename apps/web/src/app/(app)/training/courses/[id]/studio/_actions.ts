@@ -436,7 +436,22 @@ export async function updateCourseSettings(courseId: string, formData: FormData)
   const instructions = instructionsRaw ? sanitizeDocumentHtml(instructionsRaw) : null
   const durationRaw = String(formData.get('durationMinutes') ?? '').trim()
   const validRaw = String(formData.get('validForMonths') ?? '').trim()
+  // Card Studio designs pinned to this course (any number; empty = tenant defaults).
+  const credentialOutputIds = Array.from(
+    new Set(
+      formData
+        .getAll('credentialOutputIds')
+        .map((value) => String(value).trim())
+        .filter(Boolean),
+    ),
+  )
   await ctx.db(async (tx) => {
+    const [existing] = await tx
+      .select({ metadata: trainingCourses.metadata })
+      .from(trainingCourses)
+      .where(eq(trainingCourses.id, courseId))
+      .limit(1)
+    const metadata = { ...(existing?.metadata ?? {}), credentialOutputIds }
     await tx
       .update(trainingCourses)
       .set({
@@ -448,6 +463,7 @@ export async function updateCourseSettings(courseId: string, formData: FormData)
         instructions,
         durationMinutes: durationRaw ? Math.max(0, Number(durationRaw) || 0) : null,
         validForMonths: validRaw ? Math.max(0, Number(validRaw) || 0) : null,
+        metadata,
       })
       .where(eq(trainingCourses.id, courseId))
   })

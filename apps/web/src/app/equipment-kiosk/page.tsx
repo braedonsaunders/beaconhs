@@ -6,7 +6,6 @@
 import { and, count, desc, eq, isNull, sql } from 'drizzle-orm'
 import { db } from '@beaconhs/db'
 import {
-  equipmentCheckouts,
   equipmentItems,
   equipmentStationSettings,
   orgUnits,
@@ -97,18 +96,22 @@ export default async function EquipmentKioskPage({
 
     const openRows = await tx
       .select({
-        co: equipmentCheckouts,
         item: equipmentItems,
         holder: people,
-        dest: orgUnits,
+        site: orgUnits,
       })
-      .from(equipmentCheckouts)
-      .leftJoin(equipmentItems, eq(equipmentItems.id, equipmentCheckouts.equipmentItemId))
-      .leftJoin(people, eq(people.id, equipmentCheckouts.holderPersonId))
-      .leftJoin(orgUnits, eq(orgUnits.id, equipmentCheckouts.destinationOrgUnitId))
-      .where(isNull(equipmentCheckouts.returnedAt))
-      .orderBy(desc(equipmentCheckouts.checkedOutAt))
-      .limit(200)
+      .from(equipmentItems)
+      .leftJoin(people, eq(people.id, equipmentItems.currentHolderPersonId))
+      .leftJoin(orgUnits, eq(orgUnits.id, equipmentItems.currentSiteOrgUnitId))
+      .where(
+        and(
+          eq(equipmentItems.isAvailableForCheckout, false),
+          eq(equipmentItems.status, 'in_service'),
+          isNull(equipmentItems.deletedAt),
+        ),
+      )
+      .orderBy(desc(equipmentItems.lastSeenAt))
+      .limit(300)
 
     const [avail] = await tx
       .select({ c: count() })
@@ -159,15 +162,15 @@ export default async function EquipmentKioskPage({
       }))}
       locations={data.locationRows}
       availableCount={data.availableCount}
-      openCheckouts={data.openRows.map(({ co, item, holder, dest }) => ({
-        id: co.id,
-        itemId: co.equipmentItemId,
-        assetTag: item?.assetTag ?? '—',
-        itemName: item?.name ?? 'Unknown',
+      openCheckouts={data.openRows.map(({ item, holder, site }) => ({
+        id: item.id,
+        itemId: item.id,
+        assetTag: item.assetTag,
+        itemName: item.name,
         holderName: holder ? `${holder.firstName} ${holder.lastName}` : null,
-        locationName: dest?.name ?? null,
-        checkedOutAt: co.checkedOutAt.toISOString(),
-        expectedReturnOn: co.expectedReturnOn,
+        locationName: site?.name ?? null,
+        checkedOutAt: item.lastSeenAt?.toISOString() ?? '',
+        expectedReturnOn: null,
       }))}
     />
   )

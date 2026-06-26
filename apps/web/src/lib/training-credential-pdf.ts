@@ -21,6 +21,7 @@ import { publicUrl } from '@beaconhs/storage'
 import type { RequestContext } from '@beaconhs/tenant'
 import {
   credentialOutputPdfFormat,
+  resolveCourseCredentialOutput,
   resolveCredentialOutput,
   type CredentialOutputRequest,
 } from '@/lib/credential-designs'
@@ -92,7 +93,8 @@ export async function renderTrainingCredentialPdf(
   const verifyUrl = `${appBaseUrl()}/verify/${cert.verifyToken}`
   const qrDataUrl = await makeVerifyQr(verifyUrl)
   const fullName = `${person.firstName} ${person.lastName}`
-  const output = resolveCredentialOutput(tenant.settings, request)
+  // Honor the course's pinned Card Studio designs; fall back to tenant defaults.
+  const output = resolveCourseCredentialOutput(course.metadata, tenant.settings, request)
   const pdfFormat = credentialOutputPdfFormat(output)
   const design = output
   const certificateInput = {

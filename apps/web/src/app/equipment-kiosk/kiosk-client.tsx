@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react'
 import { ScanLine } from 'lucide-react'
 import { StationClient } from '@/app/(app)/equipment/station/_station-client'
-import { performKioskScan, resolveKioskScan } from './actions'
+import { performKioskScan, searchKioskScan } from './actions'
 
 type Person = { id: string; name: string; employeeNo: string | null; jobTitle: string | null }
 type Location = { id: string; name: string; level: string; isBase: boolean }
@@ -45,8 +45,8 @@ export function EquipmentKioskClient(props: {
       return
     }
     start(async () => {
-      // An empty-code resolve verifies the PIN server-side without mutating.
-      const res = await resolveKioskScan({ tenantId, pin: candidate, code: '' })
+      // An empty-query search verifies the PIN server-side without mutating.
+      const res = await searchKioskScan({ tenantId, pin: candidate, query: '' })
       if (!res.ok) {
         setError(res.error)
         return
@@ -107,9 +107,9 @@ export function EquipmentKioskClient(props: {
       locations={props.locations}
       openCheckouts={props.openCheckouts}
       availableCount={props.availableCount}
-      onResolve={async (code) => {
-        const r = await resolveKioskScan({ tenantId, pin, code })
-        return r.ok ? r.result : { kind: 'none' }
+      onSearch={async (query) => {
+        const r = await searchKioskScan({ tenantId, pin, query })
+        return r.ok ? r.results : { equipment: [], people: [] }
       }}
       onScan={(input) => performKioskScan({ ...input, tenantId, pin, deviceLabel })}
       onAuthError={() => setPin(null)}

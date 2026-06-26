@@ -33,7 +33,7 @@ import {
 } from '@beaconhs/design-studio'
 import { requireRequestContext } from '@/lib/auth'
 import { ListPageLayout } from '@/components/page-layout'
-import { resolveCredentialOutput } from '@/lib/credential-designs'
+import { resolveCourseCredentialOutput, resolveCredentialOutput } from '@/lib/credential-designs'
 import { WorkspaceNoIdentity } from '../_no-identity'
 import { WalletStack, type WalletCard, type WalletDesign } from './_wallet-stack'
 
@@ -87,6 +87,7 @@ export default async function MyWalletPage() {
         grade: trainingRecords.grade,
         courseName: trainingCourses.name,
         courseCode: trainingCourses.code,
+        courseMetadata: trainingCourses.metadata,
       })
       .from(trainingRecords)
       .leftJoin(trainingCourses, eq(trainingCourses.id, trainingRecords.courseId))
@@ -168,13 +169,11 @@ export default async function MyWalletPage() {
   }
 
   const { person, tenant, records, skills, recordCerts, skillCerts, photoUrl } = data
-  const output = resolveCredentialOutput(tenant?.settings, { format: 'wallet' })
-  // The same document the PDF route renders — fall back to a freshly built one
-  // if the saved output predates the document model.
-  const document = output.document ?? createWalletDesignDocument(output)
-  const frontId = document.artboards[0]?.id ?? null
-  const backId = document.artboards[1]?.id ?? frontId
-  const front = document.artboards[0]
+  // Tenant-default wallet design — used for skills and as the fallback. Training
+  // records resolve their own design from the course's pinned selection below.
+  const defaultOutput = resolveCredentialOutput(tenant?.settings, { format: 'wallet' })
+  const defaultDocument = defaultOutput.document ?? createWalletDesignDocument(defaultOutput)
+  const front = defaultDocument.artboards[0]
   const widthIn = front?.width ?? 3.375
   const heightIn = front?.height ?? 2.125
 
@@ -198,10 +197,13 @@ export default async function MyWalletPage() {
   }
 
   async function renderCard(
+    doc: typeof defaultDocument,
     cardData: CredentialDesignData,
   ): Promise<{ frontHtml: string; backHtml: string }> {
-    const frontHtml = renderDesignDocumentHtml(document, cardData, { artboardId: frontId })
-    const backHtml = renderDesignDocumentHtml(document, cardData, { artboardId: backId })
+    const fId = doc.artboards[0]?.id ?? null
+    const bId = doc.artboards[1]?.id ?? fId
+    const frontHtml = renderDesignDocumentHtml(doc, cardData, { artboardId: fId })
+    const backHtml = renderDesignDocumentHtml(doc, cardData, { artboardId: bId })
     return { frontHtml, backHtml }
   }
 
@@ -209,7 +211,12 @@ export default async function MyWalletPage() {
     records.map(async (r) => {
       const token = tokenByRecord.get(r.id)
       const qrDataUrl = await qrFor(token)
-      const faces = await renderCard({
+      // Each course can pin its own wallet design; fall back to the tenant default.
+      const recordOutput = resolveCourseCredentialOutput(r.courseMetadata, tenant?.settings, {
+        format: 'wallet',
+      })
+      const recordDocument = recordOutput.document ?? createWalletDesignDocument(recordOutput)
+      const faces = await renderCard(recordDocument, {
         tenantName,
         tenantLogoUrl,
         recipientFullName,
@@ -230,7 +237,7 @@ export default async function MyWalletPage() {
         kind: 'training' as const,
         title: r.courseName ?? 'Training credential',
         status: statusFor(r.expiresOn, todayStr),
-        pdfHref: `/training/records/${r.id}/certificate?format=wallet&output=${output.id}`,
+        pdfHref: `/training/records/${r.id}/certificate?format=wallet&output=${recordOutput.id}`,
         verifyHref: token ? `/verify/${token}` : null,
         ...faces,
       }
@@ -241,7 +248,7 @@ export default async function MyWalletPage() {
     skills.map(async (s) => {
       const token = tokenByAssignment.get(s.id)
       const qrDataUrl = await qrFor(token)
-      const faces = await renderCard({
+      const faces = await renderCard(defaultDocument, {
         tenantName,
         tenantLogoUrl,
         recipientFullName,
@@ -261,7 +268,7 @@ export default async function MyWalletPage() {
         kind: 'skill' as const,
         title: s.skillName,
         status: statusFor(s.expiresOn, todayStr),
-        pdfHref: `/training/skills/${s.id}/certificate?format=wallet&output=${output.id}`,
+        pdfHref: `/training/skills/${s.id}/certificate?format=wallet&output=${defaultOutput.id}`,
         verifyHref: token ? `/verify/${token}` : null,
         ...faces,
       }

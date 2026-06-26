@@ -10,11 +10,11 @@ import { sql, eq } from 'drizzle-orm'
 import { db, type Database } from '@beaconhs/db'
 import { auditLog, equipmentStationSettings } from '@beaconhs/db/schema'
 import {
-  resolveScanCore,
+  searchStationCore,
   stationScanCore,
-  type ResolvedScan,
   type StationScanInput,
   type StationScanResult,
+  type StationSearchResults,
 } from '@/lib/equipment-station'
 
 type Settings = {
@@ -37,19 +37,19 @@ async function loadSettings(tx: Database, tenantId: string): Promise<Settings> {
   return row ?? null
 }
 
-export async function resolveKioskScan(input: {
+export async function searchKioskScan(input: {
   tenantId: string
   pin: string
-  code: string
-}): Promise<{ ok: true; result: ResolvedScan } | { ok: false; error: string }> {
+  query: string
+}): Promise<{ ok: true; results: StationSearchResults } | { ok: false; error: string }> {
   if (!input.tenantId || !input.pin) return { ok: false, error: 'PIN required' }
   return db.transaction(async (txRaw) => {
     const tx = txRaw as unknown as Database
     const settings = await loadSettings(tx, input.tenantId)
     if (!settings?.pin) return { ok: false, error: 'Kiosk is not enabled for this tenant' }
     if (settings.pin !== input.pin) return { ok: false, error: 'Invalid PIN' }
-    const result = await resolveScanCore(tx, input.code)
-    return { ok: true, result }
+    const results = await searchStationCore(tx, input.query)
+    return { ok: true, results }
   })
 }
 

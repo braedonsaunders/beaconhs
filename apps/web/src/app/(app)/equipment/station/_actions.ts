@@ -11,17 +11,17 @@ import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import {
-  resolveScanCore,
+  searchStationCore,
   stationScanCore,
-  type ResolvedScan,
   type StationScanInput,
   type StationScanResult,
+  type StationSearchResults,
 } from '@/lib/equipment-station'
 
-export async function resolveStationScan(code: string): Promise<ResolvedScan> {
+export async function searchStation(query: string): Promise<StationSearchResults> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'equipment.manage')
-  return ctx.db((tx) => resolveScanCore(tx, code))
+  return ctx.db((tx) => searchStationCore(tx, query))
 }
 
 export async function performStationScan(input: StationScanInput): Promise<StationScanResult> {

@@ -3,7 +3,6 @@ import { Settings2 } from 'lucide-react'
 import { and, asc, count, desc, eq, isNull } from 'drizzle-orm'
 import { Button, PageHeader } from '@beaconhs/ui'
 import {
-  equipmentCheckouts,
   equipmentItems,
   equipmentStationSettings,
   orgUnits,
@@ -15,7 +14,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { ListPageLayout } from '@/components/page-layout'
 import { EquipmentSubNav } from '@/components/equipment-sub-nav'
 import { StationClient } from './_station-client'
-import { performStationScan, resolveStationScan } from './_actions'
+import { performStationScan, searchStation } from './_actions'
 
 export const metadata = { title: 'Check in / out station' }
 export const dynamic = 'force-dynamic'
@@ -73,20 +72,27 @@ export default async function StationPage({
       .orderBy(desc(orgUnits.isEquipmentBase), asc(orgUnits.name))
       .limit(2000)
 
+    // "Currently out" = items not available while still in service. This matches
+    // the equipment register's availability filter and covers items assigned or
+    // transferred directly (no checkout ledger row).
     const openRows = await tx
       .select({
-        co: equipmentCheckouts,
         item: equipmentItems,
         holder: people,
-        dest: orgUnits,
+        site: orgUnits,
       })
-      .from(equipmentCheckouts)
-      .leftJoin(equipmentItems, eq(equipmentItems.id, equipmentCheckouts.equipmentItemId))
-      .leftJoin(people, eq(people.id, equipmentCheckouts.holderPersonId))
-      .leftJoin(orgUnits, eq(orgUnits.id, equipmentCheckouts.destinationOrgUnitId))
-      .where(isNull(equipmentCheckouts.returnedAt))
-      .orderBy(desc(equipmentCheckouts.checkedOutAt))
-      .limit(200)
+      .from(equipmentItems)
+      .leftJoin(people, eq(people.id, equipmentItems.currentHolderPersonId))
+      .leftJoin(orgUnits, eq(orgUnits.id, equipmentItems.currentSiteOrgUnitId))
+      .where(
+        and(
+          eq(equipmentItems.isAvailableForCheckout, false),
+          eq(equipmentItems.status, 'in_service'),
+          isNull(equipmentItems.deletedAt),
+        ),
+      )
+      .orderBy(desc(equipmentItems.lastSeenAt))
+      .limit(300)
 
     const [avail] = await tx
       .select({ c: count() })
@@ -147,17 +153,17 @@ export default async function StationPage({
         locations={data.locationRows}
         availableCount={data.availableCount}
         initialScanCode={initialScanCode}
-        openCheckouts={data.openRows.map(({ co, item, holder, dest }) => ({
-          id: co.id,
-          itemId: co.equipmentItemId,
-          assetTag: item?.assetTag ?? '—',
-          itemName: item?.name ?? 'Unknown',
+        openCheckouts={data.openRows.map(({ item, holder, site }) => ({
+          id: item.id,
+          itemId: item.id,
+          assetTag: item.assetTag,
+          itemName: item.name,
           holderName: holder ? `${holder.firstName} ${holder.lastName}` : null,
-          locationName: dest?.name ?? null,
-          checkedOutAt: co.checkedOutAt.toISOString(),
-          expectedReturnOn: co.expectedReturnOn,
+          locationName: site?.name ?? null,
+          checkedOutAt: item.lastSeenAt?.toISOString() ?? '',
+          expectedReturnOn: null,
         }))}
-        onResolve={resolveStationScan}
+        onSearch={searchStation}
         onScan={performStationScan}
       />
     </ListPageLayout>
