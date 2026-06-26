@@ -78,6 +78,7 @@ export default async function MyIncidentsPage({
       <ListPageLayout
         header={
           <PageHeader
+            back={{ href: '/my', label: 'Workspace' }}
             title="My incidents"
             description="Incidents you reported."
             actions={
@@ -165,6 +166,7 @@ export default async function MyIncidentsPage({
       header={
         <>
           <PageHeader
+            back={{ href: '/my', label: 'Workspace' }}
             title="My incidents"
             description="Incidents you reported."
             actions={

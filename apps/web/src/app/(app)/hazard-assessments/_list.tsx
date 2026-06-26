@@ -260,6 +260,7 @@ export async function AssessmentsListPage({
         header={
           <>
             <PageHeader
+              back={mineOnly ? { href: '/my', label: 'Workspace' } : undefined}
               title={mineOnly ? 'My hazard assessments' : 'Hazard assessments'}
               description={
                 mineOnly

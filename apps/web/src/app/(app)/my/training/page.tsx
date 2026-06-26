@@ -263,6 +263,7 @@ export default async function MyTrainingPage({
       <ListPageLayout
         header={
           <PageHeader
+            back={{ href: '/my', label: 'Workspace' }}
             title="My training"
             description="Your courses, records and assignments."
             actions={
@@ -288,6 +289,7 @@ export default async function MyTrainingPage({
       header={
         <>
           <PageHeader
+            back={{ href: '/my', label: 'Workspace' }}
             title="My training"
             description="Your courses, records, upcoming expirations, and outstanding assignments."
             actions={

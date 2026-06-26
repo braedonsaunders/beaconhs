@@ -86,6 +86,7 @@ export default async function MyTasksPage({
       <ListPageLayout
         header={
           <PageHeader
+            back={{ href: '/my', label: 'Workspace' }}
             title="My tasks"
             description="Corrective actions assigned to you."
             actions={
@@ -205,6 +206,7 @@ export default async function MyTasksPage({
       header={
         <>
           <PageHeader
+            back={{ href: '/my', label: 'Workspace' }}
             title="My tasks"
             description="Corrective actions assigned to you."
             actions={

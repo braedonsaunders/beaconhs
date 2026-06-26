@@ -62,6 +62,7 @@ export default async function MyInspectionsPage({
       <ListPageLayout
         header={
           <PageHeader
+            back={{ href: '/my', label: 'Workspace' }}
             title="My inspections"
             description="Inspections you carried out."
             actions={
@@ -144,6 +145,7 @@ export default async function MyInspectionsPage({
       header={
         <>
           <PageHeader
+            back={{ href: '/my', label: 'Workspace' }}
             title="My inspections"
             description="Inspection records you carried out as the inspector."
             actions={

@@ -152,7 +152,11 @@ export default async function MyWalletPage() {
     return (
       <ListPageLayout
         header={
-          <PageHeader title="My wallet" description="Your certificates and credential cards." />
+          <PageHeader
+            back={{ href: '/my', label: 'Workspace' }}
+            title="My wallet"
+            description="Your certificates and credential cards."
+          />
         }
       >
         <WorkspaceNoIdentity
@@ -274,6 +278,7 @@ export default async function MyWalletPage() {
     <ListPageLayout
       header={
         <PageHeader
+          back={{ href: '/my', label: 'Workspace' }}
           title="My wallet"
           description="Your certificates and credential cards. Tap a card to flip it, or download the print-ready pass."
         />
