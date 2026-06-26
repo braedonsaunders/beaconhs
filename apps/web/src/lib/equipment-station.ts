@@ -59,7 +59,7 @@ export type StationScanInput = {
   code: string
   /** Person taking the asset on check-out. */
   activePersonId?: string | null
-  /** Destination on check-out. Null = unassigned ("any location"). */
+  /** Destination on check-out. Required before an asset can leave the station. */
   destinationOrgUnitId?: string | null
   expectedReturnOn?: string | null
   /** undefined ⇒ toggle current state; 'out'/'in' ⇒ force that direction. */
@@ -81,7 +81,7 @@ function cleanCode(raw: string): string {
 export async function searchStationCore(
   tx: Database,
   rawQuery: string,
-  limit = 8,
+  limit = 24,
 ): Promise<StationSearchResults> {
   const q = cleanCode(rawQuery)
   if (q.length < 1) return { equipment: [], people: [] }
@@ -279,6 +279,13 @@ export async function stationScanCore(
       return { ok: false, error: 'Scan or pick a person before checking out' }
     }
     const destinationOrgUnitId = args.destinationOrgUnitId ?? null
+    if (!destinationOrgUnitId) {
+      return { ok: false, error: 'Pick a check-out destination before checking out' }
+    }
+    const destinationName = await locationName(tx, destinationOrgUnitId)
+    if (!destinationName) {
+      return { ok: false, error: 'Pick a valid check-out destination' }
+    }
 
     const [co] = await tx
       .insert(equipmentCheckouts)
@@ -319,12 +326,23 @@ export async function stationScanCore(
       assetTag: item.assetTag,
       itemName: item.name,
       holderName: await personName(tx, holderPersonId),
-      locationName: await locationName(tx, destinationOrgUnitId),
+      locationName: destinationName,
       checkoutId: co?.id ?? null,
     }
   }
 
   // ---- check in: snap to home, clear holder, mark available -----------------
+  const homeOrgUnitId = args.homeOrgUnitId
+  if (!homeOrgUnitId) {
+    return { ok: false, error: 'Set a default check-in location before checking equipment in' }
+  }
+  const homeName = await locationName(tx, homeOrgUnitId)
+  if (!homeName) {
+    return {
+      ok: false,
+      error: 'Set a valid default check-in location before checking equipment in',
+    }
+  }
   const condition: ReturnCondition = args.condition ?? 'good'
   if (open) {
     await tx
@@ -341,8 +359,8 @@ export async function stationScanCore(
     .update(equipmentItems)
     .set({
       currentHolderPersonId: null,
-      currentSiteOrgUnitId: args.homeOrgUnitId,
-      lastSeenSiteOrgUnitId: args.homeOrgUnitId,
+      currentSiteOrgUnitId: homeOrgUnitId,
+      lastSeenSiteOrgUnitId: homeOrgUnitId,
       lastSeenAt: new Date(),
       isAvailableForCheckout: item.status === 'in_service',
     })
@@ -350,7 +368,7 @@ export async function stationScanCore(
   await tx.insert(equipmentLocationHistory).values({
     tenantId: args.tenantId,
     itemId: item.id,
-    siteOrgUnitId: args.homeOrgUnitId,
+    siteOrgUnitId: homeOrgUnitId,
     holderPersonId: null,
     recordedByTenantUserId: args.actorTenantUserId,
     note: `Checked in (${condition}) at station${args.returnedNotes ? ` — ${args.returnedNotes}` : ''}`,
@@ -362,7 +380,7 @@ export async function stationScanCore(
     assetTag: item.assetTag,
     itemName: item.name,
     holderName: null,
-    locationName: await locationName(tx, args.homeOrgUnitId),
+    locationName: homeName,
     checkoutId: open?.id ?? null,
   }
 }

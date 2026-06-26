@@ -89,21 +89,6 @@ export default async function EquipmentKioskPage({
       .where(isNull(orgUnits.deletedAt))
       .orderBy(desc(orgUnits.isEquipmentBase), orgUnits.name)
 
-    const openRows = await tx
-      .select({
-        item: equipmentItems,
-        holder: people,
-        site: orgUnits,
-      })
-      .from(equipmentItems)
-      .leftJoin(people, eq(people.id, equipmentItems.currentHolderPersonId))
-      .leftJoin(orgUnits, eq(orgUnits.id, equipmentItems.currentSiteOrgUnitId))
-      .where(
-        and(eq(equipmentItems.isAvailableForCheckout, false), isNull(equipmentItems.deletedAt)),
-      )
-      .orderBy(desc(equipmentItems.lastSeenAt))
-      .limit(300)
-
     const [avail] = await tx
       .select({ c: count() })
       .from(equipmentItems)
@@ -115,7 +100,6 @@ export default async function EquipmentKioskPage({
       homeName,
       peopleRows,
       locationRows,
-      openRows,
       availableCount: Number(avail?.c ?? 0),
     }
   })
@@ -153,16 +137,6 @@ export default async function EquipmentKioskPage({
       }))}
       locations={data.locationRows}
       availableCount={data.availableCount}
-      openCheckouts={data.openRows.map(({ item, holder, site }) => ({
-        id: item.id,
-        itemId: item.id,
-        assetTag: item.assetTag,
-        itemName: item.name,
-        holderName: holder ? `${holder.firstName} ${holder.lastName}` : null,
-        locationName: site?.name ?? null,
-        checkedOutAt: item.lastSeenAt?.toISOString() ?? '',
-        expectedReturnOn: null,
-      }))}
     />
   )
 }

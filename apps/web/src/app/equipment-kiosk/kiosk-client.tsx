@@ -7,16 +7,6 @@ import { performKioskScan, searchKioskScan } from './actions'
 
 type Person = { id: string; name: string; employeeNo: string | null; jobTitle: string | null }
 type Location = { id: string; name: string; level: string; isBase: boolean }
-type OpenCheckout = {
-  id: string
-  itemId: string
-  assetTag: string
-  itemName: string
-  holderName: string | null
-  locationName: string | null
-  checkedOutAt: string
-  expectedReturnOn: string | null
-}
 
 export function EquipmentKioskClient(props: {
   tenantId: string
@@ -27,7 +17,6 @@ export function EquipmentKioskClient(props: {
   homeLocationName: string | null
   people: Person[]
   locations: Location[]
-  openCheckouts: OpenCheckout[]
   availableCount: number
 }) {
   const { tenantId } = props
@@ -104,7 +93,6 @@ export function EquipmentKioskClient(props: {
       homeLocationName={props.homeLocationName}
       people={props.people}
       locations={props.locations}
-      openCheckouts={props.openCheckouts}
       availableCount={props.availableCount}
       onSearch={async (query) => {
         const r = await searchKioskScan({ tenantId, pin, query })

@@ -39,16 +39,6 @@ import type {
 
 type Person = { id: string; name: string; employeeNo: string | null; jobTitle: string | null }
 type Location = { id: string; name: string; level: string; isBase: boolean }
-type OpenCheckout = {
-  id: string
-  itemId: string
-  assetTag: string
-  itemName: string
-  holderName: string | null
-  locationName: string | null
-  checkedOutAt: string
-  expectedReturnOn: string | null
-}
 
 type LogEntry = {
   key: string
@@ -70,8 +60,8 @@ export type StationClientProps = {
   homeLocationName: string | null
   people: Person[]
   locations: Location[]
-  openCheckouts: OpenCheckout[]
   availableCount: number
+  initialActivePersonId?: string | null
   initialScanCode?: string | null
   onSearch: (query: string) => Promise<StationSearchResults>
   onScan: (input: StationScanInput) => Promise<StationScanResult>
@@ -132,8 +122,8 @@ export function StationClient(props: StationClientProps) {
     homeLocationName,
     people,
     locations,
-    openCheckouts: initialOpen,
     availableCount,
+    initialActivePersonId,
     initialScanCode,
     onSearch,
     onScan,
@@ -142,7 +132,9 @@ export function StationClient(props: StationClientProps) {
   } = props
 
   const kiosk = surface === 'kiosk'
-  const [activePerson, setActivePerson] = useState<Person | null>(null)
+  const [activePerson, setActivePerson] = useState<Person | null>(
+    () => people.find((p) => p.id === initialActivePersonId) ?? null,
+  )
   const [destinationId, setDestinationId] = useState('')
   const [direction, setDirection] = useState<'toggle' | 'out' | 'in'>(
     scanMode === 'explicit' ? 'out' : 'toggle',
@@ -152,8 +144,6 @@ export function StationClient(props: StationClientProps) {
   const [pending, setPending] = useState(false)
   const [flash, setFlash] = useState<Flash>(null)
   const [log, setLog] = useState<LogEntry[]>([])
-  const [open, setOpen] = useState<OpenCheckout[]>(initialOpen)
-  const [outCount, setOutCount] = useState(initialOpen.length)
   const [availCount, setAvailCount] = useState(availableCount)
   const [results, setResults] = useState<StationSearchResults | null>(null)
   const [overlay, setOverlay] = useState(false)
@@ -242,7 +232,7 @@ export function StationClient(props: StationClientProps) {
           showFlash({ tone: 'person', title: result.personName, sub: 'Active holder set' })
           return
         }
-        // A real check in/out happened — update the live counters + log.
+        // A real check in/out happened — update the live availability count + log.
         const checkedOut = result.action === 'checked_out'
         beep(checkedOut ? 'out' : 'in')
         showFlash({
@@ -264,25 +254,7 @@ export function StationClient(props: StationClientProps) {
             ...l,
           ].slice(0, 60),
         )
-        setOutCount((n) => (checkedOut ? n + 1 : Math.max(0, n - 1)))
         setAvailCount((n) => (checkedOut ? Math.max(0, n - 1) : n + 1))
-        if (checkedOut) {
-          setOpen((o) => [
-            {
-              id: result.checkoutId ?? result.itemId,
-              itemId: result.itemId,
-              assetTag: result.assetTag,
-              itemName: result.itemName,
-              holderName: result.holderName,
-              locationName: result.locationName,
-              checkedOutAt: new Date().toISOString(),
-              expectedReturnOn: null,
-            },
-            ...o,
-          ])
-        } else {
-          setOpen((o) => o.filter((c) => c.itemId !== result.itemId))
-        }
       } finally {
         setPending(false)
         setTimeout(focusScan, 0)
@@ -526,9 +498,8 @@ export function StationClient(props: StationClientProps) {
               value={destinationId}
               onChange={setDestinationId}
               options={locationOptions}
-              clearable
-              emptyLabel="Unassigned (any location)"
-              placeholder="Unassigned (any location)"
+              placeholder="Pick a destination..."
+              searchPlaceholder="Search locations..."
               ariaLabel="Destination"
             />
           </div>
@@ -610,7 +581,9 @@ export function StationClient(props: StationClientProps) {
           results &&
           (results.equipment.length > 0 || results.people.length > 0) ? (
             <div
-              className={`absolute z-20 mt-1.5 max-h-80 w-full overflow-y-auto rounded-xl border shadow-xl ${
+              className={`absolute z-20 mt-1.5 w-full overflow-y-auto rounded-xl border shadow-xl ${
+                big ? 'max-h-[32rem]' : 'max-h-96'
+              } ${
                 dark
                   ? 'border-slate-700 bg-slate-900'
                   : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900'
@@ -767,66 +740,10 @@ export function StationClient(props: StationClientProps) {
           </div>
         </div>
 
-        {/* ---- live counts + currently-out -------------------------------- */}
+        {/* ---- live counts -------------------------------------------------- */}
         <div className="flex flex-wrap items-center gap-2 text-xs">
-          <Badge variant={outCount > 0 ? 'warning' : 'secondary'}>{outCount} out</Badge>
           <Badge variant="success">{availCount} available</Badge>
         </div>
-        {open.length > 0 ? (
-          <div
-            className={`overflow-hidden rounded-xl border ${
-              dark ? 'border-slate-800' : 'border-slate-200 dark:border-slate-800'
-            }`}
-          >
-            <div
-              className={`px-3 py-2 text-xs font-semibold ${
-                dark
-                  ? 'bg-slate-900 text-slate-300'
-                  : 'bg-slate-50 text-slate-600 dark:bg-slate-900 dark:text-slate-300'
-              }`}
-            >
-              Currently out
-            </div>
-            <ul className="max-h-72 divide-y overflow-y-auto text-sm">
-              {open.slice(0, 50).map((c) => (
-                <li
-                  key={c.id}
-                  className={`flex items-center justify-between gap-3 px-3 py-2 ${
-                    dark ? 'divide-slate-800 border-slate-800' : 'divide-slate-100'
-                  }`}
-                >
-                  <span className="min-w-0">
-                    <span className="block truncate font-medium">
-                      <span className="font-mono text-xs opacity-70">{c.assetTag}</span> ·{' '}
-                      {c.itemName}
-                    </span>
-                    <span
-                      className={
-                        dark
-                          ? 'block truncate text-xs text-slate-400'
-                          : 'block truncate text-xs text-slate-500'
-                      }
-                    >
-                      {c.holderName ?? 'no holder'}
-                      {c.locationName ? ` @ ${c.locationName}` : ''}
-                    </span>
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => void handleCode(c.assetTag, { directionOverride: 'in' })}
-                    className={`inline-flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold ${
-                      dark
-                        ? 'bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25'
-                        : 'bg-emerald-500 text-white hover:bg-emerald-400'
-                    }`}
-                  >
-                    <ArrowDownToLine size={13} /> Check in
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
       </div>
 
       {camOpen ? (

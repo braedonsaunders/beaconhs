@@ -50,6 +50,7 @@ export default async function StationPage({
     const peopleRows = await tx
       .select({
         id: people.id,
+        userId: people.userId,
         firstName: people.firstName,
         lastName: people.lastName,
         employeeNo: people.employeeNo,
@@ -72,24 +73,6 @@ export default async function StationPage({
       .orderBy(desc(orgUnits.isEquipmentBase), asc(orgUnits.name))
       .limit(2000)
 
-    // "Currently out" = items flagged not-available — the exact predicate the
-    // equipment register's "Currently checked out" filter uses. Covers items
-    // assigned or transferred directly (no checkout ledger row).
-    const openRows = await tx
-      .select({
-        item: equipmentItems,
-        holder: people,
-        site: orgUnits,
-      })
-      .from(equipmentItems)
-      .leftJoin(people, eq(people.id, equipmentItems.currentHolderPersonId))
-      .leftJoin(orgUnits, eq(orgUnits.id, equipmentItems.currentSiteOrgUnitId))
-      .where(
-        and(eq(equipmentItems.isAvailableForCheckout, false), isNull(equipmentItems.deletedAt)),
-      )
-      .orderBy(desc(equipmentItems.lastSeenAt))
-      .limit(300)
-
     const [avail] = await tx
       .select({ c: count() })
       .from(equipmentItems)
@@ -106,9 +89,9 @@ export default async function StationPage({
       homeName,
       peopleRows,
       locationRows,
-      openRows,
       tenantName: tenant?.name ?? 'Equipment',
       availableCount: Number(avail?.c ?? 0),
+      initialActivePersonId: peopleRows.find((p) => p.userId === ctx.userId)?.id ?? null,
     }
   })
 
@@ -148,17 +131,8 @@ export default async function StationPage({
         }))}
         locations={data.locationRows}
         availableCount={data.availableCount}
+        initialActivePersonId={data.initialActivePersonId}
         initialScanCode={initialScanCode}
-        openCheckouts={data.openRows.map(({ item, holder, site }) => ({
-          id: item.id,
-          itemId: item.id,
-          assetTag: item.assetTag,
-          itemName: item.name,
-          holderName: holder ? `${holder.firstName} ${holder.lastName}` : null,
-          locationName: site?.name ?? null,
-          checkedOutAt: item.lastSeenAt?.toISOString() ?? '',
-          expectedReturnOn: null,
-        }))}
         onSearch={searchStation}
         onScan={performStationScan}
       />
