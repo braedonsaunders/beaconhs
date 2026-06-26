@@ -2,8 +2,7 @@
 // tables (+ enums, indexes, RLS) and add tenant_notification_settings.group_ids,
 // for the reusable-audience feature. Safe to re-run.
 //
-//   DBURL=$(grep -oE 'DATABASE_URL=\S+' .env | sed 's/^DATABASE_URL=//;s/10\.0\.0\.86/10.0.0.85/')
-//   DATABASE_URL="$DBURL" pnpm --filter @beaconhs/db exec tsx src/migrate-notification-groups.ts
+//   DATABASE_URL=<your-db-url> pnpm --filter @beaconhs/db exec tsx src/migrate-notification-groups.ts
 
 import { sql } from 'drizzle-orm'
 import { createClient, withSuperAdmin } from './index'
