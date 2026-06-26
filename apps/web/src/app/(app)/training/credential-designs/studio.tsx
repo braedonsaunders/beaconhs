@@ -150,7 +150,7 @@ const KIND_META: Record<DesignElement['kind'], { label: string; hint: string }> 
   },
 }
 
-type RailTab = 'design' | 'insert' | 'layers' | 'inspector' | 'print'
+type RailTab = 'list' | 'design' | 'insert' | 'layers' | 'inspector' | 'print'
 
 export function CredentialDesignStudio({
   initialOutputs,
@@ -516,7 +516,13 @@ export function CredentialDesignStudio({
                   {activeOutput.enabled ? 'Active' : 'Hidden'}
                 </Badge>
               </div>
-              <div className="mt-3 grid grid-cols-5 gap-1">
+              <div className="mt-3 grid grid-cols-6 gap-1">
+                <RailTabButton
+                  active={tab === 'list'}
+                  label="Designs"
+                  onClick={() => setTab('list')}
+                  icon={<Layers3 size={14} />}
+                />
                 <RailTabButton
                   active={tab === 'design'}
                   label="Design"
@@ -553,8 +559,13 @@ export function CredentialDesignStudio({
         </div>
 
         <div className="app-scroll min-h-0 flex-1 overflow-y-auto p-3">
-          {!activeOutput || !activeDocument || !activeArtboard ? (
-            <DesignListPanel outputs={outputs} onOpen={openDesign} onAddOutput={addOutput} />
+          {!activeOutput || !activeDocument || !activeArtboard || tab === 'list' ? (
+            <DesignListPanel
+              outputs={outputs}
+              activeId={activeId}
+              onOpen={openDesign}
+              onAddOutput={addOutput}
+            />
           ) : (
             <>
               {tab === 'design' ? (
@@ -1026,10 +1037,12 @@ function displayTextForElement(element: DesignElement): string {
 // Landing rail: a straight list of designs — choose one to open its editor.
 function DesignListPanel({
   outputs,
+  activeId,
   onOpen,
   onAddOutput,
 }: {
   outputs: CredentialOutput[]
+  activeId?: string | null
   onOpen: (id: string) => void
   onAddOutput: (format: CredentialFormat) => void
 }) {
@@ -1047,7 +1060,13 @@ function DesignListPanel({
                 key={output.id}
                 type="button"
                 onClick={() => onOpen(output.id)}
-                className="flex w-full items-center gap-2.5 rounded-md border border-slate-200 bg-white p-2.5 text-left transition-colors hover:border-teal-600 hover:bg-teal-50/40 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-teal-500 dark:hover:bg-teal-950/30"
+                aria-current={output.id === activeId}
+                className={cn(
+                  'flex w-full items-center gap-2.5 rounded-md border p-2.5 text-left transition-colors',
+                  output.id === activeId
+                    ? 'border-teal-600 bg-teal-50/60 dark:border-teal-500 dark:bg-teal-950/40'
+                    : 'border-slate-200 bg-white hover:border-teal-600 hover:bg-teal-50/40 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-teal-500 dark:hover:bg-teal-950/30',
+                )}
               >
                 <span
                   className="relative grid h-10 w-14 shrink-0 place-items-center overflow-hidden rounded border"
