@@ -286,6 +286,10 @@ export async function stationScanCore(
     if (!destinationName) {
       return { ok: false, error: 'Pick a valid check-out destination' }
     }
+    const holderName = holderPersonId ? await personName(tx, holderPersonId) : null
+    if (holderPersonId && holderName === null) {
+      return { ok: false, error: 'Pick a valid holder before checking out' }
+    }
 
     const [co] = await tx
       .insert(equipmentCheckouts)
@@ -325,7 +329,7 @@ export async function stationScanCore(
       itemId: item.id,
       assetTag: item.assetTag,
       itemName: item.name,
-      holderName: await personName(tx, holderPersonId),
+      holderName,
       locationName: destinationName,
       checkoutId: co?.id ?? null,
     }

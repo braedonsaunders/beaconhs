@@ -145,9 +145,7 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
     href: '/inspections',
     managePath: '/inspections/manage',
     iconKey: 'clipboard',
-    // TODO: native module still gated on a forms permission — no inspections.*
-    // permission exists yet. Define one and switch this when RBAC is extended.
-    permission: 'forms.template.read',
+    permission: 'inspections.manage',
     tabs: [{ key: 'records', label: 'Inspections', href: '/inspections/records' }],
     sections: [
       {

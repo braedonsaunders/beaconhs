@@ -13,6 +13,7 @@ import { revalidatePath } from 'next/cache'
 import { count, eq, sql } from 'drizzle-orm'
 import { correctiveActions, formResponses, incidents } from '@beaconhs/db/schema'
 import { emitCorrectiveActionAssigned, emitIncidentReported } from '@beaconhs/events'
+import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { canSeeRecord } from '@/lib/visibility'
 import { recordAudit } from '@/lib/audit'
@@ -69,6 +70,11 @@ export async function createCorrectiveActionFromResponse(
 ): Promise<{ ok: true; caId: string; reference: string } | { ok: false; error: string }> {
   const ctx = await requireRequestContext()
   if (!ctx.tenantId) return { ok: false, error: 'Active tenant required' }
+  try {
+    assertCan(ctx, 'ca.create')
+  } catch {
+    return { ok: false, error: 'You do not have permission to create corrective actions.' }
+  }
   if (!input.responseId) return { ok: false, error: 'Missing responseId' }
   const title = input.title?.trim()
   if (!title) return { ok: false, error: 'Title is required' }
@@ -171,6 +177,11 @@ export async function createIncidentFromResponse(
 ): Promise<{ ok: true; incidentId: string; reference: string } | { ok: false; error: string }> {
   const ctx = await requireRequestContext()
   if (!ctx.tenantId) return { ok: false, error: 'Active tenant required' }
+  try {
+    assertCan(ctx, 'incidents.create')
+  } catch {
+    return { ok: false, error: 'You do not have permission to report incidents.' }
+  }
   if (!input.responseId) return { ok: false, error: 'Missing responseId' }
   const title = input.title?.trim()
   if (!title) return { ok: false, error: 'Title is required' }

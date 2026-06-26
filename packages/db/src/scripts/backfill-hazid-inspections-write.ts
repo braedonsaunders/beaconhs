@@ -1,4 +1,4 @@
-// Backfill the new hazid/inspections WRITE permissions onto existing roles.
+// Backfill newly introduced hazid/inspections permissions onto existing roles.
 //
 // Hazard assessments and inspections gained dedicated write permissions
 // (`<prefix>.create` / `<prefix>.update`) so their record-mutation server
@@ -15,7 +15,11 @@
 // stored an explicit `*.read.self` string (the visibility resolver defaults to
 // `self`, so workers read their own records without holding the literal perm).
 //
-// Idempotent: a re-run finds the write keys already present and grants nothing.
+// Inspections also gained `inspections.manage` for the native inspections
+// admin/config surface. Existing built-in Safety Manager and Tenant Admin roles
+// need that permission even when the tenant has already been seeded.
+//
+// Idempotent: a re-run finds the permission keys already present and grants nothing.
 // Never downgrades / removes anything.
 //
 // Connects via the BYPASSRLS super pool (SUPERADMIN_DATABASE_URL / beaconhs_super) —
@@ -30,6 +34,7 @@ import * as s from '../schema'
 // Modules that gained write permissions, with the read tiers that mark a role
 // as "interacts with this module today".
 const MODULES = ['hazid', 'inspections'] as const
+const BUILTIN_BASELINE_ONLY = ['inspections.manage'] as const
 
 function readsModule(perms: Set<string>, prefix: string): boolean {
   return (
@@ -66,6 +71,9 @@ async function main() {
           // the write perm (brings seeded built-in roles to the new baseline).
           if (readsToday || builtinPerms?.has(key)) additions.push(key)
         }
+      }
+      for (const key of BUILTIN_BASELINE_ONLY) {
+        if (!perms.has(key) && builtinPerms?.has(key)) additions.push(key)
       }
       if (additions.length === 0) continue
 

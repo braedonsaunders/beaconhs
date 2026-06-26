@@ -9,6 +9,7 @@
 import { revalidatePath } from 'next/cache'
 import { eq } from 'drizzle-orm'
 import { formResponseCheckins, formResponses } from '@beaconhs/db/schema'
+import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { canSeeRecord } from '@/lib/visibility'
 import { recordAudit } from '@/lib/audit'
@@ -16,11 +17,25 @@ import { recordAudit } from '@/lib/audit'
 export type ActionResult = { ok: true } | { ok: false; error: string }
 
 type Ctx = Awaited<ReturnType<typeof requireRequestContext>>
+type LoadedSession = NonNullable<Awaited<ReturnType<typeof loadSession>>>
 
 function safeTenantUserId(ctx: Ctx): string | null {
   const id = ctx.membership?.id
   if (!id || id === 'super-admin') return null
   return id
+}
+
+function ownsSession(ctx: Ctx, session: LoadedSession): boolean {
+  return session.submittedBy === (ctx.membership?.id ?? null)
+}
+
+function canManageSession(ctx: Ctx, session: LoadedSession): boolean {
+  return (
+    ctx.isSuperAdmin ||
+    ctx.permissions.has('*') ||
+    can(ctx, 'forms.response.read.all') ||
+    ownsSession(ctx, session)
+  )
 }
 
 // Load the monitored session AND enforce per-user record visibility, so a user
@@ -64,6 +79,9 @@ export async function recordSessionCheckin(args: {
   const ctx = await requireRequestContext()
   const s = await loadSession(ctx, args.responseId)
   if (!s) return { ok: false, error: 'Session not found.' }
+  if (!ownsSession(ctx, s) && !ctx.isSuperAdmin && !ctx.permissions.has('*')) {
+    return { ok: false, error: 'Only the session owner can check in.' }
+  }
   if (!s.monitorStatus) return { ok: false, error: 'This response is not a monitored session.' }
   if (s.monitorStatus === 'completed' || s.monitorStatus === 'cancelled') {
     return { ok: false, error: 'This session has already ended.' }
@@ -109,6 +127,7 @@ async function closeSession(
   const ctx = await requireRequestContext()
   const s = await loadSession(ctx, responseId)
   if (!s) return { ok: false, error: 'Session not found.' }
+  if (!canManageSession(ctx, s)) return { ok: false, error: 'You cannot close this session.' }
   if (!s.monitorStatus) return { ok: false, error: 'This response is not a monitored session.' }
   await ctx.db((tx) =>
     tx

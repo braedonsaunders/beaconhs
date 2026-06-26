@@ -312,7 +312,74 @@ export function lintAutomationGraph(
       errors.push(`Action ${n.id}: set_field targets unknown field "${n.data.action.field}"`)
     }
   }
+  errors.push(...lintWorkerTriggerCompatibility(graph))
   return errors
+}
+
+const WORKER_ONLY_TRIGGERS = new Set<TriggerData['trigger']>(['scheduled', 'session_overdue'])
+const WORKER_TRIGGER_ACTIONS = new Set<ActionData['action']>(['send_email', 'notify_role'])
+
+/**
+ * Scheduled and session-overdue triggers execute in the worker, not in a web
+ * request. The worker only has a narrow, side-effect-safe executor; reject
+ * branches that would otherwise save successfully and then silently no-op.
+ */
+export function lintWorkerTriggerCompatibility(graph: AutomationGraph): string[] {
+  const errors: string[] = []
+  const byId = new Map(graph.nodes.map((n) => [n.id, n]))
+  const outbound = (id: string) => graph.edges.filter((e) => e.source === id)
+
+  for (const trigger of graph.nodes) {
+    if (
+      trigger.data.kind !== 'trigger' ||
+      !WORKER_ONLY_TRIGGERS.has(trigger.data.trigger.trigger)
+    ) {
+      continue
+    }
+    const triggerName = trigger.data.trigger.trigger
+    const seen = new Set<string>()
+    const walk = (nodeId: string) => {
+      if (seen.has(nodeId)) return
+      seen.add(nodeId)
+      const node = byId.get(nodeId)
+      if (!node) return
+      if (node.id !== trigger.id && node.data.kind === 'trigger') return
+
+      if (node.data.kind === 'gate') {
+        errors.push(
+          `Trigger ${trigger.id}: "${triggerName}" runs in the worker and cannot pause for approval gates.`,
+        )
+        return
+      }
+
+      if (node.data.kind === 'action') {
+        const action = node.data.action
+        if (!WORKER_TRIGGER_ACTIONS.has(action.action)) {
+          errors.push(
+            `Trigger ${trigger.id}: "${triggerName}" runs in the worker and cannot execute "${action.action}".`,
+          )
+        } else if (
+          action.action === 'send_email' &&
+          ((action.mode ?? 'inline') !== 'inline' ||
+            action.attachPdf ||
+            action.templateId ||
+            action.pdfTemplateId ||
+            action.design ||
+            action.compiledHtml)
+        ) {
+          errors.push(
+            `Trigger ${trigger.id}: "${triggerName}" can only send inline worker emails without PDF attachments.`,
+          )
+        }
+      }
+
+      for (const edge of outbound(nodeId)) walk(edge.target)
+    }
+
+    for (const edge of outbound(trigger.id)) walk(edge.target)
+  }
+
+  return Array.from(new Set(errors))
 }
 
 // --- Engine: plan which actions/gates fire for a trigger -------------------

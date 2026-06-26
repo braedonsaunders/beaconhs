@@ -54,6 +54,7 @@ const PERMISSION_LABELS: Record<string, string> = {
   'inspections.read.self': 'View own inspections',
   'inspections.create': 'Perform inspections',
   'inspections.update': 'Edit inspections',
+  'inspections.manage': 'Manage inspections',
 
   'hazid.read.all': 'View all hazard assessments',
   'hazid.read.site': 'View site hazard assessments',
@@ -124,7 +125,6 @@ const PERMISSION_LABELS: Record<string, string> = {
   'admin.users.impersonate': 'Impersonate users',
   'admin.roles.manage': 'Manage roles',
   'admin.org.manage': 'Manage org hierarchy',
-  'admin.plugins.manage': 'Manage plugins',
   'admin.api-keys.manage': 'Manage API keys',
   'admin.settings.manage': 'Manage settings',
   'admin.audit.read': 'View audit log',

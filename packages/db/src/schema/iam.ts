@@ -159,6 +159,7 @@ export const PERMISSION_CATALOGUE = [
   'inspections.read.self',
   'inspections.create',
   'inspections.update',
+  'inspections.manage',
   // Hazard assessments (internal key `hazid`) — record visibility tiers + write.
   // `create` = start/copy an assessment; `update` = edit/lock/sign/answer and
   // add/remove hazards, tasks, PPE, questions, signatures, photos.
@@ -243,7 +244,6 @@ export const PERMISSION_CATALOGUE = [
   'admin.users.impersonate',
   'admin.roles.manage',
   'admin.org.manage',
-  'admin.plugins.manage',
   'admin.api-keys.manage',
   'admin.settings.manage',
   'admin.audit.read',
@@ -342,6 +342,7 @@ export const BUILTIN_ROLES: Record<
       'inspections.read.all',
       'inspections.create',
       'inspections.update',
+      'inspections.manage',
       'hazid.read.all',
       'hazid.create',
       'hazid.update',

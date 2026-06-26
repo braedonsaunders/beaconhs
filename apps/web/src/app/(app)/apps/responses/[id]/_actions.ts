@@ -34,6 +34,7 @@ import { canSeeRecord } from '@/lib/visibility'
 import { recordAudit } from '@/lib/audit'
 import { storeSignatureValue } from '@/lib/signature-storage'
 import { runStatusChangeAutomations } from '@/app/(app)/apps/_lib/run-automations'
+import { getUserRoleKeys } from '@/app/(app)/apps/_lib/access'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -238,6 +239,22 @@ function resolveCurrentStepKey(
   return first.key
 }
 
+function canActOnWorkflowStep(
+  ctx: Awaited<ReturnType<typeof requireRequestContext>>,
+  response: typeof formResponses.$inferSelect,
+  step: FormWorkflowStep,
+  roleKeys: ReadonlySet<string>,
+): boolean {
+  if (ctx.isSuperAdmin || ctx.permissions.has('*')) return true
+  const assignee = step.assignee
+  if (assignee.type === 'literal') return assignee.userId === ctx.userId
+  if (assignee.type === 'role') return !!assignee.role && roleKeys.has(assignee.role)
+  if (assignee.type === 'expression' && assignee.expr.trim() === '$submitter') {
+    return response.submittedBy === (ctx.membership?.id ?? null)
+  }
+  return false
+}
+
 // ---------------------------------------------------------------------------
 // 1. signWorkflowStep — capture a signature + mark the step signed
 // ---------------------------------------------------------------------------
@@ -274,6 +291,9 @@ export async function signWorkflowStep(args: {
   const { response, workflowSteps, stepsByKey } = await loadResponseWithWorkflow(ctx, responseId)
   const meta = stepsByKey.get(stepKey)
   if (!meta) return { ok: false, error: `Unknown step "${stepKey}"` }
+  if (!canActOnWorkflowStep(ctx, response, meta.step, await getUserRoleKeys(ctx))) {
+    return { ok: false, error: 'You are not assigned to this workflow step' }
+  }
 
   // State-machine guard: only the current step is signable. (currentStep may
   // be null on a freshly submitted response — then the first step is current.)
@@ -362,6 +382,9 @@ export async function advanceWorkflowStep(args: {
   const { response, workflowSteps, stepsByKey } = await loadResponseWithWorkflow(ctx, responseId)
   const meta = stepsByKey.get(currentStepKey)
   if (!meta) return { ok: false, error: `Unknown step "${currentStepKey}"` }
+  if (!canActOnWorkflowStep(ctx, response, meta.step, await getUserRoleKeys(ctx))) {
+    return { ok: false, error: 'You are not assigned to this workflow step' }
+  }
 
   // Guard: must match the response's current pointer (or first step if null).
   const realCurrent = resolveCurrentStepKey(response, workflowSteps)
@@ -489,6 +512,9 @@ export async function rejectWorkflowStep(args: {
   const { response, workflowSteps, stepsByKey } = await loadResponseWithWorkflow(ctx, responseId)
   const meta = stepsByKey.get(currentStepKey)
   if (!meta) return { ok: false, error: `Unknown step "${currentStepKey}"` }
+  if (!canActOnWorkflowStep(ctx, response, meta.step, await getUserRoleKeys(ctx))) {
+    return { ok: false, error: 'You are not assigned to this workflow step' }
+  }
 
   const realCurrent = resolveCurrentStepKey(response, workflowSteps)
   if (realCurrent !== currentStepKey) {

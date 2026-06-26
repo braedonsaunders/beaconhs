@@ -5,7 +5,11 @@
 // forms.template.create, modules on their Manage permission.
 
 import { eq } from 'drizzle-orm'
-import { automationGraphSchema, emptyAutomationGraph } from '@beaconhs/forms-core'
+import {
+  automationGraphSchema,
+  emptyAutomationGraph,
+  lintWorkerTriggerCompatibility,
+} from '@beaconhs/forms-core'
 import { can, type RequestContext } from '@beaconhs/tenant'
 import { formAutomations } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
@@ -72,6 +76,8 @@ export async function saveFlow(
 
   const parsed = automationGraphSchema.safeParse(graph)
   if (!parsed.success) return { ok: false, error: 'Invalid flow graph' }
+  const compatibilityErrors = lintWorkerTriggerCompatibility(parsed.data)
+  if (compatibilityErrors.length > 0) return { ok: false, error: compatibilityErrors[0] }
   await ctx.db((tx) =>
     tx
       .update(formAutomations)
