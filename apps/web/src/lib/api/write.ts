@@ -11,15 +11,18 @@ import { z } from 'zod'
 import { and, count, eq, isNull, sql } from 'drizzle-orm'
 import {
   correctiveActionSeverity,
+  correctiveActionStatus,
   correctiveActionSource,
   correctiveActions,
   departments,
   equipmentCategories,
   equipmentItems,
+  equipmentLocationHistory,
   equipmentStatus,
   equipmentTypes,
   incidents,
   incidentSeverity,
+  incidentStatus,
   incidentType,
   orgUnits,
   people,
@@ -41,11 +44,22 @@ import { ApiError } from './errors'
 type Json = Record<string, unknown>
 export type WriteResult = { id: string; [k: string]: unknown }
 type WriteHandler = (ctx: RequestContext, body: unknown) => Promise<WriteResult>
+type PatchHandler = (ctx: RequestContext, id: string, body: unknown) => Promise<WriteResult>
+type DeleteHandler = (ctx: RequestContext, id: string) => Promise<WriteResult>
 type TenantTx = Parameters<Parameters<RequestContext['db']>[0]>[0]
 type WriteRegistration = {
   permission: string
   handler: WriteHandler
   bodySchema: Json
+  update?: {
+    permission: string
+    handler: PatchHandler
+    bodySchema: Json
+  }
+  delete?: {
+    permission: string
+    handler: DeleteHandler
+  }
 }
 
 const uuid = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, {
@@ -68,6 +82,27 @@ function stripEmpty(value: string | null | undefined): string | null {
 
 function optionalDate(value: string | null | undefined): string | null {
   return value ?? null
+}
+
+function hasOwn<T extends object, K extends PropertyKey>(
+  value: T,
+  key: K,
+): value is T & Record<K, unknown> {
+  return Object.prototype.hasOwnProperty.call(value, key)
+}
+
+function assertPatchNotEmpty(patch: Record<string, unknown>): void {
+  if (Object.keys(patch).length === 0) {
+    throw ApiError.invalid('At least one editable field is required')
+  }
+}
+
+function optionalObjectSchema(schema: Json): Json {
+  return {
+    type: 'object',
+    properties: (schema.properties as Json | undefined) ?? {},
+    additionalProperties: false,
+  }
 }
 
 function safeTenantUserId(ctx: RequestContext): string | null {
@@ -237,16 +272,140 @@ async function createIncident(ctx: RequestContext, raw: unknown): Promise<WriteR
   }).catch(() => {})
   revalidatePath('/incidents')
 
+  return incidentResult(row)
+}
+
+function incidentResult(row: typeof incidents.$inferSelect): WriteResult {
   return {
     id: row.id,
     reference: row.reference,
-    type: row.type,
+    title: row.title,
     severity: row.severity,
     status: row.status,
-    title: row.title,
-    occurredAt: row.occurredAt.toISOString(),
-    siteOrgUnitId: row.siteOrgUnitId,
+    type: row.type,
+    occurred_at: row.occurredAt.toISOString(),
+    site_org_unit_id: row.siteOrgUnitId,
+    department_id: row.departmentId,
+    actual_severity: row.actualSeverity,
+    potential_severity: row.potentialSeverity,
   }
+}
+
+const patchableIncidentStatuses = incidentStatus.enumValues.filter((status) => status !== 'closed')
+const incidentPatch = incidentCreate.partial().extend({
+  status: z.enum(['reported', 'under_investigation', 'pending_review', 'reopened']).optional(),
+})
+
+async function updateIncident(ctx: RequestContext, id: string, raw: unknown): Promise<WriteResult> {
+  const parsed = incidentPatch.safeParse(raw)
+  if (!parsed.success) throw validationError(parsed.error)
+  const b = parsed.data
+
+  const result = await ctx.db(async (tx) => {
+    const [before] = await tx.select().from(incidents).where(eq(incidents.id, id)).limit(1)
+    if (!before || before.deletedAt) throw ApiError.notFound(`No incidents with id ${id}`)
+    if (before.locked) throw ApiError.invalid('Incident is locked and cannot be updated')
+
+    await ensureSite(tx, b.siteOrgUnitId)
+    await ensurePerson(tx, b.supervisorPersonId, 'supervisor')
+    if (b.departmentId) {
+      const [department] = await tx
+        .select({ id: departments.id })
+        .from(departments)
+        .where(eq(departments.id, b.departmentId))
+        .limit(1)
+      if (!department) {
+        throw ApiError.invalid(`No department with id ${b.departmentId} in this tenant`)
+      }
+    }
+
+    const patch: Partial<typeof incidents.$inferInsert> = {}
+    if (hasOwn(b, 'type')) patch.type = b.type
+    if (hasOwn(b, 'severity')) patch.severity = b.severity
+    if (hasOwn(b, 'status')) patch.status = b.status
+    if (hasOwn(b, 'title')) patch.title = b.title
+    if (hasOwn(b, 'description')) patch.description = stripEmpty(b.description)
+    if (hasOwn(b, 'occurredAt')) patch.occurredAt = b.occurredAt
+    if (hasOwn(b, 'siteOrgUnitId')) patch.siteOrgUnitId = b.siteOrgUnitId ?? null
+    if (hasOwn(b, 'location')) patch.location = stripEmpty(b.location)
+    if (hasOwn(b, 'weather')) patch.weather = stripEmpty(b.weather)
+    if (hasOwn(b, 'departmentId')) patch.departmentId = b.departmentId ?? null
+    if (hasOwn(b, 'supervisorPersonId')) patch.supervisorPersonId = b.supervisorPersonId ?? null
+    if (hasOwn(b, 'foremanText')) patch.foremanText = stripEmpty(b.foremanText)
+    if (hasOwn(b, 'externalPeopleInvolved')) {
+      patch.externalPeopleInvolved = stripEmpty(b.externalPeopleInvolved)
+    }
+    if (hasOwn(b, 'witnesses')) patch.witnesses = stripEmpty(b.witnesses)
+    if (hasOwn(b, 'eventsLeadingUp')) patch.eventsLeadingUp = stripEmpty(b.eventsLeadingUp)
+    if (hasOwn(b, 'immediateActionTaken')) {
+      patch.immediateActionTaken = stripEmpty(b.immediateActionTaken)
+    }
+    if (hasOwn(b, 'ppeWorn')) patch.ppeWorn = stripEmpty(b.ppeWorn)
+    if (hasOwn(b, 'criticalInjury')) patch.criticalInjury = b.criticalInjury
+    if (hasOwn(b, 'ministryOfLabourNotified')) {
+      patch.ministryOfLabourNotified = b.ministryOfLabourNotified
+    }
+    if (hasOwn(b, 'emsNotified')) patch.emsNotified = b.emsNotified
+    if (hasOwn(b, 'firstAidReceived')) patch.firstAidReceived = b.firstAidReceived
+    if (hasOwn(b, 'firstAidProvider')) patch.firstAidProvider = stripEmpty(b.firstAidProvider)
+    if (hasOwn(b, 'medicalAttentionReceived')) {
+      patch.medicalAttentionReceived = b.medicalAttentionReceived
+    }
+    if (hasOwn(b, 'actualSeverity')) patch.actualSeverity = b.actualSeverity ?? null
+    if (hasOwn(b, 'potentialSeverity')) patch.potentialSeverity = b.potentialSeverity ?? null
+    if (hasOwn(b, 'severityRating')) patch.severityRating = b.severityRating ?? null
+    assertPatchNotEmpty(patch)
+
+    const [updated] = await tx.update(incidents).set(patch).where(eq(incidents.id, id)).returning()
+    return { before, updated }
+  })
+
+  if (!result.updated) throw new ApiError(500, 'internal', 'Failed to update incident')
+  await recordAudit(ctx, {
+    entityType: 'incident',
+    entityId: id,
+    action: 'update',
+    summary: `Updated ${result.updated.reference}: ${result.updated.title}`,
+    before: {
+      title: result.before.title,
+      status: result.before.status,
+      severity: result.before.severity,
+    },
+    after: {
+      title: result.updated.title,
+      status: result.updated.status,
+      severity: result.updated.severity,
+    },
+  })
+  revalidatePath('/incidents')
+  revalidatePath(`/incidents/${id}`)
+  return incidentResult(result.updated)
+}
+
+async function deleteIncident(ctx: RequestContext, id: string): Promise<WriteResult> {
+  const result = await ctx.db(async (tx) => {
+    const [before] = await tx.select().from(incidents).where(eq(incidents.id, id)).limit(1)
+    if (!before || before.deletedAt) throw ApiError.notFound(`No incidents with id ${id}`)
+    if (before.locked) throw ApiError.invalid('Incident is locked and cannot be archived')
+    const deletedAt = new Date()
+    await tx.update(incidents).set({ deletedAt }).where(eq(incidents.id, id))
+    return { before, deletedAt }
+  })
+  await recordAudit(ctx, {
+    entityType: 'incident',
+    entityId: id,
+    action: 'delete',
+    summary: `Archived ${result.before.reference}: ${result.before.title}`,
+    before: {
+      reference: result.before.reference,
+      title: result.before.title,
+      status: result.before.status,
+    },
+    after: { deletedAt: result.deletedAt },
+  })
+  revalidatePath('/incidents')
+  revalidatePath(`/incidents/${id}`)
+  return { id, deleted: true, deletedAt: result.deletedAt.toISOString() }
 }
 
 const INCIDENT_BODY: Json = {
@@ -278,6 +437,18 @@ const INCIDENT_BODY: Json = {
     actualSeverity: { type: 'integer', minimum: 1, maximum: 5 },
     potentialSeverity: { type: 'integer', minimum: 1, maximum: 5 },
     severityRating: { type: 'integer', minimum: 1, maximum: 5 },
+  },
+}
+
+const INCIDENT_PATCH_BODY: Json = {
+  ...optionalObjectSchema(INCIDENT_BODY),
+  properties: {
+    ...(INCIDENT_BODY.properties as Json),
+    status: {
+      type: 'string',
+      enum: patchableIncidentStatuses,
+      description: 'Lifecycle close is intentionally not exposed through generic PATCH.',
+    },
   },
 }
 
@@ -389,17 +560,163 @@ async function createCorrectiveAction(ctx: RequestContext, raw: unknown): Promis
   }).catch(() => {})
   revalidatePath('/corrective-actions')
 
+  return correctiveActionResult(row)
+}
+
+function correctiveActionResult(row: typeof correctiveActions.$inferSelect): WriteResult {
   return {
     id: row.id,
     reference: row.reference,
     title: row.title,
     severity: row.severity,
     status: row.status,
+    due_on: row.dueOn,
+    assigned_on: row.assignedOn,
     source: row.source,
-    assignedOn: row.assignedOn,
-    dueOn: row.dueOn,
-    siteOrgUnitId: row.siteOrgUnitId,
+    site_org_unit_id: row.siteOrgUnitId,
   }
+}
+
+const patchableCorrectiveActionStatuses = correctiveActionStatus.enumValues.filter(
+  (status) => status !== 'closed',
+)
+const correctiveActionPatch = correctiveActionCreate.partial().extend({
+  status: z.enum(['open', 'in_progress', 'pending_verification', 'cancelled']).optional(),
+  rootCause: z.string().max(5000).nullish(),
+  actionTaken: z.string().max(5000).nullish(),
+})
+
+async function updateCorrectiveAction(
+  ctx: RequestContext,
+  id: string,
+  raw: unknown,
+): Promise<WriteResult> {
+  const parsed = correctiveActionPatch.safeParse(raw)
+  if (!parsed.success) throw validationError(parsed.error)
+  const b = parsed.data
+
+  const result = await ctx.db(async (tx) => {
+    const [before] = await tx
+      .select()
+      .from(correctiveActions)
+      .where(eq(correctiveActions.id, id))
+      .limit(1)
+    if (!before || before.deletedAt) {
+      throw ApiError.notFound(`No corrective_actions with id ${id}`)
+    }
+    if (before.locked) throw ApiError.invalid('Corrective action is locked and cannot be updated')
+
+    await ensureSite(tx, b.siteOrgUnitId)
+    await ensureTenantUser(tx, b.ownerTenantUserId, 'owner tenant user')
+    const sourceType =
+      hasOwn(b, 'sourceEntityType') && typeof b.sourceEntityType !== 'undefined'
+        ? stripEmpty(b.sourceEntityType)
+        : before.sourceEntityType
+    const sourceId =
+      hasOwn(b, 'sourceEntityId') && typeof b.sourceEntityId !== 'undefined'
+        ? (b.sourceEntityId ?? null)
+        : before.sourceEntityId
+    if (sourceType === 'incident' && sourceId) {
+      const [incident] = await tx
+        .select({ id: incidents.id })
+        .from(incidents)
+        .where(eq(incidents.id, sourceId))
+        .limit(1)
+      if (!incident) throw ApiError.invalid(`No incident with id ${sourceId} in this tenant`)
+    }
+
+    const patch: Partial<typeof correctiveActions.$inferInsert> = {}
+    if (hasOwn(b, 'title')) patch.title = b.title
+    if (hasOwn(b, 'description')) patch.description = stripEmpty(b.description)
+    if (hasOwn(b, 'severity')) patch.severity = b.severity
+    if (hasOwn(b, 'status')) patch.status = b.status
+    if (hasOwn(b, 'source')) patch.source = b.source
+    if (hasOwn(b, 'sourceEntityType')) patch.sourceEntityType = sourceType
+    if (hasOwn(b, 'sourceEntityId')) {
+      patch.sourceEntityId = b.sourceEntityId ?? null
+      patch.sourceFormResponseId =
+        sourceType === 'form_response' ? (b.sourceEntityId ?? null) : null
+    }
+    if (hasOwn(b, 'siteOrgUnitId')) patch.siteOrgUnitId = b.siteOrgUnitId ?? null
+    if (hasOwn(b, 'assignedOn')) patch.assignedOn = optionalDate(b.assignedOn)
+    if (hasOwn(b, 'dueOn')) patch.dueOn = optionalDate(b.dueOn)
+    if (hasOwn(b, 'ownerTenantUserId')) patch.ownerTenantUserId = b.ownerTenantUserId ?? null
+    if (hasOwn(b, 'verificationRequired')) patch.verificationRequired = b.verificationRequired
+    if (hasOwn(b, 'rootCause')) patch.rootCause = stripEmpty(b.rootCause)
+    if (hasOwn(b, 'actionTaken')) patch.actionTaken = stripEmpty(b.actionTaken)
+    if (hasOwn(b, 'metadata')) patch.metadata = b.metadata
+    assertPatchNotEmpty(patch)
+
+    const [updated] = await tx
+      .update(correctiveActions)
+      .set(patch)
+      .where(eq(correctiveActions.id, id))
+      .returning()
+    return { before, updated }
+  })
+
+  if (!result.updated) throw new ApiError(500, 'internal', 'Failed to update corrective action')
+  await recordAudit(ctx, {
+    entityType: 'corrective_action',
+    entityId: id,
+    action: 'update',
+    summary: `Updated ${result.updated.reference}: ${result.updated.title}`,
+    before: {
+      title: result.before.title,
+      status: result.before.status,
+      severity: result.before.severity,
+      ownerTenantUserId: result.before.ownerTenantUserId,
+    },
+    after: {
+      title: result.updated.title,
+      status: result.updated.status,
+      severity: result.updated.severity,
+      ownerTenantUserId: result.updated.ownerTenantUserId,
+    },
+  })
+  if (result.before.status !== result.updated.status) {
+    await runModuleFlows(ctx, {
+      moduleKey: 'corrective-actions',
+      event: 'status_change',
+      subjectId: id,
+      toStatus: result.updated.status,
+    })
+  }
+  revalidatePath('/corrective-actions')
+  revalidatePath(`/corrective-actions/${id}`)
+  return correctiveActionResult(result.updated)
+}
+
+async function deleteCorrectiveAction(ctx: RequestContext, id: string): Promise<WriteResult> {
+  const result = await ctx.db(async (tx) => {
+    const [before] = await tx
+      .select()
+      .from(correctiveActions)
+      .where(eq(correctiveActions.id, id))
+      .limit(1)
+    if (!before || before.deletedAt) {
+      throw ApiError.notFound(`No corrective_actions with id ${id}`)
+    }
+    if (before.locked) throw ApiError.invalid('Corrective action is locked and cannot be archived')
+    const deletedAt = new Date()
+    await tx.update(correctiveActions).set({ deletedAt }).where(eq(correctiveActions.id, id))
+    return { before, deletedAt }
+  })
+  await recordAudit(ctx, {
+    entityType: 'corrective_action',
+    entityId: id,
+    action: 'delete',
+    summary: `Archived ${result.before.reference}: ${result.before.title}`,
+    before: {
+      reference: result.before.reference,
+      title: result.before.title,
+      status: result.before.status,
+    },
+    after: { deletedAt: result.deletedAt },
+  })
+  revalidatePath('/corrective-actions')
+  revalidatePath(`/corrective-actions/${id}`)
+  return { id, deleted: true, deletedAt: result.deletedAt.toISOString() }
 }
 
 const CORRECTIVE_ACTION_BODY: Json = {
@@ -418,6 +735,20 @@ const CORRECTIVE_ACTION_BODY: Json = {
     ownerTenantUserId: { type: 'string', format: 'uuid' },
     verificationRequired: { type: 'boolean', default: false },
     metadata: { type: 'object', additionalProperties: true },
+  },
+}
+
+const CORRECTIVE_ACTION_PATCH_BODY: Json = {
+  ...optionalObjectSchema(CORRECTIVE_ACTION_BODY),
+  properties: {
+    ...(CORRECTIVE_ACTION_BODY.properties as Json),
+    status: {
+      type: 'string',
+      enum: patchableCorrectiveActionStatuses,
+      description: 'Lifecycle close is intentionally not exposed through generic PATCH.',
+    },
+    rootCause: { type: 'string' },
+    actionTaken: { type: 'string' },
   },
 }
 
@@ -526,15 +857,195 @@ async function createEquipment(ctx: RequestContext, raw: unknown): Promise<Write
   })
   revalidatePath('/equipment')
 
+  return equipmentResult(row)
+}
+
+function equipmentResult(row: typeof equipmentItems.$inferSelect): WriteResult {
   return {
     id: row.id,
-    assetTag: row.assetTag,
+    asset_tag: row.assetTag,
     name: row.name,
-    serialNumber: row.serialNumber,
+    serial_number: row.serialNumber,
     status: row.status,
-    currentSiteOrgUnitId: row.currentSiteOrgUnitId,
-    currentHolderPersonId: row.currentHolderPersonId,
+    current_site_org_unit_id: row.currentSiteOrgUnitId,
+    next_annual_inspection_due: row.nextAnnualInspectionDue,
+    next_oil_change_due: row.nextOilChangeDue,
   }
+}
+
+const equipmentPatch = equipmentCreate.partial()
+
+async function updateEquipment(
+  ctx: RequestContext,
+  id: string,
+  raw: unknown,
+): Promise<WriteResult> {
+  const parsed = equipmentPatch.safeParse(raw)
+  if (!parsed.success) throw validationError(parsed.error)
+  const b = parsed.data
+
+  const result = await ctx.db(async (tx) => {
+    const [before] = await tx
+      .select()
+      .from(equipmentItems)
+      .where(eq(equipmentItems.id, id))
+      .limit(1)
+    if (!before || before.deletedAt) throw ApiError.notFound(`No equipment with id ${id}`)
+
+    if (b.typeId) {
+      const [type] = await tx
+        .select({ id: equipmentTypes.id })
+        .from(equipmentTypes)
+        .where(eq(equipmentTypes.id, b.typeId))
+        .limit(1)
+      if (!type) throw ApiError.invalid(`No equipment type with id ${b.typeId} in this tenant`)
+    }
+    if (b.categoryId) {
+      const [category] = await tx
+        .select({ id: equipmentCategories.id })
+        .from(equipmentCategories)
+        .where(eq(equipmentCategories.id, b.categoryId))
+        .limit(1)
+      if (!category) {
+        throw ApiError.invalid(`No equipment category with id ${b.categoryId} in this tenant`)
+      }
+    }
+    await ensureSite(tx, b.currentSiteOrgUnitId)
+    await ensurePerson(tx, b.currentHolderPersonId, 'holder')
+
+    const nextAssetTag = hasOwn(b, 'assetTag') ? b.assetTag : undefined
+    if (nextAssetTag && nextAssetTag !== before.assetTag) {
+      const [existing] = await tx
+        .select({ id: equipmentItems.id })
+        .from(equipmentItems)
+        .where(eq(equipmentItems.assetTag, nextAssetTag))
+        .limit(1)
+      if (existing && existing.id !== id) {
+        throw ApiError.invalid(`Equipment asset tag "${nextAssetTag}" already exists`)
+      }
+    }
+
+    const patch: Partial<typeof equipmentItems.$inferInsert> = {}
+    if (nextAssetTag) patch.assetTag = nextAssetTag
+    if (hasOwn(b, 'name')) patch.name = b.name
+    if (hasOwn(b, 'typeId')) patch.typeId = b.typeId ?? null
+    if (hasOwn(b, 'categoryId')) patch.categoryId = b.categoryId ?? null
+    if (hasOwn(b, 'serialNumber')) patch.serialNumber = stripEmpty(b.serialNumber)
+    if (hasOwn(b, 'description')) patch.description = stripEmpty(b.description)
+    if (hasOwn(b, 'notes')) patch.notes = stripEmpty(b.notes)
+    if (hasOwn(b, 'status')) patch.status = b.status
+    if (hasOwn(b, 'purchaseDate')) patch.purchaseDate = optionalDate(b.purchaseDate)
+    if (hasOwn(b, 'warrantyExpiresOn')) {
+      patch.warrantyExpiresOn = optionalDate(b.warrantyExpiresOn)
+    }
+    if (hasOwn(b, 'currentSiteOrgUnitId')) {
+      patch.currentSiteOrgUnitId = b.currentSiteOrgUnitId ?? null
+    }
+    if (hasOwn(b, 'currentHolderPersonId')) {
+      patch.currentHolderPersonId = b.currentHolderPersonId ?? null
+    }
+    if (hasOwn(b, 'requiresPreUseInspection')) {
+      patch.requiresPreUseInspection = b.requiresPreUseInspection
+    }
+    if (hasOwn(b, 'requiresAnnualInspection')) {
+      patch.requiresAnnualInspection = b.requiresAnnualInspection
+    }
+    if (hasOwn(b, 'nextAnnualInspectionDue')) {
+      patch.nextAnnualInspectionDue = optionalDate(b.nextAnnualInspectionDue)
+    }
+    if (hasOwn(b, 'requiresOilChange')) patch.requiresOilChange = b.requiresOilChange
+    if (hasOwn(b, 'oilChangeIntervalMonths')) {
+      patch.oilChangeIntervalMonths = b.oilChangeIntervalMonths ?? null
+    }
+    if (hasOwn(b, 'lastOilChangeOn')) patch.lastOilChangeOn = optionalDate(b.lastOilChangeOn)
+    if (hasOwn(b, 'nextOilChangeDue')) patch.nextOilChangeDue = optionalDate(b.nextOilChangeDue)
+    if (hasOwn(b, 'metadata')) patch.metadata = b.metadata
+
+    const nextHolder = hasOwn(b, 'currentHolderPersonId')
+      ? (b.currentHolderPersonId ?? null)
+      : before.currentHolderPersonId
+    const nextStatus = hasOwn(b, 'status') ? b.status : before.status
+    if (hasOwn(b, 'currentHolderPersonId') || hasOwn(b, 'status')) {
+      patch.isAvailableForCheckout = !nextHolder && nextStatus === 'in_service'
+    }
+    assertPatchNotEmpty(patch)
+
+    const [updated] = await tx
+      .update(equipmentItems)
+      .set(patch)
+      .where(eq(equipmentItems.id, id))
+      .returning()
+
+    const nextSite = hasOwn(b, 'currentSiteOrgUnitId')
+      ? (b.currentSiteOrgUnitId ?? null)
+      : before.currentSiteOrgUnitId
+    if (nextSite !== before.currentSiteOrgUnitId || nextHolder !== before.currentHolderPersonId) {
+      await tx.insert(equipmentLocationHistory).values({
+        tenantId: ctx.tenantId,
+        itemId: id,
+        siteOrgUnitId: nextSite,
+        holderPersonId: nextHolder,
+        recordedByTenantUserId: safeTenantUserId(ctx),
+        note: 'Updated via public API',
+      })
+    }
+
+    return { before, updated }
+  })
+
+  if (!result.updated) throw new ApiError(500, 'internal', 'Failed to update equipment item')
+  await recordAudit(ctx, {
+    entityType: 'equipment_item',
+    entityId: id,
+    action: 'update',
+    summary: `Updated equipment ${result.updated.assetTag}: ${result.updated.name}`,
+    before: {
+      assetTag: result.before.assetTag,
+      name: result.before.name,
+      status: result.before.status,
+      currentSiteOrgUnitId: result.before.currentSiteOrgUnitId,
+      currentHolderPersonId: result.before.currentHolderPersonId,
+    },
+    after: {
+      assetTag: result.updated.assetTag,
+      name: result.updated.name,
+      status: result.updated.status,
+      currentSiteOrgUnitId: result.updated.currentSiteOrgUnitId,
+      currentHolderPersonId: result.updated.currentHolderPersonId,
+    },
+  })
+  revalidatePath('/equipment')
+  revalidatePath(`/equipment/${id}`)
+  return equipmentResult(result.updated)
+}
+
+async function deleteEquipment(ctx: RequestContext, id: string): Promise<WriteResult> {
+  const result = await ctx.db(async (tx) => {
+    const [before] = await tx
+      .select()
+      .from(equipmentItems)
+      .where(eq(equipmentItems.id, id))
+      .limit(1)
+    if (!before || before.deletedAt) throw ApiError.notFound(`No equipment with id ${id}`)
+    const deletedAt = new Date()
+    await tx.update(equipmentItems).set({ deletedAt }).where(eq(equipmentItems.id, id))
+    return { before, deletedAt }
+  })
+  await recordAudit(ctx, {
+    entityType: 'equipment_item',
+    entityId: id,
+    action: 'delete',
+    summary: `Archived equipment ${result.before.assetTag}: ${result.before.name}`,
+    before: {
+      assetTag: result.before.assetTag,
+      name: result.before.name,
+      status: result.before.status,
+    },
+    after: { deletedAt: result.deletedAt },
+  })
+  revalidatePath('/equipment')
+  revalidatePath(`/equipment/${id}`)
+  return { id, deleted: true, deletedAt: result.deletedAt.toISOString() }
 }
 
 const EQUIPMENT_BODY: Json = {
@@ -563,6 +1074,8 @@ const EQUIPMENT_BODY: Json = {
     metadata: { type: 'object', additionalProperties: true },
   },
 }
+
+const EQUIPMENT_PATCH_BODY = optionalObjectSchema(EQUIPMENT_BODY)
 
 // --- ppe ---------------------------------------------------------------------
 
@@ -642,14 +1155,129 @@ async function createPpe(ctx: RequestContext, raw: unknown): Promise<WriteResult
   })
   revalidatePath('/ppe')
 
+  return ppeResult(row)
+}
+
+function ppeResult(row: typeof ppeItems.$inferSelect): WriteResult {
   return {
     id: row.id,
-    typeId: row.typeId,
-    serialNumber: row.serialNumber,
+    serial_number: row.serialNumber,
     size: row.size,
     status: row.status,
-    currentHolderPersonId: row.currentHolderPersonId,
+    current_holder_person_id: row.currentHolderPersonId,
+    last_inspection_on: row.lastInspectionOn,
+    next_inspection_due: row.nextInspectionDue,
+    next_annual_inspection_due: row.nextAnnualInspectionDue,
+    purchase_date: row.purchaseDate,
+    expires_on: row.expiresOn,
   }
+}
+
+const ppePatch = ppeCreate.partial()
+
+async function updatePpe(ctx: RequestContext, id: string, raw: unknown): Promise<WriteResult> {
+  const parsed = ppePatch.safeParse(raw)
+  if (!parsed.success) throw validationError(parsed.error)
+  const b = parsed.data
+
+  const result = await ctx.db(async (tx) => {
+    const [before] = await tx.select().from(ppeItems).where(eq(ppeItems.id, id)).limit(1)
+    if (!before || before.deletedAt) throw ApiError.notFound(`No ppe with id ${id}`)
+
+    if (b.typeId) {
+      const [type] = await tx
+        .select({ id: ppeTypes.id })
+        .from(ppeTypes)
+        .where(eq(ppeTypes.id, b.typeId))
+        .limit(1)
+      if (!type) throw ApiError.invalid(`No PPE type with id ${b.typeId} in this tenant`)
+    }
+    await ensurePerson(tx, b.currentHolderPersonId, 'holder')
+
+    if (hasOwn(b, 'serialNumber') && b.serialNumber && b.serialNumber !== before.serialNumber) {
+      const [existing] = await tx
+        .select({ id: ppeItems.id })
+        .from(ppeItems)
+        .where(eq(ppeItems.serialNumber, b.serialNumber))
+        .limit(1)
+      if (existing && existing.id !== id) {
+        throw ApiError.invalid(`PPE serial number "${b.serialNumber}" already exists`)
+      }
+    }
+
+    const patch: Partial<typeof ppeItems.$inferInsert> = {}
+    if (hasOwn(b, 'typeId')) patch.typeId = b.typeId
+    if (hasOwn(b, 'serialNumber')) patch.serialNumber = stripEmpty(b.serialNumber)
+    if (hasOwn(b, 'size')) patch.size = stripEmpty(b.size)
+    if (hasOwn(b, 'status')) patch.status = b.status
+    if (hasOwn(b, 'currentHolderPersonId')) {
+      patch.currentHolderPersonId = b.currentHolderPersonId ?? null
+    }
+    if (hasOwn(b, 'purchaseDate')) patch.purchaseDate = optionalDate(b.purchaseDate)
+    if (hasOwn(b, 'expiresOn')) patch.expiresOn = optionalDate(b.expiresOn)
+    if (hasOwn(b, 'notes')) patch.notes = stripEmpty(b.notes)
+    if (hasOwn(b, 'lastInspectionOn')) patch.lastInspectionOn = optionalDate(b.lastInspectionOn)
+    if (hasOwn(b, 'nextInspectionDue')) patch.nextInspectionDue = optionalDate(b.nextInspectionDue)
+    if (hasOwn(b, 'lastAnnualInspectionOn')) {
+      patch.lastAnnualInspectionOn = optionalDate(b.lastAnnualInspectionOn)
+    }
+    if (hasOwn(b, 'nextAnnualInspectionDue')) {
+      patch.nextAnnualInspectionDue = optionalDate(b.nextAnnualInspectionDue)
+    }
+    if (hasOwn(b, 'metadata')) patch.metadata = b.metadata
+    assertPatchNotEmpty(patch)
+
+    const [updated] = await tx.update(ppeItems).set(patch).where(eq(ppeItems.id, id)).returning()
+    return { before, updated }
+  })
+
+  if (!result.updated) throw new ApiError(500, 'internal', 'Failed to update PPE item')
+  await recordAudit(ctx, {
+    entityType: 'ppe_item',
+    entityId: id,
+    action: 'update',
+    summary: `Updated PPE item${result.updated.serialNumber ? ` ${result.updated.serialNumber}` : ''}`,
+    before: {
+      typeId: result.before.typeId,
+      serialNumber: result.before.serialNumber,
+      status: result.before.status,
+      currentHolderPersonId: result.before.currentHolderPersonId,
+    },
+    after: {
+      typeId: result.updated.typeId,
+      serialNumber: result.updated.serialNumber,
+      status: result.updated.status,
+      currentHolderPersonId: result.updated.currentHolderPersonId,
+    },
+  })
+  revalidatePath('/ppe')
+  revalidatePath(`/ppe/${id}`)
+  return ppeResult(result.updated)
+}
+
+async function deletePpe(ctx: RequestContext, id: string): Promise<WriteResult> {
+  const result = await ctx.db(async (tx) => {
+    const [before] = await tx.select().from(ppeItems).where(eq(ppeItems.id, id)).limit(1)
+    if (!before || before.deletedAt) throw ApiError.notFound(`No ppe with id ${id}`)
+    const deletedAt = new Date()
+    await tx.update(ppeItems).set({ deletedAt }).where(eq(ppeItems.id, id))
+    return { before, deletedAt }
+  })
+  await recordAudit(ctx, {
+    entityType: 'ppe_item',
+    entityId: id,
+    action: 'delete',
+    summary: `Archived PPE item${result.before.serialNumber ? ` ${result.before.serialNumber}` : ''}`,
+    before: {
+      typeId: result.before.typeId,
+      serialNumber: result.before.serialNumber,
+      status: result.before.status,
+    },
+    after: { deletedAt: result.deletedAt },
+  })
+  revalidatePath('/ppe')
+  revalidatePath(`/ppe/${id}`)
+  return { id, deleted: true, deletedAt: result.deletedAt.toISOString() }
 }
 
 const PPE_BODY: Json = {
@@ -671,6 +1299,8 @@ const PPE_BODY: Json = {
     metadata: { type: 'object', additionalProperties: true },
   },
 }
+
+const PPE_PATCH_BODY = optionalObjectSchema(PPE_BODY)
 
 // --- training_records --------------------------------------------------------
 
@@ -746,16 +1376,138 @@ async function createTrainingRecord(ctx: RequestContext, raw: unknown): Promise<
   })
   revalidatePath('/training')
 
+  return trainingRecordResult(row)
+}
+
+function trainingRecordResult(row: typeof trainingRecords.$inferSelect): WriteResult {
   return {
     id: row.id,
-    personId: row.personId,
-    courseId: row.courseId,
+    person_id: row.personId,
+    course_id: row.courseId,
+    completed_on: row.completedOn,
+    expires_on: row.expiresOn ?? null,
     source: row.source,
-    completedOn: row.completedOn,
-    expiresOn: row.expiresOn ?? null,
     score: row.score ?? null,
     grade: row.grade ?? null,
   }
+}
+
+const trainingRecordPatch = trainingRecordCreate.partial()
+
+async function updateTrainingRecord(
+  ctx: RequestContext,
+  id: string,
+  raw: unknown,
+): Promise<WriteResult> {
+  const parsed = trainingRecordPatch.safeParse(raw)
+  if (!parsed.success) throw validationError(parsed.error)
+  const b = parsed.data
+
+  const result = await ctx.db(async (tx) => {
+    const [before] = await tx
+      .select()
+      .from(trainingRecords)
+      .where(eq(trainingRecords.id, id))
+      .limit(1)
+    if (!before || before.deletedAt) {
+      throw ApiError.notFound(`No training_records with id ${id}`)
+    }
+    if (b.personId) {
+      const [person] = await tx
+        .select({ id: people.id })
+        .from(people)
+        .where(eq(people.id, b.personId))
+        .limit(1)
+      if (!person) throw ApiError.invalid(`No person with id ${b.personId} in this tenant`)
+    }
+    if (b.courseId) {
+      const [course] = await tx
+        .select({ id: trainingCourses.id })
+        .from(trainingCourses)
+        .where(eq(trainingCourses.id, b.courseId))
+        .limit(1)
+      if (!course) {
+        throw ApiError.invalid(`No training course with id ${b.courseId} in this tenant`)
+      }
+    }
+    await ensurePerson(tx, b.evaluatorPersonId, 'evaluator')
+
+    const patch: Partial<typeof trainingRecords.$inferInsert> = {}
+    if (hasOwn(b, 'personId')) patch.personId = b.personId
+    if (hasOwn(b, 'courseId')) patch.courseId = b.courseId
+    if (hasOwn(b, 'completedOn')) patch.completedOn = b.completedOn
+    if (hasOwn(b, 'source')) patch.source = b.source
+    if (hasOwn(b, 'expiresOn')) patch.expiresOn = b.expiresOn ?? null
+    if (hasOwn(b, 'score')) patch.score = b.score ?? null
+    if (hasOwn(b, 'grade')) patch.grade = b.grade ?? null
+    if (hasOwn(b, 'instructor')) patch.instructor = stripEmpty(b.instructor)
+    if (hasOwn(b, 'evaluatorPersonId')) patch.evaluatorPersonId = b.evaluatorPersonId ?? null
+    if (hasOwn(b, 'details')) patch.details = stripEmpty(b.details)
+    if (hasOwn(b, 'notes')) patch.notes = stripEmpty(b.notes)
+    assertPatchNotEmpty(patch)
+
+    const [updated] = await tx
+      .update(trainingRecords)
+      .set(patch)
+      .where(eq(trainingRecords.id, id))
+      .returning()
+    return { before, updated }
+  })
+
+  if (!result.updated) throw new ApiError(500, 'internal', 'Failed to update training record')
+  await recordAudit(ctx, {
+    entityType: 'training_record',
+    entityId: id,
+    action: 'update',
+    summary: 'Updated training record via API',
+    before: {
+      personId: result.before.personId,
+      courseId: result.before.courseId,
+      completedOn: result.before.completedOn,
+      expiresOn: result.before.expiresOn,
+    },
+    after: {
+      personId: result.updated.personId,
+      courseId: result.updated.courseId,
+      completedOn: result.updated.completedOn,
+      expiresOn: result.updated.expiresOn,
+    },
+  })
+  revalidatePath('/training')
+  revalidatePath(`/training/records/${id}`)
+  return trainingRecordResult(result.updated)
+}
+
+async function deleteTrainingRecord(ctx: RequestContext, id: string): Promise<WriteResult> {
+  const result = await ctx.db(async (tx) => {
+    const [before] = await tx
+      .select()
+      .from(trainingRecords)
+      .where(eq(trainingRecords.id, id))
+      .limit(1)
+    if (!before || before.deletedAt) {
+      throw ApiError.notFound(`No training_records with id ${id}`)
+    }
+    const deletedAt = new Date()
+    await tx.update(trainingRecords).set({ deletedAt }).where(eq(trainingRecords.id, id))
+    return { before, deletedAt }
+  })
+  await recordAudit(ctx, {
+    entityType: 'training_record',
+    entityId: id,
+    action: 'delete',
+    summary: 'Revoked training record via API',
+    before: {
+      personId: result.before.personId,
+      courseId: result.before.courseId,
+      completedOn: result.before.completedOn,
+      expiresOn: result.before.expiresOn,
+    },
+    after: { deletedAt: result.deletedAt },
+  })
+  revalidatePath('/training')
+  revalidatePath(`/training/records/${id}`)
+  return { id, deleted: true, deletedAt: result.deletedAt.toISOString() }
 }
 
 // OpenAPI requestBody schema, co-located with the validator so docs match.
@@ -789,6 +1541,8 @@ const TRAINING_RECORD_BODY: Json = {
   },
 }
 
+const TRAINING_RECORD_PATCH_BODY = optionalObjectSchema(TRAINING_RECORD_BODY)
+
 // --- registry ----------------------------------------------------------------
 
 const WRITES: Record<string, WriteRegistration> = {
@@ -796,26 +1550,71 @@ const WRITES: Record<string, WriteRegistration> = {
     permission: 'incidents.create',
     handler: createIncident,
     bodySchema: INCIDENT_BODY,
+    update: {
+      permission: 'incidents.update',
+      handler: updateIncident,
+      bodySchema: INCIDENT_PATCH_BODY,
+    },
+    delete: {
+      permission: 'incidents.update',
+      handler: deleteIncident,
+    },
   },
   corrective_actions: {
     permission: 'ca.create',
     handler: createCorrectiveAction,
     bodySchema: CORRECTIVE_ACTION_BODY,
+    update: {
+      permission: 'ca.update',
+      handler: updateCorrectiveAction,
+      bodySchema: CORRECTIVE_ACTION_PATCH_BODY,
+    },
+    delete: {
+      permission: 'ca.update',
+      handler: deleteCorrectiveAction,
+    },
   },
   equipment: {
     permission: 'equipment.manage',
     handler: createEquipment,
     bodySchema: EQUIPMENT_BODY,
+    update: {
+      permission: 'equipment.manage',
+      handler: updateEquipment,
+      bodySchema: EQUIPMENT_PATCH_BODY,
+    },
+    delete: {
+      permission: 'equipment.manage',
+      handler: deleteEquipment,
+    },
   },
   ppe: {
     permission: 'ppe.manage',
     handler: createPpe,
     bodySchema: PPE_BODY,
+    update: {
+      permission: 'ppe.manage',
+      handler: updatePpe,
+      bodySchema: PPE_PATCH_BODY,
+    },
+    delete: {
+      permission: 'ppe.manage',
+      handler: deletePpe,
+    },
   },
   training_records: {
     permission: 'training.record.create',
     handler: createTrainingRecord,
     bodySchema: TRAINING_RECORD_BODY,
+    update: {
+      permission: 'training.record.create',
+      handler: updateTrainingRecord,
+      bodySchema: TRAINING_RECORD_PATCH_BODY,
+    },
+    delete: {
+      permission: 'training.record.create',
+      handler: deleteTrainingRecord,
+    },
   },
 }
 
@@ -826,14 +1625,37 @@ export function isWritable(entityKey: string): boolean {
   return entityKey in WRITES
 }
 
+export function isPatchable(entityKey: string): boolean {
+  return Boolean(WRITES[entityKey]?.update)
+}
+
+export function isDeletable(entityKey: string): boolean {
+  return Boolean(WRITES[entityKey]?.delete)
+}
+
 /** OpenAPI requestBody schema for a writable entity, or null. */
 export function writeBodySchema(entityKey: string): Json | null {
   return WRITES[entityKey]?.bodySchema ?? null
 }
 
+/** OpenAPI requestBody schema for a patchable entity, or null. */
+export function patchBodySchema(entityKey: string): Json | null {
+  return WRITES[entityKey]?.update?.bodySchema ?? null
+}
+
 /** Permission required to POST-create this entity. */
 export function writePermissionForEntity(entityKey: string): string | null {
   return WRITES[entityKey]?.permission ?? null
+}
+
+/** Permission required to PATCH-update this entity. */
+export function patchPermissionForEntity(entityKey: string): string | null {
+  return WRITES[entityKey]?.update?.permission ?? null
+}
+
+/** Permission required to DELETE/archive this entity. */
+export function deletePermissionForEntity(entityKey: string): string | null {
+  return WRITES[entityKey]?.delete?.permission ?? null
 }
 
 export async function createEntity(
@@ -844,4 +1666,25 @@ export async function createEntity(
   const entry = WRITES[entityKey]
   if (!entry) throw ApiError.methodNotAllowed(`Writes are not supported for "${entityKey}"`)
   return entry.handler(ctx, body)
+}
+
+export async function patchEntity(
+  ctx: RequestContext,
+  entityKey: string,
+  id: string,
+  body: unknown,
+): Promise<WriteResult> {
+  const entry = WRITES[entityKey]?.update
+  if (!entry) throw ApiError.methodNotAllowed(`Updates are not supported for "${entityKey}"`)
+  return entry.handler(ctx, id, body)
+}
+
+export async function deleteEntity(
+  ctx: RequestContext,
+  entityKey: string,
+  id: string,
+): Promise<WriteResult> {
+  const entry = WRITES[entityKey]?.delete
+  if (!entry) throw ApiError.methodNotAllowed(`Deletes are not supported for "${entityKey}"`)
+  return entry.handler(ctx, id)
 }

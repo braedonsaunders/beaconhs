@@ -6,7 +6,14 @@ import { REPORT_ENTITIES } from '@beaconhs/reports'
 import { noStore } from '@/lib/api/errors'
 import { readPermissionForEntity } from '@/lib/api/permissions'
 import { isRecordable } from '@/lib/api/records'
-import { isWritable, writePermissionForEntity } from '@/lib/api/write'
+import {
+  deletePermissionForEntity,
+  isDeletable,
+  isPatchable,
+  isWritable,
+  patchPermissionForEntity,
+  writePermissionForEntity,
+} from '@/lib/api/write'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -29,6 +36,12 @@ export async function GET(req: Request): Promise<NextResponse> {
         record: isRecordable(e.key) ? `/api/v1/${e.key}/{id}` : null,
         create: isWritable(e.key)
           ? { method: 'POST', permission: writePermissionForEntity(e.key) }
+          : null,
+        update: isPatchable(e.key)
+          ? { method: 'PATCH', permission: patchPermissionForEntity(e.key) }
+          : null,
+        delete: isDeletable(e.key)
+          ? { method: 'DELETE', permission: deletePermissionForEntity(e.key) }
           : null,
       })),
     },

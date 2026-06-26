@@ -7,7 +7,16 @@ import { REPORT_ENTITIES, type ReportColumnKind, type ReportEntity } from '@beac
 import { DEFAULT_LIMIT, MAX_LIMIT } from './query'
 import { readPermissionForEntity } from './permissions'
 import { isRecordable } from './records'
-import { isWritable, writeBodySchema, writePermissionForEntity } from './write'
+import {
+  deletePermissionForEntity,
+  isDeletable,
+  isPatchable,
+  isWritable,
+  patchBodySchema,
+  patchPermissionForEntity,
+  writeBodySchema,
+  writePermissionForEntity,
+} from './write'
 
 type Json = Record<string, unknown>
 
@@ -188,11 +197,105 @@ function postOperation(entity: ReportEntity): Json {
   }
 }
 
+/** PATCH operation for a mutable entity. */
+function patchOperation(entity: ReportEntity): Json {
+  const schemaName = pascalCase(entity.key)
+  const updatePermission = patchPermissionForEntity(entity.key)
+  return {
+    tags: [entity.category],
+    operationId: `update_${entity.key}`,
+    summary: `Update ${entity.label.replace(/s$/, '')}`,
+    description: `Partially update a ${entity.label} record by id. Requires permission \`${updatePermission}\`. Lifecycle-specific actions that need extra workflow are not exposed through generic PATCH.`,
+    'x-beaconhs-required-permission': updatePermission,
+    security: [{ bearerAuth: [] }],
+    parameters: [
+      { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+    ],
+    requestBody: {
+      required: true,
+      content: {
+        'application/json': { schema: patchBodySchema(entity.key) ?? { type: 'object' } },
+      },
+    },
+    responses: {
+      '200': {
+        description: `The updated ${entity.label} record.`,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                entity: { type: 'string', example: entity.key },
+                data: { $ref: `#/components/schemas/${schemaName}` },
+              },
+            },
+          },
+        },
+      },
+      '400': { description: 'Validation failed.', content: errorContent() },
+      '401': {
+        description: 'Missing, invalid, revoked or expired API key.',
+        content: errorContent(),
+      },
+      '403': { description: 'API key lacks the required permission.', content: errorContent() },
+      '404': { description: 'No record with that id in your tenant.', content: errorContent() },
+      '405': { description: 'Entity does not support PATCH.', content: errorContent() },
+    },
+  }
+}
+
+/** DELETE operation for a soft-deletable entity. */
+function deleteOperation(entity: ReportEntity): Json {
+  const deletePermission = deletePermissionForEntity(entity.key)
+  return {
+    tags: [entity.category],
+    operationId: `delete_${entity.key}`,
+    summary: `Delete ${entity.label.replace(/s$/, '')}`,
+    description: `Soft-delete/archive a ${entity.label} record by id. Requires permission \`${deletePermission}\`.`,
+    'x-beaconhs-required-permission': deletePermission,
+    security: [{ bearerAuth: [] }],
+    parameters: [
+      { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+    ],
+    responses: {
+      '200': {
+        description: 'Delete result.',
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                entity: { type: 'string', example: entity.key },
+                data: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'string', format: 'uuid' },
+                    deleted: { type: 'boolean', example: true },
+                    deletedAt: { type: 'string', format: 'date-time' },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      '400': { description: 'Invalid id or archived/locked record.', content: errorContent() },
+      '401': {
+        description: 'Missing, invalid, revoked or expired API key.',
+        content: errorContent(),
+      },
+      '403': { description: 'API key lacks the required permission.', content: errorContent() },
+      '404': { description: 'No record with that id in your tenant.', content: errorContent() },
+      '405': { description: 'Entity does not support DELETE.', content: errorContent() },
+    },
+  }
+}
+
 /** GET-by-id operation for a recordable entity (physical table). */
 function recordPath(entity: ReportEntity): Json {
   const schemaName = pascalCase(entity.key)
   const readPermission = readPermissionForEntity(entity)
-  return {
+  const operations: Json = {
     get: {
       tags: [entity.category],
       operationId: `get_${entity.key}`,
@@ -228,6 +331,9 @@ function recordPath(entity: ReportEntity): Json {
       },
     },
   }
+  if (isPatchable(entity.key)) operations.patch = patchOperation(entity)
+  if (isDeletable(entity.key)) operations.delete = deleteOperation(entity)
+  return operations
 }
 
 export function buildOpenApiDocument(origin: string): Json {
