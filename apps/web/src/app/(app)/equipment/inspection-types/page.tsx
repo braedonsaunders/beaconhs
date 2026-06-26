@@ -61,7 +61,6 @@ export default async function InspectionTypesPage({
     <ListPageLayout
       header={
         <>
-          <EquipmentSubNav active="inspection-types" />
           <PageHeader
             title="Inspection types"
             description="Pass/fail inspection templates shared by equipment type."
@@ -71,6 +70,7 @@ export default async function InspectionTypesPage({
               </Link>
             }
           />
+          <EquipmentSubNav active="inspection-types" />
         </>
       }
     >

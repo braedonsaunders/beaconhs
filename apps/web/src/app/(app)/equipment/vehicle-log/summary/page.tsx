@@ -150,7 +150,6 @@ export default async function TruckLogSummaryPage({
     <ListPageLayout
       header={
         <>
-          <EquipmentSubNav active="vehicle-log" />
           <PageHeader
             title="Vehicle log summary"
             description={`Annual roll-up of km driven, hours on site, and manpower for ${year}.`}
@@ -172,6 +171,7 @@ export default async function TruckLogSummaryPage({
               </div>
             }
           />
+          <EquipmentSubNav active="vehicle-log" />
           <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
             <span>Year</span>
             <form className="flex items-center gap-2" action="/equipment/vehicle-log/summary">

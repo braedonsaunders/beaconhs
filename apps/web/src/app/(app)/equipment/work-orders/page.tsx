@@ -248,7 +248,6 @@ export default async function WorkOrdersPage({
     <ListPageLayout
       header={
         <>
-          <EquipmentSubNav active="work-orders" />
           <PageHeader
             title="Work orders"
             description="Track repairs and scheduled service against equipment."
@@ -260,6 +259,7 @@ export default async function WorkOrdersPage({
               </div>
             }
           />
+          <EquipmentSubNav active="work-orders" />
           <TableToolbar>
             <SearchInput placeholder="Search reference, summary, asset tag…" />
             <form className="flex items-center gap-1 text-xs">

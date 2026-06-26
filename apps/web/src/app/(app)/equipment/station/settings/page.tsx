@@ -49,11 +49,11 @@ export default async function StationSettingsPage() {
     <ListPageLayout
       header={
         <>
-          <EquipmentSubNav active="station-settings" />
           <PageHeader
             title="Check-in / out station settings"
             description="Configure the home location, what counts as checked in, scan behaviour, and the mounted-tablet kiosk."
           />
+          <EquipmentSubNav active="station-settings" />
         </>
       }
     >

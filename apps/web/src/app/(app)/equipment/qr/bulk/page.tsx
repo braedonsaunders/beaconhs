@@ -62,12 +62,12 @@ export default async function BulkQrPage({
     <ListPageLayout
       header={
         <>
-          <EquipmentSubNav active="equipment" />
           <PageHeader
             title="Bulk QR generator"
             description="Select equipment items to generate a printable A4 sheet of 4×3 QR labels. Submitting opens a print-ready page."
             back={{ href: '/equipment', label: 'Back to equipment' }}
           />
+          <EquipmentSubNav active="equipment" />
           <form className="flex flex-wrap items-end gap-3">
             <div className="space-y-1.5">
               <Label className="text-xs">Search</Label>

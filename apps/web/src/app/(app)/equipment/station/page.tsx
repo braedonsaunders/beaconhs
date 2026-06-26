@@ -99,7 +99,6 @@ export default async function StationPage({
     <ListPageLayout
       header={
         <>
-          <EquipmentSubNav active="station" />
           <PageHeader
             title="Check in / out station"
             description="Scan a badge to set the holder, then scan assets to check them in or out. Works with a USB scanner, phone camera, or by typing a tag."
@@ -113,6 +112,7 @@ export default async function StationPage({
               ) : undefined
             }
           />
+          <EquipmentSubNav active="station" />
         </>
       }
     >

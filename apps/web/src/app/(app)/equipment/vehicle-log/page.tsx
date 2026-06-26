@@ -122,7 +122,6 @@ export default async function TruckLogPage({
     <ListPageLayout
       header={
         <>
-          <EquipmentSubNav active="vehicle-log" />
           <PageHeader
             title="Vehicle log"
             description="Per-day per-vehicle odometer, kilometres, manpower, and hours on site."
@@ -137,6 +136,7 @@ export default async function TruckLogPage({
               </div>
             }
           />
+          <EquipmentSubNav active="vehicle-log" />
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <Link href={`/equipment/vehicle-log?month=${monthParamPrev}` as any}>
