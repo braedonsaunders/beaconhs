@@ -275,6 +275,7 @@ export const TENANT_SCOPED_TABLES = [
   'sync_connections',
   'sync_crosswalk',
   'sync_runs',
+  'sync_record_changes',
   // Outbound integrations — per-tenant enablement/config + the export ledger
   // that makes event-driven pushes idempotent and reversible.
   'tenant_integrations',

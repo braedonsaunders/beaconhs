@@ -5,7 +5,7 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { and, desc, eq, isNull } from 'drizzle-orm'
-import { Clock, Play } from 'lucide-react'
+import { Clock, Eye, Play, Settings2 } from 'lucide-react'
 import {
   Button,
   Card,
@@ -25,7 +25,15 @@ import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
 import { DbMapper } from './_db-mapper'
 import { NangoConnect } from './_nango-connect'
-import { renameConnection, runNow, saveConfig, saveCsv, saveSchedule } from '../_actions'
+import {
+  previewNow,
+  renameConnection,
+  runNow,
+  saveConfig,
+  saveCsv,
+  saveSchedule,
+  saveSyncPolicy,
+} from '../_actions'
 
 export const metadata = { title: 'Connection' }
 export const dynamic = 'force-dynamic'
@@ -56,6 +64,8 @@ function statSummary(stats: Record<string, SyncEntityStat>): string {
     const bits: string[] = []
     if (s.created) bits.push(`+${s.created}`)
     if (s.updated) bits.push(`~${s.updated}`)
+    if (s.archived) bits.push(`${s.archived} archived`)
+    if (s.conflict) bits.push(`${s.conflict} conflicts`)
     if (s.skipped) bits.push(`${s.skipped} skipped`)
     if (s.failed) bits.push(`${s.failed} failed`)
     parts.push(`${ENTITY_LABELS[entity] ?? entity}: ${bits.length ? bits.join(' ') : 'no change'}`)
@@ -88,6 +98,7 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
       .select({
         id: syncRuns.id,
         trigger: syncRuns.trigger,
+        dryRun: syncRuns.dryRun,
         status: syncRuns.status,
         startedAt: syncRuns.startedAt,
         durationMs: syncRuns.durationMs,
@@ -102,6 +113,8 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
 
   const hasSettingsForm =
     (summary?.configFields.length ?? 0) > 0 || (summary?.secretFields.length ?? 0) > 0
+  const syncPolicy =
+    (config.syncPolicy as { missing?: string; ownership?: string } | undefined) ?? {}
 
   return (
     <PageContainer>
@@ -142,12 +155,20 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
             <p className="text-sm text-slate-500">{summary?.name ?? conn.connectorKey}</p>
           </div>
           {summary ? (
-            <form action={runNow}>
-              <input type="hidden" name="id" value={conn.id} />
-              <Button type="submit" variant="outline">
-                <Play size={14} /> Run now
-              </Button>
-            </form>
+            <div className="flex flex-wrap items-center gap-2">
+              <form action={previewNow}>
+                <input type="hidden" name="id" value={conn.id} />
+                <Button type="submit" variant="outline">
+                  <Eye size={14} /> Preview
+                </Button>
+              </form>
+              <form action={runNow}>
+                <input type="hidden" name="id" value={conn.id} />
+                <Button type="submit" variant="outline">
+                  <Play size={14} /> Run now
+                </Button>
+              </form>
+            </div>
           ) : null}
         </div>
 
@@ -193,6 +214,15 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
                               />
                               Enabled
                             </label>
+                          ) : f.type === 'textarea' ? (
+                            <Textarea
+                              id={f.key}
+                              name={f.key}
+                              rows={5}
+                              defaultValue={current != null ? String(current) : ''}
+                              placeholder={f.placeholder}
+                              className="font-mono text-xs"
+                            />
                           ) : (
                             <Input
                               id={f.key}
@@ -335,6 +365,11 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
                               {r.status}
                             </span>
                             <span className="text-xs text-slate-400">{r.trigger}</span>
+                            {r.dryRun ? (
+                              <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-medium text-indigo-700 ring-1 ring-indigo-200">
+                                preview
+                              </span>
+                            ) : null}
                           </div>
                           <p className="mt-1 text-xs text-slate-500">{statSummary(r.stats)}</p>
                           {r.error ? (
@@ -346,6 +381,12 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
                           {r.durationMs != null ? (
                             <div>{(r.durationMs / 1000).toFixed(1)}s</div>
                           ) : null}
+                          <Link
+                            href={`/admin/integrations/${conn.id}/runs/${r.id}`}
+                            className="mt-1 inline-block text-teal-600 hover:text-teal-700"
+                          >
+                            Review
+                          </Link>
                         </div>
                       </li>
                     ))}
@@ -404,11 +445,58 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
                   Records are matched on a stable key, so re-running updates existing rows instead
                   of duplicating.
                 </p>
-                <p>A sync never deletes — missing rows are left untouched.</p>
+                <p>
+                  Missing source records are{' '}
+                  {syncPolicy.missing === 'archive'
+                    ? 'archived after full pulls.'
+                    : 'left untouched.'}
+                </p>
                 <p className="text-xs text-slate-400">
                   Connector: <strong>{summary?.name ?? conn.connectorKey}</strong> ·{' '}
                   {(summary?.entities ?? []).map((e) => ENTITY_LABELS[e] ?? e).join(', ')}
                 </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Settings2 size={16} /> Sync policy
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <form action={saveSyncPolicy} className="space-y-3">
+                  <input type="hidden" name="id" value={conn.id} />
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ownership">Field ownership</Label>
+                    <Select
+                      id="ownership"
+                      name="ownership"
+                      defaultValue={
+                        syncPolicy.ownership === 'manual_wins' ? 'manual_wins' : 'source_wins'
+                      }
+                    >
+                      <option value="source_wins">Source updates mapped fields</option>
+                      <option value="manual_wins">Flag local edits as conflicts</option>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="missing">Missing source records</Label>
+                    <Select
+                      id="missing"
+                      name="missing"
+                      defaultValue={syncPolicy.missing === 'archive' ? 'archive' : 'keep'}
+                    >
+                      <option value="keep">Keep BeaconHS rows</option>
+                      <option value="archive">Archive after full pulls</option>
+                    </Select>
+                  </div>
+                  <div className="flex justify-end">
+                    <Button type="submit" variant="outline" size="sm">
+                      Save policy
+                    </Button>
+                  </div>
+                </form>
               </CardContent>
             </Card>
           </div>

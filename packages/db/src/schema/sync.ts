@@ -26,8 +26,17 @@ export const SYNC_ENTITIES = ['people', 'org_unit', 'equipment'] as const
 export type SyncEntityKey = (typeof SYNC_ENTITIES)[number]
 
 export type SyncConnectionStatus = 'draft' | 'connected' | 'error' | 'disabled'
-export type SyncRunTrigger = 'scheduled' | 'manual'
+export type SyncRunTrigger = 'scheduled' | 'manual' | 'preview'
 export type SyncRunStatus = 'running' | 'success' | 'partial' | 'error'
+export type SyncRecordAction =
+  | 'created'
+  | 'updated'
+  | 'unchanged'
+  | 'skipped'
+  | 'failed'
+  | 'archived'
+  | 'conflict'
+export type SyncRecordDiff = Record<string, { before: unknown; after: unknown }>
 
 // Per-entity counters recorded on every run.
 export type SyncEntityStat = {
@@ -37,6 +46,8 @@ export type SyncEntityStat = {
   unchanged: number
   skipped: number
   failed: number
+  archived: number
+  conflict: number
 }
 
 export type SyncRunLogLine = { at: string; level: 'info' | 'warn' | 'error'; msg: string }
@@ -64,6 +75,8 @@ export const syncConnections = pgTable(
       .$type<Record<string, { ciphertext: string; nonce: string }>>()
       .default({})
       .notNull(),
+    // Per-connector high-water mark for incremental pulls. Shape is connector-defined.
+    cursor: jsonb('cursor').$type<Record<string, unknown>>().default({}).notNull(),
     // Denormalised last-run summary for the list UI.
     lastRunId: uuid('last_run_id'),
     lastRunAt: timestamp('last_run_at', { withTimezone: true }),
@@ -118,11 +131,14 @@ export const syncRuns = pgTable(
       .notNull()
       .references(() => syncConnections.id, { onDelete: 'cascade' }),
     trigger: text('trigger').$type<SyncRunTrigger>().notNull(),
+    dryRun: boolean('dry_run').default(false).notNull(),
     status: text('status').$type<SyncRunStatus>().default('running').notNull(),
     startedAt: timestamp('started_at', { withTimezone: true }).defaultNow().notNull(),
     completedAt: timestamp('completed_at', { withTimezone: true }),
     durationMs: integer('duration_ms'),
     stats: jsonb('stats').$type<Record<string, SyncEntityStat>>().default({}).notNull(),
+    cursorBefore: jsonb('cursor_before').$type<Record<string, unknown>>().default({}).notNull(),
+    cursorAfter: jsonb('cursor_after').$type<Record<string, unknown>>().default({}).notNull(),
     error: text('error'),
     log: jsonb('log').$type<SyncRunLogLine[]>().default([]).notNull(),
     ...timestamps,
@@ -133,7 +149,54 @@ export const syncRuns = pgTable(
   }),
 )
 
+// Per-record execution ledger. This is what makes previews, first-run review,
+// conflict triage, and later support audits possible without coupling the UI to
+// connector internals.
+export const syncRecordChanges = pgTable(
+  'sync_record_changes',
+  {
+    id: id(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    connectionId: uuid('connection_id')
+      .notNull()
+      .references(() => syncConnections.id, { onDelete: 'cascade' }),
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => syncRuns.id, { onDelete: 'cascade' }),
+    entity: text('entity').$type<SyncEntityKey>().notNull(),
+    externalId: text('external_id').notNull(),
+    canonicalId: uuid('canonical_id'),
+    action: text('action').$type<SyncRecordAction>().notNull(),
+    dryRun: boolean('dry_run').default(false).notNull(),
+    rowHash: text('row_hash'),
+    before: jsonb('before').$type<Record<string, unknown> | null>(),
+    after: jsonb('after').$type<Record<string, unknown> | null>(),
+    diff: jsonb('diff').$type<SyncRecordDiff | null>(),
+    message: text('message'),
+    ...timestamps,
+  },
+  (t) => ({
+    tenantIdx: index('sync_record_changes_tenant_idx').on(t.tenantId),
+    runIdx: index('sync_record_changes_run_idx').on(t.runId),
+    connectionRunIdx: index('sync_record_changes_connection_run_idx').on(t.connectionId, t.runId),
+    entityActionIdx: index('sync_record_changes_entity_action_idx').on(
+      t.tenantId,
+      t.entity,
+      t.action,
+    ),
+    externalIdx: index('sync_record_changes_external_idx').on(
+      t.tenantId,
+      t.connectionId,
+      t.entity,
+      t.externalId,
+    ),
+  }),
+)
+
 export type SyncConnection = typeof syncConnections.$inferSelect
 export type NewSyncConnection = typeof syncConnections.$inferInsert
 export type SyncCrosswalkRow = typeof syncCrosswalk.$inferSelect
 export type SyncRun = typeof syncRuns.$inferSelect
+export type SyncRecordChange = typeof syncRecordChanges.$inferSelect

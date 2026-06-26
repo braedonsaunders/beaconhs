@@ -4,12 +4,14 @@
 
 import { csvConnector } from './connectors/csv'
 import { databaseConnector } from './connectors/database'
+import { httpJsonConnector } from './connectors/http-json'
 import { nangoConnector } from './connectors/nango'
 import { netsuiteConnector } from './connectors/netsuite'
 import type { Connector } from './types'
 
 export const CONNECTORS: Connector[] = [
   databaseConnector,
+  httpJsonConnector,
   netsuiteConnector,
   csvConnector,
   nangoConnector,

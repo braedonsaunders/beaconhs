@@ -7,9 +7,16 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { and, eq, isNull } from 'drizzle-orm'
+import { db } from '@beaconhs/db'
 import { syncConnections, tenantIntegrations } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
-import { type ConnectorRunContext, getConnector, sealSecret, unsealSecret } from '@beaconhs/sync'
+import {
+  type ConnectorRunContext,
+  getConnector,
+  runSync,
+  sealSecret,
+  unsealSecret,
+} from '@beaconhs/sync'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { getDestination } from '@beaconhs/integrations'
@@ -236,6 +243,33 @@ export async function saveSchedule(formData: FormData): Promise<void> {
   revalidatePath(`/admin/integrations/${id}`)
 }
 
+export async function saveSyncPolicy(formData: FormData): Promise<void> {
+  const ctx = await guard()
+  if (!ctx) return
+  const id = String(formData.get('id') ?? '')
+  const conn = await loadConn(ctx, id)
+  if (!conn) return
+  const missingRaw = String(formData.get('missing') ?? 'keep')
+  const ownershipRaw = String(formData.get('ownership') ?? 'source_wins')
+  const syncPolicy = {
+    missing: missingRaw === 'archive' ? 'archive' : 'keep',
+    ownership: ownershipRaw === 'manual_wins' ? 'manual_wins' : 'source_wins',
+  }
+  const config: Record<string, unknown> = {
+    ...(conn.config as Record<string, unknown>),
+    syncPolicy,
+  }
+  await ctx.db((tx) => tx.update(syncConnections).set({ config }).where(eq(syncConnections.id, id)))
+  await recordAudit(ctx, {
+    entityType: 'sync_connection',
+    entityId: id,
+    action: 'update',
+    summary: 'Updated sync ownership and missing-record policy',
+    after: { syncPolicy },
+  })
+  revalidatePath(`/admin/integrations/${id}`)
+}
+
 export async function saveCsv(formData: FormData): Promise<void> {
   const ctx = await guard()
   if (!ctx) return
@@ -278,6 +312,29 @@ export async function runNow(formData: FormData): Promise<void> {
     entityId: id,
     action: 'update',
     summary: 'Queued a manual sync run',
+  })
+  revalidatePath(`/admin/integrations/${id}`)
+}
+
+export async function previewNow(formData: FormData): Promise<void> {
+  const ctx = await guard()
+  if (!ctx) return
+  const id = String(formData.get('id') ?? '')
+  const conn = await loadConn(ctx, id)
+  if (!conn) return
+  const result = await runSync({
+    db,
+    tenantId: ctx.tenantId,
+    connectionId: id,
+    trigger: 'preview',
+    dryRun: true,
+  })
+  await recordAudit(ctx, {
+    entityType: 'sync_connection',
+    entityId: id,
+    action: 'update',
+    summary: `Previewed sync run (${result.status})`,
+    after: { runId: result.runId, status: result.status, stats: result.stats },
   })
   revalidatePath(`/admin/integrations/${id}`)
 }

@@ -68,7 +68,7 @@ export interface ConnectorRunContext {
   connectionId: string
   config: Record<string, unknown>
   secrets: ResolvedSecrets
-  since?: string | null // last successful cursor (reserved for incremental)
+  since?: Record<string, unknown> | null
   log: SyncLogger
 }
 
@@ -97,6 +97,12 @@ export interface ConnectStartResult {
   kind: 'nango' | 'none'
   sessionToken?: string
   message?: string
+}
+
+export interface ConnectorPullResult {
+  records: CanonicalRecord[]
+  nextCursor?: Record<string, unknown> | null
+  mode?: 'full' | 'incremental'
 }
 
 // --- Declarative settings form (simple connectors render from these) ------
@@ -139,7 +145,7 @@ export interface Connector {
     table: { name: string; schema?: string },
   ): Promise<{ columns: IntrospectColumn[] }>
   startConnect?(ctx: ConnectorRunContext): Promise<ConnectStartResult>
-  pull(ctx: ConnectorRunContext): Promise<CanonicalRecord[]>
+  pull(ctx: ConnectorRunContext): Promise<CanonicalRecord[] | ConnectorPullResult>
   // Reserved for write-back (M3). Not wired yet.
   push?(ctx: ConnectorRunContext, records: CanonicalRecord[]): Promise<void>
 }

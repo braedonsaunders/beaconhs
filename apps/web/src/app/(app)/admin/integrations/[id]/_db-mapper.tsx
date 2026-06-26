@@ -30,6 +30,7 @@ type EntityMapping = {
   where?: string
   idColumn?: string
   externalIdTemplate?: string
+  cursorColumn?: string
   columns: Record<string, string>
   values?: Record<string, string>
 }
@@ -119,6 +120,7 @@ function asDraft(entity: string, raw: unknown, index: number): MappingDraft {
     where: m.where,
     idColumn: m.idColumn,
     externalIdTemplate: m.externalIdTemplate,
+    cursorColumn: m.cursorColumn,
     columns: m.columns ?? {},
     values: m.values ?? {},
   }
@@ -152,6 +154,7 @@ function cleanMapping(m: MappingDraft): EntityMapping | null {
     ...(m.where?.trim() ? { where: m.where.trim() } : {}),
     ...(m.idColumn?.trim() ? { idColumn: m.idColumn.trim() } : {}),
     ...(m.externalIdTemplate?.trim() ? { externalIdTemplate: m.externalIdTemplate.trim() } : {}),
+    ...(m.cursorColumn?.trim() ? { cursorColumn: m.cursorColumn.trim() } : {}),
     columns: cleanColumns,
     ...(Object.keys(cleanValues).length ? { values: cleanValues } : {}),
   }
@@ -392,7 +395,7 @@ export function DbMapper({
                       />
                     </div>
 
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                       <div className="space-y-1.5">
                         <Label>ID column</Label>
                         <Input
@@ -415,6 +418,18 @@ export function DbMapper({
                             })
                           }
                           placeholder="employee:{{NetsuiteID}}"
+                          className="bg-white dark:bg-slate-950"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Cursor column</Label>
+                        <Input
+                          list={listId}
+                          value={m.cursorColumn ?? ''}
+                          onChange={(event) =>
+                            updateMapping(entity, m.localId, { cursorColumn: event.target.value })
+                          }
+                          placeholder="UpdatedAt"
                           className="bg-white dark:bg-slate-950"
                         />
                       </div>
