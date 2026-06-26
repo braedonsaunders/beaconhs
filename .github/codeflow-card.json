@@ -2,108 +2,6 @@
   "version": 1,
   "runs": [
     {
-      "at": "2026-06-24T23:33:42.192Z",
-      "sha": "6670066d6050d44e118bc1753ed9284bda6aed51",
-      "pr": null,
-      "actor": "braedonsaunders",
-      "files": 1162,
-      "functions": 3696,
-      "loc": 379737,
-      "languages": 17,
-      "topLanguages": [
-        {
-          "ext": "tsx",
-          "pct": 35,
-          "lines": 133398
-        },
-        {
-          "ext": "json",
-          "pct": 34,
-          "lines": 128269
-        },
-        {
-          "ext": "ts",
-          "pct": 25,
-          "lines": 93782
-        },
-        {
-          "ext": "yaml",
-          "pct": 4,
-          "lines": 15499
-        },
-        {
-          "ext": "sql",
-          "pct": 1,
-          "lines": 3998
-        }
-      ],
-      "dead": 63,
-      "deadPct": 1.7,
-      "circular": 1,
-      "godObjects": 1,
-      "avgCoupling": 6.8,
-      "securityIssues": 58,
-      "patterns": 9,
-      "duplicates": 71,
-      "layerViolations": 530,
-      "connections": 7868,
-      "avgFnLines": 15.4,
-      "longestFn": 16,
-      "testFiles": 6,
-      "testRatio": 0.5,
-      "topFolders": [
-        {
-          "name": "apps",
-          "count": 852
-        },
-        {
-          "name": "packages",
-          "count": 283
-        },
-        {
-          "name": "root",
-          "count": 13
-        },
-        {
-          "name": "scripts",
-          "count": 6
-        },
-        {
-          "name": "docs",
-          "count": 5
-        }
-      ],
-      "folders": 5,
-      "grade": "D",
-      "score": 63,
-      "topBlast": {
-        "path": "apps/web/src/app/(app)/insights/cards/_data.ts",
-        "direct": 542,
-        "transitive": 989,
-        "total": 1531
-      },
-      "fragility": [
-        {
-          "path": "apps/web/src/app/(app)/insights/cards/_data.ts",
-          "direct": 542,
-          "transitive": 989,
-          "total": 1531
-        },
-        {
-          "path": "apps/web/src/app/(app)/hazard-assessments/_option-field.tsx",
-          "direct": 380,
-          "transitive": 983,
-          "total": 1363
-        },
-        {
-          "path": "apps/web/src/app/(app)/apps/templates/[id]/designer/form-designer.tsx",
-          "direct": 275,
-          "transitive": 930,
-          "total": 1205
-        }
-      ]
-    },
-    {
       "at": "2026-06-25T13:44:00.796Z",
       "sha": "5d3dcd61a9dc1b2b166953fc312fa11a6170697c",
       "pr": null,
@@ -3057,6 +2955,108 @@
           "path": "packages/integrations/src/triggers/emit.ts",
           "direct": 262,
           "transitive": 1139,
+          "total": 1401
+        }
+      ]
+    },
+    {
+      "at": "2026-06-26T15:50:10.179Z",
+      "sha": "8cbe69a322ed0c4011c21de747eaa7b915c2eb05",
+      "pr": null,
+      "actor": "braedonsaunders",
+      "files": 1320,
+      "functions": 4487,
+      "loc": 434812,
+      "languages": 17,
+      "topLanguages": [
+        {
+          "ext": "tsx",
+          "pct": 34,
+          "lines": 147941
+        },
+        {
+          "ext": "json",
+          "pct": 34,
+          "lines": 147713
+        },
+        {
+          "ext": "ts",
+          "pct": 26,
+          "lines": 113651
+        },
+        {
+          "ext": "yaml",
+          "pct": 4,
+          "lines": 16458
+        },
+        {
+          "ext": "sql",
+          "pct": 1,
+          "lines": 4429
+        }
+      ],
+      "dead": 68,
+      "deadPct": 1.5,
+      "circular": 1,
+      "godObjects": 1,
+      "avgCoupling": 7.3,
+      "securityIssues": 74,
+      "patterns": 9,
+      "duplicates": 101,
+      "layerViolations": 759,
+      "connections": 9656,
+      "avgFnLines": 15.5,
+      "longestFn": 16,
+      "testFiles": 8,
+      "testRatio": 0.6,
+      "topFolders": [
+        {
+          "name": "apps",
+          "count": 980
+        },
+        {
+          "name": "packages",
+          "count": 312
+        },
+        {
+          "name": "root",
+          "count": 14
+        },
+        {
+          "name": "scripts",
+          "count": 6
+        },
+        {
+          "name": "docs",
+          "count": 5
+        }
+      ],
+      "folders": 5,
+      "grade": "D",
+      "score": 62,
+      "topBlast": {
+        "path": "apps/web/src/app/(app)/insights/cards/_data.ts",
+        "direct": 607,
+        "transitive": 1151,
+        "total": 1758
+      },
+      "fragility": [
+        {
+          "path": "apps/web/src/app/(app)/insights/cards/_data.ts",
+          "direct": 607,
+          "transitive": 1151,
+          "total": 1758
+        },
+        {
+          "path": "apps/web/src/app/(app)/hazard-assessments/_option-field.tsx",
+          "direct": 413,
+          "transitive": 1146,
+          "total": 1559
+        },
+        {
+          "path": "packages/integrations/src/triggers/emit.ts",
+          "direct": 261,
+          "transitive": 1140,
           "total": 1401
         }
       ]
