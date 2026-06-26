@@ -9,17 +9,24 @@
 // roles that interact with it today). A role with no read tier for the module
 // gets nothing. Per-record scope is still enforced separately via canSeeRecord.
 //
+// A role also receives the write perms if its KEY matches a built-in role whose
+// (current) definition includes them — this brings already-seeded worker/foreman/
+// safety_manager/tenant_admin rows up to the new baseline even when they never
+// stored an explicit `*.read.self` string (the visibility resolver defaults to
+// `self`, so workers read their own records without holding the literal perm).
+//
 // Idempotent: a re-run finds the write keys already present and grants nothing.
 // Never downgrades / removes anything.
 //
-//   DATABASE_URL='postgresql://…' npx tsx src/scripts/backfill-hazid-inspections-write.ts
-//
-// Roles are tenant-RLS'd; we read+write inside one bypass transaction so the
-// owner connection sees every tenant (same GUC getRequestContext uses).
+// MUST run on the BYPASSRLS super pool — the role-table RLS is now a single
+// `tenant_id` equality with no `app.bypass_rls` escape hatch, so connect as
+// beaconhs_super to see/update every tenant's roles:
+//   DATABASE_URL="$SUPERADMIN_DATABASE_URL" pnpm --filter @beaconhs/db exec \
+//     tsx src/scripts/backfill-hazid-inspections-write.ts
 
 import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
-import { eq, sql } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import * as s from '../schema'
 
 // Modules that gained write permissions, with the read tiers that mark a role
@@ -41,7 +48,6 @@ async function main() {
   const db = drizzle(pg, { schema: s })
 
   const summary = await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
     const roles = await tx
       .select({ id: s.roles.id, key: s.roles.key, permissions: s.roles.permissions })
       .from(s.roles)
@@ -50,12 +56,20 @@ async function main() {
     let granted = 0
     for (const role of roles) {
       const perms = new Set<string>(role.permissions ?? [])
+      const builtin = s.BUILTIN_ROLES[role.key as keyof typeof s.BUILTIN_ROLES]
+      const builtinPerms = builtin
+        ? new Set<string>(builtin.permissions as unknown as string[])
+        : null
       const additions: string[] = []
       for (const prefix of MODULES) {
-        if (!readsModule(perms, prefix)) continue
+        const readsToday = readsModule(perms, prefix)
         for (const action of ['create', 'update'] as const) {
           const key = `${prefix}.${action}`
-          if (!perms.has(key)) additions.push(key)
+          if (perms.has(key)) continue
+          // Grant if the role reads the module today (custom roles keep their
+          // prior ungated write access) OR its built-in definition now includes
+          // the write perm (brings seeded built-in roles to the new baseline).
+          if (readsToday || builtinPerms?.has(key)) additions.push(key)
         }
       }
       if (additions.length === 0) continue
