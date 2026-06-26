@@ -10,6 +10,7 @@ import {
   people,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { moduleScopeWhere } from '@/lib/visibility'
 import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
 import { Pagination } from '@/components/pagination'
@@ -71,7 +72,15 @@ export default async function EquipmentPage({
         .from(equipmentCategories)
         .where(eq(equipmentCategories.tenantId, ctx.tenantId))
         .orderBy(asc(equipmentCategories.sortOrder), asc(equipmentCategories.name))
+      // Read-tier scope: equipment.read.all → every asset; read.site → assets at
+      // the caller's scoped sites; neither → only assets they currently hold.
+      const vis = await moduleScopeWhere(ctx, tx, {
+        prefix: 'equipment',
+        siteCol: equipmentItems.currentSiteOrgUnitId,
+        personCol: equipmentItems.currentHolderPersonId,
+      })
       const filters: SQL<unknown>[] = [isNull(equipmentItems.deletedAt)]
+      if (vis) filters.push(vis)
       if (params.q) {
         const term = `%${params.q}%`
         const cond = or(
@@ -121,10 +130,12 @@ export default async function EquipmentPage({
       const ss = await tx
         .select({ s: equipmentItems.status, c: count() })
         .from(equipmentItems)
+        .where(and(isNull(equipmentItems.deletedAt), vis))
         .groupBy(equipmentItems.status)
       const av = await tx
         .select({ a: equipmentItems.isAvailableForCheckout, c: count() })
         .from(equipmentItems)
+        .where(and(isNull(equipmentItems.deletedAt), vis))
         .groupBy(equipmentItems.isAvailableForCheckout)
       return {
         rows: data,

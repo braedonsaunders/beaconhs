@@ -64,6 +64,7 @@ import {
 import { publicUrl } from '@beaconhs/storage'
 import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { canSeeRecord } from '@/lib/visibility'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { DetailGrid } from '@/components/detail-grid'
 import { Section } from '@/components/section'
@@ -547,6 +548,16 @@ export default async function EquipmentDetailPage({
       .where(eq(equipmentItems.id, id))
       .limit(1)
     if (!row) return null
+
+    // Read-tier scope (mirrors the list): read.all → any asset; read.site →
+    // assets at the caller's sites; neither → only assets they currently hold.
+    // Closes the view-by-URL gap for site/no-tier users.
+    const visible = await canSeeRecord(ctx, tx, {
+      prefix: 'equipment',
+      siteId: row.item.currentSiteOrgUnitId,
+      personId: row.item.currentHolderPersonId,
+    })
+    if (!visible) return null
 
     const [
       history,
