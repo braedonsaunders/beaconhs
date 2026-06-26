@@ -45,7 +45,7 @@ async function applyWorkActivityAction(input: ApplyWorkActivityInput) {
   } catch (error) {
     return {
       ok: false as const,
-      error: error instanceof Error ? error.message : 'Failed to import work activity.',
+      error: error instanceof Error ? error.message : 'Failed to import source activity.',
     }
   }
 }

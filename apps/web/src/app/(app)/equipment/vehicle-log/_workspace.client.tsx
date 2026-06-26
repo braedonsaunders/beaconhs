@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import {
   AlertTriangle,
   CalendarDays,
+  ChevronDown,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -15,7 +16,7 @@ import {
   Trash2,
   WandSparkles,
 } from 'lucide-react'
-import { Badge, Button, Input, Select, Textarea, cn } from '@beaconhs/ui'
+import { Badge, Button, Input, Popover, Select, Textarea, cn } from '@beaconhs/ui'
 import type {
   ApplyWorkActivityInput,
   ApplyWorkActivityResult,
@@ -95,6 +96,8 @@ export function VehicleLogWorkspaceClient({
   const [rowStates, setRowStates] = useState<Record<string, RowState>>({})
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({})
   const [actionResult, setActionResult] = useState<string | null>(null)
+  const [importPickerOpen, setImportPickerOpen] = useState(false)
+  const [selectedImportSourceId, setSelectedImportSourceId] = useState('')
 
   useEffect(() => {
     setDrafts(
@@ -105,6 +108,17 @@ export function VehicleLogWorkspaceClient({
     setRowStates({})
     setRowErrors({})
     setActionResult(null)
+    setImportPickerOpen(false)
+    setSelectedImportSourceId((current) => {
+      const sources = workspace.importSources.sources
+      if (sources.some((source) => source.id === current && source.active)) return current
+      return (
+        sources.find((source) => source.active && source.matchedDayCount > 0)?.id ??
+        sources.find((source) => source.active)?.id ??
+        sources[0]?.id ??
+        ''
+      )
+    })
   }, [workspace])
 
   const activeDriver = workspace.drivers.find((d) => d.id === workspace.selectedDriverId)
@@ -170,13 +184,19 @@ export function VehicleLogWorkspaceClient({
     }
   }
 
-  function applyActivity() {
+  function applyActivity(sourceConnectionId?: string | null) {
     if (!workspace.selectedDriverId || !workspace.selectedEquipmentId) {
       setActionResult('Choose a driver and vehicle first.')
       return
     }
-    if (workspace.totals.workActivityDays === 0) {
-      setActionResult(importHint)
+    const sourceId =
+      sourceConnectionId ||
+      selectedImportSourceId ||
+      (importableSources.length === 1 ? importableSources[0]?.id : null)
+    const source = workspace.importSources.sources.find((candidate) => candidate.id === sourceId)
+    if (!source || !source.active || source.matchedDayCount === 0) {
+      setImportPickerOpen(workspace.importSources.sources.length > 1)
+      setActionResult(source ? `${source.name} has no matching days.` : importHint)
       return
     }
     setActionResult(null)
@@ -185,17 +205,19 @@ export function VehicleLogWorkspaceClient({
         equipmentItemId: workspace.selectedEquipmentId,
         driverPersonId: workspace.selectedDriverId,
         month: workspace.month.key,
+        sourceConnectionId: source.id,
       })
       if (res.ok) {
         const { created, updated, conflicts, skipped } = res.result
         const changed = created + updated + conflicts
         setActionResult(
           changed === 0
-            ? 'No matching work activity was found.'
-            : `${created} added · ${updated} refreshed · ${conflicts} conflicts${
+            ? `${source.name}: no matching source activity was found.`
+            : `${source.name}: ${created} added · ${updated} refreshed · ${conflicts} conflicts${
                 skipped ? ` · ${skipped} skipped` : ''
               }`,
         )
+        setImportPickerOpen(false)
         router.refresh()
       } else {
         setActionResult(res.error)
@@ -224,26 +246,58 @@ export function VehicleLogWorkspaceClient({
   }
 
   const canEdit = Boolean(workspace.selectedDriverId && workspace.selectedEquipmentId)
-  const hasActiveSource = workspace.workActivity.activeSourceCount > 0
-  const importSourceDays = workspace.totals.workActivityDays
+  const importSources = workspace.importSources.sources
+  const importableSources = importSources.filter(
+    (source) => source.active && source.matchedDayCount > 0,
+  )
+  const selectedImportSource =
+    importSources.find((source) => source.id === selectedImportSourceId) ?? importableSources[0]
+  const hasActiveSource = workspace.importSources.activeSourceCount > 0
+  const matchedImportDays = workspace.totals.importSourceDays
   const importHint = !workspace.selectedDriverId
     ? 'Choose a driver first.'
     : !workspace.selectedEquipmentId
       ? 'Choose a vehicle first.'
-      : importSourceDays > 0
-        ? `${plural(importSourceDays, 'source day')} ready.`
-        : hasActiveSource
-          ? 'No work activity for this driver/month.'
-          : workspace.workActivity.monthRowCount > 0
-            ? 'No matching work activity for this driver/month.'
-            : 'No work activity source has run for this month.'
+      : !hasActiveSource
+        ? 'No vehicle log import source is configured.'
+        : importableSources.length > 1
+          ? 'Choose an import source.'
+          : selectedImportSource && selectedImportSource.matchedDayCount > 0
+            ? `${selectedImportSource.name}: ${plural(
+                selectedImportSource.matchedDayCount,
+                'matched day',
+              )} ready.`
+            : workspace.importSources.monthRowCount > 0
+              ? 'No source rows match this driver/month.'
+              : 'No import source has run for this month.'
   const sourceBadge = hasActiveSource
-    ? `${plural(workspace.workActivity.activeSourceCount, 'source')}`
+    ? `${plural(workspace.importSources.activeSourceCount, 'source')}`
     : 'No source'
   const activityBadge = canEdit
-    ? `${plural(importSourceDays, 'source day')}`
-    : `${plural(workspace.workActivity.monthRowCount, 'source row')}`
-  const canImport = canEdit && importSourceDays > 0 && !pending
+    ? `${plural(matchedImportDays, 'matched day')}`
+    : `${plural(workspace.importSources.monthRowCount, 'source row')}`
+  const canImport = canEdit && importableSources.length > 0 && !pending
+  const hasSourcePicker = importSources.length > 1
+  const canOpenSourcePicker = canEdit && hasSourcePicker && !pending
+  const importButton = (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      onClick={() => {
+        if (hasSourcePicker) setImportPickerOpen((open) => !open)
+        else void applyActivity(importableSources[0]?.id)
+      }}
+      disabled={hasSourcePicker ? !canOpenSourcePicker : !canImport}
+      title={importHint}
+      aria-expanded={hasSourcePicker ? importPickerOpen : undefined}
+      aria-haspopup={hasSourcePicker ? 'dialog' : undefined}
+    >
+      {pending ? <Loader2 size={14} className="animate-spin" /> : <WandSparkles size={14} />}
+      Import
+      {hasSourcePicker ? <ChevronDown size={13} /> : null}
+    </Button>
+  )
   const emptyMessage =
     workspace.drivers.length === 0 || workspace.vehicles.length === 0
       ? 'Add an active driver and vehicle to start logging.'
@@ -300,22 +354,80 @@ export function VehicleLogWorkspaceClient({
             </Select>
           </div>
           <div className="flex flex-wrap items-end justify-start gap-2 lg:justify-end">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={applyActivity}
-              disabled={!canImport}
-              title={importHint}
-            >
-              {pending ? (
-                <Loader2 size={14} className="animate-spin" />
-              ) : (
-                <WandSparkles size={14} />
-              )}
-              Import
-            </Button>
-            {workspace.workActivity.canConfigureSources && !hasActiveSource ? (
+            {hasSourcePicker ? (
+              <Popover
+                open={importPickerOpen}
+                onOpenChange={setImportPickerOpen}
+                align="end"
+                className="w-80"
+                trigger={importButton}
+              >
+                <div className="border-b border-slate-100 px-3 py-2 dark:border-slate-800">
+                  <div className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                    Choose import source
+                  </div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">
+                    Source rows are matched to the selected driver and month.
+                  </div>
+                </div>
+                <div className="max-h-72 overflow-y-auto py-1">
+                  {importSources.map((source) => {
+                    const disabled = !source.active || source.matchedDayCount === 0
+                    const selected = selectedImportSource?.id === source.id
+                    return (
+                      <button
+                        key={source.id}
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => setSelectedImportSourceId(source.id)}
+                        className={cn(
+                          'flex w-full items-start justify-between gap-3 px-3 py-2 text-left transition-colors',
+                          selected
+                            ? 'bg-teal-50 text-teal-900 dark:bg-teal-950/30 dark:text-teal-100'
+                            : 'text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800/60',
+                          disabled && 'cursor-not-allowed opacity-50 hover:bg-transparent',
+                        )}
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-medium">{source.name}</span>
+                          <span className="block truncate text-xs text-slate-500 dark:text-slate-400">
+                            {source.connectorLabel} · {source.status}
+                          </span>
+                          <span className="mt-0.5 block text-[11px] text-slate-400">
+                            {plural(source.monthRowCount, 'row')} this month ·{' '}
+                            {plural(source.matchedDayCount, 'matched day')}
+                          </span>
+                        </span>
+                        <Badge variant={source.matchedDayCount ? 'secondary' : 'outline'}>
+                          {source.matchedDayCount}
+                        </Badge>
+                      </button>
+                    )
+                  })}
+                </div>
+                <div className="flex items-center justify-between gap-2 border-t border-slate-100 px-3 py-2 dark:border-slate-800">
+                  <span className="truncate text-xs text-slate-500 dark:text-slate-400">
+                    {selectedImportSource?.name ?? 'No source selected'}
+                  </span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => void applyActivity(selectedImportSource?.id)}
+                    disabled={
+                      !selectedImportSource ||
+                      !selectedImportSource.active ||
+                      selectedImportSource.matchedDayCount === 0 ||
+                      pending
+                    }
+                  >
+                    Import
+                  </Button>
+                </div>
+              </Popover>
+            ) : (
+              importButton
+            )}
+            {workspace.importSources.canConfigureSources && !hasActiveSource ? (
               <Link
                 href="/admin/integrations"
                 className="inline-flex h-8 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-600 dark:hover:bg-slate-800/60"
@@ -370,7 +482,7 @@ export function VehicleLogWorkspaceClient({
             </Badge>
             <Badge variant="outline">{workspace.totals.totalKm} km</Badge>
             <Badge variant={hasActiveSource ? 'outline' : 'warning'}>{sourceBadge}</Badge>
-            <Badge variant={importSourceDays ? 'secondary' : 'outline'}>{activityBadge}</Badge>
+            <Badge variant={matchedImportDays ? 'secondary' : 'outline'}>{activityBadge}</Badge>
             {actionResult ? (
               <span className="text-slate-500 dark:text-slate-400">{actionResult}</span>
             ) : !canImport ? (
@@ -392,7 +504,7 @@ export function VehicleLogWorkspaceClient({
                 <th className="sticky left-0 z-20 w-24 bg-slate-50 px-3 py-2 text-left font-medium dark:bg-slate-950">
                   Date
                 </th>
-                <th className="w-56 px-3 py-2 text-left font-medium">Work activity</th>
+                <th className="w-56 px-3 py-2 text-left font-medium">Import source</th>
                 <th className="w-52 px-3 py-2 text-left font-medium">Site</th>
                 {workspace.mode === 'destination' ? (
                   <>
@@ -457,7 +569,7 @@ export function VehicleLogWorkspaceClient({
                             ) : null}
                           </div>
                           <div className="truncate text-xs text-slate-600 dark:text-slate-300">
-                            {row.activity.sourceLabel ?? row.activity.siteName ?? 'Activity'}
+                            {row.activity.sourceLabel ?? row.activity.siteName ?? 'Source activity'}
                           </div>
                           <div className="text-[11px] text-slate-400">
                             {[

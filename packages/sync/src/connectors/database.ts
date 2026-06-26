@@ -166,7 +166,7 @@ export const databaseConnector: Connector = {
   key: 'database',
   name: 'Database (SQL)',
   description:
-    'Connect to any SQL database — PostgreSQL, MySQL/MariaDB or SQL Server. Browse tables, map columns to People, Locations, Equipment and Work Activity, and sync on a schedule.',
+    'Connect to any SQL database — PostgreSQL, MySQL/MariaDB or SQL Server. Browse tables, map columns to People, Locations, Equipment and Vehicle Log Sources, and sync on a schedule.',
   kind: 'native',
   iconKey: 'database',
   entities: ['people', 'org_unit', 'equipment', 'work_activity'],

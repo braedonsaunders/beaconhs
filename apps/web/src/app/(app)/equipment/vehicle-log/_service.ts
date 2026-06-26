@@ -35,6 +35,18 @@ export type VehicleLogActivity = {
   status: string
 }
 
+export type VehicleLogImportSource = {
+  id: string
+  name: string
+  connectorKey: string
+  connectorLabel: string
+  status: string
+  active: boolean
+  monthRowCount: number
+  matchedRowCount: number
+  matchedDayCount: number
+}
+
 export type VehicleLogEntryDraft = {
   id: string | null
   entryDate: string
@@ -81,15 +93,16 @@ export type VehicleLogWorkspace = {
   vehicles: VehicleLogSelectorOption[]
   sites: VehicleLogSelectorOption[]
   rows: VehicleLogWorkspaceRow[]
-  workActivity: {
+  importSources: {
     configuredSourceCount: number
     activeSourceCount: number
     monthRowCount: number
     canConfigureSources: boolean
+    sources: VehicleLogImportSource[]
   }
   totals: {
     loggedDays: number
-    workActivityDays: number
+    importSourceDays: number
     pendingActivityDays: number
     conflictDays: number
     businessKm: number
@@ -125,6 +138,7 @@ export type ApplyWorkActivityInput = {
   equipmentItemId: string
   driverPersonId: string
   month: string
+  sourceConnectionId?: string | null
 }
 
 export type ApplyWorkActivityResult = {
@@ -138,7 +152,7 @@ type ActivityRow = typeof workActivityEntries.$inferSelect
 type TruckLogRow = typeof truckLogEntries.$inferSelect
 type SyncConnectionRow = Pick<
   typeof syncConnections.$inferSelect,
-  'connectorKey' | 'status' | 'config'
+  'id' | 'connectorKey' | 'name' | 'status' | 'config'
 >
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
@@ -220,6 +234,39 @@ function connectionTargetsWorkActivity(connection: SyncConnectionRow): boolean {
     return Boolean(entities.work_activity)
   }
   return true
+}
+
+function buildImportSources(
+  connections: SyncConnectionRow[],
+  monthRows: { sourceConnectionId: string; count: number }[],
+  matchedActivities: ActivityRow[],
+): VehicleLogImportSource[] {
+  const monthRowsBySource = new Map(monthRows.map((row) => [row.sourceConnectionId, row.count]))
+  const matchedRowsBySource = new Map<string, number>()
+  const matchedDaysBySource = new Map<string, Set<string>>()
+
+  for (const activity of matchedActivities) {
+    const id = activity.sourceConnectionId
+    matchedRowsBySource.set(id, (matchedRowsBySource.get(id) ?? 0) + 1)
+    const dates = matchedDaysBySource.get(id) ?? new Set<string>()
+    dates.add(activity.activityDate)
+    matchedDaysBySource.set(id, dates)
+  }
+
+  return connections.filter(connectionTargetsWorkActivity).map((connection) => {
+    const connectorLabel = getConnector(connection.connectorKey)?.name ?? connection.connectorKey
+    return {
+      id: connection.id,
+      name: connection.name || connectorLabel,
+      connectorKey: connection.connectorKey,
+      connectorLabel,
+      status: connection.status,
+      active: connection.status !== 'disabled',
+      monthRowCount: monthRowsBySource.get(connection.id) ?? 0,
+      matchedRowCount: matchedRowsBySource.get(connection.id) ?? 0,
+      matchedDayCount: matchedDaysBySource.get(connection.id)?.size ?? 0,
+    }
+  })
 }
 
 function sumHours(values: (string | null)[]): string | null {
@@ -332,22 +379,25 @@ async function listWorkActivitiesForDriver(
   driver: { id: string; employeeNo: string | null; externalEmployeeId: string | null },
   start: string,
   endExclusive: string,
+  sourceConnectionId?: string | null,
 ) {
   const personMatches = [eq(workActivityEntries.personId, driver.id)]
   if (driver.employeeNo) personMatches.push(eq(workActivityEntries.employeeNo, driver.employeeNo))
   if (driver.externalEmployeeId) {
     personMatches.push(eq(workActivityEntries.externalEmployeeId, driver.externalEmployeeId))
   }
+  const conditions = [
+    or(...personMatches),
+    gte(workActivityEntries.activityDate, start),
+    lt(workActivityEntries.activityDate, endExclusive),
+  ]
+  if (sourceConnectionId) {
+    conditions.push(eq(workActivityEntries.sourceConnectionId, sourceConnectionId))
+  }
   return tx
     .select()
     .from(workActivityEntries)
-    .where(
-      and(
-        or(...personMatches),
-        gte(workActivityEntries.activityDate, start),
-        lt(workActivityEntries.activityDate, endExclusive),
-      ),
-    )
+    .where(and(...conditions))
     .orderBy(asc(workActivityEntries.activityDate))
 }
 
@@ -373,7 +423,7 @@ export async function loadVehicleLogWorkspace(
   const mode: VehicleLogMode = opts.mode === 'odometer' ? 'odometer' : 'destination'
 
   const result = await ctx.db(async (tx) => {
-    const [driversRaw, vehiclesRaw, sitesRaw, connectionRows, workActivityMonthCount] =
+    const [driversRaw, vehiclesRaw, sitesRaw, connectionRows, workActivityMonthRows] =
       await Promise.all([
         tx
           .select({
@@ -407,14 +457,19 @@ export async function loadVehicleLogWorkspace(
           .limit(1000),
         tx
           .select({
+            id: syncConnections.id,
             connectorKey: syncConnections.connectorKey,
+            name: syncConnections.name,
             status: syncConnections.status,
             config: syncConnections.config,
           })
           .from(syncConnections)
           .where(isNull(syncConnections.deletedAt)),
         tx
-          .select({ count: count() })
+          .select({
+            sourceConnectionId: workActivityEntries.sourceConnectionId,
+            count: count(),
+          })
           .from(workActivityEntries)
           .where(
             and(
@@ -422,7 +477,13 @@ export async function loadVehicleLogWorkspace(
               lt(workActivityEntries.activityDate, endExclusive),
             ),
           )
-          .then((rows) => Number(rows[0]?.count ?? 0)),
+          .groupBy(workActivityEntries.sourceConnectionId)
+          .then((rows) =>
+            rows.map((row) => ({
+              sourceConnectionId: row.sourceConnectionId,
+              count: Number(row.count ?? 0),
+            })),
+          ),
       ])
 
     const drivers = driversRaw.map((p) => ({
@@ -453,12 +514,11 @@ export async function loadVehicleLogWorkspace(
     const selectedVehicle = opts.equipmentItemId
       ? (vehicleRows.find((v) => v.id === opts.equipmentItemId) ?? null)
       : null
-    const workActivitySources = connectionRows.filter(connectionTargetsWorkActivity)
-    const workActivity = {
-      configuredSourceCount: workActivitySources.length,
-      activeSourceCount: workActivitySources.filter((source) => source.status !== 'disabled')
-        .length,
-      monthRowCount: workActivityMonthCount,
+    const baseImportSources = buildImportSources(connectionRows, workActivityMonthRows, [])
+    const baseImportSourceMeta = {
+      configuredSourceCount: baseImportSources.length,
+      activeSourceCount: baseImportSources.filter((source) => source.active).length,
+      monthRowCount: baseImportSources.reduce((sum, source) => sum + source.monthRowCount, 0),
       canConfigureSources: can(ctx, 'admin.integrations.manage'),
     }
 
@@ -483,10 +543,10 @@ export async function loadVehicleLogWorkspace(
         vehicles,
         sites,
         rows: [],
-        workActivity,
+        importSources: { ...baseImportSourceMeta, sources: baseImportSources },
         totals: {
           loggedDays: 0,
-          workActivityDays: 0,
+          importSourceDays: 0,
           pendingActivityDays: 0,
           conflictDays: 0,
           businessKm: 0,
@@ -512,6 +572,13 @@ export async function loadVehicleLogWorkspace(
         ),
       listWorkActivitiesForDriver(tx, selectedDriver, start, endExclusive),
     ])
+    const importSources = buildImportSources(connectionRows, workActivityMonthRows, activities)
+    const importSourceMeta = {
+      configuredSourceCount: importSources.length,
+      activeSourceCount: importSources.filter((source) => source.active).length,
+      monthRowCount: importSources.reduce((sum, source) => sum + source.monthRowCount, 0),
+      canConfigureSources: can(ctx, 'admin.integrations.manage'),
+    }
 
     const entryByDate = new Map(entries.map((entry) => [entry.entryDate, entry]))
     const activityByDate = new Map<string, ActivityRow[]>()
@@ -527,7 +594,7 @@ export async function loadVehicleLogWorkspace(
     let totalKm = 0
     let hoursOnSite = 0
     let crewCount = 0
-    let workActivityDays = 0
+    let importSourceDays = 0
     let pendingActivityDays = 0
     let conflictDays = 0
     for (let day = 1; day <= dim; day++) {
@@ -535,7 +602,7 @@ export async function loadVehicleLogWorkspace(
       const dateObj = new Date(`${date}T00:00:00`)
       const entry = entryDraft(entryByDate.get(date) ?? null, date, mode)
       const activity = activitySummary(activityByDate.get(date) ?? [])
-      if (activity) workActivityDays += 1
+      if (activity) importSourceDays += 1
       if (activity && !entry.id) pendingActivityDays += 1
       if (entry.importStatus === 'conflict') conflictDays += 1
       businessKm += entry.businessKm ?? 0
@@ -573,10 +640,10 @@ export async function loadVehicleLogWorkspace(
       vehicles,
       sites,
       rows,
-      workActivity,
+      importSources: { ...importSourceMeta, sources: importSources },
       totals: {
         loggedDays: entries.length,
-        workActivityDays,
+        importSourceDays,
         pendingActivityDays,
         conflictDays,
         businessKm,
@@ -727,7 +794,7 @@ export async function applyWorkActivityToVehicleLog(
     if (!driver) throw new Error('Driver was not found.')
 
     const [activities, existingEntries] = await Promise.all([
-      listWorkActivitiesForDriver(tx, driver, start, endExclusive),
+      listWorkActivitiesForDriver(tx, driver, start, endExclusive, input.sourceConnectionId),
       tx
         .select()
         .from(truckLogEntries)
@@ -816,7 +883,7 @@ export async function applyWorkActivityToVehicleLog(
     entityType: 'truck_log_entry',
     entityId: input.equipmentItemId,
     action: 'update',
-    summary: `Imported ${result.created + result.updated} vehicle log day(s) from work activity`,
+    summary: `Imported ${result.created + result.updated} vehicle log day(s) from source activity`,
     after: { ...input, ...result },
     metadata: { operation: 'import' },
   })

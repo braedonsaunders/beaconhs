@@ -125,7 +125,7 @@ export const csvConnector: Connector = {
   key: 'csv',
   name: 'CSV / Spreadsheet',
   description:
-    'Paste or upload a CSV of people, locations, equipment or work activity. Columns are auto-matched to fields; re-importing updates existing records.',
+    'Paste or upload a CSV of people, locations, equipment or vehicle log source activity. Columns are auto-matched to fields; re-importing updates existing records.',
   kind: 'native',
   iconKey: 'file-spreadsheet',
   entities: ['people', 'org_unit', 'equipment', 'work_activity'],
