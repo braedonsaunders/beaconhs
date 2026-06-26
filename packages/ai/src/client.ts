@@ -211,9 +211,7 @@ export function defaultModel(provider: AiProvider, tier: ModelTier): string {
  * results are text/JSON only, so exposing such a tool to them would break the
  * agent turn. Used to gate the assistant's `view_document_pages` tool.
  */
-export function providerSupportsImageToolResults(
-  config: AiConfig | null | undefined,
-): boolean {
+export function providerSupportsImageToolResults(config: AiConfig | null | undefined): boolean {
   if (!config) return false
   return SPEC_BY_VALUE[config.provider]?.visionToolResults ?? false
 }

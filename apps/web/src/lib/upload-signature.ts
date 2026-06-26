@@ -21,7 +21,12 @@ export async function uploadSignatureDataUrl(dataUrl: string): Promise<string> {
   if (!dataUrl.startsWith('data:image/')) throw new Error('Signature must be a PNG data URL')
   const { blob, contentType } = dataUrlToBlob(dataUrl)
   const filename = `signature-${Date.now()}.png`
-  const req = await requestUpload({ kind: 'signature', filename, contentType, sizeBytes: blob.size })
+  const req = await requestUpload({
+    kind: 'signature',
+    filename,
+    contentType,
+    sizeBytes: blob.size,
+  })
   if (!req.ok) throw new Error(req.error)
   const put = await fetch(req.putUrl, {
     method: 'PUT',

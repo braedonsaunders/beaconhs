@@ -212,11 +212,7 @@ export function JournalRecordsTable({
         footer={
           readEntry ? (
             <div className="flex w-full items-center justify-end gap-2">
-              <a
-                href={`/journals/${readEntry.id}/print`}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
+              <a href={`/journals/${readEntry.id}/print`} target="_blank" rel="noopener noreferrer">
                 <Button variant="outline">
                   <Printer size={14} /> Print
                 </Button>

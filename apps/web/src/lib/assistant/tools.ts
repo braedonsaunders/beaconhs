@@ -509,7 +509,15 @@ const viewDocumentPages: AssistantToolDef = {
 
     return {
       ok: true,
-      data: { images, summary, title, pages, fromPage: from, toPage: to, renderedPages: images.length },
+      data: {
+        images,
+        summary,
+        title,
+        pages,
+        fromPage: from,
+        toPage: to,
+        renderedPages: images.length,
+      },
     }
   },
 }

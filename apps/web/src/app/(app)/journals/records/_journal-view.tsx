@@ -87,8 +87,7 @@ export function JournalView({
             </span>
           </div>
           <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-            {formatLongDate(entry.entryDate)} ·{' '}
-            <span className="font-mono">{entry.reference}</span>
+            {formatLongDate(entry.entryDate)} · <span className="font-mono">{entry.reference}</span>
           </p>
         </div>
       </div>
