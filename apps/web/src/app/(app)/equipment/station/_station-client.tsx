@@ -354,27 +354,24 @@ export function StationClient(props: StationClientProps) {
     return () => document.removeEventListener('fullscreenchange', onChange)
   }, [])
 
-  const personOptions = useMemo(
-    () => {
-      const options = people.map((p) => ({
-        value: p.id,
-        label: p.name,
-        hint: p.employeeNo ?? undefined,
-      }))
-      if (activePerson && !options.some((option) => option.value === activePerson.id)) {
-        return [
-          {
-            value: activePerson.id,
-            label: activePerson.name,
-            hint: activePerson.employeeNo ?? undefined,
-          },
-          ...options,
-        ]
-      }
-      return options
-    },
-    [activePerson, people],
-  )
+  const personOptions = useMemo(() => {
+    const options = people.map((p) => ({
+      value: p.id,
+      label: p.name,
+      hint: p.employeeNo ?? undefined,
+    }))
+    if (activePerson && !options.some((option) => option.value === activePerson.id)) {
+      return [
+        {
+          value: activePerson.id,
+          label: activePerson.name,
+          hint: activePerson.employeeNo ?? undefined,
+        },
+        ...options,
+      ]
+    }
+    return options
+  }, [activePerson, people])
   const locationOptions = useMemo(
     () =>
       locations.map((l) => ({
