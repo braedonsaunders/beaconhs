@@ -8,6 +8,14 @@ import { DEFAULT_LIMIT, MAX_LIMIT } from './query'
 import { readPermissionForEntity } from './permissions'
 import { isRecordable } from './records'
 import {
+  BUILDER_APP_CREATE_PERMISSION,
+  BUILDER_APP_DELETE_PERMISSION,
+  BUILDER_APP_READ_PERMISSION,
+  BUILDER_APP_UPDATE_PERMISSION,
+  responseDataOpenApiSchema,
+  type BuilderAppOpenApiEntity,
+} from './builder-apps'
+import {
   deletePermissionForEntity,
   isDeletable,
   isPatchable,
@@ -38,10 +46,16 @@ function schemaForKind(kind: ReportColumnKind): Json {
 }
 
 function pascalCase(key: string): string {
-  return key
-    .split(/[_\s-]+/)
+  const out = key
+    .split(/[^a-zA-Z0-9]+/)
+    .filter(Boolean)
     .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
     .join('')
+  return out || 'Entity'
+}
+
+function operationSuffix(key: string): string {
+  return key.replace(/[^a-zA-Z0-9_]+/g, '_').replace(/^_+|_+$/g, '') || 'app'
 }
 
 function entitySchema(entity: ReportEntity): Json {
@@ -336,7 +350,383 @@ function recordPath(entity: ReportEntity): Json {
   return operations
 }
 
-export function buildOpenApiDocument(origin: string): Json {
+function builderAppResponseSchema(dataSchema: Json | { $ref: string }): Json {
+  return {
+    type: 'object',
+    properties: {
+      id: { type: 'string', format: 'uuid' },
+      template_id: { type: 'string', format: 'uuid' },
+      template_key: { type: 'string' },
+      template_name: { type: 'string' },
+      template_version_id: { type: 'string', format: 'uuid' },
+      template_version: { type: 'integer' },
+      status: { type: 'string' },
+      site_org_unit_id: { type: ['string', 'null'], format: 'uuid' },
+      subject_person_id: { type: ['string', 'null'], format: 'uuid' },
+      submitted_by: { type: ['string', 'null'], format: 'uuid' },
+      submitted_at: { type: ['string', 'null'], format: 'date-time' },
+      closed_at: { type: ['string', 'null'], format: 'date-time' },
+      locked: { type: 'boolean' },
+      compliance_score: { type: ['number', 'null'] },
+      compliance_status: { type: ['string', 'null'] },
+      monitor_status: { type: ['string', 'null'] },
+      created_at: { type: 'string', format: 'date-time' },
+      updated_at: { type: 'string', format: 'date-time' },
+      data: dataSchema,
+    },
+    required: [
+      'id',
+      'template_id',
+      'template_key',
+      'template_name',
+      'template_version_id',
+      'template_version',
+      'status',
+      'locked',
+      'created_at',
+      'updated_at',
+      'data',
+    ],
+  }
+}
+
+function builderAppSubmitSchema(dataSchema: Json | { $ref: string }): Json {
+  return {
+    type: 'object',
+    required: ['data'],
+    properties: {
+      data: dataSchema,
+      siteOrgUnitId: { type: 'string', format: 'uuid' },
+      subjectPersonId: { type: 'string', format: 'uuid' },
+      responseId: {
+        type: 'string',
+        format: 'uuid',
+        description: 'Optional draft response id to finalize in-place.',
+      },
+    },
+    additionalProperties: false,
+  }
+}
+
+function builderAppPatchSchema(dataSchema: Json | { $ref: string }): Json {
+  return {
+    type: 'object',
+    properties: {
+      data: dataSchema,
+      fields: {
+        type: 'object',
+        additionalProperties: true,
+        description: 'Partial field map merged into the existing response data.',
+      },
+      siteOrgUnitId: { type: ['string', 'null'], format: 'uuid' },
+      subjectPersonId: { type: ['string', 'null'], format: 'uuid' },
+    },
+    additionalProperties: false,
+    minProperties: 1,
+  }
+}
+
+function builderAppsPath(): Json {
+  return {
+    get: {
+      tags: ['Builder apps'],
+      operationId: 'list_builder_apps',
+      summary: 'List published Builder apps',
+      description: `List the tenant's published Builder apps and their dynamic response endpoints. Requires permission \`${BUILDER_APP_READ_PERMISSION}\`.`,
+      'x-beaconhs-required-permission': BUILDER_APP_READ_PERMISSION,
+      security: [{ bearerAuth: [] }],
+      responses: {
+        '200': {
+          description: 'Published Builder apps for this tenant.',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  data: { type: 'array', items: { $ref: '#/components/schemas/BuilderApp' } },
+                },
+              },
+            },
+          },
+        },
+        '401': {
+          description: 'Missing, invalid, revoked or expired API key.',
+          content: errorContent(),
+        },
+        '403': { description: 'API key lacks the required permission.', content: errorContent() },
+      },
+    },
+  }
+}
+
+function builderResponsesPath(options: {
+  app?: BuilderAppOpenApiEntity
+  responseSchemaRef: string
+  submitSchemaRef: string
+}): Json {
+  const suffix = options.app ? operationSuffix(options.app.key) : 'builder_app'
+  const tag = options.app ? `Builder app: ${options.app.name}` : 'Builder apps'
+  const templateParam = options.app
+    ? []
+    : [
+        {
+          name: 'templateKey',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+          description: 'Published Builder app key or template id.',
+        },
+      ]
+  return {
+    get: {
+      tags: [tag],
+      operationId: `list_${suffix}_responses`,
+      summary: options.app ? `List ${options.app.name} responses` : 'List Builder app responses',
+      description: `List responses for one published Builder app. Requires permission \`${BUILDER_APP_READ_PERMISSION}\`. Supports metadata filters plus exact data-field filters as \`data.field_id=value\`.`,
+      'x-beaconhs-required-permission': BUILDER_APP_READ_PERMISSION,
+      ...(options.app ? { 'x-beaconhs-builder-app-key': options.app.key } : {}),
+      security: [{ bearerAuth: [] }],
+      parameters: [
+        ...templateParam,
+        {
+          name: 'limit',
+          in: 'query',
+          schema: { type: 'integer', minimum: 1, maximum: MAX_LIMIT, default: DEFAULT_LIMIT },
+        },
+        { name: 'offset', in: 'query', schema: { type: 'integer', minimum: 0, default: 0 } },
+        {
+          name: 'sort',
+          in: 'query',
+          schema: {
+            type: 'string',
+            enum: ['submitted_at', 'created_at', 'updated_at', 'status', 'compliance_score'],
+            default: 'submitted_at',
+          },
+        },
+        {
+          name: 'order',
+          in: 'query',
+          schema: { type: 'string', enum: ['asc', 'desc'], default: 'desc' },
+        },
+        { name: 'status', in: 'query', schema: { type: 'string' } },
+        { name: 'site_org_unit_id', in: 'query', schema: { type: 'string', format: 'uuid' } },
+        { name: 'subject_person_id', in: 'query', schema: { type: 'string', format: 'uuid' } },
+        { name: 'submitted_at__gte', in: 'query', schema: { type: 'string', format: 'date-time' } },
+        { name: 'submitted_at__lte', in: 'query', schema: { type: 'string', format: 'date-time' } },
+        { name: 'created_at__gte', in: 'query', schema: { type: 'string', format: 'date-time' } },
+        { name: 'created_at__lte', in: 'query', schema: { type: 'string', format: 'date-time' } },
+      ],
+      responses: {
+        '200': {
+          description: 'A page of Builder app responses.',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  app: { type: 'string', example: options.app?.key ?? 'hot-work-permit' },
+                  data: {
+                    type: 'array',
+                    items: { $ref: options.responseSchemaRef },
+                  },
+                  pagination: { $ref: '#/components/schemas/Pagination' },
+                },
+              },
+            },
+          },
+        },
+        '400': { description: 'Invalid request.', content: errorContent() },
+        '401': {
+          description: 'Missing, invalid, revoked or expired API key.',
+          content: errorContent(),
+        },
+        '403': { description: 'API key lacks the required permission.', content: errorContent() },
+        '404': { description: 'No published Builder app with that key.', content: errorContent() },
+      },
+    },
+    post: {
+      tags: [tag],
+      operationId: `submit_${suffix}_response`,
+      summary: options.app ? `Submit ${options.app.name} response` : 'Submit Builder app response',
+      description: `Validate and submit a response for one published Builder app. Runs the same scoring, participant indexing, audit, recap email, automation, and integration lifecycle as the app UI. Requires permission \`${BUILDER_APP_CREATE_PERMISSION}\`.`,
+      'x-beaconhs-required-permission': BUILDER_APP_CREATE_PERMISSION,
+      ...(options.app ? { 'x-beaconhs-builder-app-key': options.app.key } : {}),
+      security: [{ bearerAuth: [] }],
+      parameters: templateParam,
+      requestBody: {
+        required: true,
+        content: { 'application/json': { schema: { $ref: options.submitSchemaRef } } },
+      },
+      responses: {
+        '201': {
+          description: 'Submitted Builder app response.',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  app: { type: 'string', example: options.app?.key ?? 'hot-work-permit' },
+                  data: { $ref: options.responseSchemaRef },
+                },
+              },
+            },
+          },
+        },
+        '400': { description: 'Validation failed.', content: errorContent() },
+        '401': {
+          description: 'Missing, invalid, revoked or expired API key.',
+          content: errorContent(),
+        },
+        '403': { description: 'API key lacks the required permission.', content: errorContent() },
+        '404': { description: 'No published Builder app with that key.', content: errorContent() },
+      },
+    },
+  }
+}
+
+function builderResponseRecordPath(options: {
+  app?: BuilderAppOpenApiEntity
+  responseSchemaRef: string
+  patchSchemaRef: string
+}): Json {
+  const suffix = options.app ? operationSuffix(options.app.key) : 'builder_app'
+  const tag = options.app ? `Builder app: ${options.app.name}` : 'Builder apps'
+  const templateParam = options.app
+    ? []
+    : [
+        {
+          name: 'templateKey',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+          description: 'Published Builder app key or template id.',
+        },
+      ]
+  const idParam = {
+    name: 'id',
+    in: 'path',
+    required: true,
+    schema: { type: 'string', format: 'uuid' },
+  }
+  return {
+    get: {
+      tags: [tag],
+      operationId: `get_${suffix}_response`,
+      summary: options.app ? `Get ${options.app.name} response` : 'Get Builder app response',
+      description: `Fetch one Builder app response. Requires permission \`${BUILDER_APP_READ_PERMISSION}\`.`,
+      'x-beaconhs-required-permission': BUILDER_APP_READ_PERMISSION,
+      ...(options.app ? { 'x-beaconhs-builder-app-key': options.app.key } : {}),
+      security: [{ bearerAuth: [] }],
+      parameters: [...templateParam, idParam],
+      responses: {
+        '200': {
+          description: 'Builder app response.',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  app: { type: 'string', example: options.app?.key ?? 'hot-work-permit' },
+                  data: { $ref: options.responseSchemaRef },
+                },
+              },
+            },
+          },
+        },
+        '400': { description: 'Invalid id.', content: errorContent() },
+        '401': {
+          description: 'Missing, invalid, revoked or expired API key.',
+          content: errorContent(),
+        },
+        '403': { description: 'API key lacks the required permission.', content: errorContent() },
+        '404': { description: 'No response with that id.', content: errorContent() },
+      },
+    },
+    patch: {
+      tags: [tag],
+      operationId: `update_${suffix}_response`,
+      summary: options.app ? `Update ${options.app.name} response` : 'Update Builder app response',
+      description: `Replace the response \`data\`, merge a partial \`fields\` object, or update response metadata. Revalidates the response and recomputes compliance. Requires permission \`${BUILDER_APP_UPDATE_PERMISSION}\`.`,
+      'x-beaconhs-required-permission': BUILDER_APP_UPDATE_PERMISSION,
+      ...(options.app ? { 'x-beaconhs-builder-app-key': options.app.key } : {}),
+      security: [{ bearerAuth: [] }],
+      parameters: [...templateParam, idParam],
+      requestBody: {
+        required: true,
+        content: { 'application/json': { schema: { $ref: options.patchSchemaRef } } },
+      },
+      responses: {
+        '200': {
+          description: 'Updated Builder app response.',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  app: { type: 'string', example: options.app?.key ?? 'hot-work-permit' },
+                  data: { $ref: options.responseSchemaRef },
+                },
+              },
+            },
+          },
+        },
+        '400': { description: 'Validation failed or response is locked.', content: errorContent() },
+        '401': {
+          description: 'Missing, invalid, revoked or expired API key.',
+          content: errorContent(),
+        },
+        '403': { description: 'API key lacks the required permission.', content: errorContent() },
+        '404': { description: 'No response with that id.', content: errorContent() },
+      },
+    },
+    delete: {
+      tags: [tag],
+      operationId: `delete_${suffix}_response`,
+      summary: options.app ? `Delete ${options.app.name} response` : 'Delete Builder app response',
+      description: `Soft-delete/archive one Builder app response. Requires permission \`${BUILDER_APP_DELETE_PERMISSION}\`.`,
+      'x-beaconhs-required-permission': BUILDER_APP_DELETE_PERMISSION,
+      ...(options.app ? { 'x-beaconhs-builder-app-key': options.app.key } : {}),
+      security: [{ bearerAuth: [] }],
+      parameters: [...templateParam, idParam],
+      responses: {
+        '200': {
+          description: 'Delete result.',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  app: { type: 'string', example: options.app?.key ?? 'hot-work-permit' },
+                  data: {
+                    type: 'object',
+                    properties: {
+                      id: { type: 'string', format: 'uuid' },
+                      template_key: { type: 'string' },
+                      deleted: { type: 'boolean', example: true },
+                      deleted_at: { type: 'string', format: 'date-time' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        '400': { description: 'Invalid id or response is locked.', content: errorContent() },
+        '401': {
+          description: 'Missing, invalid, revoked or expired API key.',
+          content: errorContent(),
+        },
+        '403': { description: 'API key lacks the required permission.', content: errorContent() },
+        '404': { description: 'No response with that id.', content: errorContent() },
+      },
+    },
+  }
+}
+
+export function buildOpenApiDocument(
+  origin: string,
+  options: { builderApps?: BuilderAppOpenApiEntity[] } = {},
+): Json {
   const schemas: Json = {
     Pagination: {
       type: 'object',
@@ -363,6 +753,43 @@ export function buildOpenApiDocument(origin: string): Json {
       },
       required: ['error'],
     },
+    BuilderAppField: {
+      type: 'object',
+      properties: {
+        id: { type: 'string' },
+        label: { type: 'string' },
+        type: { type: 'string' },
+        section_id: { type: 'string' },
+        section_label: { type: ['string', 'null'] },
+        required: { type: 'boolean' },
+        repeating: { type: 'boolean' },
+      },
+    },
+    BuilderApp: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', format: 'uuid' },
+        key: { type: 'string' },
+        name: { type: 'string' },
+        description: { type: ['string', 'null'] },
+        category: { type: ['string', 'null'] },
+        kind: { type: 'string' },
+        version: { type: 'integer' },
+        endpoint: { type: 'string' },
+        responses_endpoint: { type: 'string' },
+        fields: { type: 'array', items: { $ref: '#/components/schemas/BuilderAppField' } },
+      },
+    },
+    BuilderAppResponseData: { type: 'object', additionalProperties: true },
+    BuilderAppResponse: builderAppResponseSchema({
+      $ref: '#/components/schemas/BuilderAppResponseData',
+    }),
+    BuilderAppSubmitRequest: builderAppSubmitSchema({
+      $ref: '#/components/schemas/BuilderAppResponseData',
+    }),
+    BuilderAppPatchRequest: builderAppPatchSchema({
+      $ref: '#/components/schemas/BuilderAppResponseData',
+    }),
   }
   const paths: Json = {}
   for (const entity of REPORT_ENTITIES) {
@@ -371,6 +798,40 @@ export function buildOpenApiDocument(origin: string): Json {
     if (isRecordable(entity.key)) {
       paths[`/api/v1/${entity.key}/{id}`] = recordPath(entity)
     }
+  }
+  paths['/api/v1/apps'] = builderAppsPath()
+  paths['/api/v1/apps/{templateKey}/responses'] = builderResponsesPath({
+    responseSchemaRef: '#/components/schemas/BuilderAppResponse',
+    submitSchemaRef: '#/components/schemas/BuilderAppSubmitRequest',
+  })
+  paths['/api/v1/apps/{templateKey}/responses/{id}'] = builderResponseRecordPath({
+    responseSchemaRef: '#/components/schemas/BuilderAppResponse',
+    patchSchemaRef: '#/components/schemas/BuilderAppPatchRequest',
+  })
+
+  for (const app of options.builderApps ?? []) {
+    const name = `BuilderApp${pascalCase(app.key)}`
+    schemas[`${name}ResponseData`] = responseDataOpenApiSchema(app.schema)
+    schemas[`${name}Response`] = builderAppResponseSchema({
+      $ref: `#/components/schemas/${name}ResponseData`,
+    })
+    schemas[`${name}SubmitRequest`] = builderAppSubmitSchema({
+      $ref: `#/components/schemas/${name}ResponseData`,
+    })
+    schemas[`${name}PatchRequest`] = builderAppPatchSchema({
+      $ref: `#/components/schemas/${name}ResponseData`,
+    })
+    const encodedKey = encodeURIComponent(app.key)
+    paths[`/api/v1/apps/${encodedKey}/responses`] = builderResponsesPath({
+      app,
+      responseSchemaRef: `#/components/schemas/${name}Response`,
+      submitSchemaRef: `#/components/schemas/${name}SubmitRequest`,
+    })
+    paths[`/api/v1/apps/${encodedKey}/responses/{id}`] = builderResponseRecordPath({
+      app,
+      responseSchemaRef: `#/components/schemas/${name}Response`,
+      patchSchemaRef: `#/components/schemas/${name}PatchRequest`,
+    })
   }
 
   return {
@@ -393,13 +854,20 @@ export function buildOpenApiDocument(origin: string): Json {
         '## Permissions',
         'API keys use the same permission catalogue as tenant roles. Each operation lists its required permission in the description and `x-beaconhs-required-permission`.',
         '',
+        '## Builder apps',
+        'Published Builder apps are addressable at `/api/v1/apps/{templateKey}/responses`. Fetch this OpenAPI document with a valid Bearer token to include concrete, tenant-specific paths and schemas for each published Builder app.',
+        '',
         '## Filtering, sorting & paging',
         'Every list endpoint accepts `limit`, `offset`, `sort`, `order` and `fields`, plus per-column filters (`?status=open`, `?occurred_at__gte=2026-01-01`, `?severity__in=high,critical`).',
       ].join('\n'),
     },
     servers: [{ url: origin, description: 'This tenant' }],
     security: [{ bearerAuth: [] }],
-    tags: [...new Set(REPORT_ENTITIES.map((e) => e.category))].map((c) => ({ name: c })),
+    tags: [
+      ...[...new Set(REPORT_ENTITIES.map((e) => e.category))].map((c) => ({ name: c })),
+      { name: 'Builder apps' },
+      ...(options.builderApps ?? []).map((app) => ({ name: `Builder app: ${app.name}` })),
+    ],
     components: {
       securitySchemes: {
         bearerAuth: {

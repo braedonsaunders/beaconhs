@@ -2,18 +2,9 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, isNull } from 'drizzle-orm'
 import { z } from 'zod'
-import {
-  formAutomations,
-  formResponses,
-  formTemplateVersions,
-  formTemplates,
-  orgUnits,
-  people,
-} from '@beaconhs/db/schema'
-import { extractScores, validateResponse } from '@beaconhs/forms-core'
-import { formResponseScores } from '@beaconhs/db/schema'
+import { formResponses, formTemplates, formTemplateVersions, orgUnits } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import type { SafetyVisionAnalysis } from '@beaconhs/ai'
 import { requireRequestContext } from '@/lib/auth'
@@ -22,10 +13,47 @@ import { analyzePhotoAttachments } from '@/app/(app)/apps/_lib/analyze-photos'
 import { recordAudit } from '@/lib/audit'
 import { computeFormScore } from '@/app/(app)/apps/_lib/score-router'
 import { fetchSingleEntityAttrs } from '@/app/(app)/apps/_lib/entity-loader'
-import { repopulateParticipants } from '@/app/(app)/apps/_lib/participants'
-import { sendFormResponseRecapEmail } from '@/app/(app)/apps/_lib/recap-email'
-import { runOnSubmitAutomations } from '@/app/(app)/apps/_lib/run-automations'
-import { emitFormSubmitted } from '@beaconhs/integrations'
+import { submitFormResponseLifecycle } from '@/lib/forms/form-response-lifecycle'
+import { appVisibleTo, getUserRoleKeys } from '@/app/(app)/apps/_lib/access'
+
+type Ctx = Awaited<ReturnType<typeof requireRequestContext>>
+
+async function canFillTemplate(ctx: Ctx, templateId: string): Promise<boolean> {
+  const [tmpl] = await ctx.db((tx) =>
+    tx
+      .select({ allowedRoles: formTemplates.allowedRoles })
+      .from(formTemplates)
+      .where(
+        and(
+          eq(formTemplates.id, templateId),
+          eq(formTemplates.tenantId, ctx.tenantId),
+          isNull(formTemplates.deletedAt),
+        ),
+      )
+      .limit(1),
+  )
+  if (!tmpl) return false
+  return appVisibleTo(ctx, tmpl.allowedRoles, await getUserRoleKeys(ctx))
+}
+
+async function canFillResponse(ctx: Ctx, responseId: string): Promise<boolean> {
+  const [row] = await ctx.db((tx) =>
+    tx
+      .select({ allowedRoles: formTemplates.allowedRoles })
+      .from(formResponses)
+      .innerJoin(formTemplates, eq(formTemplates.id, formResponses.templateId))
+      .where(
+        and(
+          eq(formResponses.id, responseId),
+          eq(formResponses.tenantId, ctx.tenantId),
+          isNull(formTemplates.deletedAt),
+        ),
+      )
+      .limit(1),
+  )
+  if (!row) return false
+  return appVisibleTo(ctx, row.allowedRoles, await getUserRoleKeys(ctx))
+}
 
 export async function submitFormResponse(args: {
   templateId: string
@@ -40,253 +68,29 @@ export async function submitFormResponse(args: {
   returnTo?: string | null
 }): Promise<{ ok: boolean; responseId?: string; errors?: { fieldId: string; message: string }[] }> {
   const ctx = await requireRequestContext()
+  if (!(await canFillTemplate(ctx, args.templateId))) {
+    return { ok: false, errors: [{ fieldId: '', message: 'You do not have access to this app' }] }
+  }
 
-  const result = await ctx.db(async (tx) => {
-    const [version] = await tx
-      .select()
-      .from(formTemplateVersions)
-      .where(eq(formTemplateVersions.templateId, args.templateId))
-      .orderBy(desc(formTemplateVersions.version))
-      .limit(1)
-    if (!version) return { ok: false as const, errors: [{ fieldId: '', message: 'No version' }] }
-
-    // Template category — denormalized onto participant rows below.
-    const [tmpl] = await tx
-      .select({ category: formTemplates.category })
-      .from(formTemplates)
-      .where(eq(formTemplates.id, args.templateId))
-      .limit(1)
-
-    const errors = validateResponse(version.schema, args.data, 'submit')
-    if (errors.length > 0) return { ok: false as const, errors }
-
-    // Compute compliance verdict from the score-router. Hoist repeating
-    // section rows so any section-aware operators in scoreFormula resolve.
-    const rows: Record<string, Array<Record<string, unknown>>> = {}
-    for (const sec of version.schema.sections) {
-      if (!sec.repeating) continue
-      const v = args.data[sec.id]
-      rows[sec.id] = Array.isArray(v) ? (v as Array<Record<string, unknown>>) : []
-    }
-    const verdict = computeFormScore(version.schema, args.data, rows)
-
-    const finalStatus =
-      verdict.status === 'non_compliant' ? ('non_compliant' as const) : ('submitted' as const)
-
-    // If the client already has a draft row (autosave was running), finalize
-    // it in-place: keep the same id so deep links the user might have stay
-    // valid, clear draft state, and stamp the submitted data on top.
-    let resp: { id: string } | undefined = undefined
-    if (args.responseId) {
-      const [existing] = await tx
-        .select({
-          id: formResponses.id,
-          status: formResponses.status,
-        })
-        .from(formResponses)
-        .where(and(eq(formResponses.id, args.responseId), eq(formResponses.tenantId, ctx.tenantId)))
-        .limit(1)
-      // Only finalize if the row exists AND is still in a pre-submit state.
-      // If someone else already submitted it we fall through to the insert
-      // path below so the user's work isn't lost.
-      if (existing && (existing.status === 'draft' || existing.status === 'in_progress')) {
-        const [updated] = await tx
-          .update(formResponses)
-          .set({
-            status: finalStatus,
-            siteOrgUnitId: args.siteOrgUnitId ?? null,
-            submittedBy: ctx.membership?.id,
-            submittedAt: new Date(),
-            data: args.data,
-            complianceScore: String(verdict.score),
-            complianceStatus: verdict.status,
-            // Clear draft state — the row is no longer in-flight.
-            draftData: null,
-            draftUpdatedAt: null,
-            draftStepIndex: null,
-          })
-          .where(eq(formResponses.id, args.responseId))
-          .returning({ id: formResponses.id })
-        resp = updated
-      }
-    }
-
-    if (!resp) {
-      const [inserted] = await tx
-        .insert(formResponses)
-        .values({
-          tenantId: ctx.tenantId,
-          templateId: args.templateId,
-          templateVersionId: version.id,
-          // Auto-flag the response. Workflow status is `submitted` for the
-          // happy path; if scoring flagged us non_compliant, surface that as
-          // the top-level status so list views immediately call it out.
-          status: finalStatus,
-          siteOrgUnitId: args.siteOrgUnitId ?? null,
-          submittedBy: ctx.membership?.id,
-          submittedAt: new Date(),
-          data: args.data,
-          complianceScore: String(verdict.score),
-          complianceStatus: verdict.status,
-        })
-        .returning({ id: formResponses.id })
-      resp = inserted
-    }
-
-    if (resp) {
-      const scores = extractScores(version.schema, args.data)
-      if (scores.length > 0) {
-        await tx.insert(formResponseScores).values(
-          scores.map((s) => ({
-            tenantId: ctx.tenantId,
-            responseId: resp.id,
-            fieldId: s.fieldId,
-            sectionId: s.sectionId,
-            score: s.score,
-            label: s.label,
-            weight: s.weight,
-          })),
-        )
-      }
-      // Rebuild the participant index (attendees / person pickers + the
-      // submitter) so it powers transcripts, the form compliance kind, and
-      // reports. Resolving the submitter's person record makes a plain app a
-      // trackable compliance obligation ("this person completed the app").
-      const [submitterPerson] = await tx
-        .select({ id: people.id })
-        .from(people)
-        .where(and(eq(people.tenantId, ctx.tenantId), eq(people.userId, ctx.userId)))
-        .limit(1)
-      await repopulateParticipants(tx, {
-        tenantId: ctx.tenantId,
-        responseId: resp.id,
-        templateId: args.templateId,
-        category: tmpl?.category ?? null,
-        schema: version.schema,
-        data: args.data,
-        submittedAt: new Date(),
-        submitterPersonId: submitterPerson?.id ?? null,
-      })
-
-      // Monitored sessions are normally started by an on-submit Flow's
-      // `start_monitored_session` action (run-automations) — that's where the
-      // config now lives. Back-compat: a legacy template still configured via
-      // schema.monitor keeps working, UNLESS an enabled Flow already starts the
-      // session (the Flow takes precedence, so there's no double-start).
-      const monitor = version.schema.monitor
-      if (monitor?.enabled) {
-        const [flowStart] = await tx
-          .select({ id: formAutomations.id })
-          .from(formAutomations)
-          .where(
-            and(
-              eq(formAutomations.templateId, args.templateId),
-              eq(formAutomations.enabled, true),
-              sql`${formAutomations.graph}::text like '%start_monitored_session%'`,
-            ),
-          )
-          .limit(1)
-        if (!flowStart) {
-          const d = args.data as Record<string, unknown>
-          const numField = (key: string | undefined, fallback: number): number => {
-            if (key) {
-              const v = Number(d[key])
-              if (Number.isFinite(v) && v > 0) return v
-            }
-            return fallback
-          }
-          const interval = numField(monitor.intervalFieldKey, monitor.intervalMinutes)
-          const grace =
-            monitor.graceFieldKey && Number.isFinite(Number(d[monitor.graceFieldKey]))
-              ? Math.max(0, Number(d[monitor.graceFieldKey]))
-              : monitor.graceMinutes
-          const duration = numField(monitor.durationFieldKey, monitor.durationMinutes ?? 0)
-          const now = new Date()
-          await tx
-            .update(formResponses)
-            .set({
-              monitorStatus: 'active',
-              checkinIntervalMinutes: interval,
-              gracePeriodMinutes: grace,
-              monitorRequireGeo: !!monitor.requireGeo,
-              lastCheckinAt: now,
-              nextCheckinDueAt: new Date(now.getTime() + interval * 60_000),
-              expectedEndAt: duration > 0 ? new Date(now.getTime() + duration * 60_000) : null,
-            })
-            .where(eq(formResponses.id, resp.id))
-        }
-      }
-    }
-
-    return {
-      ok: true as const,
-      responseId: resp?.id,
-      verdict,
-    }
+  const result = await submitFormResponseLifecycle(ctx, {
+    templateId: args.templateId,
+    data: args.data,
+    siteOrgUnitId: args.siteOrgUnitId,
+    responseId: args.responseId,
   })
 
-  if (result.ok && result.responseId) {
-    await recordAudit(ctx, {
-      entityType: 'form_response',
-      entityId: result.responseId,
-      action: 'create',
-      summary:
-        result.verdict.status === 'non_compliant'
-          ? `Form submitted (auto-flagged non-compliant, score ${result.verdict.score})`
-          : 'Form submitted',
-      metadata: {
-        complianceScore: result.verdict.score,
-        complianceStatus: result.verdict.status,
-        failedFieldKeys: result.verdict.failedFieldKeys,
-      },
-    })
-    // Best-effort recap email — self-gates on the template's emailOnSubmit flag;
-    // never block or fail the submit on email errors.
-    try {
-      await sendFormResponseRecapEmail(ctx, result.responseId)
-    } catch {
-      // swallow — email is non-critical
-    }
-    // Best-effort: run the template's on-submit Flow. Never block/fail submit.
-    try {
-      await runOnSubmitAutomations(ctx, {
-        templateId: args.templateId,
-        responseId: result.responseId,
-        data: args.data,
-        score: result.verdict.score,
-        status: result.verdict.status,
-      })
-    } catch {
-      // swallow — automations are non-critical to the submit
-    }
-    // Best-effort: fire any outbound integrations bound to form.submitted.
-    try {
-      await emitFormSubmitted(ctx, {
-        id: result.responseId,
-        templateId: args.templateId,
-        status: result.verdict.status,
-        submittedAt: new Date(),
-        complianceScore: result.verdict.score,
-        complianceStatus: result.verdict.status,
-        data: args.data,
-      })
-    } catch {
-      // swallow — integrations are non-critical to the submit
-    }
-    revalidatePath('/apps/responses')
-    const returnTo =
-      args.returnTo && args.returnTo.startsWith('/') && !args.returnTo.startsWith('//')
-        ? args.returnTo
-        : null
-    if (returnTo) {
-      revalidatePath(returnTo.split('?')[0] || returnTo)
-      redirect(returnTo as any)
-    }
-    redirect(`/apps/responses/${result.responseId}`)
-  }
-  // Validation/missing-version error branches — strip the inner discriminator.
   if (!result.ok) return { ok: false, errors: result.errors }
-  return { ok: true, responseId: result.responseId }
+
+  revalidatePath('/apps/responses')
+  const returnTo =
+    args.returnTo && args.returnTo.startsWith('/') && !args.returnTo.startsWith('//')
+      ? args.returnTo
+      : null
+  if (returnTo) {
+    revalidatePath(returnTo.split('?')[0] || returnTo)
+    redirect(returnTo as any)
+  }
+  redirect(`/apps/responses/${result.responseId}`)
 }
 
 /**
@@ -354,7 +158,7 @@ export async function listOrgUnitOptions(
  *   - response belongs to active tenant (RLS via ctx.db)
  *   - response is in draft / in_progress status (no editing after submit)
  *   - response is owned by current user (submittedBy = ctx.membership.id) OR
- *     current user has the `forms.responses.write_any` permission
+ *     current user has the reviewer/manage tier
  *
  * Does NOT bump any response version. The submit path is the only one that
  * writes to `data` / `compliance_*` / `submittedAt`.
@@ -377,6 +181,9 @@ export async function saveFormResponseDraft(
     return { ok: false, error: 'Invalid draft payload' }
   }
   const ctx = await requireRequestContext()
+  if (!(await canFillResponse(ctx, parsed.data.responseId))) {
+    return { ok: false, error: 'You do not have access to this app' }
+  }
   return await persistDraft(ctx, parsed.data)
 }
 
@@ -428,10 +235,7 @@ export async function persistDraft(
       const callerMembershipId = ctx.membership?.id ?? null
       const isOwner = submitterId !== null && submitterId === callerMembershipId
       const hasOverride =
-        ctx.isSuperAdmin ||
-        ctx.permissions.has('*') ||
-        ctx.permissions.has('forms.responses.write_any') ||
-        ctx.permissions.has('forms.responses.*')
+        ctx.isSuperAdmin || ctx.permissions.has('*') || can(ctx, 'forms.response.read.all')
       // First save of the lifetime of this response (no submittedBy yet) →
       // the current user takes ownership.
       const isAdopting = submitterId === null
@@ -493,6 +297,9 @@ export async function createDraftResponse(args: {
   templateId: string
 }): Promise<{ ok: true; responseId: string } | { ok: false; error: string }> {
   const ctx = await requireRequestContext()
+  if (!(await canFillTemplate(ctx, args.templateId))) {
+    return { ok: false, error: 'You do not have access to this app' }
+  }
   try {
     const result = await ctx.db(async (tx) => {
       const [version] = await tx
@@ -538,8 +345,8 @@ export async function createDraftResponse(args: {
  * Gates (mirrors persistDraft):
  *   - response exists in the active tenant (RLS via ctx.db)
  *   - `locked` must be false
- *   - caller owns the row (submittedBy = membership) OR has write-any /
- *     wildcard / super-admin; adopts ownership when submittedBy is null
+ *   - caller owns the row (submittedBy = membership) OR has the reviewer/manage
+ *     tier / wildcard / super-admin; adopts ownership when submittedBy is null
  *   - fieldId must be a top-level field id OR a repeating-section id
  */
 export async function updateResponseField(input: {
@@ -551,6 +358,9 @@ export async function updateResponseField(input: {
     return { ok: false, error: 'Invalid request' }
   }
   const ctx = await requireRequestContext()
+  if (!(await canFillResponse(ctx, input.responseId))) {
+    return { ok: false, error: 'You do not have access to this app' }
+  }
   try {
     const result = await ctx.db(async (tx) => {
       const [row] = await tx
@@ -580,10 +390,7 @@ export async function updateResponseField(input: {
       const callerMembershipId = ctx.membership?.id ?? null
       const isOwner = submitterId !== null && submitterId === callerMembershipId
       const hasOverride =
-        ctx.isSuperAdmin ||
-        ctx.permissions.has('*') ||
-        ctx.permissions.has('forms.responses.write_any') ||
-        ctx.permissions.has('forms.responses.*')
+        ctx.isSuperAdmin || ctx.permissions.has('*') || can(ctx, 'forms.response.read.all')
       const isAdopting = submitterId === null
       if (!isOwner && !hasOverride && !isAdopting) {
         return { ok: false as const, error: 'You do not have permission to edit this record' }
