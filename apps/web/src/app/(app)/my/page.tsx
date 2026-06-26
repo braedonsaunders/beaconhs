@@ -355,49 +355,56 @@ export default async function MyLandingPage() {
           }
         />
 
-        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid auto-rows-fr grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3">
           {tiles.map((tile) => {
             const tone = TONES[tile.tone]
             return (
               <Link
                 key={tile.href}
                 href={tile.href as never}
-                className="group relative block overflow-hidden rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md sm:p-4 dark:border-slate-800 dark:bg-slate-900"
+                className="group relative flex h-full min-h-[10rem] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-lg sm:p-6 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-700"
               >
                 {/* oversized ghost icon bleeding off the corner */}
                 <tile.icon
                   aria-hidden
                   strokeWidth={1.5}
                   className={cn(
-                    'pointer-events-none absolute -right-4 -bottom-5 h-24 w-24 -rotate-12 transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-6',
+                    'pointer-events-none absolute -right-6 -bottom-7 h-36 w-36 -rotate-12 transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-6',
                     tone.ghost,
                   )}
                 />
-                <div className="relative">
-                  <span
-                    className={cn(
-                      'inline-flex h-8 w-8 items-center justify-center rounded-lg',
-                      tone.chip,
-                    )}
-                  >
-                    <tile.icon size={16} />
-                  </span>
-                  {typeof tile.count === 'number' ? (
-                    <div className="mt-2 text-2xl font-semibold text-slate-900 tabular-nums dark:text-slate-100">
-                      {tile.count.toLocaleString()}
-                    </div>
-                  ) : null}
-                  <div className="mt-0.5 truncate text-sm font-medium text-slate-800 dark:text-slate-100">
+                <div className="relative flex h-full flex-col">
+                  <div className="flex items-start justify-between gap-3">
+                    <span
+                      className={cn(
+                        'inline-flex h-11 w-11 items-center justify-center rounded-xl',
+                        tone.chip,
+                      )}
+                    >
+                      <tile.icon size={22} />
+                    </span>
+                    {typeof tile.count === 'number' ? (
+                      <div className="text-3xl font-semibold text-slate-900 tabular-nums dark:text-slate-100">
+                        {tile.count.toLocaleString()}
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="mt-4 text-base font-semibold text-slate-900 dark:text-slate-100">
                     {tile.label}
                   </div>
-                  <p className="mt-0.5 hidden truncate text-xs text-slate-500 sm:block dark:text-slate-400">
+                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                     {tile.description}
                   </p>
                   {tile.hint ? (
-                    <Badge variant={tile.hintVariant ?? 'secondary'} className="mt-2 font-normal">
+                    <Badge
+                      variant={tile.hintVariant ?? 'secondary'}
+                      className="mt-auto w-fit font-normal"
+                    >
                       {tile.hint}
                     </Badge>
-                  ) : null}
+                  ) : (
+                    <div className="mt-auto" />
+                  )}
                 </div>
               </Link>
             )

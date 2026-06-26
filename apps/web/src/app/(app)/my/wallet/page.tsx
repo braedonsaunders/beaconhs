@@ -1,10 +1,12 @@
 // "My wallet" — an Apple-Wallet-style view of the signed-in user's credentials.
 //
-// Every training record and granted skill the person holds is rendered as a
-// live credential card styled with the tenant's configured *wallet* credential
-// design (resolveCredentialOutput → format 'wallet'), so the cards on screen
-// match the printed CR80 cards exactly. Each card links to its print-ready PDF
-// and, once a verification certificate exists, shows a scan-to-verify QR.
+// Every training record and granted skill is rendered through the SAME design
+// system that produces the printed CR80 cards: the tenant's configured *wallet*
+// credential design document (resolveCredentialOutput → format 'wallet'), drawn
+// to HTML by `renderDesignDocumentHtml`. The front/back artboards on screen are
+// therefore pixel-identical to the downloaded PDF. Each card links to its
+// print-ready pass and, once a verification certificate exists, shows a
+// scan-to-verify QR.
 //
 // Pivots on people.userId = ctx.userId, like every other /my view.
 
@@ -24,6 +26,11 @@ import {
   trainingSkillTypes,
 } from '@beaconhs/db/schema'
 import { publicUrl } from '@beaconhs/storage'
+import {
+  createWalletDesignDocument,
+  renderDesignDocumentHtml,
+  type CredentialDesignData,
+} from '@beaconhs/design-studio'
 import { requireRequestContext } from '@/lib/auth'
 import { ListPageLayout } from '@/components/page-layout'
 import { resolveCredentialOutput } from '@/lib/credential-designs'
@@ -58,7 +65,6 @@ export default async function MyWalletPage() {
         firstName: people.firstName,
         lastName: people.lastName,
         employeeNo: people.employeeNo,
-        jobTitle: people.jobTitle,
         photoAttachmentId: people.photoAttachmentId,
       })
       .from(people)
@@ -77,6 +83,8 @@ export default async function MyWalletPage() {
         id: trainingRecords.id,
         completedOn: trainingRecords.completedOn,
         expiresOn: trainingRecords.expiresOn,
+        instructor: trainingRecords.instructor,
+        grade: trainingRecords.grade,
         courseName: trainingCourses.name,
         courseCode: trainingCourses.code,
       })
@@ -157,8 +165,20 @@ export default async function MyWalletPage() {
 
   const { person, tenant, records, skills, recordCerts, skillCerts, photoUrl } = data
   const output = resolveCredentialOutput(tenant?.settings, { format: 'wallet' })
+  // The same document the PDF route renders — fall back to a freshly built one
+  // if the saved output predates the document model.
+  const document = output.document ?? createWalletDesignDocument(output)
+  const frontId = document.artboards[0]?.id ?? null
+  const backId = document.artboards[1]?.id ?? frontId
+  const front = document.artboards[0]
+  const widthIn = front?.width ?? 3.375
+  const heightIn = front?.height ?? 2.125
+
   const todayStr = new Date().toISOString().slice(0, 10)
   const base = appBaseUrl()
+  const tenantName = tenant?.name ?? 'Credential'
+  const tenantLogoUrl = tenant?.branding?.logoUrl ?? null
+  const recipientFullName = `${person.firstName} ${person.lastName}`
 
   const tokenByRecord = new Map(recordCerts.map((c) => [c.recordId, c.token]))
   const tokenByAssignment = new Map(skillCerts.map((c) => [c.assignmentId, c.token]))
@@ -168,27 +188,47 @@ export default async function MyWalletPage() {
     return QRCode.toDataURL(`${base}/verify/${token}`, {
       errorCorrectionLevel: 'M',
       margin: 1,
-      scale: 5,
+      scale: 6,
       color: { dark: '#0f172a', light: '#ffffff' },
     })
+  }
+
+  async function renderCard(
+    cardData: CredentialDesignData,
+  ): Promise<{ frontHtml: string; backHtml: string }> {
+    const frontHtml = renderDesignDocumentHtml(document, cardData, { artboardId: frontId })
+    const backHtml = renderDesignDocumentHtml(document, cardData, { artboardId: backId })
+    return { frontHtml, backHtml }
   }
 
   const trainingCards: WalletCard[] = await Promise.all(
     records.map(async (r) => {
       const token = tokenByRecord.get(r.id)
+      const qrDataUrl = await qrFor(token)
+      const faces = await renderCard({
+        tenantName,
+        tenantLogoUrl,
+        recipientFullName,
+        recipientEmployeeNo: person.employeeNo,
+        recipientPhotoUrl: photoUrl,
+        credentialName: r.courseName ?? 'Training credential',
+        credentialCode: r.courseCode ?? null,
+        completedOn: r.completedOn,
+        expiresOn: r.expiresOn,
+        instructor: r.instructor,
+        grade: r.grade,
+        verifyUrl: token ? `${base}/verify/${token}` : null,
+        verifyToken: token ?? null,
+        qrDataUrl,
+      })
       return {
         id: `t-${r.id}`,
         kind: 'training' as const,
         title: r.courseName ?? 'Training credential',
-        code: r.courseCode ?? null,
-        authority: null,
-        issuedLabel: 'Issued',
-        issuedOn: r.completedOn,
-        expiresOn: r.expiresOn,
         status: statusFor(r.expiresOn, todayStr),
         pdfHref: `/training/records/${r.id}/certificate?format=wallet&output=${output.id}`,
         verifyHref: token ? `/verify/${token}` : null,
-        qrDataUrl: await qrFor(token),
+        ...faces,
       }
     }),
   )
@@ -196,51 +236,46 @@ export default async function MyWalletPage() {
   const skillCards: WalletCard[] = await Promise.all(
     skills.map(async (s) => {
       const token = tokenByAssignment.get(s.id)
+      const qrDataUrl = await qrFor(token)
+      const faces = await renderCard({
+        tenantName,
+        tenantLogoUrl,
+        recipientFullName,
+        recipientEmployeeNo: person.employeeNo,
+        recipientPhotoUrl: photoUrl,
+        credentialName: s.skillName,
+        credentialCode: s.skillCode ?? null,
+        authorityName: s.authorityName,
+        completedOn: s.grantedOn,
+        expiresOn: s.expiresOn,
+        verifyUrl: token ? `${base}/verify/${token}` : null,
+        verifyToken: token ?? null,
+        qrDataUrl,
+      })
       return {
         id: `s-${s.id}`,
         kind: 'skill' as const,
         title: s.skillName,
-        code: s.skillCode ?? null,
-        authority: s.authorityName ?? null,
-        issuedLabel: 'Granted',
-        issuedOn: s.grantedOn,
-        expiresOn: s.expiresOn,
         status: statusFor(s.expiresOn, todayStr),
         pdfHref: `/training/skills/${s.id}/certificate?format=wallet&output=${output.id}`,
         verifyHref: token ? `/verify/${token}` : null,
-        qrDataUrl: await qrFor(token),
+        ...faces,
       }
     }),
   )
 
-  // Most-urgent first (expired, then expiring), then newest issued.
+  // Most-urgent first (expired, then expiring), then training before skills.
   const order = { expired: 0, expiring: 1, valid: 2, none: 3 }
-  const cards = [...trainingCards, ...skillCards].sort(
-    (a, b) => order[a.status] - order[b.status] || b.issuedOn.localeCompare(a.issuedOn),
-  )
+  const cards = [...trainingCards, ...skillCards].sort((a, b) => order[a.status] - order[b.status])
 
-  const design: WalletDesign = {
-    primary: output.primary,
-    accent: output.accent,
-    paper: output.paper,
-    typeface: output.typeface,
-    showPhoto: output.showPhoto,
-    showSeal: output.showSeal,
-    showQr: output.showQr,
-    tenantName: tenant?.name ?? 'Credential',
-    tenantLogoUrl: tenant?.branding?.logoUrl ?? null,
-    holderName: `${person.firstName} ${person.lastName}`,
-    employeeNo: person.employeeNo,
-    jobTitle: person.jobTitle,
-    photoUrl,
-  }
+  const design: WalletDesign = { widthIn, heightIn }
 
   return (
     <ListPageLayout
       header={
         <PageHeader
           title="My wallet"
-          description="Your certificates and credential cards. Tap a card for details and to download the print-ready pass."
+          description="Your certificates and credential cards. Tap a card to flip it, or download the print-ready pass."
         />
       }
     >
