@@ -30,7 +30,7 @@ import {
   X,
   XCircle,
 } from 'lucide-react'
-import { Badge, SearchSelect } from '@beaconhs/ui'
+import { Badge, Select } from '@beaconhs/ui'
 import type {
   StationScanInput,
   StationScanResult,
@@ -172,11 +172,8 @@ export function StationClient(props: StationClientProps) {
     // Don't steal focus from the camera overlay or a dropdown search box.
     if (camOpen) return
     const el = scanRef.current
-    if (
-      el &&
-      document.activeElement?.tagName !== 'INPUT' &&
-      document.activeElement?.tagName !== 'TEXTAREA'
-    ) {
+    const tag = document.activeElement?.tagName
+    if (el && tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'BUTTON' && tag !== 'SELECT') {
       el.focus()
     }
   }, [camOpen])
@@ -486,33 +483,41 @@ export function StationClient(props: StationClientProps) {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <div className="space-y-1">
             <Label dark={dark}>Active holder</Label>
-            <SearchSelect
+            <Select
               value={activePerson?.id ?? ''}
-              onChange={selectActivePerson}
-              options={personOptions}
-              clearable
-              emptyLabel="No active holder"
+              onChange={(e) => selectActivePerson(e.currentTarget.value)}
               placeholder="Scan a badge or pick..."
               searchPlaceholder="Search people..."
               sheetTitle="Active holder"
-              ariaLabel="Active holder"
-              searchable
-              triggerClassName="h-11 text-base sm:h-10 sm:text-sm"
-            />
+              aria-label="Active holder"
+            >
+              <option value="">No active holder</option>
+              {personOptions.map((person) => (
+                <option key={person.value} value={person.value}>
+                  {person.hint ? `${person.label} (${person.hint})` : person.label}
+                </option>
+              ))}
+            </Select>
           </div>
           <div className="space-y-1">
             <Label dark={dark}>Check-out destination</Label>
-            <SearchSelect
+            <Select
               value={destinationId}
-              onChange={setDestinationId}
-              options={locationOptions}
+              onChange={(e) => setDestinationId(e.currentTarget.value)}
               placeholder="Pick a destination..."
               searchPlaceholder="Search locations..."
               sheetTitle="Check-out destination"
-              ariaLabel="Destination"
-              searchable
-              triggerClassName="h-11 text-base sm:h-10 sm:text-sm"
-            />
+              aria-label="Destination"
+            >
+              <option value="" disabled>
+                Pick a destination...
+              </option>
+              {locationOptions.map((location) => (
+                <option key={location.value} value={location.value}>
+                  {location.hint ? `${location.label} (${location.hint})` : location.label}
+                </option>
+              ))}
+            </Select>
           </div>
           <div className="space-y-1">
             <Label dark={dark}>Scan does</Label>
