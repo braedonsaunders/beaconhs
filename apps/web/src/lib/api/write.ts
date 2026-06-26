@@ -15,6 +15,11 @@ import {
   correctiveActionSource,
   correctiveActions,
   departments,
+  documentCategories,
+  documentDrafts,
+  documents,
+  documentStatus,
+  documentTypes,
   equipmentCategories,
   equipmentItems,
   equipmentLocationHistory,
@@ -1081,6 +1086,279 @@ const INSPECTION_PATCH_BODY: Json = {
   },
 }
 
+// --- documents ---------------------------------------------------------------
+
+const documentCreate = z.object({
+  title: z.string().trim().min(1).max(240),
+  key: z.string().trim().max(160).nullish(),
+  description: z.string().max(5000).nullish(),
+  category: z.string().max(200).nullish(),
+  typeId: uuid.nullish(),
+  categoryId: uuid.nullish(),
+  ownerTenantUserId: uuid.nullish(),
+  reviewFrequencyMonths: z.number().int().positive().max(120).nullish(),
+  nextReviewOn: isoDate.nullish(),
+  requiredForRoleKeys: z.array(z.string().trim().min(1).max(120)).default([]),
+  requiredForTradeIds: z.array(uuid).default([]),
+  printHeader: z.boolean().default(true),
+  printFooter: z.boolean().default(true),
+  pageSize: z.enum(['Letter', 'A4']).default('Letter'),
+  headerText: z.string().max(500).nullish(),
+  footerText: z.string().max(500).nullish(),
+})
+
+const documentPatch = documentCreate.partial().extend({
+  requiredForRoleKeys: z.array(z.string().trim().min(1).max(120)).optional(),
+  requiredForTradeIds: z.array(uuid).optional(),
+  printHeader: z.boolean().optional(),
+  printFooter: z.boolean().optional(),
+  pageSize: z.enum(['Letter', 'A4']).optional(),
+  status: z.enum(documentStatus.enumValues).optional(),
+})
+
+function slugifyDocumentKey(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_\-\s]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 120)
+}
+
+async function ensureDocumentType(tx: TenantTx, id: string | null | undefined): Promise<void> {
+  if (!id) return
+  const [type] = await tx
+    .select({ id: documentTypes.id })
+    .from(documentTypes)
+    .where(and(eq(documentTypes.id, id), isNull(documentTypes.deletedAt)))
+    .limit(1)
+  if (!type) throw ApiError.invalid(`No document type with id ${id} in this tenant`)
+}
+
+async function ensureDocumentCategory(tx: TenantTx, id: string | null | undefined): Promise<void> {
+  if (!id) return
+  const [category] = await tx
+    .select({ id: documentCategories.id })
+    .from(documentCategories)
+    .where(and(eq(documentCategories.id, id), isNull(documentCategories.deletedAt)))
+    .limit(1)
+  if (!category) throw ApiError.invalid(`No document category with id ${id} in this tenant`)
+}
+
+function documentResult(row: typeof documents.$inferSelect): WriteResult {
+  return {
+    id: row.id,
+    key: row.key,
+    title: row.title,
+    description: row.description,
+    category: row.category,
+    type_id: row.typeId,
+    category_id: row.categoryId,
+    status: row.status,
+    owner_tenant_user_id: row.ownerTenantUserId,
+    review_frequency_months: row.reviewFrequencyMonths,
+    next_review_on: row.nextReviewOn,
+    required_for_role_keys: row.requiredForRoleKeys,
+    required_for_trade_ids: row.requiredForTradeIds,
+    print_header: row.printHeader,
+    print_footer: row.printFooter,
+    page_size: row.pageSize,
+    header_text: row.headerText,
+    footer_text: row.footerText,
+  }
+}
+
+async function createDocument(ctx: RequestContext, raw: unknown): Promise<WriteResult> {
+  const parsed = documentCreate.safeParse(raw)
+  if (!parsed.success) throw validationError(parsed.error)
+  const b = parsed.data
+  const key = slugifyDocumentKey(b.key || b.title) || `document-${randomBytes(4).toString('hex')}`
+
+  const row = await ctx.db(async (tx) => {
+    await ensureDocumentType(tx, b.typeId)
+    await ensureDocumentCategory(tx, b.categoryId)
+    await ensureTenantUser(tx, b.ownerTenantUserId, 'document owner')
+
+    const [created] = await tx
+      .insert(documents)
+      .values({
+        tenantId: ctx.tenantId,
+        key,
+        title: b.title,
+        description: stripEmpty(b.description),
+        category: stripEmpty(b.category),
+        typeId: b.typeId ?? null,
+        categoryId: b.categoryId ?? null,
+        status: 'draft',
+        ownerTenantUserId: b.ownerTenantUserId ?? null,
+        reviewFrequencyMonths: b.reviewFrequencyMonths ?? null,
+        nextReviewOn: optionalDate(b.nextReviewOn),
+        requiredForRoleKeys: b.requiredForRoleKeys,
+        requiredForTradeIds: b.requiredForTradeIds,
+        printHeader: b.printHeader,
+        printFooter: b.printFooter,
+        pageSize: b.pageSize,
+        headerText: stripEmpty(b.headerText),
+        footerText: stripEmpty(b.footerText),
+      })
+      .returning()
+    if (!created) return null
+    await tx.insert(documentDrafts).values({
+      tenantId: ctx.tenantId,
+      documentId: created.id,
+      contentHtml: '',
+      contentJson: null,
+      updatedByTenantUserId: safeTenantUserId(ctx),
+    })
+    return created
+  })
+
+  if (!row) throw new ApiError(500, 'internal', 'Failed to create document')
+  await recordAudit(ctx, {
+    entityType: 'document',
+    entityId: row.id,
+    action: 'create',
+    summary: `Created document ${row.key}: ${row.title}`,
+    after: {
+      key: row.key,
+      title: row.title,
+      status: row.status,
+      typeId: row.typeId,
+      categoryId: row.categoryId,
+    },
+  })
+  revalidatePath('/documents')
+  return documentResult(row)
+}
+
+async function updateDocument(ctx: RequestContext, id: string, raw: unknown): Promise<WriteResult> {
+  const parsed = documentPatch.safeParse(raw)
+  if (!parsed.success) throw validationError(parsed.error)
+  const b = parsed.data
+
+  const result = await ctx.db(async (tx) => {
+    const [before] = await tx.select().from(documents).where(eq(documents.id, id)).limit(1)
+    if (!before || before.deletedAt) throw ApiError.notFound(`No documents with id ${id}`)
+
+    await ensureDocumentType(tx, b.typeId)
+    await ensureDocumentCategory(tx, b.categoryId)
+    await ensureTenantUser(tx, b.ownerTenantUserId, 'document owner')
+
+    const patch: Partial<typeof documents.$inferInsert> = {}
+    if (hasOwn(b, 'title')) patch.title = b.title
+    if (hasOwn(b, 'key')) {
+      const key = slugifyDocumentKey(b.key ?? '')
+      if (key) patch.key = key
+    }
+    if (hasOwn(b, 'description')) patch.description = stripEmpty(b.description)
+    if (hasOwn(b, 'category')) patch.category = stripEmpty(b.category)
+    if (hasOwn(b, 'typeId')) patch.typeId = b.typeId ?? null
+    if (hasOwn(b, 'categoryId')) patch.categoryId = b.categoryId ?? null
+    if (hasOwn(b, 'status')) patch.status = b.status
+    if (hasOwn(b, 'ownerTenantUserId')) patch.ownerTenantUserId = b.ownerTenantUserId ?? null
+    if (hasOwn(b, 'reviewFrequencyMonths')) {
+      patch.reviewFrequencyMonths = b.reviewFrequencyMonths ?? null
+    }
+    if (hasOwn(b, 'nextReviewOn')) patch.nextReviewOn = optionalDate(b.nextReviewOn)
+    if (hasOwn(b, 'requiredForRoleKeys')) patch.requiredForRoleKeys = b.requiredForRoleKeys ?? []
+    if (hasOwn(b, 'requiredForTradeIds')) patch.requiredForTradeIds = b.requiredForTradeIds ?? []
+    if (hasOwn(b, 'printHeader')) patch.printHeader = b.printHeader
+    if (hasOwn(b, 'printFooter')) patch.printFooter = b.printFooter
+    if (hasOwn(b, 'pageSize')) patch.pageSize = b.pageSize
+    if (hasOwn(b, 'headerText')) patch.headerText = stripEmpty(b.headerText)
+    if (hasOwn(b, 'footerText')) patch.footerText = stripEmpty(b.footerText)
+    assertPatchNotEmpty(patch)
+
+    const [updated] = await tx.update(documents).set(patch).where(eq(documents.id, id)).returning()
+    return { before, updated }
+  })
+
+  if (!result.updated) throw new ApiError(500, 'internal', 'Failed to update document')
+  await recordAudit(ctx, {
+    entityType: 'document',
+    entityId: id,
+    action: result.updated.status === 'published' ? 'publish' : 'update',
+    summary: `Updated document ${result.updated.key}: ${result.updated.title}`,
+    before: {
+      key: result.before.key,
+      title: result.before.title,
+      status: result.before.status,
+    },
+    after: {
+      key: result.updated.key,
+      title: result.updated.title,
+      status: result.updated.status,
+    },
+  })
+  revalidatePath('/documents')
+  revalidatePath(`/documents/${id}`)
+  return documentResult(result.updated)
+}
+
+async function deleteDocument(ctx: RequestContext, id: string): Promise<WriteResult> {
+  const result = await ctx.db(async (tx) => {
+    const [before] = await tx.select().from(documents).where(eq(documents.id, id)).limit(1)
+    if (!before || before.deletedAt) throw ApiError.notFound(`No documents with id ${id}`)
+    const deletedAt = new Date()
+    await tx.update(documents).set({ deletedAt }).where(eq(documents.id, id))
+    return { before, deletedAt }
+  })
+  await recordAudit(ctx, {
+    entityType: 'document',
+    entityId: id,
+    action: 'delete',
+    summary: `Archived document ${result.before.key}: ${result.before.title}`,
+    before: {
+      key: result.before.key,
+      title: result.before.title,
+      status: result.before.status,
+    },
+    after: { deletedAt: result.deletedAt },
+  })
+  revalidatePath('/documents')
+  revalidatePath(`/documents/${id}`)
+  return { id, deleted: true, deletedAt: result.deletedAt.toISOString() }
+}
+
+const DOCUMENT_BODY: Json = {
+  type: 'object',
+  required: ['title'],
+  description:
+    'Creates document metadata plus an empty editable draft. Content upload/import/publish stays in the document editor workflow.',
+  properties: {
+    title: { type: 'string', maxLength: 240 },
+    key: { type: 'string', description: 'Slug. Defaults from title when omitted.' },
+    description: { type: 'string' },
+    category: { type: 'string', description: 'Legacy/freeform category label.' },
+    typeId: { type: 'string', format: 'uuid' },
+    categoryId: { type: 'string', format: 'uuid' },
+    ownerTenantUserId: { type: 'string', format: 'uuid' },
+    reviewFrequencyMonths: { type: 'integer', minimum: 1, maximum: 120 },
+    nextReviewOn: { type: 'string', format: 'date' },
+    requiredForRoleKeys: { type: 'array', items: { type: 'string' } },
+    requiredForTradeIds: { type: 'array', items: { type: 'string', format: 'uuid' } },
+    printHeader: { type: 'boolean', default: true },
+    printFooter: { type: 'boolean', default: true },
+    pageSize: { type: 'string', enum: ['Letter', 'A4'], default: 'Letter' },
+    headerText: { type: 'string' },
+    footerText: { type: 'string' },
+  },
+}
+
+const DOCUMENT_PATCH_BODY: Json = {
+  ...optionalObjectSchema(DOCUMENT_BODY),
+  properties: {
+    ...(DOCUMENT_BODY.properties as Json),
+    status: {
+      type: 'string',
+      enum: documentStatus.enumValues,
+      description:
+        'Metadata lifecycle status only. Publishing document content still runs through the editor/version workflow.',
+    },
+  },
+}
+
 // --- equipment ---------------------------------------------------------------
 
 const equipmentCreate = z.object({
@@ -1915,6 +2193,20 @@ const WRITES: Record<string, WriteRegistration> = {
     delete: {
       permission: 'inspections.manage',
       handler: deleteInspection,
+    },
+  },
+  documents: {
+    permission: 'documents.manage',
+    handler: createDocument,
+    bodySchema: DOCUMENT_BODY,
+    update: {
+      permission: 'documents.manage',
+      handler: updateDocument,
+      bodySchema: DOCUMENT_PATCH_BODY,
+    },
+    delete: {
+      permission: 'documents.manage',
+      handler: deleteDocument,
     },
   },
   equipment: {
