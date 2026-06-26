@@ -3,10 +3,11 @@
 // Server actions behind /admin/roles — create / edit / duplicate / delete roles
 // and the permission set each role grants. Gated on `admin.roles.manage`.
 //
-// Built-in roles (worker, foreman, safety_manager, tenant_admin) can have their
-// name / description / permissions edited but their `key` is locked and they
-// can't be deleted (other code + seeds reference the key). Custom roles can be
-// deleted only when no member still holds them.
+// Built-in roles can have their name / description edited, but their `key` is
+// locked and they can't be deleted (other code + seeds reference the key).
+// Tenant Admin's permission set is also locked to the full catalogue so a tenant
+// cannot lose its root administrative role. Custom roles can be deleted only
+// when no member still holds them.
 
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
@@ -36,6 +37,7 @@ import {
 import { z } from 'zod'
 
 const PERMISSIONS = new Set<string>(PERMISSION_CATALOGUE as unknown as string[])
+const ALL_PERMISSIONS = [...PERMISSION_CATALOGUE] as string[]
 
 type Ctx = Awaited<ReturnType<typeof requireRequestContext>>
 
@@ -261,12 +263,13 @@ export async function updateRolePermissions(formData: FormData): Promise<void> {
   assertCan(ctx, 'admin.roles.manage')
   const id = String(formData.get('id') ?? '')
   if (!id) return
-  const permissions = readPermissions(formData)
   const before = await ctx.db(async (tx) => {
     const [r] = await tx.select().from(roles).where(eq(roles.id, id)).limit(1)
     return r ?? null
   })
   if (!before) return
+  const permissions =
+    before.isBuiltIn && before.key === 'tenant_admin' ? ALL_PERMISSIONS : readPermissions(formData)
 
   await ctx.db((tx) => tx.update(roles).set({ permissions }).where(eq(roles.id, id)))
   await sanitiseSavedDashboardForRole(ctx, {

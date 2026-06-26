@@ -12,9 +12,11 @@ import { PERMISSION_GROUPS } from '@/lib/permissions-meta'
 export function PermissionMatrix({
   name = 'permissions',
   defaultSelected = [],
+  readOnly = false,
 }: {
   name?: string
   defaultSelected?: string[]
+  readOnly?: boolean
 }) {
   const [selected, setSelected] = useState<Set<string>>(() => new Set(defaultSelected))
   const allKeys = useMemo(
@@ -52,7 +54,11 @@ export function PermissionMatrix({
         <button
           type="button"
           onClick={() => setMany(allKeys, !allOn)}
-          className="text-xs font-medium text-teal-700 hover:underline dark:text-teal-300"
+          disabled={readOnly}
+          className={cn(
+            'text-xs font-medium text-teal-700 hover:underline dark:text-teal-300',
+            readOnly && 'cursor-not-allowed text-slate-400 hover:no-underline dark:text-slate-500',
+          )}
         >
           {allOn ? 'Clear all' : 'Select all'}
         </button>
@@ -77,7 +83,12 @@ export function PermissionMatrix({
               <button
                 type="button"
                 onClick={() => setMany(keys, !groupOn)}
-                className="text-xs font-medium text-teal-700 hover:underline dark:text-teal-300"
+                disabled={readOnly}
+                className={cn(
+                  'text-xs font-medium text-teal-700 hover:underline dark:text-teal-300',
+                  readOnly &&
+                    'cursor-not-allowed text-slate-400 hover:no-underline dark:text-slate-500',
+                )}
               >
                 {groupOn ? 'Clear' : 'Select all'}
               </button>
@@ -90,10 +101,11 @@ export function PermissionMatrix({
                     <label
                       className={cn(
                         'flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
+                        readOnly && 'cursor-default',
                         on
                           ? 'text-slate-900 dark:text-slate-100'
                           : 'text-slate-600 dark:text-slate-400',
-                        'hover:bg-slate-50 dark:hover:bg-slate-800/60',
+                        !readOnly && 'hover:bg-slate-50 dark:hover:bg-slate-800/60',
                       )}
                     >
                       <input
@@ -102,6 +114,7 @@ export function PermissionMatrix({
                         value={p.key}
                         checked={on}
                         onChange={() => toggle(p.key)}
+                        disabled={readOnly}
                         className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500/40 dark:border-slate-600 dark:bg-slate-800"
                       />
                       {p.label}

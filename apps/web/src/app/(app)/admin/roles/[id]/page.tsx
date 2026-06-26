@@ -6,6 +6,7 @@ import {
   Button,
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
   DetailHeader,
@@ -20,6 +21,7 @@ import {
   roles,
   tenantUsers,
   user,
+  PERMISSION_CATALOGUE,
   type DashboardLayoutData,
 } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
@@ -93,12 +95,16 @@ export default async function AdminRoleEditPage({
   if (!data) notFound()
   const { role, members, dashboard } = data
 
+  const locksTenantAdminPermissions = role.isBuiltIn && role.key === 'tenant_admin'
+  const effectiveRolePermissions = locksTenantAdminPermissions
+    ? [...PERMISSION_CATALOGUE]
+    : role.permissions
   const roleTier = inferRoleTier(role)
   const dashboardLayout = dashboard?.layout ?? DEFAULT_LAYOUTS[roleTier] ?? DEFAULT_LAYOUTS.worker
-  const roleCanViewInsights = canPermissionSetViewInsights(role.permissions)
-  const roleCanSeeAllPublishedInsights = canPermissionSetPublishInsights(role.permissions)
+  const roleCanViewInsights = canPermissionSetViewInsights(effectiveRolePermissions)
+  const roleCanSeeAllPublishedInsights = canPermissionSetPublishInsights(effectiveRolePermissions)
   const allowedWidgetIds = Object.keys(WIDGETS).filter((widgetId) =>
-    canPermissionSetSeeWidget(role.permissions, widgetId),
+    canPermissionSetSeeWidget(effectiveRolePermissions, widgetId),
   )
 
   const dashboardCanvas =
@@ -173,27 +179,33 @@ export default async function AdminRoleEditPage({
         ) : null
       }
       subtabs={
-        <ModuleSubNav
-          active={active}
-          tabs={[
-            { key: 'details', label: 'Details', href: mergeHref(basePath, sp, { tab: 'details' }) },
-            {
-              key: 'permissions',
-              label: 'Permissions',
-              href: mergeHref(basePath, sp, { tab: 'permissions' }),
-            },
-            {
-              key: 'members',
-              label: `Members (${members.length})`,
-              href: mergeHref(basePath, sp, { tab: 'members' }),
-            },
-            {
-              key: 'dashboard',
-              label: 'Dashboard',
-              href: mergeHref(basePath, sp, { tab: 'dashboard' }),
-            },
-          ]}
-        />
+        <div className="pb-2">
+          <ModuleSubNav
+            active={active}
+            tabs={[
+              {
+                key: 'details',
+                label: 'Details',
+                href: mergeHref(basePath, sp, { tab: 'details' }),
+              },
+              {
+                key: 'permissions',
+                label: 'Permissions',
+                href: mergeHref(basePath, sp, { tab: 'permissions' }),
+              },
+              {
+                key: 'members',
+                label: `Members (${members.length})`,
+                href: mergeHref(basePath, sp, { tab: 'members' }),
+              },
+              {
+                key: 'dashboard',
+                label: 'Dashboard',
+                href: mergeHref(basePath, sp, { tab: 'dashboard' }),
+              },
+            ]}
+          />
+        </div>
       }
       className={active === 'dashboard' ? 'max-w-none' : undefined}
     >
@@ -239,20 +251,34 @@ export default async function AdminRoleEditPage({
         ) : null}
 
         {active === 'permissions' ? (
-          <form action={updateRolePermissions} className="space-y-5">
-            <input type="hidden" name="id" value={id} />
+          locksTenantAdminPermissions ? (
             <Card>
               <CardHeader>
                 <CardTitle>Permissions</CardTitle>
+                <CardDescription>
+                  Tenant Admin always has the full permission catalogue and cannot be reduced.
+                </CardDescription>
               </CardHeader>
               <CardContent>
-                <PermissionMatrix defaultSelected={role.permissions} />
+                <PermissionMatrix defaultSelected={effectiveRolePermissions} readOnly />
               </CardContent>
             </Card>
-            <div className="flex justify-end">
-              <Button type="submit">Save permissions</Button>
-            </div>
-          </form>
+          ) : (
+            <form action={updateRolePermissions} className="space-y-5">
+              <input type="hidden" name="id" value={id} />
+              <Card>
+                <CardHeader>
+                  <CardTitle>Permissions</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <PermissionMatrix defaultSelected={effectiveRolePermissions} />
+                </CardContent>
+              </Card>
+              <div className="flex justify-end">
+                <Button type="submit">Save permissions</Button>
+              </div>
+            </form>
+          )
         ) : null}
 
         {active === 'members' ? (

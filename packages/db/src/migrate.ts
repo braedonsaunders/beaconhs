@@ -8,6 +8,7 @@ import { RLS_POLICY_SQL, TENANT_SCOPED_TABLES } from './rls'
 import { REPORT_VIEWS_SQL } from './views'
 import { STATS_SQL, STATS_HIGH_VOLUME_TABLES } from './stats'
 import { hashKioskPin, isKioskPinHash } from './kiosk-pin'
+import { BUILTIN_ROLES, PERMISSION_CATALOGUE } from './schema'
 
 function firstRow<T = Record<string, unknown>>(result: unknown): T | undefined {
   const rows = (result as { rows?: T[] }).rows ?? (result as T[])
@@ -114,6 +115,53 @@ async function dropRetiredPluginTables(db: ReturnType<typeof drizzle>) {
   console.log('✔ Retired plugin tables removed')
 }
 
+async function backfillBuiltinRolePermissions(db: ReturnType<typeof drizzle>) {
+  const fullCatalogueJson = JSON.stringify(PERMISSION_CATALOGUE)
+
+  await db.execute(sql`alter table "roles" no force row level security`)
+  try {
+    await db.execute(sql`
+      update "roles"
+      set "permissions" = ${fullCatalogueJson}::jsonb,
+          "updated_at" = now()
+      where "key" = 'tenant_admin'
+        and "is_built_in" = true
+        and "permissions" <> ${fullCatalogueJson}::jsonb
+    `)
+
+    for (const [key, def] of Object.entries(BUILTIN_ROLES)) {
+      if (key === 'tenant_admin') continue
+      const baselineJson = JSON.stringify(def.permissions)
+      await db.execute(sql`
+        update "roles"
+        set "permissions" = (
+              select coalesce(jsonb_agg("permission" order by "permission"), '[]'::jsonb)
+              from (
+                select distinct "permission"
+                from (
+                  select jsonb_array_elements_text("roles"."permissions") as "permission"
+                  union
+                  select jsonb_array_elements_text(${baselineJson}::jsonb) as "permission"
+                ) as combined_permissions
+              ) as deduped_permissions
+            ),
+            "updated_at" = now()
+        where "key" = ${key}
+          and "is_built_in" = true
+          and exists (
+            select 1
+            from jsonb_array_elements_text(${baselineJson}::jsonb) as baseline("permission")
+            where not ("roles"."permissions" ? baseline."permission")
+          )
+      `)
+    }
+  } finally {
+    await db.execute(sql`alter table "roles" force row level security`)
+  }
+
+  console.log('✔ Built-in role permissions backfilled')
+}
+
 async function main() {
   // Migrations + DDL must NOT run through the PgBouncer transaction pooler
   // (the migration advisory lock + session-scoped DDL need a dedicated session)
@@ -135,6 +183,9 @@ async function main() {
 
   console.log('▶ Dropping retired plugin tables…')
   await dropRetiredPluginTables(db)
+
+  console.log('▶ Backfilling built-in role permissions…')
+  await backfillBuiltinRolePermissions(db)
 
   console.log('▶ Applying RLS policies…')
   let newCount = 0
