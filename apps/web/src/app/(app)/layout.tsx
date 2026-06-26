@@ -1,12 +1,12 @@
 import { Fragment } from 'react'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
-import { and, count, eq, isNull, sql } from 'drizzle-orm'
+import { and, count, eq, isNull } from 'drizzle-orm'
 import { Toaster } from 'sonner'
-import { db } from '@beaconhs/db'
+import { db, withSuperAdmin } from '@beaconhs/db'
 import { notifications, tenants } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
-import { getRequestContext, listAccessibleTenants } from '@/lib/auth'
+import { getRequestContext, getSessionUser, listAccessibleTenants } from '@/lib/auth'
 import { AppShell } from '@/components/app-shell'
 import { NavigationProvider } from '@/components/navigation-provider'
 import { RiskMatrixProvider } from '@/components/risk-matrix'
@@ -25,9 +25,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const defaultCollapsed = (await cookies()).get('sidebar_collapsed')?.value === '1'
 
-  const [tenant, available, unread, navGroups] = await Promise.all([
-    db.transaction(async (tx) => {
-      await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
+  const [tenant, available, unread, navGroups, sessionUser] = await Promise.all([
+    withSuperAdmin(db, async (tx) => {
       const [t] = await tx
         .select({ id: tenants.id, name: tenants.name, riskMatrix: tenants.riskMatrix })
         .from(tenants)
@@ -46,8 +45,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     // Build the sidebar from the registry + this tenant's saved nav config,
     // filtered to what this user is permitted to open.
     ctx.db((tx) => resolveNavGroups(ctx, tx)),
+    getSessionUser(),
   ])
   if (!tenant) redirect('/login')
+
+  // The account menu shows the real signed-in account. Prefer the tenant display
+  // name (consistent with the rest of the app), then the session name/email.
+  const account = {
+    name: ctx.membership?.displayName ?? sessionUser?.name ?? sessionUser?.email ?? 'Account',
+    email: sessionUser?.email ?? '',
+  }
 
   // While impersonating, ctx is already the TARGET (membership = their display
   // name); ctx.impersonation carries the real admin for the banner.
@@ -69,6 +76,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             tenantId: tenant.id,
             tenantName: tenant.name,
           }}
+          account={account}
           groups={navGroups}
           availableTenants={available}
           unreadCount={unread}

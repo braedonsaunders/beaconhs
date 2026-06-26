@@ -1,5 +1,5 @@
-import { ShieldAlert, UserCircle2 } from 'lucide-react'
-import { SignOutButton } from './sign-out-button'
+import { ShieldAlert } from 'lucide-react'
+import { AccountMenu } from './account-menu'
 import { TenantSwitcher } from './tenant-switcher'
 import { PlatformMenu } from './platform-menu'
 import { NotificationsBell } from './notifications-bell'
@@ -22,6 +22,7 @@ type Ctx = {
 
 export function AppShell({
   ctx,
+  account,
   groups,
   availableTenants,
   unreadCount,
@@ -31,6 +32,8 @@ export function AppShell({
   children,
 }: {
   ctx: Ctx
+  /** The real signed-in user's display name + email, shown in the account menu. */
+  account: { name: string; email: string }
   // Resolved server-side from the module registry + the tenant's saved nav
   // config, already filtered to what this user may open. See
   // apps/web/src/lib/nav/resolve.ts.
@@ -45,7 +48,6 @@ export function AppShell({
   canUseAssistant?: boolean
   children: React.ReactNode
 }) {
-  const display = ctx.membership?.displayName ?? 'Account'
   return (
     <div className="flex h-screen overflow-hidden">
       <ServiceWorkerRegistrar unreadCount={unreadCount} />
@@ -83,11 +85,11 @@ export function AppShell({
             <div className="ml-auto flex shrink-0 items-center gap-1.5 text-sm sm:gap-3 md:ml-0">
               {canUseAssistant ? <AssistantLauncher /> : null}
               <NotificationsBell unread={unreadCount} />
-              <div className="hidden items-center gap-2 sm:flex">
-                <UserCircle2 size={18} className="text-slate-500 dark:text-slate-400" />
-                <span className="text-slate-700 dark:text-slate-200">{display}</span>
-              </div>
-              <SignOutButton />
+              <AccountMenu
+                name={account.name}
+                email={account.email}
+                isSuperAdmin={ctx.isSuperAdmin}
+              />
             </div>
           </header>
 
