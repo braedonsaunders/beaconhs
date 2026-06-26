@@ -9,6 +9,7 @@ export type { SyncEntityKey }
 // --- Canonical record shapes (what a connector emits) ---------------------
 
 export interface CanonicalPerson {
+  fullName?: string | null
   firstName: string
   lastName: string
   employeeNo?: string | null
@@ -28,6 +29,9 @@ export interface CanonicalOrgUnit {
   code?: string | null
   level?: 'customer' | 'project' | 'site' | 'area'
   parentCode?: string | null // resolved to parentId via the code lookup
+  lat?: number | null
+  lng?: number | null
+  geofenceMeters?: number | null
   address?: {
     line1?: string
     line2?: string

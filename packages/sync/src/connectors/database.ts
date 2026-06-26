@@ -8,13 +8,19 @@ import { createHash } from 'node:crypto'
 import { connectDb, type DbConn, type DbKind } from '../db-drivers'
 import type { CanonicalRecord, Connector, ConnectorRunContext, SyncEntityKey } from '../types'
 
+type FieldValues = Record<string, string>
+
 interface EntityMapping {
-  table: string
+  label?: string
+  table?: string
   schema?: string
+  query?: string
   where?: string
   idColumn?: string
+  externalIdTemplate?: string
   cursorColumn?: string
   columns: Record<string, string> // canonical field → source column
+  values?: FieldValues // canonical field → static value or {{SourceColumn}} template
 }
 
 interface DbConfig {
@@ -24,7 +30,7 @@ interface DbConfig {
   database: string
   username: string
   ssl?: boolean
-  mappings?: Partial<Record<SyncEntityKey, EntityMapping>>
+  mappings?: Partial<Record<SyncEntityKey, EntityMapping | EntityMapping[]>>
 }
 
 function cfgOf(ctx: ConnectorRunContext): DbConfig {
@@ -51,6 +57,9 @@ function qid(kind: DbKind, name: string): string {
 }
 
 function buildSelect(kind: DbKind, m: EntityMapping): string {
+  if (m.query && m.query.trim()) return m.query.trim()
+  if (!m.table)
+    throw new Error('Database mapping requires either a source table or a custom query.')
   const target = m.schema ? `${qid(kind, m.schema)}.${qid(kind, m.table)}` : qid(kind, m.table)
   let q = `SELECT * FROM ${target}`
   if (m.where && m.where.trim()) q += ` WHERE ${m.where.trim()}`
@@ -74,8 +83,96 @@ function datePart(v: string | null): string | null {
   return Number.isNaN(t) ? null : new Date(t).toISOString().slice(0, 10)
 }
 
+function numPart(v: string | null): number | null {
+  if (v == null || v === '') return null
+  const n = Number(v)
+  return Number.isFinite(n) ? n : null
+}
+
 function hashRow(o: unknown): string {
   return createHash('sha256').update(JSON.stringify(o)).digest('hex').slice(0, 16)
+}
+
+function splitName(full: string | null): { first: string; last: string } {
+  const s = String(full ?? '').trim()
+  if (!s) return { first: '', last: '' }
+  if (s.includes(',')) {
+    const [last, first] = s.split(',', 2)
+    return { first: (first ?? '').trim(), last: (last ?? '').trim() }
+  }
+  const parts = s.split(/\s+/)
+  return {
+    first: parts.slice(0, -1).join(' ') || (parts[0] ?? ''),
+    last: parts.length > 1 ? (parts[parts.length - 1] ?? '') : '',
+  }
+}
+
+function boolish(v: string | null): boolean | null {
+  if (v == null) return null
+  const s = v.trim().toLowerCase()
+  if (!s) return null
+  if (['1', 'true', 't', 'yes', 'y', 'active', 'on'].includes(s)) return true
+  if (['0', 'false', 'f', 'no', 'n', 'inactive', 'off'].includes(s)) return false
+  return null
+}
+
+function personStatus(
+  statusValue: string | null,
+  inactiveValue: string | null,
+): 'active' | 'inactive' | 'terminated' | undefined {
+  const s = String(statusValue ?? '')
+    .trim()
+    .toLowerCase()
+  if (['active', 'inactive', 'terminated'].includes(s)) {
+    return s as 'active' | 'inactive' | 'terminated'
+  }
+  if (['term', 'terminated', 'closed'].includes(s)) return 'terminated'
+  const inactive = boolish(inactiveValue)
+  if (inactive != null) return inactive ? 'inactive' : 'active'
+  return undefined
+}
+
+function orgLevel(v: string | null): 'customer' | 'project' | 'site' | 'area' | undefined {
+  const s = String(v ?? '')
+    .trim()
+    .toLowerCase()
+  if (['customer', 'project', 'site', 'area'].includes(s)) {
+    return s as 'customer' | 'project' | 'site' | 'area'
+  }
+  return undefined
+}
+
+function renderTemplate(template: string, row: Record<string, unknown>): string {
+  return template.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_match, key: string) => {
+    const value = row[key]
+    if (value == null) return ''
+    if (value instanceof Date) return value.toISOString()
+    return String(value)
+  })
+}
+
+function fieldValue(row: Record<string, unknown>, m: EntityMapping, field: string): string | null {
+  const templated = m.values?.[field]
+  if (templated != null) {
+    const rendered = renderTemplate(String(templated), row).trim()
+    return rendered === '' ? null : rendered
+  }
+  return val(row, m.columns?.[field])
+}
+
+function externalId(row: Record<string, unknown>, m: EntityMapping, fallback: string): string {
+  if (m.externalIdTemplate?.trim()) {
+    const rendered = renderTemplate(m.externalIdTemplate, row).trim()
+    if (rendered) return rendered
+  }
+  return (m.idColumn ? val(row, m.idColumn) : null) || fallback
+}
+
+function mappingList(mappings: DbConfig['mappings'], entity: SyncEntityKey): EntityMapping[] {
+  const raw = mappings?.[entity]
+  if (!raw) return []
+  const list = Array.isArray(raw) ? raw : [raw]
+  return list.filter((m) => Boolean((m.table && m.table.trim()) || (m.query && m.query.trim())))
 }
 
 function mapRow(
@@ -83,14 +180,17 @@ function mapRow(
   m: EntityMapping,
   row: Record<string, unknown>,
 ): CanonicalRecord | null {
-  const cols = m.columns ?? {}
-  const g = (f: string) => val(row, cols[f])
-  const idRaw = m.idColumn ? val(row, m.idColumn) : null
+  const g = (f: string) => fieldValue(row, m, f)
   switch (entity) {
     case 'people': {
+      const fullName = g('fullName')
+      const parsed = splitName(fullName)
+      const firstName = g('firstName') ?? parsed.first
+      const lastName = g('lastName') ?? parsed.last
       const data = {
-        firstName: g('firstName') ?? '',
-        lastName: g('lastName') ?? '',
+        fullName,
+        firstName,
+        lastName,
         employeeNo: g('employeeNo'),
         externalEmployeeId: g('externalEmployeeId'),
         email: g('email'),
@@ -99,18 +199,40 @@ function mapRow(
         departmentName: g('departmentName'),
         tradeName: g('tradeName'),
         hireDate: datePart(g('hireDate')),
+        status: personStatus(g('status'), g('inactive')),
       }
       if (!data.firstName && !data.lastName) return null
-      return { entity: 'people', externalId: idRaw || data.employeeNo || hashRow(row), data }
+      return {
+        entity: 'people',
+        externalId: externalId(row, m, data.externalEmployeeId || data.employeeNo || hashRow(row)),
+        data,
+      }
     }
     case 'org_unit': {
+      const address = {
+        line1: g('addressLine1') ?? undefined,
+        line2: g('addressLine2') ?? undefined,
+        city: g('addressCity') ?? undefined,
+        region: g('addressRegion') ?? undefined,
+        postal: g('addressPostal') ?? undefined,
+        country: g('addressCountry') ?? undefined,
+      }
       const data = {
         name: g('name') ?? '',
         code: g('code'),
         parentCode: g('parentCode'),
+        level: orgLevel(g('level')),
+        lat: numPart(g('lat')),
+        lng: numPart(g('lng')),
+        geofenceMeters: numPart(g('geofenceMeters')),
+        address: Object.values(address).some(Boolean) ? address : null,
       }
       if (!data.name) return null
-      return { entity: 'org_unit', externalId: idRaw || data.code || hashRow(row), data }
+      return {
+        entity: 'org_unit',
+        externalId: externalId(row, m, data.code || hashRow(row)),
+        data,
+      }
     }
     case 'equipment': {
       const data = {
@@ -120,7 +242,11 @@ function mapRow(
         typeName: g('typeName'),
       }
       if (!data.assetTag) return null
-      return { entity: 'equipment', externalId: idRaw || data.assetTag || hashRow(row), data }
+      return {
+        entity: 'equipment',
+        externalId: externalId(row, m, data.assetTag || hashRow(row)),
+        data,
+      }
     }
   }
 }
@@ -129,7 +255,7 @@ export const databaseConnector: Connector = {
   key: 'database',
   name: 'Database (SQL)',
   description:
-    'Connect to any SQL database — PostgreSQL, MySQL/MariaDB or SQL Server. Browse tables, map columns to People, Locations and Equipment, and sync on a schedule.',
+    'Connect to any SQL database — PostgreSQL, MySQL/MariaDB or SQL Server. Browse tables, map one or more source tables to People, Locations & Projects, and Equipment, then sync on a schedule.',
   kind: 'native',
   iconKey: 'database',
   entities: ['people', 'org_unit', 'equipment'],
@@ -189,7 +315,9 @@ export const databaseConnector: Connector = {
   async pull(ctx) {
     const c = cfgOf(ctx)
     const mappings = c.mappings ?? {}
-    const entities = (Object.keys(mappings) as SyncEntityKey[]).filter((e) => mappings[e]?.table)
+    const entities = (['people', 'org_unit', 'equipment'] as SyncEntityKey[]).filter(
+      (e) => mappingList(mappings, e).length > 0,
+    )
     if (entities.length === 0) {
       ctx.log('warn', 'No table mappings configured.')
       return []
@@ -198,15 +326,16 @@ export const databaseConnector: Connector = {
     const out: CanonicalRecord[] = []
     try {
       for (const entity of entities) {
-        const m = mappings[entity]
-        if (!m || !m.table) continue
-        const q = buildSelect(c.dbKind, m)
-        ctx.log('info', `${entity}: ${q}`)
-        const rows = await conn.query(q)
-        ctx.log('info', `${entity}: ${rows.length} row(s) from ${m.table}`)
-        for (const row of rows) {
-          const rec = mapRow(entity, m, row)
-          if (rec) out.push(rec)
+        for (const m of mappingList(mappings, entity)) {
+          const q = buildSelect(c.dbKind, m)
+          const label = m.label?.trim() || m.table || 'custom query'
+          ctx.log('info', `${entity}/${label}: ${q}`)
+          const rows = await conn.query(q)
+          ctx.log('info', `${entity}/${label}: ${rows.length} row(s)`)
+          for (const row of rows) {
+            const rec = mapRow(entity, m, row)
+            if (rec) out.push(rec)
+          }
         }
       }
     } finally {

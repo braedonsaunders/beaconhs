@@ -7,7 +7,7 @@
 // and preserved on update (so app-side edits survive re-syncs).
 
 import { createHash, randomBytes } from 'node:crypto'
-import { and, eq, isNull } from 'drizzle-orm'
+import { and, eq, isNull, sql } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
 import {
   departments,
@@ -191,6 +191,14 @@ interface PersonFields {
   tradeId: string | null
 }
 
+function withPeopleMetadata(fields: PersonFields, metadata?: Record<string, unknown>) {
+  if (!metadata || Object.keys(metadata).length === 0) return fields
+  return {
+    ...fields,
+    metadata: sql`${people.metadata} || ${JSON.stringify(metadata)}::jsonb`,
+  }
+}
+
 function rememberPersonLookup(ctx: UpsertCtx, id: string, fields: PersonFields) {
   if (fields.employeeNo) {
     ctx.lookups.personIdByEmployeeNo.set(fields.employeeNo.toLowerCase(), id)
@@ -238,7 +246,7 @@ async function upsertPerson(
     }
     const updated = await tx
       .update(people)
-      .set(fields)
+      .set(withPeopleMetadata(fields, data.metadata))
       .where(eq(people.id, link.canonicalId))
       .returning({ id: people.id })
     if (updated.length === 0) {
@@ -257,26 +265,6 @@ async function upsertPerson(
     return { action: 'updated', canonicalId: link.canonicalId }
   }
 
-  if (fields.employeeNo) {
-    const [match] = await tx
-      .select({ id: people.id })
-      .from(people)
-      .where(
-        and(
-          eq(people.tenantId, ctx.tenantId),
-          eq(people.employeeNo, fields.employeeNo),
-          isNull(people.deletedAt),
-        ),
-      )
-      .limit(1)
-    if (match) {
-      await tx.update(people).set(fields).where(eq(people.id, match.id))
-      await linkCrosswalk(tx, ctx, 'people', externalId, match.id, rowHash)
-      rememberPersonLookup(ctx, match.id, fields)
-      return { action: 'updated', canonicalId: match.id }
-    }
-  }
-
   if (fields.externalEmployeeId) {
     const [match] = await tx
       .select({ id: people.id })
@@ -290,7 +278,33 @@ async function upsertPerson(
       )
       .limit(1)
     if (match) {
-      await tx.update(people).set(fields).where(eq(people.id, match.id))
+      await tx
+        .update(people)
+        .set(withPeopleMetadata(fields, data.metadata))
+        .where(eq(people.id, match.id))
+      await linkCrosswalk(tx, ctx, 'people', externalId, match.id, rowHash)
+      rememberPersonLookup(ctx, match.id, fields)
+      return { action: 'updated', canonicalId: match.id }
+    }
+  }
+
+  if (fields.employeeNo) {
+    const [match] = await tx
+      .select({ id: people.id })
+      .from(people)
+      .where(
+        and(
+          eq(people.tenantId, ctx.tenantId),
+          eq(people.employeeNo, fields.employeeNo),
+          isNull(people.deletedAt),
+        ),
+      )
+      .limit(1)
+    if (match) {
+      await tx
+        .update(people)
+        .set(withPeopleMetadata(fields, data.metadata))
+        .where(eq(people.id, match.id))
       await linkCrosswalk(tx, ctx, 'people', externalId, match.id, rowHash)
       rememberPersonLookup(ctx, match.id, fields)
       return { action: 'updated', canonicalId: match.id }
@@ -315,7 +329,18 @@ interface OrgUnitFields {
   name: string
   code: string | null
   parentId: string | null
+  lat: number | null
+  lng: number | null
+  geofenceMeters: number | null
   address: CanonicalOrgUnit['address']
+}
+
+function withOrgUnitMetadata(fields: OrgUnitFields, metadata?: Record<string, unknown>) {
+  if (!metadata || Object.keys(metadata).length === 0) return fields
+  return {
+    ...fields,
+    metadata: sql`${orgUnits.metadata} || ${JSON.stringify(metadata)}::jsonb`,
+  }
 }
 
 async function upsertOrgUnit(
@@ -337,6 +362,9 @@ async function upsertOrgUnit(
     parentId: data.parentCode
       ? (ctx.lookups.orgUnitIdByCode.get(data.parentCode.toLowerCase()) ?? null)
       : null,
+    lat: data.lat ?? null,
+    lng: data.lng ?? null,
+    geofenceMeters: data.geofenceMeters ?? null,
     address: data.address ?? null,
   }
 
@@ -348,7 +376,7 @@ async function upsertOrgUnit(
     }
     const updated = await tx
       .update(orgUnits)
-      .set(fields)
+      .set(withOrgUnitMetadata(fields, data.metadata))
       .where(eq(orgUnits.id, link.canonicalId))
       .returning({ id: orgUnits.id })
     if (updated.length > 0) {
@@ -371,7 +399,10 @@ async function upsertOrgUnit(
       )
       .limit(1)
     if (match) {
-      await tx.update(orgUnits).set(fields).where(eq(orgUnits.id, match.id))
+      await tx
+        .update(orgUnits)
+        .set(withOrgUnitMetadata(fields, data.metadata))
+        .where(eq(orgUnits.id, match.id))
       await linkCrosswalk(tx, ctx, 'org_unit', externalId, match.id, rowHash)
       ctx.lookups.orgUnitIdByCode.set(code.toLowerCase(), match.id)
       return { action: 'updated', canonicalId: match.id }

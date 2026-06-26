@@ -156,7 +156,7 @@ const STATIC_GROUPS: Group[] = [
         href: '/admin/integrations',
         icon: <RefreshCw size={18} />,
         title: 'Integrations',
-        desc: 'Sync people, locations & equipment in',
+        desc: 'Sync data in and send events out',
       },
       {
         href: '/admin/api-keys',
