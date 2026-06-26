@@ -1,6 +1,6 @@
 // Kiosk scans — sign-in / sign-out events captured at a jobsite kiosk tablet.
 // The kiosk itself authenticates by tenant slug + a kiosk PIN stored on the tenant
-// (see core.ts → tenants.kioskPin). No per-user login needed.
+// (see core.ts → tenants.kioskPin hash). No per-user login needed.
 
 import { relations } from 'drizzle-orm'
 import { index, pgEnum, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'

@@ -43,7 +43,8 @@ export default async function StationSettingsPage() {
   })
 
   const appUrl = process.env.APP_URL ?? ''
-  const kioskUrl = settings?.stationPin && slug ? `${appUrl}/equipment-kiosk?t=${slug}` : null
+  const stationPinConfigured = Boolean(settings?.stationPin)
+  const kioskUrl = stationPinConfigured && slug ? `${appUrl}/equipment-kiosk?t=${slug}` : null
 
   return (
     <ListPageLayout
@@ -62,7 +63,7 @@ export default async function StationSettingsPage() {
         kioskUrl={kioskUrl}
         initial={{
           defaultCheckInOrgUnitId: settings?.defaultCheckInOrgUnitId ?? null,
-          stationPin: settings?.stationPin ?? null,
+          stationPinConfigured,
           scanMode: settings?.scanMode ?? 'toggle',
           requireHolderOnCheckout: settings?.requireHolderOnCheckout ?? false,
           requireConditionOnCheckin: settings?.requireConditionOnCheckin ?? false,

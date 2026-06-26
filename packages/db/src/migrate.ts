@@ -7,6 +7,7 @@ import { readFileSync } from 'node:fs'
 import { RLS_POLICY_SQL, TENANT_SCOPED_TABLES } from './rls'
 import { REPORT_VIEWS_SQL } from './views'
 import { STATS_SQL, STATS_HIGH_VOLUME_TABLES } from './stats'
+import { hashKioskPin, isKioskPinHash } from './kiosk-pin'
 
 function firstRow<T = Record<string, unknown>>(result: unknown): T | undefined {
   const rows = (result as { rows?: T[] }).rows ?? (result as T[])
@@ -59,6 +60,60 @@ async function reconcileMigrationTracker(db: ReturnType<typeof drizzle>) {
   console.log('✔ Migration tracker reconciled to journal (schema is push-managed)')
 }
 
+async function backfillKioskPinHashes(db: ReturnType<typeof drizzle>) {
+  type TenantPinRow = { id: string; kiosk_pin: string | null }
+  type StationPinRow = { id: string; station_pin: string | null }
+
+  const tenantRows = (await db.execute(sql`
+    select id, kiosk_pin
+    from tenants
+    where kiosk_pin is not null and kiosk_pin <> ''
+  `)) as unknown as TenantPinRow[]
+  let tenantCount = 0
+  for (const row of tenantRows) {
+    if (!row.kiosk_pin || isKioskPinHash(row.kiosk_pin)) continue
+    const hashed = await hashKioskPin(row.kiosk_pin)
+    await db.execute(sql`
+      update tenants
+      set kiosk_pin = ${hashed}, updated_at = now()
+      where id = ${row.id}
+    `)
+    tenantCount++
+  }
+
+  const stationRows = (await db.execute(sql`
+    select id, station_pin
+    from equipment_station_settings
+    where station_pin is not null and station_pin <> ''
+  `)) as unknown as StationPinRow[]
+  let stationCount = 0
+  for (const row of stationRows) {
+    if (!row.station_pin || isKioskPinHash(row.station_pin)) continue
+    const hashed = await hashKioskPin(row.station_pin)
+    await db.execute(sql`
+      update equipment_station_settings
+      set station_pin = ${hashed}, updated_at = now()
+      where id = ${row.id}
+    `)
+    stationCount++
+  }
+
+  console.log(`✔ Kiosk PIN hashes backfilled (${tenantCount} tenant, ${stationCount} station)`)
+}
+
+async function dropRetiredPluginTables(db: ReturnType<typeof drizzle>) {
+  for (const table of [
+    'plugin_events',
+    'plugin_runs',
+    'tenant_plugin_secrets',
+    'tenant_plugins',
+    'plugins',
+  ]) {
+    await db.execute(sql.raw(`drop table if exists "${table}" cascade`))
+  }
+  console.log('✔ Retired plugin tables removed')
+}
+
 async function main() {
   // Migrations + DDL must NOT run through the PgBouncer transaction pooler
   // (the migration advisory lock + session-scoped DDL need a dedicated session)
@@ -74,6 +129,12 @@ async function main() {
 
   console.log('▶ Running drizzle migrations…')
   await migrate(db, { migrationsFolder: './drizzle' })
+
+  console.log('▶ Backfilling kiosk PIN hashes…')
+  await backfillKioskPinHashes(db)
+
+  console.log('▶ Dropping retired plugin tables…')
+  await dropRetiredPluginTables(db)
 
   console.log('▶ Applying RLS policies…')
   let newCount = 0

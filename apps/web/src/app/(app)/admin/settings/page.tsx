@@ -14,7 +14,7 @@ import {
   Label,
   Select,
 } from '@beaconhs/ui'
-import { db, withSuperAdmin } from '@beaconhs/db'
+import { db, hashKioskPin, normalizeKioskPin, withSuperAdmin } from '@beaconhs/db'
 import { tenants } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
@@ -62,11 +62,22 @@ async function saveSettings(formData: FormData) {
     primaryColor: String(formData.get('primaryColor') ?? '').trim() || undefined,
     pdfLetterhead: String(formData.get('pdfLetterhead') ?? '').trim() || undefined,
   }
+  const kioskPinInput = String(formData.get('kioskPin') ?? '').trim()
+  const clearKioskPin = formData.get('clearKioskPin') === 'on'
+  const normalizedKioskPin = kioskPinInput ? normalizeKioskPin(kioskPinInput) : null
+  if (kioskPinInput && !normalizedKioskPin) {
+    throw new Error('Kiosk PIN must be 4–12 digits.')
+  }
 
   const before = await withSuperAdmin(db, async (tx) => {
     const [t] = await tx.select().from(tenants).where(eq(tenants.id, ctx.tenantId)).limit(1)
     return t
   })
+  const kioskPin = clearKioskPin
+    ? null
+    : normalizedKioskPin
+      ? await hashKioskPin(normalizedKioskPin)
+      : (before?.kioskPin ?? null)
 
   await withSuperAdmin(db, async (tx) => {
     await tx
@@ -78,6 +89,7 @@ async function saveSettings(formData: FormData) {
         enabledLanguages: enabledLanguages.length > 0 ? enabledLanguages : ['en'],
         hierarchy,
         branding,
+        kioskPin,
       })
       .where(eq(tenants.id, ctx.tenantId))
   })
@@ -87,8 +99,26 @@ async function saveSettings(formData: FormData) {
     entityId: ctx.tenantId,
     action: 'update',
     summary: 'Tenant settings updated',
-    before: before as unknown as Record<string, unknown>,
-    after: { name, slug, defaultLanguage, enabledLanguages, hierarchy, branding },
+    before: before
+      ? {
+          name: before.name,
+          slug: before.slug,
+          defaultLanguage: before.defaultLanguage,
+          enabledLanguages: before.enabledLanguages,
+          hierarchy: before.hierarchy,
+          branding: before.branding,
+          kioskEnabled: Boolean(before.kioskPin),
+        }
+      : null,
+    after: {
+      name,
+      slug,
+      defaultLanguage,
+      enabledLanguages,
+      hierarchy,
+      branding,
+      kioskEnabled: Boolean(kioskPin),
+    },
   })
 
   revalidatePath('/', 'layout')
@@ -104,6 +134,7 @@ export default async function AdminSettingsPage() {
 
   const enabled = new Set(tenant.enabledLanguages)
   const hierarchy = tenant.hierarchy
+  const kioskUrl = tenant.kioskPin ? `${process.env.APP_URL ?? ''}/kiosk?t=${tenant.slug}` : null
 
   return (
     <PageContainer>
@@ -126,6 +157,50 @@ export default async function AdminSettingsPage() {
               <Field label="Slug">
                 <Input name="slug" defaultValue={tenant.slug} className="font-mono" />
               </Field>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>People kiosk</CardTitle>
+              <CardDescription>
+                Shared-tablet sign-in/out is gated by a write-only PIN.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Field label="Kiosk PIN (4–12 digits)" className="max-w-xs">
+                <Input
+                  name="kioskPin"
+                  type="password"
+                  inputMode="numeric"
+                  pattern="[0-9]{4,12}"
+                  maxLength={12}
+                  placeholder={tenant.kioskPin ? 'Leave blank to keep current PIN' : 'e.g. 4821'}
+                  className="font-mono tracking-widest"
+                />
+                {tenant.kioskPin ? (
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    A PIN is configured. Enter a new PIN to rotate it.
+                  </p>
+                ) : null}
+              </Field>
+              {tenant.kioskPin ? (
+                <label className="flex max-w-xs items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                  <input
+                    type="checkbox"
+                    name="clearKioskPin"
+                    className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                  />
+                  Disable public people kiosk
+                </label>
+              ) : null}
+              {kioskUrl ? (
+                <div className="max-w-xl rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-900">
+                  <code className="block truncate font-mono text-xs text-slate-600 dark:text-slate-300">
+                    {kioskUrl}
+                  </code>
+                </div>
+              ) : null}
             </CardContent>
           </Card>
 

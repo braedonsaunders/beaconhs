@@ -9,7 +9,6 @@ import { scanCompliance } from '../lib/compliance-scanner'
 import { scanEscalations } from '../lib/escalation-scanner'
 import { scanDigests } from '../lib/digest-scanner'
 import { scanScheduledFlows } from '../lib/scheduled-flow-runner'
-import { runPluginCron } from '../lib/plugin-cron'
 import { runSyncConnection, scanSyncConnections } from '../lib/sync-scanner'
 import { runSessionOverdueFlows } from '../lib/session-overdue-flows'
 import { runDatabaseMaintenance } from '../lib/db-maintenance'
@@ -52,14 +51,6 @@ export async function processScheduledTick(job: Job<ScheduledTick>): Promise<voi
       const r = await scanFormAssignments()
       console.log(
         `[scheduled] form_assignment_scan: ${r.dispatched} dispatched / ${r.skipped} skipped / ${r.errors} errors (${r.candidates} candidates)`,
-      )
-      return
-    }
-    case 'plugin_cron': {
-      const cadence = job.data.cadence ?? 'hourly'
-      const r = await runPluginCron(cadence)
-      console.log(
-        `[scheduled] plugin_cron(${cadence}): candidates=${r.candidates} recorded=${r.recorded} errors=${r.errors}`,
       )
       return
     }

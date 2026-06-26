@@ -203,10 +203,10 @@ packages/
   analytics/  Insights BI engine (BHQL) + server split
   ai/         Per-tenant AI provider configuration + clients
   sync/       Inbound data-sync engine + connectors (database/NetSuite/CSV/Nango)
+  integrations/ Outbound automation triggers + destinations
   etl/        Legacy-system migration tooling
   ui/         Shared React component library
   emails/     Transactional email templates
-  plugin-sdk/ Plugin interface contracts
 ```
 
 See [`AGENTS.md`](AGENTS.md) for the full repo map and engineering conventions.

@@ -78,14 +78,14 @@ tab on the login form — the link will arrive in Mailpit at
 | Auto-PDF renderer via Puppeteer                              | ✅                              |
 | BullMQ queues (emails, pdfs, notifications, scheduled ticks) | ✅                              |
 | Worker process with handlers                                 | ✅                              |
-| Plugin SDK + manifest shape                                  | ✅                              |
+| Integrations hub (sync in + outbound automations)            | ✅                              |
 | Web app shell + login + module list pages                    | ✅                              |
 | **Form designer UI**                                         | 🟡 stub — Phase 1 build         |
 | **Form renderer UI**                                         | 🟡 stub — Phase 1 build         |
 | **Module CRUD screens (incidents, training, etc.)**          | 🟡 stubs — Phase 2–3            |
 | Dashboard widget builder                                     | 🟡 default tiles only — Phase 4 |
 | Report builder                                               | 🟡 — Phase 4                    |
-| First-party plugins (NetSuite, adminapp2-sync)               | 🟡 — Phase 5                    |
+| Plugin SDK / first-party plugins                             | Retired; use Integrations       |
 | External migration adapters                                  | 🟡 project-specific             |
 
 See [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) for the full phased plan.

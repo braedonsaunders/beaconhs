@@ -27,7 +27,6 @@
     "@beaconhs/forms-pdf": "workspace:*",
     "@beaconhs/integrations": "workspace:*",
     "@beaconhs/jobs": "workspace:*",
-    "@beaconhs/plugin-sdk": "workspace:*",
     "@beaconhs/reports": "workspace:*",
     "@beaconhs/sms": "workspace:*",
     "@beaconhs/storage": "workspace:*",

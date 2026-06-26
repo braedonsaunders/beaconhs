@@ -5,7 +5,6 @@
 
 import { sql } from 'drizzle-orm'
 import { db } from '@beaconhs/db'
-import { crews, orgUnits, people, tenants } from '@beaconhs/db/schema'
 import { KioskClient } from './kiosk-client'
 
 export const dynamic = 'force-dynamic'
@@ -39,35 +38,27 @@ export default async function KioskPage({
     )
   }
 
-  // The kiosk is unauthenticated; we trust the tenant slug (enumerable but
-  // harmless) + the PIN check inside the action. Resolve the tenant from the
-  // global tenants table, then scope every read to it via app.tenant_id.
+  // The kiosk is unauthenticated. Resolve only non-sensitive tenant chrome here;
+  // roster/site/crew data is loaded by a PIN-verified server action.
   const data = await db.transaction(async (tx) => {
     const tenantRows = await tx.execute(
-      sql`SELECT id, name, slug FROM tenants WHERE slug = ${slug} LIMIT 1`,
+      sql`
+        SELECT id, name, slug, kiosk_pin IS NOT NULL AS kiosk_enabled
+        FROM tenants
+        WHERE slug = ${slug}
+        LIMIT 1
+      `,
     )
-    const tenant = (tenantRows as unknown as { id: string; name: string; slug: string }[])[0]
+    const tenant = (
+      tenantRows as unknown as {
+        id: string
+        name: string
+        slug: string
+        kiosk_enabled: boolean
+      }[]
+    )[0]
     if (!tenant) return null
-    await tx.execute(sql`SELECT set_config('app.tenant_id', ${tenant.id}, true)`)
-    const [peopleRows, siteRows, crewRows] = await Promise.all([
-      tx
-        .select({
-          id: people.id,
-          firstName: people.firstName,
-          lastName: people.lastName,
-          jobTitle: people.jobTitle,
-        })
-        .from(people)
-        .where(sql`${people.status} = 'active'`)
-        .orderBy(people.lastName, people.firstName),
-      tx
-        .select({ id: orgUnits.id, name: orgUnits.name })
-        .from(orgUnits)
-        .where(sql`${orgUnits.level} = 'site'`)
-        .orderBy(orgUnits.name),
-      tx.select({ id: crews.id, name: crews.name }).from(crews).orderBy(crews.name),
-    ])
-    return { tenant, people: peopleRows, sites: siteRows, crews: crewRows }
+    return { tenant, kioskEnabled: tenant.kiosk_enabled }
   })
 
   if (!data) {
@@ -86,14 +77,16 @@ export default async function KioskPage({
       </div>
     )
   }
+  if (!data.kioskEnabled) {
+    return (
+      <div className="grid min-h-screen place-items-center bg-slate-900 p-6 text-white">
+        <div className="max-w-md rounded-2xl bg-slate-800 p-8 text-center">
+          <h1 className="text-xl font-semibold">Kiosk disabled</h1>
+          <p className="mt-2 text-sm text-slate-400">This tenant has not configured a kiosk PIN.</p>
+        </div>
+      </div>
+    )
+  }
 
-  return (
-    <KioskClient
-      tenantId={data.tenant.id}
-      tenantName={data.tenant.name}
-      people={data.people}
-      sites={data.sites}
-      crews={data.crews}
-    />
-  )
+  return <KioskClient tenantId={data.tenant.id} tenantName={data.tenant.name} />
 }

@@ -13,7 +13,6 @@ export type ScheduledTick =
   | { kind: 'escalation_scan' }
   | { kind: 'digest_scan' }
   | { kind: 'scheduled_flow_scan' }
-  | { kind: 'plugin_cron'; cadence: 'hourly' | 'daily' | 'weekly' }
   | { kind: 'sync_scan' }
   | { kind: 'sync_run'; tenantId: string; connectionId: string; trigger: 'scheduled' | 'manual' }
   | { kind: 'db_maintenance'; trigger?: 'scheduled' | 'manual' }
@@ -27,7 +26,23 @@ export const scheduledQueue = new Queue<ScheduledTick>('scheduled', {
   },
 })
 
+async function removeRetiredPluginCronSchedules() {
+  const repeatables = await scheduledQueue.getRepeatableJobs()
+  await Promise.all(
+    repeatables
+      .filter(
+        (job) =>
+          job.id?.startsWith('tick:plugin_') ||
+          job.name?.startsWith('tick:plugin_') ||
+          job.key.includes('tick:plugin_'),
+      )
+      .map((job) => scheduledQueue.removeRepeatableByKey(job.key)),
+  )
+}
+
 export async function registerSchedules() {
+  await removeRetiredPluginCronSchedules()
+
   // Every minute: form assignment dispatch
   await scheduledQueue.add('tick:every_minute', { kind: 'form_assignment_scan' } as ScheduledTick, {
     repeat: { pattern: '* * * * *' },
@@ -73,21 +88,6 @@ export async function registerSchedules() {
       repeat: { pattern: '* * * * *' },
       jobId: 'tick:scheduled_flow',
     },
-  )
-  await scheduledQueue.add(
-    'tick:plugin_hourly',
-    { kind: 'plugin_cron', cadence: 'hourly' } as ScheduledTick,
-    { repeat: { pattern: '30 * * * *' }, jobId: 'tick:plugin_hourly' },
-  )
-  await scheduledQueue.add(
-    'tick:plugin_daily',
-    { kind: 'plugin_cron', cadence: 'daily' } as ScheduledTick,
-    { repeat: { pattern: '30 7 * * *' }, jobId: 'tick:plugin_daily' },
-  )
-  await scheduledQueue.add(
-    'tick:plugin_weekly',
-    { kind: 'plugin_cron', cadence: 'weekly' } as ScheduledTick,
-    { repeat: { pattern: '30 7 * * 1' }, jobId: 'tick:plugin_weekly' },
   )
   // Every 15 minutes: scan external sync connections and enqueue the ones due.
   await scheduledQueue.add('tick:sync_scan', { kind: 'sync_scan' } as ScheduledTick, {

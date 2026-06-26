@@ -87,9 +87,6 @@ importers:
       '@beaconhs/jobs':
         specifier: workspace:*
         version: link:../../packages/jobs
-      '@beaconhs/plugin-sdk':
-        specifier: workspace:*
-        version: link:../../packages/plugin-sdk
       '@beaconhs/reports':
         specifier: workspace:*
         version: link:../../packages/reports
@@ -367,9 +364,6 @@ importers:
       '@beaconhs/jobs':
         specifier: workspace:*
         version: link:../../packages/jobs
-      '@beaconhs/plugin-sdk':
-        specifier: workspace:*
-        version: link:../../packages/plugin-sdk
       '@beaconhs/reports':
         specifier: workspace:*
         version: link:../../packages/reports
@@ -739,19 +733,6 @@ importers:
       ioredis:
         specifier: 5.11.1
         version: 5.11.1
-    devDependencies:
-      '@types/node':
-        specifier: ^24.13.2
-        version: 24.13.2
-      typescript:
-        specifier: ^6.0.3
-        version: 6.0.3
-
-  packages/plugin-sdk:
-    dependencies:
-      zod:
-        specifier: ^4.4.3
-        version: 4.4.3
     devDependencies:
       '@types/node':
         specifier: ^24.13.2

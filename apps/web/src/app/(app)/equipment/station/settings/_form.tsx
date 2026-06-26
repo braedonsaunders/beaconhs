@@ -6,6 +6,9 @@ import { Button, Input, Label, SearchSelect } from '@beaconhs/ui'
 import { saveStationSettings, type StationSettingsInput } from './_actions'
 
 type Location = { id: string; name: string; level: string }
+type StationSettingsInitial = Omit<StationSettingsInput, 'stationPin' | 'clearStationPin'> & {
+  stationPinConfigured: boolean
+}
 
 export function StationSettingsForm({
   locations,
@@ -13,11 +16,12 @@ export function StationSettingsForm({
   kioskUrl,
 }: {
   locations: Location[]
-  initial: StationSettingsInput
+  initial: StationSettingsInitial
   kioskUrl: string | null
 }) {
   const [home, setHome] = useState(initial.defaultCheckInOrgUnitId ?? '')
-  const [pin, setPin] = useState(initial.stationPin ?? '')
+  const [pin, setPin] = useState('')
+  const [clearStationPin, setClearStationPin] = useState(false)
   const [scanMode, setScanMode] = useState<'toggle' | 'explicit'>(initial.scanMode)
   const [requireHolder, setRequireHolder] = useState(initial.requireHolderOnCheckout)
   const [requireCondition, setRequireCondition] = useState(initial.requireConditionOnCheckin)
@@ -52,6 +56,7 @@ export function StationSettingsForm({
       const res = await saveStationSettings({
         defaultCheckInOrgUnitId: home || null,
         stationPin: pin || null,
+        clearStationPin,
         scanMode,
         requireHolderOnCheckout: requireHolder,
         requireConditionOnCheckin: requireCondition,
@@ -175,19 +180,42 @@ export function StationSettingsForm({
           Mounted-tablet kiosk
         </h3>
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          Set a PIN to enable the public kiosk for a wall-mounted tablet + USB scanner. Leave blank
-          to disable it — the in-app station is always available to permitted users.
+          Set a PIN to enable the public kiosk for a wall-mounted tablet + USB scanner. The in-app
+          station is always available to permitted users.
         </p>
         <div className="max-w-xs">
           <Label>Kiosk PIN (4–12 digits)</Label>
           <Input
+            type="password"
             value={pin}
             onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
             inputMode="numeric"
-            placeholder="e.g. 4821"
+            disabled={clearStationPin}
+            placeholder={
+              initial.stationPinConfigured ? 'Leave blank to keep current PIN' : 'e.g. 4821'
+            }
             className="mt-1 font-mono tracking-widest"
           />
+          {initial.stationPinConfigured ? (
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              A PIN is configured. Enter a new PIN to rotate it.
+            </p>
+          ) : null}
         </div>
+        {initial.stationPinConfigured ? (
+          <label className="flex max-w-xs items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+            <input
+              type="checkbox"
+              checked={clearStationPin}
+              onChange={(e) => {
+                setClearStationPin(e.target.checked)
+                if (e.target.checked) setPin('')
+              }}
+              className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+            />
+            Disable public equipment kiosk
+          </label>
+        ) : null}
         {kioskUrl ? (
           <div className="flex max-w-xl items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-900">
             <code className="min-w-0 flex-1 truncate font-mono text-xs text-slate-600 dark:text-slate-300">

@@ -71,13 +71,13 @@ Every list has search + sort + pagination + filter chips. Every row clicks throu
 | **Confined Space** | ✅                    | ✅ Permit detail + atmospheric-readings table + new-reading form + out-of-spec alarm + activate/close actions     | ✅ New-permit form (auto-ref + hours-based expiry)                       |
 | **Lone Worker**    | ✅                    | ✅ Session detail + check-in log + manual check-in + end-session + overdue alert                                  | ✅ Start-session form                                                    |
 
-### Phase 4 — Dashboards + reports + plugin framework
+### Phase 4 — Dashboards + reports + integrations
 
 - ✅ **Dashboard upgraded**: 8 KPI tiles with trend deltas, 4 list widgets (recent incidents, due CAs, expiring certs, inbox)
 - ⬜ Drag-drop widget builder
 - ⬜ Pre-built reports + custom report builder
 - ✅ **Scheduled reports** at `/reports`: 5 built-in report definitions (incidents_summary, training_expiring, corrective_actions_open, inspections_completed, documents_overdue_review). Per-tenant `report_schedules` table (daily/weekly/monthly cadence with day-of-week/day-of-month/hour/minute, timezone, recipient userIds + emails, optional filters). `report_runs` log captures status + PDF attachment + row count + error. `/5min report-scheduler scan picks up due schedules, a dedicated `reports` BullMQ queue dispatches PDF generation + email delivery. Full UI: list (definitions + your schedules), create-schedule wizard, schedule detail (edit + run history), run-detail (download generated PDF)
-- ⬜ Plugin SDK runtime + first-party plugins
+- ✅ Integrations hub: inbound sync connections + outbound trigger/destination automations. The older plugin SDK/runtime plan is retired for launch.
 
 ### Phase 5 — Migration + cutover
 
@@ -94,7 +94,7 @@ Every list has search + sort + pagination + filter chips. Every row clicks throu
 - ✅ **/admin/org** — org-units tree with add/delete per level + crews/departments/trades CRUD
 - ✅ **/admin/settings** — identity, branding (logo URL + primary color + PDF letterhead + live preview), languages (enable + default), hierarchy depth toggles, risk matrix preview grid
 - ✅ **/admin/api-keys** — generate (with one-time secret reveal in a 60s cookie), prefix-only listing, last-used, revoke
-- ✅ **/admin/plugins** — first-party plugin catalogue (NetSuite, adminapp2-sync, webhook-out) with enable/disable per tenant, capability chips, version display
+- ✅ **/admin/integrations** — sync connections plus outbound automation builder. `/admin/plugins` redirects here for stale bookmarks.
 
 ### Cross-cutting
 
@@ -176,65 +176,65 @@ App-shell nav: Frontline now includes JSHA/HazID / Toolbox talks / Lift plans; I
 
 ## 2. Decisions Locked In
 
-| Area                      | Decision                                                                                |
-| ------------------------- | --------------------------------------------------------------------------------------- |
-| **Tenancy**               | Multi-tenant SaaS, every org is a tenant, no billing on day one                         |
-| **Tenant routing**        | Single domain, tenant resolved at login (no subdomains in v1)                           |
-| **Tenant onboarding**     | Admin-invite only (super-admin creates tenants)                                         |
-| **Stack**                 | Next.js (App Router) + React + TypeScript                                               |
-| **DB**                    | PostgreSQL with row-level security for tenant isolation                                 |
-| **Auth**                  | Email + password and magic-link; no MFA in v1 (architect for it)                        |
-| **Worker login**          | Email/magic link — every worker has email, no SMS/PIN flow                              |
-| **Hosting**               | Self-host friendly container deployment                                                 |
-| **Residency**             | Deployment-controlled                                                                   |
-| **Scale target**          | < 50 tenants / < 5k users / < 1M records (year 1–2)                                     |
-| **File storage**          | Cloudflare R2 (S3-compatible, no egress)                                                |
-| **Search**                | Postgres full-text + trigram                                                            |
-| **Queue**                 | BullMQ on Redis                                                                         |
-| **i18n**                  | Tenant-configurable language list, bilingual form/PDF content                           |
-| **PWA**                   | Installable, online-only, with continuous form draft auto-save for spotty signal        |
-| **Conflict policy**       | Last-write-wins with warning banner                                                     |
-| **Native**                | PWA only (no Capacitor in v1)                                                           |
-| **Data migration**        | Hard cutover, 100% historical                                                           |
-| **Form builder authors**  | Tenant admins / safety managers only                                                    |
-| **Form versioning**       | Immutable versions on publish                                                           |
-| **Form drafts**           | Continuous auto-save                                                                    |
-| **Form assignment**       | On-demand + scheduled + event-triggered + manually-assigned                             |
-| **Form workflows**        | Multi-step with handoffs                                                                |
-| **Form PDF**              | Auto-rendered from schema, admin can customize CSS per template                         |
-| **Photos**                | Annotation + geotag + multi-photo per field                                             |
-| **Signatures**            | Visual signature only (drawn)                                                           |
-| **Attachments**           | Documents, video, audio, voice-to-text                                                  |
-| **Risk matrix**           | Fully configurable per tenant (none, 3×3, 5×5, custom)                                  |
-| **JSHA module**           | Implemented as a configured form template + risk matrix (no bespoke module)             |
-| **Confined Space**        | First-class specialty module (atmospheric + permit lifecycle)                           |
-| **Incidents**             | First-class module with full taxonomy, simple linear investigation                      |
-| **Training**              | First-class module — instructor-led, self-paced, evaluator skills, external cert        |
-| **Cert expiry**           | Reminders at 90/30/7/1 days + overdue flag, no auto-blocking                            |
-| **Cert output**           | PDF + QR-verifiable public page                                                         |
-| **Equipment**             | Asset registry + QR + location history + inspections + work orders. No financials.      |
-| **PPE**                   | Issue + return/replacement/discard + scheduled inspections                              |
-| **Documentation**         | Versioned library + acknowledgments + periodic review + management review books         |
-| **Corrective actions**    | Standalone records, linkable to any source                                              |
-| **Permissions**           | Built-in roles + custom roles per tenant                                                |
-| **Data scoping**          | Site/project + crew + self-only + tenant-wide (configurable per tenant)                 |
-| **Field-level perms**     | Yes, configurable per form template                                                     |
-| **Audit log**             | Every write with before/after diffs                                                     |
-| **Dashboard**             | Drag-drop widget builder                                                                |
-| **Reports**               | Pre-built + simple custom builder                                                       |
-| **Scheduled reports**     | Subscriptions + admin-to-list + event-triggered                                         |
-| **Exports**               | PDF + Excel                                                                             |
-| **Notification channels** | Email + in-app inbox + Web Push + SMS for critical only                                 |
-| **Notification prefs**    | Per-channel + per-category, user-controlled                                             |
-| **Digest**                | None — each notification immediate                                                      |
-| **Critical alerts**       | New incident                                                                            |
-| **Plugin framework**      | First-party plugins, can sync in/out, render UI panels, define form-builder field types |
-| **adminapp2**             | Stays separate; new app reads internal master data from it                              |
-| **External APIs**         | Public REST API with per-tenant keys                                                    |
-| **Calendar**              | In-app calendar only (no Google/Outlook sync in v1)                                     |
-| **Starter content**       | Curated starter library shipped to every new tenant                                     |
-| **Lone-worker**           | Timer-based check-in with auto-escalation (first-class feature)                         |
-| **Bulk import**           | CSV for people/sites/equipment + UI for historical bulk upload                          |
+| Area                      | Decision                                                                           |
+| ------------------------- | ---------------------------------------------------------------------------------- |
+| **Tenancy**               | Multi-tenant SaaS, every org is a tenant, no billing on day one                    |
+| **Tenant routing**        | Single domain, tenant resolved at login (no subdomains in v1)                      |
+| **Tenant onboarding**     | Admin-invite only (super-admin creates tenants)                                    |
+| **Stack**                 | Next.js (App Router) + React + TypeScript                                          |
+| **DB**                    | PostgreSQL with row-level security for tenant isolation                            |
+| **Auth**                  | Email + password and magic-link; no MFA in v1 (architect for it)                   |
+| **Worker login**          | Email/magic link — every worker has email, no SMS/PIN flow                         |
+| **Hosting**               | Self-host friendly container deployment                                            |
+| **Residency**             | Deployment-controlled                                                              |
+| **Scale target**          | < 50 tenants / < 5k users / < 1M records (year 1–2)                                |
+| **File storage**          | Cloudflare R2 (S3-compatible, no egress)                                           |
+| **Search**                | Postgres full-text + trigram                                                       |
+| **Queue**                 | BullMQ on Redis                                                                    |
+| **i18n**                  | Tenant-configurable language list, bilingual form/PDF content                      |
+| **PWA**                   | Installable, online-only, with continuous form draft auto-save for spotty signal   |
+| **Conflict policy**       | Last-write-wins with warning banner                                                |
+| **Native**                | PWA only (no Capacitor in v1)                                                      |
+| **Data migration**        | Hard cutover, 100% historical                                                      |
+| **Form builder authors**  | Tenant admins / safety managers only                                               |
+| **Form versioning**       | Immutable versions on publish                                                      |
+| **Form drafts**           | Continuous auto-save                                                               |
+| **Form assignment**       | On-demand + scheduled + event-triggered + manually-assigned                        |
+| **Form workflows**        | Multi-step with handoffs                                                           |
+| **Form PDF**              | Auto-rendered from schema, admin can customize CSS per template                    |
+| **Photos**                | Annotation + geotag + multi-photo per field                                        |
+| **Signatures**            | Visual signature only (drawn)                                                      |
+| **Attachments**           | Documents, video, audio, voice-to-text                                             |
+| **Risk matrix**           | Fully configurable per tenant (none, 3×3, 5×5, custom)                             |
+| **JSHA module**           | Implemented as a configured form template + risk matrix (no bespoke module)        |
+| **Confined Space**        | First-class specialty module (atmospheric + permit lifecycle)                      |
+| **Incidents**             | First-class module with full taxonomy, simple linear investigation                 |
+| **Training**              | First-class module — instructor-led, self-paced, evaluator skills, external cert   |
+| **Cert expiry**           | Reminders at 90/30/7/1 days + overdue flag, no auto-blocking                       |
+| **Cert output**           | PDF + QR-verifiable public page                                                    |
+| **Equipment**             | Asset registry + QR + location history + inspections + work orders. No financials. |
+| **PPE**                   | Issue + return/replacement/discard + scheduled inspections                         |
+| **Documentation**         | Versioned library + acknowledgments + periodic review + management review books    |
+| **Corrective actions**    | Standalone records, linkable to any source                                         |
+| **Permissions**           | Built-in roles + custom roles per tenant                                           |
+| **Data scoping**          | Site/project + crew + self-only + tenant-wide (configurable per tenant)            |
+| **Field-level perms**     | Yes, configurable per form template                                                |
+| **Audit log**             | Every write with before/after diffs                                                |
+| **Dashboard**             | Drag-drop widget builder                                                           |
+| **Reports**               | Pre-built + simple custom builder                                                  |
+| **Scheduled reports**     | Subscriptions + admin-to-list + event-triggered                                    |
+| **Exports**               | PDF + Excel                                                                        |
+| **Notification channels** | Email + in-app inbox + Web Push + SMS for critical only                            |
+| **Notification prefs**    | Per-channel + per-category, user-controlled                                        |
+| **Digest**                | None — each notification immediate                                                 |
+| **Critical alerts**       | New incident                                                                       |
+| **Integrations**          | Inbound sync connectors plus outbound trigger/destination automations              |
+| **adminapp2**             | Stays separate; new app reads internal master data from it                         |
+| **External APIs**         | Public REST API with per-tenant keys                                               |
+| **Calendar**              | In-app calendar only (no Google/Outlook sync in v1)                                |
+| **Starter content**       | Curated starter library shipped to every new tenant                                |
+| **Lone-worker**           | Timer-based check-in with auto-escalation (first-class feature)                    |
+| **Bulk import**           | CSV for people/sites/equipment + UI for historical bulk upload                     |
 
 ---
 
@@ -254,7 +254,8 @@ Monorepo with Turborepo. Single deploy target (Next.js) for v1.
   /auth           Auth.js (or Better-Auth) config, sessions, magic-link
   /forms-core     Form schema, validators, renderer-agnostic logic
   /forms-pdf      Auto-PDF renderer (server-side)
-  /plugin-sdk     Plugin interface contracts + helpers
+  /integrations   Outbound trigger/destination framework
+  /sync           Inbound sync connectors
   /tenant         Tenant context, RLS helpers, scoping middleware
   /audit          Activity-log helpers, diffing
   /ui             Shared React components (shadcn-style)
@@ -262,10 +263,6 @@ Monorepo with Turborepo. Single deploy target (Next.js) for v1.
   /api-types      Public REST API types (OpenAPI-emit)
   /jobs           Job definitions consumed by worker
   /seeds          Starter content packs
-/plugins
-  /netsuite-sync       First-party plugin
-  /adminapp2-sync      First-party plugin
-  /...
 /migrations             ETL scripts (beaconhs → new app)
 /docs
 ```
@@ -347,11 +344,11 @@ JSONB for response data (flexible across template versions). Selected indexed co
 - **Confined Space Permits** — `cs_permits`, `cs_atmospheric_readings`, `cs_rescue_plans`. Atmospheric readings tied to sensor IDs and timestamped.
 - **Lone Worker** — `lw_sessions`, `lw_checkins`, escalation policy per tenant.
 
-### 4.5 Plugin / integration
+### 4.5 Integrations
 
-- `plugins` — id, key, name, version, manifest JSONB
-- `tenant_plugins` — tenant_id, plugin_id, enabled, config JSONB (encrypted), secrets (separate row in `tenant_plugin_secrets` with envelope encryption)
-- `plugin_events` — outbound event log (audit + retry)
+- `sync_connections`, `sync_runs`, `sync_records` — inbound data-sync configuration and import ledger.
+- `tenant_integrations` — outbound trigger/destination automations with sealed secrets.
+- `integration_export_log` — outbound delivery ledger for idempotent replays/reversals.
 
 ---
 
@@ -579,55 +576,17 @@ Each field has: `id`, `type`, `label` (i18n), `helpText` (i18n), `required`, `va
 
 ---
 
-## 9. Plugin / Integration Framework
+## 9. Integrations
 
-### 9.1 Goals
+Current launch decision: BeaconHS does not ship a plugin runtime or plugin SDK.
+The earlier plugin plan was consolidated into two production integration systems:
 
-- First-party plugins only on day one (your team ships them).
-- Capabilities: sync data in, sync data out, render UI panels, contribute new form-builder field types or report types.
-- Architected so third-party plugins are _possible_ later (manifest + permission scopes + sandbox).
+- `packages/sync`: inbound data connections, including CSV, database, NetSuite, and Nango-backed connectors.
+- `packages/integrations`: outbound event automations, trigger registry, destination registry, delivery worker, and idempotent export ledger.
+- `/admin/integrations`: one admin hub for creating sync connections and outbound automations.
 
-### 9.2 Plugin SDK (TypeScript package)
-
-```ts
-import { definePlugin } from '@beaconhs/plugin-sdk'
-
-export default definePlugin({
-  key: 'netsuite-sync',
-  version: '1.0.0',
-  capabilities: ['sync.in', 'sync.out', 'ui.panel'],
-  config: z.object({
-    accountId: z.string(),
-    consumerKey: z.string(),
-  }),
-  secrets: z.object({
-    consumerSecret: z.string(),
-    tokenSecret: z.string(),
-  }),
-  hooks: {
-    'cron.daily': async (ctx) => { /* pull employees */ },
-    'incident.created': async (ctx, evt) => { /* push to ticketing */ },
-  },
-  fieldTypes: [
-    { type: 'netsuite_customer', renderer: ..., validator: ... },
-  ],
-  uiPanels: [
-    { slot: 'incident.detail.sidebar', component: ... },
-  ],
-})
-```
-
-### 9.3 Runtime
-
-- v1: plugins ship as packages in the monorepo. Loaded in-process at boot. No sandbox.
-- v2: third-party plugins run in a separate worker process with capability gates (Realm-style or Deno-sandbox).
-- Plugin config + secrets stored per tenant (`tenant_plugins`, `tenant_plugin_secrets` with envelope encryption — KMS-backed).
-
-### 9.4 Day-one first-party plugins
-
-- `netsuite-sync` — pull employees, customers, projects.
-- `adminapp2-sync` — read internal master data from your existing adminapp2.
-- `webhook-out` — generic outbound webhooks for any event.
+`/admin/plugins` remains only as a temporary redirect to `/admin/integrations` for
+stale bookmarks. Plugin-era packages and tables are retired.
 
 ### 9.5 Public REST API
 
@@ -780,12 +739,12 @@ A realistic phasing assuming a small focused team (1–3 engineers). Each phase 
 - Confined Space permit + atmospheric readings.
 - Lone Worker check-in.
 
-### Phase 4 — Dashboards + Reports + Plugin Framework (4–6 weeks)
+### Phase 4 — Dashboards + Reports + Integrations (4–6 weeks)
 
 - Dashboard widget builder.
 - Pre-built reports + custom report builder.
 - Scheduled reports (subscriptions + admin lists + event-triggered).
-- Plugin SDK + first-party plugins (NetSuite, adminapp2-sync, webhook-out).
+- Inbound sync connectors + outbound automation destinations.
 - Public REST API + per-tenant API keys + rate limiting.
 
 ### Phase 5 — Migration + Cutover (4–6 weeks of overlap)
@@ -805,9 +764,9 @@ A realistic phasing assuming a small focused team (1–3 engineers). Each phase 
 
 1. **Form builder ambition vs delivery time.** Versioned, multi-step, repeating sections, formulas, conditional logic, custom PDF — this is a product on its own. If a phase slips, this is the one. Consider feature-flagging formula fields + multi-step for v1.1 if time gets tight.
 2. **Auto-PDF rendering quality.** The 48 hand-built Blade templates exist because each had bespoke formatting needs. Auto-rendering will look generic by default. Tenant admins must be able to tune CSS, otherwise compliance teams will reject the output. Build a strong custom-CSS escape hatch from day one.
-3. **Plugin framework scope creep.** First-party in-process plugins are fine. The capability to "define new form-builder field types" via plugin is the riskiest part — adds a public interface to the form-builder internals. Lock that interface early or defer.
+3. **Integration scope creep.** Keep launch integrations to explicit sync connectors and outbound destinations. Do not reopen plugin-provided UI panels or form field types for v1.
 4. **Migration completeness.** "100% historical" + comma-separated-ID antipatterns + multiple SQL Server source DBs means the ETL is substantial. Budget time accordingly; do dry runs early.
-5. **Confined Space depth.** Atmospheric sensor integration is currently manual entry. If any tenant needs live sensor feeds, that's a plugin to build.
+5. **Confined Space depth.** Atmospheric sensor integration is currently manual entry. If any tenant needs live sensor feeds, build it as an explicit sync connector or integration destination.
 6. **Self-hosted ops on Docker Swarm.** Modern Postgres + Redis + R2-egress + worker fleet is more moving parts than the current setup. Document the runbook from day one or operations becomes brittle.
 
 ### Open questions to resolve before/during build
@@ -818,7 +777,7 @@ A realistic phasing assuming a small focused team (1–3 engineers). Each phase 
 4. **How do you want to handle the existing field-worker user base re: passwords on cutover day?** Magic-link first-login is the friendliest path; let me know if you want a different choice.
 5. **Lone Worker — is SMS escalation built day-one or later?** SMS is the only critical-channel use case for v1; either way you need a Twilio account if you want it.
 6. **Risk matrix configuration UX.** The "configurable per tenant — none / 3×3 / 5×5 / custom" requirement is broad. Recommend shipping with three built-in presets and a custom editor in v1.1.
-7. **Plugin field-types in the form designer.** Need to decide whether plugins can add their own field types to the palette in v1 or whether that's v2.
+7. **Integration catalog boundaries.** Decide which external systems are first-class launch connectors and which remain tenant-specific ETL/import work.
 8. **MFA timing.** You said no MFA for v1; recommend at minimum a hidden toggle so super-admins can MFA themselves before opening up to customers.
 
 ---

@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { eq, inArray } from 'drizzle-orm'
 import { equipmentStationSettings, orgUnits } from '@beaconhs/db/schema'
+import { hashKioskPin, normalizeKioskPin } from '@beaconhs/db'
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
@@ -10,6 +11,7 @@ import { recordAudit } from '@/lib/audit'
 export type StationSettingsInput = {
   defaultCheckInOrgUnitId: string | null
   stationPin: string | null
+  clearStationPin: boolean
   scanMode: 'toggle' | 'explicit'
   requireHolderOnCheckout: boolean
   requireConditionOnCheckin: boolean
@@ -25,16 +27,30 @@ export async function saveStationSettings(
 
   const scanMode: 'toggle' | 'explicit' = input.scanMode === 'explicit' ? 'explicit' : 'toggle'
   const pin = input.stationPin?.trim() || null
-  if (pin && !/^\d{4,12}$/.test(pin)) {
+  const normalizedPin = pin ? normalizeKioskPin(pin) : null
+  if (pin && !normalizedPin) {
     return { ok: false, error: 'Kiosk PIN must be 4–12 digits.' }
   }
+  const nextPinHash = input.clearStationPin
+    ? null
+    : normalizedPin
+      ? await hashKioskPin(normalizedPin)
+      : undefined
   const baseIds = Array.from(new Set(input.baseLocationIds.filter(Boolean)))
   const home = input.defaultCheckInOrgUnitId || null
 
+  let kioskEnabled = false
   await ctx.db(async (tx) => {
+    const [current] = await tx
+      .select({ stationPin: equipmentStationSettings.stationPin })
+      .from(equipmentStationSettings)
+      .where(eq(equipmentStationSettings.tenantId, ctx.tenantId))
+      .limit(1)
+    const stationPin = nextPinHash === undefined ? (current?.stationPin ?? null) : nextPinHash
+    kioskEnabled = Boolean(stationPin)
     const values = {
       defaultCheckInOrgUnitId: home,
-      stationPin: pin,
+      stationPin,
       scanMode,
       requireHolderOnCheckout: input.requireHolderOnCheckout,
       requireConditionOnCheckin: input.requireConditionOnCheckin,
@@ -62,7 +78,7 @@ export async function saveStationSettings(
     entityType: 'equipment_station_settings',
     action: 'update',
     summary: 'Updated check-in/out station settings',
-    after: { home, scanMode, baseCount: baseIds.length, kioskEnabled: Boolean(pin) },
+    after: { home, scanMode, baseCount: baseIds.length, kioskEnabled },
   })
   revalidatePath('/equipment/station')
   revalidatePath('/equipment/station/settings')

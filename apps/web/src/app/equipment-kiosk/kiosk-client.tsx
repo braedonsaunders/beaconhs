@@ -3,24 +3,20 @@
 import { useState, useTransition } from 'react'
 import { ScanLine } from 'lucide-react'
 import { StationClient } from '@/app/(app)/equipment/station/_station-client'
-import { performKioskScan, searchKioskScan } from './actions'
+import {
+  performKioskScan,
+  searchKioskScan,
+  unlockEquipmentKiosk,
+  type EquipmentKioskConfig,
+} from './actions'
 
 type Person = { id: string; name: string; employeeNo: string | null; jobTitle: string | null }
 type Location = { id: string; name: string; level: string; isBase: boolean }
 
-export function EquipmentKioskClient(props: {
-  tenantId: string
-  tenantName: string
-  scanMode: 'toggle' | 'explicit'
-  soundEnabled: boolean
-  requireConditionOnCheckin: boolean
-  homeLocationName: string | null
-  people: Person[]
-  locations: Location[]
-  availableCount: number
-}) {
+export function EquipmentKioskClient(props: { tenantId: string; tenantName: string }) {
   const { tenantId } = props
   const [pin, setPin] = useState<string | null>(null)
+  const [config, setConfig] = useState<EquipmentKioskConfig | null>(null)
   const [pinInput, setPinInput] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [pending, start] = useTransition()
@@ -34,18 +30,19 @@ export function EquipmentKioskClient(props: {
       return
     }
     start(async () => {
-      // An empty-query search verifies the PIN server-side without mutating.
-      const res = await searchKioskScan({ tenantId, pin: candidate, query: '' })
+      const res = await unlockEquipmentKiosk({ tenantId, pin: candidate })
       if (!res.ok) {
         setError(res.error)
+        setConfig(null)
         return
       }
+      setConfig(res.config)
       setPin(candidate)
       setPinInput('')
     })
   }
 
-  if (!pin) {
+  if (!pin || !config) {
     return (
       <div className="grid min-h-screen place-items-center bg-slate-950 p-6 text-white">
         <form
@@ -87,20 +84,26 @@ export function EquipmentKioskClient(props: {
     <StationClient
       surface="kiosk"
       tenantName={props.tenantName}
-      scanMode={props.scanMode}
-      soundEnabled={props.soundEnabled}
-      requireConditionOnCheckin={props.requireConditionOnCheckin}
-      homeLocationName={props.homeLocationName}
-      people={props.people}
-      locations={props.locations}
-      availableCount={props.availableCount}
+      scanMode={config.scanMode}
+      soundEnabled={config.soundEnabled}
+      requireConditionOnCheckin={config.requireConditionOnCheckin}
+      homeLocationName={config.homeLocationName}
+      people={config.people}
+      locations={config.locations}
+      availableCount={config.availableCount}
       onSearch={async (query) => {
         const r = await searchKioskScan({ tenantId, pin, query })
         return r.ok ? r.results : { equipment: [], people: [] }
       }}
       onScan={(input) => performKioskScan({ ...input, tenantId, pin, deviceLabel })}
-      onAuthError={() => setPin(null)}
-      onExit={() => setPin(null)}
+      onAuthError={() => {
+        setPin(null)
+        setConfig(null)
+      }}
+      onExit={() => {
+        setPin(null)
+        setConfig(null)
+      }}
     />
   )
 }

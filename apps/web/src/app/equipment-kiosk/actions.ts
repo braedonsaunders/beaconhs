@@ -6,9 +6,15 @@
 // an inline audit row (no RequestContext on this path). Rules come from the
 // shared core so the in-app station and the kiosk behave identically.
 
-import { sql, eq } from 'drizzle-orm'
-import { db, type Database } from '@beaconhs/db'
-import { auditLog, equipmentStationSettings } from '@beaconhs/db/schema'
+import { and, count, desc, eq, isNull, sql } from 'drizzle-orm'
+import { db, normalizeKioskPin, verifyKioskPin, type Database } from '@beaconhs/db'
+import {
+  auditLog,
+  equipmentItems,
+  equipmentStationSettings,
+  orgUnits,
+  people,
+} from '@beaconhs/db/schema'
 import {
   searchStationCore,
   stationScanCore,
@@ -16,12 +22,27 @@ import {
   type StationScanResult,
   type StationSearchResults,
 } from '@/lib/equipment-station'
+import {
+  guardPublicPinRateLimit,
+  recordPublicPinFailure,
+  resetPublicPinRateLimit,
+} from '@/lib/public-pin-rate-limit'
 
 type Settings = {
   pin: string | null
   homeOrgUnitId: string | null
   requireHolder: boolean
 } | null
+
+export type EquipmentKioskConfig = {
+  scanMode: 'toggle' | 'explicit'
+  soundEnabled: boolean
+  requireConditionOnCheckin: boolean
+  homeLocationName: string | null
+  people: { id: string; name: string; employeeNo: string | null; jobTitle: string | null }[]
+  locations: { id: string; name: string; level: string; isBase: boolean }[]
+  availableCount: number
+}
 
 async function loadSettings(tx: Database, tenantId: string): Promise<Settings> {
   await tx.execute(sql`SELECT set_config('app.tenant_id', ${tenantId}, true)`)
@@ -42,26 +63,131 @@ export async function searchKioskScan(input: {
   pin: string
   query: string
 }): Promise<{ ok: true; results: StationSearchResults } | { ok: false; error: string }> {
-  if (!input.tenantId || !input.pin) return { ok: false, error: 'PIN required' }
+  const pin = normalizeKioskPin(input.pin)
+  if (!input.tenantId || !pin) return { ok: false, error: 'PIN required' }
+  const pinLimit = await guardPublicPinRateLimit('equipment-kiosk', input.tenantId)
+  if (!pinLimit.ok) return { ok: false, error: pinLimit.error }
   return db.transaction(async (txRaw) => {
     const tx = txRaw as unknown as Database
     const settings = await loadSettings(tx, input.tenantId)
     if (!settings?.pin) return { ok: false, error: 'Kiosk is not enabled for this tenant' }
-    if (settings.pin !== input.pin) return { ok: false, error: 'Invalid PIN' }
+    if (!(await verifyKioskPin(settings.pin, pin))) {
+      const recorded = await recordPublicPinFailure(pinLimit.handle)
+      if (!recorded.ok) return { ok: false, error: recorded.error }
+      return { ok: false, error: 'Invalid PIN' }
+    }
+    await resetPublicPinRateLimit(pinLimit.handle)
     const results = await searchStationCore(tx, input.query)
     return { ok: true, results }
+  })
+}
+
+export async function unlockEquipmentKiosk(input: {
+  tenantId: string
+  pin: string
+}): Promise<{ ok: true; config: EquipmentKioskConfig } | { ok: false; error: string }> {
+  const pin = normalizeKioskPin(input.pin)
+  if (!input.tenantId || !pin) return { ok: false, error: 'PIN required' }
+  const pinLimit = await guardPublicPinRateLimit('equipment-kiosk', input.tenantId)
+  if (!pinLimit.ok) return { ok: false, error: pinLimit.error }
+  return db.transaction(async (txRaw) => {
+    const tx = txRaw as unknown as Database
+    const settings = await loadSettings(tx, input.tenantId)
+    if (!settings?.pin) return { ok: false, error: 'Kiosk is not enabled for this tenant' }
+    if (!(await verifyKioskPin(settings.pin, pin))) {
+      const recorded = await recordPublicPinFailure(pinLimit.handle)
+      if (!recorded.ok) return { ok: false, error: recorded.error }
+      return { ok: false, error: 'Invalid PIN' }
+    }
+    await resetPublicPinRateLimit(pinLimit.handle)
+
+    const fullSettings = await tx
+      .select({
+        scanMode: equipmentStationSettings.scanMode,
+        soundEnabled: equipmentStationSettings.soundEnabled,
+        requireConditionOnCheckin: equipmentStationSettings.requireConditionOnCheckin,
+        defaultCheckInOrgUnitId: equipmentStationSettings.defaultCheckInOrgUnitId,
+      })
+      .from(equipmentStationSettings)
+      .where(eq(equipmentStationSettings.tenantId, input.tenantId))
+      .limit(1)
+      .then((rows) => rows[0] ?? null)
+
+    const [homeRow] = fullSettings?.defaultCheckInOrgUnitId
+      ? await tx
+          .select({ name: orgUnits.name })
+          .from(orgUnits)
+          .where(eq(orgUnits.id, fullSettings.defaultCheckInOrgUnitId))
+          .limit(1)
+      : []
+
+    const [peopleRows, locationRows, availableRows] = await Promise.all([
+      tx
+        .select({
+          id: people.id,
+          firstName: people.firstName,
+          lastName: people.lastName,
+          employeeNo: people.employeeNo,
+          jobTitle: people.jobTitle,
+        })
+        .from(people)
+        .where(and(eq(people.status, 'active'), isNull(people.deletedAt)))
+        .orderBy(people.lastName, people.firstName),
+      tx
+        .select({
+          id: orgUnits.id,
+          name: orgUnits.name,
+          level: orgUnits.level,
+          isBase: orgUnits.isEquipmentBase,
+        })
+        .from(orgUnits)
+        .where(isNull(orgUnits.deletedAt))
+        .orderBy(desc(orgUnits.isEquipmentBase), orgUnits.name),
+      tx
+        .select({ c: count() })
+        .from(equipmentItems)
+        .where(
+          and(eq(equipmentItems.isAvailableForCheckout, true), isNull(equipmentItems.deletedAt)),
+        ),
+    ])
+
+    return {
+      ok: true,
+      config: {
+        scanMode: fullSettings?.scanMode ?? 'toggle',
+        soundEnabled: fullSettings?.soundEnabled ?? true,
+        requireConditionOnCheckin: fullSettings?.requireConditionOnCheckin ?? false,
+        homeLocationName: homeRow?.name ?? null,
+        people: peopleRows.map((p) => ({
+          id: p.id,
+          name: `${p.lastName}, ${p.firstName}`,
+          employeeNo: p.employeeNo,
+          jobTitle: p.jobTitle,
+        })),
+        locations: locationRows,
+        availableCount: Number(availableRows[0]?.c ?? 0),
+      },
+    }
   })
 }
 
 export async function performKioskScan(
   input: StationScanInput & { tenantId: string; pin: string; deviceLabel?: string | null },
 ): Promise<StationScanResult> {
-  if (!input.tenantId || !input.pin) return { ok: false, error: 'PIN required' }
+  const pin = normalizeKioskPin(input.pin)
+  if (!input.tenantId || !pin) return { ok: false, error: 'PIN required' }
+  const pinLimit = await guardPublicPinRateLimit('equipment-kiosk', input.tenantId)
+  if (!pinLimit.ok) return { ok: false, error: pinLimit.error }
   return db.transaction(async (txRaw) => {
     const tx = txRaw as unknown as Database
     const settings = await loadSettings(tx, input.tenantId)
     if (!settings?.pin) return { ok: false, error: 'Kiosk is not enabled for this tenant' }
-    if (settings.pin !== input.pin) return { ok: false, error: 'Invalid PIN' }
+    if (!(await verifyKioskPin(settings.pin, pin))) {
+      const recorded = await recordPublicPinFailure(pinLimit.handle)
+      if (!recorded.ok) return { ok: false, error: recorded.error }
+      return { ok: false, error: 'Invalid PIN' }
+    }
+    await resetPublicPinRateLimit(pinLimit.handle)
 
     const result = await stationScanCore(tx, {
       ...input,

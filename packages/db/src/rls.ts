@@ -141,8 +141,6 @@ export const TENANT_SCOPED_TABLES = [
   'notifications',
   'notification_preferences',
   'webpush_subscriptions',
-  'tenant_plugins',
-  'tenant_plugin_secrets',
   'audit_log',
   'api_keys',
   'inspection_banks',
@@ -185,7 +183,6 @@ export const TENANT_SCOPED_TABLES = [
   'notification_groups',
   'notification_group_members',
   'form_assignment_dispatches',
-  'plugin_runs',
   'document_book_items',
   'document_references',
   'document_types',
@@ -254,8 +251,6 @@ export const TENANT_SCOPED_TABLES = [
   // Corrective Actions — photos + multi-step complete wizard
   'ca_photos',
   'ca_complete_steps',
-  // Plugin event bus — tenant-scoped fan-out queue
-  'plugin_events',
   // Email delivery log. tenantId is NULLABLE for platform sends (magic-link,
   // billing etc.); the default tenant_isolation policy correctly hides NULL
   // rows from regular tenant context. The /admin/email-log viewer uses

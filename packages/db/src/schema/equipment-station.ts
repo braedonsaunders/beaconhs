@@ -28,8 +28,8 @@ export const equipmentStationSettings = pgTable(
     defaultCheckInOrgUnitId: uuid('default_check_in_org_unit_id').references(() => orgUnits.id, {
       onDelete: 'set null',
     }),
-    // PIN for the public mounted-tablet kiosk. Null disables the public kiosk
-    // (the in-app station is always available to permitted users).
+    // Hashed PIN for the public mounted-tablet kiosk. Null disables the public
+    // kiosk (the in-app station is always available to permitted users).
     stationPin: text('station_pin'),
     scanMode: equipmentScanMode('scan_mode').default('toggle').notNull(),
     // Require a holder (person) be set before an asset can be checked out.

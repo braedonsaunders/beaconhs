@@ -64,7 +64,7 @@ shared packages, database schema, auth, tenant scoping, workers, or UI primitive
 - `packages/events`: module event fan-out into notifications/jobs.
 - `packages/storage`: S3-compatible storage client for MinIO/R2.
 - `packages/ai`, `packages/audit`, `packages/emails`, `packages/etl`,
-  `packages/plugin-sdk`: supporting platform packages.
+  `packages/sync`, `packages/integrations`: supporting platform packages.
 - `docs/QUICKSTART.md`: local setup details.
 - `docs/IMPLEMENTATION_PLAN.md`: product history and implementation context;
   verify against current code before trusting old status notes.

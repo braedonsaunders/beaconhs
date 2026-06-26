@@ -3,9 +3,8 @@
 // by tenant slug in ?t=<slug> + the tenant's equipment-station PIN (verified
 // server-side on every action). Mirrors the people sign-in/out kiosk at /kiosk.
 
-import { and, count, desc, eq, isNull, sql } from 'drizzle-orm'
+import { sql } from 'drizzle-orm'
 import { db } from '@beaconhs/db'
-import { equipmentItems, equipmentStationSettings, orgUnits, people } from '@beaconhs/db/schema'
 import { EquipmentKioskClient } from './kiosk-client'
 
 export const dynamic = 'force-dynamic'
@@ -48,60 +47,7 @@ export default async function EquipmentKioskPage({
     )
     const tenant = (tenantRows as unknown as { id: string; name: string; slug: string }[])[0]
     if (!tenant) return null
-    await tx.execute(sql`SELECT set_config('app.tenant_id', ${tenant.id}, true)`)
-
-    const [settings] = await tx
-      .select()
-      .from(equipmentStationSettings)
-      .where(eq(equipmentStationSettings.tenantId, tenant.id))
-      .limit(1)
-
-    const homeName = settings?.defaultCheckInOrgUnitId
-      ? ((
-          await tx
-            .select({ name: orgUnits.name })
-            .from(orgUnits)
-            .where(eq(orgUnits.id, settings.defaultCheckInOrgUnitId))
-            .limit(1)
-        )[0]?.name ?? null)
-      : null
-
-    const peopleRows = await tx
-      .select({
-        id: people.id,
-        firstName: people.firstName,
-        lastName: people.lastName,
-        employeeNo: people.employeeNo,
-        jobTitle: people.jobTitle,
-      })
-      .from(people)
-      .where(and(eq(people.status, 'active'), isNull(people.deletedAt)))
-      .orderBy(people.lastName, people.firstName)
-
-    const locationRows = await tx
-      .select({
-        id: orgUnits.id,
-        name: orgUnits.name,
-        level: orgUnits.level,
-        isBase: orgUnits.isEquipmentBase,
-      })
-      .from(orgUnits)
-      .where(isNull(orgUnits.deletedAt))
-      .orderBy(desc(orgUnits.isEquipmentBase), orgUnits.name)
-
-    const [avail] = await tx
-      .select({ c: count() })
-      .from(equipmentItems)
-      .where(and(eq(equipmentItems.isAvailableForCheckout, true), isNull(equipmentItems.deletedAt)))
-
-    return {
-      tenant,
-      settings,
-      homeName,
-      peopleRows,
-      locationRows,
-      availableCount: Number(avail?.c ?? 0),
-    }
+    return { tenant }
   })
 
   if (!data) {
@@ -112,31 +58,5 @@ export default async function EquipmentKioskPage({
       </Notice>
     )
   }
-  if (!data.settings?.stationPin) {
-    return (
-      <Notice title="Kiosk disabled">
-        This tenant has not set an equipment-station PIN. An administrator can enable it under
-        Equipment → Station settings.
-      </Notice>
-    )
-  }
-
-  return (
-    <EquipmentKioskClient
-      tenantId={data.tenant.id}
-      tenantName={data.tenant.name}
-      scanMode={data.settings.scanMode}
-      soundEnabled={data.settings.soundEnabled}
-      requireConditionOnCheckin={data.settings.requireConditionOnCheckin}
-      homeLocationName={data.homeName}
-      people={data.peopleRows.map((p) => ({
-        id: p.id,
-        name: `${p.lastName}, ${p.firstName}`,
-        employeeNo: p.employeeNo,
-        jobTitle: p.jobTitle,
-      }))}
-      locations={data.locationRows}
-      availableCount={data.availableCount}
-    />
-  )
+  return <EquipmentKioskClient tenantId={data.tenant.id} tenantName={data.tenant.name} />
 }

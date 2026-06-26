@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from 'react'
 import { ArrowLeft, CheckCircle2, LogIn, LogOut, Search, X } from 'lucide-react'
 import { Select } from '@beaconhs/ui'
-import { recordKioskScan } from './actions'
+import { recordKioskScan, unlockKiosk, type KioskDirectory } from './actions'
 
 type Person = { id: string; firstName: string; lastName: string; jobTitle: string | null }
 type Site = { id: string; name: string }
@@ -15,20 +15,9 @@ type Stage =
   | { kind: 'sign'; pin: string; person: Person }
   | { kind: 'done'; pin: string; person: Person; scanKind: 'in' | 'out'; at: Date }
 
-export function KioskClient({
-  tenantId,
-  tenantName,
-  people,
-  sites,
-  crews,
-}: {
-  tenantId: string
-  tenantName: string
-  people: Person[]
-  sites: Site[]
-  crews: Crew[]
-}) {
+export function KioskClient({ tenantId, tenantName }: { tenantId: string; tenantName: string }) {
   const [stage, setStage] = useState<Stage>({ kind: 'pin' })
+  const [directory, setDirectory] = useState<KioskDirectory | null>(null)
   const [pinInput, setPinInput] = useState('')
   const [query, setQuery] = useState('')
   const [siteId, setSiteId] = useState<string>('')
@@ -37,6 +26,7 @@ export function KioskClient({
   const [pending, start] = useTransition()
 
   const filtered = useMemo(() => {
+    const people = directory?.people ?? []
     const q = query.trim().toLowerCase()
     if (!q) return people.slice(0, 50)
     return people
@@ -46,7 +36,7 @@ export function KioskClient({
           (p.jobTitle ?? '').toLowerCase().includes(q),
       )
       .slice(0, 50)
-  }, [query, people])
+  }, [query, directory])
 
   function submitPin(e: React.FormEvent) {
     e.preventDefault()
@@ -55,7 +45,17 @@ export function KioskClient({
       setError('Enter the kiosk PIN to continue')
       return
     }
-    setStage({ kind: 'pick', pin: pinInput.trim() })
+    const pin = pinInput.trim()
+    start(async () => {
+      const result = await unlockKiosk({ tenantId, pin })
+      if (!result.ok) {
+        setError(result.error)
+        setDirectory(null)
+        return
+      }
+      setDirectory(result.directory)
+      setStage({ kind: 'pick', pin })
+    })
   }
 
   function pickPerson(person: Person) {
@@ -82,6 +82,7 @@ export function KioskClient({
         setError(result.error)
         if (result.error === 'Invalid PIN' || result.error.includes('PIN')) {
           setStage({ kind: 'pin' })
+          setDirectory(null)
           setPinInput('')
         }
         return
@@ -219,7 +220,7 @@ export function KioskClient({
           ) : null}
 
           <div className="mt-4 grid grid-cols-1 gap-3">
-            {sites.length > 0 ? (
+            {(directory?.sites.length ?? 0) > 0 ? (
               <div>
                 <label className="text-xs font-medium tracking-wide text-slate-500 uppercase">
                   Site (optional)
@@ -230,7 +231,7 @@ export function KioskClient({
                   className="mt-1 w-full py-2 pl-3 text-sm text-slate-900"
                 >
                   <option value="">— No site —</option>
-                  {sites.map((s) => (
+                  {directory?.sites.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.name}
                     </option>
@@ -238,7 +239,7 @@ export function KioskClient({
                 </Select>
               </div>
             ) : null}
-            {crews.length > 0 ? (
+            {(directory?.crews.length ?? 0) > 0 ? (
               <div>
                 <label className="text-xs font-medium tracking-wide text-slate-500 uppercase">
                   Crew (optional)
@@ -249,7 +250,7 @@ export function KioskClient({
                   className="mt-1 w-full py-2 pl-3 text-sm text-slate-900"
                 >
                   <option value="">— No crew —</option>
-                  {crews.map((c) => (
+                  {directory?.crews.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
                     </option>

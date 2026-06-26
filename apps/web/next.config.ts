@@ -16,7 +16,6 @@ const nextConfig: NextConfig = {
     '@beaconhs/emails',
     '@beaconhs/integrations',
     '@beaconhs/jobs',
-    '@beaconhs/plugin-sdk',
     '@beaconhs/storage',
     '@beaconhs/sync',
     '@beaconhs/email-render',
