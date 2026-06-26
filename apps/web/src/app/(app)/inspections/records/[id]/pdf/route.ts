@@ -4,7 +4,10 @@
 // template for the inspections module when one is set, else the generic
 // record summary.
 
+import { eq } from 'drizzle-orm'
+import { inspectionRecords } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { canSeeRecord } from '@/lib/visibility'
 import { renderModulePdfResponse } from '@/lib/module-pdf'
 
 export const dynamic = 'force-dynamic'
@@ -17,6 +20,33 @@ export async function GET(
   const ctx = await requireRequestContext()
   if (!ctx.tenantId) {
     return Response.json({ error: 'No active tenant' }, { status: 400 })
+  }
+
+  // Per-user record visibility: a read.self/site user must not pull the PDF of a
+  // record they can't see by guessing its id. Mirrors the detail page guard.
+  const [rec] = await ctx.db((tx) =>
+    tx
+      .select({
+        inspectorTenantUserId: inspectionRecords.inspectorTenantUserId,
+        submittedByTenantUserId: inspectionRecords.submittedByTenantUserId,
+        siteOrgUnitId: inspectionRecords.siteOrgUnitId,
+      })
+      .from(inspectionRecords)
+      .where(eq(inspectionRecords.id, id))
+      .limit(1),
+  )
+  if (!rec) {
+    return Response.json({ error: 'Not found' }, { status: 404 })
+  }
+  const visible = await ctx.db((tx) =>
+    canSeeRecord(ctx, tx, {
+      prefix: 'inspections',
+      ownerIds: [rec.inspectorTenantUserId, rec.submittedByTenantUserId],
+      siteId: rec.siteOrgUnitId,
+    }),
+  )
+  if (!visible) {
+    return Response.json({ error: 'Not found' }, { status: 404 })
   }
 
   return renderModulePdfResponse(ctx, { moduleKey: 'inspections', recordId: id })

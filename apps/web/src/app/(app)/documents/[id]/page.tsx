@@ -41,7 +41,7 @@ import {
   user,
 } from '@beaconhs/db/schema'
 import { publicUrl } from '@beaconhs/storage'
-import { can } from '@beaconhs/tenant'
+import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { getTenantAiSettings } from '@/lib/ai-config'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
@@ -59,7 +59,14 @@ import { DocumentCompliancePanel, loadDocumentObligations } from './_compliance-
 
 export const dynamic = 'force-dynamic'
 
-const TABS = ['overview', 'versions', 'acknowledgments', 'reviews', 'compliance', 'activity'] as const
+const TABS = [
+  'overview',
+  'versions',
+  'acknowledgments',
+  'reviews',
+  'compliance',
+  'activity',
+] as const
 type Tab = (typeof TABS)[number]
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
@@ -71,6 +78,8 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
 async function publish(formData: FormData) {
   'use server'
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.manage')
   const id = String(formData.get('id') ?? '')
   if (!id) return
   // Snapshots the live draft into an immutable version (or publishes the latest
@@ -82,6 +91,7 @@ async function publish(formData: FormData) {
 async function unpublish(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.manage')
   const id = String(formData.get('id') ?? '')
   if (!id) return
   await ctx.db((tx) => tx.update(documents).set({ status: 'draft' }).where(eq(documents.id, id)))
@@ -103,6 +113,7 @@ async function recordReviewAction(input: {
 }): Promise<{ ok: boolean; error?: string }> {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.review')
   const { documentId, outcome, notes, nextReviewOn: nextReviewOnRaw } = input
   if (!documentId || !outcome) return { ok: false, error: 'Missing fields' }
   if (!ctx.membership?.id) {
@@ -162,6 +173,7 @@ async function recordReviewAction(input: {
 async function sendEmailAction(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.manage')
   const id = String(formData.get('id') ?? '')
   if (!id) return
   const subjectPrefix = String(formData.get('subjectPrefix') ?? '').trim() || undefined

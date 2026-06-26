@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { and, asc, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
 import { documents } from '@beaconhs/db/schema'
+import { assertCan } from '@beaconhs/tenant'
 import { requireExportContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { csvFilename, csvResponse } from '@/lib/csv'
@@ -21,6 +22,7 @@ export async function GET(req: NextRequest) {
   })
   const statusFilter = pickString(sp.status)
   const ctx = await requireExportContext()
+  assertCan(ctx, 'documents.read')
 
   const rows = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = []

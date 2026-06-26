@@ -9,6 +9,7 @@ import { and, desc, eq, isNotNull } from 'drizzle-orm'
 import HTMLtoDOCX from '@turbodocx/html-to-docx'
 import { documentDrafts, documentVersions, documents } from '@beaconhs/db/schema'
 import { sanitizeDocumentHtml } from '@beaconhs/forms-core'
+import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 
@@ -39,6 +40,7 @@ export async function GET(
 ): Promise<Response> {
   const { id } = await params
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.read')
   const useDraft = new URL(req.url).searchParams.get('draft') === '1'
 
   const data = await ctx.db(async (tx) => {

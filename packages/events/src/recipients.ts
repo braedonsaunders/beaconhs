@@ -14,14 +14,18 @@
 
 import { and, eq, inArray, isNull } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
+import { notificationGroupMembers, people, users } from '@beaconhs/db/schema'
 import {
-  notificationGroupMembers,
-  people,
-  users,
-} from '@beaconhs/db/schema'
-import { resolveAudienceMembers, type AudienceItem, type ResolvedMember } from '@beaconhs/compliance'
+  resolveAudienceMembers,
+  type AudienceItem,
+  type ResolvedMember,
+} from '@beaconhs/compliance'
 
-export type AudienceMemberInput = { kind: AudienceItem['kind']; entityKey: string; mode: 'include' | 'exclude' }
+export type AudienceMemberInput = {
+  kind: AudienceItem['kind']
+  entityKey: string
+  mode: 'include' | 'exclude'
+}
 
 /**
  * Resolve a raw member list (not necessarily saved yet) to the deduplicated set
@@ -149,7 +153,9 @@ export async function previewAudience(
     })
     .from(people)
     .leftJoin(users, eq(users.id, people.userId))
-    .where(and(eq(people.tenantId, tenantId), inArray(people.id, personIds), isNull(people.deletedAt)))
+    .where(
+      and(eq(people.tenantId, tenantId), inArray(people.id, personIds), isNull(people.deletedAt)),
+    )
   const withEmail = rows.filter((r) => r.personEmail || r.userEmail).length
   const sample = rows
     .slice(0, sampleLimit)

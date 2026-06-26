@@ -10,6 +10,7 @@ import { revalidatePath } from 'next/cache'
 import { eq } from 'drizzle-orm'
 import { formResponseCheckins, formResponses } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { canSeeRecord } from '@/lib/visibility'
 import { recordAudit } from '@/lib/audit'
 
 export type ActionResult = { ok: true } | { ok: false; error: string }
@@ -22,6 +23,9 @@ function safeTenantUserId(ctx: Ctx): string | null {
   return id
 }
 
+// Load the monitored session AND enforce per-user record visibility, so a user
+// can't drive (check in / end / cancel) another user's session by guessing its
+// id. Returns null when the response is missing OR not visible to the caller.
 async function loadSession(ctx: Ctx, id: string) {
   return ctx.db(async (tx) => {
     const [r] = await tx
@@ -29,11 +33,21 @@ async function loadSession(ctx: Ctx, id: string) {
         id: formResponses.id,
         monitorStatus: formResponses.monitorStatus,
         checkinIntervalMinutes: formResponses.checkinIntervalMinutes,
+        submittedBy: formResponses.submittedBy,
+        subjectPersonId: formResponses.subjectPersonId,
+        siteOrgUnitId: formResponses.siteOrgUnitId,
       })
       .from(formResponses)
       .where(eq(formResponses.id, id))
       .limit(1)
-    return r ?? null
+    if (!r) return null
+    const visible = await canSeeRecord(ctx, tx, {
+      prefix: 'forms.response',
+      ownerIds: [r.submittedBy],
+      personId: r.subjectPersonId,
+      siteId: r.siteOrgUnitId,
+    })
+    return visible ? r : null
   })
 }
 

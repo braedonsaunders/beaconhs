@@ -9,6 +9,7 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { eq } from 'drizzle-orm'
 import { inspectionRecords, inspectionTypes } from '@beaconhs/db/schema'
+import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { runModuleFlows } from '@/lib/flows/run-module-flows'
@@ -21,6 +22,7 @@ import { materialiseCriteriaForRecord, nextInspectionReference } from '../_lib'
  */
 export async function startInspection(formData: FormData) {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'inspections.create')
   const typeId = String(formData.get('typeId') ?? '').trim()
   if (!typeId) throw new Error('Inspection type is required')
 

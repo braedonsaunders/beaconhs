@@ -5,6 +5,7 @@
 // people, channels, reminder cadence, and an escalation ladder. State is held
 // locally and saved as one batch; a sticky bar tracks unsaved changes.
 
+import Link from 'next/link'
 import { useMemo, useState, useTransition } from 'react'
 import { Plus, X } from 'lucide-react'
 import { Button, Label, SearchSelect, Select, cn } from '@beaconhs/ui'
@@ -32,6 +33,7 @@ type CatConfig = {
   enabled: boolean
   roleKeys: string[]
   userIds: string[]
+  groupIds: string[]
   channels: string[]
   escalation: EscalationStep[]
 }
@@ -117,29 +119,43 @@ function RoleChips({
 function ChannelChips({
   value,
   onChange,
+  configured,
 }: {
   value: string[]
   onChange: (next: string[]) => void
+  configured: Record<string, boolean>
 }) {
   return (
     <div className="flex flex-wrap gap-1.5">
       {CHANNELS.map((c) => {
         const on = c.locked || value.includes(c.key)
+        // email/sms can be selected, but warn if that transport isn't set up.
+        const unconfigured = (c.key === 'email' || c.key === 'sms') && configured[c.key] === false
         return (
           <button
             key={c.key}
             type="button"
             disabled={c.locked}
             aria-pressed={on}
+            title={
+              unconfigured
+                ? `${c.label} isn't set up yet — configure it in the ${c.label} tab`
+                : undefined
+            }
             onClick={() =>
               c.locked
                 ? undefined
                 : onChange(on ? value.filter((k) => k !== c.key) : [...value, c.key])
             }
-            className={cn(chipBase, on ? chipOn : chipOff)}
+            className={cn(
+              chipBase,
+              on ? chipOn : chipOff,
+              unconfigured &&
+                'border-amber-400 text-amber-700 dark:border-amber-600 dark:text-amber-300',
+            )}
           >
             {c.label}
-            {c.locked ? ' · always' : ''}
+            {c.locked ? ' · always' : unconfigured ? ' · not set up' : ''}
           </button>
         )
       })}
@@ -147,28 +163,60 @@ function ChannelChips({
   )
 }
 
+function ChannelStatus({ label, ok, href }: { label: string; ok: boolean; href?: string }) {
+  const content = (
+    <span className="inline-flex items-center gap-1.5">
+      <span className={cn('h-1.5 w-1.5 rounded-full', ok ? 'bg-emerald-500' : 'bg-amber-500')} />
+      <span
+        className={ok ? 'text-slate-600 dark:text-slate-300' : 'text-amber-700 dark:text-amber-400'}
+      >
+        {label}
+        {ok ? '' : ' — not set up'}
+      </span>
+    </span>
+  )
+  return !ok && href ? (
+    <Link href={href as never} className="hover:underline">
+      {content}
+    </Link>
+  ) : (
+    content
+  )
+}
+
 function PeoplePicker({
   options,
   value,
   onChange,
+  placeholder = 'Add a person…',
+  searchPlaceholder = 'Search people…',
+  sheetTitle = 'Select people',
+  emptyHint,
 }: {
   options: MemberOpt[]
   value: string[]
   onChange: (next: string[]) => void
+  placeholder?: string
+  searchPlaceholder?: string
+  sheetTitle?: string
+  emptyHint?: string
 }) {
   const available = useMemo(() => options.filter((o) => !value.includes(o.value)), [options, value])
   const chosen = value
     .map((v) => options.find((o) => o.value === v))
     .filter((o): o is MemberOpt => Boolean(o))
+  if (options.length === 0 && emptyHint) {
+    return <p className="text-xs text-slate-400 dark:text-slate-500">{emptyHint}</p>
+  }
   return (
     <div className="space-y-2">
       <SearchSelect
         value=""
         onChange={(v) => v && onChange([...value, v])}
         options={available}
-        placeholder="Add a person…"
-        searchPlaceholder="Search people…"
-        sheetTitle="Select people"
+        placeholder={placeholder}
+        searchPlaceholder={searchPlaceholder}
+        sheetTitle={sheetTitle}
       />
       {chosen.length > 0 ? (
         <div className="flex flex-wrap gap-1.5">
@@ -261,15 +309,27 @@ export function NotificationSettingsForm({
   categories,
   roles,
   members,
+  groups,
   initial,
   policy,
+  emailConfigured,
+  smsConfigured,
 }: {
   categories: NotificationCategory[]
   roles: RoleOpt[]
   members: MemberOpt[]
+  groups: MemberOpt[]
   initial: InitialMap
   policy: PolicyInput
+  emailConfigured: boolean
+  smsConfigured: boolean
 }) {
+  const channelConfigured: Record<string, boolean> = {
+    in_app: true,
+    email: emailConfigured,
+    push: true,
+    sms: smsConfigured,
+  }
   const seed = useMemo<InitialMap>(() => {
     const out: InitialMap = {}
     for (const c of categories) {
@@ -277,6 +337,7 @@ export function NotificationSettingsForm({
         enabled: true,
         roleKeys: c.defaultRoles,
         userIds: [],
+        groupIds: [],
         channels: ['in_app', 'email'],
         escalation: [],
       }
@@ -336,6 +397,15 @@ export function NotificationSettingsForm({
 
   return (
     <div className="space-y-3">
+      {/* Channel availability — what actually delivers right now. */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-900/40">
+        <span className="font-medium text-slate-600 dark:text-slate-300">Channels</span>
+        <ChannelStatus label="In-app" ok />
+        <ChannelStatus label="Email" ok={emailConfigured} href="/admin/email" />
+        <ChannelStatus label="SMS" ok={smsConfigured} href="/admin/sms" />
+        <ChannelStatus label="Push" ok />
+      </div>
+
       {/* Tenant-wide routing policy */}
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-800">
@@ -519,7 +589,8 @@ export function NotificationSettingsForm({
       {/* Per-category rules */}
       {categories.map((cat) => {
         const cfg = config[cat.key]!
-        const noRecipients = cfg.roleKeys.length === 0 && cfg.userIds.length === 0
+        const noRecipients =
+          cfg.roleKeys.length === 0 && cfg.userIds.length === 0 && cfg.groupIds.length === 0
         return (
           <div
             key={cat.key}
@@ -562,10 +633,24 @@ export function NotificationSettingsForm({
                 </div>
 
                 <div className="space-y-1.5">
+                  <Label>Notification groups</Label>
+                  <PeoplePicker
+                    options={groups}
+                    value={cfg.groupIds}
+                    onChange={(v) => patch(cat.key, { groupIds: v })}
+                    placeholder="Add a group…"
+                    searchPlaceholder="Search groups…"
+                    sheetTitle="Select notification groups"
+                    emptyHint="No notification groups yet — create one from the Notification groups page."
+                  />
+                </div>
+
+                <div className="space-y-1.5">
                   <Label>Channels</Label>
                   <ChannelChips
                     value={cfg.channels}
                     onChange={(v) => patch(cat.key, { channels: v })}
+                    configured={channelConfigured}
                   />
                 </div>
 

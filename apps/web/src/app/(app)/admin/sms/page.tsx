@@ -5,6 +5,7 @@ import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { getSmsPolicyMode, getTenantSmsSettings } from '@/lib/sms-config'
 import { PageContainer } from '@/components/page-layout'
+import { NotificationsSubNav } from '@/components/notifications-sub-nav'
 import { clearTenantSms, saveTenantSms } from '@/lib/sms-settings-actions'
 import { SmsTestButton } from '@/components/sms-settings/test-button'
 import { SmsSettingsForm, type SmsProviderSpecLite } from '@/components/sms-settings/settings-form'
@@ -38,6 +39,7 @@ export default async function SmsSettingsPage() {
           title="SMS"
           subtitle="This tenant's SMS provider, sender and encrypted credentials. The platform-wide default and policy are set by your platform administrator."
         />
+        <NotificationsSubNav active="sms" showBack={false} />
 
         <Card>
           <CardContent className="space-y-6 pt-6">

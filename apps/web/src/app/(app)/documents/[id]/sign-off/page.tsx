@@ -18,6 +18,7 @@ import {
   people,
 } from '@beaconhs/db/schema'
 import { publicUrl } from '@beaconhs/storage'
+import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
 import { pickString } from '@/lib/list-params'
@@ -39,6 +40,11 @@ export default async function SignOffPage({
   const backHref = `/documents/${id}?tab=acknowledgments`
 
   const ctx = await requireRequestContext()
+  // Facilitator-only: the sign-off sheet loads the full active-people directory
+  // and writes acks on behalf of others. Gate the render on documents.manage so
+  // a read-only user can't reach the kiosk session or enumerate people.
+  if (!can(ctx, 'documents.manage')) notFound()
+
   const data = await ctx.db(async (tx) => {
     const [doc] = await tx
       .select({ id: documents.id, title: documents.title, key: documents.key })

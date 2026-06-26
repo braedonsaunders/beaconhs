@@ -146,7 +146,9 @@ export function AcknowledgmentsPanel({
       ) : (
         <Alert variant="warning">
           <AlertTitle>Account not linked to a person</AlertTitle>
-          <AlertDescription>Acknowledgments require a person record in the directory.</AlertDescription>
+          <AlertDescription>
+            Acknowledgments require a person record in the directory.
+          </AlertDescription>
         </Alert>
       )}
 
@@ -256,7 +258,7 @@ export function AcknowledgmentsPanel({
                 type="button"
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={current <= 1}
-                className="rounded-md border border-slate-200 p-1 disabled:opacity-40 enabled:hover:bg-slate-100 dark:border-slate-700 dark:enabled:hover:bg-slate-800"
+                className="rounded-md border border-slate-200 p-1 enabled:hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:enabled:hover:bg-slate-800"
                 aria-label="Previous page"
               >
                 <ChevronLeft size={14} />
@@ -265,7 +267,7 @@ export function AcknowledgmentsPanel({
                 type="button"
                 onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
                 disabled={current >= pageCount}
-                className="rounded-md border border-slate-200 p-1 disabled:opacity-40 enabled:hover:bg-slate-100 dark:border-slate-700 dark:enabled:hover:bg-slate-800"
+                className="rounded-md border border-slate-200 p-1 enabled:hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:enabled:hover:bg-slate-800"
                 aria-label="Next page"
               >
                 <ChevronRight size={14} />

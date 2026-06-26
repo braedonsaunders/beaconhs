@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   ChevronRight,
   Database,
+  FileImage,
   FileText,
   ListChecks,
   Loader2,
@@ -32,6 +33,7 @@ const META: Record<string, { label: string; icon: LucideIcon }> = {
   find_documents: { label: 'Searched documents', icon: Search },
   search_document: { label: 'Searched within document', icon: Search },
   read_document: { label: 'Read document', icon: FileText },
+  view_document_pages: { label: 'Viewed document pages', icon: FileImage },
   find_people: { label: 'Looked up people', icon: Users },
   find_training_records: { label: 'Searched training records', icon: Search },
   list_my_open_items: { label: 'Checked your open items', icon: ListChecks },
@@ -49,10 +51,25 @@ function summarize(output: unknown): string | null {
   const o = output as Record<string, unknown>
   if (o.ok === false) return typeof o.error === 'string' ? o.error.replace(/_/g, ' ') : 'failed'
   const data = (o.data ?? o) as Record<string, unknown>
+  if (typeof data.renderedPages === 'number')
+    return `${data.renderedPages} page${data.renderedPages === 1 ? '' : 's'}`
   if (typeof data.total === 'number') return `${data.total} match${data.total === 1 ? '' : 'es'}`
   if (typeof data.returned === 'number')
     return `${data.returned} result${data.returned === 1 ? '' : 's'}`
   return null
+}
+
+// The vision tool returns base64 page images on data.images so the model can SEE
+// them. Replace that payload with a short marker before the card prints the JSON
+// result, so the expandable view stays readable (the human reads the actual
+// pages via the document reader). No-op for every other tool.
+function redactImages(output: unknown): unknown {
+  if (!output || typeof output !== 'object') return output
+  const data = (output as { data?: unknown }).data
+  const images = data && typeof data === 'object' ? (data as { images?: unknown }).images : null
+  if (!Array.isArray(images) || images.length === 0) return output
+  const o = output as { data?: Record<string, unknown> }
+  return { ...o, data: { ...o.data, images: `[${images.length} page image(s)]` } }
 }
 
 export function ToolUseCard({
@@ -114,7 +131,7 @@ export function ToolUseCard({
           {input !== undefined && input !== null && Object.keys(input).length > 0 ? (
             <Detail label="Request" value={input} />
           ) : null}
-          {output !== undefined ? <Detail label="Result" value={output} /> : null}
+          {output !== undefined ? <Detail label="Result" value={redactImages(output)} /> : null}
         </div>
       ) : null}
     </div>

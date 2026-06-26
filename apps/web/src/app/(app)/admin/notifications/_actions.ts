@@ -14,6 +14,7 @@ export type CategorySettingInput = {
   enabled: boolean
   roleKeys: string[]
   userIds: string[]
+  groupIds: string[]
   channels: string[]
   escalation: EscalationStep[]
 }
@@ -53,6 +54,7 @@ export async function saveNotificationSettings(items: CategorySettingInput[]) {
     for (const item of items) {
       const roleKeys = [...new Set(item.roleKeys.filter(Boolean))]
       const userIds = [...new Set(item.userIds.filter(Boolean))]
+      const groupIds = [...new Set((item.groupIds ?? []).filter(Boolean))]
       const channels = item.channels.filter((c) => VALID_CHANNELS.includes(c))
       const escalation = cleanEscalation(item.escalation)
       await tx
@@ -63,6 +65,7 @@ export async function saveNotificationSettings(items: CategorySettingInput[]) {
           enabled: item.enabled,
           roleKeys,
           userIds,
+          groupIds,
           channels,
           escalation,
         })
@@ -72,6 +75,7 @@ export async function saveNotificationSettings(items: CategorySettingInput[]) {
             enabled: item.enabled,
             roleKeys,
             userIds,
+            groupIds,
             channels,
             escalation,
             updatedAt: new Date(),

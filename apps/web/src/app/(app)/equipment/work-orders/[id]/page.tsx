@@ -5,6 +5,7 @@ import { asc, eq } from 'drizzle-orm'
 import { FileText, Mail } from 'lucide-react'
 import { Badge, Button, DetailHeader, Input, Label, Select, Textarea } from '@beaconhs/ui'
 import { equipmentItems, equipmentWorkOrders, people, tenantUsers, user } from '@beaconhs/db/schema'
+import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { runModuleFlows } from '@/lib/flows/run-module-flows'
@@ -56,6 +57,7 @@ function priorityBadgeVariant(p: string): 'destructive' | 'warning' | 'secondary
 async function updateOverview(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.workorder.close')
   const id = String(formData.get('id') ?? '')
   const summary = String(formData.get('summary') ?? '').trim()
   const description = String(formData.get('description') ?? '').trim() || null
@@ -98,6 +100,7 @@ async function updateOverview(formData: FormData) {
 async function updateActionTaken(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.workorder.close')
   const id = String(formData.get('id') ?? '')
   const actionTaken = String(formData.get('actionTaken') ?? '').trim() || null
   const costRaw = String(formData.get('cost') ?? '').trim()
@@ -122,6 +125,7 @@ async function updateActionTaken(formData: FormData) {
 async function updateStatus(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.workorder.close')
   const id = String(formData.get('id') ?? '')
   const status = String(formData.get('status') ?? '') as (typeof STATUSES)[number]
   if (!id || !STATUSES.includes(status)) return
@@ -159,6 +163,7 @@ async function updateStatus(formData: FormData) {
 async function markComplete(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.workorder.close')
   const id = String(formData.get('id') ?? '')
   if (!id) return
   const itemId = await ctx.db(async (tx) => {
@@ -191,6 +196,7 @@ async function markComplete(formData: FormData) {
 async function sendEmailAction(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.read.all')
   const id = String(formData.get('id') ?? '')
   if (!id) return
   const subjectPrefix = String(formData.get('subjectPrefix') ?? '').trim() || undefined

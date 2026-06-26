@@ -75,6 +75,7 @@ import { IncidentHeaderActions } from './_header-actions'
 import { pickString } from '@/lib/list-params'
 import { publicUrl } from '@beaconhs/storage'
 import { requireRequestContext } from '@/lib/auth'
+import { assertCan, can } from '@beaconhs/tenant'
 import { canSeeRecord } from '@/lib/visibility'
 import { canManageModule } from '@/lib/module-admin/guard'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
@@ -123,6 +124,33 @@ const TYPES = [
 
 const SEVERITIES = ['first_aid_only', 'medical_aid', 'lost_time', 'fatality', 'no_injury'] as const
 
+// Re-scope guard for the per-incident mutations: the caller already holds the
+// relevant write permission, but a self/site-tier user must not be able to
+// drive an incident they cannot see by guessing its id. Mirrors the detail
+// page's canSeeRecord check (prefix 'incidents', owner = reporter, site).
+async function assertCanSeeIncident(
+  ctx: Awaited<ReturnType<typeof requireRequestContext>>,
+  incidentId: string,
+): Promise<void> {
+  const visible = await ctx.db(async (tx) => {
+    const [row] = await tx
+      .select({
+        reportedByTenantUserId: incidents.reportedByTenantUserId,
+        siteOrgUnitId: incidents.siteOrgUnitId,
+      })
+      .from(incidents)
+      .where(eq(incidents.id, incidentId))
+      .limit(1)
+    if (!row) return false
+    return canSeeRecord(ctx, tx, {
+      prefix: 'incidents',
+      ownerIds: [row.reportedByTenantUserId],
+      siteId: row.siteOrgUnitId,
+    })
+  })
+  if (!visible) throw new Error('Incident not found')
+}
+
 // ---- Status & lock ---------------------------------------------------------
 
 async function updateStatus(formData: FormData) {
@@ -132,6 +160,8 @@ async function updateStatus(formData: FormData) {
   const status = String(formData.get('status') ?? '')
   if (!STATUSES.includes(status as (typeof STATUSES)[number])) return
   const closing = status === 'closed'
+  assertCan(ctx, closing ? 'incidents.close' : 'incidents.update')
+  await assertCanSeeIncident(ctx, id)
   const prior = await ctx.db(async (tx) => {
     const [row] = await tx
       .select({
@@ -190,8 +220,10 @@ async function updateStatus(formData: FormData) {
 async function toggleLock(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'incidents.update')
   const id = String(formData.get('id') ?? '')
   const lock = formData.get('lock') === 'true'
+  await assertCanSeeIncident(ctx, id)
   await ctx.db((tx) => tx.update(incidents).set({ locked: lock }).where(eq(incidents.id, id)))
   await recordAudit(ctx, {
     entityType: 'incident',
@@ -213,6 +245,7 @@ async function toggleLock(formData: FormData) {
 async function updateTextField(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'incidents.update')
   const id = String(formData.get('id') ?? '')
   const field = String(formData.get('field') ?? '')
   const raw = formData.get('value')
@@ -294,14 +327,25 @@ async function updateTextField(formData: FormData) {
     TEXT.has(field)
   if (!allowed) throw new Error('Field not allowed')
 
-  // Locked incidents are read-only — mirror the legacy edit guard.
+  // Locked incidents are read-only — mirror the legacy edit guard. Also re-scope
+  // so a self/site-tier user can't edit an incident they cannot see.
   const before = await ctx.db(async (tx) => {
     const [row] = await tx
-      .select({ locked: incidents.locked })
+      .select({
+        locked: incidents.locked,
+        reportedByTenantUserId: incidents.reportedByTenantUserId,
+        siteOrgUnitId: incidents.siteOrgUnitId,
+      })
       .from(incidents)
       .where(eq(incidents.id, id))
       .limit(1)
-    return row ?? null
+    if (!row) return null
+    const visible = await canSeeRecord(ctx, tx, {
+      prefix: 'incidents',
+      ownerIds: [row.reportedByTenantUserId],
+      siteId: row.siteOrgUnitId,
+    })
+    return visible ? row : null
   })
   if (!before) throw new Error('Incident not found')
   if (before.locked) throw new Error('Incident is locked')
@@ -369,7 +413,9 @@ async function updateTextField(formData: FormData) {
 async function attachPhotos(incidentId: string, attachmentIds: string[]) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'incidents.update')
   if (attachmentIds.length === 0) return
+  await assertCanSeeIncident(ctx, incidentId)
   await ctx.db((tx) =>
     tx.insert(incidentAttachments).values(
       attachmentIds.map((attachmentId) => ({
@@ -391,8 +437,16 @@ async function attachPhotos(incidentId: string, attachmentIds: string[]) {
 async function sendEmailAction(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  if (
+    !can(ctx, 'incidents.read.all') &&
+    !can(ctx, 'incidents.read.site') &&
+    !can(ctx, 'incidents.read.self')
+  ) {
+    throw new Error('Not authorized')
+  }
   const id = String(formData.get('id') ?? '')
   if (!id) return
+  await assertCanSeeIncident(ctx, id)
   const subjectPrefix = String(formData.get('subjectPrefix') ?? '').trim() || undefined
   const messageOverride = String(formData.get('message') ?? '').trim() || undefined
   const extraRaw = String(formData.get('extraRecipients') ?? '').trim()
@@ -409,12 +463,21 @@ async function sendEmailAction(formData: FormData) {
 async function copyIncident(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'incidents.create')
   const sourceId = String(formData.get('id') ?? '')
   if (!sourceId) return
   const titleOverride = String(formData.get('title') ?? '').trim()
   const src = await ctx.db(async (tx) => {
     const [row] = await tx.select().from(incidents).where(eq(incidents.id, sourceId)).limit(1)
-    return row ?? null
+    if (!row) return null
+    // Re-scope the source record: a self/site-tier user must be able to see the
+    // incident they are cloning from.
+    const visible = await canSeeRecord(ctx, tx, {
+      prefix: 'incidents',
+      ownerIds: [row.reportedByTenantUserId],
+      siteId: row.siteOrgUnitId,
+    })
+    return visible ? row : null
   })
   if (!src) return
 
@@ -489,9 +552,11 @@ async function deleteIncident(formData: FormData) {
 async function saveIncidentPerson(input: PersonInput): Promise<{ ok: boolean; error?: string }> {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'incidents.update')
   if (!input.incidentId) return { ok: false, error: 'Missing incident.' }
   if (!input.personId && !input.personNameText)
     return { ok: false, error: 'Pick a person or type a name.' }
+  await assertCanSeeIncident(ctx, input.incidentId)
   if (input.id) {
     await ctx.db((tx) =>
       tx
@@ -533,9 +598,11 @@ async function saveIncidentPerson(input: PersonInput): Promise<{ ok: boolean; er
 async function deleteIncidentPerson(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'incidents.update')
   const id = String(formData.get('id') ?? '')
   const incidentId = String(formData.get('incidentId') ?? '')
   if (!id || !incidentId) return
+  await assertCanSeeIncident(ctx, incidentId)
   await ctx.db((tx) => tx.delete(incidentPeople).where(eq(incidentPeople.id, id)))
   await recordAudit(ctx, {
     entityType: 'incident',
@@ -551,9 +618,11 @@ async function deleteIncidentPerson(formData: FormData) {
 async function saveIncidentInjury(input: InjuryInput): Promise<{ ok: boolean; error?: string }> {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'incidents.update')
   if (!input.incidentId) return { ok: false, error: 'Missing incident.' }
   if (!input.personId && !input.personName)
     return { ok: false, error: 'Pick the injured person or type a name.' }
+  await assertCanSeeIncident(ctx, input.incidentId)
   const values = {
     personId: input.personId,
     personName: input.personName,
@@ -596,9 +665,11 @@ async function saveIncidentInjury(input: InjuryInput): Promise<{ ok: boolean; er
 async function deleteIncidentInjury(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'incidents.update')
   const id = String(formData.get('id') ?? '')
   const incidentId = String(formData.get('incidentId') ?? '')
   if (!id || !incidentId) return
+  await assertCanSeeIncident(ctx, incidentId)
   await ctx.db((tx) => tx.delete(incidentInjuries).where(eq(incidentInjuries.id, id)))
   await recordAudit(ctx, {
     entityType: 'incident',
@@ -625,6 +696,8 @@ async function addLostTimeEvent(formData: FormData) {
   const notes = String(formData.get('notes') ?? '').trim() || null
   if (!incidentId || !validFrom) return
   if (!['off_work', 'restricted_duty', 'full_duty'].includes(status)) return
+  assertCan(ctx, 'incidents.update')
+  await assertCanSeeIncident(ctx, incidentId)
 
   const [row] = await ctx.db((tx) =>
     tx
@@ -656,9 +729,11 @@ async function addLostTimeEvent(formData: FormData) {
 async function deleteLostTimeEvent(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'incidents.update')
   const id = String(formData.get('id') ?? '')
   const incidentId = String(formData.get('incidentId') ?? '')
   if (!id || !incidentId) return
+  await assertCanSeeIncident(ctx, incidentId)
   const before = await ctx.db(async (tx) => {
     const [row] = await tx
       .select()
@@ -688,11 +763,13 @@ async function saveEventAction(input: {
 }): Promise<{ ok: boolean; error?: string }> {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'incidents.investigate')
   const desc = input.description.trim()
   if (!input.incidentId || !desc) return { ok: false, error: 'Description is required.' }
   if (!input.occurredAt) return { ok: false, error: 'Timestamp is required.' }
   const occurred = new Date(input.occurredAt)
   if (Number.isNaN(occurred.getTime())) return { ok: false, error: 'Invalid timestamp.' }
+  await assertCanSeeIncident(ctx, input.incidentId)
 
   if (input.id) {
     const before = await ctx.db(async (tx) => {
@@ -747,9 +824,11 @@ async function saveEventAction(input: {
 async function deleteEvent(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'incidents.investigate')
   const id = String(formData.get('id') ?? '')
   const incidentId = String(formData.get('incidentId') ?? '')
   if (!id || !incidentId) return
+  await assertCanSeeIncident(ctx, incidentId)
   const before = await ctx.db(async (tx) => {
     const [row] = await tx.select().from(incidentEvents).where(eq(incidentEvents.id, id)).limit(1)
     return row ?? null
@@ -776,9 +855,11 @@ async function saveFactorAction(input: {
 }): Promise<{ ok: boolean; error?: string }> {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'incidents.investigate')
   const desc = input.description.trim()
   if (!input.incidentId || !desc) return { ok: false, error: 'Description is required.' }
   if (!FACTOR_CATEGORIES.includes(input.category)) return { ok: false, error: 'Invalid category.' }
+  await assertCanSeeIncident(ctx, input.incidentId)
 
   if (input.id) {
     const before = await ctx.db(async (tx) => {
@@ -832,9 +913,11 @@ async function saveFactorAction(input: {
 async function deleteFactor(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'incidents.investigate')
   const id = String(formData.get('id') ?? '')
   const incidentId = String(formData.get('incidentId') ?? '')
   if (!id || !incidentId) return
+  await assertCanSeeIncident(ctx, incidentId)
   const before = await ctx.db(async (tx) => {
     const [row] = await tx
       .select()
@@ -867,10 +950,12 @@ async function saveWhyAction(input: {
 }): Promise<{ ok: boolean; error?: string }> {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'incidents.investigate')
   const text = input.whyText.trim()
   if (!input.incidentId || !text) return { ok: false, error: 'Why text is required.' }
   if (!Number.isInteger(input.ordinal) || input.ordinal < 1 || input.ordinal > 5)
     return { ok: false, error: 'Ordinal must be between 1 and 5.' }
+  await assertCanSeeIncident(ctx, input.incidentId)
 
   if (input.id) {
     const before = await ctx.db(async (tx) => {
@@ -924,9 +1009,11 @@ async function saveWhyAction(input: {
 async function deleteWhy(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'incidents.investigate')
   const id = String(formData.get('id') ?? '')
   const incidentId = String(formData.get('incidentId') ?? '')
   if (!id || !incidentId) return
+  await assertCanSeeIncident(ctx, incidentId)
   const before = await ctx.db(async (tx) => {
     const [row] = await tx
       .select()
@@ -959,9 +1046,11 @@ async function savePrevStepAction(input: {
 }): Promise<{ ok: boolean; error?: string }> {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'incidents.investigate')
   const desc = input.description.trim()
   if (!input.incidentId || !desc) return { ok: false, error: 'Description is required.' }
   if (!PREV_STEP_STATUSES.includes(input.status)) return { ok: false, error: 'Invalid status.' }
+  await assertCanSeeIncident(ctx, input.incidentId)
 
   if (input.id) {
     const before = await ctx.db(async (tx) => {
@@ -1037,9 +1126,11 @@ async function savePrevStepAction(input: {
 async function deletePrevStep(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'incidents.investigate')
   const id = String(formData.get('id') ?? '')
   const incidentId = String(formData.get('incidentId') ?? '')
   if (!id || !incidentId) return
+  await assertCanSeeIncident(ctx, incidentId)
   const before = await ctx.db(async (tx) => {
     const [row] = await tx
       .select()

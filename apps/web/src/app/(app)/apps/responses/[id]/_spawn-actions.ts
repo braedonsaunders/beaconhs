@@ -14,6 +14,7 @@ import { count, eq, sql } from 'drizzle-orm'
 import { correctiveActions, formResponses, incidents } from '@beaconhs/db/schema'
 import { emitCorrectiveActionAssigned, emitIncidentReported } from '@beaconhs/events'
 import { requireRequestContext } from '@/lib/auth'
+import { canSeeRecord } from '@/lib/visibility'
 import { recordAudit } from '@/lib/audit'
 import { runModuleFlows } from '@/lib/flows/run-module-flows'
 
@@ -34,6 +35,18 @@ async function loadResponseForSpawn(
     return r ?? null
   })
   if (!row) return { ok: false, error: 'Form response not found' }
+  // Per-user record visibility re-check: incident/CA creation is intentionally
+  // broad (no dedicated permission to cite), but the caller must at least be
+  // able to SEE the source response before spawning from it by id.
+  const visible = await ctx.db((tx) =>
+    canSeeRecord(ctx, tx, {
+      prefix: 'forms.response',
+      ownerIds: [row.submittedBy],
+      personId: row.subjectPersonId,
+      siteId: row.siteOrgUnitId,
+    }),
+  )
+  if (!visible) return { ok: false, error: 'Form response not found' }
   return { ok: true, response: row }
 }
 

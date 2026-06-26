@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { asc, inArray } from 'drizzle-orm'
 import QRCode from 'qrcode'
 import { equipmentItems } from '@beaconhs/db/schema'
+import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 
@@ -43,6 +44,9 @@ export default async function BulkQrPrintPage({
   }
 
   const ctx = await requireRequestContext()
+  // Printable export of equipment data (asset tags, names, scan URLs) that also
+  // stamps a traceable bulk-QR token — gate on the equipment read tier.
+  assertCan(ctx, 'equipment.read.site')
   const bulkToken = randomBytes(8).toString('base64url')
 
   const items = await ctx.db(async (tx) => {

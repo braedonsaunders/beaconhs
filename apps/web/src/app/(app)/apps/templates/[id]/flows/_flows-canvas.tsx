@@ -72,8 +72,14 @@ export type RecipientOptions = {
   people: { id: string; name: string }[]
   roles: { key: string; name: string }[]
   departments: { id: string; name: string }[]
+  groups: { id: string; name: string }[]
 }
-const EMPTY_RECIPIENT_OPTIONS: RecipientOptions = { people: [], roles: [], departments: [] }
+const EMPTY_RECIPIENT_OPTIONS: RecipientOptions = {
+  people: [],
+  roles: [],
+  departments: [],
+  groups: [],
+}
 
 const RECIPIENT_LABEL: Record<EmailTarget['type'], string> = {
   submitter: 'The submitter',
@@ -81,6 +87,7 @@ const RECIPIENT_LABEL: Record<EmailTarget['type'], string> = {
   person: 'A specific person',
   role: 'Everyone in a role',
   department_manager: "A department's managers",
+  group: 'A notification group',
   literal: 'Specific email address(es)',
   field: 'A record field',
 }
@@ -95,6 +102,8 @@ function defaultTarget(type: EmailTarget['type'], firstField: string): EmailTarg
       return { type: 'person', personId: '' }
     case 'department_manager':
       return { type: 'department_manager', departmentId: '' }
+    case 'group':
+      return { type: 'group', groupId: '' }
     case 'field':
       return { type: 'field', field: firstField }
     case 'submitter_manager':
@@ -123,6 +132,7 @@ function RecipientsEditor({
   const update = (i: number, t: EmailTarget) => onChange(rows.map((x, j) => (j === i ? t : x)))
   const peopleOpts = options.people.map((p) => ({ value: p.id, label: p.name }))
   const deptOpts = options.departments.map((d) => ({ value: d.id, label: d.name }))
+  const groupOpts = options.groups.map((g) => ({ value: g.id, label: g.name }))
   return (
     <Field label="Recipients">
       <div className="space-y-2">
@@ -172,6 +182,15 @@ function RecipientsEditor({
                 options={deptOpts}
                 placeholder="Choose a department"
                 onChange={(v) => update(i, { type: 'department_manager', departmentId: v })}
+              />
+            ) : null}
+            {t.type === 'group' ? (
+              <SearchSelect
+                value={t.groupId}
+                disabled={readOnly}
+                options={groupOpts}
+                placeholder="Choose a notification group"
+                onChange={(v) => update(i, { type: 'group', groupId: v })}
               />
             ) : null}
             {t.type === 'role' ? (
@@ -1668,7 +1687,18 @@ function ActionInspector({
             fieldIds={fieldIds}
             options={recipientOptions}
           />
-          <Field label="Email content">
+          <Field label="Channel">
+            <Select
+              value={a.channel ?? 'email'}
+              disabled={readOnly}
+              onChange={(e) => set({ ...a, channel: e.target.value as 'email' | 'sms' | 'in_app' })}
+            >
+              <option value="email">Email</option>
+              <option value="sms">SMS (text)</option>
+              <option value="in_app">In-app notification</option>
+            </Select>
+          </Field>
+          <Field label={(a.channel ?? 'email') === 'email' ? 'Email content' : 'Message content'}>
             <Select
               value={a.mode ?? 'inline'}
               disabled={readOnly}

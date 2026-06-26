@@ -26,6 +26,7 @@ import {
 } from '@beaconhs/db/schema'
 import { publicUrl } from '@beaconhs/storage'
 import { requireRequestContext } from '@/lib/auth'
+import { assertCan } from '@beaconhs/tenant'
 import { canSeeRecord } from '@/lib/visibility'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { runModuleFlows } from '@/lib/flows/run-module-flows'
@@ -76,6 +77,25 @@ async function updateStatus(formData: FormData) {
   // Closing happens through the Close+lock action (cost-impact prompt + lock);
   // the header status dropdown is for non-terminal transitions only.
   if (status === 'closed') return
+  assertCan(ctx, 'ca.update')
+  // Re-scope: a self/site-tier user must be able to see the action they edit.
+  const visible = await ctx.db(async (tx) => {
+    const [row] = await tx
+      .select({
+        ownerTenantUserId: correctiveActions.ownerTenantUserId,
+        siteOrgUnitId: correctiveActions.siteOrgUnitId,
+      })
+      .from(correctiveActions)
+      .where(eq(correctiveActions.id, id))
+      .limit(1)
+    if (!row) return false
+    return canSeeRecord(ctx, tx, {
+      prefix: 'ca',
+      ownerIds: [row.ownerTenantUserId],
+      siteId: row.siteOrgUnitId,
+    })
+  })
+  if (!visible) return
   await ctx.db((tx) =>
     tx
       .update(correctiveActions)
@@ -104,7 +124,10 @@ async function updateStatus(formData: FormData) {
 
 async function reopenAction(formData: FormData) {
   'use server'
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'ca.update')
   const id = String(formData.get('id') ?? '')
+  // reopenCorrectiveAction re-resolves context + re-scopes the record itself.
   await reopenCorrectiveAction(id)
 }
 
@@ -114,6 +137,7 @@ async function reopenAction(formData: FormData) {
 async function updateTextField(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'ca.update')
   const id = String(formData.get('id') ?? '')
   const field = String(formData.get('field') ?? '')
   const raw = formData.get('value')
@@ -141,11 +165,22 @@ async function updateTextField(formData: FormData) {
 
   const before = await ctx.db(async (tx) => {
     const [row] = await tx
-      .select({ locked: correctiveActions.locked })
+      .select({
+        locked: correctiveActions.locked,
+        ownerTenantUserId: correctiveActions.ownerTenantUserId,
+        siteOrgUnitId: correctiveActions.siteOrgUnitId,
+      })
       .from(correctiveActions)
       .where(eq(correctiveActions.id, id))
       .limit(1)
-    return row ?? null
+    if (!row) return null
+    // Re-scope so a self/site-tier user can't edit an action they cannot see.
+    const visible = await canSeeRecord(ctx, tx, {
+      prefix: 'ca',
+      ownerIds: [row.ownerTenantUserId],
+      siteId: row.siteOrgUnitId,
+    })
+    return visible ? row : null
   })
   if (!before) throw new Error('Corrective action not found')
   if (before.locked) throw new Error('This action is locked')

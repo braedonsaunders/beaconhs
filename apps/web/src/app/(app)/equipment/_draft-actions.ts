@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { randomBytes } from 'crypto'
 import { eq } from 'drizzle-orm'
 import { equipmentItems } from '@beaconhs/db/schema'
+import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 
@@ -17,6 +18,7 @@ export async function createEquipmentDraft(): Promise<
   { ok: true; id: string } | { ok: false; error: string }
 > {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.manage')
   const qrToken = randomBytes(12).toString('base64url')
   const assetTag = `DRAFT-${randomBytes(3).toString('hex').toUpperCase()}`
   const itemId = await ctx.db(async (tx) => {
@@ -48,6 +50,7 @@ export async function createEquipmentDraft(): Promise<
 // contract). The full edit form on the detail page clears the draft flag.
 export async function updateEquipmentName(formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.manage')
   const id = String(formData.get('id') ?? '')
   const value = String(formData.get('value') ?? '')
   if (!id) throw new Error('Missing id')

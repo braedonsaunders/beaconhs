@@ -48,13 +48,13 @@ import { pickString } from '@/lib/list-params'
 import {
   attachments,
   equipmentCheckouts,
+  equipmentInspectionRecords,
+  equipmentInspectionTypes,
   equipmentItems,
   equipmentLocationHistory,
   equipmentLogEntries,
   equipmentTypes,
   equipmentWorkOrders,
-  formResponses,
-  formTemplates,
   orgUnits,
   people,
   tenantUsers,
@@ -62,6 +62,7 @@ import {
   user,
 } from '@beaconhs/db/schema'
 import { publicUrl } from '@beaconhs/storage'
+import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { DetailGrid } from '@/components/detail-grid'
@@ -93,6 +94,7 @@ type Tab = (typeof TABS)[number]
 async function reportMissing(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.manage')
   const id = String(formData.get('id') ?? '')
   const lastSeenDate = String(formData.get('lastSeenDate') ?? '').trim() || null
   const lastSeenLocation = String(formData.get('lastSeenLocation') ?? '').trim() || null
@@ -135,6 +137,7 @@ async function reportMissing(formData: FormData) {
 async function reportFound(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.manage')
   const id = String(formData.get('id') ?? '')
   const foundNotes = String(formData.get('foundNotes') ?? '').trim() || null
   if (!id) return
@@ -168,6 +171,7 @@ async function reportFound(formData: FormData) {
 async function transferLocation(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.manage')
   const id = String(formData.get('id') ?? '')
   const siteOrgUnitId = String(formData.get('siteOrgUnitId') ?? '').trim() || null
   const holderPersonId = String(formData.get('holderPersonId') ?? '').trim() || null
@@ -208,6 +212,7 @@ async function transferLocation(formData: FormData) {
 async function createWorkOrder(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.workorder.create')
   const itemId = String(formData.get('itemId') ?? '')
   const summary = String(formData.get('summary') ?? '').trim()
   const description = String(formData.get('description') ?? '').trim() || null
@@ -250,6 +255,7 @@ async function createWorkOrder(formData: FormData) {
 async function addLogEntry(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.manage')
   const itemId = String(formData.get('itemId') ?? '').trim()
   const entryDate = String(formData.get('entryDate') ?? '').trim()
   const kind = String(formData.get('kind') ?? 'note').trim() || 'note'
@@ -288,6 +294,7 @@ async function addLogEntry(formData: FormData) {
 async function checkOutFromItem(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.manage')
   const itemId = String(formData.get('itemId') ?? '').trim()
   const holderPersonId = String(formData.get('holderPersonId') ?? '').trim() || null
   const destinationOrgUnitId = String(formData.get('destinationOrgUnitId') ?? '').trim() || null
@@ -336,6 +343,7 @@ async function checkOutFromItem(formData: FormData) {
 async function checkInFromItem(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.manage')
   const checkoutId = String(formData.get('checkoutId') ?? '').trim()
   const itemId = String(formData.get('itemId') ?? '').trim()
   const condition = String(formData.get('returnedCondition') ?? 'good').trim() || 'good'
@@ -389,6 +397,7 @@ async function createWorkOrderAction(input: {
 }): Promise<{ ok: boolean; error?: string }> {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.workorder.create')
   const { itemId, summary, description, priority, assignedToTenantUserId, reportedByPersonId } =
     input
   if (!itemId || !summary.trim()) return { ok: false, error: 'Summary is required.' }
@@ -446,6 +455,7 @@ async function createTruckLogEntryAction(input: {
 }): Promise<{ ok: boolean; error?: string }> {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.manage')
   const {
     equipmentItemId,
     entryDate,
@@ -545,7 +555,7 @@ export default async function EquipmentDetailPage({
       holders,
       assignees,
       certAttachments,
-      inspectionResponses,
+      inspectionRecords,
       logRows,
       checkoutRows,
     ] = await Promise.all([
@@ -593,16 +603,14 @@ export default async function EquipmentDetailPage({
         .orderBy(desc(attachments.createdAt))
         .limit(50),
       tx
-        .select({ response: formResponses, template: formTemplates })
-        .from(formResponses)
-        .innerJoin(formTemplates, eq(formTemplates.id, formResponses.templateId))
-        .where(
-          and(
-            eq(formResponses.sourceEntityType, 'equipment'),
-            eq(formResponses.sourceEntityId, id),
-          ),
+        .select({ record: equipmentInspectionRecords, type: equipmentInspectionTypes })
+        .from(equipmentInspectionRecords)
+        .leftJoin(
+          equipmentInspectionTypes,
+          eq(equipmentInspectionTypes.id, equipmentInspectionRecords.inspectionTypeId),
         )
-        .orderBy(desc(formResponses.submittedAt))
+        .where(eq(equipmentInspectionRecords.equipmentItemId, id))
+        .orderBy(desc(equipmentInspectionRecords.occurredAt))
         .limit(50),
       // Per-item freeform log.
       tx
@@ -631,7 +639,7 @@ export default async function EquipmentDetailPage({
       holders,
       assignees,
       certAttachments,
-      inspectionResponses,
+      inspectionRecords,
       logEntries: logRows,
       checkouts: checkoutRows,
     }
@@ -650,7 +658,7 @@ export default async function EquipmentDetailPage({
     holders,
     assignees,
     certAttachments,
-    inspectionResponses,
+    inspectionRecords,
     logEntries,
     checkouts,
   } = data
@@ -804,7 +812,7 @@ export default async function EquipmentDetailPage({
                 {
                   key: 'inspections',
                   label: 'Inspections',
-                  count: inspectionResponses.length,
+                  count: inspectionRecords.length,
                 },
                 { key: 'log', label: 'Log', count: logEntries.length },
                 { key: 'checkouts', label: 'Check-outs', count: checkouts.length },
@@ -875,10 +883,6 @@ export default async function EquipmentDetailPage({
                             ),
                           },
                           {
-                            label: 'Pre-use template',
-                            value: item.preUseInspectionTemplateKey ?? '—',
-                          },
-                          {
                             label: 'Last pre-use inspection',
                             value: item.lastPreUseInspectionAt
                               ? new Date(item.lastPreUseInspectionAt).toLocaleString()
@@ -900,15 +904,13 @@ export default async function EquipmentDetailPage({
                   </Card>
                   <Section title="Start a new inspection">
                     <div className="flex flex-wrap items-center gap-3 text-sm">
-                      <p className="text-slate-600">
-                        Choose a form template bound to equipment inspection to start a new
-                        inspection. The completed form will appear under the Inspections tab.
+                      <p className="text-slate-600 dark:text-slate-400">
+                        Run an inspection from one of this asset&apos;s checklist types. The
+                        completed record appears under the Inspections tab.
                       </p>
-                      <Link
-                        href={`/apps?category=inspection&sourceEntityType=equipment&sourceEntityId=${id}`}
-                      >
+                      <Link href={`/equipment/inspections/new?itemId=${id}`}>
                         <Button>
-                          <ClipboardCheck size={14} /> Browse inspection forms
+                          <ClipboardCheck size={14} /> New inspection
                         </Button>
                       </Link>
                     </div>
@@ -1163,18 +1165,16 @@ export default async function EquipmentDetailPage({
               {active === 'inspections' ? (
                 <Card>
                   <CardHeader>
-                    <CardTitle>Inspection history ({inspectionResponses.length})</CardTitle>
+                    <CardTitle>Inspection history ({inspectionRecords.length})</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    {inspectionResponses.length === 0 ? (
+                    {inspectionRecords.length === 0 ? (
                       <EmptyState
                         icon={<ClipboardCheck size={24} />}
                         title="No inspections recorded"
-                        description="Pre-use, scheduled, and ad-hoc inspections (any form pinned to this equipment) appear here."
+                        description="Pre-use, scheduled, and ad-hoc inspections for this asset appear here."
                         action={
-                          <Link
-                            href={`/apps?category=inspection&sourceEntityType=equipment&sourceEntityId=${id}`}
-                          >
+                          <Link href={`/equipment/inspections/new?itemId=${id}`}>
                             <Button variant="outline" size="sm">
                               Start an inspection →
                             </Button>
@@ -1185,37 +1185,65 @@ export default async function EquipmentDetailPage({
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead>Form</TableHead>
+                            <TableHead>Reference</TableHead>
+                            <TableHead>Type</TableHead>
+                            <TableHead>Performed</TableHead>
+                            <TableHead>Result</TableHead>
                             <TableHead>Status</TableHead>
-                            <TableHead>Submitted</TableHead>
                             <TableHead></TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {inspectionResponses.map((r) => (
-                            <TableRow key={r.response.id}>
-                              <TableCell className="font-medium">{r.template.name}</TableCell>
+                          {inspectionRecords.map(({ record, type }) => (
+                            <TableRow key={record.id}>
+                              <TableCell className="font-medium">
+                                <Link
+                                  href={`/equipment/inspections/${record.id}`}
+                                  className="text-teal-700 hover:underline dark:text-teal-400"
+                                >
+                                  {record.reference}
+                                </Link>
+                              </TableCell>
+                              <TableCell className="text-slate-600 dark:text-slate-300">
+                                {type?.name ?? '—'}
+                              </TableCell>
+                              <TableCell className="whitespace-nowrap text-slate-600 dark:text-slate-300">
+                                {record.occurredAt
+                                  ? new Date(record.occurredAt).toLocaleDateString()
+                                  : '—'}
+                              </TableCell>
+                              <TableCell>
+                                {record.result ? (
+                                  <Badge
+                                    variant={
+                                      record.result === 'pass'
+                                        ? 'success'
+                                        : record.result === 'fail'
+                                          ? 'destructive'
+                                          : 'secondary'
+                                    }
+                                  >
+                                    {record.result}
+                                  </Badge>
+                                ) : (
+                                  <span className="text-slate-400">—</span>
+                                )}
+                              </TableCell>
                               <TableCell>
                                 <Badge
                                   variant={
-                                    r.response.status === 'closed' ||
-                                    r.response.status === 'submitted'
+                                    record.status === 'closed' || record.status === 'submitted'
                                       ? 'success'
                                       : 'warning'
                                   }
                                 >
-                                  {r.response.status.replace('_', ' ')}
+                                  {record.status.replace('_', ' ')}
                                 </Badge>
                               </TableCell>
                               <TableCell>
-                                {r.response.submittedAt
-                                  ? new Date(r.response.submittedAt).toLocaleDateString()
-                                  : '—'}
-                              </TableCell>
-                              <TableCell>
                                 <Link
-                                  href={`/apps/responses/${r.response.id}`}
-                                  className="text-xs text-teal-700 hover:underline"
+                                  href={`/equipment/inspections/${record.id}`}
+                                  className="text-xs text-teal-700 hover:underline dark:text-teal-400"
                                 >
                                   View →
                                 </Link>

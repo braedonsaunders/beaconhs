@@ -13,6 +13,7 @@ import {
   Textarea,
 } from '@beaconhs/ui'
 import { equipmentItems, orgUnits, people, truckLogEntries } from '@beaconhs/db/schema'
+import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { DetailGrid } from '@/components/detail-grid'
@@ -44,6 +45,7 @@ function safeStr(raw: FormDataEntryValue | null): string | null {
 async function updateEntry(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.manage')
   const id = String(formData.get('id') ?? '').trim()
   const entryDate = String(formData.get('entryDate') ?? '').trim()
   const equipmentItemId = String(formData.get('equipmentItemId') ?? '').trim()
@@ -94,6 +96,7 @@ async function updateEntry(formData: FormData) {
 async function deleteEntry(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.manage')
   const id = String(formData.get('id') ?? '').trim()
   if (!id) return
   const removed = await ctx.db(async (tx) => {

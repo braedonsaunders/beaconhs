@@ -82,7 +82,9 @@ export default async function ObligationDetailPage({
   if (editable && pickString(sp.drawer) === 'edit') {
     const { targets, audienceOptions } = await loadObligationFormOptions(ctx)
     const initialAudience: AudienceItem[] = audience.map((a) => ({
-      type: a.kind,
+      // Compliance obligations only ever use the 6 compliance audience kinds;
+      // the crew/person_group kinds are notification-only, so this narrows safely.
+      type: a.kind as AudienceItem['type'],
       entityKey: a.kind === 'everyone' ? EVERYONE_KEY : a.entityKey,
     }))
     edit = {

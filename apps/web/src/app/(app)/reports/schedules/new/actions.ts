@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { reportDefinitions, reportSchedules } from '@beaconhs/db/schema'
 import { db, withSuperAdmin } from '@beaconhs/db'
 import { eq } from 'drizzle-orm'
+import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { computeNextRunAt } from '@beaconhs/reports'
@@ -14,6 +15,7 @@ type Cadence = (typeof CADENCES)[number]
 
 export async function createSchedule(formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'reports.schedule')
 
   const definitionId = String(formData.get('definitionId') ?? '').trim()
   const name = String(formData.get('name') ?? '').trim()

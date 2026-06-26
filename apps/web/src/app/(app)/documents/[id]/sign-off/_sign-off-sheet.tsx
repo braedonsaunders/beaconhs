@@ -9,15 +9,7 @@
 import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
-import {
-  Check,
-  ChevronDown,
-  ChevronRight,
-  PenLine,
-  Trash2,
-  UserPlus,
-  Users,
-} from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, PenLine, Trash2, UserPlus, Users } from 'lucide-react'
 import {
   Button,
   Input,

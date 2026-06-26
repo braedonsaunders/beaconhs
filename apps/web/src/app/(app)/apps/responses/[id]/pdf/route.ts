@@ -2,7 +2,11 @@
 //
 // Render a fresh form-response PDF on demand and stream it back to the browser.
 
+import { notFound } from 'next/navigation'
+import { eq } from 'drizzle-orm'
+import { formResponses } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { canSeeRecord } from '@/lib/visibility'
 import { renderOnDemandPdfResponse } from '@/lib/pdf-route'
 
 export const dynamic = 'force-dynamic'
@@ -15,6 +19,35 @@ export async function GET(
   const ctx = await requireRequestContext()
   if (!ctx.tenantId) {
     return Response.json({ error: 'No active tenant' }, { status: 400 })
+  }
+
+  // Per-user record visibility — mirror the HTML detail page so the PDF can't be
+  // pulled for a response the caller isn't allowed to see (read.all → any;
+  // read.site → my sites; else → ones I submitted or am the subject of).
+  const row = await ctx.db(async (tx) => {
+    const [r] = await tx
+      .select({
+        submittedBy: formResponses.submittedBy,
+        subjectPersonId: formResponses.subjectPersonId,
+        siteOrgUnitId: formResponses.siteOrgUnitId,
+      })
+      .from(formResponses)
+      .where(eq(formResponses.id, id))
+      .limit(1)
+    return r ?? null
+  })
+  if (!row) notFound()
+  if (
+    !(await ctx.db((tx) =>
+      canSeeRecord(ctx, tx, {
+        prefix: 'forms.response',
+        ownerIds: [row.submittedBy],
+        personId: row.subjectPersonId,
+        siteId: row.siteOrgUnitId,
+      }),
+    ))
+  ) {
+    notFound()
   }
 
   return renderOnDemandPdfResponse({

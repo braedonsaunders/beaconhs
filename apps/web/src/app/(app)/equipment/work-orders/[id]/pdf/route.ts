@@ -2,6 +2,7 @@
 //
 // Render a fresh work-order PDF on demand and stream it back to the browser.
 
+import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { renderModulePdfResponse } from '@/lib/module-pdf'
 
@@ -16,6 +17,7 @@ export async function GET(
   if (!ctx.tenantId) {
     return Response.json({ error: 'No active tenant' }, { status: 400 })
   }
+  assertCan(ctx, 'equipment.read.all')
 
   return renderModulePdfResponse(ctx, {
     moduleKey: 'equipment',

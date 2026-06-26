@@ -14,6 +14,7 @@ import {
   documentAcknowledgments,
   people,
 } from '@beaconhs/db/schema'
+import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 
@@ -35,6 +36,7 @@ export async function acknowledgeDocument(input: {
   signatureAttachmentId?: string | null
 }): Promise<Ok<unknown> | Err> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.acknowledge')
   const { documentId, versionId } = input
   if (!documentId || !versionId) return { ok: false, error: 'Missing document or version' }
 
@@ -98,6 +100,7 @@ export async function addSignOffSigner(input: {
   signatureAttachmentId?: string | null
 }): Promise<Ok<{ sessionId: string; signer: SignerRow }> | Err> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.manage')
   const { documentId, versionId, personId } = input
   if (!documentId || !versionId) return { ok: false, error: 'Missing document or version' }
   if (!personId) return { ok: false, error: 'Pick a person' }
@@ -199,6 +202,7 @@ export async function removeSignOffSigner(input: {
   ackId: string
 }): Promise<Ok<unknown> | Err> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.manage')
   if (!input.ackId) return { ok: false, error: 'Missing signer' }
   await ctx.db((tx) =>
     tx

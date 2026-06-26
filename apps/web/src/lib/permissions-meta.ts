@@ -22,6 +22,7 @@ const GROUP_LABELS: Record<string, string> = {
   reports: 'Reports',
   dashboards: 'Dashboards',
   insights: 'Insights',
+  assistant: 'AI Assistant',
   admin: 'Administration',
 }
 
@@ -51,10 +52,14 @@ const PERMISSION_LABELS: Record<string, string> = {
   'inspections.read.all': 'View all inspections',
   'inspections.read.site': 'View site inspections',
   'inspections.read.self': 'View own inspections',
+  'inspections.create': 'Perform inspections',
+  'inspections.update': 'Edit inspections',
 
   'hazid.read.all': 'View all hazard assessments',
   'hazid.read.site': 'View site hazard assessments',
   'hazid.read.self': 'View own hazard assessments',
+  'hazid.create': 'Create hazard assessments',
+  'hazid.update': 'Edit hazard assessments',
 
   'training.read.all': 'View all training',
   'training.read.self': 'View own training',
@@ -111,6 +116,9 @@ const PERMISSION_LABELS: Record<string, string> = {
   'insights.create': 'Build insights',
   'insights.publish': 'Publish to library',
   'insights.manage': "Manage others' insights",
+
+  'assistant.use': 'Use the assistant',
+  'assistant.write': 'Draft changes with the assistant',
 
   'admin.users.manage': 'Manage users',
   'admin.users.impersonate': 'Impersonate users',

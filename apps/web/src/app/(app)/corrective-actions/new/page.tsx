@@ -18,6 +18,7 @@ import { correctiveActions, incidents, orgUnits } from '@beaconhs/db/schema'
 import { emitCorrectiveActionAssigned } from '@beaconhs/events'
 import { emitCorrectiveActionCreated } from '@beaconhs/integrations'
 import { requireRequestContext } from '@/lib/auth'
+import { assertCan } from '@beaconhs/tenant'
 import { recordAudit } from '@/lib/audit'
 import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { pickString } from '@/lib/list-params'
@@ -39,6 +40,7 @@ const SOURCES = [
 async function createCA(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'ca.create')
   const title = String(formData.get('title') ?? '').trim()
   if (!title) throw new Error('Title is required')
   const description = String(formData.get('description') ?? '').trim() || null

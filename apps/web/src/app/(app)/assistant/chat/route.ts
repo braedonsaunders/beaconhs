@@ -5,7 +5,7 @@
 // Mirrors the contract of journals/ai/route.ts but for a full agent loop.
 
 import { convertToModelMessages, type UIMessage } from 'ai'
-import { runAgentTurn, AIDisabledError } from '@beaconhs/ai'
+import { runAgentTurn, AIDisabledError, providerSupportsImageToolResults } from '@beaconhs/ai'
 import { can } from '@beaconhs/tenant'
 import { getRequestContext } from '@/lib/auth'
 import { getTenantAiConfig } from '@/lib/ai-config'
@@ -24,6 +24,24 @@ export const maxDuration = 300
 
 const SCOPE = 'assistant'
 const MAX_HISTORY = 40
+
+// Vision tool (view_document_pages) results carry base64 page images so the
+// model can SEE them this turn — but they must NOT be written into the saved
+// transcript (DB bloat, and they'd be re-sent every later turn). The browser
+// still receives the full images over the live stream; we strip them only from
+// the persisted copy, leaving the lightweight page metadata behind.
+function stripVisionImages(parts: UIMessage['parts']): UIMessage['parts'] {
+  return parts.map((p) => {
+    if (p.type !== 'tool-view_document_pages') return p
+    const out = (p as { output?: { data?: Record<string, unknown> } }).output
+    const images = out?.data?.images
+    if (!Array.isArray(images) || images.length === 0) return p
+    return {
+      ...p,
+      output: { ...out, data: { ...out!.data, images: [] } },
+    } as typeof p
+  })
+}
 
 export async function POST(req: Request): Promise<Response> {
   const ctx = await getRequestContext()
@@ -53,7 +71,11 @@ export async function POST(req: Request): Promise<Response> {
   await appendMessage({ conversationId, role: 'user', content: prompt })
 
   const aiConfig = await getTenantAiConfig(ctx)
-  const tools = buildToolRegistry(ctx)
+  // Vision tools (rendered scanned-PDF pages) are only exposed when the provider
+  // accepts image content in a tool result — currently Anthropic.
+  const tools = buildToolRegistry(ctx, {
+    imageToolResults: providerSupportsImageToolResults(aiConfig),
+  })
 
   // Rebuild the model transcript from persisted history (cap to recent turns).
   const history = (await getConversationMessages(conversationId)).slice(-MAX_HISTORY)
@@ -102,7 +124,14 @@ export async function POST(req: Request): Promise<Response> {
           conversationId: conversationId!,
           role: 'assistant',
           content: text || (aborted ? '(stopped)' : ''),
-          data: { v: 1, kind: 'agent-turn', finishReason, aborted, usage, parts },
+          data: {
+            v: 1,
+            kind: 'agent-turn',
+            finishReason,
+            aborted,
+            usage,
+            parts: stripVisionImages(parts),
+          },
         })
       },
     })

@@ -57,6 +57,7 @@ export async function publishNewVersion(args: {
   changelog: string
 }): Promise<{ ok: boolean; version?: number; error?: string }> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'forms.template.publish')
   try {
     const validated = validateFormSchema(args.schema)
     const result = await ctx.db(async (tx) => {

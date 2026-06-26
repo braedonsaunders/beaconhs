@@ -18,6 +18,7 @@ import { incidents, orgUnits } from '@beaconhs/db/schema'
 import { emitIncidentReported } from '@beaconhs/events'
 import { emitIncidentCreated } from '@beaconhs/integrations'
 import { requireRequestContext } from '@/lib/auth'
+import { assertCan } from '@beaconhs/tenant'
 import { recordAudit } from '@/lib/audit'
 import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { PageContainer } from '@/components/page-layout'
@@ -38,6 +39,7 @@ const SEVERITIES = ['first_aid_only', 'medical_aid', 'lost_time', 'fatality', 'n
 async function reportIncident(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'incidents.create')
   const type = String(formData.get('type') ?? '') as (typeof TYPES)[number]
   const severity = String(formData.get('severity') ?? '') as (typeof SEVERITIES)[number]
   const title = String(formData.get('title') ?? '').trim()

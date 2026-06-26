@@ -2,6 +2,7 @@
 //
 // Render a fresh PPE issue-report PDF on demand and stream it back to the browser.
 
+import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { renderOnDemandPdfResponse } from '@/lib/pdf-route'
 
@@ -16,6 +17,7 @@ export async function GET(
   if (!ctx.tenantId) {
     return Response.json({ error: 'No active tenant' }, { status: 400 })
   }
+  assertCan(ctx, 'ppe.read.all')
 
   return renderOnDemandPdfResponse({
     kind: 'ppe_issue',

@@ -19,8 +19,8 @@ import {
 import { can } from '@beaconhs/tenant'
 import { recordVisibilityWhere } from '@/lib/visibility'
 import { documentReadFilter } from './doc-access'
-import { getDocumentText } from './document-content'
-import { truncateText, type AssistantToolDef, type ToolResult } from './types'
+import { getDocumentPdfBytes, getDocumentText } from './document-content'
+import { truncateText, type AssistantToolDef, type ToolImage, type ToolResult } from './types'
 
 // ---- helpers ---------------------------------------------------------------
 
@@ -420,6 +420,100 @@ const readDocument: AssistantToolDef = {
   },
 }
 
+// How many pages a single view_document_pages call may rasterize (token budget)
+// and the target raster width in px (~150 DPI for a Letter/A4 page — enough for
+// the model to read body text without bloating the image token cost).
+const VIEW_PAGES_MAX = 5
+const VIEW_PAGES_WIDTH = 1240
+
+const viewDocumentPages: AssistantToolDef = {
+  name: 'view_document_pages',
+  description:
+    'View the actual PAGES of a scanned / image-only PDF as images, so you can READ a document that has no extractable text layer (read_document/search_document return nothing for these). Pass a page range — a few pages per call (max 5). Use this ONLY when read_document or search_document reported the document is scanned. Read-only.',
+  category: 'read',
+  gate: { mode: 'anyOf', perms: ['documents.read', 'documents.manage'] },
+  // Returns page images for the model to SEE — withheld unless the provider
+  // accepts image content in tool results (Anthropic). See registry.ts.
+  needsImageToolResults: true,
+  inputSchema: z.object({
+    id: z.string().uuid(),
+    fromPage: z.number().int().min(1),
+    toPage: z.number().int().min(1),
+  }),
+  execute: async (raw, ctx): Promise<ToolResult> => {
+    const a = raw as { id: string; fromPage: number; toPage: number }
+    // Metadata first (cached by getDocumentText): confirms it's a scanned PDF and
+    // gives the page count, so we never rasterize a document with a text layer.
+    const meta = await getDocumentText(ctx, a.id)
+    if (!meta.ok) return { ok: false, error: meta.error }
+    const { source, pages, scanned, title } = meta.doc
+    if (source !== 'pdf' || !pages) {
+      return {
+        ok: true,
+        data: {
+          images: [] as ToolImage[],
+          summary: `“${title}” is not an uploaded PDF, so there are no pages to render. Use read_document for its text.`,
+        },
+      }
+    }
+    if (!scanned) {
+      return {
+        ok: true,
+        data: {
+          images: [] as ToolImage[],
+          summary: `“${title}” has an extractable text layer — use read_document or search_document to read it as text instead of rendering page images.`,
+        },
+      }
+    }
+
+    // Clamp to the real page range and cap the span so one call can't blow the
+    // image-token budget on a hundreds-of-page scan.
+    const from = Math.min(Math.max(1, Math.floor(a.fromPage)), pages)
+    let to = Math.min(Math.max(from, Math.floor(a.toPage)), pages)
+    let capped = false
+    if (to - from + 1 > VIEW_PAGES_MAX) {
+      to = from + VIEW_PAGES_MAX - 1
+      capped = true
+    }
+
+    const bytesRes = await getDocumentPdfBytes(ctx, a.id)
+    if (!bytesRes.ok) return { ok: false, error: bytesRes.error }
+
+    let images: ToolImage[]
+    try {
+      // Lazy import keeps unpdf + the native canvas backend off every other path.
+      const { getDocumentProxy, renderPageAsImage } = await import('unpdf')
+      const pdf = await getDocumentProxy(new Uint8Array(bytesRes.bytes))
+      const rendered: ToolImage[] = []
+      for (let n = from; n <= to; n++) {
+        const dataUrl = await renderPageAsImage(pdf, n, {
+          canvasImport: () => import('@napi-rs/canvas'),
+          width: VIEW_PAGES_WIDTH,
+          toDataURL: true,
+        })
+        const base64 = dataUrl.slice(dataUrl.indexOf(',') + 1)
+        if (base64) rendered.push({ mediaType: 'image/png', base64 })
+      }
+      images = rendered
+    } catch (e) {
+      console.warn(`[assistant] page render failed for ${a.id}`, e)
+      return { ok: false, error: 'render_failed' }
+    }
+
+    const span = from === to ? `page ${from}` : `pages ${from}–${to}`
+    const summary =
+      `Rendered ${span} of ${pages} from the scanned PDF “${title}” as ${images.length} image(s). ` +
+      `Read the text directly from these page images.` +
+      (capped ? ` (Range capped to ${VIEW_PAGES_MAX} pages per call.)` : '') +
+      (to < pages ? ` Pages ${to + 1}–${pages} are not shown — call again to view more.` : '')
+
+    return {
+      ok: true,
+      data: { images, summary, title, pages, fromPage: from, toPage: to, renderedPages: images.length },
+    }
+  },
+}
+
 /** Locate the PDF page a character offset falls on, using the `[Page N]` markers
  *  getDocumentText inserts. Returns null for non-PDF text. */
 function pageForOffset(text: string, offset: number): number | null {
@@ -713,6 +807,7 @@ export const READ_TOOLS: AssistantToolDef[] = [
   findDocuments,
   searchDocument,
   readDocument,
+  viewDocumentPages,
   findPeople,
   findTrainingRecords,
   listMyOpenItems,

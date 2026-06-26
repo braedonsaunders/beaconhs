@@ -151,14 +151,22 @@ export const PERMISSION_CATALOGUE = [
   'incidents.update',
   'incidents.investigate',
   'incidents.close',
-  // Inspections — record visibility tiers (records are otherwise ungated to create).
+  // Inspections — record visibility tiers + write. `create` = start/perform an
+  // inspection record; `update` = answer criteria, lock, sign, edit fields
+  // (record-mutation actions additionally re-scope via canSeeRecord).
   'inspections.read.all',
   'inspections.read.site',
   'inspections.read.self',
-  // Hazard assessments (internal key `hazid`) — record visibility tiers.
+  'inspections.create',
+  'inspections.update',
+  // Hazard assessments (internal key `hazid`) — record visibility tiers + write.
+  // `create` = start/copy an assessment; `update` = edit/lock/sign/answer and
+  // add/remove hazards, tasks, PPE, questions, signatures, photos.
   'hazid.read.all',
   'hazid.read.site',
   'hazid.read.self',
+  'hazid.create',
+  'hazid.update',
   // Training
   'training.read.all',
   'training.read.self',
@@ -262,7 +270,11 @@ export const BUILTIN_ROLES: Record<
       'incidents.read.self',
       'incidents.create',
       'inspections.read.self',
+      'inspections.create',
+      'inspections.update',
       'hazid.read.self',
+      'hazid.create',
+      'hazid.update',
       'training.read.self',
       'documents.read',
       'documents.acknowledge',
@@ -285,7 +297,11 @@ export const BUILTIN_ROLES: Record<
       'incidents.create',
       'incidents.update',
       'inspections.read.site',
+      'inspections.create',
+      'inspections.update',
       'hazid.read.site',
+      'hazid.create',
+      'hazid.update',
       'training.read.all',
       'equipment.read.site',
       'equipment.inspect',
@@ -324,7 +340,11 @@ export const BUILTIN_ROLES: Record<
       'incidents.investigate',
       'incidents.close',
       'inspections.read.all',
+      'inspections.create',
+      'inspections.update',
       'hazid.read.all',
+      'hazid.create',
+      'hazid.update',
       'training.read.all',
       'training.course.manage',
       'training.class.manage',

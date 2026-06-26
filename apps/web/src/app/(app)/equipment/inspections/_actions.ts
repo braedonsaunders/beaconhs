@@ -13,6 +13,7 @@ import {
   equipmentInspectionTypes,
   equipmentItems,
 } from '@beaconhs/db/schema'
+import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import {
@@ -34,6 +35,7 @@ function revalidateRecord(id: string) {
  */
 export async function startEquipmentInspection(formData: FormData) {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.inspect')
   const typeId = String(formData.get('typeId') ?? '').trim()
   const equipmentItemId = String(formData.get('equipmentItemId') ?? '').trim()
   if (!typeId) throw new Error('Inspection type is required')
@@ -90,6 +92,7 @@ export async function startEquipmentInspection(formData: FormData) {
 
 export async function setAnswer(formData: FormData) {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.inspect')
   const rowId = String(formData.get('rowId') ?? '')
   const recordId = String(formData.get('recordId') ?? '')
   const answer = parseEqAnswer(formData.get('answer'))
@@ -108,6 +111,7 @@ export async function setAnswer(formData: FormData) {
 
 export async function setSeverity(formData: FormData) {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.inspect')
   const rowId = String(formData.get('rowId') ?? '')
   const recordId = String(formData.get('recordId') ?? '')
   const severity = parseEqSeverity(formData.get('severity'))
@@ -122,6 +126,7 @@ export async function setSeverity(formData: FormData) {
 
 export async function setComment(formData: FormData) {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.inspect')
   const rowId = String(formData.get('rowId') ?? '')
   const recordId = String(formData.get('recordId') ?? '')
   const value = String(formData.get('value') ?? '').trim() || null
@@ -136,6 +141,7 @@ export async function setComment(formData: FormData) {
 
 export async function setActionTaken(formData: FormData) {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.inspect')
   const rowId = String(formData.get('rowId') ?? '')
   const recordId = String(formData.get('recordId') ?? '')
   const value = String(formData.get('value') ?? '').trim() || null
@@ -151,6 +157,7 @@ export async function setActionTaken(formData: FormData) {
 /** Text / numeric answer kinds. */
 export async function setValue(formData: FormData) {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.inspect')
   const rowId = String(formData.get('rowId') ?? '')
   const recordId = String(formData.get('recordId') ?? '')
   const kind = String(formData.get('kind') ?? '')
@@ -170,6 +177,7 @@ export async function setValue(formData: FormData) {
 
 export async function addCriterionPhotos(formData: FormData) {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.inspect')
   const rowId = String(formData.get('rowId') ?? '')
   const recordId = String(formData.get('recordId') ?? '')
   const ids = String(formData.get('attachmentIds') ?? '')
@@ -196,6 +204,7 @@ export async function addCriterionPhotos(formData: FormData) {
 
 export async function setRecordNotes(formData: FormData) {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.inspect')
   const recordId = String(formData.get('recordId') ?? '')
   const value = String(formData.get('value') ?? '').trim() || null
   await ctx.db((tx) =>
@@ -209,6 +218,7 @@ export async function setRecordNotes(formData: FormData) {
 
 export async function setRecordHours(formData: FormData) {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.inspect')
   const recordId = String(formData.get('recordId') ?? '')
   const raw = String(formData.get('value') ?? '').trim()
   await ctx.db((tx) =>
@@ -222,6 +232,7 @@ export async function setRecordHours(formData: FormData) {
 
 export async function setRecordOccurredAt(formData: FormData) {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.inspect')
   const recordId = String(formData.get('recordId') ?? '')
   const raw = String(formData.get('value') ?? '').trim()
   if (!raw) return
@@ -238,6 +249,7 @@ export async function setRecordOccurredAt(formData: FormData) {
 
 export async function submitEquipmentInspection(formData: FormData) {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.inspect')
   const recordId = String(formData.get('recordId') ?? '')
   if (!recordId) throw new Error('Record is required')
   const outcome = await finaliseEquipmentInspection(ctx, recordId)
@@ -254,6 +266,7 @@ export async function submitEquipmentInspection(formData: FormData) {
 
 export async function reopenEquipmentInspection(formData: FormData) {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.inspect')
   const recordId = String(formData.get('recordId') ?? '')
   await ctx.db((tx) =>
     tx

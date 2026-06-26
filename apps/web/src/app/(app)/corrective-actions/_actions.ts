@@ -22,8 +22,10 @@ import {
 } from '@beaconhs/db/schema'
 import { emitCorrectiveActionAssigned, emitCorrectiveActionCompleted } from '@beaconhs/events'
 import { emitCorrectiveActionClosed } from '@beaconhs/integrations'
+import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { canSeeRecord } from '@/lib/visibility'
 import { runModuleFlows } from '@/lib/flows/run-module-flows'
 
 export type ActionResult = { ok: true } | { ok: false; error: string }
@@ -35,7 +37,16 @@ async function loadCA(ctx: Awaited<ReturnType<typeof requireRequestContext>>, id
       .from(correctiveActions)
       .where(eq(correctiveActions.id, id))
       .limit(1)
-    return row ?? null
+    if (!row) return null
+    // Re-scope to the caller's read tier so a self/site-tier user can't drive a
+    // corrective action they cannot see by guessing its id (mirrors the detail
+    // page's canSeeRecord check).
+    const visible = await canSeeRecord(ctx, tx, {
+      prefix: 'ca',
+      ownerIds: [row.ownerTenantUserId],
+      siteId: row.siteOrgUnitId,
+    })
+    return visible ? row : null
   })
 }
 
@@ -61,6 +72,7 @@ function safeTenantUserId(ctx: Awaited<ReturnType<typeof requireRequestContext>>
 export async function attachCaPhotos(caId: string, attachmentIds: string[]): Promise<ActionResult> {
   if (attachmentIds.length === 0) return { ok: true }
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'ca.update')
   const ca = await loadCA(ctx, caId)
   if (!ca) return { ok: false, error: 'Corrective action not found.' }
   const lockErr = assertNotLocked(ca)
@@ -92,6 +104,7 @@ export async function updateCaPhotoCaption(
   caption: string,
 ): Promise<ActionResult> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'ca.update')
   const ca = await loadCA(ctx, caId)
   if (!ca) return { ok: false, error: 'Corrective action not found.' }
   const lockErr = assertNotLocked(ca)
@@ -116,6 +129,7 @@ export async function updateCaPhotoCaption(
 
 export async function deleteCaPhoto(caId: string, photoId: string): Promise<ActionResult> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'ca.update')
   const ca = await loadCA(ctx, caId)
   if (!ca) return { ok: false, error: 'Corrective action not found.' }
   const lockErr = assertNotLocked(ca)
@@ -150,11 +164,28 @@ export async function appendCompleteStep(args: {
   signatureDataUrl?: string | null
 }): Promise<ActionResult> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'ca.update')
   const ca = await loadCA(ctx, args.caId)
   if (!ca) return { ok: false, error: 'Corrective action not found.' }
   const lockErr = assertNotLocked(ca)
   if (lockErr) return lockErr
 
+  return insertCompleteStep(ctx, args)
+}
+
+// Timeline-step writer shared by the exported `appendCompleteStep` action and
+// the verify/close flows. The callers are responsible for their own permission
+// gate + lock check; this only performs the insert + audit so a verifier
+// (ca.verify, not necessarily ca.update) can still record their sign-off step.
+async function insertCompleteStep(
+  ctx: Awaited<ReturnType<typeof requireRequestContext>>,
+  args: {
+    caId: string
+    kind: 'action_taken' | 'verification' | 'signature'
+    description?: string | null
+    signatureDataUrl?: string | null
+  },
+): Promise<ActionResult> {
   const [nextOrder] = await ctx.db((tx) =>
     tx
       .select({
@@ -199,6 +230,7 @@ export async function verifyCorrectiveAction(args: {
   signatureDataUrl?: string | null
 }): Promise<ActionResult> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'ca.verify')
   const ca = await loadCA(ctx, args.caId)
   if (!ca) return { ok: false, error: 'Corrective action not found.' }
   const lockErr = assertNotLocked(ca)
@@ -223,7 +255,7 @@ export async function verifyCorrectiveAction(args: {
 
   // Persist the verification step + optional signature on the timeline so it
   // shows up in the CA "Complete steps" panel.
-  await appendCompleteStep({
+  await insertCompleteStep(ctx, {
     caId: args.caId,
     kind: 'verification',
     description: args.notes,
@@ -254,6 +286,7 @@ export async function closeCorrectiveAction(args: {
   closeNotes?: string | null
 }): Promise<ActionResult> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'ca.update')
   const ca = await loadCA(ctx, args.caId)
   if (!ca) return { ok: false, error: 'Corrective action not found.' }
   if (ca.locked) return { ok: false, error: 'Already closed and locked.' }
@@ -279,7 +312,7 @@ export async function closeCorrectiveAction(args: {
       .where(eq(correctiveActions.id, args.caId)),
   )
   if (args.closeNotes && args.closeNotes.trim().length > 0) {
-    await appendCompleteStep({
+    await insertCompleteStep(ctx, {
       caId: args.caId,
       kind: 'action_taken',
       description: `Close note: ${args.closeNotes.trim()}`,
@@ -320,6 +353,7 @@ export async function closeCorrectiveAction(args: {
  */
 export async function reopenCorrectiveAction(caId: string): Promise<ActionResult> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'ca.update')
   const ca = await loadCA(ctx, caId)
   if (!ca) return { ok: false, error: 'Corrective action not found.' }
   if (!ca.locked && ca.status !== 'closed') {
@@ -362,6 +396,9 @@ export async function sendCorrectiveActionEmail(args: {
   message?: string | null
 }): Promise<ActionResult> {
   const ctx = await requireRequestContext()
+  if (!can(ctx, 'ca.read.all') && !can(ctx, 'ca.read.site') && !can(ctx, 'ca.read.self')) {
+    return { ok: false, error: 'Not authorized.' }
+  }
   const ca = await loadCA(ctx, args.caId)
   if (!ca) return { ok: false, error: 'Corrective action not found.' }
 
@@ -404,6 +441,7 @@ export async function bulkReassignCorrectiveActions(args: {
   newOwnerTenantUserId: string
 }): Promise<{ ok: true; updated: number; skipped: number } | { ok: false; error: string }> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'ca.update')
   if (args.caIds.length === 0) return { ok: false, error: 'No actions selected.' }
   if (!args.newOwnerTenantUserId) return { ok: false, error: 'Pick an owner.' }
 
@@ -477,6 +515,7 @@ export async function setVerificationRequired(
   required: boolean,
 ): Promise<ActionResult> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'ca.update')
   const ca = await loadCA(ctx, caId)
   if (!ca) return { ok: false, error: 'Corrective action not found.' }
   const lockErr = assertNotLocked(ca)

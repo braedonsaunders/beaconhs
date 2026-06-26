@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
-import { and, asc, eq } from 'drizzle-orm'
+import { and, asc, eq, isNull } from 'drizzle-orm'
 import {
+  notificationGroups,
   roles as rolesTable,
   tenantNotificationPolicy,
   tenantNotificationSettings,
@@ -10,7 +11,10 @@ import {
 import { can } from '@beaconhs/tenant'
 import { DetailHeader } from '@beaconhs/ui'
 import { requireRequestContext } from '@/lib/auth'
+import { getEmailPolicyMode, getTenantEmailSettings } from '@/lib/email-config'
+import { getSmsPolicyMode, getTenantSmsSettings } from '@/lib/sms-config'
 import { PageContainer } from '@/components/page-layout'
+import { NotificationsSubNav } from '@/components/notifications-sub-nav'
 import { NOTIFICATION_CATEGORIES } from './_catalog'
 import { NotificationSettingsForm } from './_form'
 
@@ -69,6 +73,7 @@ export default async function NotificationSettingsPage() {
       enabled: boolean
       roleKeys: string[]
       userIds: string[]
+      groupIds: string[]
       channels: string[]
       escalation: { afterDays: number; roleKeys: string[] }[]
     }
@@ -78,10 +83,29 @@ export default async function NotificationSettingsPage() {
       enabled: r.enabled,
       roleKeys: r.roleKeys ?? [],
       userIds: r.userIds ?? [],
+      groupIds: r.groupIds ?? [],
       channels: r.channels ?? [],
       escalation: r.escalation ?? [],
     }
   }
+
+  // Reusable notification groups, selectable per category. Guarded for the
+  // pre-migration window.
+  let groupRows: { id: string; name: string }[] = []
+  try {
+    groupRows = await ctx.db((tx) =>
+      tx
+        .select({ id: notificationGroups.id, name: notificationGroups.name })
+        .from(notificationGroups)
+        .where(
+          and(eq(notificationGroups.tenantId, ctx.tenantId), isNull(notificationGroups.deletedAt)),
+        )
+        .orderBy(asc(notificationGroups.name)),
+    )
+  } catch {
+    groupRows = []
+  }
+  const groups = groupRows.map((g) => ({ value: g.id, label: g.name }))
 
   const policy = {
     digestMode: (policyRow?.digestMode ?? 'off') as 'off' | 'daily' | 'weekly',
@@ -95,20 +119,43 @@ export default async function NotificationSettingsPage() {
     .map((m) => ({ value: m.userId ?? '', label: m.displayName ?? m.email }))
     .filter((m) => m.value)
 
+  // Channel availability — surfaced so admins know which channels actually
+  // deliver before they enable them. Guarded; defaults to "not set up".
+  let emailConfigured = false
+  let smsConfigured = false
+  try {
+    const [emailMode, tEmail, smsMode, tSms] = await Promise.all([
+      getEmailPolicyMode(),
+      getTenantEmailSettings(ctx),
+      getSmsPolicyMode(),
+      getTenantSmsSettings(ctx),
+    ])
+    emailConfigured =
+      emailMode !== 'disabled' &&
+      (emailMode === 'global_only' || (tEmail.enabled && !!tEmail.fromEmail))
+    smsConfigured =
+      smsMode !== 'disabled' && (smsMode === 'global_only' || (tSms.enabled && !!tSms.fromNumber))
+  } catch {
+    // platform/tenant settings unavailable — leave both false.
+  }
+
   return (
     <PageContainer>
-      <div className="max-w-3xl space-y-4">
+      <div className="space-y-4">
         <DetailHeader
-          back={{ href: '/admin', label: 'Back to admin' }}
           title="Notifications"
           subtitle="Choose who is notified for each kind of alert, through which channels, and how it escalates. These apply tenant-wide; individuals still control their own channels from their inbox settings."
         />
+        <NotificationsSubNav active="rules" />
         <NotificationSettingsForm
           categories={NOTIFICATION_CATEGORIES}
           roles={roleRows}
           members={members}
+          groups={groups}
           initial={initial}
           policy={policy}
+          emailConfigured={emailConfigured}
+          smsConfigured={smsConfigured}
         />
       </div>
     </PageContainer>

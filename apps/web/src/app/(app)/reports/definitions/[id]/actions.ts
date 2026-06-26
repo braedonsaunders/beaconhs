@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { and, eq, isNull, or } from 'drizzle-orm'
+import { assertCan } from '@beaconhs/tenant'
 import { db, withSuperAdmin } from '@beaconhs/db'
 import { reportDefinitions, reportSchedules } from '@beaconhs/db/schema'
 import { enqueueReportRun } from '@beaconhs/jobs'
@@ -18,6 +19,7 @@ import { computeNextRunAt } from '@beaconhs/reports'
  */
 export async function runOnceFromDefinition(definitionId: string): Promise<void> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'reports.schedule')
 
   // Make sure the definition is visible to this tenant (built-in or owned).
   const def = await withSuperAdmin(db, async (tx) => {
@@ -98,6 +100,7 @@ export async function runOnceFromDefinition(definitionId: string): Promise<void>
 /** Delete a custom definition. Built-ins cannot be deleted. */
 export async function deleteDefinition(definitionId: string): Promise<void> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'reports.builder')
   const deletedName = await withSuperAdmin(db, async (tx) => {
     const [d] = await tx
       .select()

@@ -1,7 +1,9 @@
 import type { NextRequest } from 'next/server'
 import { and, asc, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
 import { equipmentItems, equipmentTypes, orgUnits, people } from '@beaconhs/db/schema'
+import { assertCan } from '@beaconhs/tenant'
 import { requireExportContext } from '@/lib/auth'
+import { moduleScopeWhere } from '@/lib/visibility'
 import { recordAudit } from '@/lib/audit'
 import { csvFilename, csvResponse } from '@/lib/csv'
 import { parseListParams, pickString } from '@/lib/list-params'
@@ -21,9 +23,19 @@ export async function GET(req: NextRequest) {
   })
   const statusFilter = pickString(sp.status)
   const ctx = await requireExportContext()
+  // Read-tier gate: must hold at least the site read tier (equipment has no
+  // self tier), and the export is bounded to that tier so a site-scoped user
+  // can't dump the whole tenant.
+  assertCan(ctx, 'equipment.read.site')
 
   const rows = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = []
+    const scopeWhere = await moduleScopeWhere(ctx, tx, {
+      prefix: 'equipment',
+      siteCol: equipmentItems.currentSiteOrgUnitId,
+      personCol: equipmentItems.currentHolderPersonId,
+    })
+    if (scopeWhere) filters.push(scopeWhere)
     if (params.q) {
       const term = `%${params.q}%`
       const cond = or(

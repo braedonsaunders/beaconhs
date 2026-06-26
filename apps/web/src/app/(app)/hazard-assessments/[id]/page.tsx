@@ -52,6 +52,7 @@ import {
 import { publicUrl } from '@beaconhs/storage'
 import { revalidatePath } from 'next/cache'
 import { requireRequestContext } from '@/lib/auth'
+import { can } from '@beaconhs/tenant'
 import { canSeeRecord } from '@/lib/visibility'
 import { FlowApprovals } from '@/components/flows/flow-approvals'
 import { getPendingFlowGatesForSubject } from '@/lib/flows/gate-store'
@@ -138,8 +139,29 @@ export const dynamic = 'force-dynamic'
 async function sendEmailAction(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  if (!can(ctx, 'hazid.read.all') && !can(ctx, 'hazid.read.site') && !can(ctx, 'hazid.read.self')) {
+    throw new Error('Not authorized')
+  }
   const id = String(formData.get('id') ?? '')
   if (!id) return
+  // Re-scope so a self/site-tier user can't email an assessment they can't see.
+  const visible = await ctx.db(async (tx) => {
+    const [row] = await tx
+      .select({
+        reportedByTenantUserId: hazidAssessments.reportedByTenantUserId,
+        siteOrgUnitId: hazidAssessments.siteOrgUnitId,
+      })
+      .from(hazidAssessments)
+      .where(eq(hazidAssessments.id, id))
+      .limit(1)
+    if (!row) return false
+    return canSeeRecord(ctx, tx, {
+      prefix: 'hazid',
+      ownerIds: [row.reportedByTenantUserId],
+      siteId: row.siteOrgUnitId,
+    })
+  })
+  if (!visible) return
   const subjectPrefix = String(formData.get('subjectPrefix') ?? '').trim() || undefined
   const messageOverride = String(formData.get('message') ?? '').trim() || undefined
   const splitEmails = (raw: string) =>

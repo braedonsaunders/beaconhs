@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { eq, sql } from 'drizzle-orm'
 import {
@@ -15,6 +16,7 @@ import {
 } from '@beaconhs/ui'
 import { db } from '@beaconhs/db'
 import { tenants } from '@beaconhs/db/schema'
+import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { levelLabel } from '@/lib/org-hierarchy'
@@ -30,9 +32,18 @@ const KNOWN_LANGUAGES = [
 ]
 const LEVELS = ['customer', 'project', 'site', 'area'] as const
 
+// Tenant settings is admin configuration. saveSettings bypasses RLS to write
+// the global tenants row, so it must self-gate (a POST endpoint isn't protected
+// by the page render gate). `can` returns true for super-admins.
+async function requireSettingsAdmin() {
+  const ctx = await requireRequestContext()
+  if (!can(ctx, 'admin.settings.manage')) redirect('/admin')
+  return ctx
+}
+
 async function saveSettings(formData: FormData) {
   'use server'
-  const ctx = await requireRequestContext()
+  const ctx = await requireSettingsAdmin()
 
   const name = String(formData.get('name') ?? '').trim()
   const slug = String(formData.get('slug') ?? '').trim()
@@ -86,7 +97,7 @@ async function saveSettings(formData: FormData) {
 }
 
 export default async function AdminSettingsPage() {
-  const ctx = await requireRequestContext()
+  const ctx = await requireSettingsAdmin()
   const tenant = await db.transaction(async (tx) => {
     await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
     const [t] = await tx.select().from(tenants).where(eq(tenants.id, ctx.tenantId)).limit(1)

@@ -14,6 +14,7 @@
 import { revalidatePath } from 'next/cache'
 import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { documentBookItems, documentBooks, documentDrafts, documents } from '@beaconhs/db/schema'
+import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 
@@ -24,6 +25,7 @@ export async function createBlankDocument(): Promise<
   { ok: true; id: string } | { ok: false; error: string }
 > {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.manage')
   const key = `untitled-${Math.random().toString(36).slice(2, 8)}`
   const id = await ctx.db(async (tx) => {
     const [doc] = await tx
@@ -54,6 +56,7 @@ export async function createBlankDocument(): Promise<
 // contract). Existing docs rename via the editor's renameDocument.
 export async function updateDocumentTitle(formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.manage')
   const id = String(formData.get('id') ?? '')
   const value = String(formData.get('value') ?? '')
   if (!id) throw new Error('Missing id')
@@ -77,6 +80,7 @@ export async function bulkPublishDocuments(args: {
   documentIds: string[]
 }): Promise<BulkActionResult> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.manage')
   if (args.documentIds.length === 0) return { ok: false, error: 'No documents selected.' }
   const ids = args.documentIds.slice(0, MAX_BULK)
   const batchId = makeBatchId()
@@ -122,6 +126,7 @@ export async function bulkArchiveDocuments(args: {
   documentIds: string[]
 }): Promise<BulkActionResult> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.manage')
   if (args.documentIds.length === 0) return { ok: false, error: 'No documents selected.' }
   const ids = args.documentIds.slice(0, MAX_BULK)
   const batchId = makeBatchId()
@@ -173,6 +178,7 @@ export async function bulkAddDocumentsToBook(args: {
   bookId: string
 }): Promise<BulkActionResult> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.manage')
   if (args.documentIds.length === 0) return { ok: false, error: 'No documents selected.' }
   if (!args.bookId) return { ok: false, error: 'Pick a book.' }
   const ids = args.documentIds.slice(0, MAX_BULK)

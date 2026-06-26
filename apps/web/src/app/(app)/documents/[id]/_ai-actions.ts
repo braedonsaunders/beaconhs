@@ -6,6 +6,7 @@
 
 import { and, asc, desc, eq } from 'drizzle-orm'
 import { aiConversations, aiMessages } from '@beaconhs/db/schema'
+import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 
 const SCOPE = 'documents.editor'
@@ -17,6 +18,7 @@ export async function loadDocConversation(
   documentId: string,
 ): Promise<{ conversationId: string; messages: DocAiMessage[] }> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.read')
   return ctx.db(async (tx) => {
     const existing = await tx
       .select()
@@ -63,6 +65,7 @@ export async function appendDocMessages(input: {
   messages: { role: DocAiRole; content: string }[]
 }): Promise<{ ok: boolean }> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.read')
   if (!input.conversationId || input.messages.length === 0) return { ok: false }
   await ctx.db(async (tx) => {
     for (const m of input.messages) {
@@ -79,6 +82,7 @@ export async function appendDocMessages(input: {
 
 export async function newDocConversation(documentId: string): Promise<{ conversationId: string }> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.read')
   const [conv] = await ctx.db((tx) =>
     tx
       .insert(aiConversations)

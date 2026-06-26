@@ -1,13 +1,14 @@
 'use client'
 
 // In-chat document reader. A right-side slide-out panel that loads a controlled
-// document's FULL sanitized HTML and renders it on a paper surface using the
-// same `documentBodyCss` as the editor/PDF — so a user can read a long policy
-// without leaving the conversation. Mounted once by DocumentReaderProvider (in
+// document and renders it without leaving the conversation: in-app documents on
+// a paper surface using the same `documentBodyCss` as the editor/PDF, and
+// uploaded PDFs (including scanned/image-only ones) in a native <iframe> on a
+// short-lived presigned URL. Mounted once by DocumentReaderProvider (in
 // assistant-app); any result card opens it via useDocumentReader().
 
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { ExternalLink, FileText, FileWarning, PanelRightOpen, X } from 'lucide-react'
+import { Download, ExternalLink, FileText, FileWarning, PanelRightOpen, X } from 'lucide-react'
 import { Badge, Drawer, Skeleton } from '@beaconhs/ui'
 import { documentBodyCss } from '@beaconhs/forms-core'
 import { getReaderDocument, type ReaderDocument } from '../_document-reader-actions'
@@ -19,7 +20,8 @@ export type DocRef = {
   status?: string | null
   category?: string | null
   /** Preloaded sanitized HTML (e.g. from the preview card) — when present the
-   *  reader renders it immediately instead of re-fetching. */
+   *  reader renders it immediately instead of re-fetching. Uploaded PDFs have no
+   *  HTML, so they leave this null and the reader fetches a fresh presigned URL. */
   html?: string | null
 }
 
@@ -103,6 +105,8 @@ function DocumentReaderDrawer({ docRef, onClose }: { docRef: DocRef | null; onCl
           category: docRef.category ?? null,
           updatedAt: null,
           html: docRef.html,
+          // Preloading only ever carries HTML; PDFs always re-fetch a fresh URL.
+          pdfUrl: null,
         }
       : null
   const current = docRef && loaded?.id === docRef.id ? loaded : null
@@ -119,6 +123,7 @@ function DocumentReaderDrawer({ docRef, onClose }: { docRef: DocRef | null; onCl
       loading={docRef !== null && !preloaded && current === null}
       error={current?.error ?? null}
       html={doc?.html ?? null}
+      pdfUrl={doc?.pdfUrl ?? null}
       onClose={onClose}
     />
   )
@@ -135,6 +140,7 @@ export function ReaderShell({
   loading,
   error,
   html,
+  pdfUrl,
   onClose,
 }: {
   open: boolean
@@ -146,6 +152,7 @@ export function ReaderShell({
   loading: boolean
   error: string | null
   html: string | null
+  pdfUrl: string | null
   onClose: () => void
 }) {
   return (
@@ -204,6 +211,34 @@ export function ReaderShell({
         <ReaderMessage icon={<FileWarning className="h-5 w-5" />} title={error}>
           You can still open it from the document module if you have access.
         </ReaderMessage>
+      ) : pdfUrl ? (
+        // Uploaded PDF (incl. scanned/image-only) → browsers render it natively
+        // in the iframe; no pdf.js needed. A slim action row offers download /
+        // new-tab on the same short-lived presigned URL.
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-100 dark:border-slate-800 dark:bg-slate-950">
+          <div className="flex items-center justify-end gap-1.5 border-b border-slate-200 bg-white/95 px-3 py-2 dark:border-slate-800 dark:bg-slate-900/95">
+            <a
+              href={pdfUrl}
+              download
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/60"
+            >
+              <Download className="h-3.5 w-3.5" /> Download
+            </a>
+            <a
+              href={pdfUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/60"
+            >
+              <ExternalLink className="h-3.5 w-3.5" /> New tab
+            </a>
+          </div>
+          <iframe
+            src={pdfUrl}
+            title={title}
+            className="h-[calc(100vh-11rem)] min-h-[480px] w-full bg-white"
+          />
+        </div>
       ) : html ? (
         // White "paper" surface, kept light even in dark mode so the document
         // reads like a printed page; doc-body CSS styles headings/lists/tables.
@@ -303,14 +338,16 @@ export function DocumentPreviewCard({
 
   function open() {
     if (reader) {
-      // Hand the already-loaded HTML to the reader so it opens instantly.
+      // Hand the already-loaded HTML to the reader so it opens instantly. A PDF
+      // document has no HTML (empty string) — pass null so the reader fetches a
+      // fresh presigned URL rather than treating "" as preloaded-but-empty.
       reader.open({
         id,
         title: resolvedTitle,
         key: resolvedKey,
         status: resolvedStatus,
         category: resolvedCategory,
-        html: doc?.html ?? null,
+        html: doc?.html || null,
       })
     } else if (typeof window !== 'undefined') {
       window.open(`/documents/${id}`, '_blank', 'noopener')
@@ -359,6 +396,8 @@ export function DocumentPreviewCard({
         <div className="relative max-h-52 overflow-hidden border-t border-slate-100 bg-white px-6 pt-6 dark:border-slate-800">
           {loaded === null ? (
             <PreviewSkeleton />
+          ) : doc?.pdfUrl ? (
+            <PreviewPdf />
           ) : doc?.html ? (
             <div className="doc-reader-body" dangerouslySetInnerHTML={{ __html: doc.html }} />
           ) : (
@@ -392,6 +431,20 @@ function PreviewEmpty({ error }: { error: boolean }) {
     <div className="flex flex-col items-center justify-center gap-1.5 py-8 text-center text-slate-400">
       <FileText className="h-7 w-7" />
       <span className="text-xs">{error ? 'Preview unavailable' : 'No preview available'}</span>
+    </div>
+  )
+}
+
+// Uploaded-PDF documents have no HTML to thumbnail — show a PDF affordance
+// instead. The surface is always white paper, so this is styled light-only.
+function PreviewPdf() {
+  return (
+    <div className="flex flex-col items-center justify-center gap-1.5 py-8 text-center">
+      <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-teal-100 text-teal-700">
+        <FileText className="h-5 w-5" />
+      </span>
+      <span className="text-sm font-medium text-slate-700">PDF document</span>
+      <span className="text-xs text-slate-500">Open in the reader to view the pages</span>
     </div>
   )
 }

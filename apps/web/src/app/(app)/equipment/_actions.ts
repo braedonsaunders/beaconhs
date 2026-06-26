@@ -21,6 +21,7 @@ import {
   orgUnits,
   people,
 } from '@beaconhs/db/schema'
+import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { csvRow } from '@/lib/csv'
@@ -44,6 +45,7 @@ export async function bulkTransferEquipmentToSite(args: {
   siteOrgUnitId: string
 }): Promise<BulkActionResult> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.manage')
   if (args.equipmentIds.length === 0) return { ok: false, error: 'No equipment selected.' }
   if (!args.siteOrgUnitId) return { ok: false, error: 'Pick a site.' }
   const ids = args.equipmentIds.slice(0, MAX_BULK)
@@ -111,6 +113,7 @@ export async function bulkAssignEquipmentToHolder(args: {
   personId: string
 }): Promise<BulkActionResult> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.manage')
   if (args.equipmentIds.length === 0) return { ok: false, error: 'No equipment selected.' }
   if (!args.personId) return { ok: false, error: 'Pick a holder.' }
   const ids = args.equipmentIds.slice(0, MAX_BULK)
@@ -191,6 +194,7 @@ export async function bulkSetEquipmentStatus(args: {
   status: EquipmentStatus
 }): Promise<BulkActionResult> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.manage')
   if (args.equipmentIds.length === 0) return { ok: false, error: 'No equipment selected.' }
   if (!EQUIPMENT_STATUSES.includes(args.status)) {
     return { ok: false, error: 'Invalid status.' }
@@ -249,6 +253,7 @@ export async function bulkExportEquipmentCsv(args: {
   equipmentIds: string[]
 }): Promise<BulkCsvResult> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.read.all')
   if (args.equipmentIds.length === 0) return { ok: false, error: 'No equipment selected.' }
   const ids = args.equipmentIds.slice(0, MAX_BULK)
   const batchId = makeBatchId()
@@ -366,6 +371,7 @@ type ReturnCondition = (typeof RETURN_CONDITIONS)[number]
 
 export async function checkInEquipment(formData: FormData) {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.manage')
   const id = String(formData.get('id') ?? '').trim()
   const rawCondition = String(formData.get('returnedCondition') ?? 'good').trim()
   const condition: ReturnCondition = (RETURN_CONDITIONS as readonly string[]).includes(rawCondition)

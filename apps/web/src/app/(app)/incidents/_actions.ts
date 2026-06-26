@@ -14,6 +14,7 @@
 import { revalidatePath } from 'next/cache'
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
 import { incidentClassifications, incidents, orgUnits } from '@beaconhs/db/schema'
+import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { csvRow } from '@/lib/csv'
@@ -40,6 +41,7 @@ export async function bulkArchiveIncidents(args: {
   incidentIds: string[]
 }): Promise<BulkActionResult> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'incidents.update')
   if (args.incidentIds.length === 0) return { ok: false, error: 'No incidents selected.' }
   const ids = args.incidentIds.slice(0, MAX_BULK)
   const batchId = makeBatchId()
@@ -95,6 +97,7 @@ export async function bulkSetIncidentClassification(args: {
   classificationId: string
 }): Promise<BulkActionResult> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'incidents.update')
   if (args.incidentIds.length === 0) return { ok: false, error: 'No incidents selected.' }
   if (!args.classificationId) return { ok: false, error: 'Select a classification.' }
   const ids = args.incidentIds.slice(0, MAX_BULK)
@@ -172,6 +175,13 @@ export async function bulkExportIncidentsCsv(args: {
   incidentIds: string[]
 }): Promise<BulkCsvResult> {
   const ctx = await requireRequestContext()
+  if (
+    !can(ctx, 'incidents.read.all') &&
+    !can(ctx, 'incidents.read.site') &&
+    !can(ctx, 'incidents.read.self')
+  ) {
+    return { ok: false, error: 'Not authorized.' }
+  }
   if (args.incidentIds.length === 0) return { ok: false, error: 'No incidents selected.' }
   const ids = args.incidentIds.slice(0, MAX_BULK)
   const batchId = makeBatchId()

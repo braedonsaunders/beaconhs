@@ -15,6 +15,7 @@ import {
   PageHeader,
   Textarea,
 } from '@beaconhs/ui'
+import { assertCan } from '@beaconhs/tenant'
 import { formTemplates, formTemplateVersions } from '@beaconhs/db/schema'
 import type { FormSchemaV1 } from '@beaconhs/db/schema'
 import { CANONICAL_TEMPLATES, getCanonicalTemplate } from '@beaconhs/db/canonical-templates'
@@ -72,6 +73,7 @@ async function pickAvailableKey(
 async function createTemplate(formData: FormData): Promise<void> {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'forms.template.create')
   const name = String(formData.get('name') ?? '').trim()
   const description = String(formData.get('description') ?? '').trim() || null
   const customKey = String(formData.get('key') ?? '').trim() || null
@@ -156,6 +158,7 @@ async function createFromCanonical(formData: FormData): Promise<void> {
   if (!canonical) return
 
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'forms.template.create')
   // Use the canonical key as the base; suffix on collision so admins can clone
   // multiple variations of the same canonical (e.g. site-specific tweaks).
   const key = await pickAvailableKey(ctx, canonical.key)

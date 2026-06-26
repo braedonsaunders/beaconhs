@@ -2,6 +2,7 @@ import { asc, eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { Button, Card, CardContent, Input, Label, Select, Textarea } from '@beaconhs/ui'
 import { equipmentItems, equipmentTypes, orgUnits, people } from '@beaconhs/db/schema'
+import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { PersonSelectField } from '@/components/person-select-field'
@@ -13,6 +14,7 @@ import { PersonSelectField } from '@/components/person-select-field'
 async function saveEquipment(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.manage')
   const id = String(formData.get('id') ?? '')
   if (!id) return
 

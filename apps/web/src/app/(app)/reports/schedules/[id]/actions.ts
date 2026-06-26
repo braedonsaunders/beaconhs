@@ -3,7 +3,8 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { eq } from 'drizzle-orm'
-import { reportSchedules, reportRuns } from '@beaconhs/db/schema'
+import { assertCan } from '@beaconhs/tenant'
+import { reportSchedules } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { computeNextRunAt } from '@beaconhs/reports'
@@ -11,6 +12,7 @@ import { enqueueReportRun } from '@beaconhs/jobs'
 
 export async function setActive(scheduleId: string, active: boolean): Promise<void> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'reports.schedule')
   await ctx.db(async (tx) => {
     await tx.update(reportSchedules).set({ active }).where(eq(reportSchedules.id, scheduleId))
   })
@@ -26,6 +28,7 @@ export async function setActive(scheduleId: string, active: boolean): Promise<vo
 
 export async function triggerNow(scheduleId: string): Promise<void> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'reports.schedule')
   // Load the schedule from the tenant context.
   const schedule = await ctx.db(async (tx) => {
     const [row] = await tx
@@ -48,6 +51,7 @@ export async function triggerNow(scheduleId: string): Promise<void> {
 
 export async function updateSchedule(scheduleId: string, formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'reports.schedule')
 
   const name = String(formData.get('name') ?? '').trim()
   const cadence = String(formData.get('cadence') ?? '') as 'daily' | 'weekly' | 'monthly'
@@ -137,6 +141,7 @@ export async function updateSchedule(scheduleId: string, formData: FormData): Pr
 
 export async function deleteSchedule(scheduleId: string): Promise<void> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'reports.schedule')
   await ctx.db(async (tx) => {
     // Runs cascade-delete via FK.
     await tx.delete(reportSchedules).where(eq(reportSchedules.id, scheduleId))

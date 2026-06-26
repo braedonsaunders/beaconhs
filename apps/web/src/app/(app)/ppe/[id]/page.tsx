@@ -64,7 +64,7 @@ import {
   ppeTypeInspectionCriteria,
   ppeTypes,
 } from '@beaconhs/db/schema'
-import { can } from '@beaconhs/tenant'
+import { assertCan, can } from '@beaconhs/tenant'
 import { publicUrl } from '@beaconhs/storage'
 import { requireRequestContext } from '@/lib/auth'
 import { PersonSelectField } from '@/components/person-select-field'
@@ -147,6 +147,7 @@ async function updatePpeField(formData: FormData) {
 async function recordInspection(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'ppe.inspect')
   const itemId = String(formData.get('itemId') ?? '')
   const typeId = String(formData.get('typeId') ?? '')
   const kind = String(formData.get('kind') ?? 'pre_use') as 'pre_use' | 'annual'
@@ -249,6 +250,12 @@ async function setStatus(formData: FormData) {
   const personId = String(formData.get('personId') ?? '').trim() || null
   const note = String(formData.get('note') ?? '').trim() || null
 
+  // Permission split mirrors the transition: issuing needs issue, returning needs
+  // return, everything else (damage/discard/in-stock/expire) is a manage write.
+  if (status === 'issued') assertCan(ctx, 'ppe.issue')
+  else if (status === 'returned') assertCan(ctx, 'ppe.return')
+  else assertCan(ctx, 'ppe.manage')
+
   if (status === 'issued') {
     if (!personId) return
     await recordPpeIssueAction(ctx, { itemId, personId, action: 'issue', note })
@@ -277,6 +284,7 @@ async function setStatus(formData: FormData) {
 async function reportIssue(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'ppe.inspect')
   const itemId = String(formData.get('itemId') ?? '')
   const description = String(formData.get('description') ?? '').trim()
   if (!description) return
@@ -307,6 +315,7 @@ async function reportIssue(formData: FormData) {
 async function resolveIssue(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'ppe.manage')
   const id = String(formData.get('id') ?? '').trim()
   const itemId = String(formData.get('itemId') ?? '').trim()
   const resolution = String(formData.get('resolution') ?? '').trim() || null
@@ -426,6 +435,7 @@ async function deleteCertificate(formData: FormData) {
 async function sendEmailAction(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'ppe.read.all')
   const id = String(formData.get('id') ?? '')
   if (!id) return
   const subjectPrefix = String(formData.get('subjectPrefix') ?? '').trim() || undefined

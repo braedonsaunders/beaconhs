@@ -24,6 +24,7 @@ import {
   documentTypes,
   documents,
 } from '@beaconhs/db/schema'
+import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
@@ -45,6 +46,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 async function addDocumentToBook(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.manage')
   const bookId = String(formData.get('bookId') ?? '')
   const documentId = String(formData.get('documentId') ?? '')
   if (!bookId || !documentId) return
@@ -83,6 +85,7 @@ async function addDocumentToBook(formData: FormData) {
 async function removeDocumentFromBook(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.manage')
   const bookId = String(formData.get('bookId') ?? '')
   const documentId = String(formData.get('documentId') ?? '')
   if (!bookId || !documentId) return
@@ -119,6 +122,7 @@ async function removeDocumentFromBook(formData: FormData) {
 async function reorderBookItems(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.manage')
   const bookId = String(formData.get('bookId') ?? '')
   const orderedIdsRaw = String(formData.get('orderedIds') ?? '')
   if (!bookId || !orderedIdsRaw) return
@@ -151,6 +155,7 @@ async function reorderBookItems(formData: FormData) {
 async function moveItem(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.manage')
   const bookId = String(formData.get('bookId') ?? '')
   const documentId = String(formData.get('documentId') ?? '')
   const direction = String(formData.get('direction') ?? '') as 'up' | 'down'
@@ -190,6 +195,7 @@ async function moveItem(formData: FormData) {
 async function publishBook(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.manage')
   const bookId = String(formData.get('bookId') ?? '')
   if (!bookId) return
   await ctx.db((tx) =>
@@ -211,6 +217,7 @@ async function publishBook(formData: FormData) {
 async function unpublishBook(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.manage')
   const bookId = String(formData.get('bookId') ?? '')
   if (!bookId) return
   await ctx.db((tx) =>
@@ -232,6 +239,7 @@ async function unpublishBook(formData: FormData) {
 async function updateBookSettings(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.manage')
   const bookId = String(formData.get('bookId') ?? '')
   const title = String(formData.get('title') ?? '').trim()
   const description = String(formData.get('description') ?? '').trim() || null

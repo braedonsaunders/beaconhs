@@ -66,6 +66,13 @@ export type ProviderSpec = {
   keyHint: string
   /** Optional note about the model-id format for this provider. */
   modelHint?: string
+  /**
+   * True when this provider's API accepts IMAGE content inside a tool result
+   * (Anthropic does; OpenAI's and Google's function/tool results are text/JSON
+   * only). Gates vision tools that return rendered page images to the model —
+   * see `providerSupportsImageToolResults`.
+   */
+  visionToolResults: boolean
 }
 
 /**
@@ -82,6 +89,7 @@ export const AI_PROVIDER_SPECS: ProviderSpec[] = [
     fast: 'claude-haiku-4-5-20251001',
     smart: 'claude-sonnet-4-6',
     keyHint: 'sk-ant-…',
+    visionToolResults: true,
   },
   {
     value: 'openai',
@@ -92,6 +100,7 @@ export const AI_PROVIDER_SPECS: ProviderSpec[] = [
     fast: 'gpt-4o-mini',
     smart: 'gpt-4o',
     keyHint: 'sk-…',
+    visionToolResults: false,
   },
   {
     value: 'google',
@@ -102,6 +111,7 @@ export const AI_PROVIDER_SPECS: ProviderSpec[] = [
     fast: 'gemini-2.5-flash',
     smart: 'gemini-2.5-pro',
     keyHint: 'AIza…',
+    visionToolResults: false,
   },
   {
     value: 'openrouter',
@@ -113,6 +123,9 @@ export const AI_PROVIDER_SPECS: ProviderSpec[] = [
     smart: 'anthropic/claude-3.5-sonnet',
     keyHint: 'sk-or-…',
     modelHint: 'Use vendor/model slugs, e.g. anthropic/claude-3.5-sonnet or openai/gpt-4o.',
+    // OpenRouter proxies many vendors over an OpenAI-compatible surface; image
+    // tool-results aren't reliably supported, so keep vision tools off here.
+    visionToolResults: false,
   },
   {
     value: 'groq',
@@ -123,6 +136,7 @@ export const AI_PROVIDER_SPECS: ProviderSpec[] = [
     fast: 'llama-3.1-8b-instant',
     smart: 'llama-3.3-70b-versatile',
     keyHint: 'gsk_…',
+    visionToolResults: false,
   },
   {
     value: 'xai',
@@ -133,6 +147,7 @@ export const AI_PROVIDER_SPECS: ProviderSpec[] = [
     fast: 'grok-2-1212',
     smart: 'grok-2-vision-1212',
     keyHint: 'xai-…',
+    visionToolResults: false,
   },
   {
     value: 'deepseek',
@@ -143,6 +158,7 @@ export const AI_PROVIDER_SPECS: ProviderSpec[] = [
     fast: 'deepseek-chat',
     smart: 'deepseek-chat',
     keyHint: 'sk-…',
+    visionToolResults: false,
   },
   {
     value: 'mistral',
@@ -153,6 +169,7 @@ export const AI_PROVIDER_SPECS: ProviderSpec[] = [
     fast: 'mistral-small-latest',
     smart: 'mistral-large-latest',
     keyHint: 'Your Mistral API key',
+    visionToolResults: false,
   },
   {
     value: 'custom',
@@ -165,6 +182,7 @@ export const AI_PROVIDER_SPECS: ProviderSpec[] = [
     keyHint: 'Your provider API key',
     modelHint:
       'Point Base URL at any OpenAI-compatible endpoint (Together, Fireworks, Perplexity, Ollama, vLLM, …) and set explicit model ids.',
+    visionToolResults: false,
   },
 ]
 
@@ -184,6 +202,20 @@ export function providerSpec(provider: AiProvider): ProviderSpec {
 export function defaultModel(provider: AiProvider, tier: ModelTier): string {
   const spec = SPEC_BY_VALUE[provider] ?? SPEC_BY_VALUE.anthropic
   return tier === 'smart' ? spec.smart : spec.fast
+}
+
+/**
+ * Whether the configured provider accepts IMAGE content in a tool result — the
+ * capability that lets a tool hand rendered PDF pages back to the model for
+ * vision reading. Currently Anthropic only; other providers' tool/function
+ * results are text/JSON only, so exposing such a tool to them would break the
+ * agent turn. Used to gate the assistant's `view_document_pages` tool.
+ */
+export function providerSupportsImageToolResults(
+  config: AiConfig | null | undefined,
+): boolean {
+  if (!config) return false
+  return SPEC_BY_VALUE[config.provider]?.visionToolResults ?? false
 }
 
 export function isAiConfigured(config: AiConfig | null | undefined): config is AiConfig {

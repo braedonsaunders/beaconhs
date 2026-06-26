@@ -5,7 +5,15 @@ import 'server-only'
 // trade / crew / person-group). RLS-bound to the caller's tenant.
 
 import { asc, eq, isNull } from 'drizzle-orm'
-import { crews, departments, orgUnits, people, personGroups, roles, trades } from '@beaconhs/db/schema'
+import {
+  crews,
+  departments,
+  orgUnits,
+  people,
+  personGroups,
+  roles,
+  trades,
+} from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 
 export type AudienceOptions = {

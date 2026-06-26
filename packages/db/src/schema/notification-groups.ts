@@ -88,16 +88,13 @@ export const notificationGroupsRelations = relations(notificationGroups, ({ one,
   members: many(notificationGroupMembers),
 }))
 
-export const notificationGroupMembersRelations = relations(
-  notificationGroupMembers,
-  ({ one }) => ({
-    tenant: one(tenants, {
-      fields: [notificationGroupMembers.tenantId],
-      references: [tenants.id],
-    }),
-    group: one(notificationGroups, {
-      fields: [notificationGroupMembers.groupId],
-      references: [notificationGroups.id],
-    }),
+export const notificationGroupMembersRelations = relations(notificationGroupMembers, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [notificationGroupMembers.tenantId],
+    references: [tenants.id],
   }),
-)
+  group: one(notificationGroups, {
+    fields: [notificationGroupMembers.groupId],
+    references: [notificationGroups.id],
+  }),
+}))

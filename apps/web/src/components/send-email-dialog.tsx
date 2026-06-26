@@ -11,9 +11,13 @@
 // stitches into the email body / subject prefix as it sees fit.
 
 import { useRouter } from 'next/navigation'
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import { Mail, X } from 'lucide-react'
-import { Button, Input, Label, Textarea } from '@beaconhs/ui'
+import { Button, Input, Label, SearchSelect, Textarea } from '@beaconhs/ui'
+import {
+  listNotificationGroups,
+  resolveNotificationGroupEmails,
+} from '@/lib/notifications/group-emails-action'
 
 export type SendEmailDialogProps = {
   open: boolean
@@ -39,7 +43,7 @@ export function GenericSendEmailDialog({
   title = 'Send email',
   description,
   defaultRecipients = '',
-  recipientsHint = 'Each address gets its own copy. Leave blank to send to the default tenant admin distribution list.',
+  recipientsHint = 'Each address gets its own copy. Nothing is sent if this is left blank.',
   defaultCc = '',
   defaultSubjectPrefix = 'Update',
   reference,
@@ -49,6 +53,44 @@ export function GenericSendEmailDialog({
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [submitted, setSubmitted] = useState(false)
+  // Notification groups — loaded lazily when the dialog opens; the picker only
+  // appears if the tenant has any. Choosing one appends its members' emails to
+  // the recipients field (which is controlled so it can be programmatically set).
+  const [groups, setGroups] = useState<{ value: string; label: string }[]>([])
+  const [recipients, setRecipients] = useState(defaultRecipients)
+  const [groupBusy, startGroup] = useTransition()
+
+  useEffect(() => {
+    if (!open) return
+    setRecipients(defaultRecipients)
+    let cancelled = false
+    listNotificationGroups()
+      .then((g) => {
+        if (!cancelled) setGroups(g)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
+  function addGroup(groupId: string) {
+    if (!groupId) return
+    startGroup(async () => {
+      const emails = await resolveNotificationGroupEmails(groupId)
+      setRecipients((cur) => {
+        const have = new Set(
+          cur
+            .split(/[,;\s]+/)
+            .map((s) => s.trim())
+            .filter(Boolean),
+        )
+        for (const e of emails) have.add(e)
+        return Array.from(have).join(', ')
+      })
+    })
+  }
 
   if (!open) return null
 
@@ -100,10 +142,22 @@ export function GenericSendEmailDialog({
               id="recipients"
               name="recipients"
               type="text"
-              defaultValue={defaultRecipients}
+              value={recipients}
+              onChange={(e) => setRecipients(e.target.value)}
               placeholder="alice@example.com, bob@example.com"
             />
             <p className="text-[11px] text-slate-500 dark:text-slate-400">{recipientsHint}</p>
+            {groups.length > 0 ? (
+              <SearchSelect
+                value=""
+                onChange={addGroup}
+                options={groups}
+                placeholder={groupBusy ? 'Adding group…' : 'Add a notification group…'}
+                searchPlaceholder="Search groups…"
+                ariaLabel="Add a notification group"
+                triggerClassName="mt-1"
+              />
+            ) : null}
           </div>
 
           <div className="space-y-1.5">

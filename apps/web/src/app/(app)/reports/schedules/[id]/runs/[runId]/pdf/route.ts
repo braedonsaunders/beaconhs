@@ -6,6 +6,7 @@
 
 import { NextResponse } from 'next/server'
 import { and, eq } from 'drizzle-orm'
+import { assertCan } from '@beaconhs/tenant'
 import { attachments, reportRuns } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { storedPdfArtifactResponse } from '@/lib/pdf-route'
@@ -18,6 +19,7 @@ export async function GET(
 ): Promise<Response> {
   const { id, runId } = await params
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'reports.read')
   if (!ctx.tenantId) {
     return NextResponse.json({ error: 'No active tenant' }, { status: 400 })
   }

@@ -30,6 +30,7 @@ import {
   publicUrl,
   putObject,
 } from '@beaconhs/storage'
+import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 
@@ -42,6 +43,7 @@ export async function renameDocument(input: {
   title: string
 }): Promise<{ ok: boolean; error?: string }> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.manage')
   const title = input.title.trim()
   if (!input.documentId) return { ok: false, error: 'Missing document id' }
   if (!title) return { ok: false, error: 'Title is required' }
@@ -61,6 +63,7 @@ export async function updateDocumentLayout(input: {
   printFooter?: boolean
 }): Promise<{ ok: boolean }> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.manage')
   if (!input.documentId) return { ok: false }
   const patch: Record<string, unknown> = {}
   if (input.pageSize) patch.pageSize = input.pageSize
@@ -149,6 +152,7 @@ export async function updateDocumentMeta(input: {
   footerText?: string | null
 }): Promise<{ ok: boolean; error?: string }> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.manage')
   if (!input.documentId) return { ok: false, error: 'Missing document id' }
   const patch: Record<string, unknown> = {}
   if (input.title !== undefined) {
@@ -190,6 +194,7 @@ export async function importDocxIntoDocument(input: {
   attachmentId: string
 }): Promise<{ ok: boolean; error?: string }> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.manage')
   if (!input.documentId || !input.attachmentId) return { ok: false, error: 'Missing fields' }
   const [att] = await ctx.db((tx) =>
     tx
@@ -288,6 +293,7 @@ export async function attachFileVersion(input: {
   attachmentId: string
 }): Promise<{ ok: boolean; error?: string }> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.manage')
   if (!input.documentId || !input.attachmentId) return { ok: false, error: 'Missing fields' }
   await ctx.db(async (tx) => {
     const [latest] = await tx
@@ -322,6 +328,7 @@ export async function saveDraft(input: {
   contentHtml: string
 }): Promise<SaveDraftResult> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.manage')
   if (!input.documentId) return { ok: false, error: 'Missing document id' }
 
   const html = sanitizeDocumentHtml(input.contentHtml)
@@ -363,6 +370,7 @@ export async function publishDraft(input: {
   changelog?: string | null
 }): Promise<{ ok: true; version: number } | { ok: false; error: string }> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.manage')
   const { documentId } = input
   if (!documentId) return { ok: false, error: 'Missing document id' }
 
@@ -491,6 +499,7 @@ export async function addComment(input: {
   body: string
 }): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.review')
   const body = input.body.trim()
   if (!input.documentId || !input.anchorId) return { ok: false, error: 'Missing anchor' }
   if (!body) return { ok: false, error: 'Comment is empty' }
@@ -526,6 +535,7 @@ export async function replyToComment(input: {
   body: string
 }): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.review')
   const body = input.body.trim()
   if (!input.documentId || !input.threadId) return { ok: false, error: 'Missing thread' }
   if (!body) return { ok: false, error: 'Reply is empty' }
@@ -554,8 +564,25 @@ export async function editComment(input: {
   body: string
 }): Promise<{ ok: boolean; error?: string }> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.review')
   const body = input.body.trim()
   if (!input.id || !body) return { ok: false, error: 'Missing fields' }
+
+  // Author-ownership: only the comment's author (or a documents.manage holder)
+  // may rewrite it — a reviewer can't edit someone else's comment.
+  const [existing] = await ctx.db((tx) =>
+    tx
+      .select({ authorTenantUserId: documentComments.authorTenantUserId })
+      .from(documentComments)
+      .where(eq(documentComments.id, input.id))
+      .limit(1),
+  )
+  if (!existing) return { ok: false, error: 'Comment not found' }
+  const isAuthor = !!ctx.membership?.id && existing.authorTenantUserId === ctx.membership.id
+  if (!isAuthor && !can(ctx, 'documents.manage')) {
+    return { ok: false, error: 'You can only edit your own comments' }
+  }
+
   await ctx.db((tx) =>
     tx.update(documentComments).set({ body }).where(eq(documentComments.id, input.id)),
   )
@@ -567,6 +594,7 @@ export async function resolveComment(input: {
   resolved: boolean
 }): Promise<{ ok: boolean }> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.review')
   if (!input.id) return { ok: false }
   await ctx.db((tx) =>
     tx
@@ -582,7 +610,22 @@ export async function resolveComment(input: {
 
 export async function deleteComment(input: { id: string }): Promise<{ ok: boolean }> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.review')
   if (!input.id) return { ok: false }
+
+  // Author-ownership: only the (root) comment's author or a documents.manage
+  // holder may delete a thread — a reviewer can't delete someone else's comment.
+  const [existing] = await ctx.db((tx) =>
+    tx
+      .select({ authorTenantUserId: documentComments.authorTenantUserId })
+      .from(documentComments)
+      .where(eq(documentComments.id, input.id))
+      .limit(1),
+  )
+  if (!existing) return { ok: false }
+  const isAuthor = !!ctx.membership?.id && existing.authorTenantUserId === ctx.membership.id
+  if (!isAuthor && !can(ctx, 'documents.manage')) return { ok: false }
+
   await ctx.db((tx) =>
     // Deleting a root removes its replies too (soft self-reference, no FK cascade).
     tx

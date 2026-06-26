@@ -19,6 +19,7 @@ import {
   tenantUsers,
   user as userTable,
 } from '@beaconhs/db/schema'
+import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { DetailGrid } from '@/components/detail-grid'
 import { Section } from '@/components/section'
@@ -40,6 +41,8 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
 async function deleteReview(formData: FormData): Promise<void> {
   'use server'
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.manage')
   const id = String(formData.get('id') ?? '')
   if (!id) return
   await deleteManagementReview(id)

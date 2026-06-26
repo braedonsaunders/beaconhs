@@ -106,6 +106,33 @@ async function addComment(formData: FormData) {
   const body = String(formData.get('body') ?? '').trim()
   if (!responseId || !body) return
   if (!ctx.membership?.id) return
+  // Per-user record visibility re-check: the page render is scoped, but this
+  // action is reachable directly, so a user must be able to see the response
+  // before commenting on it (read.all → any; read.site → my sites; else → mine).
+  const target = await ctx.db(async (tx) => {
+    const [r] = await tx
+      .select({
+        submittedBy: formResponses.submittedBy,
+        subjectPersonId: formResponses.subjectPersonId,
+        siteOrgUnitId: formResponses.siteOrgUnitId,
+      })
+      .from(formResponses)
+      .where(eq(formResponses.id, responseId))
+      .limit(1)
+    return r ?? null
+  })
+  if (!target) return
+  if (
+    !(await ctx.db((tx) =>
+      canSeeRecord(ctx, tx, {
+        prefix: 'forms.response',
+        ownerIds: [target.submittedBy],
+        personId: target.subjectPersonId,
+        siteId: target.siteOrgUnitId,
+      }),
+    ))
+  )
+    return
   await ctx.db((tx) =>
     tx.insert(formResponseComments).values({
       tenantId: ctx.tenantId,

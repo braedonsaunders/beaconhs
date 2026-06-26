@@ -7,7 +7,7 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { and, asc, count, desc, eq, isNull, max, sql } from 'drizzle-orm'
-import type { RequestContext } from '@beaconhs/tenant'
+import { assertCan, type RequestContext } from '@beaconhs/tenant'
 import { htmlToText } from '@beaconhs/forms-core'
 import {
   attachments,
@@ -35,6 +35,7 @@ import {
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
+import { canSeeRecord } from '@/lib/visibility'
 import { recordAudit } from '@/lib/audit'
 import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { emitHazardAssessmentCreated } from '@beaconhs/integrations'
@@ -48,6 +49,30 @@ async function ctxWithTenant(): Promise<HazidCtx> {
   const ctx = await requireRequestContext()
   if (!ctx.tenantId) throw new Error('Active tenant required')
   return ctx as HazidCtx
+}
+
+// Re-scope guard for the per-assessment mutations: the caller already holds
+// `hazid.update`, but a self/site-tier user must not be able to drive an
+// assessment they cannot see by guessing its id. Mirrors the detail page's
+// canSeeRecord check (prefix 'hazid', owner = reporter, site).
+async function assertCanSeeAssessment(ctx: HazidCtx, assessmentId: string): Promise<void> {
+  const visible = await ctx.db(async (tx) => {
+    const [row] = await tx
+      .select({
+        reportedByTenantUserId: hazidAssessments.reportedByTenantUserId,
+        siteOrgUnitId: hazidAssessments.siteOrgUnitId,
+      })
+      .from(hazidAssessments)
+      .where(eq(hazidAssessments.id, assessmentId))
+      .limit(1)
+    if (!row) return false
+    return canSeeRecord(ctx, tx, {
+      prefix: 'hazid',
+      ownerIds: [row.reportedByTenantUserId],
+      siteId: row.siteOrgUnitId,
+    })
+  })
+  if (!visible) throw new Error('Assessment not found')
 }
 
 const PATHS = (id: string) => [`/hazard-assessments/${id}`, '/hazard-assessments']
@@ -154,6 +179,7 @@ async function createAutoAssessmentApps(
 
 export async function createAssessment(formData: FormData): Promise<{ id: string }> {
   const ctx = await ctxWithTenant()
+  assertCan(ctx, 'hazid.create')
   const assessmentTypeId = String(formData.get('assessmentTypeId') ?? '').trim() || null
   const siteOrgUnitId = String(formData.get('siteOrgUnitId') ?? '').trim() || null
   const projectOrgUnitId = String(formData.get('projectOrgUnitId') ?? '').trim() || null
@@ -447,9 +473,11 @@ export async function startAssessment(formData: FormData) {
 
 export async function openAssessmentApp(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCan(ctx, 'hazid.update')
   const assessmentId = String(formData.get('assessmentId') ?? '')
   const typeAppId = String(formData.get('typeAppId') ?? '')
   if (!assessmentId || !typeAppId) throw new Error('Missing assessment app')
+  await assertCanSeeAssessment(ctx, assessmentId)
 
   const target = await ctx.db(async (tx) => {
     const [assessment] = await tx
@@ -544,8 +572,10 @@ export async function openAssessmentApp(formData: FormData) {
 
 export async function updateGeneral(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCan(ctx, 'hazid.update')
   const id = String(formData.get('id') ?? '')
   if (!id) throw new Error('Missing id')
+  await assertCanSeeAssessment(ctx, id)
 
   const occurredAtRaw = String(formData.get('occurredAt') ?? '')
   const occurredAt = occurredAtRaw ? new Date(occurredAtRaw) : undefined
@@ -571,10 +601,12 @@ export async function updateGeneral(formData: FormData) {
 
 export async function updateTextField(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCan(ctx, 'hazid.update')
   const id = String(formData.get('id') ?? '')
   const field = String(formData.get('field') ?? '')
   const value = nullable(formData.get('value'))
   if (!id || !field) throw new Error('Missing id/field')
+  await assertCanSeeAssessment(ctx, id)
   const ALLOWED = new Set([
     'jobScope',
     // General-info fields editable inline on the single-page form
@@ -638,7 +670,9 @@ export async function updateTextField(formData: FormData) {
 
 export async function lockAssessment(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCan(ctx, 'hazid.update')
   const id = String(formData.get('id') ?? '')
+  await assertCanSeeAssessment(ctx, id)
   await ctx.db((tx) =>
     tx
       .update(hazidAssessments)
@@ -662,7 +696,9 @@ export async function lockAssessment(formData: FormData) {
 
 export async function unlockAssessment(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCan(ctx, 'hazid.update')
   const id = String(formData.get('id') ?? '')
+  await assertCanSeeAssessment(ctx, id)
   await ctx.db(async (tx) => {
     await tx
       .update(hazidAssessments)
@@ -691,7 +727,9 @@ export async function unlockAssessment(formData: FormData) {
 
 export async function deleteAssessment(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCan(ctx, 'hazid.update')
   const id = String(formData.get('id') ?? '')
+  await assertCanSeeAssessment(ctx, id)
   await ctx.db((tx) =>
     tx.update(hazidAssessments).set({ deletedAt: new Date() }).where(eq(hazidAssessments.id, id)),
   )
@@ -724,8 +762,12 @@ export async function deleteAssessment(formData: FormData) {
 // After the copy we redirect to the new detail page.
 export async function copyAssessment(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCan(ctx, 'hazid.create')
   const sourceId = String(formData.get('id') ?? '')
   if (!sourceId) throw new Error('Missing id')
+  // Re-scope the source: a self/site-tier user must be able to see the
+  // assessment they are copying from.
+  await assertCanSeeAssessment(ctx, sourceId)
 
   const created = await ctx.db(async (tx) => {
     const [src] = await tx
@@ -883,11 +925,13 @@ export async function copyAssessment(formData: FormData) {
 // ------------------------------------------------------------------
 export async function addTask(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCan(ctx, 'hazid.update')
   const assessmentId = String(formData.get('assessmentId') ?? '')
   const taskId = String(formData.get('taskId') ?? '').trim() || null
   const description = String(formData.get('description') ?? '').trim() || null
   const controls = String(formData.get('controls') ?? '').trim() || null
   if (!assessmentId) throw new Error('Missing assessmentId')
+  await assertCanSeeAssessment(ctx, assessmentId)
 
   await ctx.db(async (tx) => {
     let hazardIds: string[] = []
@@ -927,8 +971,10 @@ export async function addTask(formData: FormData) {
 
 export async function updateTask(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCan(ctx, 'hazid.update')
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
+  await assertCanSeeAssessment(ctx, assessmentId)
   const description = nullable(formData.get('description'))
   const controls = nullable(formData.get('controls'))
   await ctx.db((tx) =>
@@ -948,8 +994,10 @@ export async function updateTask(formData: FormData) {
 
 export async function deleteTask(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCan(ctx, 'hazid.update')
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
+  await assertCanSeeAssessment(ctx, assessmentId)
   await ctx.db((tx) => tx.delete(hazidAssessmentTasks).where(eq(hazidAssessmentTasks.id, id)))
   await recordAudit(ctx, {
     entityType: 'hazid_assessment_task',
@@ -962,10 +1010,12 @@ export async function deleteTask(formData: FormData) {
 
 export async function moveTask(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCan(ctx, 'hazid.update')
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
   const direction = String(formData.get('direction') ?? '')
   if (!['up', 'down'].includes(direction)) throw new Error('Bad direction')
+  await assertCanSeeAssessment(ctx, assessmentId)
   await reorderEntities(ctx, hazidAssessmentTasks, assessmentId, id, direction as 'up' | 'down')
   revalidateAssessment(assessmentId)
 }
@@ -975,10 +1025,12 @@ export async function moveTask(formData: FormData) {
 // ------------------------------------------------------------------
 export async function addHazard(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCan(ctx, 'hazid.update')
   const assessmentId = String(formData.get('assessmentId') ?? '')
   const hazardId = String(formData.get('hazardId') ?? '').trim() || null
   const name = String(formData.get('name') ?? '').trim() || null
   if (!assessmentId) throw new Error('Missing assessmentId')
+  await assertCanSeeAssessment(ctx, assessmentId)
 
   await ctx.db(async (tx) => {
     let standardControls: string | null = null
@@ -1011,9 +1063,11 @@ export async function addHazard(formData: FormData) {
 
 export async function addHazardSet(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCan(ctx, 'hazid.update')
   const assessmentId = String(formData.get('assessmentId') ?? '')
   const setId = String(formData.get('setId') ?? '')
   if (!assessmentId || !setId) throw new Error('Missing ids')
+  await assertCanSeeAssessment(ctx, assessmentId)
   await ctx.db(async (tx) => {
     const [set] = await tx
       .select()
@@ -1053,8 +1107,10 @@ export async function addHazardSet(formData: FormData) {
 
 export async function updateHazard(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCan(ctx, 'hazid.update')
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
+  await assertCanSeeAssessment(ctx, assessmentId)
   const specificControls = nullable(formData.get('specificControls'))
   const applicable = formData.get('applicable') === 'on' || formData.get('applicable') === 'true'
   const standardControls = nullable(formData.get('standardControls'))
@@ -1099,8 +1155,10 @@ function riskRating(v: FormDataEntryValue | null): number | null {
 
 export async function deleteHazard(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCan(ctx, 'hazid.update')
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
+  await assertCanSeeAssessment(ctx, assessmentId)
   await ctx.db((tx) => tx.delete(hazidAssessmentHazards).where(eq(hazidAssessmentHazards.id, id)))
   await recordAudit(ctx, {
     entityType: 'hazid_assessment_hazard',
@@ -1113,10 +1171,12 @@ export async function deleteHazard(formData: FormData) {
 
 export async function moveHazard(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCan(ctx, 'hazid.update')
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
   const direction = String(formData.get('direction') ?? '')
   if (!['up', 'down'].includes(direction)) throw new Error('Bad direction')
+  await assertCanSeeAssessment(ctx, assessmentId)
   await reorderEntities(ctx, hazidAssessmentHazards, assessmentId, id, direction as 'up' | 'down')
   revalidateAssessment(assessmentId)
 }
@@ -1126,9 +1186,11 @@ export async function moveHazard(formData: FormData) {
 // ------------------------------------------------------------------
 export async function addPPE(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCan(ctx, 'hazid.update')
   const assessmentId = String(formData.get('assessmentId') ?? '')
   const name = String(formData.get('name') ?? '').trim()
   if (!assessmentId || !name) throw new Error('Missing fields')
+  await assertCanSeeAssessment(ctx, assessmentId)
   const description = nullable(formData.get('description'))
   const required = formData.get('required') === 'on' || formData.get('required') === 'true'
   await ctx.db(async (tx) => {
@@ -1156,8 +1218,10 @@ export async function addPPE(formData: FormData) {
 
 export async function updatePPE(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCan(ctx, 'hazid.update')
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
+  await assertCanSeeAssessment(ctx, assessmentId)
   const name = String(formData.get('name') ?? '').trim() || undefined
   const description = nullable(formData.get('description'))
   const required = formData.get('required') === 'on' || formData.get('required') === 'true'
@@ -1177,10 +1241,12 @@ export async function updatePPE(formData: FormData) {
 
 export async function answerPPE(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCan(ctx, 'hazid.update')
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
   const answer = String(formData.get('answer') ?? '')
   if (!['yes', 'no', 'na'].includes(answer)) throw new Error('Bad answer')
+  await assertCanSeeAssessment(ctx, assessmentId)
   await ctx.db((tx) =>
     tx
       .update(hazidAssessmentPPE)
@@ -1198,8 +1264,10 @@ export async function answerPPE(formData: FormData) {
 
 export async function deletePPE(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCan(ctx, 'hazid.update')
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
+  await assertCanSeeAssessment(ctx, assessmentId)
   await ctx.db((tx) => tx.delete(hazidAssessmentPPE).where(eq(hazidAssessmentPPE.id, id)))
   await recordAudit(ctx, {
     entityType: 'hazid_assessment_ppe',
@@ -1212,10 +1280,12 @@ export async function deletePPE(formData: FormData) {
 
 export async function movePPE(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCan(ctx, 'hazid.update')
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
   const direction = String(formData.get('direction') ?? '')
   if (!['up', 'down'].includes(direction)) throw new Error('Bad direction')
+  await assertCanSeeAssessment(ctx, assessmentId)
   await reorderEntities(ctx, hazidAssessmentPPE, assessmentId, id, direction as 'up' | 'down')
   revalidateAssessment(assessmentId)
 }
@@ -1225,9 +1295,11 @@ export async function movePPE(formData: FormData) {
 // ------------------------------------------------------------------
 export async function addQuestion(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCan(ctx, 'hazid.update')
   const assessmentId = String(formData.get('assessmentId') ?? '')
   const question = String(formData.get('question') ?? '').trim()
   if (!assessmentId || !question) throw new Error('Missing fields')
+  await assertCanSeeAssessment(ctx, assessmentId)
   const questionType = String(formData.get('questionType') ?? 'yes_no') as
     | 'yes_no'
     | 'text'
@@ -1266,8 +1338,10 @@ export async function addQuestion(formData: FormData) {
 
 export async function answerQuestion(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCan(ctx, 'hazid.update')
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
+  await assertCanSeeAssessment(ctx, assessmentId)
   const answer = nullable(formData.get('answer'))
   await ctx.db((tx) =>
     tx.update(hazidAssessmentQuestions).set({ answer }).where(eq(hazidAssessmentQuestions.id, id)),
@@ -1283,8 +1357,10 @@ export async function answerQuestion(formData: FormData) {
 
 export async function updateQuestion(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCan(ctx, 'hazid.update')
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
+  await assertCanSeeAssessment(ctx, assessmentId)
   const question = String(formData.get('question') ?? '').trim() || undefined
   const requiresYes = formData.get('requiresYes') === 'on' || formData.get('requiresYes') === 'true'
   const updates: Record<string, unknown> = { requiresYes }
@@ -1303,8 +1379,10 @@ export async function updateQuestion(formData: FormData) {
 
 export async function deleteQuestion(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCan(ctx, 'hazid.update')
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
+  await assertCanSeeAssessment(ctx, assessmentId)
   await ctx.db((tx) =>
     tx.delete(hazidAssessmentQuestions).where(eq(hazidAssessmentQuestions.id, id)),
   )
@@ -1319,10 +1397,12 @@ export async function deleteQuestion(formData: FormData) {
 
 export async function moveQuestion(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCan(ctx, 'hazid.update')
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
   const direction = String(formData.get('direction') ?? '')
   if (!['up', 'down'].includes(direction)) throw new Error('Bad direction')
+  await assertCanSeeAssessment(ctx, assessmentId)
   await reorderEntities(ctx, hazidAssessmentQuestions, assessmentId, id, direction as 'up' | 'down')
   revalidateAssessment(assessmentId)
 }
@@ -1332,6 +1412,7 @@ export async function moveQuestion(formData: FormData) {
 // ------------------------------------------------------------------
 export async function addSignature(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCan(ctx, 'hazid.update')
   const assessmentId = String(formData.get('assessmentId') ?? '')
   const signatureType = String(formData.get('signatureType') ?? 'internal') as
     | 'internal'
@@ -1347,6 +1428,7 @@ export async function addSignature(formData: FormData) {
     throw new Error('Internal signer requires a person')
   if (signatureType === 'external' && !externalName)
     throw new Error('External signer requires a name')
+  await assertCanSeeAssessment(ctx, assessmentId)
 
   const [row] = await ctx.db((tx) =>
     tx
@@ -1380,8 +1462,10 @@ export async function addSignature(formData: FormData) {
 
 export async function updateSignature(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCan(ctx, 'hazid.update')
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
+  await assertCanSeeAssessment(ctx, assessmentId)
   const personId = formData.has('personId')
     ? String(formData.get('personId') ?? '').trim() || null
     : undefined
@@ -1426,8 +1510,10 @@ export async function updateSignature(formData: FormData) {
 
 export async function deleteSignature(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCan(ctx, 'hazid.update')
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
+  await assertCanSeeAssessment(ctx, assessmentId)
   await ctx.db((tx) =>
     tx.delete(hazidAssessmentSignatures).where(eq(hazidAssessmentSignatures.id, id)),
   )
@@ -1445,11 +1531,13 @@ export async function deleteSignature(formData: FormData) {
 // ------------------------------------------------------------------
 export async function attachPhotos(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCan(ctx, 'hazid.update')
   const assessmentId = String(formData.get('assessmentId') ?? '')
   const ids = String(formData.get('attachmentIds') ?? '')
     .split(',')
     .filter(Boolean)
   if (!assessmentId || ids.length === 0) return
+  await assertCanSeeAssessment(ctx, assessmentId)
   await ctx.db((tx) =>
     tx.insert(hazidAssessmentPhotos).values(
       ids.map((attachmentId) => ({
@@ -1470,8 +1558,10 @@ export async function attachPhotos(formData: FormData) {
 
 export async function deletePhoto(formData: FormData) {
   const ctx = await ctxWithTenant()
+  assertCan(ctx, 'hazid.update')
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
+  await assertCanSeeAssessment(ctx, assessmentId)
   await ctx.db((tx) => tx.delete(hazidAssessmentPhotos).where(eq(hazidAssessmentPhotos.id, id)))
   await recordAudit(ctx, {
     entityType: 'hazid_assessment',

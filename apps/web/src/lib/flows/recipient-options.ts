@@ -4,13 +4,14 @@ import 'server-only'
 // the Flows canvas (person, department-managers, role targets). RLS-bound.
 
 import { asc, isNull } from 'drizzle-orm'
-import { departments, people, roles } from '@beaconhs/db/schema'
+import { departments, notificationGroups, people, roles } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 
 export type RecipientOptionsData = {
   people: { id: string; name: string }[]
   roles: { key: string; name: string }[]
   departments: { id: string; name: string }[]
+  groups: { id: string; name: string }[]
 }
 
 export async function loadRecipientOptions(ctx: RequestContext): Promise<RecipientOptionsData> {
@@ -28,10 +29,22 @@ export async function loadRecipientOptions(ctx: RequestContext): Promise<Recipie
       .select({ id: departments.id, name: departments.name })
       .from(departments)
       .orderBy(asc(departments.name))
+    // Reusable notification groups — degrade to empty if the table isn't there.
+    let groups: { id: string; name: string }[] = []
+    try {
+      groups = await tx
+        .select({ id: notificationGroups.id, name: notificationGroups.name })
+        .from(notificationGroups)
+        .where(isNull(notificationGroups.deletedAt))
+        .orderBy(asc(notificationGroups.name))
+    } catch {
+      groups = []
+    }
     return {
       people: ppl.map((p) => ({ id: p.id, name: `${p.first} ${p.last}`.trim() })),
       roles: rls,
       departments: depts,
+      groups,
     }
   })
 }

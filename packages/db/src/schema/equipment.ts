@@ -59,9 +59,6 @@ export const equipmentTypes = pgTable(
       onDelete: 'set null',
     }),
     description: text('description'),
-    requiresPreUseInspection: jsonb('requires_pre_use_inspection').$type<{
-      templateKey?: string
-    } | null>(),
     inspectionSchedule: jsonb('inspection_schedule').$type<{
       cron?: string
       everyDays?: number
@@ -117,7 +114,6 @@ export const equipmentItems = pgTable(
     photoAttachmentId: uuid('photo_attachment_id'),
     manualAttachmentId: uuid('manual_attachment_id'),
     requiresPreUseInspection: boolean('requires_pre_use_inspection').default(false).notNull(),
-    preUseInspectionTemplateKey: text('pre_use_inspection_template_key'),
     lastPreUseInspectionAt: timestamp('last_pre_use_inspection_at', { withTimezone: true }),
     requiresAnnualInspection: boolean('requires_annual_inspection').default(false).notNull(),
     lastAnnualInspectionOn: date('last_annual_inspection_on'),

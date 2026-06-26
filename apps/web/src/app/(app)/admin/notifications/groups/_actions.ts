@@ -121,10 +121,7 @@ export async function updateGroup(input: {
           color: input.color?.trim() || null,
         })
         .where(
-          and(
-            eq(notificationGroups.id, input.id),
-            eq(notificationGroups.tenantId, ctx.tenantId),
-          ),
+          and(eq(notificationGroups.id, input.id), eq(notificationGroups.tenantId, ctx.tenantId)),
         )
       // Replace the member set wholesale — simplest correct semantics.
       await tx

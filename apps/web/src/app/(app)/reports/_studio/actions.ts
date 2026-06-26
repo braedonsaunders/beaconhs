@@ -8,6 +8,7 @@ import { randomBytes } from 'node:crypto'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { eq } from 'drizzle-orm'
+import { assertCan } from '@beaconhs/tenant'
 import { db, withSuperAdmin } from '@beaconhs/db'
 import { reportDefinitions } from '@beaconhs/db/schema'
 import { computeRangeFor, runReport, type ReportRunResult } from '@beaconhs/reports'
@@ -45,6 +46,7 @@ function parseStudioForm(formData: FormData) {
 
 export async function createCustomDefinition(formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'reports.builder')
   const { name, description, customQuery } = parseStudioForm(formData)
   const cloneFromIdRaw = String(formData.get('cloneFromId') ?? '').trim()
 
@@ -101,6 +103,7 @@ export async function updateCustomDefinition(
   formData: FormData,
 ): Promise<void> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'reports.builder')
   const { name, description, customQuery } = parseStudioForm(formData)
 
   await withSuperAdmin(db, async (tx) => {
@@ -143,6 +146,7 @@ const PREVIEW_MAX_ROWS = 25
 export async function previewCustomReport(payload: unknown): Promise<StudioPreviewResult> {
   try {
     const ctx = await requireRequestContext()
+    assertCan(ctx, 'reports.builder')
     const customQuery = validateCustomQuery(payload)
     const range = computeRangeFor('custom_query', {})
     const result = await ctx.db((tx) =>

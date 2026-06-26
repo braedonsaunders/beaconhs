@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { and, asc, eq } from 'drizzle-orm'
 import { documentBookItems, documentBooks } from '@beaconhs/db/schema'
+import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 
@@ -14,6 +15,7 @@ import { recordAudit } from '@/lib/audit'
  */
 export async function createBook(formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.manage')
   const title = String(formData.get('title') ?? '').trim() || 'Untitled book'
   const category = String(formData.get('category') ?? '').trim() || null
   const description = String(formData.get('description') ?? '').trim() || null
@@ -54,6 +56,7 @@ export async function reorderBookItemsAction(
   orderedDocumentIds: string[],
 ): Promise<void> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.manage')
   if (!bookId || orderedDocumentIds.length === 0) return
   await ctx.db(async (tx) => {
     for (let i = 0; i < orderedDocumentIds.length; i++) {
@@ -80,6 +83,7 @@ export async function reorderBookItemsAction(
 
 export async function removeBookItemAction(bookId: string, documentId: string): Promise<void> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.manage')
   if (!bookId || !documentId) return
   await ctx.db(async (tx) => {
     await tx

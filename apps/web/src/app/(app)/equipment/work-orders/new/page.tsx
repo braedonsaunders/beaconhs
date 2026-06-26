@@ -13,6 +13,7 @@ import {
   Textarea,
 } from '@beaconhs/ui'
 import { equipmentItems, equipmentWorkOrders, people, tenantUsers, user } from '@beaconhs/db/schema'
+import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { runModuleFlows } from '@/lib/flows/run-module-flows'
@@ -28,6 +29,7 @@ const PRIORITIES = ['low', 'med', 'high'] as const
 async function createWorkOrder(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.workorder.create')
   const itemId = String(formData.get('itemId') ?? '').trim()
   const summary = String(formData.get('summary') ?? '').trim()
   const description = String(formData.get('description') ?? '').trim() || null

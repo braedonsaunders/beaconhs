@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { asc, eq, sql } from 'drizzle-orm'
 import { equipmentItems, equipmentTypes, truckLogEntries } from '@beaconhs/db/schema'
+import { assertCan } from '@beaconhs/tenant'
 import { requireExportContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { csvFilename, csvResponse } from '@/lib/csv'
@@ -19,6 +20,9 @@ export async function GET(req: NextRequest) {
   const yearRaw = url.searchParams.get('year')
   const year = yearRaw && /^\d{4}$/.test(yearRaw) ? Number(yearRaw) : new Date().getFullYear()
   const ctx = await requireExportContext()
+  // Tenant-wide fleet summary grid: gate on the full read tier (a site-scoped
+  // export would distort the cross-vehicle totals rather than bound them).
+  assertCan(ctx, 'equipment.read.all')
 
   const firstDay = ymd(year, 1, 1)
   const nextFirst = ymd(year + 1, 1, 1)

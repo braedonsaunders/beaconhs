@@ -43,30 +43,18 @@ export async function sendWorkOrderEmail(
       .limit(1)
     if (!row) return null
 
-    const adminRecipients = await tx
-      .select({ email: users.email })
-      .from(tenantUsers)
-      .innerJoin(users, eq(users.id, tenantUsers.userId))
-      .where(
-        and(
-          eq(tenantUsers.tenantId, row.wo.tenantId),
-          eq(tenantUsers.status, 'active'),
-          sql`${users.email} IS NOT NULL`,
-        ),
-      )
-
-    return { ...row, adminRecipients }
+    return { ...row }
   })
   if (!data) return null
 
-  const explicit = (options?.recipients ?? []).filter((s) => /@/.test(s))
-  const adminEmails = data.adminRecipients.map((r) => r.email).filter((s): s is string => !!s)
-  // If the assignee has an email and we're using the default distribution,
-  // make sure they get a copy too.
-  if (data.assigneeUser?.email) {
-    adminEmails.push(data.assigneeUser.email)
-  }
-  const to = explicit.length > 0 ? explicit : Array.from(new Set(adminEmails))
+  // Explicit recipients (+ the assignee, who the work order is for) — no blast
+  // to every active tenant user.
+  const to = Array.from(
+    new Set([
+      ...(options?.recipients ?? []).filter((s) => /@/.test(s)),
+      ...(data.assigneeUser?.email ? [data.assigneeUser.email] : []),
+    ]),
+  )
   if (to.length === 0) return null
   const cc = (options?.cc ?? []).filter((s) => /@/.test(s))
 

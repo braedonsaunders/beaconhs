@@ -1,3 +1,4 @@
+import { redirect } from 'next/navigation'
 import { and, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
 import {
   Badge,
@@ -11,6 +12,7 @@ import {
   TableRow,
 } from '@beaconhs/ui'
 import { auditLog, user } from '@beaconhs/db/schema'
+import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
@@ -47,6 +49,8 @@ export default async function AuditLogPage({
   const actionFilter = pickString(sp.action)
   const entityFilter = pickString(sp.entityType)
   const ctx = await requireRequestContext()
+  // The audit log is a sensitive security/forensics surface — restrict reads.
+  if (!can(ctx, 'admin.audit.read')) redirect('/admin')
 
   const { rows, total } = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = []

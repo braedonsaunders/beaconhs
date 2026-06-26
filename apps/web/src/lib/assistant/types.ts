@@ -19,6 +19,15 @@ export type ToolCategory = 'read' | 'search' | 'write'
  *  is returned as `{ ok: false }` so one bad call can't crash the turn. */
 export type ToolResult = { ok: true; data: unknown; note?: string } | { ok: false; error: string }
 
+/** A rendered image a VISION tool hands back for the model to SEE (not read as
+ *  JSON). A vision tool puts these on its successful `data.images`; the registry
+ *  maps them to image content parts in the model-facing tool result. `base64` is
+ *  the raw payload (no `data:` prefix). */
+export type ToolImage = { mediaType: string; base64: string }
+
+/** Shape of a vision tool's successful result data (see `needsImageToolResults`). */
+export type VisionToolData = { images: ToolImage[]; summary?: string }
+
 export type AssistantToolDef = {
   /** snake_case, model-facing. */
   name: string
@@ -30,6 +39,11 @@ export type AssistantToolDef = {
   gate: PermissionRule
   /** Write tools set this; the loop NEVER auto-commits a tool that requires it. */
   requiresConfirmation?: boolean
+  /** VISION tool: returns rendered images on `data.images` (a `VisionToolData`)
+   *  for the model to SEE. The registry maps those to image tool-result content
+   *  and ONLY exposes the tool when the active provider supports image tool
+   *  results (Anthropic) — see buildToolRegistry / providerSupportsImageToolResults. */
+  needsImageToolResults?: boolean
   /** Per-call handler. Receives the (already schema-validated) args + the request
    *  context; opens its own RLS tx via ctx.db(). Must return a ToolResult and
    *  must not throw. */

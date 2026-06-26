@@ -71,28 +71,12 @@ export async function sendHazidEmail(
       .leftJoin(people, eq(people.id, hazidAssessmentSignatures.personId))
       .where(eq(hazidAssessmentSignatures.assessmentId, assessmentId))
 
-    // Default distribution = active tenant admins on this tenant.
-    const adminRecipients = await tx
-      .select({ email: users.email })
-      .from(tenantUsers)
-      .innerJoin(users, eq(users.id, tenantUsers.userId))
-      .where(
-        and(
-          eq(tenantUsers.tenantId, row.a.tenantId),
-          eq(tenantUsers.status, 'active'),
-          sql`${users.email} IS NOT NULL`,
-        ),
-      )
-
-    return { ...row, tasks, hazards, ppe, signatures, adminRecipients }
+    return { ...row, tasks, hazards, ppe, signatures }
   })
   if (!data) return null
 
-  const explicit = (options?.recipients ?? []).filter((s) => /@/.test(s))
-  const adminEmails = data.adminRecipients.map((r) => r.email).filter((s): s is string => !!s)
-  // Explicit recipients override the default distribution; if none given,
-  // fall back to tenant-admin distribution.
-  const to = explicit.length > 0 ? explicit : Array.from(new Set(adminEmails))
+  // Explicit recipients only — no silent blast to every active tenant user.
+  const to = Array.from(new Set((options?.recipients ?? []).filter((s) => /@/.test(s))))
   if (to.length === 0) return null
   const cc = (options?.cc ?? []).filter((s) => /@/.test(s))
 

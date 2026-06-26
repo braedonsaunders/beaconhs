@@ -5,6 +5,7 @@ import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { getEmailPolicyMode, getTenantEmailSettings } from '@/lib/email-config'
 import { PageContainer } from '@/components/page-layout'
+import { NotificationsSubNav } from '@/components/notifications-sub-nav'
 import { clearTenantEmail, saveTenantEmail } from '@/lib/email-settings-actions'
 import { EmailTestButton } from '@/components/email-settings/test-button'
 import {
@@ -42,6 +43,7 @@ export default async function EmailSettingsPage() {
           title="Email"
           subtitle="This tenant's email provider, sender and encrypted credentials. The platform-wide default and policy are set by your platform administrator."
         />
+        <NotificationsSubNav active="email" showBack={false} />
 
         <Card>
           <CardContent className="space-y-6 pt-6">

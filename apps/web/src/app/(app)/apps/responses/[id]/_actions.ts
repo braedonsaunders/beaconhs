@@ -30,6 +30,7 @@ import {
   type FormWorkflowStep,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { canSeeRecord } from '@/lib/visibility'
 import { recordAudit } from '@/lib/audit'
 import { runStatusChangeAutomations } from '@/app/(app)/apps/_lib/run-automations'
 
@@ -91,6 +92,19 @@ async function loadResponseWithWorkflow(
     return rows[0] ?? null
   })
   if (!result) throw new Error('Form response not found')
+  // Per-user record visibility re-check: these workflow actions have no
+  // dedicated permission, but a caller must at least be able to SEE the source
+  // response (read.all → any; read.site → my sites; else → mine) before
+  // signing / advancing / rejecting it by id. Same shape as the detail page.
+  const visible = await ctx.db((tx) =>
+    canSeeRecord(ctx, tx, {
+      prefix: 'forms.response',
+      ownerIds: [result.response.submittedBy],
+      personId: result.response.subjectPersonId,
+      siteId: result.response.siteOrgUnitId,
+    }),
+  )
+  if (!visible) throw new Error('Form response not found')
   const schema = result.schema as FormSchemaV1
   const workflowSteps = schema.workflow?.steps ?? []
   if (workflowSteps.length === 0) {

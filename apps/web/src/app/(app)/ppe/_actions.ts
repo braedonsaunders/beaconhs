@@ -15,6 +15,7 @@
 import { revalidatePath } from 'next/cache'
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
 import { people, ppeIssues, ppeItems, ppeTypes } from '@beaconhs/db/schema'
+import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { csvRow } from '@/lib/csv'
@@ -50,6 +51,7 @@ export async function bulkIssuePpeToPerson(args: {
   personId: string
 }): Promise<BulkActionResult> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'ppe.issue')
   if (args.ppeItemIds.length === 0) return { ok: false, error: 'No items selected.' }
   if (!args.personId) return { ok: false, error: 'Pick a holder.' }
   const ids = args.ppeItemIds.slice(0, MAX_BULK)
@@ -145,6 +147,7 @@ export async function bulkDiscardPpe(args: {
   reason?: string | null
 }): Promise<BulkActionResult> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'ppe.manage')
   if (args.ppeItemIds.length === 0) return { ok: false, error: 'No items selected.' }
   const ids = args.ppeItemIds.slice(0, MAX_BULK)
   const batchId = makeBatchId()
@@ -220,6 +223,7 @@ export async function bulkDiscardPpe(args: {
 
 export async function bulkExportPpeCsv(args: { ppeItemIds: string[] }): Promise<BulkCsvResult> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'ppe.read.all')
   if (args.ppeItemIds.length === 0) return { ok: false, error: 'No items selected.' }
   const ids = args.ppeItemIds.slice(0, MAX_BULK)
   const batchId = makeBatchId()
@@ -302,6 +306,9 @@ export async function createAndIssuePpe(input: {
   note?: string | null
 }): Promise<{ ok: true; id: string; issued: boolean } | { ok: false; error: string }> {
   const ctx = await requireRequestContext()
+  // Registration needs manage; issuing-in-the-same-step additionally needs issue.
+  assertCan(ctx, 'ppe.manage')
+  if (input.personId) assertCan(ctx, 'ppe.issue')
   if (!input.typeId) return { ok: false, error: 'Pick a PPE type.' }
   // Issuing writes a ledger row attributed to a tenant user — super-admin can't.
   if (input.personId && !safeTenantUserId(ctx)) {

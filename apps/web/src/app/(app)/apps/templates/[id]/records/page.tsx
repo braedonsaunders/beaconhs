@@ -33,6 +33,7 @@ import {
   user,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { moduleScopeWhere } from '@/lib/visibility'
 import { createDraftResponse } from '@/app/(app)/apps/templates/[id]/fill/actions'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { SortableTh } from '@/components/sortable-th'
@@ -182,7 +183,18 @@ export default async function AppRecordsPage({
       .orderBy(desc(formTemplateVersions.version))
       .limit(1)
 
+    // Per-user record visibility (same tiers as apps/responses/page.tsx):
+    // read.all → all; read.site → my sites; else → ones I submitted or am the
+    // subject of. Without this the per-app list leaks every response's
+    // subject/site/fields regardless of the caller's read tier.
+    const vis = await moduleScopeWhere(ctx, tx, {
+      prefix: 'forms.response',
+      ownerCols: [formResponses.submittedBy],
+      personCol: formResponses.subjectPersonId,
+      siteCol: formResponses.siteOrgUnitId,
+    })
     const filters: SQL<unknown>[] = [eq(formResponses.templateId, id)]
+    if (vis) filters.push(vis)
     if (statusFilter) filters.push(eq(formResponses.status, statusFilter as never))
     const whereClause = and(...filters)
 
@@ -222,7 +234,7 @@ export default async function AppRecordsPage({
     const ss = await tx
       .select({ s: formResponses.status, c: count() })
       .from(formResponses)
-      .where(eq(formResponses.templateId, id))
+      .where(and(eq(formResponses.templateId, id), vis))
       .groupBy(formResponses.status)
     return {
       tmpl,

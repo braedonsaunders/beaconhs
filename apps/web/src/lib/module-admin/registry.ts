@@ -301,13 +301,6 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
         iconKey: 'library',
         desc: 'Reusable criteria question banks shared across PPE types.',
       },
-      {
-        key: 'inspection-criteria',
-        label: 'Inspection criteria',
-        href: '/ppe/inspection-criteria',
-        iconKey: 'check',
-        desc: 'Cross-type overview of the checks each PPE kind requires.',
-      },
     ],
   },
   {

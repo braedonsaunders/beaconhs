@@ -36,6 +36,7 @@
     "@beaconhs/ui": "workspace:*",
     "@excalidraw/excalidraw": "^0.18.1",
     "@grapesjs/react": "^2.0.0",
+    "@napi-rs/canvas": "^0.1.100",
     "@tiptap/core": "^3.26.0",
     "@tiptap/extension-character-count": "^3.26.0",
     "@tiptap/extension-color": "^3.26.0",

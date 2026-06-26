@@ -38,6 +38,10 @@ const nextConfig: NextConfig = {
     'web-push',
     // PDF text extraction (serverless pdf.js) for the assistant document tools.
     'unpdf',
+    // Native canvas backend for unpdf's renderPageAsImage — the assistant
+    // rasterizes scanned-PDF pages to PNG for vision reading. Ships per-platform
+    // prebuilt .node binaries; must stay external so Next never tries to bundle it.
+    '@napi-rs/canvas',
     'puppeteer-core',
     '@aws-sdk/client-s3',
     '@aws-sdk/s3-request-presigner',

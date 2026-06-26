@@ -17,6 +17,7 @@ import {
 } from '@beaconhs/forms-core'
 import { people, roleAssignments, roles, tenantUsers, users } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
+import { resolveGroupEmails, resolveGroupUserIds } from '@beaconhs/events'
 import {
   interpolate,
   renderEmail,
@@ -144,6 +145,61 @@ export async function executeFlowPlan(
             .where(and(eq(people.departmentId, t.departmentId), isNull(people.deletedAt))),
         )
         for (const m of mgrs) if (m.mgr) add(await personEmail(m.mgr))
+      } else if (t.type === 'group') {
+        // A reusable notification group — resolved through the shared engine.
+        const emails = await ctx.db((tx) => resolveGroupEmails(tx, ctx.tenantId, [t.groupId]))
+        for (const e of emails) add(e)
+      }
+    }
+    return Array.from(out)
+  }
+
+  // Map a person to their linked Better-Auth user id (for non-email channels).
+  const personUserId = async (personId: string): Promise<string | null> => {
+    const [p] = await ctx.db((tx) =>
+      tx.select({ userId: people.userId }).from(people).where(eq(people.id, personId)).limit(1),
+    )
+    return p?.userId ?? null
+  }
+
+  // The user-id counterpart of resolveEmails, for SMS / in-app channels (which
+  // address people by user, not email). literal/field targets are email-only
+  // and have no user mapping, so they're skipped here.
+  const resolveUserIds = async (targets: EmailTarget[]): Promise<string[]> => {
+    const out = new Set<string>()
+    const add = (u: string | null | undefined) => {
+      if (u) out.add(u)
+    }
+    for (const t of targets) {
+      if (t.type === 'submitter') {
+        add((await getSubmitter()).userId)
+      } else if (t.type === 'role') {
+        for (const u of await getRoleUsers(t.role)) add(u.userId)
+      } else if (t.type === 'person') {
+        add(await personUserId(t.personId))
+      } else if (t.type === 'group') {
+        for (const u of await ctx.db((tx) => resolveGroupUserIds(tx, ctx.tenantId, [t.groupId])))
+          add(u)
+      } else if (t.type === 'submitter_manager') {
+        const s = await getSubmitter()
+        if (s.userId) {
+          const [self] = await ctx.db((tx) =>
+            tx
+              .select({ mgr: people.managerPersonId })
+              .from(people)
+              .where(eq(people.userId, s.userId!))
+              .limit(1),
+          )
+          if (self?.mgr) add(await personUserId(self.mgr))
+        }
+      } else if (t.type === 'department_manager') {
+        const mgrs = await ctx.db((tx) =>
+          tx
+            .selectDistinct({ mgr: people.managerPersonId })
+            .from(people)
+            .where(and(eq(people.departmentId, t.departmentId), isNull(people.deletedAt))),
+        )
+        for (const m of mgrs) if (m.mgr) add(await personUserId(m.mgr))
       }
     }
     return Array.from(out)
@@ -202,11 +258,7 @@ export async function executeFlowPlan(
           break
         }
         case 'send_email': {
-          const to = await resolveEmails(action.to)
-          if (to.length === 0) {
-            failed.push('send_email (no recipients)')
-            break
-          }
+          const channel = action.channel ?? 'email'
           const mode = action.mode ?? 'inline'
           let spec: RenderableEmail
           if (mode === 'template' && action.templateId) {
@@ -234,6 +286,35 @@ export async function executeFlowPlan(
             }
           }
           const { subject, html, text } = renderEmail(spec, values)
+
+          // SMS / in-app channels address people by user (not email): resolve to
+          // user ids and post a notification the worker fans out on that channel.
+          // SMS is critical by design (cost) so it bypasses digest/quiet-hours.
+          if (channel === 'sms' || channel === 'in_app') {
+            const userIds = await resolveUserIds(action.to)
+            if (userIds.length === 0) {
+              failed.push(`send_email:${channel} (no users)`)
+              break
+            }
+            await enqueueNotification({
+              tenantId: ctx.tenantId,
+              userIds,
+              category: adapter.notifyCategory,
+              type: 'flow.send',
+              title: subject,
+              body: text,
+              channels: [channel],
+              isCritical: channel === 'sms',
+            })
+            ran.push(`send_email:${channel}→${userIds.length}`)
+            break
+          }
+
+          const to = await resolveEmails(action.to)
+          if (to.length === 0) {
+            failed.push('send_email (no recipients)')
+            break
+          }
           const refForFile = values.reference
           const fileBase =
             typeof refForFile === 'string' && refForFile.trim() ? refForFile : 'document'
@@ -336,7 +417,13 @@ export async function executeFlowPlan(
             category: adapter.notifyCategory,
             type: 'flow.notify',
             title: interpolate(action.message, values) || 'Notification',
-            channels: action.channel === 'email' ? ['email'] : ['in_app'],
+            channels:
+              action.channel === 'email'
+                ? ['email']
+                : action.channel === 'sms'
+                  ? ['sms']
+                  : ['in_app'],
+            isCritical: action.channel === 'sms',
           })
           ran.push(`notify_role→${userIds.length}`)
           break

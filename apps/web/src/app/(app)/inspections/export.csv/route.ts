@@ -22,6 +22,8 @@ import {
   user,
 } from '@beaconhs/db/schema'
 import { requireExportContext } from '@/lib/auth'
+import { assertCan } from '@beaconhs/tenant'
+import { moduleScopeWhere } from '@/lib/visibility'
 import { recordAudit } from '@/lib/audit'
 import { csvFilename, csvResponse } from '@/lib/csv'
 import { parseListParams, pickString } from '@/lib/list-params'
@@ -49,9 +51,21 @@ export async function GET(req: NextRequest) {
   const dateFromRaw = pickString(sp.dateFrom)
   const dateToRaw = pickString(sp.dateTo)
   const ctx = await requireExportContext()
+  // Read-tier gate: must hold at least the self read tier, and the export is
+  // bounded to the caller's tier (read.self/site can't dump the whole tenant).
+  assertCan(ctx, 'inspections.read.self')
 
   const rows = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = []
+    const scopeWhere = await moduleScopeWhere(ctx, tx, {
+      prefix: 'inspections',
+      ownerCols: [
+        inspectionRecords.inspectorTenantUserId,
+        inspectionRecords.submittedByTenantUserId,
+      ],
+      siteCol: inspectionRecords.siteOrgUnitId,
+    })
+    if (scopeWhere) filters.push(scopeWhere)
     if (params.q) {
       const term = `%${params.q}%`
       const c = or(

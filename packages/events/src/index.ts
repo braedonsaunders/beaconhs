@@ -15,6 +15,7 @@ import { and, eq, inArray } from 'drizzle-orm'
 import { db as defaultDb, withSuperAdmin, withTenant, type Database } from '@beaconhs/db'
 import { caAssignedEmail, caCompletedEmail, incidentReportedEmail } from '@beaconhs/emails'
 import { enqueueEmail, enqueueNotification } from '@beaconhs/jobs'
+import { resolveGroupUserIds } from './recipients'
 import {
   complianceObligations,
   correctiveActions,
@@ -150,6 +151,12 @@ async function resolveAudience(
       }
     } else {
       for (const u of settings.userIds ?? []) audience.add(u)
+    }
+
+    // Reusable notification groups — resolved through the shared engine. An
+    // independent audience source, so it runs even if no roles are configured.
+    if (settings && Array.isArray(settings.groupIds) && settings.groupIds.length > 0) {
+      for (const u of await resolveGroupUserIds(tx, tenantId, settings.groupIds)) audience.add(u)
     }
 
     // A saved row's roles are authoritative — an empty list means the admin

@@ -189,3 +189,58 @@ export async function getDocumentText(
     return { ok: true, doc: { ...doc, ...entry } }
   })
 }
+
+// ---- raw PDF bytes (for vision rasterization) ------------------------------
+
+export type DocumentPdfBytesResult =
+  | { ok: true; bytes: Buffer; title: string }
+  | { ok: false; error: 'not_found' | 'forbidden' | 'not_pdf' }
+
+/**
+ * Load the raw PDF bytes of a document's latest version, permission-gated exactly
+ * like getDocumentText. The vision tool uses this to rasterize pages for an
+ * image-only (scanned) PDF. Returns `not_pdf` when the latest version isn't an
+ * uploaded PDF (in-app HTML docs have no file to render).
+ */
+export async function getDocumentPdfBytes(
+  ctx: RequestContext,
+  id: string,
+): Promise<DocumentPdfBytesResult> {
+  if (!can(ctx, 'documents.read') && !can(ctx, 'documents.manage')) {
+    return { ok: false, error: 'forbidden' }
+  }
+  return ctx.db(async (tx): Promise<DocumentPdfBytesResult> => {
+    const conds: SQL[] = [eq(documents.id, id), isNull(documents.deletedAt)]
+    const filter = documentReadFilter(ctx)
+    if (filter) conds.push(filter)
+    const [doc] = await tx
+      .select({ title: documents.title })
+      .from(documents)
+      .where(and(...conds))
+      .limit(1)
+    if (!doc) return { ok: false, error: 'not_found' }
+
+    const [version] = await tx
+      .select({ attachmentId: documentVersions.contentAttachmentId })
+      .from(documentVersions)
+      .where(eq(documentVersions.documentId, id))
+      .orderBy(desc(documentVersions.version))
+      .limit(1)
+    if (!version?.attachmentId) return { ok: false, error: 'not_pdf' }
+
+    const [att] = await tx
+      .select({ r2Key: attachments.r2Key, contentType: attachments.contentType })
+      .from(attachments)
+      .where(eq(attachments.id, version.attachmentId))
+      .limit(1)
+    if (att?.contentType !== 'application/pdf') return { ok: false, error: 'not_pdf' }
+
+    try {
+      const bytes = await getObject({ key: att.r2Key })
+      return { ok: true, bytes, title: doc.title }
+    } catch (e) {
+      console.warn(`[assistant] PDF bytes load failed for ${id}`, e)
+      return { ok: false, error: 'not_found' }
+    }
+  })
+}

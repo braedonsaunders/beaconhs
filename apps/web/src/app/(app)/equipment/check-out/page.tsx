@@ -29,6 +29,7 @@ import {
   orgUnits,
   people,
 } from '@beaconhs/db/schema'
+import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { ListPageLayout } from '@/components/page-layout'
@@ -43,6 +44,7 @@ export const dynamic = 'force-dynamic'
 async function checkOut(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.manage')
   const itemId = String(formData.get('equipmentItemId') ?? '').trim()
   const holderPersonId = String(formData.get('holderPersonId') ?? '').trim() || null
   const destinationOrgUnitId = String(formData.get('destinationOrgUnitId') ?? '').trim() || null

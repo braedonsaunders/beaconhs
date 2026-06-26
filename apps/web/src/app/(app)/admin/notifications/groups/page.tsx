@@ -5,6 +5,7 @@ import { can } from '@beaconhs/tenant'
 import { DetailHeader } from '@beaconhs/ui'
 import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
+import { NotificationsSubNav } from '@/components/notifications-sub-nav'
 import { loadAudienceOptions } from './_options'
 import { NotificationGroupsManager, type GroupRow } from './_manager'
 
@@ -61,12 +62,12 @@ export default async function NotificationGroupsPage() {
 
   return (
     <PageContainer>
-      <div className="max-w-4xl space-y-4">
+      <div className="space-y-4">
         <DetailHeader
-          back={{ href: '/admin/notifications', label: 'Back to notifications' }}
           title="Notification groups"
           subtitle="Reusable audiences you can target from any alert — incidents, corrective actions, compliance, Flows, and record shares. A group is a union of roles, departments, sites, crews, people groups, and named individuals (with optional exclusions)."
         />
+        <NotificationsSubNav active="groups" />
         <NotificationGroupsManager groups={groups} options={options} />
       </div>
     </PageContainer>

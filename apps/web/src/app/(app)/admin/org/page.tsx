@@ -1,3 +1,4 @@
+import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { asc, eq } from 'drizzle-orm'
 import { Plus, Trash2 } from 'lucide-react'
@@ -15,6 +16,7 @@ import {
   Select,
 } from '@beaconhs/ui'
 import { crews, departments, orgUnits, trades } from '@beaconhs/db/schema'
+import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { levelLabel } from '@/lib/org-hierarchy'
@@ -25,9 +27,18 @@ export const dynamic = 'force-dynamic'
 
 const LEVELS = ['customer', 'project', 'site', 'area'] as const
 
+// Org hierarchy is admin configuration. Every action here is a POST endpoint,
+// so each must gate itself — the page render gate does not protect them.
+// `can` already returns true for super-admins.
+async function requireOrgAdmin() {
+  const ctx = await requireRequestContext()
+  if (!can(ctx, 'admin.org.manage')) redirect('/admin')
+  return ctx
+}
+
 async function addOrgUnit(formData: FormData) {
   'use server'
-  const ctx = await requireRequestContext()
+  const ctx = await requireOrgAdmin()
   const name = String(formData.get('name') ?? '').trim()
   const level = String(formData.get('level') ?? '') as (typeof LEVELS)[number]
   const parentId = String(formData.get('parentId') ?? '').trim() || null
@@ -48,7 +59,7 @@ async function addOrgUnit(formData: FormData) {
 
 async function deleteOrgUnit(formData: FormData) {
   'use server'
-  const ctx = await requireRequestContext()
+  const ctx = await requireOrgAdmin()
   const id = String(formData.get('id') ?? '')
   await ctx.db((tx) => tx.delete(orgUnits).where(eq(orgUnits.id, id)))
   await recordAudit(ctx, { entityType: 'org_unit', entityId: id, action: 'delete' })
@@ -57,7 +68,7 @@ async function deleteOrgUnit(formData: FormData) {
 
 async function addDepartment(formData: FormData) {
   'use server'
-  const ctx = await requireRequestContext()
+  const ctx = await requireOrgAdmin()
   const name = String(formData.get('name') ?? '').trim()
   if (!name) return
   await ctx.db((tx) => tx.insert(departments).values({ tenantId: ctx.tenantId, name }))
@@ -66,7 +77,7 @@ async function addDepartment(formData: FormData) {
 
 async function deleteDepartment(formData: FormData) {
   'use server'
-  const ctx = await requireRequestContext()
+  const ctx = await requireOrgAdmin()
   const id = String(formData.get('id') ?? '')
   await ctx.db((tx) => tx.delete(departments).where(eq(departments.id, id)))
   revalidatePath('/admin/org')
@@ -74,7 +85,7 @@ async function deleteDepartment(formData: FormData) {
 
 async function addTrade(formData: FormData) {
   'use server'
-  const ctx = await requireRequestContext()
+  const ctx = await requireOrgAdmin()
   const name = String(formData.get('name') ?? '').trim()
   if (!name) return
   await ctx.db((tx) => tx.insert(trades).values({ tenantId: ctx.tenantId, name }))
@@ -83,7 +94,7 @@ async function addTrade(formData: FormData) {
 
 async function deleteTrade(formData: FormData) {
   'use server'
-  const ctx = await requireRequestContext()
+  const ctx = await requireOrgAdmin()
   const id = String(formData.get('id') ?? '')
   await ctx.db((tx) => tx.delete(trades).where(eq(trades.id, id)))
   revalidatePath('/admin/org')
@@ -91,7 +102,7 @@ async function deleteTrade(formData: FormData) {
 
 async function addCrew(formData: FormData) {
   'use server'
-  const ctx = await requireRequestContext()
+  const ctx = await requireOrgAdmin()
   const name = String(formData.get('name') ?? '').trim()
   if (!name) return
   await ctx.db((tx) => tx.insert(crews).values({ tenantId: ctx.tenantId, name }))
@@ -100,14 +111,14 @@ async function addCrew(formData: FormData) {
 
 async function deleteCrew(formData: FormData) {
   'use server'
-  const ctx = await requireRequestContext()
+  const ctx = await requireOrgAdmin()
   const id = String(formData.get('id') ?? '')
   await ctx.db((tx) => tx.delete(crews).where(eq(crews.id, id)))
   revalidatePath('/admin/org')
 }
 
 export default async function AdminOrgPage() {
-  const ctx = await requireRequestContext()
+  const ctx = await requireOrgAdmin()
   const [allUnits, depts, allTrades, allCrews] = await ctx.db(async (tx) => {
     const u = await tx.select().from(orgUnits).orderBy(asc(orgUnits.name))
     const d = await tx.select().from(departments).orderBy(asc(departments.name))

@@ -1,10 +1,12 @@
 import type { NextRequest } from 'next/server'
 import { and, asc, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
 import { incidents, orgUnits } from '@beaconhs/db/schema'
+import { can } from '@beaconhs/tenant'
 import { requireExportContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { csvFilename, csvResponse } from '@/lib/csv'
 import { parseListParams, pickString } from '@/lib/list-params'
+import { moduleScopeWhere } from '@/lib/visibility'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,8 +25,24 @@ export async function GET(req: NextRequest) {
   const statusFilter = pickString(sp.status)
   const ctx = await requireExportContext()
 
+  // Require a read tier and scope rows to it (mirrors the /incidents list page):
+  // all → everything, site → my sites, self → incidents I reported.
+  if (
+    !can(ctx, 'incidents.read.all') &&
+    !can(ctx, 'incidents.read.site') &&
+    !can(ctx, 'incidents.read.self')
+  ) {
+    return Response.json({ error: 'Not found' }, { status: 404 })
+  }
+
   const rows = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = []
+    const vis = await moduleScopeWhere(ctx, tx, {
+      prefix: 'incidents',
+      ownerCols: [incidents.reportedByTenantUserId],
+      siteCol: incidents.siteOrgUnitId,
+    })
+    if (vis) filters.push(vis)
     if (params.q) {
       const term = `%${params.q}%`
       const cond = or(

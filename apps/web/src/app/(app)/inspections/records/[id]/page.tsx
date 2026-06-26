@@ -38,6 +38,7 @@ import {
   user,
 } from '@beaconhs/db/schema'
 import { publicUrl } from '@beaconhs/storage'
+import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { canSeeRecord } from '@/lib/visibility'
 import { runModuleFlows } from '@/lib/flows/run-module-flows'
@@ -111,12 +112,44 @@ function isOverdue(args: {
 // Server actions
 // ----------------------------------------------------------------------------
 
+// Re-check per-user record visibility on a mutation, mirroring the detail page's
+// read guard. `inspections.update` is the permission gate; this closes the
+// write-by-guessing-the-URL gap (read.self/site users mutating a record they
+// can't see). Throws `notFound`-equivalent (the action just errors) if denied.
+async function assertCanSeeInspection(
+  ctx: Awaited<ReturnType<typeof requireRequestContext>>,
+  recordId: string,
+): Promise<void> {
+  const [rec] = await ctx.db((tx) =>
+    tx
+      .select({
+        inspectorTenantUserId: inspectionRecords.inspectorTenantUserId,
+        submittedByTenantUserId: inspectionRecords.submittedByTenantUserId,
+        siteOrgUnitId: inspectionRecords.siteOrgUnitId,
+      })
+      .from(inspectionRecords)
+      .where(eq(inspectionRecords.id, recordId))
+      .limit(1),
+  )
+  if (!rec) throw new Error('Inspection record not found')
+  const ok = await ctx.db((tx) =>
+    canSeeRecord(ctx, tx, {
+      prefix: 'inspections',
+      ownerIds: [rec.inspectorTenantUserId, rec.submittedByTenantUserId],
+      siteId: rec.siteOrgUnitId,
+    }),
+  )
+  if (!ok) throw new Error('Inspection record not found')
+}
+
 async function updateStatus(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'inspections.update')
   const id = String(formData.get('id') ?? '')
   const status = String(formData.get('status') ?? '')
   if (!STATUSES.includes(status as (typeof STATUSES)[number])) return
+  await assertCanSeeInspection(ctx, id)
 
   // Submit gate — refuse to flip to submitted/closed if any criterion is incomplete.
   if (status === 'submitted' || status === 'closed') {
@@ -160,8 +193,10 @@ async function updateStatus(formData: FormData) {
 async function toggleLock(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'inspections.update')
   const id = String(formData.get('id') ?? '')
   const lock = formData.get('lock') === 'true'
+  await assertCanSeeInspection(ctx, id)
   await ctx.db((tx) =>
     tx.update(inspectionRecords).set({ locked: lock }).where(eq(inspectionRecords.id, id)),
   )
@@ -173,10 +208,12 @@ async function toggleLock(formData: FormData) {
 async function updateRecordField(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'inspections.update')
   const id = String(formData.get('id') ?? '')
   const field = String(formData.get('field') ?? '')
   const value = String(formData.get('value') ?? '')
   if (!id || !field) throw new Error('Missing id/field')
+  await assertCanSeeInspection(ctx, id)
 
   const ALLOWED = new Set(['occurredAt', 'siteOrgUnitId', 'foremanText', 'notes'])
   if (!ALLOWED.has(field)) throw new Error('Field not allowed')
@@ -215,10 +252,12 @@ async function updateRecordField(formData: FormData) {
 async function setCriterionAnswer(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'inspections.update')
   const recordId = String(formData.get('recordId') ?? '')
   const rowId = String(formData.get('rowId') ?? '')
   const answer = parseAnswer(formData.get('answer'))
   if (!recordId || !rowId || !answer) return
+  await assertCanSeeInspection(ctx, recordId)
 
   // Flipping to pass / N-A wipes the fail-only fields.
   const clear = answer !== 'fail'
@@ -268,10 +307,12 @@ async function setCriterionAnswer(formData: FormData) {
 async function setCriterionSeverity(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'inspections.update')
   const recordId = String(formData.get('recordId') ?? '')
   const rowId = String(formData.get('rowId') ?? '')
   const severity = parseSeverity(formData.get('severity'))
   if (!recordId || !rowId) return
+  await assertCanSeeInspection(ctx, recordId)
 
   const prevCAId = await getCriterionCAId(ctx, rowId)
   await ctx.db((tx) =>
@@ -306,10 +347,12 @@ async function setCriterionSeverity(formData: FormData) {
 async function setCriterionNonCompliance(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'inspections.update')
   const recordId = String(formData.get('recordId') ?? '')
   const rowId = String(formData.get('rowId') ?? '')
   const value = String(formData.get('value') ?? '').trim() || null
   if (!recordId || !rowId) return
+  await assertCanSeeInspection(ctx, recordId)
   await ctx.db((tx) =>
     tx
       .update(inspectionRecordCriteria)
@@ -324,10 +367,12 @@ async function setCriterionNonCompliance(formData: FormData) {
 async function setCriterionActionTaken(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'inspections.update')
   const recordId = String(formData.get('recordId') ?? '')
   const rowId = String(formData.get('rowId') ?? '')
   const value = String(formData.get('value') ?? '').trim() || null
   if (!recordId || !rowId) return
+  await assertCanSeeInspection(ctx, recordId)
   await ctx.db((tx) =>
     tx
       .update(inspectionRecordCriteria)
@@ -342,10 +387,12 @@ async function setCriterionActionTaken(formData: FormData) {
 async function setCriterionCompliantNote(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'inspections.update')
   const recordId = String(formData.get('recordId') ?? '')
   const rowId = String(formData.get('rowId') ?? '')
   const value = String(formData.get('value') ?? '').trim() || null
   if (!recordId || !rowId) return
+  await assertCanSeeInspection(ctx, recordId)
   await ctx.db((tx) =>
     tx
       .update(inspectionRecordCriteria)
@@ -359,11 +406,13 @@ async function setCriterionCompliantNote(formData: FormData) {
 async function setCriterionAssignment(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'inspections.update')
   const recordId = String(formData.get('recordId') ?? '')
   const rowId = String(formData.get('rowId') ?? '')
   const assignedToPersonId = String(formData.get('assignedToPersonId') ?? '').trim() || null
   const assignedDueDate = String(formData.get('assignedDueDate') ?? '').trim() || null
   if (!recordId || !rowId) return
+  await assertCanSeeInspection(ctx, recordId)
   await ctx.db((tx) =>
     tx
       .update(inspectionRecordCriteria)
@@ -378,10 +427,12 @@ async function setCriterionAssignment(formData: FormData) {
 async function setCriterionCorrectedOn(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'inspections.update')
   const recordId = String(formData.get('recordId') ?? '')
   const rowId = String(formData.get('rowId') ?? '')
   const value = String(formData.get('correctedOn') ?? '').trim() || null
   if (!recordId || !rowId) return
+  await assertCanSeeInspection(ctx, recordId)
   await ctx.db((tx) =>
     tx
       .update(inspectionRecordCriteria)
@@ -401,6 +452,7 @@ async function setCriterionCorrectedOn(formData: FormData) {
 async function addCriterionPhotos(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'inspections.update')
   const recordId = String(formData.get('recordId') ?? '')
   const rowId = String(formData.get('rowId') ?? '')
   const ids = String(formData.get('attachmentIds') ?? '')
@@ -408,6 +460,7 @@ async function addCriterionPhotos(formData: FormData) {
     .map((s) => s.trim())
     .filter(Boolean)
   if (!recordId || !rowId || ids.length === 0) return
+  await assertCanSeeInspection(ctx, recordId)
   await ctx.db(async (tx) => {
     const [cur] = await tx
       .select({ ids: inspectionRecordCriteria.photoAttachmentIds })
@@ -433,8 +486,10 @@ async function addCriterionPhotos(formData: FormData) {
 async function passAll(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'inspections.update')
   const recordId = String(formData.get('recordId') ?? '')
   if (!recordId) return
+  await assertCanSeeInspection(ctx, recordId)
   const flipped = await ctx.db(async (tx) => {
     const rows = await tx
       .select({ id: inspectionRecordCriteria.id })
@@ -478,10 +533,12 @@ async function passAll(formData: FormData) {
 async function saveCustomerSignature(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'inspections.update')
   const recordId = String(formData.get('recordId') ?? '')
   const signature = String(formData.get('signature') ?? '')
   const signerName = String(formData.get('signerName') ?? '').trim() || null
   if (!recordId) return
+  await assertCanSeeInspection(ctx, recordId)
   const dataUrl = signature === 'clear' || signature === '' ? null : signature
   await ctx.db((tx) =>
     tx
@@ -505,7 +562,9 @@ async function saveCustomerSignature(formData: FormData) {
 // Plain helper — invoked by the inline photo-attach server action below.
 async function attachRecordPhotos(recordId: string, ids: string[]) {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'inspections.update')
   if (ids.length === 0) return
+  await assertCanSeeInspection(ctx, recordId)
   await ctx.db((tx) =>
     tx.insert(inspectionRecordAttachments).values(
       ids.map((attachmentId) => ({

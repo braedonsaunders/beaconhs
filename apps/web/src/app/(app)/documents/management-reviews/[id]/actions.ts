@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { eq } from 'drizzle-orm'
 import { documentManagementReviews } from '@beaconhs/db/schema'
+import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { runModuleFlows } from '@/lib/flows/run-module-flows'
@@ -16,6 +17,7 @@ import { runModuleFlows } from '@/lib/flows/run-module-flows'
  */
 export async function createManagementReview(formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.manage')
   const title = String(formData.get('title') ?? '').trim() || 'Untitled review'
   const periodEnd =
     String(formData.get('periodEnd') ?? '').trim() || new Date().toISOString().slice(0, 10)
@@ -58,6 +60,7 @@ export async function updateReviewMeta(
   },
 ): Promise<void> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.manage')
   await ctx.db((tx) =>
     tx
       .update(documentManagementReviews)
@@ -84,6 +87,7 @@ export async function updateReviewMeta(
 
 export async function updateDocumentsReviewed(id: string, docIds: string[]): Promise<void> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.manage')
   await ctx.db((tx) =>
     tx
       .update(documentManagementReviews)
@@ -102,6 +106,7 @@ export async function updateDocumentsReviewed(id: string, docIds: string[]): Pro
 
 export async function updateActionItems(id: string, caIds: string[]): Promise<void> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.manage')
   await ctx.db((tx) =>
     tx
       .update(documentManagementReviews)
@@ -120,6 +125,7 @@ export async function updateActionItems(id: string, caIds: string[]): Promise<vo
 
 export async function deleteManagementReview(id: string): Promise<void> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.manage')
   await ctx.db((tx) =>
     tx
       .update(documentManagementReviews)

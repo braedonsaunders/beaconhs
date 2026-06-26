@@ -7,6 +7,7 @@ import { notFound } from 'next/navigation'
 import { NextResponse, type NextRequest } from 'next/server'
 import ExcelJS from 'exceljs'
 import { eq } from 'drizzle-orm'
+import { assertCan } from '@beaconhs/tenant'
 import { db, withSuperAdmin } from '@beaconhs/db'
 import { tenants } from '@beaconhs/db/schema'
 import { renderReportPdf } from '@beaconhs/forms-pdf'
@@ -22,6 +23,7 @@ export async function GET(
 ): Promise<Response> {
   const { id } = await params
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'reports.read')
   const definition = await loadDefinitionById(ctx.tenantId!, id)
   if (!definition) notFound()
 

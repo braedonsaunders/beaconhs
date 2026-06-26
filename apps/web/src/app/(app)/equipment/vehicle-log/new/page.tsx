@@ -13,6 +13,7 @@ import {
   Textarea,
 } from '@beaconhs/ui'
 import { equipmentItems, orgUnits, people, truckLogEntries } from '@beaconhs/db/schema'
+import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { pickString } from '@/lib/list-params'
@@ -39,6 +40,7 @@ function safeStr(raw: FormDataEntryValue | null): string | null {
 async function createEntry(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.manage')
   const equipmentItemId = String(formData.get('equipmentItemId') ?? '').trim()
   const entryDate = String(formData.get('entryDate') ?? '').trim()
   if (!equipmentItemId || !entryDate) throw new Error('Truck and date are required.')
