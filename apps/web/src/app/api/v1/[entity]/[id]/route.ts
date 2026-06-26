@@ -8,7 +8,7 @@ import { authenticateApiKey } from '@/lib/api/auth'
 import { ApiError, errorResponse, noStore } from '@/lib/api/errors'
 import { getEntityRecord } from '@/lib/api/query'
 import { isRecordable, isUuid } from '@/lib/api/records'
-import { keyCanRead } from '@/lib/api/scopes'
+import { keyHasPermission, readPermissionForEntity } from '@/lib/api/permissions'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -24,9 +24,10 @@ export async function GET(
     if (!entity || !isRecordable(entityKey)) {
       throw ApiError.notFound(`No record endpoint for "${entityKey}"`)
     }
-    if (!keyCanRead(key.scopes, entityKey)) {
+    const requiredPermission = readPermissionForEntity(entity)
+    if (!keyHasPermission(key.permissions, requiredPermission)) {
       throw ApiError.forbidden(
-        `This key cannot read "${entityKey}" — grant scope read:${entityKey} or read:*.`,
+        `This key cannot read "${entityKey}" — grant permission ${requiredPermission}.`,
       )
     }
     if (!isUuid(id)) throw ApiError.invalid('Record id must be a uuid')

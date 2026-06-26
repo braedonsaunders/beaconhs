@@ -36,19 +36,29 @@ export async function recordAudit(
   // the trail stays honest. Start/stop entries themselves are recorded by the
   // admin's own (non-impersonated) context, so this branch is skipped for them.
   const imp = ctx.impersonation
+  const isSyntheticApiActor = Boolean(ctx.apiKey && ctx.userId === `api_key:${ctx.apiKey.id}`)
   const metadata = imp
     ? {
         ...(evt.metadata ?? {}),
+        ...(ctx.apiKey
+          ? { actorKind: 'api_key', apiKeyId: ctx.apiKey.id, apiKeyName: ctx.apiKey.name }
+          : {}),
         impersonatorUserId: imp.actor.userId,
         impersonatorName: imp.actor.name,
       }
-    : (evt.metadata ?? {})
+    : {
+        ...(evt.metadata ?? {}),
+        ...(ctx.apiKey
+          ? { actorKind: 'api_key', apiKeyId: ctx.apiKey.id, apiKeyName: ctx.apiKey.name }
+          : {}),
+      }
   const summary = imp && evt.summary ? `[impersonated] ${evt.summary}` : evt.summary
+  const actorUserId = isSyntheticApiActor ? null : ctx.userId
 
   await ctx.db((tx) =>
     tx.insert(auditLog).values({
       tenantId: ctx.tenantId,
-      actorUserId: ctx.userId,
+      actorUserId,
       entityType: evt.entityType,
       entityId: evt.entityId,
       action: evt.action,

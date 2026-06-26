@@ -1617,7 +1617,7 @@ CREATE TABLE "api_keys" (
 	"name" text NOT NULL,
 	"key_hash" text NOT NULL,
 	"prefix" text NOT NULL,
-	"scopes" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"permissions" jsonb DEFAULT '[]'::jsonb NOT NULL,
 	"created_by" text,
 	"last_used_at" timestamp with time zone,
 	"expires_at" timestamp with time zone,

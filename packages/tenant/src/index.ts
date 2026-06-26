@@ -36,6 +36,8 @@ export type RequestContext = {
   scopes: RoleScope[]
   // Present only during impersonation — null/undefined for a normal session.
   impersonation?: ImpersonationInfo | null
+  // Present for public API requests authenticated by an API key.
+  apiKey?: { id: string; name: string } | null
   // Convenience: bound DB executor with tenant context applied
   db: <T>(fn: (tx: Database) => Promise<T>) => Promise<T>
 }

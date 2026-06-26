@@ -1,14 +1,14 @@
 // /api/v1/{entity} — GET lists rows; POST creates a record (writable entities
 // only). Both authenticate first (so unknown paths can't probe which entities
-// exist without a valid key), then check the relevant scope.
+// exist without a valid key), then check the relevant permission.
 
 import { NextResponse } from 'next/server'
 import { REPORT_ENTITY_MAP } from '@beaconhs/reports'
 import { authenticateApiKey } from '@/lib/api/auth'
 import { ApiError, errorResponse, noStore } from '@/lib/api/errors'
 import { readEntityRows } from '@/lib/api/query'
-import { keyCanRead, keyCanWrite } from '@/lib/api/scopes'
-import { createEntity, isWritable } from '@/lib/api/write'
+import { keyHasPermission, readPermissionForEntity } from '@/lib/api/permissions'
+import { createEntity, isWritable, writePermissionForEntity } from '@/lib/api/write'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -22,9 +22,10 @@ export async function GET(
     const { entity: entityKey } = await params
     const entity = REPORT_ENTITY_MAP[entityKey]
     if (!entity) throw ApiError.notFound(`Unknown entity "${entityKey}"`)
-    if (!keyCanRead(key.scopes, entityKey)) {
+    const requiredPermission = readPermissionForEntity(entity)
+    if (!keyHasPermission(key.permissions, requiredPermission)) {
       throw ApiError.forbidden(
-        `This key cannot read "${entityKey}" — grant scope read:${entityKey} or read:*.`,
+        `This key cannot read "${entityKey}" — grant permission ${requiredPermission}.`,
       )
     }
 
@@ -48,9 +49,13 @@ export async function POST(
     if (!isWritable(entityKey)) {
       throw ApiError.methodNotAllowed(`"${entityKey}" is read-only — POST is not supported.`)
     }
-    if (!keyCanWrite(key.scopes, entityKey)) {
+    const requiredPermission = writePermissionForEntity(entityKey)
+    if (!requiredPermission) {
+      throw ApiError.methodNotAllowed(`"${entityKey}" is read-only — POST is not supported.`)
+    }
+    if (!keyHasPermission(key.permissions, requiredPermission)) {
       throw ApiError.forbidden(
-        `This key cannot write "${entityKey}" — grant scope write:${entityKey} or write:*.`,
+        `This key cannot write "${entityKey}" — grant permission ${requiredPermission}.`,
       )
     }
 

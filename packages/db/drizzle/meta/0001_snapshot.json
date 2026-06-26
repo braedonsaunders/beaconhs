@@ -17344,8 +17344,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "scopes": {
-          "name": "scopes",
+        "permissions": {
+          "name": "permissions",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": true,

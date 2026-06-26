@@ -27,7 +27,7 @@ export class ApiError extends Error {
   static unauthorized(message = 'Missing or invalid API key') {
     return new ApiError(401, 'unauthorized', message)
   }
-  static forbidden(message = 'API key lacks the required scope') {
+  static forbidden(message = 'API key lacks the required permission') {
     return new ApiError(403, 'forbidden', message)
   }
   static notFound(message = 'Resource not found') {

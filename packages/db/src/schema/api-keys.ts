@@ -3,6 +3,7 @@
 import { index, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
 import { id, timestamps } from './_helpers'
 import { tenants, users } from './core'
+import type { PermissionKey } from './iam'
 
 export const apiKeys = pgTable(
   'api_keys',
@@ -15,7 +16,7 @@ export const apiKeys = pgTable(
     // Hash of the secret; the secret itself is only shown once at creation.
     keyHash: text('key_hash').notNull(),
     prefix: text('prefix').notNull(), // e.g. 'bhs_live_…' first 8 chars, shown in UI
-    scopes: jsonb('scopes').$type<string[]>().default([]).notNull(),
+    permissions: jsonb('permissions').$type<PermissionKey[]>().default([]).notNull(),
     createdBy: text('created_by').references(() => users.id),
     lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
     expiresAt: timestamp('expires_at', { withTimezone: true }),

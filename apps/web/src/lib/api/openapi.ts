@@ -5,9 +5,9 @@
 
 import { REPORT_ENTITIES, type ReportColumnKind, type ReportEntity } from '@beaconhs/reports'
 import { DEFAULT_LIMIT, MAX_LIMIT } from './query'
+import { readPermissionForEntity } from './permissions'
 import { isRecordable } from './records'
-import { API_SCOPES, READ_ALL_SCOPE } from './scopes'
-import { isWritable, writeBodySchema } from './write'
+import { isWritable, writeBodySchema, writePermissionForEntity } from './write'
 
 type Json = Record<string, unknown>
 
@@ -58,6 +58,7 @@ const errorContent = (): Json => ({
 function entityPath(entity: ReportEntity): Json {
   const schemaName = pascalCase(entity.key)
   const columnKeys = entity.columns.map((c) => c.key)
+  const readPermission = readPermissionForEntity(entity)
 
   const filterParams = entity.columns.map((col) => ({
     name: col.key,
@@ -72,7 +73,8 @@ function entityPath(entity: ReportEntity): Json {
       tags: [entity.category],
       operationId: `list_${entity.key}`,
       summary: `List ${entity.label}`,
-      description: `${entity.description}\n\nRequires scope \`read:${entity.key}\` or \`${READ_ALL_SCOPE}\`. Results are scoped to the API key's tenant. Filter on any column with the operator suffixes documented on each parameter.`,
+      description: `${entity.description}\n\nRequires permission \`${readPermission}\`. Results are scoped to the API key's tenant. Filter on any column with the operator suffixes documented on each parameter.`,
+      'x-beaconhs-required-permission': readPermission,
       security: [{ bearerAuth: [] }],
       parameters: [
         {
@@ -136,7 +138,7 @@ function entityPath(entity: ReportEntity): Json {
           description: 'Missing, invalid, revoked or expired API key.',
           content: errorContent(),
         },
-        '403': { description: 'API key lacks the required scope.', content: errorContent() },
+        '403': { description: 'API key lacks the required permission.', content: errorContent() },
       },
     },
   }
@@ -147,11 +149,13 @@ function entityPath(entity: ReportEntity): Json {
 /** POST operation for a writable entity. */
 function postOperation(entity: ReportEntity): Json {
   const schemaName = pascalCase(entity.key)
+  const writePermission = writePermissionForEntity(entity.key)
   return {
     tags: [entity.category],
     operationId: `create_${entity.key}`,
     summary: `Create ${entity.label.replace(/s$/, '')}`,
-    description: `Create a ${entity.label} record. Requires scope \`write:${entity.key}\` or \`${'write:*'}\`. The record is created in the API key's tenant.`,
+    description: `Create a ${entity.label} record. Requires permission \`${writePermission}\`. The record is created in the API key's tenant.`,
+    'x-beaconhs-required-permission': writePermission,
     security: [{ bearerAuth: [] }],
     requestBody: {
       required: true,
@@ -179,7 +183,7 @@ function postOperation(entity: ReportEntity): Json {
         description: 'Missing, invalid, revoked or expired API key.',
         content: errorContent(),
       },
-      '403': { description: 'API key lacks the required scope.', content: errorContent() },
+      '403': { description: 'API key lacks the required permission.', content: errorContent() },
     },
   }
 }
@@ -187,12 +191,14 @@ function postOperation(entity: ReportEntity): Json {
 /** GET-by-id operation for a recordable entity (physical table). */
 function recordPath(entity: ReportEntity): Json {
   const schemaName = pascalCase(entity.key)
+  const readPermission = readPermissionForEntity(entity)
   return {
     get: {
       tags: [entity.category],
       operationId: `get_${entity.key}`,
       summary: `Get ${entity.label.replace(/s$/, '')} by id`,
-      description: `Fetch a single ${entity.label} record by id. Requires scope \`read:${entity.key}\` or \`${READ_ALL_SCOPE}\`.`,
+      description: `Fetch a single ${entity.label} record by id. Requires permission \`${readPermission}\`.`,
+      'x-beaconhs-required-permission': readPermission,
       security: [{ bearerAuth: [] }],
       parameters: [
         { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
@@ -217,7 +223,7 @@ function recordPath(entity: ReportEntity): Json {
           description: 'Missing, invalid, revoked or expired API key.',
           content: errorContent(),
         },
-        '403': { description: 'API key lacks the required scope.', content: errorContent() },
+        '403': { description: 'API key lacks the required permission.', content: errorContent() },
         '404': { description: 'No record with that id in your tenant.', content: errorContent() },
       },
     },
@@ -261,15 +267,13 @@ export function buildOpenApiDocument(origin: string): Json {
     }
   }
 
-  const scopeList = API_SCOPES.map((s) => `- \`${s.value}\` — ${s.label}`).join('\n')
-
   return {
     openapi: '3.1.0',
     info: {
       title: 'BeaconHS Public API',
       version: '1.0.0',
       description: [
-        'Read-only REST access to your BeaconHS data, scoped to the tenant that owns the API key.',
+        'REST access to your BeaconHS data, scoped to the tenant that owns the API key.',
         '',
         '## Authentication',
         'Send your key as a Bearer token:',
@@ -280,8 +284,8 @@ export function buildOpenApiDocument(origin: string): Json {
         '',
         'Create and manage keys under Admin → API keys. The secret is shown once at creation.',
         '',
-        '## Scopes',
-        scopeList,
+        '## Permissions',
+        'API keys use the same permission catalogue as tenant roles. Each operation lists its required permission in the description and `x-beaconhs-required-permission`.',
         '',
         '## Filtering, sorting & paging',
         'Every list endpoint accepts `limit`, `offset`, `sort`, `order` and `fields`, plus per-column filters (`?status=open`, `?occurred_at__gte=2026-01-01`, `?severity__in=high,critical`).',

@@ -12,13 +12,13 @@ import { db, withSuperAdmin } from '@beaconhs/db'
 import { apiKeys } from '@beaconhs/db/schema'
 import { makeTenantContext, type RequestContext } from '@beaconhs/tenant'
 import { ApiError } from './errors'
-import { sanitizeScopes } from './scopes'
+import { sanitizeApiPermissions } from './permissions'
 
 export type ApiKeyInfo = {
   id: string
   name: string
   tenantId: string
-  scopes: string[]
+  permissions: string[]
 }
 
 export type ApiAuth = {
@@ -57,7 +57,7 @@ export async function authenticateApiKey(req: Request): Promise<ApiAuth> {
     throw ApiError.unauthorized('API key has expired')
   }
 
-  const scopes = sanitizeScopes(row.scopes ?? [])
+  const permissions = sanitizeApiPermissions(row.permissions ?? [])
   const ctx = makeTenantContext(db, {
     userId: row.createdBy ?? `api_key:${row.id}`,
     tenantId: row.tenantId,
@@ -66,11 +66,12 @@ export async function authenticateApiKey(req: Request): Promise<ApiAuth> {
     // affects server-rendered local-time display, which JSON API responses don't use.
     timezone: 'America/Toronto',
     membership: null,
-    // The key's API scopes double as the context's permission set; site-level
-    // visibility is full-tenant (a tenant-level credential).
-    permissions: new Set(scopes),
+    apiKey: { id: row.id, name: row.name },
+    // API keys use the same permission vocabulary as tenant roles. They are
+    // tenant-level credentials, so record visibility is full-tenant.
+    permissions: new Set(permissions),
     scopes: [{ type: 'tenant' }],
   })
 
-  return { ctx, key: { id: row.id, name: row.name, tenantId: row.tenantId, scopes } }
+  return { ctx, key: { id: row.id, name: row.name, tenantId: row.tenantId, permissions } }
 }
