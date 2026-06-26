@@ -26,6 +26,10 @@ export type RequestContext = {
   userId: string
   tenantId: string
   isSuperAdmin: boolean
+  // IANA timezone for the active user (e.g. 'America/Toronto'). Server components
+  // render on the deploy container's clock (UTC in prod), so any local-time
+  // display — greetings, "today", date headers — must format against this.
+  timezone: string
   // The active tenant_user membership (id, display name)
   membership: { id: string; displayName: string } | null
   permissions: Set<string>

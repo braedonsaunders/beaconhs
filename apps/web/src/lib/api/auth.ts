@@ -62,6 +62,9 @@ export async function authenticateApiKey(req: Request): Promise<ApiAuth> {
     userId: row.createdBy ?? `api_key:${row.id}`,
     tenantId: row.tenantId,
     isSuperAdmin: false,
+    // No human user behind an API key — default to the platform timezone. It only
+    // affects server-rendered local-time display, which JSON API responses don't use.
+    timezone: 'America/Toronto',
     membership: null,
     // The key's API scopes double as the context's permission set; site-level
     // visibility is full-tenant (a tenant-level credential).

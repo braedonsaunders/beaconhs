@@ -98,7 +98,7 @@ export default async function DashboardPage() {
     }
   }
 
-  const greeting = buildGreeting(today, ctx.membership?.displayName ?? null)
+  const greeting = buildGreeting(today, ctx.timezone, ctx.membership?.displayName ?? null)
   // The tenant rollup is org data — omit it for self-only viewers (they'd have
   // no org cards either, so the number would be the only leak).
   const tenantSummary = canSeeOrgAggregates(ctx)
@@ -118,8 +118,18 @@ export default async function DashboardPage() {
   )
 }
 
-function buildGreeting(now: Date, name: string | null): string {
-  const hour = now.getHours()
+function buildGreeting(now: Date, timeZone: string, name: string | null): string {
+  // Read the hour in the USER's timezone, not the server's. This renders in a
+  // Server Component, so a bare now.getHours() uses the deploy container's clock
+  // (UTC in prod) and greets "morning" during someone's evening. Mirrors the
+  // tz-aware hour read in packages/reports/src/cadence.ts.
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hour: '2-digit',
+    hour12: false,
+  }).formatToParts(now)
+  const raw = Number(parts.find((p) => p.type === 'hour')?.value ?? '0')
+  const hour = raw === 24 ? 0 : raw // some platforms emit '24' for midnight
   const stem = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
   const firstName = firstNameFrom(name)
   return firstName ? `${stem}, ${firstName}` : stem

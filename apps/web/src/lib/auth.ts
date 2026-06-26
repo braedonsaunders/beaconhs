@@ -1,7 +1,7 @@
 import { cache } from 'react'
 import { cookies, headers } from 'next/headers'
 import { auth } from '@beaconhs/auth'
-import { db, type Database } from '@beaconhs/db'
+import { db, withSuperAdmin, type Database } from '@beaconhs/db'
 import { sessions, tenants, tenantUsers, users } from '@beaconhs/db/schema'
 import { and, asc, eq, sql } from 'drizzle-orm'
 import {
@@ -27,6 +27,17 @@ export async function requireUserId(): Promise<string> {
   const userId = await getCurrentUserId()
   if (!userId) throw new UnauthorizedError()
   return userId
+}
+
+/**
+ * The real signed-in user's display name + email, straight from the Better-Auth
+ * session. Unlike RequestContext (which carries the EFFECTIVE / impersonated
+ * identity), this is always the actual account — used by the top-bar account menu.
+ */
+export async function getSessionUser(): Promise<{ name: string; email: string } | null> {
+  const session = await auth.api.getSession({ headers: await headers() })
+  if (!session?.user) return null
+  return { name: session.user.name ?? '', email: session.user.email ?? '' }
 }
 
 /**
@@ -61,8 +72,12 @@ export const getRequestContext = cache(async (): Promise<RequestContext | null> 
   const cookieStore = await cookies()
   const cookieTenantId = cookieStore.get(ACTIVE_TENANT_COOKIE)?.value ?? null
 
-  return await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
+  // Bootstrap read: resolve identity + membership ACROSS tenants before any
+  // tenant scope is chosen. Runs on the BYPASSRLS super pool — the tenant tables
+  // (tenant_users, roles, …) enforce FORCE ROW LEVEL SECURITY, so a normal
+  // connection would see zero rows here. The returned context's db() helper is
+  // still tenant-scoped via makeTenantContext.
+  return await withSuperAdmin(db, async (tx) => {
     const [u] = await tx.select().from(users).where(eq(users.id, userId)).limit(1)
     if (!u) return null
 
@@ -125,6 +140,7 @@ export const getRequestContext = cache(async (): Promise<RequestContext | null> 
         userId,
         tenantId: t.id,
         isSuperAdmin: true,
+        timezone: u.timezone,
         membership: m ? { id: m.id, displayName: m.displayName ?? u.name } : null,
         permissions,
         scopes: [{ type: 'tenant' }],
@@ -164,6 +180,7 @@ export const getRequestContext = cache(async (): Promise<RequestContext | null> 
       userId,
       tenantId: active.tenant.id,
       isSuperAdmin: false,
+      timezone: u.timezone,
       membership: {
         id: active.membership.id,
         displayName: active.membership.displayName ?? u.name,
@@ -227,6 +244,7 @@ async function resolveImpersonation(
     userId: target.id,
     tenantId: s.tenantId,
     isSuperAdmin: false,
+    timezone: target.timezone,
     membership: { id: m.id, displayName: m.displayName ?? target.name },
     permissions,
     scopes,
@@ -268,8 +286,7 @@ export async function listAccessibleTenants(): Promise<
 > {
   const userId = await getCurrentUserId()
   if (!userId) return []
-  return await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT set_config('app.bypass_rls', 'on', true)`)
+  return await withSuperAdmin(db, async (tx) => {
     const [u] = await tx.select().from(users).where(eq(users.id, userId)).limit(1)
     if (!u) return []
     if (u.isSuperAdmin) {
