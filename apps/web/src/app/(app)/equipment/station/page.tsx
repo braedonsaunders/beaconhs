@@ -116,26 +116,28 @@ export default async function StationPage({
         </>
       }
     >
-      <StationClient
-        surface="app"
-        tenantName={data.tenantName}
-        scanMode={data.settings?.scanMode ?? 'toggle'}
-        soundEnabled={data.settings?.soundEnabled ?? true}
-        requireConditionOnCheckin={data.settings?.requireConditionOnCheckin ?? false}
-        homeLocationName={data.homeName}
-        people={data.peopleRows.map((p) => ({
-          id: p.id,
-          name: `${p.lastName}, ${p.firstName}`,
-          employeeNo: p.employeeNo,
-          jobTitle: p.jobTitle,
-        }))}
-        locations={data.locationRows}
-        availableCount={data.availableCount}
-        initialActivePersonId={data.initialActivePersonId}
-        initialScanCode={initialScanCode}
-        onSearch={searchStation}
-        onScan={performStationScan}
-      />
+      <div className="-mx-3 sm:mx-0">
+        <StationClient
+          surface="app"
+          tenantName={data.tenantName}
+          scanMode={data.settings?.scanMode ?? 'toggle'}
+          soundEnabled={data.settings?.soundEnabled ?? true}
+          requireConditionOnCheckin={data.settings?.requireConditionOnCheckin ?? false}
+          homeLocationName={data.homeName}
+          people={data.peopleRows.map((p) => ({
+            id: p.id,
+            name: `${p.lastName}, ${p.firstName}`,
+            employeeNo: p.employeeNo,
+            jobTitle: p.jobTitle,
+          }))}
+          locations={data.locationRows}
+          availableCount={data.availableCount}
+          initialActivePersonId={data.initialActivePersonId}
+          initialScanCode={initialScanCode}
+          onSearch={searchStation}
+          onScan={performStationScan}
+        />
+      </div>
     </ListPageLayout>
   )
 }

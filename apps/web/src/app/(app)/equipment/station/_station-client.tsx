@@ -393,7 +393,7 @@ export function StationClient(props: StationClientProps) {
     ? 'fixed inset-0 z-40 overflow-y-auto bg-slate-950 text-slate-100'
     : kiosk
       ? 'min-h-screen bg-slate-950 text-slate-100'
-      : 'mx-auto w-full max-w-full overflow-hidden rounded-none border-slate-200 bg-white text-slate-900 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100 sm:rounded-2xl sm:border'
+      : 'mx-auto w-full max-w-full overflow-visible rounded-none bg-transparent text-slate-900 dark:bg-transparent dark:text-slate-100 sm:overflow-hidden sm:rounded-2xl sm:border sm:border-slate-200 sm:bg-white sm:dark:border-slate-800 sm:dark:bg-slate-900'
 
   const tree = (
     <div ref={rootRef} className={shell}>
@@ -401,7 +401,7 @@ export function StationClient(props: StationClientProps) {
         className={
           big
             ? 'mx-auto flex min-h-screen w-full max-w-screen-2xl flex-col gap-6 p-6 sm:p-10'
-            : 'flex w-full max-w-full flex-col gap-4 px-3 py-4 sm:gap-5 sm:p-6'
+            : 'flex w-full max-w-full flex-col gap-4 px-3 py-3 sm:gap-5 sm:p-6'
         }
         onClick={focusScan}
       >
