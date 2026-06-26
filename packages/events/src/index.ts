@@ -200,6 +200,7 @@ async function getTenant(ctx: EventCtx, tenantId: string): Promise<{ name: strin
 
 async function tenantUserToUserId(
   ctx: EventCtx,
+  tenantId: string,
   tenantUserId: string,
 ): Promise<{ userId: string; displayName: string | null } | null> {
   return ctx.db(async (tx) => {
@@ -209,19 +210,30 @@ async function tenantUserToUserId(
         displayName: tenantUsers.displayName,
       })
       .from(tenantUsers)
-      .where(eq(tenantUsers.id, tenantUserId))
+      .where(and(eq(tenantUsers.tenantId, tenantId), eq(tenantUsers.id, tenantUserId)))
       .limit(1)
     return row ?? null
   })
 }
 
-async function emailsForUserIds(ctx: EventCtx, userIds: string[]): Promise<string[]> {
+async function emailsForUserIds(
+  ctx: EventCtx,
+  tenantId: string,
+  userIds: string[],
+): Promise<string[]> {
   if (userIds.length === 0) return []
   return ctx.db(async (tx) => {
     const rows = await tx
       .select({ email: users.email })
-      .from(users)
-      .where(inArray(users.id, userIds))
+      .from(tenantUsers)
+      .innerJoin(users, eq(users.id, tenantUsers.userId))
+      .where(
+        and(
+          eq(tenantUsers.tenantId, tenantId),
+          eq(tenantUsers.status, 'active'),
+          inArray(tenantUsers.userId, userIds),
+        ),
+      )
     return rows.map((r) => r.email)
   })
 }
@@ -251,7 +263,7 @@ export async function emitIncidentReported(
     if (!incident) return
 
     const reporter = incident.reportedByTenantUserId
-      ? await tenantUserToUserId(ctx, incident.reportedByTenantUserId)
+      ? await tenantUserToUserId(ctx, tenantId, incident.reportedByTenantUserId)
       : null
 
     const tenant = await getTenant(ctx, tenantId)
@@ -278,7 +290,7 @@ export async function emitIncidentReported(
       channels: ['in_app', 'push'],
     })
 
-    const recipients = await emailsForUserIds(ctx, audience)
+    const recipients = await emailsForUserIds(ctx, tenantId, audience)
     if (recipients.length > 0) {
       const tpl = incidentReportedEmail({
         tenant,
@@ -323,10 +335,10 @@ export async function emitIncidentStatusChanged(
     if (!incident) return
 
     const reporter = incident.reportedByTenantUserId
-      ? await tenantUserToUserId(ctx, incident.reportedByTenantUserId)
+      ? await tenantUserToUserId(ctx, tenantId, incident.reportedByTenantUserId)
       : null
     const investigator = incident.assignedInvestigatorTenantUserId
-      ? await tenantUserToUserId(ctx, incident.assignedInvestigatorTenantUserId)
+      ? await tenantUserToUserId(ctx, tenantId, incident.assignedInvestigatorTenantUserId)
       : null
 
     const audience = await resolveAudience(ctx, tenantId, 'incident', [
@@ -385,11 +397,11 @@ export async function emitCorrectiveActionAssigned(
     let assigner: { userId: string; displayName: string | null } | null = null
 
     if (!assigneeUserId && ca.ownerTenantUserId) {
-      const a = await tenantUserToUserId(ctx, ca.ownerTenantUserId)
+      const a = await tenantUserToUserId(ctx, tenantId, ca.ownerTenantUserId)
       assigneeUserId = a?.userId ?? null
     }
     if (ca.assignedByTenantUserId) {
-      assigner = await tenantUserToUserId(ctx, ca.assignedByTenantUserId)
+      assigner = await tenantUserToUserId(ctx, tenantId, ca.assignedByTenantUserId)
       if (!assignerUserId) assignerUserId = assigner?.userId ?? null
     }
 
@@ -416,7 +428,7 @@ export async function emitCorrectiveActionAssigned(
       channels: ['in_app', 'push'],
     })
 
-    const recipients = await emailsForUserIds(ctx, audience)
+    const recipients = await emailsForUserIds(ctx, tenantId, audience)
     if (recipients.length > 0) {
       const tpl = caAssignedEmail({
         tenant,
@@ -469,19 +481,28 @@ export async function emitCorrectiveActionCompleted(
       const [u] = await ctx.db((tx) =>
         tx
           .select({ id: users.id, name: users.name })
-          .from(users)
-          .where(eq(users.id, completerUserId))
+          .from(tenantUsers)
+          .innerJoin(users, eq(users.id, tenantUsers.userId))
+          .where(
+            and(
+              eq(tenantUsers.tenantId, tenantId),
+              eq(tenantUsers.status, 'active'),
+              eq(tenantUsers.userId, completerUserId),
+            ),
+          )
           .limit(1),
       )
       completer = u ? { userId: u.id, displayName: u.name } : null
     }
 
     const assigner = ca.assignedByTenantUserId
-      ? await tenantUserToUserId(ctx, ca.assignedByTenantUserId)
+      ? await tenantUserToUserId(ctx, tenantId, ca.assignedByTenantUserId)
       : null
-    const owner = ca.ownerTenantUserId ? await tenantUserToUserId(ctx, ca.ownerTenantUserId) : null
+    const owner = ca.ownerTenantUserId
+      ? await tenantUserToUserId(ctx, tenantId, ca.ownerTenantUserId)
+      : null
     const verifier = ca.verifiedByTenantUserId
-      ? await tenantUserToUserId(ctx, ca.verifiedByTenantUserId)
+      ? await tenantUserToUserId(ctx, tenantId, ca.verifiedByTenantUserId)
       : null
 
     const audience = await resolveAudience(ctx, tenantId, 'ca', [
@@ -507,7 +528,7 @@ export async function emitCorrectiveActionCompleted(
       data: { caId: ca.id, status: ca.status },
     })
 
-    const recipients = await emailsForUserIds(ctx, audience)
+    const recipients = await emailsForUserIds(ctx, tenantId, audience)
     if (recipients.length > 0) {
       const tpl = caCompletedEmail({
         tenant,
@@ -623,7 +644,7 @@ export async function emitComplianceTransitions(
         linkPath,
         data: { obligationId: ob.id, overdue, expiring },
       })
-      const recipients = await emailsForUserIds(ctx, audience)
+      const recipients = await emailsForUserIds(ctx, tenantId, audience)
       if (recipients.length > 0) {
         const list = actionable
           .slice(0, 25)

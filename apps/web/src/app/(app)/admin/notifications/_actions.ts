@@ -1,10 +1,18 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { eq } from 'drizzle-orm'
-import { tenantNotificationPolicy, tenantNotificationSettings } from '@beaconhs/db/schema'
-import { can } from '@beaconhs/tenant'
+import { and, eq, inArray, isNull } from 'drizzle-orm'
+import {
+  notificationGroups,
+  roles,
+  tenantNotificationPolicy,
+  tenantNotificationSettings,
+  tenantUsers,
+} from '@beaconhs/db/schema'
+import { can, type RequestContext } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { recordAudit } from '@/lib/audit'
+import { NOTIFICATION_CATEGORIES } from './_catalog'
 import { DEFAULT_SCAN_CRON, DEFAULT_SCAN_TZ, isValidCron, isValidTimezone } from './_schedule'
 
 export type EscalationStep = { afterDays: number; roleKeys: string[] }
@@ -29,15 +37,75 @@ export type PolicyInput = {
 }
 
 const VALID_CHANNELS = ['in_app', 'email', 'push', 'sms']
+const VALID_CATEGORIES = new Set(NOTIFICATION_CATEGORIES.map((category) => category.key))
 
-const cleanEscalation = (steps: EscalationStep[]): EscalationStep[] =>
+function uniq(input: string[]): string[] {
+  return [...new Set(input.map((value) => value.trim()).filter(Boolean))]
+}
+
+const cleanEscalation = (
+  steps: EscalationStep[],
+  allowedRoleKeys?: ReadonlySet<string>,
+): EscalationStep[] =>
   steps
     .map((s) => ({
       afterDays: Math.min(365, Math.max(1, Math.round(s.afterDays || 1))),
-      roleKeys: [...new Set(s.roleKeys.filter(Boolean))],
+      roleKeys: uniq(s.roleKeys).filter((key) => !allowedRoleKeys || allowedRoleKeys.has(key)),
     }))
     .filter((s) => s.roleKeys.length > 0)
     .sort((a, b) => a.afterDays - b.afterDays)
+
+async function loadAllowedRecipients(ctx: RequestContext, items: CategorySettingInput[]) {
+  const requestedRoleKeys = uniq(
+    items.flatMap((item) => [
+      ...item.roleKeys,
+      ...(item.escalation ?? []).flatMap((step) => step.roleKeys),
+    ]),
+  )
+  const requestedUserIds = uniq(items.flatMap((item) => item.userIds))
+  const requestedGroupIds = uniq(items.flatMap((item) => item.groupIds ?? []))
+
+  return ctx.db(async (tx) => {
+    const roleRows =
+      requestedRoleKeys.length > 0
+        ? await tx
+            .select({ key: roles.key })
+            .from(roles)
+            .where(and(eq(roles.tenantId, ctx.tenantId), inArray(roles.key, requestedRoleKeys)))
+        : []
+    const userRows =
+      requestedUserIds.length > 0
+        ? await tx
+            .select({ userId: tenantUsers.userId })
+            .from(tenantUsers)
+            .where(
+              and(
+                eq(tenantUsers.tenantId, ctx.tenantId),
+                eq(tenantUsers.status, 'active'),
+                inArray(tenantUsers.userId, requestedUserIds),
+              ),
+            )
+        : []
+    const groupRows =
+      requestedGroupIds.length > 0
+        ? await tx
+            .select({ id: notificationGroups.id })
+            .from(notificationGroups)
+            .where(
+              and(
+                eq(notificationGroups.tenantId, ctx.tenantId),
+                isNull(notificationGroups.deletedAt),
+                inArray(notificationGroups.id, requestedGroupIds),
+              ),
+            )
+        : []
+    return {
+      roleKeys: new Set(roleRows.map((row) => row.key)),
+      userIds: new Set(userRows.map((row) => row.userId)),
+      groupIds: new Set(groupRows.map((row) => row.id)),
+    }
+  })
+}
 
 /**
  * Upsert one row per category for the active tenant. A row always exists once
@@ -49,14 +117,19 @@ export async function saveNotificationSettings(items: CategorySettingInput[]) {
   if (!ctx.isSuperAdmin && !can(ctx, 'admin.settings.manage')) {
     throw new Error('You do not have permission to manage notification settings.')
   }
+  if (items.some((item) => !VALID_CATEGORIES.has(item.category))) {
+    throw new Error('One or more notification categories are invalid.')
+  }
+
+  const allowed = await loadAllowedRecipients(ctx, items)
 
   await ctx.db(async (tx) => {
     for (const item of items) {
-      const roleKeys = [...new Set(item.roleKeys.filter(Boolean))]
-      const userIds = [...new Set(item.userIds.filter(Boolean))]
-      const groupIds = [...new Set((item.groupIds ?? []).filter(Boolean))]
+      const roleKeys = uniq(item.roleKeys).filter((key) => allowed.roleKeys.has(key))
+      const userIds = uniq(item.userIds).filter((id) => allowed.userIds.has(id))
+      const groupIds = uniq(item.groupIds ?? []).filter((id) => allowed.groupIds.has(id))
       const channels = item.channels.filter((c) => VALID_CHANNELS.includes(c))
-      const escalation = cleanEscalation(item.escalation)
+      const escalation = cleanEscalation(item.escalation, allowed.roleKeys)
       await tx
         .insert(tenantNotificationSettings)
         .values({
@@ -84,6 +157,13 @@ export async function saveNotificationSettings(items: CategorySettingInput[]) {
     }
   })
 
+  await recordAudit(ctx, {
+    entityType: 'tenant',
+    entityId: ctx.tenantId,
+    action: 'update',
+    summary: 'Updated notification routing rules',
+    metadata: { categories: items.map((item) => item.category) },
+  })
   revalidatePath('/admin/notifications')
 }
 
@@ -141,5 +221,12 @@ export async function saveNotificationPolicy(input: PolicyInput) {
     }
   })
 
+  await recordAudit(ctx, {
+    entityType: 'tenant',
+    entityId: ctx.tenantId,
+    action: 'update',
+    summary: 'Updated notification routing policy',
+    metadata: { digestMode, digestHourUtc, quietHours, scanCron, scanTimezone },
+  })
   revalidatePath('/admin/notifications')
 }

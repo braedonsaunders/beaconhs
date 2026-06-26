@@ -6,7 +6,7 @@
 // @beaconhs/events, which calls the canonical compliance audience engine.
 
 import { revalidatePath } from 'next/cache'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import { notificationGroupMembers, notificationGroups } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { previewAudience, type AudienceMemberInput } from '@beaconhs/events'
@@ -112,8 +112,8 @@ export async function updateGroup(input: {
   if (!name) return { ok: false, error: 'Name is required.' }
   const members = sanitizeMembers(input.members)
   try {
-    await ctx.db(async (tx) => {
-      await tx
+    const updated = await ctx.db(async (tx) => {
+      const [group] = await tx
         .update(notificationGroups)
         .set({
           name,
@@ -121,8 +121,15 @@ export async function updateGroup(input: {
           color: input.color?.trim() || null,
         })
         .where(
-          and(eq(notificationGroups.id, input.id), eq(notificationGroups.tenantId, ctx.tenantId)),
+          and(
+            eq(notificationGroups.id, input.id),
+            eq(notificationGroups.tenantId, ctx.tenantId),
+            isNull(notificationGroups.deletedAt),
+          ),
         )
+        .returning({ id: notificationGroups.id })
+      if (!group) return false
+
       // Replace the member set wholesale — simplest correct semantics.
       await tx
         .delete(notificationGroupMembers)
@@ -143,7 +150,9 @@ export async function updateGroup(input: {
           })),
         )
       }
+      return true
     })
+    if (!updated) return { ok: false, error: 'Notification group not found.' }
     await recordAudit(ctx, {
       entityType: 'notification_group',
       entityId: input.id,
@@ -160,14 +169,21 @@ export async function updateGroup(input: {
 export async function deleteGroup(input: { id: string }): Promise<Result> {
   const ctx = await guard()
   if (!ctx) return { ok: false, error: 'You do not have permission to manage notifications.' }
-  await ctx.db((tx) =>
-    tx
+  const deleted = await ctx.db(async (tx) => {
+    const [group] = await tx
       .update(notificationGroups)
       .set({ deletedAt: new Date() })
       .where(
-        and(eq(notificationGroups.id, input.id), eq(notificationGroups.tenantId, ctx.tenantId)),
-      ),
-  )
+        and(
+          eq(notificationGroups.id, input.id),
+          eq(notificationGroups.tenantId, ctx.tenantId),
+          isNull(notificationGroups.deletedAt),
+        ),
+      )
+      .returning({ id: notificationGroups.id })
+    return Boolean(group)
+  })
+  if (!deleted) return { ok: false, error: 'Notification group not found.' }
   await recordAudit(ctx, {
     entityType: 'notification_group',
     entityId: input.id,

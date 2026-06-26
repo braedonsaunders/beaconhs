@@ -8,6 +8,7 @@ import {
   smsLog,
   tenantNotificationPolicy,
   tenantNotificationSettings,
+  tenantUsers,
   users,
   webpushSubscriptions,
 } from '@beaconhs/db/schema'
@@ -37,6 +38,7 @@ if (vapidPub && vapidPriv) {
 export async function processNotification(job: Job<NotifyJobData>): Promise<void> {
   const d = job.data
   const critical = d.isCritical ?? false
+  const requestedUserIds = [...new Set(d.userIds.map((id) => id.trim()).filter(Boolean))]
   await withTenant(db, d.tenantId, async (tx) => {
     // Routing policy (Phase 2): per-category channel allow-list + tenant-wide
     // digest/quiet-hours. Channels configured for the category override the
@@ -69,22 +71,35 @@ export async function processNotification(job: Job<NotifyJobData>): Promise<void
     const pushAllowed = allowed.includes('push') && (critical || !quietNow)
     const smsAllowed = allowed.includes('sms')
 
-    // Determine effective channels per user
-    const targets = await tx
-      .select({ user: users, pref: notificationPreferences })
-      .from(users)
-      .leftJoin(
-        notificationPreferences,
-        and(
-          eq(notificationPreferences.userId, users.id),
-          eq(notificationPreferences.tenantId, d.tenantId),
-          eq(notificationPreferences.category, d.category),
-        ),
-      )
-      .where(inArray(users.id, d.userIds))
+    // Determine effective channels per active tenant member. The queue is a
+    // trust boundary: every producer supplies userIds, so the worker enforces
+    // tenant membership before writing in-app rows or sending external channels.
+    const targets =
+      requestedUserIds.length > 0
+        ? await tx
+            .select({ user: users, pref: notificationPreferences })
+            .from(tenantUsers)
+            .innerJoin(users, eq(users.id, tenantUsers.userId))
+            .leftJoin(
+              notificationPreferences,
+              and(
+                eq(notificationPreferences.userId, users.id),
+                eq(notificationPreferences.tenantId, d.tenantId),
+                eq(notificationPreferences.category, d.category),
+              ),
+            )
+            .where(
+              and(
+                eq(tenantUsers.tenantId, d.tenantId),
+                eq(tenantUsers.status, 'active'),
+                inArray(tenantUsers.userId, requestedUserIds),
+              ),
+            )
+        : []
+    const targetUserIds = targets.map((target) => target.user.id)
 
     // 1. Always insert in_app
-    for (const u of d.userIds) {
+    for (const u of targetUserIds) {
       await tx.insert(notifications).values({
         tenantId: d.tenantId,
         userId: u,
@@ -114,7 +129,7 @@ export async function processNotification(job: Job<NotifyJobData>): Promise<void
         body,
         bodyLength: body.length,
         errorMessage: 'SMS delivery is disabled by the platform administrator.',
-        meta: { recipients: d.userIds.length },
+        meta: { recipients: targetUserIds.length },
       })
       console.log('[sms] suppressed: SMS is disabled by the platform administrator')
     }
