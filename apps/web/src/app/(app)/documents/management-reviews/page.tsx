@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { desc, sql } from 'drizzle-orm'
+import { desc, isNull } from 'drizzle-orm'
 import { Gavel } from 'lucide-react'
 import {
   Badge,
@@ -28,7 +28,7 @@ export default async function ManagementReviewsPage() {
     tx
       .select()
       .from(documentManagementReviews)
-      .where(sql`${documentManagementReviews.deletedAt} is null`)
+      .where(isNull(documentManagementReviews.deletedAt))
       .orderBy(desc(documentManagementReviews.periodEnd)),
   )
 

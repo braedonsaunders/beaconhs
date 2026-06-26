@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { asc, eq, inArray, sql } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
 import { Gavel, Trash2 } from 'lucide-react'
 import {
   Badge,
@@ -19,7 +19,6 @@ import {
   tenantUsers,
   user as userTable,
 } from '@beaconhs/db/schema'
-import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { DetailGrid } from '@/components/detail-grid'
 import { Section } from '@/components/section'
@@ -27,7 +26,7 @@ import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { DetailPageLayout } from '@/components/page-layout'
 import { ActionItemsPicker, DocumentMultiPicker } from './_components/document-multi-picker'
 import { OverviewEditor } from './_components/overview-editor'
-import { deleteManagementReview } from './actions'
+import { deleteManagementReviewAndRedirect } from './actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,15 +36,6 @@ type Tab = (typeof TABS)[number]
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   return { title: `Management review · ${id.slice(0, 8)}` }
-}
-
-async function deleteReview(formData: FormData): Promise<void> {
-  'use server'
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'documents.manage')
-  const id = String(formData.get('id') ?? '')
-  if (!id) return
-  await deleteManagementReview(id)
 }
 
 export default async function ManagementReviewDetailPage({
@@ -64,7 +54,7 @@ export default async function ManagementReviewDetailPage({
     const [review] = await tx
       .select()
       .from(documentManagementReviews)
-      .where(eq(documentManagementReviews.id, id))
+      .where(and(eq(documentManagementReviews.id, id), isNull(documentManagementReviews.deletedAt)))
       .limit(1)
     if (!review) return null
 
@@ -72,7 +62,7 @@ export default async function ManagementReviewDetailPage({
       tx
         .select({ id: documents.id, title: documents.title, status: documents.status })
         .from(documents)
-        .where(sql`${documents.deletedAt} is null`)
+        .where(isNull(documents.deletedAt))
         .orderBy(asc(documents.title))
         .limit(500),
       tx
@@ -83,7 +73,7 @@ export default async function ManagementReviewDetailPage({
           status: correctiveActions.status,
         })
         .from(correctiveActions)
-        .where(sql`${correctiveActions.deletedAt} is null`)
+        .where(isNull(correctiveActions.deletedAt))
         .orderBy(asc(correctiveActions.reference))
         .limit(500),
       tx
@@ -164,7 +154,7 @@ export default async function ManagementReviewDetailPage({
             </div>
           }
           actions={
-            <form action={deleteReview} className="inline">
+            <form action={deleteManagementReviewAndRedirect} className="inline">
               <input type="hidden" name="id" value={id} />
               <Button type="submit" variant="outline">
                 <Trash2 size={14} /> Delete

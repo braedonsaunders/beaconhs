@@ -2,7 +2,7 @@
 
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { eq } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import { documentManagementReviews } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
@@ -126,17 +126,29 @@ export async function updateActionItems(id: string, caIds: string[]): Promise<vo
 export async function deleteManagementReview(id: string): Promise<void> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'documents.manage')
-  await ctx.db((tx) =>
+  const deletedAt = new Date()
+  const [row] = await ctx.db((tx) =>
     tx
       .update(documentManagementReviews)
-      .set({ deletedAt: new Date() })
-      .where(eq(documentManagementReviews.id, id)),
+      .set({ deletedAt })
+      .where(and(eq(documentManagementReviews.id, id), isNull(documentManagementReviews.deletedAt)))
+      .returning({ title: documentManagementReviews.title }),
   )
+  if (!row) throw new Error('Management review not found')
   await recordAudit(ctx, {
     entityType: 'document_management_review',
     entityId: id,
     action: 'delete',
-    summary: 'Soft-deleted management review',
+    summary: `Soft-deleted management review "${row.title}"`,
+    after: { deletedAt: deletedAt.toISOString() },
   })
   revalidatePath('/documents/management-reviews')
+  revalidatePath(`/documents/management-reviews/${id}`)
+}
+
+export async function deleteManagementReviewAndRedirect(formData: FormData): Promise<void> {
+  const id = String(formData.get('id') ?? '')
+  if (!id) return
+  await deleteManagementReview(id)
+  redirect('/documents/management-reviews')
 }
