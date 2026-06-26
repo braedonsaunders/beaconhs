@@ -176,6 +176,7 @@ export const TENANT_SCOPED_TABLES = [
   'training_content_items',
   'report_schedules',
   'report_runs',
+  'report_definitions',
   'tenant_notification_recipients',
   'tenant_notification_settings',
   'tenant_notification_policy',
@@ -210,6 +211,7 @@ export const TENANT_SCOPED_TABLES = [
   'hazid_assessment_ppe',
   'hazid_assessment_questions',
   'hazid_assessment_photos',
+  'hazid_assessment_app_responses',
   'hazid_signed_reports',
   // Daily Journals (individual field-safety log)
   'journal_entries',
