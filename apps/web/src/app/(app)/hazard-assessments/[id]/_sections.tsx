@@ -789,7 +789,7 @@ export function HazardRow({
         </div>
       ) : null}
       {row.specificControls ? (
-        <div className="rounded bg-amber-50 px-2 py-1 text-xs text-slate-700 dark:text-slate-300">
+        <div className="rounded bg-amber-50 px-2 py-1 text-xs text-slate-700 dark:bg-amber-950/40 dark:text-slate-300">
           <span className="font-medium tracking-wide text-slate-500 uppercase">Specific:</span>{' '}
           {row.specificControls}
         </div>
