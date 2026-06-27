@@ -111,9 +111,22 @@ export default async function AdminRolesPage({
           title="Roles"
           subtitle="Bundles of permissions you assign to members."
           actions={
-            <Link href="/admin/roles/new">
-              <Button>New role</Button>
-            </Link>
+            <div className="flex items-center gap-2 whitespace-nowrap">
+              {scopeOptions ? (
+                <BulkRoleAssignmentForm
+                  roles={rows.map((role) => ({
+                    id: role.id,
+                    name: role.name,
+                    isBuiltIn: role.isBuiltIn,
+                  }))}
+                  members={data.members}
+                  scopeOptions={scopeOptions}
+                />
+              ) : null}
+              <Link href="/admin/roles/new">
+                <Button>New role</Button>
+              </Link>
+            </div>
           }
         />
 
@@ -126,18 +139,6 @@ export default async function AdminRolesPage({
           <div className="rounded-md border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-800 dark:border-teal-900 dark:bg-teal-950/40 dark:text-teal-300">
             {notice}
           </div>
-        ) : null}
-
-        {scopeOptions ? (
-          <BulkRoleAssignmentForm
-            roles={rows.map((role) => ({
-              id: role.id,
-              name: role.name,
-              isBuiltIn: role.isBuiltIn,
-            }))}
-            members={data.members}
-            scopeOptions={scopeOptions}
-          />
         ) : null}
 
         {sorted.length === 0 ? (

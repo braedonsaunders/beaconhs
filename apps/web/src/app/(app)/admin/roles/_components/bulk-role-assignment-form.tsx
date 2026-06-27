@@ -2,19 +2,7 @@
 
 import { useMemo, useState, type FormEvent } from 'react'
 import { Search, UsersRound } from 'lucide-react'
-import {
-  Badge,
-  Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  Input,
-  Label,
-  Select,
-  cn,
-} from '@beaconhs/ui'
+import { Badge, Button, Drawer, Input, Label, Select, cn } from '@beaconhs/ui'
 import { ScopePicker } from '../../users/_components/scope-picker'
 import type { ScopeOptions } from '../../users/_scope-data'
 import { bulkUpdateRoleAssignments } from '../_actions'
@@ -69,6 +57,7 @@ export function BulkRoleAssignmentForm({
   members: MemberOption[]
   scopeOptions: ScopeOptions
 }) {
+  const [open, setOpen] = useState(false)
   const [operation, setOperation] = useState<(typeof OPERATIONS)[number]['value']>('add')
   const [roleId, setRoleId] = useState(roles[0]?.id ?? '')
   const [query, setQuery] = useState('')
@@ -149,16 +138,42 @@ export function BulkRoleAssignmentForm({
     }
   }
 
+  const footer = (
+    <>
+      <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
+        Cancel
+      </Button>
+      <Button
+        type="submit"
+        form="bulk-role-assignment-form"
+        disabled={selected.size === 0 || overLimit || !roleId}
+      >
+        <UsersRound size={14} className="mr-1.5" />
+        Apply to {selected.size} member{selected.size === 1 ? '' : 's'}
+      </Button>
+    </>
+  )
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Bulk role manager</CardTitle>
-        <CardDescription>
-          Tenant admins can assign or change roles for multiple members at once.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form action={bulkUpdateRoleAssignments} className="space-y-5" onSubmit={handleSubmit}>
+    <>
+      <Button type="button" variant="outline" onClick={() => setOpen(true)}>
+        <UsersRound size={14} className="mr-1.5" />
+        Bulk roles
+      </Button>
+      <Drawer
+        open={open}
+        onClose={() => setOpen(false)}
+        title="Bulk role manager"
+        description="Assign or change roles for multiple members."
+        size="2xl"
+        footer={footer}
+      >
+        <form
+          id="bulk-role-assignment-form"
+          action={bulkUpdateRoleAssignments}
+          className="space-y-5"
+          onSubmit={handleSubmit}
+        >
           <input type="hidden" name="operation" value={operation} />
           {selectedMembers.map((member) => (
             <input key={member.id} type="hidden" name="membershipIds" value={member.id} />
@@ -328,16 +343,15 @@ export function BulkRoleAssignmentForm({
                 </div>
               </div>
 
-              <div className="flex justify-end">
-                <Button type="submit" disabled={selected.size === 0 || overLimit || !roleId}>
-                  <UsersRound size={14} className="mr-1.5" />
-                  Apply to {selected.size} member{selected.size === 1 ? '' : 's'}
-                </Button>
-              </div>
+              {overLimit ? (
+                <p className="text-right text-xs text-red-600 dark:text-red-300">
+                  Select {MAX_BULK_ROLE_MEMBERS} or fewer members at a time.
+                </p>
+              ) : null}
             </div>
           </div>
         </form>
-      </CardContent>
-    </Card>
+      </Drawer>
+    </>
   )
 }

@@ -16,6 +16,7 @@ export type ScopeOption = { value: string; label: string; hint?: string }
 type ScopeType = RoleScope['type']
 
 const TYPE_OPTIONS: { value: ScopeType; label: string; help: string }[] = [
+  { value: 'self', label: 'Only their own records', help: 'Sees only what they create or own.' },
   { value: 'tenant', label: 'Everyone in the tenant', help: 'Sees every record in the tenant.' },
   {
     value: 'sites',
@@ -37,7 +38,6 @@ const TYPE_OPTIONS: { value: ScopeType; label: string; help: string }[] = [
     label: 'Specific crews',
     help: 'Their own records plus people in the chosen crews.',
   },
-  { value: 'self', label: 'Only their own records', help: 'Sees only what they create or own.' },
 ]
 
 function MultiChipSelect({
@@ -110,7 +110,7 @@ export function ScopePicker({
   groups: ScopeOption[]
   people: ScopeOption[]
 }) {
-  const [type, setType] = useState<ScopeType>(defaultScope?.type ?? 'tenant')
+  const [type, setType] = useState<ScopeType>(defaultScope?.type ?? 'self')
   const [siteIds, setSiteIds] = useState<string[]>(
     defaultScope?.type === 'sites' ? defaultScope.siteIds : [],
   )
@@ -140,7 +140,7 @@ export function ScopePicker({
       case 'self':
         return { type }
       default:
-        return { type: 'tenant' }
+        return { type: 'self' }
     }
   }, [type, siteIds, crewIds, personIds, departmentIds, groupIds])
 
