@@ -63,7 +63,7 @@ export default async function CorrectiveActionsPage({
   const statusFilter = statusRaw === 'all' ? undefined : statusRaw
   const sevFilter = pickString(sp.severity)
   const ctx = await requireRequestContext()
-  const canExport = can(ctx, 'utilities.export') && can(ctx, 'ca.read.self')
+  const canExport = can(ctx, 'admin.data.export') && can(ctx, 'ca.read.self')
 
   const { rows, total, statusCounts, sevCounts } = await ctx.db(async (tx) => {
     // Per-user record visibility: read.all → everything, read.site → my sites,

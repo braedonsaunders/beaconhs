@@ -46,7 +46,7 @@ export default async function DocumentsPage({
   // Administration + Health & Safety (documents.manage) get the management table;
   // everyone else gets a read-only card library of published documents.
   const canManage = ctx.isSuperAdmin || can(ctx, 'documents.manage')
-  const canExport = canManage && can(ctx, 'utilities.export')
+  const canExport = canManage && can(ctx, 'admin.data.export')
 
   const { rows, total, statusCounts, categoryCounts, typeCounts, categories, types } = await ctx.db(
     async (tx) => {

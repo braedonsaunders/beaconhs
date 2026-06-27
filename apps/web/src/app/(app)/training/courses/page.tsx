@@ -51,7 +51,7 @@ export default async function TrainingCoursesPage({
   const deliveryFilter = pickString(sp.delivery)
   const ctx = await requireRequestContext()
   const canExport =
-    can(ctx, 'utilities.export') &&
+    can(ctx, 'admin.data.export') &&
     (can(ctx, 'training.read.all') || can(ctx, 'training.course.manage'))
 
   const { rows, total, deliveryCounts } = await ctx.db(async (tx) => {

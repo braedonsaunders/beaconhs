@@ -28,7 +28,7 @@ export default async function PeoplePage({
   const statusFilter = pickString(sp.status) ?? 'active'
   const departmentFilter = pickString(sp.department) ?? null
   const ctx = await requireRequestContext()
-  const canExport = can(ctx, 'utilities.export') && can(ctx, 'admin.users.manage')
+  const canExport = can(ctx, 'admin.data.export') && can(ctx, 'admin.users.manage')
 
   const { rows, total, statusCounts, allCount } = await ctx.db(async (tx) => {
     const baseFilters: SQL<unknown>[] = [isNull(people.deletedAt)]

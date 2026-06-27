@@ -85,7 +85,7 @@ export default async function InspectionRecordsPage({
   const dateToRaw = pickString(sp.dateTo)
   const drawerKey = pickString(sp.drawer)
   const ctx = await requireRequestContext()
-  const canExport = can(ctx, 'utilities.export') && can(ctx, 'inspections.read.self')
+  const canExport = can(ctx, 'admin.data.export') && can(ctx, 'inspections.read.self')
 
   const { rows, total, statusCounts, types, sites, inspectors } = await ctx.db(async (tx) => {
     // Per-user record visibility: read.all → everything, read.site → my sites,

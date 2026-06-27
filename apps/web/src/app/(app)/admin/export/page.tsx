@@ -85,7 +85,7 @@ export default async function ExportHubPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const ctx = await requireRequestContext()
-  if (!can(ctx, 'utilities.export')) notFound()
+  if (!can(ctx, 'admin.data.export')) notFound()
 
   const sp = await searchParams
   const q = pickString(sp.q)?.trim() || undefined
@@ -106,7 +106,7 @@ export default async function ExportHubPage({
   const selectedSource = sourceKey
     ? (availableEntities.find((entity) => entity.key === sourceKey) ?? null)
     : null
-  const closeHref = mergeHref('/utilities/export', sp, { source: undefined })
+  const closeHref = mergeHref('/admin/export', sp, { source: undefined })
   const groupCounts = new Map(
     EXPORT_GROUPS.map((group) => [
       group.label,
@@ -129,7 +129,7 @@ export default async function ExportHubPage({
             <PageHeader
               title="Data export"
               description="Select a data source, configure filters, and export through the audited module endpoint."
-              back={{ href: '/utilities', label: 'All utilities' }}
+              back={{ href: '/admin', label: 'Admin' }}
               actions={
                 canReadAudit ? (
                   <Button asChild variant="outline">
@@ -150,7 +150,7 @@ export default async function ExportHubPage({
             >
               <SearchInput placeholder="Search data sources..." />
               <FilterChips
-                basePath="/utilities/export"
+                basePath="/admin/export"
                 currentParams={sp}
                 paramKey="group"
                 label="Group"
@@ -161,7 +161,7 @@ export default async function ExportHubPage({
                 }))}
               />
               <FilterChips
-                basePath="/utilities/export"
+                basePath="/admin/export"
                 currentParams={sp}
                 paramKey="sensitivity"
                 label="Sensitivity"

@@ -5,6 +5,7 @@ import {
   Bell,
   Building2,
   Database,
+  Download,
   FileText,
   KeyRound,
   Mail,
@@ -55,7 +56,14 @@ const ACCENTS = {
 } as const
 
 type Accent = keyof typeof ACCENTS
-type Tile = { href: string; title: string; desc: string; badge?: string; icon: ReactNode }
+type Tile = {
+  href: string
+  title: string
+  desc: string
+  badge?: string
+  icon: ReactNode
+  permission?: string
+}
 type Group = { key: string; label: string; accent: Accent; tiles: Tile[] }
 
 // Library & catalogues and Navigation used to live in the sidebar; they're now
@@ -71,18 +79,21 @@ const STATIC_GROUPS: Group[] = [
         icon: <Users size={18} />,
         title: 'Users',
         desc: 'Invite people, assign roles & scopes',
+        permission: 'admin.users.manage',
       },
       {
         href: '/admin/roles',
         icon: <ShieldCheck size={18} />,
         title: 'Roles & permissions',
         desc: 'Define roles and what they grant',
+        permission: 'admin.roles.manage',
       },
       {
         href: '/admin/org',
         icon: <Building2 size={18} />,
         title: 'Org hierarchy',
         desc: 'Locations, projects, sites, areas, crews',
+        permission: 'admin.org.manage',
       },
     ],
   },
@@ -96,36 +107,49 @@ const STATIC_GROUPS: Group[] = [
         icon: <SlidersHorizontal size={18} />,
         title: 'Tenant settings',
         desc: 'Branding, languages, risk matrix, hierarchy',
+        permission: 'admin.settings.manage',
       },
       {
         href: '/admin/notifications',
         icon: <Bell size={18} />,
         title: 'Notifications',
         desc: 'Who gets automatic alerts & how often reminders repeat',
+        permission: 'admin.settings.manage',
       },
       {
         href: '/admin/navigation',
         icon: <PanelLeft size={18} />,
         title: 'Navigation',
         desc: 'Reorder the sidebar, pin forms as modules',
+        permission: 'admin.nav.manage',
       },
       {
         href: '/admin/data-sources',
         icon: <Database size={18} />,
         title: 'Data sources',
         desc: 'Reference lists & live data your apps bind to',
+        permission: 'admin.settings.manage',
+      },
+      {
+        href: '/admin/export',
+        icon: <Download size={18} />,
+        title: 'Data export',
+        desc: 'Audited CSV exports across modules and Builder apps',
+        permission: 'admin.data.export',
       },
       {
         href: '/admin/email-templates',
         icon: <Mail size={18} />,
         title: 'Email templates',
         desc: 'Drag-and-drop branded emails for flows',
+        permission: 'admin.settings.manage',
       },
       {
         href: '/admin/pdf-templates',
         icon: <FileText size={18} />,
         title: 'PDF templates',
         desc: 'Paper-size documents (Paged.js preview) flows attach',
+        permission: 'admin.settings.manage',
       },
     ],
   },
@@ -139,30 +163,35 @@ const STATIC_GROUPS: Group[] = [
         icon: <Sparkles size={18} />,
         title: 'AI',
         desc: 'Provider, models & encrypted API key',
+        permission: 'admin.settings.manage',
       },
       {
         href: '/admin/email',
         icon: <Mail size={18} />,
         title: 'Email',
         desc: 'Provider, sender & encrypted credentials',
+        permission: 'admin.settings.manage',
       },
       {
         href: '/admin/sms',
         icon: <MessageSquare size={18} />,
         title: 'SMS',
         desc: 'Provider, sender & encrypted credentials',
+        permission: 'admin.settings.manage',
       },
       {
         href: '/admin/integrations',
         icon: <RefreshCw size={18} />,
         title: 'Integrations',
         desc: 'Sync data in and send events out',
+        permission: 'admin.integrations.manage',
       },
       {
         href: '/admin/api-keys',
         icon: <KeyRound size={18} />,
         title: 'API keys',
         desc: 'Public REST API credentials',
+        permission: 'admin.api-keys.manage',
       },
     ],
   },
@@ -176,18 +205,21 @@ const STATIC_GROUPS: Group[] = [
         icon: <ScrollText size={18} />,
         title: 'Audit log',
         desc: 'Every write captured with actor + diffs',
+        permission: 'admin.audit.read',
       },
       {
         href: '/admin/email-log',
         icon: <Mail size={18} />,
         title: 'Email log',
         desc: 'Every email the worker dispatched',
+        permission: 'admin.audit.read',
       },
       {
         href: '/admin/sms-log',
         icon: <MessageSquare size={18} />,
         title: 'SMS log',
         desc: 'Every text the worker dispatched',
+        permission: 'admin.audit.read',
       },
     ],
   },
@@ -222,8 +254,12 @@ export default async function AdminPage({
   ]
 
   // Pills filter to a category; search narrows within the visible scope.
+  const canSeeTile = (t: Tile) => !t.permission || ctx.isSuperAdmin || can(ctx, t.permission)
   const matches = (t: Tile) => !query || `${t.title} ${t.desc}`.toLowerCase().includes(query)
-  const visibleGroups = allGroups
+  const permittedGroups = allGroups
+    .map((g) => ({ ...g, tiles: g.tiles.filter(canSeeTile) }))
+    .filter((g) => g.tiles.length > 0)
+  const visibleGroups = permittedGroups
     .filter((g) => activeCat === 'all' || g.key === activeCat)
     .map((g) => ({ ...g, tiles: g.tiles.filter(matches) }))
     .filter((g) => g.tiles.length > 0)
@@ -231,7 +267,7 @@ export default async function AdminPage({
   const basePath = '/admin'
   const categories = [
     { key: 'all', label: 'All' },
-    ...allGroups.map((g) => ({ key: g.key, label: g.label })),
+    ...permittedGroups.map((g) => ({ key: g.key, label: g.label })),
   ]
 
   return (

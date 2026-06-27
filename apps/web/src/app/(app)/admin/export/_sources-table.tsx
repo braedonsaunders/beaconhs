@@ -30,7 +30,7 @@ export function ExportSourcesTable({
   const router = useRouter()
 
   function sourceHref(key: string): string {
-    return mergeHref('/utilities/export', currentParams, { source: key })
+    return mergeHref('/admin/export', currentParams, { source: key })
   }
 
   function openSource(key: string) {

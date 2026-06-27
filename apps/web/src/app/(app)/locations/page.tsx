@@ -50,7 +50,7 @@ export default async function LocationsPage({
   const params = parseListParams(sp, { sort: 'name', dir: 'asc', perPage: 25, allowedSorts: SORTS })
   const statusFilter = pickString(sp.status) ?? 'active'
   const ctx = await requireRequestContext()
-  const canExport = can(ctx, 'utilities.export') && can(ctx, 'admin.org.manage')
+  const canExport = can(ctx, 'admin.data.export') && can(ctx, 'admin.org.manage')
   const hierarchy = await getTenantHierarchy(ctx.tenantId)
 
   const { rows, total, activeCount, archivedCount } = await ctx.db(async (tx) => {

@@ -55,7 +55,7 @@ export default async function PpePage({
   const statusRaw = pickString(sp.status) ?? 'issued'
   const statusFilter = statusRaw === 'all' ? undefined : statusRaw
   const ctx = await requireRequestContext()
-  const canExport = can(ctx, 'utilities.export') && can(ctx, 'ppe.read.all')
+  const canExport = can(ctx, 'admin.data.export') && can(ctx, 'ppe.read.all')
 
   const { rows, total, statusCounts, types } = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = [isNull(ppeItems.deletedAt)]

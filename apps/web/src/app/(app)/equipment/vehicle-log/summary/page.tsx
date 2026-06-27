@@ -59,7 +59,7 @@ export default async function TruckLogSummaryPage({
   const sp = await searchParams
   const year = parseYear(pickString(sp.year))
   const ctx = await requireRequestContext()
-  const canExport = can(ctx, 'utilities.export') && can(ctx, 'equipment.read.all')
+  const canExport = can(ctx, 'admin.data.export') && can(ctx, 'equipment.read.all')
 
   const firstDay = ymd(year, 1, 1)
   const nextFirst = ymd(year + 1, 1, 1)

@@ -5,8 +5,8 @@
 // components render. Responsibilities:
 //   - load the saved config, or compute defaults (registry + lift-plan pin)
 //   - resolve pinned-form items to their template name / icon / home href
-//   - filter every item by `can(ctx, requiredPermission)` — the sidebar now
-//     reflects what each user may actually open
+//   - filter every item by its module permission gates — the sidebar now reflects
+//     what each user may actually open
 //   - drop `hidden` items and empty groups
 //
 // Read-only: never writes. A tenant gets a persisted row only when an admin
@@ -130,6 +130,9 @@ function resolveItem(
     const mod = moduleByKey(item.moduleKey)
     if (!mod) return null // stale/removed module key
     if (mod.requiredPermission && !can(ctx, mod.requiredPermission)) return null
+    if (mod.requiredAnyPermission?.length && !mod.requiredAnyPermission.some((p) => can(ctx, p))) {
+      return null
+    }
     return {
       href: mod.href,
       label: item.label ?? mod.label,

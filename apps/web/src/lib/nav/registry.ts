@@ -24,6 +24,11 @@ export type NavModule = {
    * modules should use explicit permissions so roles can deliberately opt in.
    */
   requiredPermission?: string
+  /**
+   * At least one of these permissions is required to see this module. Useful for
+   * hub routes where several independently gated tools live behind one entry.
+   */
+  requiredAnyPermission?: string[]
   /** Default group label — must be one of NAV_GROUP_ORDER. */
   group: (typeof NAV_GROUP_ORDER)[number]
 }
@@ -36,7 +41,7 @@ export const NAV_GROUP_ORDER = [
   'Assets & people',
   // Program oversight — obligations/compliance + analytics/dashboards + reports.
   'Assurance',
-  'Platform',
+  'Administration',
 ] as const
 
 export type NavGroupLabel = (typeof NAV_GROUP_ORDER)[number]
@@ -160,7 +165,7 @@ export const NAV_MODULES: NavModule[] = [
     group: 'Assurance',
   },
 
-  // Platform
+  // Administration
   // Library & catalogues and Navigation are intentionally NOT sidebar modules —
   // they're surfaced as tiles on the /admin landing page to keep the sidebar lean.
   {
@@ -168,27 +173,29 @@ export const NAV_MODULES: NavModule[] = [
     href: '/admin',
     label: 'Admin',
     iconKey: 'settings',
-    requiredPermission: 'admin.settings.manage',
-    group: 'Platform',
+    requiredAnyPermission: [
+      'admin.users.manage',
+      'admin.roles.manage',
+      'admin.org.manage',
+      'admin.api-keys.manage',
+      'admin.settings.manage',
+      'admin.audit.read',
+      'admin.nav.manage',
+      'admin.integrations.manage',
+      'admin.data.export',
+    ],
+    group: 'Administration',
   },
   // Forms = the template library + designer; a build/admin task, so it lives in
-  // Platform. Crews don't need the library — they fill forms via assignments,
-  // the module pages (inspections/JSHA/…), and pinned forms.
+  // Administration. Crews don't need the library — they fill forms via
+  // assignments, the module pages (inspections/JSHA/…), and pinned forms.
   {
     key: 'forms',
     href: '/apps',
     label: 'Builder',
     iconKey: 'clipboard-check',
     requiredPermission: 'forms.template.read',
-    group: 'Platform',
-  },
-  {
-    key: 'utilities',
-    href: '/utilities',
-    label: 'Utilities',
-    iconKey: 'gauge',
-    requiredPermission: 'utilities.view',
-    group: 'Platform',
+    group: 'Administration',
   },
 ]
 

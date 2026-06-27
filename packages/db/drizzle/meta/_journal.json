@@ -57,6 +57,13 @@
       "when": 1782507200000,
       "tag": "0007_hazid_style_drives_sections",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1782510800000,
+      "tag": "0008_admin_export_nav_cleanup",
+      "breakpoints": true
     }
   ]
 }

@@ -68,7 +68,7 @@ export default async function FormResponsesPage({
   // wizard responses drowning out the rest).
   const templateFilter = pickString(sp.template)
   const ctx = await requireRequestContext()
-  const canExport = can(ctx, 'utilities.export') && can(ctx, 'forms.response.read.self')
+  const canExport = can(ctx, 'admin.data.export') && can(ctx, 'forms.response.read.self')
 
   const { rows, total, statusCounts, templateOptions } = await ctx.db(async (tx) => {
     // Per-user record visibility: read.all → everything, read.site → my sites,

@@ -19,7 +19,6 @@ const GROUP_LABELS: Record<string, string> = {
   journals: 'Journals',
   ca: 'Corrective actions',
   compliance: 'Compliance',
-  utilities: 'Utilities',
   reports: 'Reports',
   dashboards: 'Dashboards',
   insights: 'Insights',
@@ -107,9 +106,6 @@ const PERMISSION_LABELS: Record<string, string> = {
   'compliance.manage': 'Manage obligations',
   'compliance.assign': 'Assign obligations',
 
-  'utilities.view': 'View utilities',
-  'utilities.export': 'Export data',
-
   'reports.read': 'View reports',
   'reports.builder': 'Build reports',
   'reports.schedule': 'Schedule reports',
@@ -132,6 +128,7 @@ const PERMISSION_LABELS: Record<string, string> = {
   'admin.api-keys.manage': 'Manage API keys',
   'admin.settings.manage': 'Manage settings',
   'admin.audit.read': 'View audit log',
+  'admin.data.export': 'Export data',
   'admin.nav.manage': 'Edit navigation',
   'admin.integrations.manage': 'Manage integrations',
 }

@@ -214,11 +214,6 @@ export const PERMISSION_CATALOGUE = [
   'compliance.read',
   'compliance.manage',
   'compliance.assign',
-  // Utilities — tenant-wide administrative tools. `view` controls the Utilities
-  // module/navigation; `export` is required by every CSV export route and the
-  // central export hub.
-  'utilities.view',
-  'utilities.export',
   // Reports
   'reports.read',
   'reports.builder',
@@ -252,6 +247,9 @@ export const PERMISSION_CATALOGUE = [
   'admin.api-keys.manage',
   'admin.settings.manage',
   'admin.audit.read',
+  // Tenant-wide CSV export permission, required by every export.csv route and
+  // the central Admin data export hub.
+  'admin.data.export',
   // Edit the per-tenant sidebar navigation (/admin/navigation).
   'admin.nav.manage',
   // Configure external data-sync connections (/admin/integrations).

@@ -53,7 +53,7 @@ export default async function IncidentsPage({
   const statusFilter = pickString(sp.status)
 
   const ctx = await requireRequestContext()
-  const canExport = can(ctx, 'utilities.export') && can(ctx, 'incidents.read.self')
+  const canExport = can(ctx, 'admin.data.export') && can(ctx, 'incidents.read.self')
 
   const { rows, total, typeCounts, statusCounts, involved } = await ctx.db(async (tx) => {
     // Per-user record visibility: read.all → everything, read.site → my sites,

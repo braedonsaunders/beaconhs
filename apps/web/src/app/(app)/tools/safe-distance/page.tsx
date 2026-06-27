@@ -69,7 +69,7 @@ export default async function SafeDistanceListPage({
   const methodFilter = pickString(sp.method)
 
   const ctx = await requireRequestContext()
-  const canExport = can(ctx, 'utilities.export')
+  const canExport = can(ctx, 'admin.data.export')
 
   const { rows, total, methodCounts } = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = []

@@ -275,7 +275,7 @@ export async function requireRequestContext(): Promise<RequestContext> {
  */
 export async function requireExportContext(): Promise<RequestContext> {
   const ctx = await requireRequestContext()
-  assertCan(ctx, 'utilities.export')
+  assertCan(ctx, 'admin.data.export')
   assertNotImpersonating(ctx, 'export')
   return ctx
 }

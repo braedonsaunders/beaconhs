@@ -47,7 +47,7 @@ export default async function JournalRecordsPage({
 }) {
   const ctx = await requireRequestContext()
   if (!journalCanBrowseAll(ctx)) redirect('/journals')
-  const canExport = can(ctx, 'utilities.export') && can(ctx, 'journals.read.self')
+  const canExport = can(ctx, 'admin.data.export') && can(ctx, 'journals.read.self')
 
   const sp = await searchParams
   const params = parseListParams(sp, {

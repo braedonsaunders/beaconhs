@@ -60,7 +60,7 @@ export default async function EquipmentPage({
   const typeFilter = pickString(sp.type)
   const categoryFilter = pickString(sp.category)
   const ctx = await requireRequestContext()
-  const canExport = can(ctx, 'utilities.export') && can(ctx, 'equipment.read.site')
+  const canExport = can(ctx, 'admin.data.export') && can(ctx, 'equipment.read.site')
 
   const { rows, total, statusCounts, availabilityCounts, allTypes, allCats } = await ctx.db(
     async (tx) => {
