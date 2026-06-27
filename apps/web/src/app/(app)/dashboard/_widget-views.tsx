@@ -64,6 +64,10 @@ type Props = {
   quickActionsSaveSuccessMessage?: string
 }
 
+function quickActionsStateKey(actions: QuickAction[] | undefined): string {
+  return actions ? JSON.stringify(actions) : 'default'
+}
+
 export function WidgetCard({
   widgetId,
   data,
@@ -297,6 +301,7 @@ export function WidgetCard({
     case 'personal-actions':
       return (
         <QuickActions
+          key={quickActionsStateKey(quickActions)}
           actions={quickActions}
           saveAction={quickActionsSaveAction}
           saveSuccessMessage={quickActionsSaveSuccessMessage}
