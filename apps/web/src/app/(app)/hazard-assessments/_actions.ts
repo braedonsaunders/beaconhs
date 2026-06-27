@@ -232,44 +232,48 @@ export async function createAssessment(formData: FormData): Promise<{ id: string
         .limit(1)
       if (type) {
         // Default PPE
-        const typePPE = await tx
-          .select()
-          .from(hazidAssessmentTypePPE)
-          .where(eq(hazidAssessmentTypePPE.typeId, type.id))
-          .orderBy(asc(hazidAssessmentTypePPE.entityOrder))
-        if (typePPE.length > 0) {
-          await tx.insert(hazidAssessmentPPE).values(
-            typePPE.map((p) => ({
-              tenantId: ctx.tenantId,
-              assessmentId: row.id,
-              name: p.name,
-              description: p.description,
-              required: p.required,
-              entityOrder: p.entityOrder,
-            })),
-          )
+        if (type.hasPPE) {
+          const typePPE = await tx
+            .select()
+            .from(hazidAssessmentTypePPE)
+            .where(eq(hazidAssessmentTypePPE.typeId, type.id))
+            .orderBy(asc(hazidAssessmentTypePPE.entityOrder))
+          if (typePPE.length > 0) {
+            await tx.insert(hazidAssessmentPPE).values(
+              typePPE.map((p) => ({
+                tenantId: ctx.tenantId,
+                assessmentId: row.id,
+                name: p.name,
+                description: p.description,
+                required: p.required,
+                entityOrder: p.entityOrder,
+              })),
+            )
+          }
         }
         // Default questions
-        const typeQ = await tx
-          .select()
-          .from(hazidAssessmentTypeQuestions)
-          .where(eq(hazidAssessmentTypeQuestions.typeId, type.id))
-          .orderBy(asc(hazidAssessmentTypeQuestions.entityOrder))
-        if (typeQ.length > 0) {
-          await tx.insert(hazidAssessmentQuestions).values(
-            typeQ.map((q) => ({
-              tenantId: ctx.tenantId,
-              assessmentId: row.id,
-              question: q.question,
-              questionType: q.questionType,
-              answers: q.answers,
-              requiresYes: q.requiresYes,
-              entityOrder: q.entityOrder,
-            })),
-          )
+        if (type.hasQuestions) {
+          const typeQ = await tx
+            .select()
+            .from(hazidAssessmentTypeQuestions)
+            .where(eq(hazidAssessmentTypeQuestions.typeId, type.id))
+            .orderBy(asc(hazidAssessmentTypeQuestions.entityOrder))
+          if (typeQ.length > 0) {
+            await tx.insert(hazidAssessmentQuestions).values(
+              typeQ.map((q) => ({
+                tenantId: ctx.tenantId,
+                assessmentId: row.id,
+                question: q.question,
+                questionType: q.questionType,
+                answers: q.answers,
+                requiresYes: q.requiresYes,
+                entityOrder: q.entityOrder,
+              })),
+            )
+          }
         }
         // Default hazards from the type's default hazard set
-        if (type.defaultHazardSetId) {
+        if (type.style === 'hazard_based' && type.defaultHazardSetId) {
           const [set] = await tx
             .select()
             .from(hazidHazardSets)
@@ -294,7 +298,7 @@ export async function createAssessment(formData: FormData): Promise<{ id: string
           }
         }
         // Location task suggestions
-        if (siteOrgUnitId) {
+        if (type.style === 'task_based' && siteOrgUnitId) {
           const locTasks = await tx
             .select({ task: hazidTasks })
             .from(hazidLocationTasks)
@@ -1856,7 +1860,8 @@ export async function createAssessmentType(formData: FormData) {
   assertCanManageModule(ctx, 'hazid')
   const name = String(formData.get('name') ?? '').trim()
   if (!name) throw new Error('Name is required')
-  const style = String(formData.get('style') ?? 'task_based') as 'task_based' | 'hazard_based'
+  const rawStyle = String(formData.get('style') ?? 'task_based')
+  const style = rawStyle === 'hazard_based' ? 'hazard_based' : 'task_based'
   const flag = (k: string) => formData.get(k) === 'on' || formData.get(k) === 'true'
   const availableToGroupIds = String(formData.get('availableToGroupIds') ?? '')
     .split(',')
@@ -1870,11 +1875,10 @@ export async function createAssessmentType(formData: FormData) {
         name,
         description: nullable(formData.get('description')),
         style,
-        hasTasks: flag('hasTasks'),
-        hasHazards: flag('hasHazards'),
         hasPPE: flag('hasPPE'),
         hasQuestions: flag('hasQuestions'),
-        defaultHazardSetId: nullable(formData.get('defaultHazardSetId')),
+        defaultHazardSetId:
+          style === 'hazard_based' ? nullable(formData.get('defaultHazardSetId')) : null,
         availableToGroupIds,
       })
       .returning(),

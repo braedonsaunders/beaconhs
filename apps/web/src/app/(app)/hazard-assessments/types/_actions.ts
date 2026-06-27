@@ -44,8 +44,6 @@ export async function updateAssessmentType(input: {
   description: string | null
   style: 'task_based' | 'hazard_based'
   defaultHazardSetId: string | null
-  hasTasks: boolean
-  hasHazards: boolean
   hasPPE: boolean
   hasQuestions: boolean
   availableToGroupIds: string[]
@@ -60,9 +58,8 @@ export async function updateAssessmentType(input: {
         name,
         description: input.description?.trim() || null,
         style: input.style,
-        defaultHazardSetId: input.defaultHazardSetId || null,
-        hasTasks: input.hasTasks,
-        hasHazards: input.hasHazards,
+        defaultHazardSetId:
+          input.style === 'hazard_based' ? input.defaultHazardSetId || null : null,
         hasPPE: input.hasPPE,
         hasQuestions: input.hasQuestions,
         availableToGroupIds: input.availableToGroupIds,

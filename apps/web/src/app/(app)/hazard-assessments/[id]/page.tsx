@@ -558,10 +558,12 @@ export default async function HazidAssessmentDetailPage({
   const requiredEmbeddedDone = requiredEmbeddedApps.filter((item) => item.done).length
 
   const locked = a.locked
+  const assessmentStyle = type?.style ?? 'task_based'
   const showPPE = type?.hasPPE ?? true
   const showQ = type?.hasQuestions ?? true
-  const showTasks = type?.hasTasks ?? true
-  const showHazards = type?.hasHazards ?? true
+  const showTasks = assessmentStyle === 'task_based'
+  const showHazards = assessmentStyle === 'hazard_based'
+  const showJobScope = assessmentStyle === 'hazard_based'
 
   // ------------------------------------------------------------------
   // Readiness — how complete is this assessment? Drives the progress
@@ -572,6 +574,7 @@ export default async function HazidAssessmentDetailPage({
   const requiresYesViolations = questions.filter(
     (q) => q.requiresYes && (q.answer ?? '').trim().length > 0 && q.answer?.toLowerCase() !== 'yes',
   )
+  const tasksControlled = tasks.filter((t) => (t.row.controls ?? '').trim().length > 0).length
   const applicableHazards = hazards.filter((h) => h.row.applicable)
   const hazardsRated = applicableHazards.filter(
     (h) => h.row.preLikelihood != null && h.row.preSeverity != null,
@@ -597,6 +600,12 @@ export default async function HazidAssessmentDetailPage({
       label: 'Questions answered',
       done: questionsAnswered,
       total: questions.length,
+    })
+  if (showTasks)
+    readiness.push({
+      label: 'Tasks controlled',
+      done: tasksControlled,
+      total: tasks.length,
     })
   if (showHazards)
     readiness.push({
@@ -641,7 +650,16 @@ export default async function HazidAssessmentDetailPage({
           },
         ]
       : []),
-    ...(showTasks ? [{ id: 'tasks', label: 'Tasks', count: tasks.length }] : []),
+    ...(showTasks
+      ? [
+          {
+            id: 'tasks',
+            label: 'Tasks',
+            count: tasks.length,
+            done: tasks.length > 0 && tasksControlled === tasks.length,
+          },
+        ]
+      : []),
     ...(showHazards
       ? [
           {
@@ -922,17 +940,19 @@ export default async function HazidAssessmentDetailPage({
                   />
                 </div>
               </div>
-              <div className="mt-4">
-                <LiveRichText
-                  id={a.id}
-                  field="jobScope"
-                  initialValue={a.jobScope}
-                  label="Job scope"
-                  disabled={locked}
-                  updateAction={updateTextField}
-                  placeholder="Describe the work to be performed."
-                />
-              </div>
+              {showJobScope ? (
+                <div className="mt-4">
+                  <LiveRichText
+                    id={a.id}
+                    field="jobScope"
+                    initialValue={a.jobScope}
+                    label="Job scope"
+                    disabled={locked}
+                    updateAction={updateTextField}
+                    placeholder="Describe the work to be performed."
+                  />
+                </div>
+              ) : null}
             </Section>
           </>
         </section>

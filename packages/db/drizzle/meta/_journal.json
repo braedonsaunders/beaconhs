@@ -50,6 +50,13 @@
       "when": 1782503600000,
       "tag": "0006_role_dashboard_layouts",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1782507200000,
+      "tag": "0007_hazid_style_drives_sections",
+      "breakpoints": true
     }
   ]
 }

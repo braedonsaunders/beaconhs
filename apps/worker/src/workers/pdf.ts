@@ -7,7 +7,7 @@
 // durable artifact of record.
 
 import type { Job } from 'bullmq'
-import { and, asc, desc, eq } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray } from 'drizzle-orm'
 import { db, loadEntitiesForFormPickers, withTenant, type Database } from '@beaconhs/db'
 import { entityDisplayName } from '@beaconhs/forms-core'
 import {
@@ -858,6 +858,7 @@ type HazidLoadedAssessment = {
     row: typeof hazidAssessmentTasks.$inferSelect
     task: typeof hazidTasks.$inferSelect | null
   }[]
+  taskHazards: { id: string; name: string }[]
   hazards: {
     row: typeof hazidAssessmentHazards.$inferSelect
     library: typeof hazidHazards.$inferSelect | null
@@ -922,6 +923,15 @@ async function loadHazidAssessment(
     .where(eq(hazidAssessmentHazards.assessmentId, assessmentId))
     .orderBy(asc(hazidAssessmentHazards.entityOrder))
 
+  const taskHazardIds = [...new Set(tasks.flatMap((t) => t.row.hazardIds))]
+  const taskHazards =
+    taskHazardIds.length > 0
+      ? await tx
+          .select({ id: hazidHazards.id, name: hazidHazards.name })
+          .from(hazidHazards)
+          .where(inArray(hazidHazards.id, taskHazardIds))
+      : []
+
   const ppe = await tx
     .select()
     .from(hazidAssessmentPPE)
@@ -950,6 +960,7 @@ async function loadHazidAssessment(
     ...row,
     projectName,
     tasks,
+    taskHazards,
     hazards,
     ppe,
     questions,
@@ -963,10 +974,19 @@ async function loadHazidAssessment(
 function toHazidRenderInput(data: HazidLoadedAssessment): HazidRenderInput {
   const a = data.a
   const t = data.tenant
+  const style = data.type?.style ?? 'task_based'
+  const taskHazardLookup = new Map(data.taskHazards.map((h) => [h.id, h.name]))
   return {
     tenantName: t.name,
     tenantLogoUrl: t.branding.logoUrl,
     primaryColor: t.branding.primaryColor,
+    sections: {
+      jobScope: style === 'hazard_based',
+      ppe: data.type?.hasPPE ?? true,
+      questions: data.type?.hasQuestions ?? true,
+      tasks: style === 'task_based',
+      hazards: style === 'hazard_based',
+    },
     assessment: {
       reference: a.reference,
       occurredAt: a.occurredAt,
@@ -992,6 +1012,9 @@ function toHazidRenderInput(data: HazidLoadedAssessment): HazidRenderInput {
     })),
     tasks: data.tasks.map((t) => ({
       name: t.task?.name ?? t.row.description ?? 'Task',
+      hazardNames: t.row.hazardIds
+        .map((id) => taskHazardLookup.get(id))
+        .filter((name): name is string => Boolean(name)),
       controls: t.row.controls,
     })),
     hazards: data.hazards.map((h) => ({

@@ -21,6 +21,10 @@ import { HazidSubNav } from '../_subnav'
 export const metadata = { title: 'Assessment types' }
 export const dynamic = 'force-dynamic'
 
+function styleLabel(style: 'task_based' | 'hazard_based') {
+  return style === 'hazard_based' ? 'Hazard-based' : 'Task-based'
+}
+
 export default async function AssessmentTypesPage() {
   const ctx = await requireModuleManage('hazid')
   const rows = await ctx.db((tx) =>
@@ -63,7 +67,7 @@ export default async function AssessmentTypesPage() {
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
-              <TableHead>Sub-forms</TableHead>
+              <TableHead>Optional sections</TableHead>
               <TableHead>Style</TableHead>
             </TableRow>
           </TableHeader>
@@ -82,12 +86,10 @@ export default async function AssessmentTypesPage() {
                   <div className="flex flex-wrap gap-1">
                     {r.hasPPE ? <Badge variant="secondary">PPE</Badge> : null}
                     {r.hasQuestions ? <Badge variant="secondary">Q&amp;A</Badge> : null}
-                    {r.hasTasks ? <Badge variant="secondary">Tasks</Badge> : null}
-                    {r.hasHazards ? <Badge variant="secondary">Hazards</Badge> : null}
                   </div>
                 </TableCell>
                 <TableCell className="text-slate-600 dark:text-slate-400">
-                  {r.style.replace('_', '-')}
+                  {styleLabel(r.style)}
                 </TableCell>
               </TableRow>
             ))}

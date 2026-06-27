@@ -5,7 +5,7 @@
 // recipients + composes html/text and dispatches via `sendEmail`. The
 // audit row + email_log row both end up linked back to the assessment.
 
-import { and, asc, eq, sql } from 'drizzle-orm'
+import { asc, eq, inArray } from 'drizzle-orm'
 import {
   hazidAssessmentHazards,
   hazidAssessmentPPE,
@@ -13,10 +13,10 @@ import {
   hazidAssessmentTasks,
   hazidAssessmentTypes,
   hazidAssessments,
+  hazidHazards,
+  hazidTasks,
   orgUnits,
   people,
-  tenantUsers,
-  users,
 } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 import { htmlToText, sanitizeDocumentHtml } from '@beaconhs/forms-core'
@@ -52,13 +52,23 @@ export async function sendHazidEmail(
     if (!row) return null
 
     const tasks = await tx
-      .select()
+      .select({ row: hazidAssessmentTasks, task: hazidTasks })
       .from(hazidAssessmentTasks)
+      .leftJoin(hazidTasks, eq(hazidTasks.id, hazidAssessmentTasks.taskId))
       .where(eq(hazidAssessmentTasks.assessmentId, assessmentId))
       .orderBy(asc(hazidAssessmentTasks.entityOrder))
+    const taskHazardIds = [...new Set(tasks.flatMap((t) => t.row.hazardIds))]
+    const taskHazards =
+      taskHazardIds.length > 0
+        ? await tx
+            .select({ id: hazidHazards.id, name: hazidHazards.name })
+            .from(hazidHazards)
+            .where(inArray(hazidHazards.id, taskHazardIds))
+        : []
     const hazards = await tx
-      .select()
+      .select({ row: hazidAssessmentHazards, library: hazidHazards })
       .from(hazidAssessmentHazards)
+      .leftJoin(hazidHazards, eq(hazidHazards.id, hazidAssessmentHazards.hazardId))
       .where(eq(hazidAssessmentHazards.assessmentId, assessmentId))
       .orderBy(asc(hazidAssessmentHazards.entityOrder))
     const ppe = await tx
@@ -71,7 +81,7 @@ export async function sendHazidEmail(
       .leftJoin(people, eq(people.id, hazidAssessmentSignatures.personId))
       .where(eq(hazidAssessmentSignatures.assessmentId, assessmentId))
 
-    return { ...row, tasks, hazards, ppe, signatures }
+    return { ...row, tasks, taskHazards, hazards, ppe, signatures }
   })
   if (!data) return null
 
@@ -86,6 +96,26 @@ export async function sendHazidEmail(
   const subject =
     (options?.subjectPrefix ? `${options.subjectPrefix} · ` : '') +
     `Hazard Assessment ${data.a.reference}${data.type ? ` · ${data.type.name}` : ''}`
+  const style = data.type?.style ?? 'task_based'
+  const showJobScope = style === 'hazard_based'
+  const showTasks = style === 'task_based'
+  const showHazards = style === 'hazard_based'
+  const showPPE = data.type?.hasPPE ?? true
+  const taskHazardLookup = new Map(data.taskHazards.map((h) => [h.id, h.name]))
+  const taskSummary = data.tasks.map((t) => {
+    const name = t.task?.name ?? t.row.description ?? '—'
+    const hazards = t.row.hazardIds
+      .map((id) => taskHazardLookup.get(id))
+      .filter((hazard): hazard is string => Boolean(hazard))
+      .join(', ')
+    return `  - ${name}${hazards ? `\n      Hazards: ${hazards}` : ''}${t.row.controls ? `\n      Controls: ${t.row.controls}` : ''}`
+  })
+  const hazardSummary = data.hazards.map((h) => {
+    const name = h.library?.name ?? h.row.name ?? '—'
+    const controls = [h.row.standardControls, h.row.specificControls].filter(Boolean).join(' / ')
+    return `  - ${name}${controls ? `\n      Controls: ${controls}` : ''}`
+  })
+  const ppeRequired = data.ppe.filter((p) => p.answer === 'yes')
 
   const text = [
     `HAZARD ASSESSMENT`,
@@ -95,22 +125,13 @@ export async function sendHazidEmail(
     `Site: ${data.site?.name ?? '—'}`,
     `Location on site: ${data.a.locationOnSite ?? '—'}`,
     `Supervisor: ${supervisorName}`,
-    `Job scope: ${htmlToText(data.a.jobScope) || '—'}`,
+    ...(showJobScope ? [`Job scope: ${htmlToText(data.a.jobScope) || '—'}`] : []),
     `Status: ${data.a.locked ? 'locked / completed' : 'in progress'}`,
     ``,
     options?.messageOverride ? `Note: ${options.messageOverride}\n` : '',
-    `Tasks (${data.tasks.length}):`,
-    ...data.tasks.map((t) => `  - ${t.description ?? '—'}`),
-    ``,
-    `Hazards (${data.hazards.length}):`,
-    ...data.hazards.map((h) => {
-      const controls = [h.standardControls, h.specificControls].filter(Boolean).join(' / ')
-      return `  - ${h.name ?? '—'}${controls ? `\n      Controls: ${controls}` : ''}`
-    }),
-    ``,
-    `PPE required:`,
-    ...data.ppe.filter((p) => p.answer === 'yes').map((p) => `  - ${p.name}`),
-    ``,
+    ...(showTasks ? [`Tasks (${data.tasks.length}):`, ...taskSummary, ``] : []),
+    ...(showHazards ? [`Hazards (${data.hazards.length}):`, ...hazardSummary, ``] : []),
+    ...(showPPE ? [`PPE required:`, ...ppeRequired.map((p) => `  - ${p.name}`), ``] : []),
     `Signatures (${data.signatures.length}):`,
     ...data.signatures.map((s) => {
       const name = s.person
@@ -121,6 +142,53 @@ export async function sendHazidEmail(
   ]
     .filter((s) => s !== '')
     .join('\n')
+
+  const jobScopeHtml = showJobScope
+    ? `<tr><td style="padding:4px 12px 4px 0;color:#64748b;vertical-align:top;">Job scope</td>
+            <td style="padding:4px 0;">${data.a.jobScope ? sanitizeDocumentHtml(data.a.jobScope) : '—'}</td></tr>`
+    : ''
+  const tasksHtml = showTasks
+    ? `<h3 style="margin:18px 0 4px;font-size:14px;">Tasks (${data.tasks.length})</h3>
+      ${
+        data.tasks.length === 0
+          ? '<div style="font-size:13px;color:#64748b;">None recorded.</div>'
+          : `<ul style="font-size:13px;margin:0 0 12px 18px;padding:0;">${data.tasks
+              .map((t) => {
+                const name = t.task?.name ?? t.row.description ?? '—'
+                const hazards = t.row.hazardIds
+                  .map((id) => taskHazardLookup.get(id))
+                  .filter((hazard): hazard is string => Boolean(hazard))
+                  .join(', ')
+                return `<li><strong>${escapeHtml(name)}</strong>${hazards ? `<br/><span style="color:#64748b">Hazards: ${escapeHtml(hazards)}</span>` : ''}${t.row.controls ? `<br/><span style="color:#64748b">Controls: ${escapeHtml(t.row.controls)}</span>` : ''}</li>`
+              })
+              .join('')}</ul>`
+      }`
+    : ''
+  const hazardsHtml = showHazards
+    ? `<h3 style="margin:18px 0 4px;font-size:14px;">Hazards (${data.hazards.length})</h3>
+      ${
+        data.hazards.length === 0
+          ? '<div style="font-size:13px;color:#64748b;">None recorded.</div>'
+          : `<ul style="font-size:13px;margin:0 0 12px 18px;padding:0;">${data.hazards
+              .map((h) => {
+                const controls = [h.row.standardControls, h.row.specificControls]
+                  .filter(Boolean)
+                  .join(' / ')
+                return `<li><strong>${escapeHtml(h.library?.name ?? h.row.name ?? '—')}</strong>${controls ? `<br/><span style="color:#64748b">Controls: ${escapeHtml(controls)}</span>` : ''}</li>`
+              })
+              .join('')}</ul>`
+      }`
+    : ''
+  const ppeHtml = showPPE
+    ? `<h3 style="margin:18px 0 4px;font-size:14px;">PPE</h3>
+      ${
+        ppeRequired.length === 0
+          ? '<div style="font-size:13px;color:#64748b;">None required.</div>'
+          : `<ul style="font-size:13px;margin:0 0 12px 18px;padding:0;">${ppeRequired
+              .map((p) => `<li>${escapeHtml(p.name)}</li>`)
+              .join('')}</ul>`
+      }`
+    : ''
 
   const html = `
     <div style="font-family:system-ui,Segoe UI,Arial,sans-serif;color:#0f172a;max-width:720px;">
@@ -142,37 +210,11 @@ export async function sendHazidEmail(
             <td style="padding:4px 0;">${escapeHtml(data.a.locationOnSite ?? '—')}</td></tr>
         <tr><td style="padding:4px 12px 4px 0;color:#64748b;">Supervisor</td>
             <td style="padding:4px 0;">${escapeHtml(supervisorName)}</td></tr>
-        <tr><td style="padding:4px 12px 4px 0;color:#64748b;vertical-align:top;">Job scope</td>
-            <td style="padding:4px 0;">${data.a.jobScope ? sanitizeDocumentHtml(data.a.jobScope) : '—'}</td></tr>
+        ${jobScopeHtml}
       </table>
-      <h3 style="margin:18px 0 4px;font-size:14px;">Tasks (${data.tasks.length})</h3>
-      ${
-        data.tasks.length === 0
-          ? '<div style="font-size:13px;color:#64748b;">None recorded.</div>'
-          : `<ul style="font-size:13px;margin:0 0 12px 18px;padding:0;">${data.tasks.map((t) => `<li>${escapeHtml(t.description ?? '—')}</li>`).join('')}</ul>`
-      }
-      <h3 style="margin:18px 0 4px;font-size:14px;">Hazards (${data.hazards.length})</h3>
-      ${
-        data.hazards.length === 0
-          ? '<div style="font-size:13px;color:#64748b;">None recorded.</div>'
-          : `<ul style="font-size:13px;margin:0 0 12px 18px;padding:0;">${data.hazards
-              .map((h) => {
-                const controls = [h.standardControls, h.specificControls]
-                  .filter(Boolean)
-                  .join(' / ')
-                return `<li><strong>${escapeHtml(h.name ?? '—')}</strong>${controls ? `<br/><span style="color:#64748b">Controls: ${escapeHtml(controls)}</span>` : ''}</li>`
-              })
-              .join('')}</ul>`
-      }
-      <h3 style="margin:18px 0 4px;font-size:14px;">PPE</h3>
-      ${
-        data.ppe.filter((p) => p.answer === 'yes').length === 0
-          ? '<div style="font-size:13px;color:#64748b;">None required.</div>'
-          : `<ul style="font-size:13px;margin:0 0 12px 18px;padding:0;">${data.ppe
-              .filter((p) => p.answer === 'yes')
-              .map((p) => `<li>${escapeHtml(p.name)}</li>`)
-              .join('')}</ul>`
-      }
+      ${tasksHtml}
+      ${hazardsHtml}
+      ${ppeHtml}
       <h3 style="margin:18px 0 4px;font-size:14px;">Signatures (${data.signatures.length})</h3>
       ${
         data.signatures.length === 0

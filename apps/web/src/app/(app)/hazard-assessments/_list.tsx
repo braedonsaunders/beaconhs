@@ -246,8 +246,7 @@ export async function AssessmentsListPage({
               id: t.id,
               name: t.name,
               description: t.description,
-              hasTasks: t.hasTasks,
-              hasHazards: t.hasHazards,
+              style: t.style,
               hasPPE: t.hasPPE,
               hasQuestions: t.hasQuestions,
             }))

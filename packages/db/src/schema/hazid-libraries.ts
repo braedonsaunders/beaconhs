@@ -164,7 +164,9 @@ export const hazidLocationTasks = pgTable(
 // ----------------------------------------------------------------------------
 // Assessment types
 // ----------------------------------------------------------------------------
-// Style determines whether tasks-first or hazards-first layout is used in PDFs.
+// Style determines the assessment workflow:
+//   - task_based: crews break the job into tasks, each with hazards and controls.
+//   - hazard_based: crews describe the job scope and work through a default hazard set.
 export const hazidAssessmentStyle = pgEnum('hazid_assessment_style', ['task_based', 'hazard_based'])
 
 export const hazidAssessmentTypes = pgTable(
@@ -178,9 +180,7 @@ export const hazidAssessmentTypes = pgTable(
     description: text('description'),
     style: hazidAssessmentStyle('style').default('task_based').notNull(),
 
-    // Section toggles — turning these off hides the corresponding tab/section.
-    hasTasks: boolean('has_tasks').default(true).notNull(),
-    hasHazards: boolean('has_hazards').default(true).notNull(),
+    // Optional sections. Tasks vs hazards are determined by `style` above.
     hasPPE: boolean('has_ppe').default(true).notNull(),
     hasQuestions: boolean('has_questions').default(true).notNull(),
     // Working-at-Heights, Confined Space, and Arc Flash are Builder Apps now,

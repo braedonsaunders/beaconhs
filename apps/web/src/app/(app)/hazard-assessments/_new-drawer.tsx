@@ -14,8 +14,7 @@ export type NewAssessmentType = {
   id: string
   name: string
   description: string | null
-  hasTasks: boolean
-  hasHazards: boolean
+  style: 'task_based' | 'hazard_based'
   hasPPE: boolean
   hasQuestions: boolean
 }
@@ -84,8 +83,7 @@ export function NewAssessmentDrawer({
           {filtered.map((t) => {
             const isPending = pendingId === t.id
             const seeds = [
-              t.hasTasks ? 'Tasks' : null,
-              t.hasHazards ? 'Hazards' : null,
+              t.style === 'hazard_based' ? 'Hazard-based' : 'Task-based',
               t.hasPPE ? 'PPE' : null,
               t.hasQuestions ? 'Questions' : null,
             ].filter(Boolean) as string[]

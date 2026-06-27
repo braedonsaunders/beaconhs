@@ -44,6 +44,7 @@ async function ensureType(
   args: {
     name: string
     description: string
+    style: 'task_based' | 'hazard_based'
     defaultHazardSetId: string | null
   },
 ) {
@@ -59,12 +60,10 @@ async function ensureType(
       .update(hazidAssessmentTypes)
       .set({
         description: args.description,
-        hasTasks: true,
-        hasHazards: true,
+        style: args.style,
         hasPPE: true,
         hasQuestions: true,
-        hasWAH: false,
-        defaultHazardSetId: args.defaultHazardSetId,
+        defaultHazardSetId: args.style === 'hazard_based' ? args.defaultHazardSetId : null,
       })
       .where(eq(hazidAssessmentTypes.id, existing.id))
     return existing.id
@@ -76,13 +75,10 @@ async function ensureType(
       tenantId,
       name: args.name,
       description: args.description,
-      style: 'task_based',
-      hasTasks: true,
-      hasHazards: true,
+      style: args.style,
       hasPPE: true,
       hasQuestions: true,
-      hasWAH: false,
-      defaultHazardSetId: args.defaultHazardSetId,
+      defaultHazardSetId: args.style === 'hazard_based' ? args.defaultHazardSetId : null,
       availableToGroupIds: [],
     })
     .returning({ id: hazidAssessmentTypes.id })
@@ -196,13 +192,15 @@ async function main() {
         const confinedTypeId = await ensureType(tx, tenant.id, {
           name: 'Confined Space JSHA',
           description:
-            'Core JSHA plus an embedded confined-space entry app for readings, entry log, rescue planning, and sign-off.',
+            'Hazard-based JSHA plus an embedded confined-space entry app for readings, entry log, rescue planning, and sign-off.',
+          style: 'hazard_based',
           defaultHazardSetId: await hazardSetId(tx, tenant.id, 'Confined space entry'),
         })
         const arcFlashTypeId = await ensureType(tx, tenant.id, {
           name: 'Arc Flash JSHA',
           description:
-            'Core JSHA plus an embedded arc-flash work-plan app for electrical boundaries, PPE, controls, and qualified sign-off.',
+            'Hazard-based JSHA plus an embedded arc-flash work-plan app for electrical boundaries, PPE, controls, and qualified sign-off.',
+          style: 'hazard_based',
           defaultHazardSetId: await hazardSetId(tx, tenant.id, 'Welding / hot work'),
         })
 

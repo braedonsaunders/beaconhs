@@ -3,7 +3,7 @@ import 'server-only'
 // Hazard Assessments (HazID) FlowSubjectAdapter. Field-map keys mirror
 // MODULE_FLOW_PROFILES.hazid.
 
-import { asc, eq } from 'drizzle-orm'
+import { asc, eq, inArray } from 'drizzle-orm'
 import {
   attachments,
   hazidAssessmentHazards,
@@ -97,6 +97,7 @@ export function createHazidFlowAdapter(
             .select({
               description: hazidAssessmentTasks.description,
               controls: hazidAssessmentTasks.controls,
+              hazardIds: hazidAssessmentTasks.hazardIds,
               libName: hazidTasks.name,
             })
             .from(hazidAssessmentTasks)
@@ -147,6 +148,18 @@ export function createHazidFlowAdapter(
         ),
       ])
 
+      const taskHazardIds = [...new Set(tasks.flatMap((t) => t.hazardIds))]
+      const taskHazards =
+        taskHazardIds.length > 0
+          ? await ctx.db((tx) =>
+              tx
+                .select({ id: hazidHazards.id, name: hazidHazards.name })
+                .from(hazidHazards)
+                .where(inArray(hazidHazards.id, taskHazardIds)),
+            )
+          : []
+      const taskHazardLookup = new Map(taskHazards.map((h) => [h.id, h.name]))
+
       return {
         reference: a.reference ?? null,
         job_scope: a.jobScope ?? null,
@@ -173,6 +186,13 @@ export function createHazidFlowAdapter(
         // Collections — rendered via {{#each …}} tables.
         tasks: tasks.map((t) => ({
           name: t.libName ?? t.description ?? 'Task',
+          hazards: t.hazardIds
+            .map((id) => taskHazardLookup.get(id))
+            .filter((name): name is string => Boolean(name)),
+          hazard_names: t.hazardIds
+            .map((id) => taskHazardLookup.get(id))
+            .filter((name): name is string => Boolean(name))
+            .join(', '),
           controls: t.controls ?? '',
         })),
         hazards: hazards.map((h) => ({

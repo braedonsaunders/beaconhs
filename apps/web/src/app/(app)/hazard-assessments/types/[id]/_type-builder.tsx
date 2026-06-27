@@ -49,8 +49,6 @@ export type BuilderType = {
   description: string | null
   style: Style
   defaultHazardSetId: string | null
-  hasTasks: boolean
-  hasHazards: boolean
   hasPPE: boolean
   hasQuestions: boolean
   availableToGroupIds: string[]
@@ -773,11 +771,10 @@ function SettingsPanel({
   const [description, setDescription] = React.useState(type.description ?? '')
   const [style, setStyle] = React.useState<Style>(type.style)
   const [defaultHazardSetId, setDefaultHazardSetId] = React.useState(type.defaultHazardSetId ?? '')
-  const [hasTasks, setHasTasks] = React.useState(type.hasTasks)
-  const [hasHazards, setHasHazards] = React.useState(type.hasHazards)
   const [hasPPE, setHasPPE] = React.useState(type.hasPPE)
   const [hasQuestions, setHasQuestions] = React.useState(type.hasQuestions)
   const [groupIds, setGroupIds] = React.useState<string[]>(type.availableToGroupIds)
+  const isHazardBased = style === 'hazard_based'
 
   function toggleGroup(id: string) {
     setGroupIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]))
@@ -790,9 +787,7 @@ function SettingsPanel({
           name,
           description,
           style,
-          defaultHazardSetId: defaultHazardSetId || null,
-          hasTasks,
-          hasHazards,
+          defaultHazardSetId: isHazardBased ? defaultHazardSetId || null : null,
           hasPPE,
           hasQuestions,
           availableToGroupIds: groupIds,
@@ -832,21 +827,24 @@ function SettingsPanel({
           <option value="hazard_based">Hazard-based</option>
         </Select>
       </div>
-      <div className="space-y-1.5">
-        <Label>Default hazard set</Label>
-        <Select value={defaultHazardSetId} onChange={(e) => setDefaultHazardSetId(e.target.value)}>
-          <option value="">— none —</option>
-          {hazardSets.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </Select>
-      </div>
+      {isHazardBased ? (
+        <div className="space-y-1.5">
+          <Label>Default hazard set</Label>
+          <Select
+            value={defaultHazardSetId}
+            onChange={(e) => setDefaultHazardSetId(e.target.value)}
+          >
+            <option value="">— none —</option>
+            {hazardSets.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </Select>
+        </div>
+      ) : null}
       <fieldset className="space-y-2 rounded-md border border-slate-200 p-3 dark:border-slate-800">
-        <legend className="px-1 text-xs font-medium text-slate-500">Enabled sections</legend>
-        <CheckRow label="Tasks" checked={hasTasks} onChange={setHasTasks} />
-        <CheckRow label="Hazards" checked={hasHazards} onChange={setHasHazards} />
+        <legend className="px-1 text-xs font-medium text-slate-500">Optional sections</legend>
         <CheckRow label="PPE" checked={hasPPE} onChange={setHasPPE} />
         <CheckRow label="Questions & Answers" checked={hasQuestions} onChange={setHasQuestions} />
       </fieldset>

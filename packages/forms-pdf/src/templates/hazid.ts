@@ -6,8 +6,7 @@
 //   1. General + classification info
 //   2. PPE manifest
 //   3. Question & Answer
-//   4. Tasks
-//   5. Hazards & controls
+//   4. Task-based tasks, or hazard-based hazards & controls
 //   6. Signatures + photos
 //
 // Specialty work plans (Working at Heights, Confined Space, Arc Flash) are no
@@ -32,6 +31,13 @@ export type HazidRenderInput = {
     supervisorName?: string | null
     jobScope?: string | null
   }
+  sections?: {
+    jobScope: boolean
+    ppe: boolean
+    questions: boolean
+    tasks: boolean
+    hazards: boolean
+  }
   ppe: {
     name: string
     description?: string | null
@@ -45,6 +51,7 @@ export type HazidRenderInput = {
   }[]
   tasks: {
     name: string
+    hazardNames?: string[]
     controls?: string | null
   }[]
   hazards: {
@@ -71,6 +78,13 @@ export function renderHazidHtml(input: HazidRenderInput): string {
   const primary = input.primaryColor ?? '#1f3a5f'
   const occurred = fmtDateTime(a.occurredAt)
   const generated = fmtDateTime(input.generatedAt ?? new Date())
+  const sections = input.sections ?? {
+    jobScope: true,
+    ppe: true,
+    questions: true,
+    tasks: true,
+    hazards: true,
+  }
 
   const ppeRows =
     input.ppe.length === 0
@@ -109,13 +123,14 @@ export function renderHazidHtml(input: HazidRenderInput): string {
     input.tasks.length === 0
       ? '<p class="muted">No tasks recorded.</p>'
       : `<table class="data-table">
-          <thead><tr><th style="width:32px;">#</th><th>Task</th><th>Controls</th></tr></thead>
+          <thead><tr><th style="width:32px;">#</th><th>Task</th><th>Hazards</th><th>Controls</th></tr></thead>
           <tbody>
           ${input.tasks
             .map(
               (t, i) => `<tr>
                 <td>${i + 1}</td>
                 <td>${esc(t.name)}</td>
+                <td class="wrap">${esc(t.hazardNames?.join(', ') || '—')}</td>
                 <td class="wrap">${esc(t.controls ?? '—')}</td>
               </tr>`,
             )
@@ -270,31 +285,51 @@ export function renderHazidHtml(input: HazidRenderInput): string {
         <td class="lbl">Project</td><td class="val">${esc(a.projectName ?? '—')}</td>
         <td class="lbl">Supervisor</td><td class="val">${esc(a.supervisorName ?? '—')}</td>
       </tr>
-      <tr>
+      ${
+        sections.jobScope
+          ? `<tr>
         <td class="lbl">Job scope</td><td class="val rich" colspan="3">${a.jobScope ? sanitizeDocumentHtml(a.jobScope) : '—'}</td>
-      </tr>
+      </tr>`
+          : ''
+      }
     </table>
   </section>
 
-  <section>
+  ${
+    sections.ppe
+      ? `<section>
     <h2>PPE Manifest</h2>
     ${ppeRows}
-  </section>
+  </section>`
+      : ''
+  }
 
-  <section>
+  ${
+    sections.questions
+      ? `<section>
     <h2>Questions &amp; Answers</h2>
     ${questionsHtml}
-  </section>
+  </section>`
+      : ''
+  }
 
-  <section>
+  ${
+    sections.tasks
+      ? `<section>
     <h2>Tasks</h2>
     ${tasksHtml}
-  </section>
+  </section>`
+      : ''
+  }
 
-  <section>
+  ${
+    sections.hazards
+      ? `<section>
     <h2>Hazards &amp; Controls</h2>
     ${hazardsHtml}
-  </section>
+  </section>`
+      : ''
+  }
 
   <section>
     <h2>Signatures</h2>

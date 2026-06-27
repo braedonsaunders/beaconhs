@@ -16,6 +16,10 @@ import { HazardTypeBuilder } from './_type-builder'
 
 export const dynamic = 'force-dynamic'
 
+function styleLabel(style: 'task_based' | 'hazard_based') {
+  return style === 'hazard_based' ? 'Hazard-based' : 'Task-based'
+}
+
 export default async function AssessmentTypeDetailPage({
   params,
 }: {
@@ -95,10 +99,9 @@ export default async function AssessmentTypeDetailPage({
           title={type.name}
           badge={
             <div className="flex flex-wrap items-center gap-1">
+              <Badge variant="secondary">{styleLabel(type.style)}</Badge>
               {type.hasPPE ? <Badge variant="secondary">PPE</Badge> : null}
               {type.hasQuestions ? <Badge variant="secondary">Q&amp;A</Badge> : null}
-              {type.hasTasks ? <Badge variant="secondary">Tasks</Badge> : null}
-              {type.hasHazards ? <Badge variant="secondary">Hazards</Badge> : null}
             </div>
           }
         />
@@ -112,8 +115,6 @@ export default async function AssessmentTypeDetailPage({
           description: type.description,
           style: type.style,
           defaultHazardSetId: type.defaultHazardSetId,
-          hasTasks: type.hasTasks,
-          hasHazards: type.hasHazards,
           hasPPE: type.hasPPE,
           hasQuestions: type.hasQuestions,
           availableToGroupIds: type.availableToGroupIds ?? [],
