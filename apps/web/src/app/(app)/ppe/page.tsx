@@ -3,6 +3,7 @@ import { HardHat } from 'lucide-react'
 import { and, asc, count, desc, eq, ilike, isNull, or, sql, type SQL } from 'drizzle-orm'
 import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
 import { people, ppeIssues, ppeItems, ppeTypes } from '@beaconhs/db/schema'
+import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
@@ -54,6 +55,7 @@ export default async function PpePage({
   const statusRaw = pickString(sp.status) ?? 'issued'
   const statusFilter = statusRaw === 'all' ? undefined : statusRaw
   const ctx = await requireRequestContext()
+  const canExport = can(ctx, 'utilities.export') && can(ctx, 'ppe.read.all')
 
   const { rows, total, statusCounts, types } = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = [isNull(ppeItems.deletedAt)]
@@ -162,9 +164,11 @@ export default async function PpePage({
             description="Issue, inspect, and track PPE through its lifecycle."
             actions={
               <div className="flex items-center gap-2">
-                <Link href={buildExportHref('/ppe/export.csv', sp)}>
-                  <Button variant="outline">Export CSV</Button>
-                </Link>
+                {canExport ? (
+                  <Link href={buildExportHref('/ppe/export.csv', sp)}>
+                    <Button variant="outline">Export CSV</Button>
+                  </Link>
+                ) : null}
                 <Link href="/ppe?drawer=issue" scroll={false}>
                   <Button>Issue PPE</Button>
                 </Link>

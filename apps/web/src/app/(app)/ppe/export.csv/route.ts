@@ -5,6 +5,7 @@ import { assertCan } from '@beaconhs/tenant'
 import { requireExportContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { csvFilename, csvResponse } from '@/lib/csv'
+import { csvColumns, selectCsvColumns } from '@/lib/export-columns'
 import { parseListParams, pickString } from '@/lib/list-params'
 
 export const dynamic = 'force-dynamic'
@@ -63,27 +64,32 @@ export async function GET(req: NextRequest) {
     metadata: { format: 'csv', filters: { q: params.q ?? null, status: statusFilter ?? null } },
   })
 
+  const columns = csvColumns([
+    'Type',
+    'Serial #',
+    'Size',
+    'Status',
+    'Holder',
+    'Purchase date',
+    'Expires on',
+    'Next inspection',
+  ])
+  const selection = selectCsvColumns(url.searchParams, columns)
+
   return csvResponse({
     filename: csvFilename('ppe'),
-    headers: [
-      'Type',
-      'Serial #',
-      'Size',
-      'Status',
-      'Holder',
-      'Purchase date',
-      'Expires on',
-      'Next inspection',
-    ],
-    rows: rows.map(({ item, type, holder }) => [
-      type.name,
-      item.serialNumber ?? '',
-      item.size ?? '',
-      item.status,
-      holder ? `${holder.firstName} ${holder.lastName}` : '',
-      item.purchaseDate ?? '',
-      item.expiresOn ?? '',
-      item.nextInspectionDue ?? '',
-    ]),
+    headers: selection.headers,
+    rows: rows.map(({ item, type, holder }) =>
+      selection.project([
+        type.name,
+        item.serialNumber ?? '',
+        item.size ?? '',
+        item.status,
+        holder ? `${holder.firstName} ${holder.lastName}` : '',
+        item.purchaseDate ?? '',
+        item.expiresOn ?? '',
+        item.nextInspectionDue ?? '',
+      ]),
+    ),
   })
 }

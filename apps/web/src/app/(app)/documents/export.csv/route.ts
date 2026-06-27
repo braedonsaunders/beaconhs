@@ -5,6 +5,7 @@ import { assertCan } from '@beaconhs/tenant'
 import { requireExportContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { csvFilename, csvResponse } from '@/lib/csv'
+import { csvColumns, selectCsvColumns } from '@/lib/export-columns'
 import { parseListParams, pickString } from '@/lib/list-params'
 
 export const dynamic = 'force-dynamic'
@@ -22,7 +23,7 @@ export async function GET(req: NextRequest) {
   })
   const statusFilter = pickString(sp.status)
   const ctx = await requireExportContext()
-  assertCan(ctx, 'documents.read')
+  assertCan(ctx, 'documents.manage')
 
   const rows = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = []
@@ -58,25 +59,30 @@ export async function GET(req: NextRequest) {
     metadata: { format: 'csv', filters: { q: params.q ?? null, status: statusFilter ?? null } },
   })
 
+  const columns = csvColumns([
+    'Title',
+    'Key',
+    'Category',
+    'Status',
+    'Next review',
+    'Review frequency (months)',
+    'Description',
+  ])
+  const selection = selectCsvColumns(url.searchParams, columns)
+
   return csvResponse({
     filename: csvFilename('documents'),
-    headers: [
-      'Title',
-      'Key',
-      'Category',
-      'Status',
-      'Next review',
-      'Review frequency (months)',
-      'Description',
-    ],
-    rows: rows.map((d) => [
-      d.title,
-      d.key,
-      d.category ?? '',
-      d.status,
-      d.nextReviewOn ?? '',
-      d.reviewFrequencyMonths ?? '',
-      d.description ?? '',
-    ]),
+    headers: selection.headers,
+    rows: rows.map((d) =>
+      selection.project([
+        d.title,
+        d.key,
+        d.category ?? '',
+        d.status,
+        d.nextReviewOn ?? '',
+        d.reviewFrequencyMonths ?? '',
+        d.description ?? '',
+      ]),
+    ),
   })
 }

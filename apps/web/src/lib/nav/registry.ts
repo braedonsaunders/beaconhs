@@ -20,8 +20,8 @@ export type NavModule = {
   iconKey: string
   /**
    * Permission required to see this module. Checked with `can(ctx, perm)`
-   * (wildcard-aware). Undefined = always visible. Map only to permissions the
-   * built-in roles already hold so the default roles don't lose core tools.
+   * (wildcard-aware). Undefined = always visible. Sensitive/admin-adjacent
+   * modules should use explicit permissions so roles can deliberately opt in.
    */
   requiredPermission?: string
   /** Default group label — must be one of NAV_GROUP_ORDER. */
@@ -182,7 +182,14 @@ export const NAV_MODULES: NavModule[] = [
     requiredPermission: 'forms.template.read',
     group: 'Platform',
   },
-  { key: 'utilities', href: '/utilities', label: 'Utilities', iconKey: 'gauge', group: 'Platform' },
+  {
+    key: 'utilities',
+    href: '/utilities',
+    label: 'Utilities',
+    iconKey: 'gauge',
+    requiredPermission: 'utilities.view',
+    group: 'Platform',
+  },
 ]
 
 const MODULE_BY_KEY = new Map(NAV_MODULES.map((m) => [m.key, m]))

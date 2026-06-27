@@ -3,6 +3,7 @@ import { AlertTriangle } from 'lucide-react'
 import { and, asc, count, desc, eq, ilike, inArray, isNull, or, type SQL } from 'drizzle-orm'
 import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
 import { incidentPeople, incidents, orgUnits, people } from '@beaconhs/db/schema'
+import { can } from '@beaconhs/tenant'
 import { IncidentsSubNav } from './_sub-nav'
 import { requireRequestContext } from '@/lib/auth'
 import { moduleScopeWhere } from '@/lib/visibility'
@@ -52,6 +53,7 @@ export default async function IncidentsPage({
   const statusFilter = pickString(sp.status)
 
   const ctx = await requireRequestContext()
+  const canExport = can(ctx, 'utilities.export') && can(ctx, 'incidents.read.self')
 
   const { rows, total, typeCounts, statusCounts, involved } = await ctx.db(async (tx) => {
     // Per-user record visibility: read.all → everything, read.site → my sites,
@@ -171,9 +173,11 @@ export default async function IncidentsPage({
             description="Reports, investigations, and closeouts."
             actions={
               <div className="flex items-center gap-2">
-                <Link href={buildExportHref('/incidents/export.csv', sp)}>
-                  <Button variant="outline">Export CSV</Button>
-                </Link>
+                {canExport ? (
+                  <Link href={buildExportHref('/incidents/export.csv', sp)}>
+                    <Button variant="outline">Export CSV</Button>
+                  </Link>
+                ) : null}
                 <Link href="/incidents/new">
                   <Button>Report incident</Button>
                 </Link>

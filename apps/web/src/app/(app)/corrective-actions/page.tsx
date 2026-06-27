@@ -3,6 +3,7 @@ import { ListChecks } from 'lucide-react'
 import { and, asc, count, desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm'
 import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
 import { correctiveActions, orgUnits, tenantUsers, user } from '@beaconhs/db/schema'
+import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { moduleScopeWhere } from '@/lib/visibility'
 import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
@@ -62,6 +63,7 @@ export default async function CorrectiveActionsPage({
   const statusFilter = statusRaw === 'all' ? undefined : statusRaw
   const sevFilter = pickString(sp.severity)
   const ctx = await requireRequestContext()
+  const canExport = can(ctx, 'utilities.export') && can(ctx, 'ca.read.self')
 
   const { rows, total, statusCounts, sevCounts } = await ctx.db(async (tx) => {
     // Per-user record visibility: read.all → everything, read.site → my sites,
@@ -166,14 +168,16 @@ export default async function CorrectiveActionsPage({
             description="Standalone records, linkable to incidents, inspections, audits, JSHAs."
             actions={
               <div className="flex items-center gap-2">
-                <Link
-                  href={buildExportHref('/corrective-actions/export.csv', {
-                    ...sp,
-                    status: statusRaw,
-                  })}
-                >
-                  <Button variant="outline">Export CSV</Button>
-                </Link>
+                {canExport ? (
+                  <Link
+                    href={buildExportHref('/corrective-actions/export.csv', {
+                      ...sp,
+                      status: statusRaw,
+                    })}
+                  >
+                    <Button variant="outline">Export CSV</Button>
+                  </Link>
+                ) : null}
                 <Link href="/corrective-actions/new">
                   <Button>New action</Button>
                 </Link>

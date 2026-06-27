@@ -5,6 +5,7 @@ import { can } from '@beaconhs/tenant'
 import { requireExportContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { csvFilename, csvResponse } from '@/lib/csv'
+import { csvColumns, selectCsvColumns } from '@/lib/export-columns'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { moduleScopeWhere } from '@/lib/visibility'
 
@@ -100,29 +101,34 @@ export async function GET(req: NextRequest) {
     },
   })
 
+  const columns = csvColumns([
+    'Reference',
+    'Title',
+    'Severity',
+    'Status',
+    'Assigned on',
+    'Due on',
+    'Closed on',
+    'Site',
+    'Description',
+  ])
+  const selection = selectCsvColumns(url.searchParams, columns)
+
   return csvResponse({
     filename: csvFilename('corrective-actions'),
-    headers: [
-      'Reference',
-      'Title',
-      'Severity',
-      'Status',
-      'Assigned on',
-      'Due on',
-      'Closed on',
-      'Site',
-      'Description',
-    ],
-    rows: rows.map(({ ca, site }) => [
-      ca.reference,
-      ca.title,
-      ca.severity,
-      ca.status,
-      ca.assignedOn ?? '',
-      ca.dueOn ?? '',
-      ca.closedAt ? new Date(ca.closedAt).toISOString() : '',
-      site?.name ?? '',
-      ca.description ?? '',
-    ]),
+    headers: selection.headers,
+    rows: rows.map(({ ca, site }) =>
+      selection.project([
+        ca.reference,
+        ca.title,
+        ca.severity,
+        ca.status,
+        ca.assignedOn ?? '',
+        ca.dueOn ?? '',
+        ca.closedAt ? new Date(ca.closedAt).toISOString() : '',
+        site?.name ?? '',
+        ca.description ?? '',
+      ]),
+    ),
   })
 }

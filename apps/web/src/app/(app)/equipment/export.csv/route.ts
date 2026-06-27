@@ -6,6 +6,7 @@ import { requireExportContext } from '@/lib/auth'
 import { moduleScopeWhere } from '@/lib/visibility'
 import { recordAudit } from '@/lib/audit'
 import { csvFilename, csvResponse } from '@/lib/csv'
+import { csvColumns, selectCsvColumns } from '@/lib/export-columns'
 import { parseListParams, pickString } from '@/lib/list-params'
 
 export const dynamic = 'force-dynamic'
@@ -87,29 +88,34 @@ export async function GET(req: NextRequest) {
     metadata: { format: 'csv', filters: { q: params.q ?? null, status: statusFilter ?? null } },
   })
 
+  const columns = csvColumns([
+    'Asset tag',
+    'Name',
+    'Type',
+    'Serial #',
+    'Status',
+    'Missing',
+    'Site',
+    'Holder',
+    'Purchase date',
+  ])
+  const selection = selectCsvColumns(url.searchParams, columns)
+
   return csvResponse({
     filename: csvFilename('equipment'),
-    headers: [
-      'Asset tag',
-      'Name',
-      'Type',
-      'Serial #',
-      'Status',
-      'Missing',
-      'Site',
-      'Holder',
-      'Purchase date',
-    ],
-    rows: rows.map(({ item, type, site, holder }) => [
-      item.assetTag,
-      item.name,
-      type?.name ?? '',
-      item.serialNumber ?? '',
-      item.status,
-      item.isMissing ? 'yes' : 'no',
-      site?.name ?? '',
-      holder ? `${holder.firstName} ${holder.lastName}` : '',
-      item.purchaseDate ?? '',
-    ]),
+    headers: selection.headers,
+    rows: rows.map(({ item, type, site, holder }) =>
+      selection.project([
+        item.assetTag,
+        item.name,
+        type?.name ?? '',
+        item.serialNumber ?? '',
+        item.status,
+        item.isMissing ? 'yes' : 'no',
+        site?.name ?? '',
+        holder ? `${holder.firstName} ${holder.lastName}` : '',
+        item.purchaseDate ?? '',
+      ]),
+    ),
   })
 }

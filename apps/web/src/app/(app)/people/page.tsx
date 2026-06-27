@@ -3,6 +3,7 @@ import { Users } from 'lucide-react'
 import { and, asc, count, desc, eq, ilike, isNull, or, type SQL } from 'drizzle-orm'
 import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
 import { departments, people, trades } from '@beaconhs/db/schema'
+import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { buildExportHref, mergeHref, parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
@@ -27,6 +28,7 @@ export default async function PeoplePage({
   const statusFilter = pickString(sp.status) ?? 'active'
   const departmentFilter = pickString(sp.department) ?? null
   const ctx = await requireRequestContext()
+  const canExport = can(ctx, 'utilities.export') && can(ctx, 'admin.users.manage')
 
   const { rows, total, statusCounts, allCount } = await ctx.db(async (tx) => {
     const baseFilters: SQL<unknown>[] = [isNull(people.deletedAt)]
@@ -124,9 +126,11 @@ export default async function PeoplePage({
                 <Link href="/people/import">
                   <Button variant="outline">Import people</Button>
                 </Link>
-                <Link href={buildExportHref('/people/export.csv', sp)}>
-                  <Button variant="outline">Export CSV</Button>
-                </Link>
+                {canExport ? (
+                  <Link href={buildExportHref('/people/export.csv', sp)}>
+                    <Button variant="outline">Export CSV</Button>
+                  </Link>
+                ) : null}
                 <Link href="/people/new">
                   <Button>Add person</Button>
                 </Link>

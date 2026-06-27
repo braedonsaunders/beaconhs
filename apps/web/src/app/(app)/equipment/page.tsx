@@ -9,6 +9,7 @@ import {
   orgUnits,
   people,
 } from '@beaconhs/db/schema'
+import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { moduleScopeWhere } from '@/lib/visibility'
 import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
@@ -59,6 +60,7 @@ export default async function EquipmentPage({
   const typeFilter = pickString(sp.type)
   const categoryFilter = pickString(sp.category)
   const ctx = await requireRequestContext()
+  const canExport = can(ctx, 'utilities.export') && can(ctx, 'equipment.read.site')
 
   const { rows, total, statusCounts, availabilityCounts, allTypes, allCats } = await ctx.db(
     async (tx) => {
@@ -177,9 +179,13 @@ export default async function EquipmentPage({
             description="Asset registry. QR scan + inspections + work orders."
             actions={
               <div className="flex items-center gap-2">
-                <Link href={buildExportHref('/equipment/export.csv', { ...sp, status: statusRaw })}>
-                  <Button variant="outline">Export CSV</Button>
-                </Link>
+                {canExport ? (
+                  <Link
+                    href={buildExportHref('/equipment/export.csv', { ...sp, status: statusRaw })}
+                  >
+                    <Button variant="outline">Export CSV</Button>
+                  </Link>
+                ) : null}
                 <Link href="/equipment/new">
                   <Button>Add equipment</Button>
                 </Link>

@@ -214,6 +214,11 @@ export const PERMISSION_CATALOGUE = [
   'compliance.read',
   'compliance.manage',
   'compliance.assign',
+  // Utilities — tenant-wide administrative tools. `view` controls the Utilities
+  // module/navigation; `export` is required by every CSV export route and the
+  // central export hub.
+  'utilities.view',
+  'utilities.export',
   // Reports
   'reports.read',
   'reports.builder',

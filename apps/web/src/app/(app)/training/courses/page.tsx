@@ -13,6 +13,7 @@ import {
   TableRow,
 } from '@beaconhs/ui'
 import { trainingCourses } from '@beaconhs/db/schema'
+import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
@@ -49,6 +50,9 @@ export default async function TrainingCoursesPage({
   })
   const deliveryFilter = pickString(sp.delivery)
   const ctx = await requireRequestContext()
+  const canExport =
+    can(ctx, 'utilities.export') &&
+    (can(ctx, 'training.read.all') || can(ctx, 'training.course.manage'))
 
   const { rows, total, deliveryCounts } = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = []
@@ -107,9 +111,11 @@ export default async function TrainingCoursesPage({
             description="Courses across classroom, self-paced, on-the-job, and external formats."
             actions={
               <div className="flex items-center gap-2">
-                <Link href={buildExportHref('/training/courses/export.csv', sp)}>
-                  <Button variant="outline">Export CSV</Button>
-                </Link>
+                {canExport ? (
+                  <Link href={buildExportHref('/training/courses/export.csv', sp)}>
+                    <Button variant="outline">Export CSV</Button>
+                  </Link>
+                ) : null}
                 <Link href="/training/courses/new">
                   <Button>New course</Button>
                 </Link>

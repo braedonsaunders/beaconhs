@@ -2,9 +2,11 @@ import type { NextRequest } from 'next/server'
 import { and, asc, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
 import { trainingCourses } from '@beaconhs/db/schema'
 import { htmlToSnippet } from '@beaconhs/forms-core'
+import { can } from '@beaconhs/tenant'
 import { requireExportContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { csvFilename, csvResponse } from '@/lib/csv'
+import { csvColumns, selectCsvColumns } from '@/lib/export-columns'
 import { parseListParams, pickString } from '@/lib/list-params'
 
 export const dynamic = 'force-dynamic'
@@ -22,6 +24,9 @@ export async function GET(req: NextRequest) {
   })
   const deliveryFilter = pickString(sp.delivery)
   const ctx = await requireExportContext()
+  if (!can(ctx, 'training.read.all') && !can(ctx, 'training.course.manage')) {
+    return Response.json({ error: 'Not found' }, { status: 404 })
+  }
 
   const rows = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = []
@@ -65,25 +70,30 @@ export async function GET(req: NextRequest) {
     metadata: { format: 'csv', filters: { q: params.q ?? null, delivery: deliveryFilter ?? null } },
   })
 
+  const columns = csvColumns([
+    'Name',
+    'Code',
+    'Delivery type',
+    'Duration (min)',
+    'Validity (months)',
+    'Requires evaluator',
+    'Description',
+  ])
+  const selection = selectCsvColumns(url.searchParams, columns)
+
   return csvResponse({
     filename: csvFilename('training-courses'),
-    headers: [
-      'Name',
-      'Code',
-      'Delivery type',
-      'Duration (min)',
-      'Validity (months)',
-      'Requires evaluator',
-      'Description',
-    ],
-    rows: rows.map((c) => [
-      c.name,
-      c.code,
-      c.deliveryType,
-      c.durationMinutes ?? '',
-      c.validForMonths ?? '',
-      c.requiresEvaluator ? 'yes' : 'no',
-      htmlToSnippet(c.description, 2000),
-    ]),
+    headers: selection.headers,
+    rows: rows.map((c) =>
+      selection.project([
+        c.name,
+        c.code,
+        c.deliveryType,
+        c.durationMinutes ?? '',
+        c.validForMonths ?? '',
+        c.requiresEvaluator ? 'yes' : 'no',
+        htmlToSnippet(c.description, 2000),
+      ]),
+    ),
   })
 }

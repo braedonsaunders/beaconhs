@@ -14,6 +14,7 @@ import {
 import { Truck } from 'lucide-react'
 import { extractRows } from '@beaconhs/reports'
 import { equipmentItems, equipmentTypes } from '@beaconhs/db/schema'
+import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { buildHref, pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
@@ -58,6 +59,7 @@ export default async function TruckLogSummaryPage({
   const sp = await searchParams
   const year = parseYear(pickString(sp.year))
   const ctx = await requireRequestContext()
+  const canExport = can(ctx, 'utilities.export') && can(ctx, 'equipment.read.all')
 
   const firstDay = ymd(year, 1, 1)
   const nextFirst = ymd(year + 1, 1, 1)
@@ -168,9 +170,11 @@ export default async function TruckLogSummaryPage({
                     {year + 1} →
                   </Button>
                 </Link>
-                <Link href={buildHref('/equipment/vehicle-log/export.csv', { year }) as any}>
-                  <Button>Export CSV</Button>
-                </Link>
+                {canExport ? (
+                  <Link href={buildHref('/equipment/vehicle-log/export.csv', { year }) as any}>
+                    <Button>Export CSV</Button>
+                  </Link>
+                ) : null}
               </div>
             }
           />

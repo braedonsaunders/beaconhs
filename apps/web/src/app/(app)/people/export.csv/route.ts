@@ -1,9 +1,11 @@
 import type { NextRequest } from 'next/server'
 import { and, asc, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
 import { departments, people, trades } from '@beaconhs/db/schema'
+import { assertCan } from '@beaconhs/tenant'
 import { requireExportContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { csvFilename, csvResponse } from '@/lib/csv'
+import { csvColumns, selectCsvColumns } from '@/lib/export-columns'
 import { parseListParams } from '@/lib/list-params'
 
 export const dynamic = 'force-dynamic'
@@ -15,6 +17,7 @@ export async function GET(req: NextRequest) {
   const sp = Object.fromEntries(url.searchParams.entries())
   const params = parseListParams(sp, { sort: 'name', dir: 'asc', perPage: 25, allowedSorts: SORTS })
   const ctx = await requireExportContext()
+  assertCan(ctx, 'admin.users.manage')
 
   const rows = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = []
@@ -63,29 +66,34 @@ export async function GET(req: NextRequest) {
     metadata: { format: 'csv', filters: { q: params.q ?? null } },
   })
 
+  const columns = csvColumns([
+    'Last name',
+    'First name',
+    'Employee #',
+    'Department',
+    'Trade',
+    'Hire date',
+    'Email',
+    'Phone',
+    'Status',
+  ])
+  const selection = selectCsvColumns(url.searchParams, columns)
+
   return csvResponse({
     filename: csvFilename('people'),
-    headers: [
-      'Last name',
-      'First name',
-      'Employee #',
-      'Department',
-      'Trade',
-      'Hire date',
-      'Email',
-      'Phone',
-      'Status',
-    ],
-    rows: rows.map((r) => [
-      r.person.lastName,
-      r.person.firstName,
-      r.person.employeeNo ?? '',
-      r.department?.name ?? '',
-      r.trade?.name ?? '',
-      r.person.hireDate ?? '',
-      r.person.email ?? '',
-      r.person.phone ?? '',
-      r.person.status,
-    ]),
+    headers: selection.headers,
+    rows: rows.map((r) =>
+      selection.project([
+        r.person.lastName,
+        r.person.firstName,
+        r.person.employeeNo ?? '',
+        r.department?.name ?? '',
+        r.trade?.name ?? '',
+        r.person.hireDate ?? '',
+        r.person.email ?? '',
+        r.person.phone ?? '',
+        r.person.status,
+      ]),
+    ),
   })
 }

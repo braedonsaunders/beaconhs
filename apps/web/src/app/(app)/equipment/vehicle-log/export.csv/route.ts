@@ -6,6 +6,7 @@ import { assertCan } from '@beaconhs/tenant'
 import { requireExportContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { csvFilename, csvResponse } from '@/lib/csv'
+import { csvColumns, selectCsvColumns } from '@/lib/export-columns'
 
 export const dynamic = 'force-dynamic'
 
@@ -126,9 +127,11 @@ export async function GET(req: NextRequest) {
     metadata: { format: 'csv', year },
   })
 
+  const selection = selectCsvColumns(url.searchParams, csvColumns(headers))
+
   return csvResponse({
     filename: csvFilename(`vehicle-log-summary-${year}`),
-    headers,
-    rows: csvRows,
+    headers: selection.headers,
+    rows: csvRows.map((row) => selection.project(row)),
   })
 }

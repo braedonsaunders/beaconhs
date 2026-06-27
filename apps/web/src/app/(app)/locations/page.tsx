@@ -27,6 +27,7 @@ import {
   TableRow,
 } from '@beaconhs/ui'
 import { customerContacts, orgUnits } from '@beaconhs/db/schema'
+import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { getTenantHierarchy } from '@/lib/org-hierarchy'
 import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
@@ -49,6 +50,7 @@ export default async function LocationsPage({
   const params = parseListParams(sp, { sort: 'name', dir: 'asc', perPage: 25, allowedSorts: SORTS })
   const statusFilter = pickString(sp.status) ?? 'active'
   const ctx = await requireRequestContext()
+  const canExport = can(ctx, 'utilities.export') && can(ctx, 'admin.org.manage')
   const hierarchy = await getTenantHierarchy(ctx.tenantId)
 
   const { rows, total, activeCount, archivedCount } = await ctx.db(async (tx) => {
@@ -169,9 +171,11 @@ export default async function LocationsPage({
             description="Your locations, plus the projects and sites beneath them. Add on-site contacts (non-employee site managers, client reps) here."
             actions={
               <div className="flex items-center gap-2">
-                <Link href={buildExportHref('/locations/export.csv', sp)}>
-                  <Button variant="outline">Export CSV</Button>
-                </Link>
+                {canExport ? (
+                  <Link href={buildExportHref('/locations/export.csv', sp)}>
+                    <Button variant="outline">Export CSV</Button>
+                  </Link>
+                ) : null}
                 <Link href="/locations/new">
                   <Button>Add location</Button>
                 </Link>

@@ -26,6 +26,7 @@ import { assertCan } from '@beaconhs/tenant'
 import { moduleScopeWhere } from '@/lib/visibility'
 import { recordAudit } from '@/lib/audit'
 import { csvFilename, csvResponse } from '@/lib/csv'
+import { csvColumns, selectCsvColumns } from '@/lib/export-columns'
 import { parseListParams, pickString } from '@/lib/list-params'
 
 export const dynamic = 'force-dynamic'
@@ -147,31 +148,36 @@ export async function GET(req: NextRequest) {
     metadata: { format: 'csv', filters: { q: params.q ?? null, status: statusFilter ?? null } },
   })
 
+  const columns = csvColumns([
+    'Reference',
+    'Type',
+    'Status',
+    'Occurred',
+    'Site',
+    'Inspector',
+    'Pass',
+    'Fail',
+    'N/A',
+    'Signed',
+  ])
+  const selection = selectCsvColumns(url.searchParams, columns)
+
   return csvResponse({
     filename: csvFilename('inspections'),
-    headers: [
-      'Reference',
-      'Type',
-      'Status',
-      'Occurred',
-      'Site',
-      'Inspector',
-      'Pass',
-      'Fail',
-      'N/A',
-      'Signed',
-    ],
-    rows: rows.map((r) => [
-      r.record.reference,
-      r.type.name,
-      r.record.status,
-      new Date(r.record.occurredAt).toISOString(),
-      r.site?.name ?? '',
-      r.inspectorName ?? '',
-      String(r.passCount ?? 0),
-      String(r.failCount ?? 0),
-      String(r.naCount ?? 0),
-      r.record.customerSignedAt ? 'Signed' : 'Unsigned',
-    ]),
+    headers: selection.headers,
+    rows: rows.map((r) =>
+      selection.project([
+        r.record.reference,
+        r.type.name,
+        r.record.status,
+        new Date(r.record.occurredAt).toISOString(),
+        r.site?.name ?? '',
+        r.inspectorName ?? '',
+        String(r.passCount ?? 0),
+        String(r.failCount ?? 0),
+        String(r.naCount ?? 0),
+        r.record.customerSignedAt ? 'Signed' : 'Unsigned',
+      ]),
+    ),
   })
 }

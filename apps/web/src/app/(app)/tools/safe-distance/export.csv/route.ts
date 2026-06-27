@@ -4,6 +4,7 @@ import { orgUnits, safeDistanceRecords } from '@beaconhs/db/schema'
 import { requireExportContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { csvFilename, csvResponse } from '@/lib/csv'
+import { csvColumns, selectCsvColumns } from '@/lib/export-columns'
 import { parseListParams, pickString } from '@/lib/list-params'
 import {
   pressureUnitLabel,
@@ -84,39 +85,44 @@ export async function GET(req: NextRequest) {
     },
   })
 
+  const columns = csvColumns([
+    'Reference',
+    'Date',
+    'Name',
+    'Method',
+    'Unit',
+    'Test pressure',
+    'Pressure unit',
+    'Total volume',
+    'NASA (dist)',
+    'ASME (dist)',
+    "Lloyd's (dist)",
+    'Site',
+    'Locked',
+    'Notes',
+  ])
+  const selection = selectCsvColumns(url.searchParams, columns)
+
   return csvResponse({
     filename: csvFilename('safe-distance'),
-    headers: [
-      'Reference',
-      'Date',
-      'Name',
-      'Method',
-      'Unit',
-      'Test pressure',
-      'Pressure unit',
-      'Total volume',
-      'NASA (dist)',
-      'ASME (dist)',
-      "Lloyd's (dist)",
-      'Site',
-      'Locked',
-      'Notes',
-    ],
-    rows: rows.map(({ rec, site }) => [
-      rec.reference,
-      rec.occurredAt ? new Date(rec.occurredAt).toISOString() : '',
-      rec.name,
-      SAFE_DISTANCE_METHOD_LABELS[rec.method as SafeDistanceMethod],
-      rec.unit,
-      rec.testPressure ?? '',
-      pressureUnitLabel(rec.unit as SafeDistanceUnit),
-      rec.totalVolume ?? '',
-      rec.resultNasa ?? '',
-      rec.resultAsme ?? '',
-      rec.resultLloyds ?? '',
-      site?.name ?? '',
-      rec.locked ? 'Yes' : 'No',
-      rec.notes ?? '',
-    ]),
+    headers: selection.headers,
+    rows: rows.map(({ rec, site }) =>
+      selection.project([
+        rec.reference,
+        rec.occurredAt ? new Date(rec.occurredAt).toISOString() : '',
+        rec.name,
+        SAFE_DISTANCE_METHOD_LABELS[rec.method as SafeDistanceMethod],
+        rec.unit,
+        rec.testPressure ?? '',
+        pressureUnitLabel(rec.unit as SafeDistanceUnit),
+        rec.totalVolume ?? '',
+        rec.resultNasa ?? '',
+        rec.resultAsme ?? '',
+        rec.resultLloyds ?? '',
+        site?.name ?? '',
+        rec.locked ? 'Yes' : 'No',
+        rec.notes ?? '',
+      ]),
+    ),
   })
 }

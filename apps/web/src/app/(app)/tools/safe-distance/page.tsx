@@ -14,6 +14,7 @@ import {
   TableRow,
 } from '@beaconhs/ui'
 import { orgUnits, safeDistanceRecords } from '@beaconhs/db/schema'
+import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
@@ -68,6 +69,7 @@ export default async function SafeDistanceListPage({
   const methodFilter = pickString(sp.method)
 
   const ctx = await requireRequestContext()
+  const canExport = can(ctx, 'utilities.export')
 
   const { rows, total, methodCounts } = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = []
@@ -141,9 +143,11 @@ export default async function SafeDistanceListPage({
             back={{ href: '/tools', label: 'All tools' }}
             actions={
               <div className="flex items-center gap-2">
-                <Link href={buildExportHref('/tools/safe-distance/export.csv', sp)}>
-                  <Button variant="outline">Export CSV</Button>
-                </Link>
+                {canExport ? (
+                  <Link href={buildExportHref('/tools/safe-distance/export.csv', sp)}>
+                    <Button variant="outline">Export CSV</Button>
+                  </Link>
+                ) : null}
                 {/* Create a blank record and drop straight into the calculator
                     editor — no separate create form. */}
                 <form action={createSafeDistanceRecord}>

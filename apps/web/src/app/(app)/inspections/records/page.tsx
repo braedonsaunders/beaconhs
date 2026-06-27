@@ -28,6 +28,7 @@ import {
   TableRow,
   UrlDrawer,
 } from '@beaconhs/ui'
+import { can } from '@beaconhs/tenant'
 import {
   inspectionRecordCriteria,
   inspectionRecords,
@@ -84,6 +85,7 @@ export default async function InspectionRecordsPage({
   const dateToRaw = pickString(sp.dateTo)
   const drawerKey = pickString(sp.drawer)
   const ctx = await requireRequestContext()
+  const canExport = can(ctx, 'utilities.export') && can(ctx, 'inspections.read.self')
 
   const { rows, total, statusCounts, types, sites, inspectors } = await ctx.db(async (tx) => {
     // Per-user record visibility: read.all → everything, read.site → my sites,
@@ -258,9 +260,11 @@ export default async function InspectionRecordsPage({
               description="Completed inspections with results, signatures, and follow-up actions."
               actions={
                 <div className="flex items-center gap-2">
-                  <Link href={buildExportHref('/inspections/export.csv', sp)}>
-                    <Button variant="outline">Export CSV</Button>
-                  </Link>
+                  {canExport ? (
+                    <Link href={buildExportHref('/inspections/export.csv', sp)}>
+                      <Button variant="outline">Export CSV</Button>
+                    </Link>
+                  ) : null}
                   <Link href="/inspections/records?drawer=new">
                     <Button>New inspection</Button>
                   </Link>

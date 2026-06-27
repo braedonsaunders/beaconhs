@@ -69,9 +69,22 @@ export function makeSuperAdminContext(baseDb: Database, userId: string): SuperAd
 export function can(ctx: RequestContext, perm: string): boolean {
   if (ctx.isSuperAdmin) return true
   if (ctx.permissions.has(perm)) return true
+  if (readTierCovers(ctx.permissions, perm)) return true
   // wildcard convention: 'incidents.*' grants any 'incidents.x'
   for (const p of ctx.permissions) {
     if (p.endsWith('.*') && perm.startsWith(p.slice(0, -1))) return true
+  }
+  return false
+}
+
+function readTierCovers(permissions: Set<string>, requested: string): boolean {
+  const match = /^(.+)\.read\.(all|site|self)$/.exec(requested)
+  if (!match) return false
+  const [, prefix, tier] = match
+  if (!prefix) return false
+  if (tier === 'site') return permissions.has(`${prefix}.read.all`)
+  if (tier === 'self') {
+    return permissions.has(`${prefix}.read.all`) || permissions.has(`${prefix}.read.site`)
   }
   return false
 }

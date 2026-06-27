@@ -11,6 +11,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { BookText } from 'lucide-react'
 import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
+import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { ModuleNav } from '@/components/module-admin/module-nav'
 import { ListPageLayout } from '@/components/page-layout'
@@ -46,6 +47,7 @@ export default async function JournalRecordsPage({
 }) {
   const ctx = await requireRequestContext()
   if (!journalCanBrowseAll(ctx)) redirect('/journals')
+  const canExport = can(ctx, 'utilities.export') && can(ctx, 'journals.read.self')
 
   const sp = await searchParams
   const params = parseListParams(sp, {
@@ -97,9 +99,11 @@ export default async function JournalRecordsPage({
             title="Journal records"
             description="Browse, filter and read every journal you have access to."
             actions={
-              <Link href={buildExportHref('/journals/export.csv', sp)}>
-                <Button variant="outline">Export CSV</Button>
-              </Link>
+              canExport ? (
+                <Link href={buildExportHref('/journals/export.csv', sp)}>
+                  <Button variant="outline">Export CSV</Button>
+                </Link>
+              ) : null
             }
           />
           <ModuleNav moduleKey="journals" active="records" />

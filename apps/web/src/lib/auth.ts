@@ -5,6 +5,7 @@ import { db, withSuperAdmin, type Database } from '@beaconhs/db'
 import { sessions, tenants, tenantUsers, users } from '@beaconhs/db/schema'
 import { and, asc, eq, sql } from 'drizzle-orm'
 import {
+  assertCan,
   assertNotImpersonating,
   makeTenantContext,
   UnauthorizedError,
@@ -267,11 +268,14 @@ export async function requireRequestContext(): Promise<RequestContext> {
 /**
  * Like requireRequestContext, but refuses while impersonating: bulk data
  * exports must never run "as" another user (they'd exfiltrate that user's data
- * under the admin's hand without a per-record audit). Used by the export.csv
- * routes — the rest of the app stays read+write under impersonation.
+ * under the admin's hand without a per-record audit). Also enforces the
+ * tenant-level export feature permission before module-specific routes apply
+ * their own read scopes. Used by the export.csv routes — the rest of the app
+ * stays read+write under impersonation.
  */
 export async function requireExportContext(): Promise<RequestContext> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'utilities.export')
   assertNotImpersonating(ctx, 'export')
   return ctx
 }

@@ -22,6 +22,7 @@ import {
   tenantUsers,
   user,
 } from '@beaconhs/db/schema'
+import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { moduleScopeWhere } from '@/lib/visibility'
 import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
@@ -67,6 +68,7 @@ export default async function FormResponsesPage({
   // wizard responses drowning out the rest).
   const templateFilter = pickString(sp.template)
   const ctx = await requireRequestContext()
+  const canExport = can(ctx, 'utilities.export') && can(ctx, 'forms.response.read.self')
 
   const { rows, total, statusCounts, templateOptions } = await ctx.db(async (tx) => {
     // Per-user record visibility: read.all → everything, read.site → my sites,
@@ -159,9 +161,11 @@ export default async function FormResponsesPage({
             title="Form responses"
             description="Every app submission. Use the App filter to focus on one."
             actions={
-              <Link href={buildExportHref('/apps/responses/export.csv', sp)}>
-                <Button variant="outline">Export CSV</Button>
-              </Link>
+              canExport ? (
+                <Link href={buildExportHref('/apps/responses/export.csv', sp)}>
+                  <Button variant="outline">Export CSV</Button>
+                </Link>
+              ) : null
             }
           />
           <TableToolbar>

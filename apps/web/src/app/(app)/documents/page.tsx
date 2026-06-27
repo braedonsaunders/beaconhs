@@ -46,6 +46,7 @@ export default async function DocumentsPage({
   // Administration + Health & Safety (documents.manage) get the management table;
   // everyone else gets a read-only card library of published documents.
   const canManage = ctx.isSuperAdmin || can(ctx, 'documents.manage')
+  const canExport = canManage && can(ctx, 'utilities.export')
 
   const { rows, total, statusCounts, categoryCounts, typeCounts, categories, types } = await ctx.db(
     async (tx) => {
@@ -161,9 +162,11 @@ export default async function DocumentsPage({
             actions={
               canManage ? (
                 <div className="flex items-center gap-2">
-                  <Link href={buildExportHref('/documents/export.csv', sp)}>
-                    <Button variant="outline">Export CSV</Button>
-                  </Link>
+                  {canExport ? (
+                    <Link href={buildExportHref('/documents/export.csv', sp)}>
+                      <Button variant="outline">Export CSV</Button>
+                    </Link>
+                  ) : null}
                   <Link href="/documents/new">
                     <Button>New document</Button>
                   </Link>

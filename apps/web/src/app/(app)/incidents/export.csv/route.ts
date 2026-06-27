@@ -5,6 +5,7 @@ import { can } from '@beaconhs/tenant'
 import { requireExportContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { csvFilename, csvResponse } from '@/lib/csv'
+import { csvColumns, selectCsvColumns } from '@/lib/export-columns'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { moduleScopeWhere } from '@/lib/visibility'
 
@@ -86,29 +87,34 @@ export async function GET(req: NextRequest) {
     },
   })
 
+  const columns = csvColumns([
+    'Reference',
+    'Occurred',
+    'Type',
+    'Severity',
+    'Status',
+    'Title',
+    'Site',
+    'Description',
+    'Location',
+  ])
+  const selection = selectCsvColumns(url.searchParams, columns)
+
   return csvResponse({
     filename: csvFilename('incidents'),
-    headers: [
-      'Reference',
-      'Occurred',
-      'Type',
-      'Severity',
-      'Status',
-      'Title',
-      'Site',
-      'Description',
-      'Location',
-    ],
-    rows: rows.map(({ incident, site }) => [
-      incident.reference,
-      new Date(incident.occurredAt).toISOString(),
-      incident.type,
-      incident.severity,
-      incident.status,
-      incident.title,
-      site?.name ?? '',
-      incident.description ?? '',
-      incident.location ?? '',
-    ]),
+    headers: selection.headers,
+    rows: rows.map(({ incident, site }) =>
+      selection.project([
+        incident.reference,
+        new Date(incident.occurredAt).toISOString(),
+        incident.type,
+        incident.severity,
+        incident.status,
+        incident.title,
+        site?.name ?? '',
+        incident.description ?? '',
+        incident.location ?? '',
+      ]),
+    ),
   })
 }
