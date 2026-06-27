@@ -8,7 +8,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { and, asc, count, desc, eq, isNull, max, sql } from 'drizzle-orm'
 import { assertCan, type RequestContext } from '@beaconhs/tenant'
-import { htmlToText } from '@beaconhs/forms-core'
+import { htmlToText, sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import {
   attachments,
   formResponses,
@@ -1780,7 +1780,7 @@ export async function createTaskLibrary(formData: FormData) {
   const name = String(formData.get('name') ?? '').trim()
   if (!name) throw new Error('Name is required')
   const description = nullable(formData.get('description'))
-  const controls = nullable(formData.get('controls'))
+  const controls = nullableRichText(formData.get('controls'))
   const hazardIds = String(formData.get('hazardIds') ?? '')
     .split(',')
     .map((s) => s.trim())
@@ -1821,7 +1821,7 @@ export async function updateTaskLibrary(formData: FormData) {
   const updates = {
     name: String(formData.get('name') ?? '').trim() || undefined,
     description: nullable(formData.get('description')),
-    controls: nullable(formData.get('controls')),
+    controls: nullableRichText(formData.get('controls')),
     hazardIds,
     preLikelihood: riskInt(formData.get('preLikelihood')),
     preSeverity: riskInt(formData.get('preSeverity')),
@@ -1899,6 +1899,13 @@ function nullable(v: FormDataEntryValue | null): string | null {
   if (v === null) return null
   const s = String(v).trim()
   return s === '' ? null : s
+}
+
+function nullableRichText(v: FormDataEntryValue | null): string | null {
+  const raw = nullable(v)
+  if (!raw) return null
+  const clean = sanitizeDocumentHtml(raw)
+  return htmlToText(clean) ? clean : null
 }
 
 function nullableNumeric(v: FormDataEntryValue | null): string | null {

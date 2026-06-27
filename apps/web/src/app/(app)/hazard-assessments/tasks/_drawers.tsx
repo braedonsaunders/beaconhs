@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { Button, Input, Label, Textarea, UrlDrawer } from '@beaconhs/ui'
+import { Button, Input, Label, RichTextEditor, Textarea, UrlDrawer } from '@beaconhs/ui'
 import { MultiPicker } from '../_multipicker'
 import { RiskMatrixField } from '../_risk'
 
@@ -139,13 +139,12 @@ function TaskDrawer({
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor={`${formId}-controls`}>Default controls</Label>
-              <Textarea
-                id={`${formId}-controls`}
+              <Label>Default controls</Label>
+              <RichTextEditor
                 name="controls"
-                rows={3}
                 defaultValue={defaults?.controls ?? ''}
-                placeholder="LOTO, double-block & bleed, PPE…"
+                placeholder="LOTO, double-block & bleed, PPE..."
+                minHeight="140px"
               />
             </div>
             <div className="rounded-md border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-800/40">

@@ -35,6 +35,7 @@ import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
+import { RichContent } from '@/components/rich-content'
 import { HazidSubNav } from '../_subnav'
 import { createTaskLibrary, deleteTaskLibrary, updateTaskLibrary } from '../_actions'
 import { TaskLibraryDrawers, type EditTaskDefaults } from './_drawers'
@@ -327,8 +328,15 @@ export default async function TaskLibraryPage({
                         </>
                       )}
                     </TableCell>
-                    <TableCell className="line-clamp-2 max-w-md text-xs text-slate-600 dark:text-slate-400">
-                      {task.controls ?? '—'}
+                    <TableCell className="max-w-md text-xs text-slate-600 dark:text-slate-400">
+                      {task.controls ? (
+                        <RichContent
+                          html={task.controls}
+                          className="prose-p:my-0 prose-ul:my-0 prose-ol:my-0 prose-li:my-0 max-h-12 overflow-hidden text-xs"
+                        />
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
