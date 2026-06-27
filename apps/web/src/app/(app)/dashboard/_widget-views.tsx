@@ -47,7 +47,7 @@ import { AnimatedNumber } from './_counter'
 import { Sparkline } from './_sparkline'
 import { AnimatedBar } from './_bar'
 import { QuickActions } from './_quick-actions'
-import type { QuickAction, SaveQuickActionsAction } from './_quick-actions-shared'
+import type { QuickAction } from './_quick-actions-shared'
 import { checkInEquipment } from '../equipment/_actions'
 
 // =====================================================================
@@ -60,22 +60,13 @@ type Props = {
   todayIso: string
   /** User's saved Quick-actions tiles (only the personal-actions widget uses it). */
   quickActions?: QuickAction[]
-  quickActionsSaveAction?: SaveQuickActionsAction
-  quickActionsSaveSuccessMessage?: string
 }
 
 function quickActionsStateKey(actions: QuickAction[] | undefined): string {
   return actions ? JSON.stringify(actions) : 'default'
 }
 
-export function WidgetCard({
-  widgetId,
-  data,
-  todayIso,
-  quickActions,
-  quickActionsSaveAction,
-  quickActionsSaveSuccessMessage,
-}: Props) {
+export function WidgetCard({ widgetId, data, todayIso, quickActions }: Props) {
   switch (widgetId) {
     // KPIs — headline rates
     case 'kpi-trir':
@@ -299,14 +290,7 @@ export function WidgetCard({
     case 'personal-inbox':
       return <InboxList items={data.myInbox} />
     case 'personal-actions':
-      return (
-        <QuickActions
-          key={quickActionsStateKey(quickActions)}
-          actions={quickActions}
-          saveAction={quickActionsSaveAction}
-          saveSuccessMessage={quickActionsSaveSuccessMessage}
-        />
-      )
+      return <QuickActions key={quickActionsStateKey(quickActions)} actions={quickActions} />
 
     default:
       return (

@@ -1,7 +1,6 @@
 import type React from 'react'
 import type { RequestContext } from '@beaconhs/tenant'
 import type { DashboardLayoutData } from '@beaconhs/db/schema'
-import type { SaveQuickActionsAction } from './_quick-actions-shared'
 import { loadCardsForPalette, type CardRow } from '../insights/cards/_data'
 import { loadDashboardCardRenders } from '../insights/_data'
 import { ensureSystemCards } from '../insights/_system-cards'
@@ -17,8 +16,6 @@ export async function loadDashboardEditCanvas(
   opts: {
     includeLibraryCards: boolean
     filterLibraryCard?: (card: CardRow) => boolean
-    quickActionsSaveAction?: SaveQuickActionsAction
-    quickActionsSaveSuccessMessage?: string
   },
 ): Promise<{
   nodes: Record<string, React.ReactNode>
@@ -44,8 +41,6 @@ export async function loadDashboardEditCanvas(
         data={data}
         todayIso={todayIso}
         quickActions={layout.quickActions}
-        quickActionsSaveAction={opts.quickActionsSaveAction}
-        quickActionsSaveSuccessMessage={opts.quickActionsSaveSuccessMessage}
       />
     )
   }

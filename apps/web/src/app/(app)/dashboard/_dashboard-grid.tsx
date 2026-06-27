@@ -39,6 +39,8 @@ import {
   type WidgetMeta,
 } from './_widget-registry'
 import type { RoleTier } from './_role-tier'
+import { QuickActions } from './_quick-actions'
+import type { SaveQuickActionsAction } from './_quick-actions-shared'
 import { resetDashboardLayout, saveDashboardLayout } from './actions'
 import { toast } from '@/lib/toast'
 
@@ -62,6 +64,10 @@ type SaveDashboardGridAction = (input: {
 }) => Promise<DashboardGridActionResult>
 type ResetDashboardGridAction = () => Promise<DashboardGridActionResult>
 
+function quickActionsStateKey(actions: DashboardLayoutData['quickActions']): string {
+  return actions ? JSON.stringify(actions) : 'default'
+}
+
 export function DashboardGrid({
   initialLayout,
   nodes,
@@ -76,6 +82,8 @@ export function DashboardGrid({
   resetConfirmMessage = 'Reset to the default layout for your role? Your customisations will be lost.',
   saveSuccessMessage = 'Layout saved',
   resetSuccessMessage = 'Layout reset to default',
+  quickActionsSaveAction,
+  quickActionsSaveSuccessMessage,
 }: {
   initialLayout: DashboardLayoutData
   nodes: Record<string, ReactNode>
@@ -91,6 +99,8 @@ export function DashboardGrid({
   resetConfirmMessage?: string
   saveSuccessMessage?: string
   resetSuccessMessage?: string
+  quickActionsSaveAction?: SaveQuickActionsAction
+  quickActionsSaveSuccessMessage?: string
 }) {
   const cardNameById = useMemo(
     () => new Map(libraryCards.map((c) => [c.id, c.name])),
@@ -321,7 +331,17 @@ export function DashboardGrid({
             onResizeStop={(next: Layout) => commitLayout(next)}
           >
             {layout.map((w) => {
-              const node = nodes[w.id]
+              const node =
+                w.id === 'personal-actions' && quickActionsSaveAction ? (
+                  <QuickActions
+                    key={quickActionsStateKey(initialLayout.quickActions)}
+                    actions={initialLayout.quickActions}
+                    saveAction={quickActionsSaveAction}
+                    saveSuccessMessage={quickActionsSaveSuccessMessage}
+                  />
+                ) : (
+                  nodes[w.id]
+                )
               return (
                 <div key={w.id} className="group/cell">
                   <div className="relative h-full w-full">

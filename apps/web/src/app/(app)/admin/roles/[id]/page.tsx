@@ -121,8 +121,6 @@ export default async function AdminRoleEditPage({
               !card.allowedRoles ||
               card.allowedRoles.length === 0 ||
               card.allowedRoles.includes(role.key)),
-          quickActionsSaveAction: saveQuickActions,
-          quickActionsSaveSuccessMessage: 'Role default quick actions saved',
         })
       : null
 
@@ -337,6 +335,8 @@ export default async function AdminRoleEditPage({
             resetConfirmMessage={`Reset ${role.name}'s default dashboard to the shipped ${ROLE_TIER_LABELS[roleTier]} layout?`}
             saveSuccessMessage="Role default dashboard saved"
             resetSuccessMessage="Role default dashboard reset"
+            quickActionsSaveAction={saveQuickActions}
+            quickActionsSaveSuccessMessage="Role default quick actions saved"
           />
         ) : null}
       </TabContent>
