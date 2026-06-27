@@ -11,7 +11,7 @@
 
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { and, count, eq, inArray, isNull } from 'drizzle-orm'
+import { and, count, desc, eq, inArray, isNull } from 'drizzle-orm'
 import {
   insightCards,
   PERMISSION_CATALOGUE,
@@ -208,7 +208,13 @@ async function loadRoleDashboardLayout(
     const [row] = await tx
       .select({ layout: roleDashboardLayouts.layout })
       .from(roleDashboardLayouts)
-      .where(eq(roleDashboardLayouts.roleId, roleId))
+      .where(
+        and(
+          eq(roleDashboardLayouts.tenantId, ctx.tenantId),
+          eq(roleDashboardLayouts.roleId, roleId),
+        ),
+      )
+      .orderBy(desc(roleDashboardLayouts.updatedAt))
       .limit(1)
     return row?.layout ?? null
   })
@@ -221,7 +227,14 @@ async function sanitiseSavedDashboardForRole(ctx: Ctx, role: RoleForDashboard): 
   if (existing.quickActions) sanitised.quickActions = existing.quickActions
   if (sanitised.widgets.length === 0) {
     await ctx.db((tx) =>
-      tx.delete(roleDashboardLayouts).where(eq(roleDashboardLayouts.roleId, role.id)),
+      tx
+        .delete(roleDashboardLayouts)
+        .where(
+          and(
+            eq(roleDashboardLayouts.tenantId, ctx.tenantId),
+            eq(roleDashboardLayouts.roleId, role.id),
+          ),
+        ),
     )
     return
   }
@@ -229,7 +242,12 @@ async function sanitiseSavedDashboardForRole(ctx: Ctx, role: RoleForDashboard): 
     tx
       .update(roleDashboardLayouts)
       .set({ layout: sanitised, updatedAt: new Date() })
-      .where(eq(roleDashboardLayouts.roleId, role.id)),
+      .where(
+        and(
+          eq(roleDashboardLayouts.tenantId, ctx.tenantId),
+          eq(roleDashboardLayouts.roleId, role.id),
+        ),
+      ),
   )
 }
 
@@ -511,7 +529,10 @@ export async function duplicateRole(formData: FormData): Promise<void> {
     const [sourceDashboard] = await tx
       .select({ layout: roleDashboardLayouts.layout })
       .from(roleDashboardLayouts)
-      .where(eq(roleDashboardLayouts.roleId, id))
+      .where(
+        and(eq(roleDashboardLayouts.tenantId, ctx.tenantId), eq(roleDashboardLayouts.roleId, id)),
+      )
+      .orderBy(desc(roleDashboardLayouts.updatedAt))
       .limit(1)
     const [created] = await tx
       .insert(roles)
@@ -697,7 +718,14 @@ export async function resetRoleDashboardLayout(input: unknown) {
   if (!before) return { ok: true as const }
 
   await ctx.db((tx) =>
-    tx.delete(roleDashboardLayouts).where(eq(roleDashboardLayouts.roleId, role.id)),
+    tx
+      .delete(roleDashboardLayouts)
+      .where(
+        and(
+          eq(roleDashboardLayouts.tenantId, ctx.tenantId),
+          eq(roleDashboardLayouts.roleId, role.id),
+        ),
+      ),
   )
 
   await recordAudit(ctx, {

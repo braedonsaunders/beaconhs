@@ -37,6 +37,7 @@ async function loadAssignedRoleDefault(ctx: RequestContext): Promise<DashboardDe
         isBuiltIn: roles.isBuiltIn,
         permissions: roles.permissions,
         layout: roleDashboardLayouts.layout,
+        dashboardUpdatedAt: roleDashboardLayouts.updatedAt,
       })
       .from(roleAssignments)
       .innerJoin(roles, eq(roles.id, roleAssignments.roleId))
@@ -57,7 +58,9 @@ async function loadAssignedRoleDefault(ctx: RequestContext): Promise<DashboardDe
     const tier = TIER_RANK[aTier] - TIER_RANK[bTier]
     if (tier !== 0) return tier
     if (a.isBuiltIn !== b.isBuiltIn) return a.isBuiltIn ? -1 : 1
-    return a.name.localeCompare(b.name)
+    const name = a.name.localeCompare(b.name)
+    if (name !== 0) return name
+    return (b.dashboardUpdatedAt?.getTime() ?? 0) - (a.dashboardUpdatedAt?.getTime() ?? 0)
   })
 
   const selected = candidates[0]

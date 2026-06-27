@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
-import { asc, eq } from 'drizzle-orm'
+import { and, asc, desc, eq } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -89,7 +89,10 @@ export default async function AdminRoleEditPage({
     const [dashboard] = await tx
       .select({ layout: roleDashboardLayouts.layout, updatedAt: roleDashboardLayouts.updatedAt })
       .from(roleDashboardLayouts)
-      .where(eq(roleDashboardLayouts.roleId, id))
+      .where(
+        and(eq(roleDashboardLayouts.tenantId, ctx.tenantId), eq(roleDashboardLayouts.roleId, id)),
+      )
+      .orderBy(desc(roleDashboardLayouts.updatedAt))
       .limit(1)
     return { role, members, dashboard: dashboard ?? null }
   })
@@ -318,7 +321,9 @@ export default async function AdminRoleEditPage({
 
         {active === 'dashboard' && dashboardCanvas ? (
           <DashboardGrid
-            key={`${role.id}:${JSON.stringify(dashboardLayout.widgets)}`}
+            key={`${role.id}:${JSON.stringify(dashboardLayout.widgets)}:${JSON.stringify(
+              dashboardLayout.quickActions ?? null,
+            )}`}
             initialLayout={dashboardLayout}
             nodes={dashboardCanvas.nodes}
             role={roleTier}

@@ -172,13 +172,6 @@ export const DEFAULT_QUICK_ACTIONS: QuickAction[] = [
     tone: 'amber',
   },
   {
-    id: 'd-toolbox',
-    label: 'Toolbox talk',
-    href: '/apps/by-key/toolbox-talk/fill',
-    iconKey: 'clipboard',
-    tone: 'sky',
-  },
-  {
     id: 'd-ca',
     label: 'Corrective action',
     href: '/corrective-actions/new',
