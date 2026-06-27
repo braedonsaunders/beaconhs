@@ -24,51 +24,18 @@ import {
   tenantUsers,
   userPermissionOverrides,
   users,
-  type RoleScope,
 } from '@beaconhs/db/schema'
 import { assertCan, ForbiddenError } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { IMPERSONATION_TTL_MS } from '@/lib/impersonation'
+import { parseRoleScope } from './_scope-data'
 
 const PERMISSIONS = new Set<string>(PERMISSION_CATALOGUE as unknown as string[])
 
 type Ctx = Awaited<ReturnType<typeof requireRequestContext>>
 
 // --- helpers -------------------------------------------------------------
-
-function strArray(x: unknown): string[] {
-  return Array.isArray(x) ? x.filter((s): s is string => typeof s === 'string') : []
-}
-
-/** Validate + normalise a serialized RoleScope from the ScopePicker. */
-function parseScope(raw: string): RoleScope {
-  try {
-    const v = JSON.parse(raw) as { type?: string } & Record<string, unknown>
-    switch (v?.type) {
-      case 'tenant':
-        return { type: 'tenant' }
-      case 'self':
-        return { type: 'self' }
-      case 'sites':
-        return { type: 'sites', siteIds: strArray(v.siteIds) }
-      case 'crews':
-        return { type: 'crews', crewIds: strArray(v.crewIds) }
-      case 'people':
-        return { type: 'people', personIds: strArray(v.personIds) }
-      case 'team':
-        return {
-          type: 'team',
-          // Accept the legacy `divisionIds` key on any not-yet-migrated stored scope.
-          departmentIds: strArray(v.departmentIds ?? v.divisionIds),
-          groupIds: strArray(v.groupIds),
-        }
-    }
-  } catch {
-    // fall through
-  }
-  return { type: 'self' }
-}
 
 function detailPath(membershipId: string): string {
   return `/admin/users/${membershipId}`
@@ -175,7 +142,7 @@ export async function inviteUser(formData: FormData): Promise<void> {
           tenantId: ctx.tenantId,
           tenantUserId: m.id,
           roleId: role.id,
-          scope: scopeRaw ? parseScope(scopeRaw) : { type: 'self' },
+          scope: scopeRaw ? parseRoleScope(scopeRaw) : { type: 'self' },
         })
       }
     }
@@ -318,7 +285,7 @@ export async function assignRole(formData: FormData): Promise<void> {
   assertCan(ctx, 'admin.users.manage')
   const membershipId = String(formData.get('membershipId') ?? '')
   const roleId = String(formData.get('roleId') ?? '').trim()
-  const scope = parseScope(String(formData.get('scope') ?? ''))
+  const scope = parseRoleScope(String(formData.get('scope') ?? ''))
   if (!membershipId || !roleId) return
 
   await ctx.db(async (tx) => {
@@ -363,7 +330,7 @@ export async function updateAssignmentScope(formData: FormData): Promise<void> {
   assertCan(ctx, 'admin.users.manage')
   const membershipId = String(formData.get('membershipId') ?? '')
   const assignmentId = String(formData.get('assignmentId') ?? '')
-  const scope = parseScope(String(formData.get('scope') ?? ''))
+  const scope = parseRoleScope(String(formData.get('scope') ?? ''))
   if (!assignmentId) return
   await ctx.db((tx) =>
     tx.update(roleAssignments).set({ scope }).where(eq(roleAssignments.id, assignmentId)),

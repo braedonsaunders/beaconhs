@@ -24,6 +24,39 @@ export type ScopeOptions = {
   people: ScopeOpt[]
 }
 
+function strArray(x: unknown): string[] {
+  return Array.isArray(x) ? x.filter((s): s is string => typeof s === 'string') : []
+}
+
+/** Validate + normalise a serialized RoleScope from the ScopePicker. */
+export function parseRoleScope(raw: string): RoleScope {
+  try {
+    const v = JSON.parse(raw) as { type?: string } & Record<string, unknown>
+    switch (v?.type) {
+      case 'tenant':
+        return { type: 'tenant' }
+      case 'self':
+        return { type: 'self' }
+      case 'sites':
+        return { type: 'sites', siteIds: strArray(v.siteIds) }
+      case 'crews':
+        return { type: 'crews', crewIds: strArray(v.crewIds) }
+      case 'people':
+        return { type: 'people', personIds: strArray(v.personIds) }
+      case 'team':
+        return {
+          type: 'team',
+          // Accept the legacy `divisionIds` key on any not-yet-migrated stored scope.
+          departmentIds: strArray(v.departmentIds ?? v.divisionIds),
+          groupIds: strArray(v.groupIds),
+        }
+    }
+  } catch {
+    // fall through
+  }
+  return { type: 'self' }
+}
+
 export async function loadScopeOptions(ctx: Ctx): Promise<ScopeOptions> {
   return ctx.db(async (tx) => {
     const sites = await tx

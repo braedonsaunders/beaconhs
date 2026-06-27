@@ -2,12 +2,14 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { asc, count, eq } from 'drizzle-orm'
 import { Badge, Button, DetailHeader, EmptyState } from '@beaconhs/ui'
-import { roleAssignments, roles } from '@beaconhs/db/schema'
+import { roleAssignments, roles, tenantUsers, user } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
 import { SortTh } from '@/components/sortable-th'
 import { parseListParams } from '@/lib/list-params'
+import { loadScopeOptions } from '../users/_scope-data'
+import { BulkRoleAssignmentForm } from './_components/bulk-role-assignment-form'
 
 export const metadata = { title: 'Roles' }
 export const dynamic = 'force-dynamic'
@@ -23,23 +25,68 @@ export default async function AdminRolesPage({
   if (!can(ctx, 'admin.roles.manage')) redirect('/admin')
   const sp = await searchParams
   const { sort, dir } = parseListParams(sp, { sort: 'name', dir: 'asc', allowedSorts: SORTS })
+  const error = typeof sp.error === 'string' ? sp.error : undefined
+  const notice = typeof sp.notice === 'string' ? sp.notice : undefined
+  const canBulkManageRoles = can(ctx, 'admin.users.manage')
 
-  const rows = await ctx.db(async (tx) => {
+  const data = await ctx.db(async (tx) => {
     const roleRows = await tx.select().from(roles).orderBy(asc(roles.name))
     const counts = await tx
       .select({ roleId: roleAssignments.roleId, n: count() })
       .from(roleAssignments)
       .groupBy(roleAssignments.roleId)
+    const memberRows = canBulkManageRoles
+      ? await tx
+          .select({
+            membershipId: tenantUsers.id,
+            userId: tenantUsers.userId,
+            status: tenantUsers.status,
+            displayName: tenantUsers.displayName,
+            name: user.name,
+            email: user.email,
+            isSuperAdmin: user.isSuperAdmin,
+          })
+          .from(tenantUsers)
+          .innerJoin(user, eq(user.id, tenantUsers.userId))
+          .orderBy(asc(user.name))
+      : []
+    const allAssignments = canBulkManageRoles
+      ? await tx
+          .select({
+            tenantUserId: roleAssignments.tenantUserId,
+            roleId: roles.id,
+            roleName: roles.name,
+          })
+          .from(roleAssignments)
+          .innerJoin(roles, eq(roles.id, roleAssignments.roleId))
+          .orderBy(asc(roles.name))
+      : []
     const countByRole = new Map(counts.map((c) => [c.roleId, Number(c.n)]))
-    return roleRows.map((r) => ({
-      id: r.id,
-      name: r.name,
-      description: r.description,
-      isBuiltIn: r.isBuiltIn,
-      permissionCount: r.permissions.length,
-      memberCount: countByRole.get(r.id) ?? 0,
-    }))
+    return {
+      roles: roleRows.map((r) => ({
+        id: r.id,
+        name: r.name,
+        description: r.description,
+        isBuiltIn: r.isBuiltIn,
+        permissionCount: r.permissions.length,
+        memberCount: countByRole.get(r.id) ?? 0,
+      })),
+      members: memberRows.map((m) => ({
+        id: m.membershipId,
+        name: m.name,
+        email: m.email,
+        displayName: m.displayName,
+        status: m.status,
+        isSelf: m.userId === ctx.userId,
+        isProtectedSuperAdmin: m.isSuperAdmin && !ctx.isSuperAdmin,
+        roles: allAssignments
+          .filter((assignment) => assignment.tenantUserId === m.membershipId)
+          .map((assignment) => ({ id: assignment.roleId, name: assignment.roleName })),
+      })),
+    }
   })
+  const rows = data.roles
+  const scopeOptions = canBulkManageRoles ? await loadScopeOptions(ctx) : null
 
   const sorted = [...rows].sort((a, b) => {
     const mult = dir === 'asc' ? 1 : -1
@@ -69,6 +116,29 @@ export default async function AdminRolesPage({
             </Link>
           }
         />
+
+        {error ? (
+          <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+            {error}
+          </div>
+        ) : null}
+        {notice ? (
+          <div className="rounded-md border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-800 dark:border-teal-900 dark:bg-teal-950/40 dark:text-teal-300">
+            {notice}
+          </div>
+        ) : null}
+
+        {scopeOptions ? (
+          <BulkRoleAssignmentForm
+            roles={rows.map((role) => ({
+              id: role.id,
+              name: role.name,
+              isBuiltIn: role.isBuiltIn,
+            }))}
+            members={data.members}
+            scopeOptions={scopeOptions}
+          />
+        ) : null}
 
         {sorted.length === 0 ? (
           <EmptyState title="No roles" description="Create a role to start assigning access." />

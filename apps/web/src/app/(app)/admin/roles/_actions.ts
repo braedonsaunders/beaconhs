@@ -18,11 +18,14 @@ import {
   roleAssignments,
   roleDashboardLayouts,
   roles,
+  tenantUsers,
+  user,
   type DashboardLayoutData,
 } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { parseRoleScope } from '../users/_scope-data'
 import {
   DashboardLayoutInputSchema,
   filterPersistableDashboardWidgets,
@@ -41,6 +44,8 @@ import { z } from 'zod'
 
 const PERMISSIONS = new Set<string>(PERMISSION_CATALOGUE as unknown as string[])
 const ALL_PERMISSIONS = [...PERMISSION_CATALOGUE] as string[]
+const BULK_ROLE_OPERATIONS = new Set(['add', 'replace', 'remove'])
+const MAX_BULK_ROLE_MEMBERS = 250
 
 type Ctx = Awaited<ReturnType<typeof requireRequestContext>>
 
@@ -69,6 +74,25 @@ function readPermissions(formData: FormData): string[] {
     .getAll('permissions')
     .map((p) => String(p))
     .filter((p) => PERMISSIONS.has(p))
+}
+
+function rolesPath(msg: { error?: string; notice?: string } = {}): string {
+  const q = new URLSearchParams()
+  if (msg.error) q.set('error', msg.error)
+  if (msg.notice) q.set('notice', msg.notice)
+  const qs = q.toString()
+  return qs ? `/admin/roles?${qs}` : '/admin/roles'
+}
+
+function uniqueFormStrings(formData: FormData, key: string): string[] {
+  return [
+    ...new Set(
+      formData
+        .getAll(key)
+        .map((value) => String(value).trim())
+        .filter(Boolean),
+    ),
+  ]
 }
 
 function slugify(name: string): string {
@@ -236,6 +260,175 @@ export async function createRole(formData: FormData): Promise<void> {
   }
   revalidatePath('/admin/roles')
   if (row) redirect(`/admin/roles/${row.id}`)
+}
+
+export async function bulkUpdateRoleAssignments(formData: FormData): Promise<void> {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'admin.roles.manage')
+  assertCan(ctx, 'admin.users.manage')
+
+  const operation = String(formData.get('operation') ?? '')
+  const roleId = String(formData.get('roleId') ?? '').trim()
+  const membershipIds = uniqueFormStrings(formData, 'membershipIds')
+  const scope = parseRoleScope(String(formData.get('scope') ?? ''))
+
+  if (!BULK_ROLE_OPERATIONS.has(operation)) {
+    redirect(rolesPath({ error: 'Choose a bulk role operation.' }))
+  }
+  if (!roleId) {
+    redirect(rolesPath({ error: 'Choose a role to apply.' }))
+  }
+  if (membershipIds.length === 0) {
+    redirect(rolesPath({ error: 'Select at least one member.' }))
+  }
+  if (membershipIds.length > MAX_BULK_ROLE_MEMBERS) {
+    redirect(
+      rolesPath({
+        error: `Select ${MAX_BULK_ROLE_MEMBERS} or fewer members at a time.`,
+      }),
+    )
+  }
+
+  const result = await ctx.db(async (tx) => {
+    const [role] = await tx
+      .select({ id: roles.id, name: roles.name })
+      .from(roles)
+      .where(eq(roles.id, roleId))
+      .limit(1)
+    if (!role) return { changed: 0, skipped: 0, changedIds: [] as string[], roleName: null }
+
+    const selectedMembers = await tx
+      .select({
+        id: tenantUsers.id,
+        userId: tenantUsers.userId,
+        email: user.email,
+        displayName: tenantUsers.displayName,
+        name: user.name,
+        isSuperAdmin: user.isSuperAdmin,
+      })
+      .from(tenantUsers)
+      .innerJoin(user, eq(user.id, tenantUsers.userId))
+      .where(inArray(tenantUsers.id, membershipIds))
+
+    const eligibleMembers = selectedMembers.filter(
+      (member) => member.userId !== ctx.userId && (ctx.isSuperAdmin || !member.isSuperAdmin),
+    )
+    const skipped = membershipIds.length - eligibleMembers.length
+    const eligibleIds = eligibleMembers.map((member) => member.id)
+    if (eligibleIds.length === 0) {
+      return { changed: 0, skipped, changedIds: [] as string[], roleName: role.name }
+    }
+
+    if (operation === 'replace') {
+      await tx.delete(roleAssignments).where(inArray(roleAssignments.tenantUserId, eligibleIds))
+      await tx.insert(roleAssignments).values(
+        eligibleIds.map((membershipId) => ({
+          tenantId: ctx.tenantId,
+          tenantUserId: membershipId,
+          roleId: role.id,
+          scope,
+        })),
+      )
+      return {
+        changed: eligibleIds.length,
+        skipped,
+        changedIds: eligibleIds,
+        roleName: role.name,
+      }
+    }
+
+    if (operation === 'remove') {
+      const deleted = await tx
+        .delete(roleAssignments)
+        .where(
+          and(
+            inArray(roleAssignments.tenantUserId, eligibleIds),
+            eq(roleAssignments.roleId, role.id),
+          ),
+        )
+        .returning({ membershipId: roleAssignments.tenantUserId })
+      const changedIds = [...new Set(deleted.map((row) => row.membershipId))]
+      return {
+        changed: changedIds.length,
+        skipped,
+        changedIds,
+        roleName: role.name,
+      }
+    }
+
+    const existing = await tx
+      .select({ id: roleAssignments.id, tenantUserId: roleAssignments.tenantUserId })
+      .from(roleAssignments)
+      .where(
+        and(
+          inArray(roleAssignments.tenantUserId, eligibleIds),
+          eq(roleAssignments.roleId, role.id),
+        ),
+      )
+    const existingIds = existing.map((row) => row.id)
+    if (existingIds.length > 0) {
+      await tx
+        .update(roleAssignments)
+        .set({ scope })
+        .where(inArray(roleAssignments.id, existingIds))
+    }
+
+    const existingMembershipIds = new Set(existing.map((row) => row.tenantUserId))
+    const insertIds = eligibleIds.filter((membershipId) => !existingMembershipIds.has(membershipId))
+    if (insertIds.length > 0) {
+      await tx.insert(roleAssignments).values(
+        insertIds.map((membershipId) => ({
+          tenantId: ctx.tenantId,
+          tenantUserId: membershipId,
+          roleId: role.id,
+          scope,
+        })),
+      )
+    }
+
+    return {
+      changed: eligibleIds.length,
+      skipped,
+      changedIds: eligibleIds,
+      roleName: role.name,
+    }
+  })
+
+  if (!result.roleName) {
+    redirect(rolesPath({ error: 'Role not found.' }))
+  }
+
+  const verb =
+    operation === 'replace'
+      ? 'Replaced roles with'
+      : operation === 'remove'
+        ? 'Removed'
+        : 'Assigned'
+  for (const membershipId of result.changedIds) {
+    await recordAudit(ctx, {
+      entityType: 'tenant_user',
+      entityId: membershipId,
+      action: 'update',
+      summary: `${verb} role "${result.roleName}" via bulk role manager`,
+      metadata: { roleId, operation, scope },
+    })
+    revalidatePath(`/admin/users/${membershipId}`)
+  }
+
+  revalidatePath('/admin/roles')
+  revalidatePath('/admin/users')
+  revalidatePath('/dashboard')
+
+  const changedLabel = `${result.changed} member${result.changed === 1 ? '' : 's'}`
+  const skippedLabel =
+    result.skipped > 0
+      ? ` ${result.skipped} selected member${result.skipped === 1 ? '' : 's'} skipped.`
+      : ''
+  redirect(
+    rolesPath({
+      notice: `${verb} "${result.roleName}" for ${changedLabel}.${skippedLabel}`,
+    }),
+  )
 }
 
 export async function updateRoleDetails(formData: FormData): Promise<void> {
