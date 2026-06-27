@@ -2736,6 +2736,8 @@ function LookupInput({
 }) {
   const b = field.binding
   const parentVal = b?.filterByField ? evalCtx.values[b.filterByField] : undefined
+  const hasCascade = !!b?.filterByField && !!b?.filterColumn
+  const parentKey = String(parentVal ?? '')
   const [rows, setRows] = useState<DataRow[]>([])
   const [loading, setLoading] = useState(false)
   const whereKey = JSON.stringify(b?.where ?? null)
@@ -2747,8 +2749,8 @@ function LookupInput({
     queryDataSource({
       sourceKey: b.sourceKey,
       where: b.where,
-      filterColumn: b.filterColumn,
-      filterValue: b.filterColumn ? parentVal : undefined,
+      filterColumn: hasCascade ? b.filterColumn : undefined,
+      filterValue: hasCascade ? parentVal : undefined,
       limit: b.limit ?? 200,
     })
       .then((res) => {
@@ -2764,7 +2766,7 @@ function LookupInput({
       alive = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [b?.sourceKey, b?.filterColumn, whereKey, String(parentVal ?? ''), b?.limit])
+  }, [b?.sourceKey, b?.filterByField, b?.filterColumn, whereKey, parentKey, b?.limit])
 
   if (!b?.sourceKey) {
     return (
@@ -2775,7 +2777,7 @@ function LookupInput({
   }
 
   const valueCol = b.valueColumn || '__rowId'
-  const waitingParent = !!b.filterColumn && (parentVal == null || parentVal === '')
+  const waitingParent = hasCascade && (parentVal == null || parentVal === '')
 
   const pick = (rowVal: string) => {
     onChange(rowVal)
@@ -2821,6 +2823,8 @@ function DataTableInput({
 }) {
   const b = field.binding
   const parentVal = b?.filterByField ? evalCtx.values[b.filterByField] : undefined
+  const hasCascade = !!b?.filterByField && !!b?.filterColumn
+  const parentKey = String(parentVal ?? '')
   const [res, setRes] = useState<DataQueryResult>({ columns: [], rows: [] })
   const [loading, setLoading] = useState(false)
   const whereKey = JSON.stringify(b?.where ?? null)
@@ -2832,8 +2836,8 @@ function DataTableInput({
     queryDataSource({
       sourceKey: b.sourceKey,
       where: b.where,
-      filterColumn: b.filterColumn,
-      filterValue: b.filterColumn ? parentVal : undefined,
+      filterColumn: hasCascade ? b.filterColumn : undefined,
+      filterValue: hasCascade ? parentVal : undefined,
       limit: b.limit ?? 50,
     })
       .then((r) => {
@@ -2849,7 +2853,7 @@ function DataTableInput({
       alive = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [b?.sourceKey, b?.filterColumn, whereKey, String(parentVal ?? ''), b?.limit])
+  }, [b?.sourceKey, b?.filterByField, b?.filterColumn, whereKey, parentKey, b?.limit])
 
   if (!b?.sourceKey) return <p className="text-xs text-slate-400">Configure a data source…</p>
 
@@ -2922,6 +2926,8 @@ function DataTableInput({
 function MetricBlock({ field, evalCtx }: { field: FormField; evalCtx: EvalContext }) {
   const b = field.binding
   const parentVal = b?.filterByField ? evalCtx.values[b.filterByField] : undefined
+  const hasCascade = !!b?.filterByField && !!b?.filterColumn
+  const parentKey = String(parentVal ?? '')
   const [res, setRes] = useState<DataAggregateResult | null>(null)
   const whereKey = JSON.stringify(b?.where ?? null)
   const agg = b?.aggregate
@@ -2935,6 +2941,8 @@ function MetricBlock({ field, evalCtx }: { field: FormField; evalCtx: EvalContex
       column: agg?.column,
       groupBy: agg?.groupBy,
       where: b.where,
+      filterColumn: hasCascade ? b.filterColumn : undefined,
+      filterValue: hasCascade ? parentVal : undefined,
       limit: b.limit,
     })
       .then((r) => {
@@ -2947,7 +2955,17 @@ function MetricBlock({ field, evalCtx }: { field: FormField; evalCtx: EvalContex
       alive = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [b?.sourceKey, agg?.fn, agg?.column, agg?.groupBy, whereKey, String(parentVal ?? '')])
+  }, [
+    b?.sourceKey,
+    b?.filterByField,
+    b?.filterColumn,
+    b?.limit,
+    agg?.fn,
+    agg?.column,
+    agg?.groupBy,
+    whereKey,
+    parentKey,
+  ])
 
   if (!b?.sourceKey) return <p className="text-xs text-slate-400">Configure a data source…</p>
 

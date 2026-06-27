@@ -11,7 +11,7 @@
 // All edits mutate a local copy of FormSchemaV1. Publish writes a new immutable
 // version via the `publishNewVersion` server action.
 
-import { useEffect, useRef, useState, useTransition, useMemo } from 'react'
+import { useCallback, useEffect, useRef, useState, useTransition, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -117,6 +117,7 @@ import {
   MousePointerClick,
   PanelLeft,
   PenTool,
+  RefreshCw,
   ScanLine,
   Send,
   SlidersHorizontal,
@@ -1832,13 +1833,18 @@ function MatrixConfigEditor({
 // Module-cached list of the tenant's data sources, shared by every binding
 // editor instance so we hit the server action once per editor session.
 let _dataSourcesPromise: Promise<DataSourceSummary[]> | null = null
-function useDataSources(): { sources: DataSourceSummary[]; loading: boolean } {
+function useDataSources(): {
+  sources: DataSourceSummary[]
+  loading: boolean
+  refresh: () => void
+} {
   const [sources, setSources] = useState<DataSourceSummary[]>([])
   const [loading, setLoading] = useState(true)
-  useEffect(() => {
-    if (!_dataSourcesPromise) _dataSourcesPromise = listDataSources()
+  const activeLoadRef = useRef<(() => void) | null>(null)
+
+  const applySourcePromise = useCallback((promise: Promise<DataSourceSummary[]>) => {
     let alive = true
-    _dataSourcesPromise
+    promise
       .then((s) => {
         if (alive) {
           setSources(s)
@@ -1852,7 +1858,24 @@ function useDataSources(): { sources: DataSourceSummary[]; loading: boolean } {
       alive = false
     }
   }, [])
-  return { sources, loading }
+
+  useEffect(() => {
+    if (!_dataSourcesPromise) _dataSourcesPromise = listDataSources()
+    const cleanup = applySourcePromise(_dataSourcesPromise)
+    activeLoadRef.current = cleanup
+    return cleanup
+  }, [applySourcePromise])
+
+  return {
+    sources,
+    loading,
+    refresh: () => {
+      activeLoadRef.current?.()
+      setLoading(true)
+      _dataSourcesPromise = listDataSources()
+      activeLoadRef.current = applySourcePromise(_dataSourcesPromise)
+    },
+  }
 }
 
 type DsColumns = DataSourceSummary['columns']
@@ -1866,7 +1889,7 @@ function DataBindingEditor({
   otherFields: { id: string; label: string }[]
   onChange: (patch: Partial<FormField>) => void
 }) {
-  const { sources, loading } = useDataSources()
+  const { sources, loading, refresh } = useDataSources()
   const b = field.binding
   const source = sources.find((s) => s.key === b?.sourceKey)
   const cols = source?.columns ?? []
@@ -1896,6 +1919,14 @@ function DataBindingEditor({
         >
           Manage sources ↗
         </a>
+        <button
+          type="button"
+          onClick={refresh}
+          className="inline-flex items-center gap-1 text-[11px] text-violet-700 hover:underline"
+        >
+          <RefreshCw size={11} />
+          Refresh
+        </button>
       </div>
 
       <div className="space-y-1">
@@ -1925,9 +1956,11 @@ function DataBindingEditor({
             <LookupBindingFields b={b} cols={cols} otherFields={otherFields} patch={patch} />
           ) : null}
           {field.type === 'data_table' ? (
-            <DataTableBindingFields b={b} cols={cols} patch={patch} />
+            <DataTableBindingFields b={b} cols={cols} otherFields={otherFields} patch={patch} />
           ) : null}
-          {field.type === 'metric' ? <MetricBindingFields b={b} cols={cols} patch={patch} /> : null}
+          {field.type === 'metric' ? (
+            <MetricBindingFields b={b} cols={cols} otherFields={otherFields} patch={patch} />
+          ) : null}
         </>
       ) : null}
     </div>
@@ -1981,47 +2014,7 @@ function LookupBindingFields({
         </div>
       </div>
 
-      <div className="space-y-1.5 rounded border border-slate-200 bg-white p-2">
-        <div className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
-          Cascade (optional)
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <div className="space-y-1">
-            <Label className="text-xs">Filter by field</Label>
-            <Select
-              className="h-8 text-xs"
-              value={b?.filterByField ?? ''}
-              onChange={(e) => patch({ filterByField: e.target.value || undefined })}
-            >
-              <option value="">— none —</option>
-              {otherFields.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.label}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Matched on column</Label>
-            <Select
-              className="h-8 text-xs"
-              value={b?.filterColumn ?? ''}
-              onChange={(e) => patch({ filterColumn: e.target.value || undefined })}
-            >
-              <option value="">—</option>
-              {cols.map((c) => (
-                <option key={c.key} value={c.key}>
-                  {c.label}
-                </option>
-              ))}
-            </Select>
-          </div>
-        </div>
-        <p className="text-[10px] text-slate-500">
-          Only show rows whose column matches the parent field&apos;s value — e.g. Area filtered by
-          the chosen Site.
-        </p>
-      </div>
+      <CascadeBindingFields b={b} cols={cols} otherFields={otherFields} patch={patch} />
 
       <div className="space-y-1.5 rounded border border-slate-200 bg-white p-2">
         <div className="flex items-center justify-between">
@@ -2099,13 +2092,78 @@ function LookupBindingFields({
   )
 }
 
-function DataTableBindingFields({
+function CascadeBindingFields({
   b,
   cols,
+  otherFields,
   patch,
 }: {
   b: DataBinding | undefined
   cols: DsColumns
+  otherFields: { id: string; label: string }[]
+  patch: (p: Partial<DataBinding>) => void
+}) {
+  return (
+    <div className="space-y-1.5 rounded border border-slate-200 bg-white p-2">
+      <div className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
+        Cascade (optional)
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1">
+          <Label className="text-xs">Filter by field</Label>
+          <Select
+            className="h-8 text-xs"
+            value={b?.filterByField ?? ''}
+            onChange={(e) =>
+              patch(
+                e.target.value
+                  ? { filterByField: e.target.value }
+                  : { filterByField: undefined, filterColumn: undefined },
+              )
+            }
+          >
+            <option value="">— none —</option>
+            {otherFields.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.label}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Matched on column</Label>
+          <Select
+            className="h-8 text-xs"
+            value={b?.filterColumn ?? ''}
+            disabled={!b?.filterByField}
+            onChange={(e) => patch({ filterColumn: e.target.value || undefined })}
+          >
+            <option value="">—</option>
+            {cols.map((c) => (
+              <option key={c.key} value={c.key}>
+                {c.label}
+              </option>
+            ))}
+          </Select>
+        </div>
+      </div>
+      <p className="text-[10px] text-slate-500">
+        Only show rows whose column matches the parent field&apos;s value — e.g. Area filtered by
+        the chosen Site.
+      </p>
+    </div>
+  )
+}
+
+function DataTableBindingFields({
+  b,
+  cols,
+  otherFields,
+  patch,
+}: {
+  b: DataBinding | undefined
+  cols: DsColumns
+  otherFields: { id: string; label: string }[]
   patch: (p: Partial<DataBinding>) => void
 }) {
   const allShown = !b?.columns
@@ -2117,6 +2175,7 @@ function DataTableBindingFields({
   }
   return (
     <div className="space-y-2">
+      <CascadeBindingFields b={b} cols={cols} otherFields={otherFields} patch={patch} />
       <div className="space-y-1">
         <Label className="text-xs">Columns shown</Label>
         <div className="flex flex-wrap gap-1.5 rounded border border-slate-200 bg-white p-1.5">
@@ -2168,10 +2227,12 @@ function DataTableBindingFields({
 function MetricBindingFields({
   b,
   cols,
+  otherFields,
   patch,
 }: {
   b: DataBinding | undefined
   cols: DsColumns
+  otherFields: { id: string; label: string }[]
   patch: (p: Partial<DataBinding>) => void
 }) {
   const agg = b?.aggregate ?? { fn: 'count' as const }
@@ -2180,6 +2241,7 @@ function MetricBindingFields({
   const needsColumn = agg.fn !== 'count'
   return (
     <div className="space-y-2">
+      <CascadeBindingFields b={b} cols={cols} otherFields={otherFields} patch={patch} />
       <div className="grid grid-cols-2 gap-2">
         <div className="space-y-1">
           <Label className="text-xs">Aggregate</Label>

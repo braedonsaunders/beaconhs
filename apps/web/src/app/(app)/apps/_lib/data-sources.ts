@@ -212,12 +212,14 @@ export async function aggregateDataSource(args: {
   column?: string
   groupBy?: string
   where?: WhereClause[]
+  filterColumn?: string
+  filterValue?: unknown
   limit?: number
 }): Promise<DataAggregateResult> {
   const source = await resolveSource(args.sourceKey)
   if (!source) return { value: null, total: 0 }
   const all = await fetchRows(source)
-  const rows = applyFilters(all, args.where, undefined, undefined)
+  const rows = applyFilters(all, args.where, args.filterColumn, args.filterValue)
 
   const compute = (group: DataRow[]): number | null => {
     if (args.fn === 'count') return group.length

@@ -41,6 +41,7 @@ import { recordAudit } from '@/lib/audit'
 import { PageContainer } from '@/components/page-layout'
 import { AdminBackLink } from '../_back-link'
 import { deriveColumnsFromSchema, slugify } from './_shared'
+import { collectDataSourceUsage } from './_usage'
 
 export const metadata = { title: 'Data sources' }
 export const dynamic = 'force-dynamic'
@@ -160,10 +161,27 @@ export default async function DataSourcesPage() {
     const tmpls = await tx
       .select({ id: formTemplates.id, name: formTemplates.name })
       .from(formTemplates)
+      .where(isNull(formTemplates.deletedAt))
       .orderBy(asc(formTemplates.name))
+    const versionRows = await tx
+      .select({
+        templateId: formTemplates.id,
+        templateName: formTemplates.name,
+        version: formTemplateVersions.version,
+        schema: formTemplateVersions.schema,
+      })
+      .from(formTemplateVersions)
+      .innerJoin(formTemplates, eq(formTemplates.id, formTemplateVersions.templateId))
+      .where(isNull(formTemplates.deletedAt))
+      .orderBy(asc(formTemplates.name), desc(formTemplateVersions.version))
+    const usageBySource = collectDataSourceUsage(versionRows)
 
     return {
-      sources: all.map((s) => ({ ...s, rowCount: countMap[s.id] ?? 0 })),
+      sources: all.map((s) => ({
+        ...s,
+        rowCount: countMap[s.id] ?? 0,
+        usage: usageBySource.get(s.key) ?? [],
+      })),
       templates: tmpls,
     }
   })
@@ -223,10 +241,24 @@ export default async function DataSourcesPage() {
                           ) : (
                             <span>live</span>
                           )}
+                          <span>
+                            {s.usage.length > 0
+                              ? `used by ${s.usage.length} app${s.usage.length === 1 ? '' : 's'}`
+                              : 'not referenced yet'}
+                          </span>
                           <span className="inline-flex items-center gap-0.5 text-teal-600 opacity-0 transition group-hover:opacity-100">
                             Manage <ArrowUpRight size={12} />
                           </span>
                         </p>
+                        {s.usage.length > 0 ? (
+                          <p className="mt-1 text-xs text-slate-500">
+                            {s.usage
+                              .slice(0, 2)
+                              .map((u) => u.templateName)
+                              .join(', ')}
+                            {s.usage.length > 2 ? ` +${s.usage.length - 2} more` : ''}
+                          </p>
+                        ) : null}
                       </Link>
                       <form action={deleteDataSource}>
                         <input type="hidden" name="id" value={s.id} />

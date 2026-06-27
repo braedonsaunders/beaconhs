@@ -6,7 +6,7 @@ import { revalidatePath } from 'next/cache'
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Plus, RefreshCw, Trash2 } from 'lucide-react'
-import { asc, desc, eq, isNull, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -34,6 +34,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { PageContainer } from '@/components/page-layout'
 import { deriveColumnsFromSchema, slugify } from '../_shared'
+import { collectDataSourceUsage } from '../_usage'
 
 export const metadata = { title: 'Data source' }
 export const dynamic = 'force-dynamic'
@@ -250,7 +251,7 @@ export default async function DataSourceDetailPage({
         ? await tx
             .select({ id: dataSourceRows.id, data: dataSourceRows.data })
             .from(dataSourceRows)
-            .where(eq(dataSourceRows.dataSourceId, id))
+            .where(and(eq(dataSourceRows.dataSourceId, id), isNull(dataSourceRows.deletedAt)))
             .orderBy(asc(dataSourceRows.position))
         : []
     let templateName: string | null = null
@@ -262,11 +263,23 @@ export default async function DataSourceDetailPage({
         .limit(1)
       templateName = t?.name ?? null
     }
-    return { src, rows, templateName }
+    const versionRows = await tx
+      .select({
+        templateId: formTemplates.id,
+        templateName: formTemplates.name,
+        version: formTemplateVersions.version,
+        schema: formTemplateVersions.schema,
+      })
+      .from(formTemplateVersions)
+      .innerJoin(formTemplates, eq(formTemplates.id, formTemplateVersions.templateId))
+      .where(isNull(formTemplates.deletedAt))
+      .orderBy(asc(formTemplates.name), desc(formTemplateVersions.version))
+    const usage = collectDataSourceUsage(versionRows).get(src.key) ?? []
+    return { src, rows, templateName, usage }
   })
 
   if (!data) notFound()
-  const { src, rows, templateName } = data
+  const { src, rows, templateName, usage } = data
   const cols = (src.columns as DataSourceColumn[]) ?? []
   const isReference = src.kind === 'reference'
 
@@ -499,6 +512,43 @@ export default async function DataSourceDetailPage({
 
           {/* RIGHT: settings + columns */}
           <div className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Builder references</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {usage.length === 0 ? (
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    No Builder apps reference this source yet. Add a Lookup, Data table or KPI /
+                    chart element in the Builder and bind it to this key.
+                  </p>
+                ) : (
+                  <ul className="space-y-2">
+                    {usage.map((u) => (
+                      <li
+                        key={u.templateId}
+                        className="rounded-md border border-slate-100 bg-slate-50/60 px-2.5 py-2 text-sm dark:border-slate-800 dark:bg-slate-900/80"
+                      >
+                        <Link
+                          href={`/apps/templates/${u.templateId}/designer`}
+                          className="font-medium text-teal-700 hover:underline dark:text-teal-300"
+                        >
+                          {u.templateName}
+                        </Link>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {u.fields.map((field) => (
+                            <Badge key={field.fieldId} variant="outline" className="text-[10px]">
+                              {field.fieldLabel}
+                            </Badge>
+                          ))}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </CardContent>
+            </Card>
+
             <Card>
               <CardHeader>
                 <CardTitle>Settings</CardTitle>
