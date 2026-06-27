@@ -13,6 +13,7 @@ import {
   type QuickAction,
   type QuickActionOption,
   type QuickActionOptions,
+  type SaveQuickActionsAction,
 } from './_quick-actions-shared'
 import { FALLBACK_ICON, ICON_PICKER_KEYS, QUICK_ACTION_ICONS } from './_quick-actions-icons'
 import { listQuickActionOptions, saveQuickActions } from './actions'
@@ -30,11 +31,15 @@ export function QuickActionsEditor({
   value,
   onClose,
   onSaved,
+  saveAction = saveQuickActions,
+  saveSuccessMessage = 'Quick actions saved',
 }: {
   open: boolean
   value: QuickAction[]
   onClose: () => void
   onSaved: (next: QuickAction[]) => void
+  saveAction?: SaveQuickActionsAction
+  saveSuccessMessage?: string
 }) {
   const router = useRouter()
   const [items, setItems] = useState<QuickAction[]>(value)
@@ -128,9 +133,9 @@ export function QuickActionsEditor({
       .filter((a) => a.label && a.href)
     setSaving(true)
     try {
-      const res = await saveQuickActions(clean)
+      const res = await saveAction(clean)
       if (res.ok) {
-        toast.success('Quick actions saved')
+        toast.success(saveSuccessMessage)
         onSaved(clean)
         router.refresh()
         onClose()

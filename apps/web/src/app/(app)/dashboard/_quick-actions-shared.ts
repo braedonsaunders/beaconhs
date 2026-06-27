@@ -7,6 +7,10 @@ import type { DashboardQuickAction } from '@beaconhs/db/schema'
 
 export type QuickAction = DashboardQuickAction
 
+export type QuickActionsSaveResult = { ok: true } | { ok: false; error?: string }
+
+export type SaveQuickActionsAction = (input: QuickAction[]) => Promise<QuickActionsSaveResult>
+
 /** A choosable destination surfaced in the editor's "Add action" picker. */
 export type QuickActionOption = {
   label: string

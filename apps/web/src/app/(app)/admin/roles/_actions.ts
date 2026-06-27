@@ -28,12 +28,15 @@ import {
   filterPersistableDashboardWidgets,
   UUID_RE,
 } from '../../dashboard/_layout-input'
+import { QuickActionsSchema } from '../../dashboard/_quick-actions-input'
 import { WIDGETS } from '../../dashboard/_widget-registry'
 import {
   canPermissionSetPublishInsights,
   canPermissionSetSeeWidget,
   canPermissionSetViewInsights,
 } from '../../dashboard/_widget-access'
+import { DEFAULT_LAYOUTS } from '../../dashboard/_role-defaults'
+import { inferRoleTier } from '../../dashboard/_role-tier'
 import { z } from 'zod'
 
 const PERMISSIONS = new Set<string>(PERMISSION_CATALOGUE as unknown as string[])
@@ -54,6 +57,11 @@ const RoleDashboardLayoutInputSchema = DashboardLayoutInputSchema.extend({
 
 const RoleDashboardResetInputSchema = z.object({
   roleId: z.string().uuid(),
+})
+
+const RoleDashboardQuickActionsInputSchema = z.object({
+  roleId: z.string().uuid(),
+  quickActions: QuickActionsSchema,
 })
 
 function readPermissions(formData: FormData): string[] {
@@ -186,6 +194,7 @@ async function sanitiseSavedDashboardForRole(ctx: Ctx, role: RoleForDashboard): 
   const existing = await loadRoleDashboardLayout(ctx, role.id)
   if (!existing) return
   const sanitised = await sanitiseRoleDashboardLayout(ctx, role, existing.widgets)
+  if (existing.quickActions) sanitised.quickActions = existing.quickActions
   if (sanitised.widgets.length === 0) {
     await ctx.db((tx) =>
       tx.delete(roleDashboardLayouts).where(eq(roleDashboardLayouts.roleId, role.id)),
@@ -399,6 +408,7 @@ export async function saveRoleDashboardLayout(input: unknown) {
   }
 
   const before = await loadRoleDashboardLayout(ctx, role.id)
+  if (before?.quickActions) layout.quickActions = before.quickActions
 
   await ctx.db((tx) =>
     tx
@@ -419,6 +429,56 @@ export async function saveRoleDashboardLayout(input: unknown) {
     entityId: role.id,
     action: 'update',
     summary: `Updated default dashboard for role "${role.name}"`,
+    before: before ? { dashboardLayout: before } : null,
+    after: { dashboardLayout: layout },
+  })
+
+  revalidatePath(`/admin/roles/${role.id}`)
+  revalidatePath('/admin/roles')
+  revalidatePath('/dashboard')
+  return { ok: true as const }
+}
+
+export async function saveRoleDashboardQuickActions(input: unknown) {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'admin.roles.manage')
+  const parsed = RoleDashboardQuickActionsInputSchema.safeParse(input)
+  if (!parsed.success) {
+    return {
+      ok: false as const,
+      error: parsed.error.issues[0]?.message ?? 'Invalid quick actions',
+    }
+  }
+
+  const role = await loadRoleForDashboardAction(ctx, parsed.data.roleId)
+  if (!role) return { ok: false as const, error: 'Role not found.' }
+
+  const before = await loadRoleDashboardLayout(ctx, role.id)
+  const baseLayout = before ?? DEFAULT_LAYOUTS[inferRoleTier(role)] ?? DEFAULT_LAYOUTS.worker
+  const layout: DashboardLayoutData = {
+    widgets: baseLayout.widgets,
+    quickActions: parsed.data.quickActions,
+  }
+
+  await ctx.db((tx) =>
+    tx
+      .insert(roleDashboardLayouts)
+      .values({
+        tenantId: ctx.tenantId,
+        roleId: role.id,
+        layout,
+      })
+      .onConflictDoUpdate({
+        target: [roleDashboardLayouts.tenantId, roleDashboardLayouts.roleId],
+        set: { layout, updatedAt: new Date() },
+      }),
+  )
+
+  await recordAudit(ctx, {
+    entityType: 'role',
+    entityId: role.id,
+    action: 'update',
+    summary: `Updated default quick actions for role "${role.name}"`,
     before: before ? { dashboardLayout: before } : null,
     after: { dashboardLayout: layout },
   })

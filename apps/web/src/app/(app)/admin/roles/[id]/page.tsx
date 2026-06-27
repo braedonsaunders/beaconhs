@@ -47,6 +47,7 @@ import {
   duplicateRole,
   resetRoleDashboardLayout,
   saveRoleDashboardLayout,
+  saveRoleDashboardQuickActions,
   updateRoleDetails,
   updateRolePermissions,
 } from '../_actions'
@@ -117,6 +118,8 @@ export default async function AdminRoleEditPage({
               !card.allowedRoles ||
               card.allowedRoles.length === 0 ||
               card.allowedRoles.includes(role.key)),
+          quickActionsSaveAction: saveQuickActions,
+          quickActionsSaveSuccessMessage: 'Role default quick actions saved',
         })
       : null
 
@@ -128,6 +131,11 @@ export default async function AdminRoleEditPage({
   async function resetLayout() {
     'use server'
     return resetRoleDashboardLayout({ roleId: id })
+  }
+
+  async function saveQuickActions(input: DashboardLayoutData['quickActions']) {
+    'use server'
+    return saveRoleDashboardQuickActions({ roleId: id, quickActions: input ?? [] })
   }
 
   return (

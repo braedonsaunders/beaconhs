@@ -9,6 +9,7 @@ import {
   isExternalHref,
   toneOf,
   type QuickAction,
+  type SaveQuickActionsAction,
 } from './_quick-actions-shared'
 import { FALLBACK_ICON, QUICK_ACTION_ICONS } from './_quick-actions-icons'
 import { QuickActionsEditor } from './_quick-actions-editor'
@@ -29,10 +30,16 @@ import { QuickActionsEditor } from './_quick-actions-editor'
  * Self-contained card (not wrapped in CardShell) so it owns its header — and
  * the "Customize" affordance that opens the editor.
  */
-export function QuickActions({ actions }: { actions?: QuickAction[] | null }) {
-  const [items, setItems] = useState<QuickAction[]>(
-    actions && actions.length ? actions : DEFAULT_QUICK_ACTIONS,
-  )
+export function QuickActions({
+  actions,
+  saveAction,
+  saveSuccessMessage,
+}: {
+  actions?: QuickAction[] | null
+  saveAction?: SaveQuickActionsAction
+  saveSuccessMessage?: string
+}) {
+  const [items, setItems] = useState<QuickAction[]>(actions ?? DEFAULT_QUICK_ACTIONS)
   const [editorOpen, setEditorOpen] = useState(false)
 
   return (
@@ -88,6 +95,8 @@ export function QuickActions({ actions }: { actions?: QuickAction[] | null }) {
         value={items}
         onClose={() => setEditorOpen(false)}
         onSaved={(next) => setItems(next)}
+        saveAction={saveAction}
+        saveSuccessMessage={saveSuccessMessage}
       />
     </div>
   )

@@ -14,33 +14,10 @@ import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { NAV_MODULES } from '@/lib/nav/registry'
 import { getUserRoleTier } from './_role-tier'
-import {
-  MAX_QUICK_ACTIONS,
-  type QuickActionOption,
-  type QuickActionOptions,
-} from './_quick-actions-shared'
+import { type QuickActionOption, type QuickActionOptions } from './_quick-actions-shared'
+import { QuickActionsSchema } from './_quick-actions-input'
 import { DashboardLayoutInputSchema, filterPersistableDashboardWidgets } from './_layout-input'
 import { resolveDashboardDefault } from './_load-layout'
-import { z } from 'zod'
-
-// An href is safe to persist when it's an internal path or an http(s) URL —
-// never a `javascript:`/`data:` scheme.
-const safeHref = (h: string) => h.startsWith('/') || /^https?:\/\//i.test(h)
-
-const QuickActionSchema = z.object({
-  id: z.string().min(1).max(64),
-  label: z.string().trim().min(1).max(80),
-  href: z
-    .string()
-    .trim()
-    .min(1)
-    .max(2048)
-    .refine(safeHref, 'Link must be an internal path or http(s) URL'),
-  iconKey: z.string().min(1).max(48),
-  tone: z.string().min(1).max(24),
-})
-
-const QuickActionsSchema = z.array(QuickActionSchema).max(MAX_QUICK_ACTIONS)
 
 export async function saveDashboardLayout(input: unknown) {
   const ctx = await requireRequestContext()
