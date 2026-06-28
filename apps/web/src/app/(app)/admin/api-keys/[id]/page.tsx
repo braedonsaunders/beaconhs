@@ -189,7 +189,14 @@ export default async function ApiKeyEditPage({
                 <CardTitle>Permissions</CardTitle>
               </CardHeader>
               <CardContent>
-                <PermissionMatrix defaultSelected={key.permissions ?? []} />
+                {/* Remount after each save: React auto-resets a `<form action>`
+                    on success, unchecking the controlled checkboxes in the DOM
+                    without re-rendering them, so the next save would post a
+                    stale selection. `updatedAt` bumps per save (`$onUpdate`). */}
+                <PermissionMatrix
+                  key={key.updatedAt.toISOString()}
+                  defaultSelected={key.permissions ?? []}
+                />
               </CardContent>
             </Card>
 

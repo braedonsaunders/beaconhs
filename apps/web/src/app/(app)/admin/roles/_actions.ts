@@ -449,6 +449,185 @@ export async function bulkUpdateRoleAssignments(formData: FormData): Promise<voi
   )
 }
 
+// ---------------------------------------------------------------------------
+// Members tab on the role detail page — add / re-scope / remove the members
+// who hold THIS role. These mirror the per-user assignRole/removeAssignment
+// actions but are gated for the role editor and revalidate the role page, so
+// the membership edits stay in place instead of bouncing to the user list.
+// Modifying who holds a role is a membership change, so both gates apply
+// (matching the bulk role manager). Self and protected super-admins are never
+// touched, mirroring the eligibility rules used everywhere else.
+// ---------------------------------------------------------------------------
+
+function revalidateRoleMembership(roleId: string, membershipIds: string[]): void {
+  for (const membershipId of membershipIds) revalidatePath(`/admin/users/${membershipId}`)
+  revalidatePath(`/admin/roles/${roleId}`)
+  revalidatePath('/admin/roles')
+  revalidatePath('/admin/users')
+  revalidatePath('/dashboard')
+}
+
+export async function addRoleMembers(formData: FormData): Promise<void> {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'admin.roles.manage')
+  assertCan(ctx, 'admin.users.manage')
+  const roleId = String(formData.get('roleId') ?? '').trim()
+  const membershipIds = uniqueFormStrings(formData, 'membershipIds')
+  const scope = parseRoleScope(String(formData.get('scope') ?? ''))
+  if (!roleId || membershipIds.length === 0) return
+
+  const result = await ctx.db(async (tx) => {
+    const [role] = await tx
+      .select({ id: roles.id, name: roles.name })
+      .from(roles)
+      .where(eq(roles.id, roleId))
+      .limit(1)
+    if (!role) return null
+
+    const selected = await tx
+      .select({
+        id: tenantUsers.id,
+        userId: tenantUsers.userId,
+        isSuperAdmin: user.isSuperAdmin,
+      })
+      .from(tenantUsers)
+      .innerJoin(user, eq(user.id, tenantUsers.userId))
+      .where(and(inArray(tenantUsers.id, membershipIds), eq(tenantUsers.status, 'active')))
+
+    const eligibleIds = selected
+      .filter((m) => m.userId !== ctx.userId && (ctx.isSuperAdmin || !m.isSuperAdmin))
+      .map((m) => m.id)
+    if (eligibleIds.length === 0) return { roleName: role.name, changedIds: [] as string[] }
+
+    const existing = await tx
+      .select({ tenantUserId: roleAssignments.tenantUserId })
+      .from(roleAssignments)
+      .where(
+        and(
+          inArray(roleAssignments.tenantUserId, eligibleIds),
+          eq(roleAssignments.roleId, role.id),
+        ),
+      )
+    const existingIds = new Set(existing.map((row) => row.tenantUserId))
+
+    // Re-selecting a member who already holds the role just updates its scope.
+    if (existingIds.size > 0) {
+      await tx
+        .update(roleAssignments)
+        .set({ scope })
+        .where(
+          and(
+            inArray(roleAssignments.tenantUserId, [...existingIds]),
+            eq(roleAssignments.roleId, role.id),
+          ),
+        )
+    }
+    const insertIds = eligibleIds.filter((id) => !existingIds.has(id))
+    if (insertIds.length > 0) {
+      await tx.insert(roleAssignments).values(
+        insertIds.map((membershipId) => ({
+          tenantId: ctx.tenantId,
+          tenantUserId: membershipId,
+          roleId: role.id,
+          scope,
+        })),
+      )
+    }
+    return { roleName: role.name, changedIds: eligibleIds }
+  })
+
+  if (!result || result.changedIds.length === 0) return
+  for (const membershipId of result.changedIds) {
+    await recordAudit(ctx, {
+      entityType: 'tenant_user',
+      entityId: membershipId,
+      action: 'update',
+      summary: `Added to role "${result.roleName}"`,
+      metadata: { roleId, scope },
+    })
+  }
+  revalidateRoleMembership(roleId, result.changedIds)
+}
+
+export async function updateRoleMemberScope(formData: FormData): Promise<void> {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'admin.roles.manage')
+  assertCan(ctx, 'admin.users.manage')
+  const roleId = String(formData.get('roleId') ?? '').trim()
+  const assignmentId = String(formData.get('assignmentId') ?? '').trim()
+  const membershipId = String(formData.get('membershipId') ?? '').trim()
+  const scope = parseRoleScope(String(formData.get('scope') ?? ''))
+  if (!roleId || !assignmentId) return
+
+  const result = await ctx.db(async (tx) => {
+    const [row] = await tx
+      .select({
+        userId: tenantUsers.userId,
+        isSuperAdmin: user.isSuperAdmin,
+        roleName: roles.name,
+      })
+      .from(roleAssignments)
+      .innerJoin(tenantUsers, eq(tenantUsers.id, roleAssignments.tenantUserId))
+      .innerJoin(user, eq(user.id, tenantUsers.userId))
+      .innerJoin(roles, eq(roles.id, roleAssignments.roleId))
+      .where(and(eq(roleAssignments.id, assignmentId), eq(roleAssignments.roleId, roleId)))
+      .limit(1)
+    if (!row) return null
+    if (row.userId === ctx.userId || (!ctx.isSuperAdmin && row.isSuperAdmin)) return null
+    await tx.update(roleAssignments).set({ scope }).where(eq(roleAssignments.id, assignmentId))
+    return { roleName: row.roleName }
+  })
+
+  if (!result) return
+  await recordAudit(ctx, {
+    entityType: 'tenant_user',
+    entityId: membershipId,
+    action: 'update',
+    summary: `Updated scope for role "${result.roleName}"`,
+    metadata: { roleId, assignmentId, scope },
+  })
+  revalidateRoleMembership(roleId, membershipId ? [membershipId] : [])
+}
+
+export async function removeRoleMember(formData: FormData): Promise<void> {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'admin.roles.manage')
+  assertCan(ctx, 'admin.users.manage')
+  const roleId = String(formData.get('roleId') ?? '').trim()
+  const assignmentId = String(formData.get('assignmentId') ?? '').trim()
+  const membershipId = String(formData.get('membershipId') ?? '').trim()
+  if (!roleId || !assignmentId) return
+
+  const result = await ctx.db(async (tx) => {
+    const [row] = await tx
+      .select({
+        userId: tenantUsers.userId,
+        isSuperAdmin: user.isSuperAdmin,
+        roleName: roles.name,
+      })
+      .from(roleAssignments)
+      .innerJoin(tenantUsers, eq(tenantUsers.id, roleAssignments.tenantUserId))
+      .innerJoin(user, eq(user.id, tenantUsers.userId))
+      .innerJoin(roles, eq(roles.id, roleAssignments.roleId))
+      .where(and(eq(roleAssignments.id, assignmentId), eq(roleAssignments.roleId, roleId)))
+      .limit(1)
+    if (!row) return null
+    if (row.userId === ctx.userId || (!ctx.isSuperAdmin && row.isSuperAdmin)) return null
+    await tx.delete(roleAssignments).where(eq(roleAssignments.id, assignmentId))
+    return { roleName: row.roleName }
+  })
+
+  if (!result) return
+  await recordAudit(ctx, {
+    entityType: 'tenant_user',
+    entityId: membershipId,
+    action: 'update',
+    summary: `Removed from role "${result.roleName}"`,
+    metadata: { roleId, assignmentId },
+  })
+  revalidateRoleMembership(roleId, membershipId ? [membershipId] : [])
+}
+
 export async function updateRoleDetails(formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'admin.roles.manage')

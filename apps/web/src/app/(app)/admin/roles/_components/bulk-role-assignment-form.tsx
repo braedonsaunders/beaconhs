@@ -18,7 +18,6 @@ type MemberOption = {
   name: string
   email: string
   displayName: string | null
-  status: 'active' | 'invited' | 'suspended'
   roles: { id: string; name: string }[]
   isSelf: boolean
   isProtectedSuperAdmin: boolean
@@ -44,10 +43,6 @@ const OPERATIONS = [
 
 const MAX_BULK_ROLE_MEMBERS = 250
 
-function statusVariant(status: MemberOption['status']) {
-  return status === 'active' ? 'success' : status === 'invited' ? 'secondary' : 'destructive'
-}
-
 export function BulkRoleAssignmentForm({
   roles,
   members,
@@ -72,7 +67,6 @@ export function BulkRoleAssignmentForm({
         member.displayName ?? '',
         member.name,
         member.email,
-        member.status,
         ...member.roles.map((role) => role.name),
       ]
         .join(' ')
@@ -302,9 +296,6 @@ export function BulkRoleAssignmentForm({
                               <span className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">
                                 {member.displayName ?? member.name}
                               </span>
-                              <Badge variant={statusVariant(member.status)} className="text-[10px]">
-                                {member.status}
-                              </Badge>
                               {member.isSelf ? (
                                 <Badge variant="outline" className="text-[10px]">
                                   You

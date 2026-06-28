@@ -34,13 +34,14 @@ export default async function AdminRolesPage({
     const counts = await tx
       .select({ roleId: roleAssignments.roleId, n: count() })
       .from(roleAssignments)
+      .innerJoin(tenantUsers, eq(tenantUsers.id, roleAssignments.tenantUserId))
+      .where(eq(tenantUsers.status, 'active'))
       .groupBy(roleAssignments.roleId)
     const memberRows = canBulkManageRoles
       ? await tx
           .select({
             membershipId: tenantUsers.id,
             userId: tenantUsers.userId,
-            status: tenantUsers.status,
             displayName: tenantUsers.displayName,
             name: user.name,
             email: user.email,
@@ -48,6 +49,7 @@ export default async function AdminRolesPage({
           })
           .from(tenantUsers)
           .innerJoin(user, eq(user.id, tenantUsers.userId))
+          .where(eq(tenantUsers.status, 'active'))
           .orderBy(asc(user.name))
       : []
     const allAssignments = canBulkManageRoles
@@ -76,7 +78,6 @@ export default async function AdminRolesPage({
         name: m.name,
         email: m.email,
         displayName: m.displayName,
-        status: m.status,
         isSelf: m.userId === ctx.userId,
         isProtectedSuperAdmin: m.isSuperAdmin && !ctx.isSuperAdmin,
         roles: allAssignments

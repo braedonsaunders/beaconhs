@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
-import { and, asc, desc, eq } from 'drizzle-orm'
+import { and, asc, desc, eq, notInArray } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -23,6 +23,7 @@ import {
   user,
   PERMISSION_CATALOGUE,
   type DashboardLayoutData,
+  type RoleScope,
 } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
@@ -41,7 +42,9 @@ import {
   canPermissionSetViewInsights,
 } from '@/app/(app)/dashboard/_widget-access'
 import { ConfirmButton } from '../../users/_components/confirm-button'
+import { describeScope, loadScopeOptions } from '../../users/_scope-data'
 import { PermissionMatrix } from '../_components/permission-matrix'
+import { RoleMembersManager, type RoleMember } from '../_components/role-members-manager'
 import {
   deleteRole,
   duplicateRole,
@@ -71,6 +74,10 @@ export default async function AdminRoleEditPage({
   const active = pickActiveTab(sp, ROLE_TABS, 'details')
   const error = typeof sp.error === 'string' ? sp.error : undefined
   const basePath = `/admin/roles/${id}`
+  // Editing who holds a role is a membership change, so the members tab is only
+  // editable with admin.users.manage (matching the bulk role manager); without
+  // it the tab stays read-only.
+  const canManageMembers = can(ctx, 'admin.users.manage')
 
   const data = await ctx.db(async (tx) => {
     const [role] = await tx.select().from(roles).where(eq(roles.id, id)).limit(1)
@@ -78,14 +85,41 @@ export default async function AdminRoleEditPage({
     const members = await tx
       .select({
         membershipId: tenantUsers.id,
+        assignmentId: roleAssignments.id,
+        scope: roleAssignments.scope,
         name: user.name,
+        email: user.email,
         displayName: tenantUsers.displayName,
+        userId: tenantUsers.userId,
+        isSuperAdmin: user.isSuperAdmin,
       })
       .from(roleAssignments)
       .innerJoin(tenantUsers, eq(tenantUsers.id, roleAssignments.tenantUserId))
       .innerJoin(user, eq(user.id, tenantUsers.userId))
-      .where(eq(roleAssignments.roleId, id))
+      .where(and(eq(roleAssignments.roleId, id), eq(tenantUsers.status, 'active')))
       .orderBy(asc(user.name))
+    // Active memberships that don't yet hold this role — the add picker.
+    const heldIds = members.map((m) => m.membershipId)
+    const candidates = canManageMembers
+      ? await tx
+          .select({
+            membershipId: tenantUsers.id,
+            name: user.name,
+            email: user.email,
+            displayName: tenantUsers.displayName,
+            userId: tenantUsers.userId,
+            isSuperAdmin: user.isSuperAdmin,
+          })
+          .from(tenantUsers)
+          .innerJoin(user, eq(user.id, tenantUsers.userId))
+          .where(
+            and(
+              eq(tenantUsers.status, 'active'),
+              heldIds.length > 0 ? notInArray(tenantUsers.id, heldIds) : undefined,
+            ),
+          )
+          .orderBy(asc(user.name))
+      : []
     const [dashboard] = await tx
       .select({ layout: roleDashboardLayouts.layout, updatedAt: roleDashboardLayouts.updatedAt })
       .from(roleDashboardLayouts)
@@ -94,15 +128,53 @@ export default async function AdminRoleEditPage({
       )
       .orderBy(desc(roleDashboardLayouts.updatedAt))
       .limit(1)
-    return { role, members, dashboard: dashboard ?? null }
+    return { role, members, candidates, dashboard: dashboard ?? null }
   })
   if (!data) notFound()
-  const { role, members, dashboard } = data
+  const { role, members, candidates, dashboard } = data
+
+  // Member editing data: scope label per assignment + the addable directory.
+  // describeScope/loadScopeOptions are server-only (DB-backed), so resolve them
+  // here and hand the manager plain serialisable props.
+  const scopeOptions = canManageMembers ? await loadScopeOptions(ctx) : null
+  const memberRows: RoleMember[] = scopeOptions
+    ? members.map((m) => ({
+        membershipId: m.membershipId,
+        assignmentId: m.assignmentId,
+        name: m.name,
+        email: m.email,
+        displayName: m.displayName,
+        scope: m.scope,
+        scopeLabel: describeScope(m.scope, scopeOptions),
+        isSelf: m.userId === ctx.userId,
+        isProtectedSuperAdmin: m.isSuperAdmin && !ctx.isSuperAdmin,
+      }))
+    : []
+  const memberCandidates =
+    scopeOptions != null
+      ? candidates
+          .filter((c) => c.userId !== ctx.userId && (ctx.isSuperAdmin || !c.isSuperAdmin))
+          .map((c) => ({
+            value: c.membershipId,
+            label: c.displayName ?? c.name,
+            hint: c.email,
+          }))
+      : []
+  // Remount the members manager after every membership change so its transient
+  // UI state (open add panel, scope edits) resets cleanly — same rationale as
+  // the permission matrix key below.
+  const membersKey = members.map((m) => `${m.assignmentId}:${JSON.stringify(m.scope)}`).join('|')
 
   const locksTenantAdminPermissions = role.isBuiltIn && role.key === 'tenant_admin'
   const effectiveRolePermissions = locksTenantAdminPermissions
     ? [...PERMISSION_CATALOGUE]
     : role.permissions
+  // Remount the permission matrix after every save. React auto-resets a
+  // `<form action>` once its server action resolves, which unchecks the
+  // controlled checkboxes in the DOM without re-rendering them — so the next
+  // save would post a stale, partial selection. `updatedAt` bumps on each save
+  // (`$onUpdate`), so keying on it rebuilds the matrix from persisted truth.
+  const permissionMatrixKey = role.updatedAt.toISOString()
   const roleTier = inferRoleTier(role)
   const dashboardLayout = dashboard?.layout ?? DEFAULT_LAYOUTS[roleTier] ?? DEFAULT_LAYOUTS.worker
   const roleCanViewInsights = canPermissionSetViewInsights(effectiveRolePermissions)
@@ -280,7 +352,10 @@ export default async function AdminRoleEditPage({
                   <CardTitle>Permissions</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <PermissionMatrix defaultSelected={effectiveRolePermissions} />
+                  <PermissionMatrix
+                    key={permissionMatrixKey}
+                    defaultSelected={effectiveRolePermissions}
+                  />
                 </CardContent>
               </Card>
               <div className="flex justify-end">
@@ -294,9 +369,22 @@ export default async function AdminRoleEditPage({
           <Card>
             <CardHeader>
               <CardTitle>Members with this role ({members.length})</CardTitle>
+              <CardDescription>
+                {canManageMembers
+                  ? 'Add or remove members and set the data each one can see through this role.'
+                  : 'Members who currently hold this role.'}
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              {members.length === 0 ? (
+              {canManageMembers && scopeOptions ? (
+                <RoleMembersManager
+                  key={membersKey}
+                  roleId={id}
+                  members={memberRows}
+                  candidates={memberCandidates}
+                  scopeOptions={scopeOptions}
+                />
+              ) : members.length === 0 ? (
                 <p className="text-sm text-slate-500 dark:text-slate-400">
                   No members hold this role yet.
                 </p>
