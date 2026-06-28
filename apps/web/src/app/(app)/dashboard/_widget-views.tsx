@@ -343,6 +343,10 @@ function CountTile({
   return (
     <Link
       href={href as any}
+      // The whole tile is an anchor; without this the browser's native link
+      // drag fires alongside the grid's pointer drag — janky movement and a
+      // ghost left behind. Disabling native drag leaves only the grid's drag.
+      draggable={false}
       className="group relative flex h-full flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-teal-200 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:hover:border-teal-800/60"
     >
       <div className="flex items-start justify-between">
@@ -415,6 +419,8 @@ function RateTile({
     <Link
       href={href as any}
       title={tooltip}
+      // See CountTile: stop the browser's native anchor drag fighting the grid.
+      draggable={false}
       className="group relative flex h-full flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-teal-200 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:hover:border-teal-800/60"
     >
       <div className="flex items-start justify-between">

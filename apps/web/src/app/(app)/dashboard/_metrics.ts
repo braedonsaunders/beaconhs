@@ -120,11 +120,6 @@ export type DashboardMetrics = {
   // List widgets
   recentIncidents: Array<typeof incidents.$inferSelect>
   dueCAs: Array<typeof correctiveActions.$inferSelect>
-  expiringCertsList: Array<{
-    record: typeof trainingRecords.$inferSelect
-    person: typeof people.$inferSelect
-    course: typeof trainingCourses.$inferSelect
-  }>
   myInbox: Array<typeof notifications.$inferSelect>
   topSitesByIncidents: Array<{ siteId: string | null; siteName: string; incidents: number }>
   topOverdueCAs: Array<{
@@ -268,7 +263,17 @@ export async function loadDashboardMetrics(
       tx
         .select({ c: count() })
         .from(trainingRecords)
-        .where(and(isNotNull(trainingRecords.expiresOn), lte(trainingRecords.expiresOn, ninetyIso)))
+        .innerJoin(people, eq(people.id, trainingRecords.personId))
+        .where(
+          and(
+            isNull(trainingRecords.deletedAt),
+            isNotNull(trainingRecords.expiresOn),
+            gte(trainingRecords.expiresOn, todayIso),
+            lte(trainingRecords.expiresOn, ninetyIso),
+            eq(people.status, 'active'),
+            isNull(people.deletedAt),
+          ),
+        )
         .then((r) => r[0]),
       tx
         .select({ c: count() })
@@ -590,15 +595,6 @@ export async function loadDashboardMetrics(
       .orderBy(asc(correctiveActions.dueOn))
       .limit(5)
 
-    const expiringCertsList = await tx
-      .select({ record: trainingRecords, person: people, course: trainingCourses })
-      .from(trainingRecords)
-      .innerJoin(people, eq(people.id, trainingRecords.personId))
-      .innerJoin(trainingCourses, eq(trainingCourses.id, trainingRecords.courseId))
-      .where(and(isNotNull(trainingRecords.expiresOn), lte(trainingRecords.expiresOn, ninetyIso)))
-      .orderBy(asc(trainingRecords.expiresOn))
-      .limit(5)
-
     const myInbox = await tx
       .select()
       .from(notifications)
@@ -669,9 +665,12 @@ export async function loadDashboardMetrics(
       .innerJoin(trainingCourses, eq(trainingCourses.id, trainingRecords.courseId))
       .where(
         and(
+          isNull(trainingRecords.deletedAt),
           isNotNull(trainingRecords.expiresOn),
           gte(trainingRecords.expiresOn, todayIso),
           lte(trainingRecords.expiresOn, thirtyIso),
+          eq(people.status, 'active'),
+          isNull(people.deletedAt),
         ),
       )
       .orderBy(asc(trainingRecords.expiresOn))
@@ -1004,7 +1003,6 @@ export async function loadDashboardMetrics(
 
       recentIncidents,
       dueCAs,
-      expiringCertsList,
       myInbox,
       topSitesByIncidents,
       topOverdueCAs,

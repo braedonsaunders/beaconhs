@@ -317,10 +317,15 @@ export function DashboardGrid({
             rowHeight={ROW_HEIGHT}
             margin={MARGIN}
             containerPadding={[0, 0]}
+            // `cancel` must NOT include `a`: KPI tiles render their whole card
+            // as a <Link> (<a>), so excluding anchors would make those cards
+            // undraggable. Drag is only enabled in edit mode (links never
+            // navigate-vs-drag in view mode), and the 3px threshold means a
+            // genuine click still follows the link.
             dragConfig={{
               enabled: mode === 'edit',
               bounded: false,
-              cancel: '.no-drag,a,button,input,select,textarea',
+              cancel: '.no-drag,button,input,select,textarea',
               threshold: 3,
             }}
             resizeConfig={{
@@ -344,7 +349,23 @@ export function DashboardGrid({
                 )
               return (
                 <div key={w.id} className="group/cell">
-                  <div className="relative h-full w-full">
+                  <div
+                    className="relative h-full w-full"
+                    // In edit mode, swallow link navigation so finishing a drag
+                    // (or a stray click) never follows a card's link. Capture
+                    // phase + stopPropagation stops it before the Link's own
+                    // onClick. Only anchors are blocked — the remove button and
+                    // any in-card buttons keep working.
+                    onClickCapture={
+                      mode === 'edit'
+                        ? (e) => {
+                            if (!(e.target as HTMLElement).closest('a')) return
+                            e.preventDefault()
+                            e.stopPropagation()
+                          }
+                        : undefined
+                    }
+                  >
                     {mode === 'edit' ? (
                       <>
                         <div className="ring-dashed pointer-events-none absolute inset-0 z-10 rounded-xl ring-1 ring-teal-300/0 transition group-hover/cell:ring-teal-400/80" />
