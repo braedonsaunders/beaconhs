@@ -34,10 +34,6 @@ import {
   AlertTitle,
   Badge,
   Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
   DetailHeader,
   EmptyState,
   Input,
@@ -90,7 +86,7 @@ import {
 
 export const dynamic = 'force-dynamic'
 
-const PPE_TABS = ['overview', 'inspections', 'annual', 'issues', 'history', 'status'] as const
+const PPE_TABS = ['overview', 'inspections', 'annual', 'issues', 'history'] as const
 type PpeTab = (typeof PPE_TABS)[number]
 
 // --- Server actions -----------------------------------------------------
@@ -278,7 +274,7 @@ async function setStatus(formData: FormData) {
   }
   revalidatePath(`/ppe/${itemId}`)
   revalidatePath('/ppe')
-  redirect(`/ppe/${itemId}?tab=status`)
+  redirect(`/ppe/${itemId}?tab=overview`)
 }
 
 async function reportIssue(formData: FormData) {
@@ -600,6 +596,11 @@ export default async function PpeDetailPage({
   // Editing the register-level fields requires the Manage PPE permission;
   // everyone else gets a read-only view of the same page.
   const canManage = can(ctx, 'ppe.manage')
+  // Custody actions live in the header so they are always reachable. Issuing
+  // needs the issue permission; the status change covers returns/damage/discard
+  // and is available to anyone who can return or manage PPE.
+  const canIssue = can(ctx, 'ppe.issue')
+  const canChangeStatus = can(ctx, 'ppe.return') || canManage
 
   // The inspection flyout is opened per-kind from the Pre-use / Annual buttons,
   // so render only the criteria for the launched kind (they are separate
@@ -631,7 +632,6 @@ export default async function PpeDetailPage({
     ...(showCertificates ? (['annual'] as const) : []),
     'issues',
     'history',
-    'status',
   ]
   // Fall back to Overview when a now-hidden tab is requested via the URL.
   const active: PpeTab = pickActiveTab(sp, visibleTabs, 'overview')
@@ -674,14 +674,30 @@ export default async function PpeDetailPage({
             </div>
           }
           actions={
-            <Link
-              href={`/ppe/${id}?send=1${active !== 'overview' ? `&tab=${active}` : ''}` as any}
-              scroll={false}
-            >
-              <Button variant="outline">
-                <Mail size={14} /> Send email
-              </Button>
-            </Link>
+            <div className="flex flex-wrap items-center gap-2">
+              {canIssue ? (
+                <Link href={`${basePath}?tab=${active}&drawer=issue-to-person` as any} scroll={false}>
+                  <Button>
+                    <UserPlus size={14} /> Issue to person
+                  </Button>
+                </Link>
+              ) : null}
+              {canChangeStatus ? (
+                <Link href={`${basePath}?tab=${active}&drawer=change-status` as any} scroll={false}>
+                  <Button variant="outline">
+                    <RefreshCw size={14} /> Change status
+                  </Button>
+                </Link>
+              ) : null}
+              <Link
+                href={`/ppe/${id}?send=1${active !== 'overview' ? `&tab=${active}` : ''}` as any}
+                scroll={false}
+              >
+                <Button variant="outline">
+                  <Mail size={14} /> Send email
+                </Button>
+              </Link>
+            </div>
           }
         />
       }
@@ -717,6 +733,7 @@ export default async function PpeDetailPage({
           basePath={basePath}
           currentParams={sp}
           active={active}
+          variant="pills"
           tabs={[
             { key: 'overview', label: 'Overview' },
             ...(hasInspections
@@ -727,7 +744,6 @@ export default async function PpeDetailPage({
               : []),
             { key: 'issues', label: 'Issues', count: issueReports.length },
             { key: 'history', label: 'History', count: issuesLog.length },
-            { key: 'status', label: 'Status' },
           ]}
         />
       }
@@ -1249,56 +1265,6 @@ export default async function PpeDetailPage({
           </Section>
         ) : null}
 
-        {active === 'status' ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>Status</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-slate-500">
-                Current status:{' '}
-                <Badge
-                  variant={
-                    item.status === 'issued'
-                      ? 'success'
-                      : item.status === 'in_stock'
-                        ? 'secondary'
-                        : 'warning'
-                  }
-                >
-                  {item.status.replace('_', ' ')}
-                </Badge>
-                {holder ? (
-                  <>
-                    {' '}
-                    held by{' '}
-                    <Link href={`/people/${holder.id}`} className="text-teal-700 hover:underline">
-                      {holder.firstName} {holder.lastName}
-                    </Link>
-                  </>
-                ) : null}
-                .
-              </p>
-              <div className="flex flex-wrap items-center gap-2">
-                <Link href={`${basePath}?tab=status&drawer=issue-to-person` as any}>
-                  <Button>
-                    <UserPlus size={14} /> Issue to person
-                  </Button>
-                </Link>
-                <Link href={`${basePath}?tab=status&drawer=change-status` as any}>
-                  <Button variant="outline">
-                    <RefreshCw size={14} /> Mark returned / damaged / discarded
-                  </Button>
-                </Link>
-              </div>
-              <p className="text-xs text-slate-500">
-                Issuing this item prompts for a holder and inserts a ledger row in the issues /
-                returns history. Marking returned clears the holder. The other statuses behave like
-                simple state flips and are audited.
-              </p>
-            </CardContent>
-          </Card>
-        ) : null}
       </div>
 
       <GenericSendEmailDialog
