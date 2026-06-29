@@ -31,6 +31,7 @@ export function TabNav({
   paramKey = 'tab',
   className,
   iconOnly = false,
+  variant = 'underline',
 }: {
   basePath: string
   currentParams: Record<string, string | string[] | undefined>
@@ -40,7 +41,64 @@ export function TabNav({
   className?: string
   /** Render the per-tab icon instead of its label (label becomes the tooltip). */
   iconOnly?: boolean
+  /**
+   * `underline` — the classic teal-underline strip (default).
+   * `pills` — the rounded "subtab pill" strip shared with the module sub-nav,
+   * for record detail pages.
+   */
+  variant?: 'underline' | 'pills'
 }) {
+  if (variant === 'pills') {
+    return (
+      <nav
+        className={cn(
+          'flex [scrollbar-width:none] flex-nowrap items-center gap-1.5 overflow-x-auto [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden',
+          'sm:flex-wrap sm:overflow-x-visible',
+          className,
+        )}
+        role="tablist"
+      >
+        {tabs
+          .filter((t) => !t.hidden)
+          .map((t) => {
+            const isActive = t.key === active
+            const href = mergeHref(basePath, currentParams, { [paramKey]: t.key })
+            return (
+              <Link
+                key={t.key}
+                href={href as any}
+                role="tab"
+                aria-selected={isActive}
+                title={iconOnly && t.icon ? t.label : undefined}
+                aria-label={iconOnly && t.icon ? t.label : undefined}
+                className={cn(
+                  'inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-xs whitespace-nowrap transition-colors',
+                  'focus-visible:ring-2 focus-visible:ring-teal-500/40 focus-visible:outline-none',
+                  isActive
+                    ? 'border-teal-700 bg-teal-700 text-white'
+                    : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800/60',
+                )}
+              >
+                {iconOnly && t.icon ? t.icon : t.label}
+                {typeof t.count === 'number' ? (
+                  <span
+                    className={cn(
+                      'rounded-full px-1.5 py-0.5 text-[11px] leading-none transition-colors',
+                      isActive
+                        ? 'bg-white/20 text-white'
+                        : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
+                    )}
+                  >
+                    {t.count}
+                  </span>
+                ) : null}
+              </Link>
+            )
+          })}
+      </nav>
+    )
+  }
+
   return (
     <nav
       className={cn(
