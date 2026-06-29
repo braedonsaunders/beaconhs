@@ -4,6 +4,7 @@
 import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lte, sql } from 'drizzle-orm'
 import { htmlToSnippet } from '@beaconhs/forms-core'
 import { extractRows } from '@beaconhs/reports'
+import type { Database } from '@beaconhs/db'
 import type { RequestContext } from '@beaconhs/tenant'
 import {
   complianceObligations,
@@ -184,13 +185,140 @@ export type DashboardMetrics = {
   // In-progress entries the current user has started but not finished, across
   // modules (journals, hazard assessments, incidents, inspections). Newest-
   // touched first. Empty for accounts with no tenant membership (e.g. super-admin).
-  inProgressEntries: Array<{
-    id: string
-    kind: 'journal' | 'hazard_assessment' | 'incident' | 'inspection'
-    title: string
-    href: string
-    updatedAt: string
-  }>
+  inProgressEntries: InProgressEntry[]
+}
+
+/**
+ * One unfinished record the current user authored — a draft or in-progress entry
+ * surfaced by the dashboard "In progress" widget and the Workspace card.
+ */
+export type InProgressEntry = {
+  id: string
+  kind: 'journal' | 'hazard_assessment' | 'incident' | 'inspection'
+  title: string
+  href: string
+  updatedAt: string
+}
+
+/**
+ * Drafts / in-progress records the given tenant-user authored across modules
+ * (journals, hazard assessments, incidents, inspections), newest-touched first
+ * and capped at 12. Must run inside a tenant-scoped executor so RLS applies.
+ * Shared by the dashboard widget and the Workspace so both read identical data.
+ */
+export async function loadInProgressEntries(
+  tx: Database,
+  myTenantUserId: string,
+): Promise<InProgressEntry[]> {
+  const entries: InProgressEntry[] = []
+  const toIso = (d: unknown) => (d instanceof Date ? d.toISOString() : String(d))
+  const [jDrafts, hzDrafts, incDrafts, insDrafts] = await Promise.all([
+    tx
+      .select({
+        id: journalEntries.id,
+        title: journalEntries.title,
+        updatedAt: journalEntries.updatedAt,
+      })
+      .from(journalEntries)
+      .where(
+        and(
+          eq(journalEntries.createdByTenantUserId, myTenantUserId),
+          eq(journalEntries.status, 'draft'),
+          isNull(journalEntries.deletedAt),
+        ),
+      )
+      .orderBy(desc(journalEntries.updatedAt))
+      .limit(8),
+    tx
+      .select({
+        id: hazidAssessments.id,
+        reference: hazidAssessments.reference,
+        jobScope: hazidAssessments.jobScope,
+        updatedAt: hazidAssessments.updatedAt,
+      })
+      .from(hazidAssessments)
+      .where(
+        and(
+          eq(hazidAssessments.reportedByTenantUserId, myTenantUserId),
+          eq(hazidAssessments.inProgress, true),
+          eq(hazidAssessments.locked, false),
+          isNull(hazidAssessments.deletedAt),
+        ),
+      )
+      .orderBy(desc(hazidAssessments.updatedAt))
+      .limit(8),
+    tx
+      .select({
+        id: incidents.id,
+        title: incidents.title,
+        reference: incidents.reference,
+        updatedAt: incidents.updatedAt,
+      })
+      .from(incidents)
+      .where(
+        and(
+          eq(incidents.reportedByTenantUserId, myTenantUserId),
+          eq(incidents.isDraft, true),
+          isNull(incidents.deletedAt),
+        ),
+      )
+      .orderBy(desc(incidents.updatedAt))
+      .limit(8),
+    tx
+      .select({
+        id: inspectionRecords.id,
+        reference: inspectionRecords.reference,
+        typeName: inspectionTypes.name,
+        updatedAt: inspectionRecords.updatedAt,
+      })
+      .from(inspectionRecords)
+      .leftJoin(inspectionTypes, eq(inspectionTypes.id, inspectionRecords.typeId))
+      .where(
+        and(
+          eq(inspectionRecords.inspectorTenantUserId, myTenantUserId),
+          inArray(inspectionRecords.status, ['draft', 'in_progress']),
+          isNull(inspectionRecords.deletedAt),
+        ),
+      )
+      .orderBy(desc(inspectionRecords.updatedAt))
+      .limit(8),
+  ])
+  for (const r of jDrafts)
+    entries.push({
+      id: r.id,
+      kind: 'journal',
+      title: r.title?.trim() || 'Untitled journal entry',
+      href: `/journals/${r.id}`,
+      updatedAt: toIso(r.updatedAt),
+    })
+  for (const r of hzDrafts)
+    entries.push({
+      id: r.id,
+      kind: 'hazard_assessment',
+      title: htmlToSnippet(r.jobScope, 120) || r.reference,
+      href: `/hazard-assessments/${r.id}`,
+      updatedAt: toIso(r.updatedAt),
+    })
+  for (const r of incDrafts)
+    entries.push({
+      id: r.id,
+      kind: 'incident',
+      title: r.title?.trim() || r.reference,
+      href: `/incidents/${r.id}`,
+      updatedAt: toIso(r.updatedAt),
+    })
+  for (const r of insDrafts)
+    entries.push({
+      id: r.id,
+      kind: 'inspection',
+      title: r.typeName?.trim() || r.reference,
+      href: `/inspections/records/${r.id}`,
+      updatedAt: toIso(r.updatedAt),
+    })
+  // Newest-touched first across every module, then cap the merged list.
+  entries.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+  entries.splice(12)
+  return entries
 }
 
 /** Returns the per-tenant dashboard payload. Single transaction. */
@@ -847,116 +975,7 @@ export async function loadDashboardMetrics(
     // newest-touched first. Keyed by tenant-user id (ctx.membership.id); an
     // account without a membership (e.g. super-admin) simply gets an empty list.
     const myTenantUserId = ctx.membership?.id ?? null
-    const inProgressEntries: DashboardMetrics['inProgressEntries'] = []
-    if (myTenantUserId) {
-      const toIso = (d: unknown) => (d instanceof Date ? d.toISOString() : String(d))
-      const [jDrafts, hzDrafts, incDrafts, insDrafts] = await Promise.all([
-        tx
-          .select({
-            id: journalEntries.id,
-            title: journalEntries.title,
-            updatedAt: journalEntries.updatedAt,
-          })
-          .from(journalEntries)
-          .where(
-            and(
-              eq(journalEntries.createdByTenantUserId, myTenantUserId),
-              eq(journalEntries.status, 'draft'),
-              isNull(journalEntries.deletedAt),
-            ),
-          )
-          .orderBy(desc(journalEntries.updatedAt))
-          .limit(8),
-        tx
-          .select({
-            id: hazidAssessments.id,
-            reference: hazidAssessments.reference,
-            jobScope: hazidAssessments.jobScope,
-            updatedAt: hazidAssessments.updatedAt,
-          })
-          .from(hazidAssessments)
-          .where(
-            and(
-              eq(hazidAssessments.reportedByTenantUserId, myTenantUserId),
-              eq(hazidAssessments.inProgress, true),
-              eq(hazidAssessments.locked, false),
-              isNull(hazidAssessments.deletedAt),
-            ),
-          )
-          .orderBy(desc(hazidAssessments.updatedAt))
-          .limit(8),
-        tx
-          .select({
-            id: incidents.id,
-            title: incidents.title,
-            reference: incidents.reference,
-            updatedAt: incidents.updatedAt,
-          })
-          .from(incidents)
-          .where(
-            and(
-              eq(incidents.reportedByTenantUserId, myTenantUserId),
-              eq(incidents.isDraft, true),
-              isNull(incidents.deletedAt),
-            ),
-          )
-          .orderBy(desc(incidents.updatedAt))
-          .limit(8),
-        tx
-          .select({
-            id: inspectionRecords.id,
-            reference: inspectionRecords.reference,
-            typeName: inspectionTypes.name,
-            updatedAt: inspectionRecords.updatedAt,
-          })
-          .from(inspectionRecords)
-          .leftJoin(inspectionTypes, eq(inspectionTypes.id, inspectionRecords.typeId))
-          .where(
-            and(
-              eq(inspectionRecords.inspectorTenantUserId, myTenantUserId),
-              inArray(inspectionRecords.status, ['draft', 'in_progress']),
-              isNull(inspectionRecords.deletedAt),
-            ),
-          )
-          .orderBy(desc(inspectionRecords.updatedAt))
-          .limit(8),
-      ])
-      for (const r of jDrafts)
-        inProgressEntries.push({
-          id: r.id,
-          kind: 'journal',
-          title: r.title?.trim() || 'Untitled journal entry',
-          href: `/journals/${r.id}`,
-          updatedAt: toIso(r.updatedAt),
-        })
-      for (const r of hzDrafts)
-        inProgressEntries.push({
-          id: r.id,
-          kind: 'hazard_assessment',
-          title: htmlToSnippet(r.jobScope, 120) || r.reference,
-          href: `/hazard-assessments/${r.id}`,
-          updatedAt: toIso(r.updatedAt),
-        })
-      for (const r of incDrafts)
-        inProgressEntries.push({
-          id: r.id,
-          kind: 'incident',
-          title: r.title?.trim() || r.reference,
-          href: `/incidents/${r.id}`,
-          updatedAt: toIso(r.updatedAt),
-        })
-      for (const r of insDrafts)
-        inProgressEntries.push({
-          id: r.id,
-          kind: 'inspection',
-          title: r.typeName?.trim() || r.reference,
-          href: `/inspections/records/${r.id}`,
-          updatedAt: toIso(r.updatedAt),
-        })
-      // Newest-touched first across every module, then cap the merged list.
-      inProgressEntries.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-      inProgressEntries.splice(12)
-    }
+    const inProgressEntries = myTenantUserId ? await loadInProgressEntries(tx, myTenantUserId) : []
 
     return {
       incidents30: Number(incRow?.c ?? 0),

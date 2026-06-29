@@ -11,6 +11,7 @@ import {
   ClipboardList,
   GraduationCap,
   ListChecks,
+  PencilLine,
   Radiation,
   ShieldCheck,
   User,
@@ -31,6 +32,7 @@ import {
 import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
 import { personCompliance } from '../compliance/_hub'
+import { loadInProgressEntries } from '../dashboard/_metrics'
 import { WorkspaceNoIdentity } from './_no-identity'
 
 export const metadata = { title: 'Workspace' }
@@ -225,8 +227,14 @@ export default async function MyLandingPage() {
           .then((r) => Number(r[0]?.c ?? 0))
       : Promise.resolve(0)
 
+    // ---- unfinished work across modules (same data as the dashboard) -----
+    const inProgressPromise = membershipId
+      ? loadInProgressEntries(tx, membershipId)
+      : Promise.resolve([])
+
     return {
       personId,
+      inProgress: await inProgressPromise,
       incidents: await incidentsPromise,
       hazardAssessments: await hazardAssessmentsPromise,
       openTasks: await openTasksPromise,
@@ -260,7 +268,21 @@ export default async function MyLandingPage() {
     (r) => r.status === 'overdue' || r.status === 'expiring',
   ).length
 
+  const inProgressCount = counts.inProgress.length
+
   const tiles: Tile[] = [
+    {
+      // Same unfinished-work feed as the dashboard "In progress" card; opens a
+      // card view with one card per unfinished entry to resume.
+      href: '/my/in-progress',
+      label: 'In progress',
+      description: 'Drafts and unfinished entries to resume.',
+      icon: PencilLine,
+      tone: 'amber',
+      count: inProgressCount,
+      hint: inProgressCount > 0 ? `${inProgressCount} to resume` : 'all caught up',
+      hintVariant: inProgressCount > 0 ? 'warning' : 'success',
+    },
     {
       href: '/compliance/mine',
       label: 'Compliance',
