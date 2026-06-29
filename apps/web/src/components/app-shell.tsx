@@ -1,6 +1,7 @@
 import { ShieldAlert } from 'lucide-react'
 import { AccountMenu } from './account-menu'
 import { TenantSwitcher } from './tenant-switcher'
+import { RoleSwitcher } from './role-switcher'
 import { PlatformMenu } from './platform-menu'
 import { NotificationsBell } from './notifications-bell'
 import { GlobalSearch } from './global-search'
@@ -25,6 +26,8 @@ export function AppShell({
   account,
   groups,
   availableTenants,
+  availableRoles,
+  activeRole,
   unreadCount,
   defaultCollapsed = false,
   impersonation = null,
@@ -39,6 +42,10 @@ export function AppShell({
   // apps/web/src/lib/nav/resolve.ts.
   groups: SidebarNavGroup[]
   availableTenants: { id: string; name: string; slug: string }[]
+  /** Distinct roles assigned to the user in the active tenant (for the switcher). */
+  availableRoles: { id: string; name: string; key: string }[]
+  /** The role the user is currently acting under (`id: null` = all roles). */
+  activeRole: { id: string | null; name: string }
   unreadCount: number
   /** Persisted sidebar-collapsed preference (from the `sidebar_collapsed` cookie). */
   defaultCollapsed?: boolean
@@ -78,6 +85,7 @@ export function AppShell({
               available={availableTenants}
               isSuperAdmin={ctx.isSuperAdmin}
             />
+            <RoleSwitcher current={activeRole} available={availableRoles} />
             {ctx.isSuperAdmin ? <PlatformMenu /> : null}
             <div className="hidden flex-1 justify-center md:flex">
               <GlobalSearch />

@@ -2,7 +2,7 @@ import { cache } from 'react'
 import { cookies, headers } from 'next/headers'
 import { auth } from '@beaconhs/auth'
 import { db, withSuperAdmin, type Database } from '@beaconhs/db'
-import { sessions, tenants, tenantUsers, users } from '@beaconhs/db/schema'
+import { roleAssignments, roles, sessions, tenants, tenantUsers, users } from '@beaconhs/db/schema'
 import { and, asc, eq, sql } from 'drizzle-orm'
 import {
   assertCan,
@@ -14,6 +14,9 @@ import {
 import { actorMayImpersonate, resolveMembershipPerms } from './impersonation'
 
 export const ACTIVE_TENANT_COOKIE = 'bhs-active-tenant'
+// The single role a multi-role user has switched into. Cleared whenever the
+// active tenant changes (a role id only means something inside one tenant).
+export const ACTIVE_ROLE_COOKIE = 'bhs-active-role'
 
 export async function getCurrentUserId(): Promise<string | null> {
   try {
@@ -72,6 +75,7 @@ export const getRequestContext = cache(async (): Promise<RequestContext | null> 
   const sessionToken = session.session?.token ?? null
   const cookieStore = await cookies()
   const cookieTenantId = cookieStore.get(ACTIVE_TENANT_COOKIE)?.value ?? null
+  const cookieRoleId = cookieStore.get(ACTIVE_ROLE_COOKIE)?.value ?? null
 
   // Bootstrap read: resolve identity + membership ACROSS tenants before any
   // tenant scope is chosen. Runs on the BYPASSRLS super pool — the tenant tables
@@ -172,9 +176,12 @@ export const getRequestContext = cache(async (): Promise<RequestContext | null> 
 
     // Role-union permissions + scopes, then per-user grant/deny overrides
     // (deny wins). Shared with the impersonation path so both resolve identically.
-    const { permissions, scopes } = await resolveMembershipPerms(
+    // When the user has switched into a single role, narrow to just that role;
+    // `appliedRoleId` is null if the cookie's role is no longer assigned.
+    const { permissions, scopes, appliedRoleId } = await resolveMembershipPerms(
       tx as unknown as Database,
       active.membership.id,
+      cookieRoleId,
     )
 
     return makeTenantContext(db, {
@@ -188,6 +195,7 @@ export const getRequestContext = cache(async (): Promise<RequestContext | null> 
       },
       permissions,
       scopes,
+      activeRoleId: appliedRoleId,
     })
   })
 })
@@ -307,4 +315,27 @@ export async function listAccessibleTenants(): Promise<
       .where(and(eq(tenantUsers.userId, userId), eq(tenantUsers.status, 'active')))
       .orderBy(tenants.name)
   })
+}
+
+/**
+ * List the distinct roles assigned to the current user in the active tenant —
+ * the menu behind the role switcher. Returns every assigned role (not the
+ * narrowed set), so a user who has switched into one role can still switch back.
+ * Empty for super-admins (no role union) and while impersonating (the overlay
+ * isn't the actor's own membership to re-scope).
+ */
+export async function listActiveTenantRoles(): Promise<
+  { id: string; name: string; key: string }[]
+> {
+  const ctx = await getRequestContext()
+  if (!ctx || ctx.isSuperAdmin || ctx.impersonation || !ctx.membership) return []
+  const membershipId = ctx.membership.id
+  return await ctx.db((tx) =>
+    tx
+      .selectDistinct({ id: roles.id, name: roles.name, key: roles.key })
+      .from(roleAssignments)
+      .innerJoin(roles, eq(roles.id, roleAssignments.roleId))
+      .where(eq(roleAssignments.tenantUserId, membershipId))
+      .orderBy(roles.name),
+  )
 }

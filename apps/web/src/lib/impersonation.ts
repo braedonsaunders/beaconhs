@@ -33,20 +33,40 @@ export function permsHas(permissions: Set<string>, perm: string): boolean {
  * roles' permissions, then per-user overrides applied grant-then-deny (deny
  * wins). This is the exact resolution getRequestContext() uses for a normal
  * login, extracted so the impersonated path produces an identical result.
+ *
+ * When `activeRoleId` is supplied AND the membership still holds that role, the
+ * resolution narrows to just that one role's permissions + scopes (the user has
+ * "switched into" a single role via the role switcher). A stale/unknown role id
+ * falls back to the full union. Per-user overrides always apply on top — they
+ * are membership-level, not role-level. `appliedRoleId` reports which role the
+ * narrowing actually used (null when the union was used).
  */
 export async function resolveMembershipPerms(
   tx: Database,
   membershipId: string,
-): Promise<{ permissions: Set<string>; scopes: RoleScope[] }> {
+  activeRoleId?: string | null,
+): Promise<{ permissions: Set<string>; scopes: RoleScope[]; appliedRoleId: string | null }> {
   const assignments = await tx
-    .select({ permissions: roles.permissions, scope: roleAssignments.scope })
+    .select({
+      roleId: roleAssignments.roleId,
+      permissions: roles.permissions,
+      scope: roleAssignments.scope,
+    })
     .from(roleAssignments)
     .innerJoin(roles, eq(roles.id, roleAssignments.roleId))
     .where(eq(roleAssignments.tenantUserId, membershipId))
 
+  // Narrow to the switched-into role only when it is actually one of this
+  // membership's roles; otherwise use every assigned role (the default union).
+  const appliedRoleId =
+    activeRoleId && assignments.some((a) => a.roleId === activeRoleId) ? activeRoleId : null
+  const effective = appliedRoleId
+    ? assignments.filter((a) => a.roleId === appliedRoleId)
+    : assignments
+
   const permissions = new Set<string>()
-  const scopes = assignments.map((a) => a.scope)
-  for (const a of assignments) for (const p of a.permissions) permissions.add(p)
+  const scopes = effective.map((a) => a.scope)
+  for (const a of effective) for (const p of a.permissions) permissions.add(p)
 
   const overrides = await tx
     .select({
@@ -58,7 +78,7 @@ export async function resolveMembershipPerms(
   for (const o of overrides) if (o.effect === 'grant') permissions.add(o.permission)
   for (const o of overrides) if (o.effect === 'deny') permissions.delete(o.permission)
 
-  return { permissions, scopes }
+  return { permissions, scopes, appliedRoleId }
 }
 
 /**

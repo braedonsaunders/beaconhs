@@ -34,6 +34,11 @@ export type RequestContext = {
   membership: { id: string; displayName: string } | null
   permissions: Set<string>
   scopes: RoleScope[]
+  // The single role a multi-role user has "switched into" via the role
+  // switcher. When set, `permissions`/`scopes` are narrowed to just that role
+  // (still with per-user overrides applied). Null/undefined means the default:
+  // the union of every assigned role. Never set for super-admins.
+  activeRoleId?: string | null
   // Present only during impersonation — null/undefined for a normal session.
   impersonation?: ImpersonationInfo | null
   // Present for public API requests authenticated by an API key.

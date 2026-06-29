@@ -6,7 +6,12 @@ import { Toaster } from 'sonner'
 import { db, withSuperAdmin } from '@beaconhs/db'
 import { notifications, tenants } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
-import { getRequestContext, getSessionUser, listAccessibleTenants } from '@/lib/auth'
+import {
+  getRequestContext,
+  getSessionUser,
+  listAccessibleTenants,
+  listActiveTenantRoles,
+} from '@/lib/auth'
 import { AppShell } from '@/components/app-shell'
 import { NavigationProvider } from '@/components/navigation-provider'
 import { RiskMatrixProvider } from '@/components/risk-matrix'
@@ -25,7 +30,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const defaultCollapsed = (await cookies()).get('sidebar_collapsed')?.value === '1'
 
-  const [tenant, available, unread, navGroups, sessionUser] = await Promise.all([
+  const [tenant, available, roles, unread, navGroups, sessionUser] = await Promise.all([
     withSuperAdmin(db, async (tx) => {
       const [t] = await tx
         .select({ id: tenants.id, name: tenants.name, riskMatrix: tenants.riskMatrix })
@@ -35,6 +40,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       return t
     }),
     listAccessibleTenants(),
+    listActiveTenantRoles(),
     ctx.db(async (tx) => {
       const [row] = await tx
         .select({ c: count() })
@@ -55,6 +61,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     name: ctx.membership?.displayName ?? sessionUser?.name ?? sessionUser?.email ?? 'Account',
     email: sessionUser?.email ?? '',
   }
+
+  // The role the user is currently acting under: a single switched-into role, or
+  // the union of all of them ("All roles"). The switcher itself hides when the
+  // user has one role or fewer.
+  const activeRole = ctx.activeRoleId
+    ? { id: ctx.activeRoleId, name: roles.find((r) => r.id === ctx.activeRoleId)?.name ?? 'Role' }
+    : { id: null, name: 'All roles' }
 
   // While impersonating, ctx is already the TARGET (membership = their display
   // name); ctx.impersonation carries the real admin for the banner.
@@ -79,6 +92,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           account={account}
           groups={navGroups}
           availableTenants={available}
+          availableRoles={roles}
+          activeRole={activeRole}
           unreadCount={unread}
           defaultCollapsed={defaultCollapsed}
           impersonation={impersonation}
@@ -93,7 +108,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               that whole class of state in one place; the shell/sidebar stay
               mounted and update via fresh props as before. */}
           <RiskMatrixProvider matrix={tenant.riskMatrix}>
-            <Fragment key={`${ctx.tenantId}:${ctx.userId}`}>{children}</Fragment>
+            <Fragment key={`${ctx.tenantId}:${ctx.userId}:${ctx.activeRoleId ?? 'all'}`}>
+              {children}
+            </Fragment>
           </RiskMatrixProvider>
           <Toaster richColors position="top-right" />
         </AppShell>
