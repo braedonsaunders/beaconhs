@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm'
+import { revalidatePath } from 'next/cache'
+import { and, asc, desc, eq, inArray, isNull, ne } from 'drizzle-orm'
 import {
   Award,
   BadgeCheck,
@@ -11,7 +12,6 @@ import {
   Mail,
   Paperclip,
   PenLine,
-  Pencil,
   Phone,
   ShieldCheck,
   Square,
@@ -19,6 +19,9 @@ import {
   Users,
 } from 'lucide-react'
 import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
   Badge,
   Button,
   Card,
@@ -27,7 +30,6 @@ import {
   CardTitle,
   DetailHeader,
   EmptyState,
-  Input,
   Label,
   Select,
   Table,
@@ -68,11 +70,13 @@ import {
 } from '@beaconhs/db/schema'
 import { publicUrl } from '@beaconhs/storage'
 import { requireRequestContext } from '@/lib/auth'
-import { recentActivityForEntity } from '@/lib/audit'
+import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { ActivityFeed } from '@/components/activity-feed'
 import { Section } from '@/components/section'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
-import { PersonEditTab } from './person-edit-tab'
+import { LiveField, LivePersonSelect, LiveSelect } from '@/components/live-field'
+import { assertCanManageModule, canManageModule } from '@/lib/module-admin/guard'
+import { getPersonSyncOrigin, SYNC_OWNED_PERSON_FIELDS } from '@/lib/people-sync'
 import { PageContainer } from '@/components/page-layout'
 import { togglePersonInGroup } from '../_actions/groups'
 import {
@@ -88,8 +92,7 @@ import { PersonFilesDrawers } from './_files-drawers'
 export const dynamic = 'force-dynamic'
 
 const TABS = [
-  'profile',
-  'employment',
+  'overview',
   'groups',
   'title',
   'compliance',
@@ -97,13 +100,97 @@ const TABS = [
   'skills',
   'ppe',
   'documents',
-  'files',
   'incidents',
   'forms',
   'activity',
-  'edit',
 ] as const
 type Tab = (typeof TABS)[number]
+
+// App-owned fields stay editable even while a person is synced. Everything in
+// SYNC_OWNED_PERSON_FIELDS is locked at the source. dateOfBirth and
+// terminationDate are manual/app-owned (no sync writes them).
+const APP_OWNED_FIELDS = new Set([
+  'formalName',
+  'externalEmployeeId',
+  'crewId',
+  'managerPersonId',
+  'emergencyContactName',
+  'emergencyContactPhone',
+  'notes',
+  'dateOfBirth',
+  'terminationDate',
+])
+const SYNC_OWNED_FIELDS = new Set<string>(SYNC_OWNED_PERSON_FIELDS)
+const EDITABLE_FIELDS = new Set<string>([...APP_OWNED_FIELDS, ...SYNC_OWNED_FIELDS])
+const PERSON_STATUSES = ['active', 'inactive', 'terminated'] as const
+
+/**
+ * Auto-save a single person field. Mirrors the incidents `updateTextField`
+ * recipe, but layers the directory's sync-lock rule on top: while the person is
+ * actively synced, the source system owns the identity fields and any write to
+ * one is rejected server-side (the disabled inputs are only the UI half of this
+ * guard). App-owned fields stay editable regardless.
+ */
+async function updatePersonField(formData: FormData) {
+  'use server'
+  const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'people')
+  const id = String(formData.get('id') ?? '')
+  const field = String(formData.get('field') ?? '')
+  const raw = formData.get('value')
+  const rawValue = typeof raw === 'string' ? raw.trim() : ''
+  if (!id || !field) throw new Error('Missing id/field')
+  if (!EDITABLE_FIELDS.has(field)) throw new Error('Field not allowed')
+
+  const { before, synced } = await ctx.db(async (tx) => {
+    const [row] = await tx.select().from(people).where(eq(people.id, id)).limit(1)
+    const origin = row ? await getPersonSyncOrigin(tx, id) : null
+    return { before: row, synced: origin != null }
+  })
+  if (!before) throw new Error('Person not found')
+
+  // Server-side half of the sync lock: a synced person's identity fields are
+  // owned by the source — reject the write outright.
+  if (synced && SYNC_OWNED_FIELDS.has(field)) {
+    throw new Error('Field is managed by an external sync and is read-only')
+  }
+
+  // A person can never be their own manager.
+  if (field === 'managerPersonId' && rawValue === id) {
+    return
+  }
+
+  // Required identity fields must not be blanked (only reachable when not synced).
+  if ((field === 'firstName' || field === 'lastName') && !rawValue) {
+    throw new Error('First and last name are required')
+  }
+
+  let value: string | null = rawValue || null
+  if (field === 'firstName' || field === 'lastName') {
+    value = rawValue
+  } else if (field === 'status') {
+    if (!(PERSON_STATUSES as readonly string[]).includes(rawValue)) {
+      throw new Error('Invalid status')
+    }
+    value = rawValue
+  }
+
+  await ctx.db((tx) =>
+    tx
+      .update(people)
+      .set({ [field]: value } as Partial<typeof people.$inferInsert>)
+      .where(eq(people.id, id)),
+  )
+  await recordAudit(ctx, {
+    entityType: 'person',
+    entityId: id,
+    action: 'update',
+    summary: `Person ${field} updated`,
+    before: { [field]: (before as Record<string, unknown>)[field] },
+    after: { [field]: value },
+  })
+  revalidatePath(`/people/${id}`)
+}
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -119,9 +206,10 @@ export default async function PersonDetailPage({
 }) {
   const { id } = await params
   const sp = await searchParams
-  const active: Tab = pickActiveTab(sp, TABS, 'profile')
+  const active: Tab = pickActiveTab(sp, TABS, 'overview')
 
   const ctx = await requireRequestContext()
+  const canEdit = canManageModule(ctx, 'people')
   const data = await ctx.db(async (tx) => {
     const [row] = await tx
       .select({ person: people, department: departments, trade: trades, crew: crews })
@@ -149,6 +237,11 @@ export default async function PersonDetailPage({
       fileRows,
       signatureAtt,
       managerRow,
+      deptOptions,
+      tradeOptions,
+      crewOptions,
+      managerOptions,
+      syncOrigin,
     ] = await Promise.all([
       tx
         .select({ record: trainingRecords, course: trainingCourses })
@@ -264,6 +357,25 @@ export default async function PersonDetailPage({
             .limit(1)
             .then((rs) => rs[0] ?? null)
         : Promise.resolve(null),
+      // Lookup lists for the Overview tab's Live* selects.
+      tx
+        .select({ id: departments.id, name: departments.name })
+        .from(departments)
+        .orderBy(asc(departments.name)),
+      tx.select({ id: trades.id, name: trades.name }).from(trades).orderBy(asc(trades.name)),
+      tx.select({ id: crews.id, name: crews.name }).from(crews).orderBy(asc(crews.name)),
+      // Manager picker — active people excluding self.
+      tx
+        .select({
+          id: people.id,
+          firstName: people.firstName,
+          lastName: people.lastName,
+          employeeNo: people.employeeNo,
+        })
+        .from(people)
+        .where(and(ne(people.id, id), eq(people.status, 'active')))
+        .orderBy(asc(people.lastName), asc(people.firstName)),
+      getPersonSyncOrigin(tx, id),
     ])
 
     // Second pass for title tasks now that we know the titles
@@ -305,6 +417,11 @@ export default async function PersonDetailPage({
       fileRows,
       signatureAtt,
       managerRow,
+      deptOptions,
+      tradeOptions,
+      crewOptions,
+      managerOptions,
+      syncOrigin,
     }
   })
 
@@ -331,10 +448,20 @@ export default async function PersonDetailPage({
     fileRows,
     signatureAtt,
     managerRow,
+    deptOptions,
+    tradeOptions,
+    crewOptions,
+    managerOptions,
+    syncOrigin,
   } = data
   const signatureUrl = signatureAtt ? publicUrl(signatureAtt.r2Key) : null
   const openDrawer = typeof sp.drawer === 'string' ? sp.drawer : null
-  const basePathForDrawer = `/people/${id}${active === 'profile' ? '' : `?tab=${active}`}`
+  const basePathForDrawer = `/people/${id}${active === 'overview' ? '' : `?tab=${active}`}`
+  const synced = syncOrigin != null
+  // A field's input is read-only when the viewer lacks edit permission, OR the
+  // person is synced and this is a sync-owned field.
+  const fieldDisabled = (field: string) =>
+    !canEdit || (synced && SYNC_OWNED_FIELDS.has(field))
   const ackByTaskId = new Map(titleTaskAcks.map((a) => [a.taskId, a]))
 
   const today = new Date()
@@ -410,14 +537,6 @@ export default async function PersonDetailPage({
             <Badge variant={person.status === 'active' ? 'success' : 'secondary'}>
               {person.status}
             </Badge>
-          }
-          actions={
-            <Link href={`${basePath}?tab=edit` as any}>
-              <Button variant="outline">
-                <Pencil size={14} />
-                Edit
-              </Button>
-            </Link>
           }
         />
 
@@ -553,9 +672,9 @@ export default async function PersonDetailPage({
               basePath={basePath}
               currentParams={sp}
               active={active}
+              variant="pills"
               tabs={[
-                { key: 'profile', label: 'Profile' },
-                { key: 'employment', label: 'Employment' },
+                { key: 'overview', label: 'Overview' },
                 {
                   key: 'groups',
                   label: 'Groups',
@@ -563,26 +682,21 @@ export default async function PersonDetailPage({
                 },
                 {
                   key: 'title',
-                  label: 'Title',
+                  label: 'Titles',
                   count: personTitleRows.length,
                 },
                 { key: 'compliance', label: 'Compliance' },
                 {
                   key: 'training',
-                  label: 'Training matrix',
+                  label: 'Training',
                   count: training.length,
                 },
                 { key: 'skills', label: 'Skills', count: skills.length },
                 { key: 'ppe', label: 'PPE', count: ppeAssigned.length },
                 {
                   key: 'documents',
-                  label: 'Documents',
-                  count: ackedDocs.length,
-                },
-                {
-                  key: 'files',
-                  label: 'Files',
-                  count: fileRows.length,
+                  label: 'Documents & files',
+                  count: fileRows.length + ackedDocs.length,
                 },
                 {
                   key: 'incidents',
@@ -595,46 +709,222 @@ export default async function PersonDetailPage({
                   count: submittedForms.length,
                 },
                 { key: 'activity', label: 'Activity' },
-                { key: 'edit', label: 'Edit' },
               ]}
             />
 
-            {active === 'profile' ? (
-              <Section title="Profile" subtitle="Identification and contact info">
-                <dl className="grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
-                  <ProfileRow label="First name">{person.firstName}</ProfileRow>
-                  <ProfileRow label="Last name">{person.lastName}</ProfileRow>
-                  <ProfileRow label="Formal name">{person.formalName ?? '—'}</ProfileRow>
-                  <ProfileRow label="Job title">{person.jobTitle ?? '—'}</ProfileRow>
-                  <ProfileRow label="Date of birth">{person.dateOfBirth ?? '—'}</ProfileRow>
-                  <ProfileRow label="Employee #">{person.employeeNo ?? '—'}</ProfileRow>
-                  <ProfileRow label="Email">{person.email ?? '—'}</ProfileRow>
-                  <ProfileRow label="Phone">{person.phone ?? '—'}</ProfileRow>
-                  <ProfileRow label="Emergency contact">
-                    {person.emergencyContactName ?? '—'}
-                  </ProfileRow>
-                  <ProfileRow label="Emergency phone">
-                    {person.emergencyContactPhone ?? '—'}
-                  </ProfileRow>
-                </dl>
-              </Section>
-            ) : null}
+            {active === 'overview' ? (
+              <div className="space-y-4">
+                {synced ? (
+                  <Alert variant="info">
+                    <AlertTitle>Synced from {syncOrigin!.connectionName}</AlertTitle>
+                    <AlertDescription>
+                      Identity fields (name, job title, employee #, contact, department, trade,
+                      status, hire date) are kept in sync from {syncOrigin!.sourceSystem} and are
+                      read-only here — edit them at the source. App-only fields stay editable.
+                    </AlertDescription>
+                  </Alert>
+                ) : null}
+                {!canEdit ? (
+                  <Alert variant="info">
+                    <AlertTitle>Read-only</AlertTitle>
+                    <AlertDescription>
+                      You do not have permission to edit this person.
+                    </AlertDescription>
+                  </Alert>
+                ) : null}
 
-            {active === 'employment' ? (
-              <Section title="Employment" subtitle="Trade, crew, department, and dates">
-                <dl className="grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
-                  <ProfileRow label="Status">{person.status}</ProfileRow>
-                  <ProfileRow label="Hire date">{person.hireDate ?? '—'}</ProfileRow>
-                  <ProfileRow label="Termination date">{person.terminationDate ?? '—'}</ProfileRow>
-                  <ProfileRow label="Department">{department?.name ?? '—'}</ProfileRow>
-                  <ProfileRow label="Trade">{trade?.name ?? '—'}</ProfileRow>
-                  <ProfileRow label="Crew">{crew?.name ?? '—'}</ProfileRow>
-                  <ProfileRow label="Job title">{person.jobTitle ?? '—'}</ProfileRow>
-                  <ProfileRow label="System user link">
-                    {person.userId ? <Badge variant="success">Linked</Badge> : '—'}
-                  </ProfileRow>
-                </dl>
-              </Section>
+                <Section title="Personal" subtitle="Identification and contact info">
+                  <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+                    <LiveField
+                      id={person.id}
+                      field="firstName"
+                      label="First name"
+                      initialValue={person.firstName}
+                      disabled={fieldDisabled('firstName')}
+                      updateAction={updatePersonField}
+                    />
+                    <LiveField
+                      id={person.id}
+                      field="lastName"
+                      label="Last name"
+                      initialValue={person.lastName}
+                      disabled={fieldDisabled('lastName')}
+                      updateAction={updatePersonField}
+                    />
+                    <LiveField
+                      id={person.id}
+                      field="formalName"
+                      label="Formal name"
+                      initialValue={person.formalName}
+                      disabled={fieldDisabled('formalName')}
+                      updateAction={updatePersonField}
+                    />
+                    <LiveField
+                      id={person.id}
+                      field="jobTitle"
+                      label="Job title"
+                      initialValue={person.jobTitle}
+                      disabled={fieldDisabled('jobTitle')}
+                      updateAction={updatePersonField}
+                    />
+                    <LiveField
+                      id={person.id}
+                      field="dateOfBirth"
+                      label="Date of birth"
+                      type="date"
+                      initialValue={person.dateOfBirth}
+                      disabled={fieldDisabled('dateOfBirth')}
+                      updateAction={updatePersonField}
+                    />
+                    <LiveField
+                      id={person.id}
+                      field="employeeNo"
+                      label="Employee #"
+                      initialValue={person.employeeNo}
+                      disabled={fieldDisabled('employeeNo')}
+                      updateAction={updatePersonField}
+                    />
+                    <LiveField
+                      id={person.id}
+                      field="email"
+                      label="Email"
+                      initialValue={person.email}
+                      disabled={fieldDisabled('email')}
+                      updateAction={updatePersonField}
+                    />
+                    <LiveField
+                      id={person.id}
+                      field="phone"
+                      label="Phone"
+                      initialValue={person.phone}
+                      disabled={fieldDisabled('phone')}
+                      updateAction={updatePersonField}
+                    />
+                  </div>
+                </Section>
+
+                <Section title="Employment" subtitle="Trade, crew, department, and dates">
+                  <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+                    <LiveSelect
+                      id={person.id}
+                      field="status"
+                      label="Status"
+                      initialValue={person.status}
+                      allowEmpty={false}
+                      options={[
+                        { value: 'active', label: 'Active' },
+                        { value: 'inactive', label: 'Inactive' },
+                        { value: 'terminated', label: 'Terminated' },
+                      ]}
+                      disabled={fieldDisabled('status')}
+                      updateAction={updatePersonField}
+                    />
+                    <LiveField
+                      id={person.id}
+                      field="hireDate"
+                      label="Hire date"
+                      type="date"
+                      initialValue={person.hireDate}
+                      disabled={fieldDisabled('hireDate')}
+                      updateAction={updatePersonField}
+                    />
+                    <LiveField
+                      id={person.id}
+                      field="terminationDate"
+                      label="Termination date"
+                      type="date"
+                      initialValue={person.terminationDate}
+                      disabled={fieldDisabled('terminationDate')}
+                      updateAction={updatePersonField}
+                    />
+                    <LiveSelect
+                      id={person.id}
+                      field="departmentId"
+                      label="Department"
+                      initialValue={person.departmentId}
+                      options={deptOptions.map((d) => ({ value: d.id, label: d.name }))}
+                      disabled={fieldDisabled('departmentId')}
+                      updateAction={updatePersonField}
+                    />
+                    <LiveSelect
+                      id={person.id}
+                      field="tradeId"
+                      label="Trade"
+                      initialValue={person.tradeId}
+                      options={tradeOptions.map((t) => ({ value: t.id, label: t.name }))}
+                      disabled={fieldDisabled('tradeId')}
+                      updateAction={updatePersonField}
+                    />
+                    <LiveSelect
+                      id={person.id}
+                      field="crewId"
+                      label="Crew"
+                      initialValue={person.crewId}
+                      options={crewOptions.map((c) => ({ value: c.id, label: c.name }))}
+                      disabled={fieldDisabled('crewId')}
+                      updateAction={updatePersonField}
+                    />
+                    <LiveField
+                      id={person.id}
+                      field="externalEmployeeId"
+                      label="External employee ID"
+                      placeholder="e.g. payroll / NetSuite id"
+                      initialValue={person.externalEmployeeId}
+                      disabled={fieldDisabled('externalEmployeeId')}
+                      updateAction={updatePersonField}
+                    />
+                    <LivePersonSelect
+                      id={person.id}
+                      field="managerPersonId"
+                      label="Reports to"
+                      initialValue={person.managerPersonId}
+                      options={managerOptions.map((m) => ({
+                        value: m.id,
+                        label: `${m.lastName}, ${m.firstName}`,
+                        hint: m.employeeNo ?? undefined,
+                      }))}
+                      sheetTitle="Select manager"
+                      placeholder="Search people…"
+                      disabled={fieldDisabled('managerPersonId')}
+                      updateAction={updatePersonField}
+                    />
+                  </div>
+                </Section>
+
+                <Section title="Emergency contact" subtitle="Who to call in an emergency">
+                  <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+                    <LiveField
+                      id={person.id}
+                      field="emergencyContactName"
+                      label="Contact name"
+                      initialValue={person.emergencyContactName}
+                      disabled={fieldDisabled('emergencyContactName')}
+                      updateAction={updatePersonField}
+                    />
+                    <LiveField
+                      id={person.id}
+                      field="emergencyContactPhone"
+                      label="Contact phone"
+                      initialValue={person.emergencyContactPhone}
+                      disabled={fieldDisabled('emergencyContactPhone')}
+                      updateAction={updatePersonField}
+                    />
+                  </div>
+                </Section>
+
+                <Section title="Notes" subtitle="Internal notes about this person">
+                  <LiveField
+                    id={person.id}
+                    field="notes"
+                    label="Notes"
+                    multiline
+                    rows={4}
+                    initialValue={person.notes}
+                    disabled={fieldDisabled('notes')}
+                    updateAction={updatePersonField}
+                  />
+                </Section>
+              </div>
             ) : null}
 
             {active === 'groups' ? (
@@ -913,142 +1203,144 @@ export default async function PersonDetailPage({
             ) : null}
 
             {active === 'documents' ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Documents acknowledged ({ackedDocs.length})</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {ackedDocs.length === 0 ? (
-                    <EmptyState
-                      icon={<ShieldCheck size={24} />}
-                      title="No documents acknowledged"
-                      description="Acknowledgements appear here once the person signs off on policies, SDS, or procedures."
-                      action={
-                        <Link href={`/documents`}>
-                          <Button variant="outline" size="sm">
-                            Browse documents →
-                          </Button>
-                        </Link>
-                      }
-                    />
-                  ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Document</TableHead>
-                          <TableHead>Category</TableHead>
-                          <TableHead>Acknowledged at</TableHead>
-                          <TableHead></TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {ackedDocs.map((row) => (
-                          <TableRow key={row.ack.id}>
-                            <TableCell className="font-medium">
-                              <Link href={`/documents/${row.doc.id}`} className="hover:underline">
-                                {row.doc.title}
-                              </Link>
-                            </TableCell>
-                            <TableCell className="text-slate-600">
-                              {row.doc.category ?? '—'}
-                            </TableCell>
-                            <TableCell>
-                              {new Date(row.ack.acknowledgedAt).toLocaleString()}
-                            </TableCell>
-                            <TableCell>
-                              <Link
-                                href={`/documents/${row.doc.id}`}
-                                className="text-xs text-teal-700 hover:underline"
-                              >
-                                View →
-                              </Link>
-                            </TableCell>
+              <div className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center justify-between text-base">
+                      <span className="flex items-center gap-2">
+                        <Paperclip size={16} />
+                        Personal files ({fileRows.length})
+                      </span>
+                      <Link href={`${basePath}?tab=documents&drawer=upload-person-file`}>
+                        <Button size="sm">Upload file</Button>
+                      </Link>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {fileRows.length === 0 ? (
+                      <EmptyState
+                        icon={<Paperclip size={24} />}
+                        title="No files uploaded"
+                        description="Use the upload button to attach resumes, certifications, ID copies, and other personal documents."
+                      />
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Label</TableHead>
+                            <TableHead>Kind</TableHead>
+                            <TableHead>Filename</TableHead>
+                            <TableHead>Uploaded</TableHead>
+                            <TableHead></TableHead>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  )}
-                </CardContent>
-              </Card>
-            ) : null}
-
-            {active === 'files' ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between text-base">
-                    <span className="flex items-center gap-2">
-                      <Paperclip size={16} />
-                      Personal files ({fileRows.length})
-                    </span>
-                    <Link href={`${basePath}?tab=files&drawer=upload-person-file`}>
-                      <Button size="sm">Upload file</Button>
-                    </Link>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {fileRows.length === 0 ? (
-                    <EmptyState
-                      icon={<Paperclip size={24} />}
-                      title="No files uploaded"
-                      description="Use the upload button to attach resumes, certifications, ID copies, and other personal documents."
-                    />
-                  ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Label</TableHead>
-                          <TableHead>Kind</TableHead>
-                          <TableHead>Filename</TableHead>
-                          <TableHead>Uploaded</TableHead>
-                          <TableHead></TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {fileRows.map(({ file, attachment }) => (
-                          <TableRow key={file.id}>
-                            <TableCell className="font-medium">{file.label}</TableCell>
-                            <TableCell>
-                              <Badge variant="secondary">{file.kind.replace('_', ' ')}</Badge>
-                            </TableCell>
-                            <TableCell className="text-xs text-slate-600">
-                              {attachment ? (
-                                <a
-                                  href={publicUrl(attachment.r2Key)}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-teal-700 hover:underline"
-                                >
-                                  {attachment.filename}
-                                </a>
-                              ) : (
-                                <span className="text-slate-400">file missing</span>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-xs text-slate-600">
-                              {new Date(file.uploadedAt).toLocaleDateString()}
-                            </TableCell>
-                            <TableCell>
-                              <form action={deletePersonFile} className="inline">
-                                <input type="hidden" name="id" value={file.id} />
-                                <input type="hidden" name="personId" value={person.id} />
-                                <Button
-                                  type="submit"
-                                  size="sm"
-                                  variant="ghost"
-                                  className="text-red-500 hover:text-red-700"
-                                  title="Delete file"
-                                >
-                                  <Trash2 size={14} />
-                                </Button>
-                              </form>
-                            </TableCell>
+                        </TableHeader>
+                        <TableBody>
+                          {fileRows.map(({ file, attachment }) => (
+                            <TableRow key={file.id}>
+                              <TableCell className="font-medium">{file.label}</TableCell>
+                              <TableCell>
+                                <Badge variant="secondary">{file.kind.replace('_', ' ')}</Badge>
+                              </TableCell>
+                              <TableCell className="text-xs text-slate-600">
+                                {attachment ? (
+                                  <a
+                                    href={publicUrl(attachment.r2Key)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-teal-700 hover:underline"
+                                  >
+                                    {attachment.filename}
+                                  </a>
+                                ) : (
+                                  <span className="text-slate-400">file missing</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-xs text-slate-600">
+                                {new Date(file.uploadedAt).toLocaleDateString()}
+                              </TableCell>
+                              <TableCell>
+                                <form action={deletePersonFile} className="inline">
+                                  <input type="hidden" name="id" value={file.id} />
+                                  <input type="hidden" name="personId" value={person.id} />
+                                  <Button
+                                    type="submit"
+                                    size="sm"
+                                    variant="ghost"
+                                    className="text-red-500 hover:text-red-700"
+                                    title="Delete file"
+                                  >
+                                    <Trash2 size={14} />
+                                  </Button>
+                                </form>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )}
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Documents acknowledged ({ackedDocs.length})</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {ackedDocs.length === 0 ? (
+                      <EmptyState
+                        icon={<ShieldCheck size={24} />}
+                        title="No documents acknowledged"
+                        description="Acknowledgements appear here once the person signs off on policies, SDS, or procedures."
+                        action={
+                          <Link href={`/documents`}>
+                            <Button variant="outline" size="sm">
+                              Browse documents →
+                            </Button>
+                          </Link>
+                        }
+                      />
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Document</TableHead>
+                            <TableHead>Category</TableHead>
+                            <TableHead>Acknowledged at</TableHead>
+                            <TableHead></TableHead>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  )}
-                </CardContent>
-              </Card>
+                        </TableHeader>
+                        <TableBody>
+                          {ackedDocs.map((row) => (
+                            <TableRow key={row.ack.id}>
+                              <TableCell className="font-medium">
+                                <Link
+                                  href={`/documents/${row.doc.id}`}
+                                  className="hover:underline"
+                                >
+                                  {row.doc.title}
+                                </Link>
+                              </TableCell>
+                              <TableCell className="text-slate-600">
+                                {row.doc.category ?? '—'}
+                              </TableCell>
+                              <TableCell>
+                                {new Date(row.ack.acknowledgedAt).toLocaleString()}
+                              </TableCell>
+                              <TableCell>
+                                <Link
+                                  href={`/documents/${row.doc.id}`}
+                                  className="text-xs text-teal-700 hover:underline"
+                                >
+                                  View →
+                                </Link>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
             ) : null}
 
             {active === 'incidents' ? (
@@ -1172,8 +1464,6 @@ export default async function PersonDetailPage({
                 </CardContent>
               </Card>
             ) : null}
-
-            {active === 'edit' ? <PersonEditTab personId={id} /> : null}
           </div>
         </div>
       </div>
@@ -1195,15 +1485,6 @@ function SidebarRow({ label, children }: { label: string; children: React.ReactN
     <div className="flex items-center justify-between text-sm">
       <span className="text-xs tracking-wide text-slate-500 uppercase">{label}</span>
       <span>{children}</span>
-    </div>
-  )
-}
-
-function ProfileRow({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col">
-      <dt className="text-xs tracking-wide text-slate-500 uppercase">{label}</dt>
-      <dd className="text-slate-900">{children}</dd>
     </div>
   )
 }
