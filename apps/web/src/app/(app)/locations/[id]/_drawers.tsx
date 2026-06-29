@@ -1,17 +1,28 @@
 'use client'
 
-// Quick-create flyout for the location detail page's Contacts tab, opened via
-// ?drawer=new-contact. A contact has no detail page of its own (it's edited in
-// place), so this drawer is create-only. Projects instant-create instead —
-// they're org units with their own /locations/[id] page. The save action is
-// passed in from the RSC page.
+// Create / edit flyout for the location detail page's Contacts tab. Opened via
+// ?drawer=new-contact (create) or ?drawer=edit-contact&contactId=… (edit). A
+// contact has no detail page of its own — it's a sub-record created and edited
+// in place — so this single drawer covers both. Projects instant-create
+// instead: they're org units with their own /locations/[id] page. The save
+// actions are passed in from the RSC page.
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import { Button, Input, Label, Textarea, UrlDrawer } from '@beaconhs/ui'
 
-type ContactSaveAction = (input: {
+export type ContactRow = {
+  id: string
+  name: string
+  role: string | null
+  email: string | null
+  phone: string | null
+  notes: string | null
+  isPrimary: boolean
+}
+
+type CreateAction = (input: {
   orgUnitId: string
   name: string
   role: string | null
@@ -21,34 +32,53 @@ type ContactSaveAction = (input: {
   isPrimary: boolean
 }) => Promise<{ ok: true } | { ok: false; error: string }>
 
-export function ContactCreateDrawer({
+type UpdateAction = (input: {
+  contactId: string
+  orgUnitId: string
+  name: string
+  role: string | null
+  email: string | null
+  phone: string | null
+  notes: string | null
+  isPrimary: boolean
+}) => Promise<{ ok: true } | { ok: false; error: string }>
+
+export function ContactDrawer({
   open,
   orgUnitId,
+  contact,
   closeHref,
-  saveAction,
+  createAction,
+  updateAction,
 }: {
   open: boolean
   orgUnitId: string
+  /** Present when editing; absent when creating. */
+  contact: ContactRow | null
   closeHref: string
-  saveAction: ContactSaveAction
+  createAction: CreateAction
+  updateAction: UpdateAction
 }) {
   const router = useRouter()
   function close() {
     router.push(closeHref)
     router.refresh()
   }
+  const editing = !!contact
   return (
     <UrlDrawer
       open={open}
       closeHref={closeHref}
-      title="New contact"
+      title={editing ? 'Edit contact' : 'New contact'}
       description="Add a contact — site managers, client reps, emergency-only contacts."
       size="md"
     >
       <ContactForm
-        key={`new-contact:${orgUnitId}`}
+        key={editing ? `edit-contact:${contact.id}` : `new-contact:${orgUnitId}`}
         orgUnitId={orgUnitId}
-        saveAction={saveAction}
+        contact={contact}
+        createAction={createAction}
+        updateAction={updateAction}
         onDone={close}
       />
     </UrlDrawer>
@@ -57,19 +87,23 @@ export function ContactCreateDrawer({
 
 function ContactForm({
   orgUnitId,
-  saveAction,
+  contact,
+  createAction,
+  updateAction,
   onDone,
 }: {
   orgUnitId: string
-  saveAction: ContactSaveAction
+  contact: ContactRow | null
+  createAction: CreateAction
+  updateAction: UpdateAction
   onDone: () => void
 }) {
-  const [name, setName] = useState('')
-  const [role, setRole] = useState('')
-  const [email, setEmail] = useState('')
-  const [phone, setPhone] = useState('')
-  const [notes, setNotes] = useState('')
-  const [isPrimary, setIsPrimary] = useState(false)
+  const [name, setName] = useState(contact?.name ?? '')
+  const [role, setRole] = useState(contact?.role ?? '')
+  const [email, setEmail] = useState(contact?.email ?? '')
+  const [phone, setPhone] = useState(contact?.phone ?? '')
+  const [notes, setNotes] = useState(contact?.notes ?? '')
+  const [isPrimary, setIsPrimary] = useState(contact?.isPrimary ?? false)
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
 
@@ -81,15 +115,17 @@ function ContactForm({
       return
     }
     startTransition(async () => {
-      const res = await saveAction({
-        orgUnitId,
+      const payload = {
         name: trimmed,
         role: role.trim() || null,
         email: email.trim() || null,
         phone: phone.trim() || null,
         notes: notes.trim() || null,
         isPrimary,
-      })
+      }
+      const res = contact
+        ? await updateAction({ contactId: contact.id, orgUnitId, ...payload })
+        : await createAction({ orgUnitId, ...payload })
       if (res.ok) onDone()
       else setError(res.error)
     })
@@ -182,7 +218,7 @@ function ContactForm({
         </Button>
         <Button type="submit" disabled={pending}>
           {pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
-          Create contact
+          {contact ? 'Save contact' : 'Create contact'}
         </Button>
       </div>
     </form>

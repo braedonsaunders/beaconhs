@@ -1,12 +1,11 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { revalidatePath } from 'next/cache'
-import { and, asc, desc, eq, inArray } from 'drizzle-orm'
 import {
   AlertTriangle,
   Folder,
   Mail,
   MapPin,
+  Pencil,
   Phone,
   Plus,
   Star,
@@ -14,6 +13,7 @@ import {
   Truck,
   Users,
 } from 'lucide-react'
+import { and, asc, desc, eq, inArray } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -23,8 +23,6 @@ import {
   CardTitle,
   DetailHeader,
   EmptyState,
-  Input,
-  Label,
   Table,
   TableBody,
   TableCell,
@@ -40,20 +38,25 @@ import {
   orgUnits,
   people,
 } from '@beaconhs/db/schema'
+import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
-import { recentActivityForEntity, recordAudit } from '@/lib/audit'
+import { recentActivityForEntity } from '@/lib/audit'
 import { getTenantHierarchy, levelLabel, type TenantHierarchy } from '@/lib/org-hierarchy'
 import { ActivityFeed } from '@/components/activity-feed'
+import { LiveField } from '@/components/live-field'
 import { DetailPageLayout } from '@/components/page-layout'
+import { Section } from '@/components/section'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import {
   archiveLocation,
   createContactFromDrawer,
   createProject,
+  deleteContact,
   restoreLocation,
-  updateLocation,
+  updateContactFromDrawer,
+  updateLocationField,
 } from '../_actions/locations'
-import { ContactCreateDrawer } from './_drawers'
+import { ContactDrawer, type ContactRow } from './_drawers'
 
 export const dynamic = 'force-dynamic'
 
@@ -83,30 +86,6 @@ type SiteTab = (typeof SITE_TABS)[number]
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   return { title: `Location · ${id.slice(0, 8)}` }
-}
-
-// -------------------- Server actions --------------------
-
-async function deleteContact(formData: FormData) {
-  'use server'
-  const ctx = await requireRequestContext()
-  const id = String(formData.get('id') ?? '')
-  const orgUnitId = String(formData.get('orgUnitId') ?? '')
-  if (!id) return
-
-  const before = await ctx.db(async (tx) => {
-    const [c] = await tx.select().from(customerContacts).where(eq(customerContacts.id, id)).limit(1)
-    return c
-  })
-  await ctx.db((tx) => tx.delete(customerContacts).where(eq(customerContacts.id, id)))
-  await recordAudit(ctx, {
-    entityType: 'customer_contact',
-    entityId: id,
-    action: 'delete',
-    summary: before ? `Removed contact "${before.name}"` : 'Removed contact',
-    before: before as unknown as Record<string, unknown>,
-  })
-  if (orgUnitId) revalidatePath(`/locations/${orgUnitId}`)
 }
 
 // -------------------- Helpers --------------------
@@ -183,8 +162,13 @@ export default async function LocationDetailPage({
   const { id } = await params
   const sp = await searchParams
   const drawer = typeof sp.drawer === 'string' ? sp.drawer : null
+  const editContactId = typeof sp.contactId === 'string' ? sp.contactId : null
   const ctx = await requireRequestContext()
   const hierarchy = await getTenantHierarchy(ctx.tenantId)
+  // Read-only unless the viewer can manage the org tree. The autosave / write
+  // actions re-assert this server-side; this only gates the inputs and
+  // affordances.
+  const canManage = can(ctx, 'admin.org.manage') || ctx.isSuperAdmin
 
   const data = await ctx.db(async (tx) => {
     const [unit] = await tx.select().from(orgUnits).where(eq(orgUnits.id, id)).limit(1)
@@ -207,12 +191,23 @@ export default async function LocationDetailPage({
   const { unit, parent, children } = data
 
   if (unit.level === 'customer') {
-    return renderCustomer({ unit, children, sp, drawer, id, ctx, hierarchy })
+    return renderCustomer({ unit, children, sp, drawer, editContactId, id, ctx, hierarchy, canManage })
   }
   if (unit.level === 'project') {
-    return renderProject({ unit, parent, children, sp, drawer, id, ctx, hierarchy })
+    return renderProject({
+      unit,
+      parent,
+      children,
+      sp,
+      drawer,
+      editContactId,
+      id,
+      ctx,
+      hierarchy,
+      canManage,
+    })
   }
-  return renderSite({ unit, parent, sp, drawer, id, ctx })
+  return renderSite({ unit, parent, sp, drawer, editContactId, id, ctx, canManage })
 }
 
 // -------------------- Customer view --------------------
@@ -222,17 +217,21 @@ async function renderCustomer({
   children,
   sp,
   drawer,
+  editContactId,
   id,
   ctx,
   hierarchy,
+  canManage,
 }: {
   unit: typeof orgUnits.$inferSelect
   children: (typeof orgUnits.$inferSelect)[]
   sp: Record<string, string | string[] | undefined>
   drawer: string | null
+  editContactId: string | null
   id: string
   ctx: Awaited<ReturnType<typeof requireRequestContext>>
   hierarchy: TenantHierarchy
+  canManage: boolean
 }) {
   // Drop levels this tenant has switched off so a disabled depth can't be
   // reached even via a hand-edited ?tab= URL.
@@ -318,6 +317,7 @@ async function renderCustomer({
           basePath={basePath}
           currentParams={sp}
           active={active}
+          variant="pills"
           tabs={[
             { key: 'overview', label: 'Overview' },
             {
@@ -335,19 +335,27 @@ async function renderCustomer({
         />
       }
     >
-      {active === 'overview' ? <OverviewTab unit={unit} /> : null}
-      {active === 'projects' ? <ProjectsTab unit={unit} projects={projects} /> : null}
+      {active === 'overview' ? <OverviewTab unit={unit} canManage={canManage} /> : null}
+      {active === 'projects' ? (
+        <ProjectsTab unit={unit} projects={projects} canManage={canManage} />
+      ) : null}
       {active === 'sites' ? <SitesTab sites={allSites} parentNameFor={projectParentName} /> : null}
-      {active === 'contacts' ? <ContactsTab unit={unit} contacts={contacts} /> : null}
+      {active === 'contacts' ? (
+        <ContactsTab unit={unit} contacts={contacts} canManage={canManage} />
+      ) : null}
       {active === 'incidents' ? <IncidentsTab rows={allIncidents} /> : null}
       {active === 'equipment' ? <EquipmentTab equipment={allEquipment} /> : null}
       {active === 'activity' ? <ActivityFeed entries={activity} /> : null}
-      <ContactCreateDrawer
-        open={drawer === 'new-contact'}
-        orgUnitId={id}
-        closeHref={`${basePath}?tab=contacts`}
-        saveAction={createContactFromDrawer}
-      />
+      {canManage ? (
+        <ContactDrawer
+          open={drawer === 'new-contact' || drawer === 'edit-contact'}
+          orgUnitId={id}
+          contact={resolveEditContact(contacts, drawer, editContactId)}
+          closeHref={`${basePath}?tab=contacts`}
+          createAction={createContactFromDrawer}
+          updateAction={updateContactFromDrawer}
+        />
+      ) : null}
     </DetailPageLayout>
   )
 }
@@ -360,18 +368,22 @@ async function renderProject({
   children,
   sp,
   drawer,
+  editContactId,
   id,
   ctx,
   hierarchy,
+  canManage,
 }: {
   unit: typeof orgUnits.$inferSelect
   parent: typeof orgUnits.$inferSelect | null
   children: (typeof orgUnits.$inferSelect)[]
   sp: Record<string, string | string[] | undefined>
   drawer: string | null
+  editContactId: string | null
   id: string
   ctx: Awaited<ReturnType<typeof requireRequestContext>>
   hierarchy: TenantHierarchy
+  canManage: boolean
 }) {
   const visibleTabs = PROJECT_TABS.filter((t) => t !== 'sites' || hierarchy.site)
   const active: ProjectTab = pickActiveTab(sp, visibleTabs, 'overview')
@@ -415,6 +427,7 @@ async function renderProject({
           basePath={basePath}
           currentParams={sp}
           active={active}
+          variant="pills"
           tabs={[
             { key: 'overview', label: 'Overview' },
             { key: 'sites', label: 'Sites', count: sites.length, hidden: !hierarchy.site },
@@ -426,18 +439,24 @@ async function renderProject({
         />
       }
     >
-      {active === 'overview' ? <OverviewTab unit={unit} /> : null}
+      {active === 'overview' ? <OverviewTab unit={unit} canManage={canManage} /> : null}
       {active === 'sites' ? <SitesTab sites={sites} /> : null}
-      {active === 'contacts' ? <ContactsTab unit={unit} contacts={contacts} /> : null}
+      {active === 'contacts' ? (
+        <ContactsTab unit={unit} contacts={contacts} canManage={canManage} />
+      ) : null}
       {active === 'incidents' ? <IncidentsTab rows={allIncidents} /> : null}
       {active === 'equipment' ? <EquipmentTab equipment={allEquipment} /> : null}
       {active === 'activity' ? <ActivityFeed entries={activity} /> : null}
-      <ContactCreateDrawer
-        open={drawer === 'new-contact'}
-        orgUnitId={id}
-        closeHref={`${basePath}?tab=contacts`}
-        saveAction={createContactFromDrawer}
-      />
+      {canManage ? (
+        <ContactDrawer
+          open={drawer === 'new-contact' || drawer === 'edit-contact'}
+          orgUnitId={id}
+          contact={resolveEditContact(contacts, drawer, editContactId)}
+          closeHref={`${basePath}?tab=contacts`}
+          createAction={createContactFromDrawer}
+          updateAction={updateContactFromDrawer}
+        />
+      ) : null}
     </DetailPageLayout>
   )
 }
@@ -449,15 +468,19 @@ async function renderSite({
   parent,
   sp,
   drawer,
+  editContactId,
   id,
   ctx,
+  canManage,
 }: {
   unit: typeof orgUnits.$inferSelect
   parent: typeof orgUnits.$inferSelect | null
   sp: Record<string, string | string[] | undefined>
   drawer: string | null
+  editContactId: string | null
   id: string
   ctx: Awaited<ReturnType<typeof requireRequestContext>>
+  canManage: boolean
 }) {
   const active: SiteTab = pickActiveTab(sp, SITE_TABS, 'overview')
   const basePath = `/locations/${id}`
@@ -498,6 +521,7 @@ async function renderSite({
           basePath={basePath}
           currentParams={sp}
           active={active}
+          variant="pills"
           tabs={[
             { key: 'overview', label: 'Overview' },
             { key: 'contacts', label: 'Contacts', count: contacts.length },
@@ -508,24 +532,56 @@ async function renderSite({
         />
       }
     >
-      {active === 'overview' ? <OverviewTab unit={unit} /> : null}
-      {active === 'contacts' ? <ContactsTab unit={unit} contacts={contacts} /> : null}
+      {active === 'overview' ? <OverviewTab unit={unit} canManage={canManage} /> : null}
+      {active === 'contacts' ? (
+        <ContactsTab unit={unit} contacts={contacts} canManage={canManage} />
+      ) : null}
       {active === 'incidents' ? <IncidentsTab rows={siteIncidents} /> : null}
       {active === 'equipment' ? <EquipmentTab equipment={siteEquipment} /> : null}
       {active === 'activity' ? <ActivityFeed entries={activity} /> : null}
-      <ContactCreateDrawer
-        open={drawer === 'new-contact'}
-        orgUnitId={id}
-        closeHref={`${basePath}?tab=contacts`}
-        saveAction={createContactFromDrawer}
-      />
+      {canManage ? (
+        <ContactDrawer
+          open={drawer === 'new-contact' || drawer === 'edit-contact'}
+          orgUnitId={id}
+          contact={resolveEditContact(contacts, drawer, editContactId)}
+          closeHref={`${basePath}?tab=contacts`}
+          createAction={createContactFromDrawer}
+          updateAction={updateContactFromDrawer}
+        />
+      ) : null}
     </DetailPageLayout>
   )
 }
 
 // ---------- Tab content components ----------
 
-function OverviewTab({ unit }: { unit: typeof orgUnits.$inferSelect }) {
+/** Find the contact targeted by ?drawer=edit-contact&contactId=… for prefill. */
+function resolveEditContact(
+  contacts: (typeof customerContacts.$inferSelect)[],
+  drawer: string | null,
+  contactId: string | null,
+): ContactRow | null {
+  if (drawer !== 'edit-contact' || !contactId) return null
+  const c = contacts.find((row) => row.id === contactId)
+  if (!c) return null
+  return {
+    id: c.id,
+    name: c.name,
+    role: c.role,
+    email: c.email,
+    phone: c.phone,
+    notes: c.notes,
+    isPrimary: c.isPrimary,
+  }
+}
+
+function OverviewTab({
+  unit,
+  canManage,
+}: {
+  unit: typeof orgUnits.$inferSelect
+  canManage: boolean
+}) {
   const addr = unit.address ?? {}
   const mapsHref =
     unit.lat != null && unit.lng != null
@@ -533,102 +589,118 @@ function OverviewTab({ unit }: { unit: typeof orgUnits.$inferSelect }) {
       : null
   return (
     <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Location details</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form action={updateLocation} className="space-y-4">
-            <input type="hidden" name="id" value={unit.id} />
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5 sm:col-span-2">
-                <Label htmlFor="loc-name">Name *</Label>
-                <Input id="loc-name" name="name" required defaultValue={unit.name} />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="loc-code">Code</Label>
-                <Input id="loc-code" name="code" defaultValue={unit.code ?? ''} />
-              </div>
-            </div>
+      <Section title="Location details">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <LiveField
+              id={unit.id}
+              field="name"
+              label="Name"
+              initialValue={unit.name}
+              disabled={!canManage}
+              updateAction={updateLocationField}
+            />
+          </div>
+          <LiveField
+            id={unit.id}
+            field="code"
+            label="Code"
+            initialValue={unit.code}
+            disabled={!canManage}
+            updateAction={updateLocationField}
+          />
+        </div>
+      </Section>
 
-            <div className="pt-1">
-              <h3 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-300">
-                Address
-              </h3>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="loc-addr1">Address line 1</Label>
-                  <Input id="loc-addr1" name="addressLine1" defaultValue={addr.line1 ?? ''} />
-                </div>
-                <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="loc-addr2">Address line 2</Label>
-                  <Input id="loc-addr2" name="addressLine2" defaultValue={addr.line2 ?? ''} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="loc-city">City</Label>
-                  <Input id="loc-city" name="addressCity" defaultValue={addr.city ?? ''} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="loc-region">Region / Province</Label>
-                  <Input id="loc-region" name="addressRegion" defaultValue={addr.region ?? ''} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="loc-postal">Postal / Zip</Label>
-                  <Input id="loc-postal" name="addressPostal" defaultValue={addr.postal ?? ''} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="loc-country">Country</Label>
-                  <Input id="loc-country" name="addressCountry" defaultValue={addr.country ?? ''} />
-                </div>
-              </div>
-            </div>
+      <Section title="Address">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <LiveField
+              id={unit.id}
+              field="addressLine1"
+              label="Address line 1"
+              initialValue={addr.line1 ?? null}
+              disabled={!canManage}
+              updateAction={updateLocationField}
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <LiveField
+              id={unit.id}
+              field="addressLine2"
+              label="Address line 2"
+              initialValue={addr.line2 ?? null}
+              disabled={!canManage}
+              updateAction={updateLocationField}
+            />
+          </div>
+          <LiveField
+            id={unit.id}
+            field="addressCity"
+            label="City"
+            initialValue={addr.city ?? null}
+            disabled={!canManage}
+            updateAction={updateLocationField}
+          />
+          <LiveField
+            id={unit.id}
+            field="addressRegion"
+            label="Region / Province"
+            initialValue={addr.region ?? null}
+            disabled={!canManage}
+            updateAction={updateLocationField}
+          />
+          <LiveField
+            id={unit.id}
+            field="addressPostal"
+            label="Postal / Zip"
+            initialValue={addr.postal ?? null}
+            disabled={!canManage}
+            updateAction={updateLocationField}
+          />
+          <LiveField
+            id={unit.id}
+            field="addressCountry"
+            label="Country"
+            initialValue={addr.country ?? null}
+            disabled={!canManage}
+            updateAction={updateLocationField}
+          />
+        </div>
+      </Section>
 
-            <div className="pt-1">
-              <h3 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-300">
-                Geolocation
-              </h3>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="loc-lat">Latitude</Label>
-                  <Input
-                    id="loc-lat"
-                    name="lat"
-                    type="number"
-                    step="any"
-                    defaultValue={unit.lat != null ? String(unit.lat) : ''}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="loc-lng">Longitude</Label>
-                  <Input
-                    id="loc-lng"
-                    name="lng"
-                    type="number"
-                    step="any"
-                    defaultValue={unit.lng != null ? String(unit.lng) : ''}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="loc-geo">Geofence (m)</Label>
-                  <Input
-                    id="loc-geo"
-                    name="geofenceMeters"
-                    type="number"
-                    min={0}
-                    defaultValue={unit.geofenceMeters != null ? String(unit.geofenceMeters) : ''}
-                  />
-                </div>
-              </div>
-            </div>
+      <Section title="Geolocation">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <LiveField
+            id={unit.id}
+            field="lat"
+            label="Latitude"
+            type="number"
+            initialValue={unit.lat != null ? String(unit.lat) : null}
+            disabled={!canManage}
+            updateAction={updateLocationField}
+          />
+          <LiveField
+            id={unit.id}
+            field="lng"
+            label="Longitude"
+            type="number"
+            initialValue={unit.lng != null ? String(unit.lng) : null}
+            disabled={!canManage}
+            updateAction={updateLocationField}
+          />
+          <LiveField
+            id={unit.id}
+            field="geofenceMeters"
+            label="Geofence (m)"
+            type="number"
+            initialValue={unit.geofenceMeters != null ? String(unit.geofenceMeters) : null}
+            disabled={!canManage}
+            updateAction={updateLocationField}
+          />
+        </div>
+      </Section>
 
-            <div className="flex justify-end">
-              <Button type="submit" size="sm">
-                Save details
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Map</CardTitle>
@@ -665,7 +737,7 @@ function OverviewTab({ unit }: { unit: typeof orgUnits.$inferSelect }) {
             <EmptyState
               icon={<MapPin size={24} />}
               title="No coordinates set"
-              description="Edit the location to set latitude and longitude — site-level coordinates feed GPS auto-suggest in the field app."
+              description="Set latitude and longitude above — site-level coordinates feed GPS auto-suggest in the field app."
             />
           )}
         </CardContent>
@@ -677,20 +749,24 @@ function OverviewTab({ unit }: { unit: typeof orgUnits.$inferSelect }) {
 function ProjectsTab({
   unit,
   projects,
+  canManage,
 }: {
   unit: typeof orgUnits.$inferSelect
   projects: (typeof orgUnits.$inferSelect)[]
+  canManage: boolean
 }) {
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-end">
-        <form action={createProject}>
-          <input type="hidden" name="parentId" value={unit.id} />
-          <Button type="submit">
-            <Plus size={14} /> Add project
-          </Button>
-        </form>
-      </div>
+      {canManage ? (
+        <div className="flex items-center justify-end">
+          <form action={createProject}>
+            <input type="hidden" name="parentId" value={unit.id} />
+            <Button type="submit">
+              <Plus size={14} /> Add project
+            </Button>
+          </form>
+        </div>
+      ) : null}
       {projects.length === 0 ? (
         <EmptyState
           icon={<Folder size={32} />}
@@ -802,19 +878,23 @@ function SitesTab({
 function ContactsTab({
   unit,
   contacts,
+  canManage,
 }: {
   unit: typeof orgUnits.$inferSelect
   contacts: (typeof customerContacts.$inferSelect)[]
+  canManage: boolean
 }) {
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-end">
-        <Link href={`/locations/${unit.id}?tab=contacts&drawer=new-contact`}>
-          <Button>
-            <Plus size={14} /> Add contact
-          </Button>
-        </Link>
-      </div>
+      {canManage ? (
+        <div className="flex items-center justify-end">
+          <Link href={`/locations/${unit.id}?tab=contacts&drawer=new-contact`}>
+            <Button>
+              <Plus size={14} /> Add contact
+            </Button>
+          </Link>
+        </div>
+      ) : null}
       {contacts.length === 0 ? (
         <EmptyState
           icon={<Users size={32} />}
@@ -872,19 +952,35 @@ function ContactsTab({
                   )}
                 </TableCell>
                 <TableCell className="text-right">
-                  <form action={deleteContact} className="inline">
-                    <input type="hidden" name="id" value={c.id} />
-                    <input type="hidden" name="orgUnitId" value={unit.id} />
-                    <Button
-                      type="submit"
-                      variant="ghost"
-                      size="sm"
-                      className="text-red-500 hover:text-red-700"
-                      aria-label={`Remove ${c.name}`}
-                    >
-                      <Trash2 size={14} />
-                    </Button>
-                  </form>
+                  {canManage ? (
+                    <div className="flex items-center justify-end gap-1">
+                      <Link
+                        href={`/locations/${unit.id}?tab=contacts&drawer=edit-contact&contactId=${c.id}`}
+                      >
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                          aria-label={`Edit ${c.name}`}
+                        >
+                          <Pencil size={14} />
+                        </Button>
+                      </Link>
+                      <form action={deleteContact} className="inline">
+                        <input type="hidden" name="id" value={c.id} />
+                        <input type="hidden" name="orgUnitId" value={unit.id} />
+                        <Button
+                          type="submit"
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-500 hover:text-red-700"
+                          aria-label={`Remove ${c.name}`}
+                        >
+                          <Trash2 size={14} />
+                        </Button>
+                      </form>
+                    </div>
+                  ) : null}
                 </TableCell>
               </TableRow>
             ))}

@@ -83,7 +83,7 @@ export async function GET(req: NextRequest) {
         (addr as any).line1 ?? '',
         (addr as any).city ?? '',
         (addr as any).region ?? '',
-        (addr as any).postalCode ?? '',
+        (addr as any).postal ?? '',
         (addr as any).country ?? '',
       ])
     }),
